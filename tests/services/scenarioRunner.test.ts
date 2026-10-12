@@ -630,7 +630,7 @@ describe('rule execution', () => {
         currencyActions.unlockBoostWithKey.mockResolvedValueOnce({ ok: false, outcome: 'unclear' });
         setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }]));
         await run();
-        expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1 });
+        expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1, unclear: 'unlockBoost' });
         expect(state().lastError!.message).toContain('the boost unlock may have gone through');
         expect(state().lastError!.message).not.toContain('refused');
     });
@@ -649,22 +649,21 @@ describe('rule execution', () => {
         expect(state().lastError!.message).toContain('may have gone through earlier, so it is not repeated');
     });
 
-    test('a spend that got no answer says so for the status line: its kind and action, not a skipped step', async () => {
+    test('a spend that got no answer marks the step on the rule in flight, where an ordinary refusal does not', async () => {
         currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'unclear' });
         setup(single([{ type: 'fillExposure' }]));
         await run();
+        expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0, unclear: 'fillExposure' });
         expect(state().lastError).toEqual({
             at: expect.any(Number),
             message:
                 'r1 → fillExposure: the exposure fill may have gone through (GuruShots gave no answer); it will be checked again next cycle, not spent again',
-            kind: 'spend-unclear',
-            action: 'fillExposure',
         });
         // An ordinary refusal carries no such marker.
         ledger.remove(7);
         currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'balance-unknown' });
         await run();
-        expect(state().lastError).not.toHaveProperty('kind');
+        expect(state().inFlight).toBeNull();
     });
 
     describe('the retry of a spend that got no answer never spends again', () => {
@@ -676,7 +675,7 @@ describe('rule execution', () => {
             const c = challenge();
             c.member.boost!.state = 'LOCKED';
             await run(c);
-            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0 });
+            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0, unclear: 'unlockBoost' });
             expect(pass.api.applyBoostToEntry).not.toHaveBeenCalled();
 
             c.member.boost!.state = 'AVAILABLE_KEY';
@@ -750,6 +749,76 @@ describe('rule execution', () => {
             expect(currencyActions.swapEntry).toHaveBeenCalledTimes(1);
             expect(currencyActions.previewSwap).toHaveBeenCalledTimes(1);
             expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+            expect(state().inFlight).toBeNull();
+        });
+
+        // A rule that went on after an unclear spend must not run again from its first step: its landed steps and
+        // the spend itself would be repeated, with no limit to stop them.
+        describe.each([
+            ['a once rule', { repeat: 'once' }],
+            ['a rule with no repeat limit (every pass)', {}],
+        ])('%s, stopped after an unclear spend, is not fired again on the third pass', (_name, extra) => {
+            test('nothing it did or may have done is done again', async () => {
+                currencyActions.previewSwap.mockResolvedValue(
+                    invalid({ ok: true, candidate: { id: 'n1', member_id: 'm' } }),
+                );
+                currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+                currencyActions.swapEntry.mockResolvedValueOnce(unclear);
+                setup(
+                    single(
+                        [{ type: 'fillExposure' }, { type: 'swap', entry: { by: 'mostVotes' }, with: 'best' }],
+                        extra,
+                    ),
+                );
+                const c = challenge();
+                await run(c); // the fill goes through, the swap gets no answer
+                expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1, unclear: 'swap' });
+                await run(c); // the retry cannot show the swap landed (a selector chose it): the rule stops
+                expect(state().inFlight).toBeNull();
+                expect(state().fired.r1).toEqual(expect.objectContaining({ unclearHalt: 'swap' }));
+                await run(c); // and stays stopped
+                await run(c);
+                expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+                expect(currencyActions.swapEntry).toHaveBeenCalledTimes(1);
+                expect(currencyActions.previewSwap).toHaveBeenCalledTimes(1);
+            });
+        });
+
+        test('a rule with no repeat limit runs again once its phase is entered again, not before', async () => {
+            currencyActions.fillExposure.mockResolvedValueOnce(unclear).mockResolvedValue(invalid({ ok: true }));
+            setup(single([{ type: 'fillExposure' }]));
+            const c = challenge();
+            await run(c);
+            // The exposure is not full: the retry cannot show it landed, so the rule stops.
+            await run(c);
+            expect(state().fired.r1.unclearHalt).toBe('fillExposure');
+            await run(c);
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+            ledger.set(7, { ...state(), phaseEnteredAt: state().phaseEnteredAt + 100 });
+            await run(c);
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(2);
+        });
+
+        test('an edit that halts the scenario and is then reverted does not turn the step into an ordinary spend', async () => {
+            currencyActions.unlockBoostWithKey.mockResolvedValue(invalid({ ok: true }));
+            currencyActions.unlockBoostWithKey.mockResolvedValueOnce(unclear);
+            const original = single([{ type: 'unlockBoost' }, { type: 'boost', entry: { by: 'fewestVotes' } }]);
+            setup(original);
+            const c = challenge();
+            c.member.boost!.state = 'LOCKED';
+            await run(c);
+            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0, unclear: 'unlockBoost' });
+            // The rule is edited away: the scenario halts, and what it says of the halt replaces lastError.
+            setup(plan({ main: { rules: [rule('renamed', [{ type: 'fillExposure' }])] } }));
+            await run(c);
+            expect(state().lastError!.message).toContain('no longer matches');
+            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0, unclear: 'unlockBoost' });
+            // Reverted: the retry still only looks, and the key is not spent again.
+            setup(original);
+            c.member.boost!.state = 'AVAILABLE_KEY';
+            await run(c);
+            expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
+            expect(pass.api.applyBoostToEntry).toHaveBeenCalledTimes(1);
             expect(state().inFlight).toBeNull();
         });
 

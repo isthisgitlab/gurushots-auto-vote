@@ -33,31 +33,70 @@ test('a running plan: phase, next check and last problem (detail)', () => {
     expect(screen.getByRole('status').textContent).toBe('app.scenarioStatusProblem');
 });
 
-test("a spend that got no answer is worded as that, with the action's own label, not as a skipped step", () => {
-    mockTranslator.t.mockImplementation((key) =>
-        key === 'app.scenarioStatusSpendUnclear'
-            ? 'No answer to “{action}”'
-            : key === 'app.sbAct_unlockBoost'
-              ? 'Unlock the boost with a key'
-              : key,
-    );
-    try {
-        render(
-            <ScenarioStatusLine
-                status={{
-                    name: 'Plan',
-                    phase: 'main',
-                    started: true,
-                    lastError: 'r1 → unlockBoost: …',
-                    lastErrorSpend: 'unlockBoost',
-                    nextWakeAt: null,
-                }}
-            />,
+test.each([
+    [false, 'app.scenarioStatusSpendUnclear', 'Not spent again: “Unlock the boost with a key”'],
+    [true, 'app.scenarioStatusSpendStopped', 'Rule stopped: “Unlock the boost with a key”'],
+])(
+    "a spend that got no answer is worded as that (stopped: %s), with the action's own label, not as a skipped step",
+    (stopped, key, text) => {
+        mockTranslator.t.mockImplementation((k) =>
+            k === key
+                ? text.replace('Unlock the boost with a key', '{action}')
+                : k === 'app.sbAct_unlockBoost'
+                  ? 'Unlock the boost with a key'
+                  : k,
         );
-        expect(screen.getByRole('status').textContent).toBe('No answer to “Unlock the boost with a key”');
-    } finally {
-        mockTranslator.t.mockImplementation((key) => key);
-    }
+        try {
+            render(
+                <ScenarioStatusLine
+                    status={{
+                        name: 'Plan',
+                        phase: 'main',
+                        started: true,
+                        lastError: 'r1 → unlockBoost: …',
+                        spendUnclear: { action: 'unlockBoost', stopped },
+                        nextWakeAt: null,
+                    }}
+                />,
+            );
+            expect(screen.getByRole('status').textContent).toBe(text);
+        } finally {
+            mockTranslator.t.mockImplementation((k) => k);
+        }
+    },
+);
+
+test('a spend that got no answer is shown even when an unrelated problem has replaced the last error', () => {
+    render(
+        <ScenarioStatusLine
+            status={{
+                name: 'Plan',
+                phase: 'main',
+                started: true,
+                lastError: null,
+                spendUnclear: { action: 'swap', stopped: false },
+                nextWakeAt: null,
+            }}
+        />,
+    );
+    expect(screen.getByRole('status').textContent).toBe('app.scenarioStatusSpendUnclear');
+});
+
+test('a spend that got no answer is clamped in the compact line', () => {
+    render(
+        <ScenarioStatusLine
+            status={{
+                name: 'Plan',
+                phase: 'main',
+                started: true,
+                lastError: null,
+                spendUnclear: { action: 'swap', stopped: true },
+                nextWakeAt: null,
+            }}
+            compact
+        />,
+    );
+    expect(screen.getByRole('status').className).toContain('line-clamp-2');
 });
 
 test('a plan not started, with nothing pending or already due (compact)', () => {

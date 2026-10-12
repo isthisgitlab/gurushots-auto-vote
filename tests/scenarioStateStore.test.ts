@@ -77,6 +77,16 @@ describe('createStateLedger', () => {
         expect(ledger.get(8).state).toBeNull();
     });
 
+    test('the step of a spend that got no answer, marked on the rule in flight, is kept', () => {
+        const ledger = createMemoryStateLedger();
+        ledger.set(7, { ...state(), inFlight: { ruleId: 'r1', actionIndex: 1, unclear: 'swap' } });
+        expect(ledger.get(7).state!.inFlight).toEqual({ ruleId: 'r1', actionIndex: 1, unclear: 'swap' });
+        const raw = rawStore(
+            JSON.stringify({ 7: { ...state(), inFlight: { ruleId: 'r1', actionIndex: 1, unclear: 'swap' } } }),
+        );
+        expect(createStateLedger(raw).get(7).state!.inFlight?.unclear).toBe('swap');
+    });
+
     test('an unreadable file is corrupt for every challenge, and logged once', () => {
         const ledger = createStateLedger(rawStore('{not json'));
         expect(ledger.get(7)).toEqual({ corrupt: true, state: null });
@@ -93,6 +103,10 @@ describe('createStateLedger', () => {
         ['missing phase', { ...initialState('Plan', 'a', 1), phase: 3 }],
         ['bad memory', { ...initialState('Plan', 'a', 1), memory: { held: 5 } }],
         ['bad inFlight', { ...initialState('Plan', 'a', 1), inFlight: { ruleId: 'r', actionIndex: 'x' } }],
+        [
+            'bad inFlight marker',
+            { ...initialState('Plan', 'a', 1), inFlight: { ruleId: 'r', actionIndex: 1, unclear: 5 } },
+        ],
         ['missing fired', { ...initialState('Plan', 'a', 1), fired: null }],
         ['bad history', { ...initialState('Plan', 'a', 1), history: [] }],
         ['bad outbox', { ...initialState('Plan', 'a', 1), outbox: {} }],

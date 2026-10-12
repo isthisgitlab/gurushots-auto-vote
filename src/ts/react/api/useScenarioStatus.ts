@@ -6,6 +6,7 @@ import * as ipc from './ipc';
 
 import type { Challenge } from '../../types/gurushots';
 import type { WindowApi } from '../../types/ipc';
+import type { ScenarioState } from '../../types/stores';
 
 /**
  * A challenge's scenario position as the card shows it.
@@ -17,8 +18,11 @@ export type ScenarioSummary = {
     phase?: string;
     started?: boolean;
     lastError?: string | null;
-    /** The last problem is a spend that got no answer: the line words it, with the action's own label. */
-    lastErrorSpend?: string | null;
+    /**
+     * A spend that got no answer, which the line words with the action's own label: the rule that will check on it
+     * (`stopped` false), or the rule that was stopped so that it is never spent again (`stopped` true).
+     */
+    spendUnclear?: { action: string; stopped: boolean } | null;
     nextWakeAt?: number | null;
 };
 
@@ -75,6 +79,20 @@ export function useScenarioStatus(
 }
 
 /**
+ * The spend that got no answer which the card should say so about: the one being checked on (carried by the rule
+ * in flight), else the one a rule was stopped after in the phase it is in now.
+ */
+const spendUnclearOf = (
+    state: Pick<ScenarioState, 'inFlight' | 'fired' | 'phaseEnteredAt'>,
+): ScenarioSummary['spendUnclear'] => {
+    if (state.inFlight?.unclear !== undefined) return { action: state.inFlight.unclear, stopped: false };
+    const [action] = Object.values(state.fired).flatMap((record) =>
+        record.unclearHalt !== undefined && record.phaseEnteredAt === state.phaseEnteredAt ? [record.unclearHalt] : [],
+    );
+    return action === undefined ? null : { action, stopped: true };
+};
+
+/**
  * @param status - an assigned challenge's status
  */
 function summarize(status: ScenarioStatus, challenge: Challenge): ScenarioSummary {
@@ -87,8 +105,7 @@ function summarize(status: ScenarioStatus, challenge: Challenge): ScenarioSummar
         phase: state.phase,
         started: status.state !== null,
         lastError: status.state?.lastError?.message ?? null,
-        lastErrorSpend:
-            status.state?.lastError?.kind === 'spend-unclear' ? (status.state.lastError.action ?? null) : null,
+        spendUnclear: spendUnclearOf(state),
         nextWakeAt: nextWakeAt({ scenario: status.scenario, state, challenge, now, timezone: status.timezone }),
     };
 }

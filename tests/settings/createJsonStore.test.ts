@@ -69,6 +69,57 @@ describe('createJsonStore', () => {
             });
         });
 
+        describe('an atomic store replaces its file, never writing into it', () => {
+            let atomic: ReturnType<typeof storageModule.createJsonStore>;
+
+            beforeEach(() => {
+                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                atomic = createJsonStore({ fileName: 'joinState.json', prefKey: 'gs_join_state', atomic: true });
+                fs.existsSync.mockReturnValue(true);
+            });
+
+            test('the data goes to a temp file next to it (owner-only, exclusive) and is renamed over it', () => {
+                atomic.writeRaw('{"a":3}');
+                const [temp, data, options] = fs.writeFileSync.mock.calls[0] as [string, string, object];
+                expect(temp).toMatch(/joinState\.json\.\d+\.[0-9a-f]{8}\.tmp$/);
+                expect(data).toBe('{"a":3}');
+                expect(options).toEqual({ encoding: 'utf8', mode: 0o600, flag: 'wx' });
+                expect(fs.renameSync).toHaveBeenCalledWith(temp, expect.stringMatching(/joinState\.json$/));
+                // Nothing is ever written into the file itself, so a reader never sees it empty or cut off.
+                expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+                expect(fs.chmodSync).not.toHaveBeenCalled();
+            });
+
+            test('a failed write, or a failed rename, removes the temp file and fails the write', () => {
+                fs.writeFileSync.mockImplementationOnce(() => {
+                    throw new Error('disk full');
+                });
+                expect(() => atomic.writeRaw('{}')).toThrow('disk full');
+                expect(fs.unlinkSync).toHaveBeenCalledTimes(1);
+                fs.renameSync.mockImplementationOnce(() => {
+                    throw new Error('EXDEV');
+                });
+                expect(() => atomic.writeRaw('{}')).toThrow('EXDEV');
+                expect(fs.unlinkSync).toHaveBeenCalledTimes(2);
+            });
+
+            test('a temp file that is not there to remove does not hide the failure', () => {
+                fs.writeFileSync.mockImplementationOnce(() => {
+                    throw new Error('disk full');
+                });
+                fs.unlinkSync.mockImplementationOnce(() => {
+                    throw Object.assign(new Error('gone'), { code: 'ENOENT' });
+                });
+                expect(() => atomic.writeRaw('{}')).toThrow('disk full');
+            });
+
+            test('the directory is created when it is missing', () => {
+                fs.existsSync.mockReturnValue(false);
+                atomic.writeRaw('{}');
+                expect(fs.mkdirSync).toHaveBeenCalledWith(expect.any(String), { recursive: true, mode: 0o700 });
+            });
+        });
+
         test('writeRaw chmods the file to 0o600 before writing into it', () => {
             store.writeRaw('{"a":2}');
             expect(fs.chmodSync).toHaveBeenCalledTimes(1);

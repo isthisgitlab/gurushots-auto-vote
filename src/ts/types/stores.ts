@@ -82,6 +82,11 @@ export interface ScenarioFiredRecord {
     /** the local day it fired: that day's midnight, unix seconds */
     day?: number;
     phaseEnteredAt?: number;
+    /**
+     * The action type of a spend that got no answer, after which the rule was stopped so that it is never spent
+     * again: the rule stays held for the phase it stopped in (see repeatBlock).
+     */
+    unclearHalt?: string;
 }
 
 /** A challenge's runtime position in its scenario (scenarioStateStore record). */
@@ -94,7 +99,8 @@ export interface ScenarioState {
     memory: Record<string, string>;
     /** rule id → when it fired */
     fired: Record<string, ScenarioFiredRecord>;
-    inFlight: { ruleId: string; actionIndex: number } | null;
+    /** `unclear`: the action type of the step at `actionIndex`, whose spend got no answer and is never spent again */
+    inFlight: { ruleId: string; actionIndex: number; unclear?: string } | null;
     /** currency spent, by kind (swaps / keys / fills) */
     spent: Record<string, number>;
     /** photo id → [[unixSec, votes], …] vote samples (scenarios/speed.ts) */
@@ -102,8 +108,7 @@ export interface ScenarioState {
     /** notices for the host notifiers */
     outbox?: Array<{ id: string; at: number; message: string }>;
     lastAction?: { at: number; ruleId: string; action: string; outcome: string } | null;
-    /** `kind` and `action`: a spend that got no answer, which the status line words for the user in their language */
-    lastError?: { at: number; message: string; kind?: 'spend-unclear'; action?: string } | null;
+    lastError?: { at: number; message: string } | null;
     /** ms, for pruning */
     updatedAt?: number;
 }

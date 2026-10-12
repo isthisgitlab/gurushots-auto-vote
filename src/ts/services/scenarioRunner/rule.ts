@@ -51,9 +51,12 @@ const applyEffects = (before: ScenarioState, effects: ActionEffects, at: number)
 };
 
 /**
- * State when a step stops its rule. The rule resumes at that step when it was committed. A spend that got no answer
- * may have gone through: it commits the rule from here, so the retry resumes at this step and a live re-check that
- * then skips it passes over it to the steps that follow, and it counts toward the scenario's spend limit.
+ * State when a step stops its rule. The rule resumes at that step when it was committed.
+ *
+ * A spend that got no answer may have gone through: it commits the rule from here, so the retry resumes at this step
+ * (marked on `inFlight` itself, which survives anything that only changes `lastError`) and never spends it again,
+ * and it counts toward the scenario's spend limit. When that retry cannot show the spend landed (`halt`) the rule
+ * ends here and is recorded as fired with the action it stopped after, so its repeat policy holds it (evaluate).
  */
 const stoppedAt = (
     state: ScenarioState,
@@ -65,16 +68,18 @@ const stoppedAt = (
         message: string;
         at: number;
         committed: boolean;
+        timezone: string;
     },
 ): ScenarioState => {
-    const { rule, index, action, result, message, at, committed } = stop;
-    // A rule that cannot go on after an unclear spend (halt) ends here, with nothing left to resume.
-    const resumes = !result.halt && (committed || result.spent);
-    const next: ScenarioState = { ...state, inFlight: resumes ? { ruleId: rule.id, actionIndex: index } : null };
-    if (result.status !== 'deferred') {
-        const unclear = result.unclear ? { kind: 'spend-unclear' as const, action: action.type } : {};
-        next.lastError = { at, message, ...unclear };
+    const { rule, index, action, result, message, at, committed, timezone } = stop;
+    const next: ScenarioState = { ...state, inFlight: null };
+    if (result.halt) {
+        next.fired = { ...state.fired, [rule.id]: { ...firedRecord(state, at, timezone), unclearHalt: action.type } };
+    } else if (committed || result.spent) {
+        const unclear = result.unclear ? { unclear: action.type } : {};
+        next.inFlight = { ruleId: rule.id, actionIndex: index, ...unclear };
     }
+    if (result.status !== 'deferred') next.lastError = { at, message };
     return applyEffects(next, { spent: result.spent }, at);
 };
 
@@ -87,10 +92,7 @@ const isUnclearRetry = (
     firstStep: boolean,
     action: ScenarioAction,
 ): action is ScenarioAction & { type: SpendAction } =>
-    firstStep &&
-    start.inFlight?.ruleId === ruleId &&
-    start.lastError?.kind === 'spend-unclear' &&
-    start.lastError.action === action.type;
+    firstStep && start.inFlight?.ruleId === ruleId && start.inFlight.unclear === action.type;
 
 /**
  * Execute one rule from `startIndex`. Returns the new state and whether the
@@ -126,7 +128,7 @@ const runRule = async (
                 ctx.ledger.set(ctx.challengeId, state);
                 continue;
             }
-            state = stoppedAt(state, { rule, index, action, result, message, at, committed });
+            state = stoppedAt(state, { rule, index, action, result, message, at, committed, timezone: ctx.timezone });
             ctx.ledger.set(ctx.challengeId, state);
             return { state, completed: false };
         }

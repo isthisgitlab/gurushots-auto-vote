@@ -2,25 +2,23 @@
  * The user's way out of a payment that cannot be confirmed: forget the claim, so the next join of the challenge
  * asks for its price like any first one. Nothing settles an unconfirmed claim by itself — only a paid submit that
  * used it, or this explicit act, ends it — so this is the one place a claim of coins that may have been taken is
- * deleted on the user's word.
+ * deleted on the user's word. Only this account's own unconfirmed claim: a record from an older version is never
+ * forgotten (it may be another account's), and clears by itself.
  */
 
 import { cat, inFlight, lockFor } from './shared';
 import type { JoinDeps } from './shared';
 import { sanitizeLogString } from '../../logger/sanitize';
 import { forgetClaim, markerOwner, paidOwnerUnknown } from './unlockMarker';
-import type { ForgetResult } from './unlockMarker';
+import type { ForgetStatus } from '../../types/join';
 
-type ForgetOutcome = {
-    status: ForgetResult | 'busy' | 'account-unknown' | 'not-authenticated';
-    challengeId: string | number;
-};
+type ForgetOutcome = { status: ForgetStatus; challengeId: string | number };
 
 /**
  * Forgets this account's claim for the challenge, under the same cross-process lock the unlock takes, re-reading
- * the store under it. Only a claim that is still unconfirmed, or a bare one from before accounts were told apart;
- * never one known to have been charged, and a bare one only while no other account has claims on this device.
- * Refuses when the account cannot be told or the file cannot be read.
+ * the store under it. Only a claim that is still unconfirmed: never one known to have been charged, and never a
+ * bare one from before accounts were told apart (`legacy-record`). Refuses when the account cannot be told, a join
+ * of the challenge is under way, or the file cannot be read.
  */
 const forgetUnconfirmedPayment = async (
     challengeId: string | number,

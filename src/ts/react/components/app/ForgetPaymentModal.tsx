@@ -6,13 +6,22 @@ import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
 
 import type { OpenChallenge } from '../../../types/gurushots';
+import type { ForgetStatus } from '../../../types/join';
 
-// The text of each answer that forgets nothing; anything else (and a call that failed) reads as the general one.
-const PROBLEM_TEXT: Record<string, string> = {
+// The text of each answer that forgets nothing; a call that failed outright, or an answer with no status, reads as
+// the general one.
+const PROBLEM_TEXT: Record<Exclude<ForgetStatus, 'forgotten'>, string> = {
     'nothing-to-forget': 'app.discoverForgetNothing',
-    'account-unknown': 'app.discoverForgetAccountUnknown',
     'legacy-record': 'app.discoverForgetLegacyRecord',
+    busy: 'app.discoverForgetBusy',
     unreadable: 'app.discoverForgetUnreadable',
+    'account-unknown': 'app.discoverForgetAccountUnknown',
+    'not-authenticated': 'app.discoverForgetNotAuthenticated',
+};
+
+const problemOf = (answer: Awaited<ReturnType<typeof ipc.forgetUnconfirmedPayment>> | null): string => {
+    const reported = answer && 'status' in answer ? answer.status : 'forgotten';
+    return reported === 'forgotten' ? 'app.discoverForgetFailed' : PROBLEM_TEXT[reported];
 };
 
 /**
@@ -27,6 +36,23 @@ function BalanceHint({ before, now }: { before: number; now: number | null }) {
                 ? interp(t('app.discoverForgetBalanceBefore'), { before })
                 : interp(t('app.discoverForgetBalances'), { before, now })}
         </p>
+    );
+}
+
+// Stays focusable while the call is under way (aria-disabled, not disabled), and ignores clicks then.
+function ConfirmButton({ working, onConfirm }: { working: boolean; onConfirm: () => void }) {
+    const { t } = useTranslation();
+    return (
+        <button
+            className={`btn btn-warning btn-sm ${working ? 'btn-disabled' : ''}`}
+            onClick={() => {
+                if (!working) onConfirm();
+            }}
+            aria-disabled={working}
+            aria-busy={working}
+        >
+            {working ? t('app.discoverForgetWorking') : t('app.discoverForgetConfirm')}
+        </button>
     );
 }
 
@@ -66,8 +92,7 @@ export function ForgetPaymentModal({
                 onForgotten(target.id);
                 onClose();
             } else {
-                const reported = answer && 'error' in answer && typeof answer.error === 'string' ? answer.error : '';
-                setProblem(PROBLEM_TEXT[reported] ?? 'app.discoverForgetFailed');
+                setProblem(problemOf(answer));
             }
         } finally {
             setWorking(false);
@@ -91,14 +116,7 @@ export function ForgetPaymentModal({
                         <button className="btn btn-outline btn-sm" onClick={onClose} disabled={working}>
                             {t('app.cancel')}
                         </button>
-                        <button
-                            className="btn btn-warning btn-sm"
-                            onClick={() => void forget(challenge)}
-                            disabled={working}
-                            aria-busy={working}
-                        >
-                            {working ? t('app.discoverForgetWorking') : t('app.discoverForgetConfirm')}
-                        </button>
+                        <ConfirmButton working={working} onConfirm={() => void forget(challenge)} />
                     </ModalActions>
                 </>
             )}

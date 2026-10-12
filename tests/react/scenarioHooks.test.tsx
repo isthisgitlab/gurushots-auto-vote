@@ -141,10 +141,24 @@ describe('useScenarioStatus', () => {
     });
 
     test.each([
-        [{ message: 'x', kind: 'spend-unclear', action: 'unlockBoost' }, 'unlockBoost'],
-        [{ message: 'x', kind: 'spend-unclear' }, null],
-        [{ message: 'x' }, null],
-    ])('a last problem %p reads as spend %p on the card', async (lastError, spend) => {
+        [
+            'a step being checked on, carried by the rule in flight',
+            { inFlight: { ruleId: 'r', actionIndex: 1, unclear: 'unlockBoost' } },
+            { action: 'unlockBoost', stopped: false },
+        ],
+        [
+            'a rule stopped after one, in the phase it is in now',
+            { fired: { r: { at: NOW, phaseEnteredAt: NOW, unclearHalt: 'swap' } } },
+            { action: 'swap', stopped: true },
+        ],
+        [
+            'a rule stopped in an earlier entry of the phase',
+            { fired: { r: { at: NOW, phaseEnteredAt: NOW - 100, unclearHalt: 'swap' } } },
+            null,
+        ],
+        ['a rule that finished normally', { fired: { r: { at: NOW, phaseEnteredAt: NOW } } }, null],
+        ['a rule in flight with no marker', { inFlight: { ruleId: 'r', actionIndex: 1 } }, null],
+    ])('%s reads as the spend %p on the card', async (_name, extra, spend) => {
         jest.mocked(window.api.getScenarioStatus).mockResolvedValue(
             invalid({
                 success: true,
@@ -152,12 +166,20 @@ describe('useScenarioStatus', () => {
                 scenario,
                 corrupt: false,
                 timezone: 'UTC',
-                state: { phase: 'main', phaseEnteredAt: NOW, fired: {}, memory: {}, lastError },
+                state: {
+                    phase: 'main',
+                    phaseEnteredAt: NOW,
+                    fired: {},
+                    memory: {},
+                    lastError: { message: 'x' },
+                    inFlight: null,
+                    ...extra,
+                },
             }),
         );
         render(<StatusProbe challenge={challenge()} />);
         await waitFor(() => expect(out()).not.toBe('none'));
-        expect((JSON.parse(out()) as ScenarioSummary).lastErrorSpend).toEqual(spend);
+        expect((JSON.parse(out()) as ScenarioSummary).spendUnclear ?? null).toEqual(spend);
     });
 
     test('a challenge without entries, and a result that lands after unmount, are handled', async () => {

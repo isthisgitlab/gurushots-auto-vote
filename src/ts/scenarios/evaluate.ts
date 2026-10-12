@@ -41,6 +41,13 @@ const localDayOf = (now: number, timezone: string) => (occurrencesOf('00:00', ti
 const repeatBlock = (rule: ScenarioRule, state: ScenarioEngineState, now: number, timezone: string) => {
     const fired = state.fired?.[rule.id];
     if (!fired) return null;
+    // A rule stopped after a spend that got no answer is not run again where nothing else holds it: one that fires
+    // every pass waits for the phase to be entered again (once, once per phase and once per day hold it by their own
+    // windows). Resetting the scenario's state clears it.
+    const everyPass = rule.repeat === undefined || rule.repeat === 'always';
+    if (fired.unclearHalt && everyPass && fired.phaseEnteredAt === state.phaseEnteredAt) {
+        return 'stopped after a spend that got no answer, until the phase is entered again';
+    }
     switch (rule.repeat) {
         case 'once':
             return 'already fired';

@@ -50,7 +50,9 @@ const failed = (message: string): NotDoneOutcome => ({ status: 'failed', message
  * the rule stops rather than going on to spend on a later step.
  */
 const unclearHalted = (actionType: SpendAction): NotDoneOutcome => ({
-    ...failed(`the ${SPEND[actionType].label} may have gone through earlier, so it is not repeated`),
+    ...failed(
+        `the ${SPEND[actionType].label} may have gone through earlier, so it is not repeated and the rule was stopped`,
+    ),
     unclear: true,
     halt: true,
 });

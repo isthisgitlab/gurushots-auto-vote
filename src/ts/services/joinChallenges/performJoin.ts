@@ -82,6 +82,25 @@ const unclearUnlock = (
     return { status: 'charged-pending-submit', charged: 0, reason: 'unconfirmed', maybeCharged: needsCoins, ...before };
 };
 
+// How often the removal of the claim of a refused unlock is tried (each try already waits a moment for the lock).
+const CLEAR_ATTEMPTS = 3;
+
+/**
+ * The unlock was refused, so its claim must go. When it cannot be removed (the claims file stays locked or
+ * unwritable) it must not stay looking like a payment that is known to have been taken, which nothing could forget:
+ * it is flagged unconfirmed instead, so the user can forget it.
+ */
+const releaseRefusedClaim = (deps: JoinDeps, id: string | number, owner: string | null): void => {
+    for (let attempt = 0; attempt < CLEAR_ATTEMPTS; attempt++) {
+        if (clearUnlocked(deps, markerKey(id, owner))) return;
+    }
+    const flagged = markUnconfirmed(deps, id, owner);
+    cat().error(
+        `challenge ${sanitizeLogString(id)}: the unlock was refused but its claim could not be removed — ${flagged ? 'it is flagged as unconfirmed, so it can be forgotten' : 'it could not be flagged either'}`,
+        null,
+    );
+};
+
 /**
  * The check→claim→unlock section, run under the cross-process lock. Re-reads
  * the unlock claim authoritatively — another process may have unlocked between
@@ -132,7 +151,7 @@ const claimAndUnlock = async (
     if (!unlock || unlock.unclear) {
         return { outcome: unclearUnlock(challenge, deps, owner, needsCoins, coinsBefore) };
     }
-    clearUnlocked(deps, markerKey(id, owner));
+    releaseRefusedClaim(deps, id, owner);
     cat().warning(`coins_unlock failed for ${logger.challengeTag(challenge)} — no coins charged`, null);
     return { outcome: failedNoCharge() };
 };
@@ -166,7 +185,10 @@ const unlockUnderLock = async (
  * may already hold it). A lock another process holds leaves the claim for the pruning that follows the challenge.
  */
 const clearClaim = (deps: JoinDeps, id: string | number, key: string, holdsLock: boolean): void => {
-    if (holdsLock) return clearUnlocked(deps, key);
+    if (holdsLock) {
+        clearUnlocked(deps, key);
+        return;
+    }
     const lock = lockFor(deps, id);
     if (!lock.ok) {
         cat().warning(

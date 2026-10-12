@@ -7,32 +7,33 @@
 jest.mock('path', () => jest.requireActual<typeof import('path')>('path'));
 
 // A small in-memory file system, faithful where the lock depends on it: exclusive creation fails with EEXIST,
-// rename and link are atomic and fail the way the real ones do, and a file carries its modification time.
+// rename and link are atomic and fail the way the real ones do, a file carries its modification time, and an open
+// file stays the file it was opened as when the path is replaced.
 type MockFile = { content: string; mtimeMs: number };
 const mockFiles = new Map<string, MockFile>();
-const mockFds = new Map<number, string>();
+const mockFds = new Map<number, MockFile>();
 let mockNextFd = 10;
 const mockFsError = (code: string) => Object.assign(new Error(code), { code });
+const mockOpen = (file: string, flag: string): number => {
+    const existing = mockFiles.get(file);
+    if (flag === 'r' && !existing) throw mockFsError('ENOENT');
+    if (flag === 'wx' && existing) throw mockFsError('EEXIST');
+    const entry = existing ?? { content: '', mtimeMs: Date.now() };
+    mockFiles.set(file, entry);
+    mockNextFd += 1;
+    mockFds.set(mockNextFd, entry);
+    return mockNextFd;
+};
 jest.mock('fs', () => ({
-    openSync: jest.fn((file: string, flag: string) => {
-        if (flag === 'wx' && mockFiles.has(file)) throw mockFsError('EEXIST');
-        mockFiles.set(file, { content: '', mtimeMs: Date.now() });
-        mockNextFd += 1;
-        mockFds.set(mockNextFd, file);
-        return mockNextFd;
-    }),
+    openSync: jest.fn(mockOpen),
     writeSync: jest.fn((fd: number, data: string) => {
-        const file = mockFiles.get(mockFds.get(fd) ?? '');
+        const file = mockFds.get(fd);
         if (file) file.content += data;
     }),
     closeSync: jest.fn(),
-    statSync: jest.fn((file: string) => {
-        const found = mockFiles.get(file);
-        if (!found) throw mockFsError('ENOENT');
-        return { mtimeMs: found.mtimeMs };
-    }),
-    readFileSync: jest.fn((file: string) => {
-        const found = mockFiles.get(file);
+    fstatSync: jest.fn((fd: number) => ({ mtimeMs: mockFds.get(fd)?.mtimeMs ?? 0 })),
+    readFileSync: jest.fn((target: string | number) => {
+        const found = typeof target === 'number' ? mockFds.get(target) : mockFiles.get(target);
         if (!found) throw mockFsError('ENOENT');
         return found.content;
     }),
@@ -41,12 +42,6 @@ jest.mock('fs', () => ({
         if (!found) throw mockFsError('ENOENT');
         mockFiles.delete(from);
         mockFiles.set(to, found);
-    }),
-    linkSync: jest.fn((from: string, to: string) => {
-        const found = mockFiles.get(from);
-        if (!found) throw mockFsError('ENOENT');
-        if (mockFiles.has(to)) throw mockFsError('EEXIST');
-        mockFiles.set(to, { ...found });
     }),
     unlinkSync: jest.fn((file: string) => {
         if (!mockFiles.delete(file)) throw mockFsError('ENOENT');
@@ -84,7 +79,9 @@ const createJsonStoreCalls = [...storage.createJsonStore.mock.calls];
 
 describe('store wiring', () => {
     test('uses the platform-aware JSON store and re-exports its hydrate/flush hooks', () => {
-        expect(createJsonStoreCalls).toEqual([[{ fileName: 'joinState.json', prefKey: 'gs_join_state' }]]);
+        expect(createJsonStoreCalls).toEqual([
+            [{ fileName: 'joinState.json', prefKey: 'gs_join_state', atomic: true }],
+        ]);
         expect(joinState.joinStateStore).toBe(mockStore);
         expect(joinState.initializeJoinStateAsync).toBe(mockStore.initializeAsync);
         expect(joinState.flushJoinStateWrites).toBe(mockStore.flushPendingWrites);
@@ -233,16 +230,24 @@ describe('acquireUnlockLock', () => {
         unwritable.release();
     });
 
-    test('a stale lock another process removes first is simply free', () => {
-        plant('crashed-owner', 61_000);
-        fs.statSync.mockImplementationOnce(() => {
-            mockFiles.delete(LOCK);
-            throw mockFsError('ENOENT');
-        });
-        expect(joinState.acquireUnlockLock('c1').ok).toBe(true);
-    });
-
     describe('the takeover is atomic: of two processes finding the same stale lock only one gets it', () => {
+        const realOpen = () => fs.openSync.getMockImplementation()!;
+        const realRename = () => fs.renameSync.getMockImplementation()!;
+        const grave = (name = '') =>
+            [...mockFiles.keys()].filter((file) => file.includes('.stale-') && file.includes(name));
+
+        test('a stale lock another process removed first is simply free', () => {
+            plant('crashed-owner', 61_000);
+            fs.openSync
+                .mockImplementationOnce(realOpen()) // the create: EEXIST
+                .mockImplementationOnce(() => {
+                    // The look at the stale file: it is gone by now.
+                    mockFiles.delete(LOCK);
+                    throw mockFsError('ENOENT');
+                });
+            expect(joinState.acquireUnlockLock('c1').ok).toBe(true);
+        });
+
         test('the other renamed it first and created its own lock: busy, and that lock is untouched', () => {
             plant('crashed-owner', 61_000);
             fs.renameSync.mockImplementationOnce(() => {
@@ -266,30 +271,104 @@ describe('acquireUnlockLock', () => {
             lock.release();
         });
 
-        test('what was renamed is a live lock that replaced the stale one meanwhile: put back, and busy', () => {
+        test('mtime and token are read through one open file: a path replaced right after the look cannot mix them', () => {
+            plant('old-token', 61_000);
+            fs.openSync
+                .mockImplementationOnce(realOpen()) // the create: EEXIST
+                .mockImplementationOnce((file, flag) => {
+                    // The look opens the stale file, and only then is the path replaced by a live lock.
+                    const fd = realOpen()(file, flag);
+                    mockFiles.set(LOCK, { content: 'live-token', mtimeMs: Date.now() });
+                    return fd;
+                });
+            // What was seen is the stale file, whole; what is then renamed away is the live one, which is put back.
+            expect(joinState.acquireUnlockLock('c1').ok).toBe(false);
+            expect(lockFile()?.content).toBe('live-token');
+            expect([...mockFiles.keys()]).toEqual([LOCK]);
+        });
+
+        test('what was renamed is a live lock that replaced the stale one meanwhile: put back with a rename, and busy', () => {
             plant('crashed-owner', 61_000);
-            const realRename = fs.renameSync.getMockImplementation()!;
             fs.renameSync.mockImplementationOnce((from, to) => {
-                // Between the check and the rename the stale lock was replaced by a live one.
+                // Between the look and the rename the stale lock was replaced by a live one.
                 mockFiles.set(LOCK, { content: 'live-token', mtimeMs: Date.now() });
-                realRename(from, to);
+                realRename()(from, to);
             });
             expect(joinState.acquireUnlockLock('c1').ok).toBe(false);
             expect(lockFile()?.content).toBe('live-token');
             expect([...mockFiles.keys()]).toEqual([LOCK]);
         });
 
-        test('…and when a newer lock was made in its place meanwhile, the one renamed away is dropped', () => {
+        test('the owner touched the lock in the moment between the look and the rename: it is live, put back', () => {
+            plant('slow-owner', 61_000);
+            fs.renameSync.mockImplementationOnce((from, to) => {
+                const held = mockFiles.get(LOCK);
+                if (held) held.mtimeMs = Date.now();
+                realRename()(from, to);
+            });
+            expect(joinState.acquireUnlockLock('c1').ok).toBe(false);
+            expect(lockFile()?.content).toBe('slow-owner');
+            expect(grave()).toEqual([]);
+        });
+
+        test('…and when another lock took its place meanwhile, the live one is left under its other name, never deleted', () => {
             plant('crashed-owner', 61_000);
-            const realRename = fs.renameSync.getMockImplementation()!;
             fs.renameSync.mockImplementationOnce((from, to) => {
                 mockFiles.set(LOCK, { content: 'live-token', mtimeMs: Date.now() });
-                realRename(from, to);
+                realRename()(from, to);
                 mockFiles.set(LOCK, { content: 'newer-token', mtimeMs: Date.now() });
             });
             expect(joinState.acquireUnlockLock('c1').ok).toBe(false);
             expect(lockFile()?.content).toBe('newer-token');
-            expect([...mockFiles.keys()]).toEqual([LOCK]);
+            const left = grave();
+            expect(left).toHaveLength(1);
+            expect(mockFiles.get(left[0])?.content).toBe('live-token');
+        });
+
+        test('a rename that fails for a reason other than a lost race leaves the lock busy', () => {
+            plant('crashed-owner', 61_000);
+            fs.renameSync.mockImplementationOnce(() => {
+                throw mockFsError('EACCES');
+            });
+            expect(joinState.acquireUnlockLock('c1').ok).toBe(false);
+            expect(lockFile()?.content).toBe('crashed-owner');
+        });
+    });
+
+    describe('renewal tolerates one failed read, not two, and never outlives the lock', () => {
+        beforeEach(() => {
+            jest.useFakeTimers();
+            mockFiles.clear();
+            jest.clearAllMocks();
+        });
+        afterEach(() => jest.useRealTimers());
+
+        test('one read that finds nothing is passed over; the renewal goes on', () => {
+            const lock = joinState.acquireUnlockLock('c1');
+            const realRead = fs.readFileSync.getMockImplementation()!;
+            fs.readFileSync.mockImplementationOnce(() => {
+                throw mockFsError('EIO');
+            });
+            jest.advanceTimersByTime(20_000);
+            expect(fs.utimesSync).not.toHaveBeenCalled();
+            fs.readFileSync.mockImplementation(realRead);
+            jest.advanceTimersByTime(20_000);
+            expect(fs.utimesSync).toHaveBeenCalledTimes(1);
+            lock.release();
+        });
+
+        test('two in a row end it', () => {
+            const lock = joinState.acquireUnlockLock('c1');
+            fs.readFileSync.mockImplementation(() => {
+                throw mockFsError('EIO');
+            });
+            jest.advanceTimersByTime(60_000);
+            fs.readFileSync.mockImplementation((target) =>
+                typeof target === 'string' ? (lockFile()?.content ?? '') : '',
+            );
+            jest.advanceTimersByTime(5 * 60_000);
+            expect(fs.utimesSync).not.toHaveBeenCalled();
+            lock.release();
         });
     });
 
@@ -303,6 +382,16 @@ describe('acquireUnlockLock', () => {
         expect(lock.ok).toBe(true);
         expect(logger.withCategory).toHaveBeenCalledWith('join');
         expect(warning).toHaveBeenCalledWith('cross-process join lock unavailable for c9: EACCES', null);
+    });
+
+    test('the challenge id is sanitized in what is logged', () => {
+        const warning = jest.fn();
+        jest.mocked(logger.withCategory).mockReturnValueOnce(invalid({ warning }));
+        fs.openSync.mockImplementationOnce(() => {
+            throw mockFsError('EACCES');
+        });
+        joinState.acquireUnlockLock('c9\nforged line');
+        expect(warning).toHaveBeenCalledWith('cross-process join lock unavailable for c9 forged line: EACCES', null);
     });
 
     test('a thrown non-Error value is still reported and fails open', () => {

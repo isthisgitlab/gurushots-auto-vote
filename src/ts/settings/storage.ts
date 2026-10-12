@@ -16,6 +16,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import * as logger from '../logger';
 const { isSourceCode, getAppName } = logger;
 import * as runtime from '../runtime';
@@ -106,6 +107,31 @@ const writeOwnerOnly = (filePath: string, data: string) => {
         }
     }
     fs.writeFileSync(filePath, data, { encoding: 'utf8', mode: 0o600 });
+};
+
+/**
+ * Writes a JSON store's file so that a reader never sees it half written: the data goes to a temp file next to it
+ * (mode 0o600) and is renamed over it, which replaces it atomically. The settings file is not written this way —
+ * its inode is watched — and neither are the stores that did not ask for it (`atomic`): the claims file asks, because
+ * a claim read by a process that does not hold the claims-file lock must never see an empty or cut-off file.
+ */
+const writeAtomicOwnerOnly = (filePath: string, data: string) => {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    }
+    const temp = `${filePath}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
+    try {
+        fs.writeFileSync(temp, data, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+        fs.renameSync(temp, filePath);
+    } catch (err) {
+        try {
+            fs.unlinkSync(temp);
+        } catch {
+            // nothing was written, or it is already gone
+        }
+        throw err;
+    }
 };
 
 const storage = {
@@ -285,14 +311,23 @@ const writeHeadlessKey = (prefKey: string, data: string) => {
  * settings store above uses, packaged for other stores (metadata.ts).
  *
  *   - Electron/CLI: synchronous fs at userData/<fileName>, left at mode
- *     0o600 after every write (userData JSON can carry tokens/state that
+ *     0o600 after every write (replaced atomically, by temp file and rename, when `atomic`) (userData JSON can carry tokens/state that
  *     other local users have no business reading).
  *   - Capacitor app WebView: hydrate-once cache (initializeAsync) +
  *     ordered async write-behind to @capacitor/preferences under prefKey.
  *   - Android headless service: the native keyed preference bridge persists
  *     supported stores; unsupported keys retain their per-cycle memory cache.
  */
-const createJsonStore = ({ fileName, prefKey }: { fileName: string; prefKey: string }) => {
+const createJsonStore = ({
+    fileName,
+    prefKey,
+    atomic = false,
+}: {
+    fileName: string;
+    prefKey: string;
+    /** replace the file atomically on every write (temp file + rename), for a store read outside any lock */
+    atomic?: boolean;
+}) => {
     let initialized = false;
     let cachedJson: string | null = null;
     let chain = Promise.resolve();
@@ -332,7 +367,7 @@ const createJsonStore = ({ fileName, prefKey }: { fileName: string; prefKey: str
                     });
                 return;
             }
-            writeOwnerOnly(filePath(), data);
+            (atomic ? writeAtomicOwnerOnly : writeOwnerOnly)(filePath(), data);
         },
         /** Hydrate the Capacitor cache once at boot. No-op elsewhere. */
         initializeAsync: async () => {

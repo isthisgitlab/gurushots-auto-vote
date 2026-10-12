@@ -338,7 +338,9 @@ export const app = {
     scenarioStatusNext: 'next check in {time}',
     scenarioStatusProblem: 'Last step skipped: {message}',
     scenarioStatusSpendUnclear:
-        'GuruShots gave no answer to “{action}”, so it may have gone through. It will be checked again next cycle.',
+        'GuruShots gave no answer to “{action}”, so it may have gone through. It will not be spent again: the next cycle only checks whether it took effect.',
+    scenarioStatusSpendStopped:
+        'GuruShots gave no answer to “{action}”, so it may have gone through, and its rule was stopped so that it is not spent again. Check the challenge: the rule can run again when its repeat window comes round, or after the scenario state is reset.',
     notifyOnScenario: 'Notify from scenarios',
     notifyOnScenarioDesc:
         "Show the messages your scenarios' notify steps send, and a warning when a scenario stops because it needs you.",
@@ -545,12 +547,12 @@ export const app = {
     discoverUnconfirmed:
         'The payment for this challenge got no answer, so it may or may not have gone through. Retrying only submits your photo, so you are never charged twice. If the GuruShots website shows the coins were not taken, press "I wasn\'t charged", then join again.',
     discoverEarlierPayment:
-        'This challenge has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. Retrying only submits your photo, so you are never charged twice. The record cannot be forgotten here, because it may belong to another account: it clears by itself after 30 days, or when the account that paid joins the challenge.',
+        'This challenge has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. Retry submit is for the account that paid: it only submits the photo, so nobody is charged twice. The record cannot be forgotten here, because it may belong to another account: it clears by itself, at the next check after 30 days, or when the account that paid joins the challenge. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.',
     discoverForgetPayment: "I wasn't charged",
     discoverForgetPaymentLabel: "I wasn't charged for {title}",
     discoverForgetTitle: 'Forget this payment?',
     discoverForgetBody:
-        'First check your coin history on the GuruShots website. Only continue if the coins for {title} were not taken: if they were, joining again charges you a second time. Once forgotten, auto-join may also join it again, and pay for it, within its coin budget.',
+        'First check your coin history on the GuruShots website. Only continue if the coins for {title} were not taken: if they were, joining again charges you a second time. Once forgotten, auto-join may join the challenge, and pay for it, again within its coin budget.',
     discoverForgetBalances:
         'Coins before this payment: {before}. GuruShots reports {now} now. Other coin activity since then (rewards, other joins) changes the difference, so the app cannot tell whether the payment went through: the coin history on the GuruShots website is what counts.',
     discoverForgetBalanceBefore:
@@ -562,7 +564,10 @@ export const app = {
     discoverForgetAccountUnknown:
         'Could not confirm which account is logged in, so nothing was changed. Try again shortly, or log in again.',
     discoverForgetLegacyRecord:
-        'This record is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It clears by itself after 30 days, or when the account that paid joins the challenge. Nothing was changed.',
+        'This record is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It clears by itself, at the next check after 30 days, or when the account that paid joins the challenge. Nothing was changed.',
+    discoverForgetBusy:
+        'A join of this challenge is in progress, or another part of the app is using the saved payment records. Nothing was changed. Try again in a moment.',
+    discoverForgetNotAuthenticated: 'You are not logged in, so nothing was changed. Log in again, then try once more.',
     discoverForgetUnreadable:
         'The saved payment records could not be read, so nothing was changed. Restart the app and try again; if it keeps happening, the join-state file needs attention — check the log.',
     discoverForgetFailed: 'Could not forget the payment right now. Nothing was changed. Try again in a moment.',

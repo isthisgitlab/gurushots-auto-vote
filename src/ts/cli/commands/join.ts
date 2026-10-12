@@ -12,7 +12,7 @@ import { stripTerminalControl } from '../../format/logSafe';
 import { formatDuration } from '../../format/duration';
 
 import type { NullEventHandlers } from '../../types/cli';
-import type { ForgetOutcome } from '../../services/joinChallenges';
+import type { ForgetStatus } from '../../types/join';
 import type { OpenChallenge } from '../../types/gurushots';
 import type * as actions_handlersModule from '../../ipc/actions.handlers';
 type ActionHandlers = NullEventHandlers<ReturnType<typeof actions_handlersModule.buildHandlers>>;
@@ -94,7 +94,7 @@ const unconfirmedText = (
 ) => {
     const rerun = `Re-run "join ${challengeId}": it only submits your photo, so you are never charged twice.`;
     if (reason === 'earlier-payment') {
-        return `Challenge ${challengeId} has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. The join did not finish. ${rerun} The record cannot be forgotten here, because it may belong to another account: it clears by itself after 30 days, or when the account that paid joins the challenge.`;
+        return `Challenge ${challengeId} has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. The join did not finish. ${rerun} The record cannot be forgotten here, because it may belong to another account: it clears by itself, at the next check after 30 days, or when the account that paid joins the challenge. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.`;
     }
     return `The payment for ${challengeId} got no answer, so it may or may not have gone through, and the join did not finish.${balanceHint(balances.before, balances.now)} ${rerun} If the GuruShots website shows the coins were not taken, run "forget-payment ${challengeId}" and join again.`;
 };
@@ -242,7 +242,7 @@ const joinChallengeCmd = async (
 
 type ForgetLine = { level: 'info' | 'error'; text: (id: string | number) => string };
 
-const FORGET_LINES: Record<ForgetOutcome['status'], ForgetLine> = {
+const FORGET_LINES: Record<ForgetStatus, ForgetLine> = {
     forgotten: {
         level: 'info',
         text: (id) =>
@@ -256,7 +256,7 @@ const FORGET_LINES: Record<ForgetOutcome['status'], ForgetLine> = {
     'legacy-record': {
         level: 'error',
         text: (id) =>
-            `The payment record for ${id} is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It clears by itself after 30 days, or when the account that paid joins the challenge. Nothing was changed.`,
+            `The payment record for ${id} is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It clears by itself, at the next check after 30 days, or when the account that paid joins the challenge. Nothing was changed.`,
     },
     busy: { level: 'error', text: (id) => `A join of ${id} is in progress. Try again in a moment.` },
     'account-unknown': {

@@ -427,7 +427,8 @@ repeated six times is one that gets forgotten at one of them.
   reset, a 3xx (a redirected POST may have been processed), any 5xx, a 2xx whose body is no JSON object and a
   rejection that is no error object are unclear. Boosts and Turbos keep the normal retrying `makePostRequest`:
   once USED the server refuses a replay, and a single attempt would only lose a boost in its last window. A
-  refused unlock gives the claim back and answers `failed-no-charge`. An **unclear** unlock may have charged:
+  refused unlock gives the claim back (clearing it is retried a bounded number of times; if it still cannot be
+  cleared the claim is flagged unconfirmed rather than left looking confirmed) and answers `failed-no-charge`. An **unclear** unlock may have charged:
   the claim stays, stored as `{ unlockedAt, unconfirmed: true }`, and the join answers
   `charged-pending-submit` with `reason: 'unconfirmed'` and `maybeCharged`, which the auto pass subtracts from
   its budget and balance without reporting it as charged. A claim that could not be flagged (the write failed)
@@ -451,8 +452,10 @@ repeated six times is one that gets forgotten at one of them.
   bare claim from before accounts were told apart is **never** forgotten (`legacy-record`): it may be another
   account's protection against a second charge and nothing on the device can tell whose, so it clears by itself
   — when a paid submit that used it succeeds, or after 30 days (any claim, bare or any account's, older than 30
-  days is pruned with the open-list pruning; no challenge lives that long, and it ends the keeping of other
-  accounts' records and balances). The GUI offers no "I wasn't charged" for it. A key with a colon is never read as a bare claim, and the IPC handler and
+  days is pruned at the next open-list pruning, except this account's own claim of a challenge still in the list
+  just read; no challenge lives that long, and it ends the keeping of other accounts' records and balances). The
+  GUI offers no "I wasn't charged" for it, and its message tells the account that did not pay it can join on
+  the GuruShots website meanwhile. A key with a colon is never read as a bare claim, and the IPC handler and
   the CLI take only a plain challenge id (digits), so a crafted id cannot name another account's record. It
   refuses when the account cannot be told. The next
   join then asks for the price like any first one. Every change of the claims is read-modify-write of one
@@ -461,7 +464,10 @@ repeated six times is one that gets forgotten at one of them.
   records no claim, so spends nothing). Every writer of the claims reads them with
   `readUnlockedState` and writes nothing when the file is unreadable (read as empty it would wipe every other
   claim; `markUnlocked` then returns false and nothing is spent), and logs by challenge id only, never by the
-  member id in a key. Spends of currency (keys, swaps, fills) that are unclear say so (`outcome: 'unclear'`,
+  member id in a key. `markUnlocked` is a compare-and-set inside the locked change: it refuses when this
+  account's or a bare claim for the challenge already exists, so two writers never overwrite each other's claim.
+  The file is written whole to a temporary file, owner-only, then renamed, and an empty file reads as unreadable.
+  Forgetting a claim whose file is locked answers `busy`. Spends of currency (keys, swaps, fills) that are unclear say so (`outcome: 'unclear'`,
   never "rejected"); an unclear swap re-reads the live entries and records the swap in the swap-back ledger
   when it did land; and a scenario step whose spend is unclear counts toward the scenario's `spent` limit
   (conservatively, so a limit is never exceeded), is retried from the same step, and says it "may have gone
@@ -713,7 +719,12 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   action, so a crash never repeats a spend that landed. A committed rule then passes over a **skipped** step
   (target/precondition gone — a permanent state such as the boost already used) and carries on, keeping it as
   the last problem, while a **failed** or deferred step (a transient refusal: API failure, unreadable balance,
-  busy lock) resumes at that step next pass. A rule whose first action does not go through simply did not
+  busy lock) resumes at that step next pass. A step whose spend got **no answer** is marked `unclear` on the
+  rule's `inFlight` record itself (so editing the scenario and reverting never forgets it) and is never spent
+  again: the retry only reads the live challenge. When it cannot show the step took effect, the rule is
+  recorded as fired with `unclearHalt`, and a rule that repeats every pass is also held back (`repeatBlock`)
+  until its phase is entered again; the status line says "unclear, will be re-checked" or "unclear, rule
+  stopped" from that state. A rule whose first action does not go through simply did not
   fire, so a skip never uses up a `once` rule. A `goto` takes effect when the rule finishes. No spend cap: each rule
   fires at most once per pass and a `goto` chain stops on revisiting a phase in that pass; spends honour the
   user's `currencyReserve*` (shared `reserveAllows`) and the scenario's optional `limits`.

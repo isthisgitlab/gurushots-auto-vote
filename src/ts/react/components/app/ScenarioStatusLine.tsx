@@ -4,6 +4,24 @@ import { useTick } from '@/hooks/useTick';
 import { interp } from '@/utils/interp';
 import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 
+type Summary = NonNullable<ReturnType<typeof useScenarioStatusModule.useScenarioStatus>>;
+
+// The one thing to say besides where the plan is: a spend that got no answer, else the last problem.
+function Notice({ status, compact }: { status: Summary; compact: boolean }) {
+    const { t } = useTranslation();
+    const { spendUnclear, lastError } = status;
+    const text = spendUnclear
+        ? interp(t(spendUnclear.stopped ? 'app.scenarioStatusSpendStopped' : 'app.scenarioStatusSpendUnclear'), {
+              action: t(`app.sbAct_${spendUnclear.action}`),
+          })
+        : lastError && interp(t('app.scenarioStatusProblem'), { message: lastError });
+    return text ? (
+        <div className={`text-warning ${compact ? 'line-clamp-2' : ''}`} role="status">
+            {text}
+        </div>
+    ) : null;
+}
+
 /**
  * Where a challenge is in its scenario (useScenarioStatus): the scenario, its
  * phase and when it next looks — plus the last problem, so a stuck step is
@@ -45,15 +63,7 @@ export function ScenarioStatusLine({
                 <span aria-hidden="true">🧭</span> {status.name} · {phase}
                 {next && <> · {next}</>}
             </div>
-            {status.lastError && (
-                <div className={`text-warning ${compact ? 'line-clamp-2' : ''}`} role="status">
-                    {status.lastErrorSpend != null
-                        ? interp(t('app.scenarioStatusSpendUnclear'), {
-                              action: t(`app.sbAct_${status.lastErrorSpend}`),
-                          })
-                        : interp(t('app.scenarioStatusProblem'), { message: status.lastError })}
-                </div>
-            )}
+            <Notice status={status} compact={compact} />
         </div>
     );
 }

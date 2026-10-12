@@ -935,8 +935,12 @@ describe('edge paths', () => {
             await waitFor(() => expect(screen.getByText<HTMLButtonElement>('app.cancel').disabled).toBe(true));
             // The button says what it is doing, and is marked busy for assistive technology.
             const working = screen.getByText<HTMLButtonElement>('app.discoverForgetWorking');
-            expect(working.disabled).toBe(true);
+            // Still focusable (a disabled button would drop focus and announce nothing), but it does nothing.
+            expect(working.disabled).toBe(false);
+            expect(working.getAttribute('aria-disabled')).toBe('true');
             expect(working.getAttribute('aria-busy')).toBe('true');
+            fireEvent.click(working);
+            expect(window.api.forgetUnconfirmedPayment).toHaveBeenCalledTimes(1);
             expect(screen.queryByText('app.discoverForgetConfirm')).toBeNull();
             // Neither can Escape dismiss it.
             fireEvent.keyDown(document, { key: 'Escape' });
@@ -949,8 +953,9 @@ describe('edge paths', () => {
             ['nothing-to-forget', 'app.discoverForgetNothing'],
             ['account-unknown', 'app.discoverForgetAccountUnknown'],
             ['legacy-record', 'app.discoverForgetLegacyRecord'],
-            ['busy', 'app.discoverForgetFailed'],
+            ['busy', 'app.discoverForgetBusy'],
             ['unreadable', 'app.discoverForgetUnreadable'],
+            ['not-authenticated', 'app.discoverForgetNotAuthenticated'],
         ])('an answer of %s keeps the dialog open and says so, changing nothing', async (error, key) => {
             window.api.forgetUnconfirmedPayment = forgetMock().mockResolvedValue(
                 invalid({ success: false, error, status: error }),

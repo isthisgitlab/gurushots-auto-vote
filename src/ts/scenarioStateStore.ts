@@ -61,7 +61,8 @@ const isRecord = (r: unknown): r is ScenarioState =>
     (r.inFlight === null ||
         (isPlainObject(r.inFlight) &&
             typeof r.inFlight.ruleId === 'string' &&
-            Number.isInteger(r.inFlight.actionIndex)));
+            Number.isInteger(r.inFlight.actionIndex) &&
+            (r.inFlight.unclear === undefined || typeof r.inFlight.unclear === 'string')));
 
 /**
  * A fresh record for a challenge entering `scenario` at its start phase.

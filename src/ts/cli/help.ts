@@ -39,11 +39,12 @@ Commands:
   join <id> [--yes [--max-coins=<coins>]] - Join an open challenge. Free joins immediately; paid joins
              print the coin cost and require --yes before spending coins. --yes alone pays the
              cost at that moment; with --max-coins=<coins> it refuses (and spends nothing) if the cost
-             is above that. An upcoming challenge answers that it has not started.
+             is above that. An upcoming challenge answers that it has not started. Exits 1 when the
+             challenge was not joined, including a paid challenge priced without --yes.
   forget-payment <id> - Forget a join payment the app could not confirm (it got no answer), after checking on the
              GuruShots website that the coins were not taken. The next join asks for the price again; if the
              coins were taken, joining again charges a second time, and auto-join may join it again within its
-             coin budget. A record from an older version cannot be forgotten: it clears by itself after 30 days.
+             coin budget. A record from an older version cannot be forgotten: it clears by itself, at the next check after 30 days.
   list-photos [--challenge=<id>] [--search=<tag>] - List your photo ids, to choose them for auto-join / auto-submit.
              With --challenge each photo shows whether that challenge accepts it.
   check-updates - Check GitHub for a newer release

@@ -10,4 +10,23 @@
  */
 type JoinReason = 'no-photo' | 'account-unknown' | 'unconfirmed' | 'earlier-payment';
 
-export type { JoinReason };
+/**
+ * What forgetting a payment came to:
+ *   forgotten         — the unconfirmed claim of this account for the challenge is gone
+ *   nothing-to-forget — there is none, or it is a confirmed one (never forgotten)
+ *   legacy-record     — only a record from an older version, which is never forgotten (it may be another account's)
+ *   busy              — a join of the challenge is under way, or the claims file is locked by another process
+ *   unreadable        — the claims file cannot be read or written, so nothing was changed
+ *   account-unknown   — the account could not be told, so nothing was changed
+ *   not-authenticated — nobody is logged in
+ */
+type ForgetStatus =
+    | 'forgotten'
+    | 'nothing-to-forget'
+    | 'legacy-record'
+    | 'busy'
+    | 'unreadable'
+    | 'account-unknown'
+    | 'not-authenticated';
+
+export type { JoinReason, ForgetStatus };

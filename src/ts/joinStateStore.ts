@@ -24,8 +24,11 @@ import { randomBytes } from 'node:crypto';
 import * as runtime from './runtime';
 import * as logger from './logger';
 import { createJsonStore, getSettingsPath } from './settings/storage';
+import { errorMessage } from './errorMessage';
+import { isPlainObject } from './plainObject';
+import { sanitizeLogString } from './logger/sanitize';
 
-const joinStateStore = createJsonStore({ fileName: 'joinState.json', prefKey: 'gs_join_state' });
+const joinStateStore = createJsonStore({ fileName: 'joinState.json', prefKey: 'gs_join_state', atomic: true });
 
 // A held lock whose file has not been touched for this long is treated as stale (its owner crashed) and taken over.
 const LOCK_TTL_MS = 60_000;
@@ -43,13 +46,34 @@ const lockPathFor = (id: string | number): string => {
 };
 
 /**
- * The owner token a lock file holds, or null when there is no such file. Never throws.
+ * Whether a caught value is a Node error with this code.
+ */
+const isErrnoCode = (caught: unknown, code: string): boolean => isPlainObject(caught) && caught.code === code;
+
+/**
+ * The owner token a lock file holds, or null when there is no such file (or it cannot be read). Never throws.
  */
 const tokenIn = (lockPath: string): string | null => {
     try {
         return fs.readFileSync(lockPath, 'utf8');
     } catch {
         return null;
+    }
+};
+
+/**
+ * A lock file as it is at one moment: its modification time and its owner token, both read through one open
+ * file, so they describe the same file even if the path is replaced in between. Null when it cannot be opened.
+ */
+const inspectLock = (lockPath: string): { mtimeMs: number; token: string } | null => {
+    let fd: number | undefined;
+    try {
+        fd = fs.openSync(lockPath, 'r');
+        return { mtimeMs: fs.fstatSync(fd).mtimeMs, token: fs.readFileSync(fd, 'utf8') };
+    } catch {
+        return null;
+    } finally {
+        if (fd !== undefined) fs.closeSync(fd);
     }
 };
 
@@ -65,21 +89,22 @@ const createLock = (lockPath: string, token: string): void => {
     }
 };
 
+const isStale = (lock: { mtimeMs: number }): boolean => Date.now() - lock.mtimeMs > LOCK_TTL_MS;
+
 /**
- * Takes over a lock whose file has not been touched for the TTL. The stale file is renamed to a name of its own
- * — only one process can rename it — and the file that was renamed is checked to be the stale one that was seen:
- * if it is not (another process replaced it in between), it is put back and the lock stays held.
+ * Takes over a lock whose file has not been touched for the TTL. The stale file is renamed to a name of its own —
+ * only one process can rename it — and what was renamed is looked at again, through one open file: it must still
+ * be past the TTL and hold the token that was seen. If it is not (another process replaced the stale lock between
+ * the look and the rename, so a live lock was moved), it is put back with a rename, but only while nothing has
+ * taken the lock's place since; when something has, the moved file is left where it is (a leftover name is the
+ * lesser harm: deleting it would delete a live lock) and the lock stays held.
  *
  * @returns whether the lock is free to create now
  */
 const takeOverStale = (lockPath: string, token: string): boolean => {
-    let seen: { mtimeMs: number; token: string | null };
-    try {
-        seen = { mtimeMs: fs.statSync(lockPath).mtimeMs, token: tokenIn(lockPath) };
-    } catch {
-        return true; // gone since: free
-    }
-    if (Date.now() - seen.mtimeMs <= LOCK_TTL_MS) return false;
+    const seen = inspectLock(lockPath);
+    if (seen === null) return true; // gone since: free
+    if (!isStale(seen)) return false;
     const grave = `${lockPath}.stale-${token}`;
     try {
         fs.renameSync(lockPath, grave);
@@ -87,30 +112,37 @@ const takeOverStale = (lockPath: string, token: string): boolean => {
         // Another process renamed it first: free only if nothing has been created in its place since.
         return tokenIn(lockPath) === null;
     }
-    if (tokenIn(grave) === seen.token) {
+    const moved = inspectLock(grave);
+    if (moved !== null && moved.token === seen.token && isStale(moved)) {
         fs.unlinkSync(grave);
         return true;
     }
-    // What was renamed is not the stale lock seen: a live lock. Put it back (if nobody has created one since).
-    try {
-        fs.linkSync(grave, lockPath);
-    } catch {
-        // another lock has been created meanwhile: the live one is lost to that, and the stale name is dropped
+    // A live lock was moved. Put it back, unless a lock has been created in its place meanwhile.
+    if (tokenIn(lockPath) === null) {
+        try {
+            fs.renameSync(grave, lockPath);
+        } catch {
+            // the live lock stays under its other name
+        }
     }
-    fs.unlinkSync(grave);
     return false;
 };
 
 /**
- * Keeps a held lock fresh: its mtime is touched while the file still holds this owner's token, and the renewal
- * stops on its own if the lock has been lost.
+ * Keeps a held lock fresh: its mtime is touched while the file still holds this owner's token. A read that finds
+ * nothing is tolerated once (it can be a momentary failure); a lock another owner holds, a second miss or a file
+ * that cannot be touched stop the renewal.
  */
 const keepFresh = (lockPath: string, token: string): NodeJS.Timeout => {
+    let missed = 0;
     const timer = setInterval(() => {
-        if (tokenIn(lockPath) !== token) {
-            clearInterval(timer);
+        const held = tokenIn(lockPath);
+        if (held !== token) {
+            missed += 1;
+            if (held !== null || missed >= 2) clearInterval(timer);
             return;
         }
+        missed = 0;
         try {
             const now = new Date();
             fs.utimesSync(lockPath, now, now);
@@ -144,7 +176,7 @@ const acquireUnlockLock = (id: string | number): UnlockLock => {
         try {
             createLock(lockPath, token);
         } catch (caught) {
-            if ((caught as NodeJS.ErrnoException | null)?.code !== 'EEXIST') throw caught;
+            if (!isErrnoCode(caught, 'EEXIST')) throw caught;
             if (!takeOverStale(lockPath, token)) return NOT_HELD;
             createLock(lockPath, token);
         }
@@ -162,13 +194,15 @@ const acquireUnlockLock = (id: string | number): UnlockLock => {
             },
         };
     } catch (caught) {
-        const error = caught as NodeJS.ErrnoException | null | undefined;
-        if (error && error.code === 'EEXIST') return NOT_HELD;
+        if (isErrnoCode(caught, 'EEXIST')) return NOT_HELD;
         // Lock infrastructure failed (permissions, etc.) — fail OPEN rather than
         // block joins forever; the in-process Set + persisted claim still apply.
         logger
             .withCategory('join')
-            .warning(`cross-process join lock unavailable for ${id}: ${error?.message || error}`, null);
+            .warning(
+                `cross-process join lock unavailable for ${sanitizeLogString(id)}: ${errorMessage(caught) || sanitizeLogString(caught)}`,
+                null,
+            );
         return NO_LOCK;
     }
 };
