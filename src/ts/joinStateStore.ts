@@ -186,7 +186,10 @@ const reportUnavailable = (
     lock: { id: string | number; lockPath: string; category: 'join' | 'scenario'; internal: boolean },
 ): void => {
     const errno = isPlainObject(caught) && typeof caught.code === 'string' ? ` [${caught.code}]` : '';
-    const said = `cross-process lock unavailable for ${sanitizeLogString(lock.id)} (${sanitizeLogString(lock.lockPath)}): ${errorMessage(caught) || sanitizeLogString(caught)}${errno}`;
+    // The lock's file name, not its path: the path holds the user's home folder, and the log may be shared.
+    const file = path.basename(lock.lockPath);
+    const reason = (errorMessage(caught) || sanitizeLogString(caught)).split(lock.lockPath).join(file);
+    const said = `cross-process lock unavailable for ${sanitizeLogString(lock.id)} (${sanitizeLogString(file)}): ${reason}${errno}`;
     const log = logger.withCategory(lock.category);
     if (lock.internal) log.error(said, null);
     else log.warning(said, null);

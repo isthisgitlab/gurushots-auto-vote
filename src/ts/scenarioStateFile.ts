@@ -128,12 +128,20 @@ const parseRequests = (raw: string | null): ResetRequests => {
 };
 
 /**
- * The requests that are not older than a tombstone or a record is kept for. A count is when the reset was asked
- * for, so a request ages out together with the tombstone it made, and cannot make a pruned one again.
+ * The requests still worth keeping: those not older than a tombstone or a record is kept for (a count is when the reset
+ * was asked for, so a request ages out together with the tombstone it made, and cannot make a pruned one again) and,
+ * however old, those not applied yet to a record that still exists. A record that holds a stop is never pruned, so a
+ * reset asked for it must not be forgotten while it stands: the stop would come back to life.
  */
-const liveRequests = (requests: ResetRequests): ResetRequests => {
+const liveRequests = (requests: ResetRequests, map: Record<string, unknown>): ResetRequests => {
     const cutoff = Date.now() - MAX_AGE_MS;
-    return Object.fromEntries(Object.entries(requests).filter(([, count]) => count > cutoff));
+    const unapplied = (key: string, count: number): boolean =>
+        key === ALL_KEY
+            ? count > countOf(map[ALL_KEY]) && Object.keys(map).some((other) => other !== ALL_KEY)
+            : isPlainObject(map[key]) && count > epochOf(map, key).gen;
+    return Object.fromEntries(
+        Object.entries(requests).filter(([key, count]) => count > cutoff || unapplied(key, count)),
+    );
 };
 
 /**
@@ -142,7 +150,7 @@ const liveRequests = (requests: ResetRequests): ResetRequests => {
  * twice changes nothing, so it can be applied by whichever runtime reads or writes next.
  */
 const withRequests = (map: Record<string, unknown>, asked: ResetRequests): Record<string, unknown> => {
-    const requests = liveRequests(asked);
+    const requests = liveRequests(asked, map);
     const all = requests[ALL_KEY] ?? 0;
     let next = all > countOf(map[ALL_KEY]) ? { [ALL_KEY]: all } : map;
     for (const [key, count] of Object.entries(requests)) {
@@ -193,10 +201,17 @@ const viewOf = (raw: string | null, asked: string | null): ParsedStateFile => {
  * @param requests - the store of asked-for resets; none where resets are made on the file itself
  * @returns whether it was asked for (false: make the reset on the file)
  */
-const askFor = (requests: RawJsonStore | undefined, key: string, current: number): boolean => {
+const askFor = (
+    requests: RawJsonStore | undefined,
+    key: string,
+    current: number,
+    map: Record<string, unknown>,
+): boolean => {
     if (!requests) return false;
     const asked = parseRequests(requests.readRaw());
-    requests.writeRaw(JSON.stringify({ ...liveRequests(asked), [key]: nextCount(Math.max(asked[key] ?? 0, current)) }));
+    requests.writeRaw(
+        JSON.stringify({ ...liveRequests(asked, map), [key]: nextCount(Math.max(asked[key] ?? 0, current)) }),
+    );
     return true;
 };
 
@@ -283,7 +298,7 @@ const createStateFile = (store: RawJsonStore, acquireLock?: (id: string) => Stat
      */
     const resetOne = (key: string): ResetResult => {
         const view = read();
-        if (view.ok && askFor(asRequests(), key, epochOf(view.map, key).gen)) return 'removed';
+        if (view.ok && askFor(asRequests(), key, epochOf(view.map, key).gen, view.map)) return 'removed';
         let result: ResetResult = 'unreadable';
         const ran = underLock(acquireLock, () => {
             const { ok, map } = read();
@@ -299,7 +314,7 @@ const createStateFile = (store: RawJsonStore, acquireLock?: (id: string) => Stat
      */
     const resetAll = (): ResetResult => {
         const view = read();
-        if (view.ok && askFor(asRequests(), ALL_KEY, countOf(view.map[ALL_KEY]))) return 'removed';
+        if (view.ok && askFor(asRequests(), ALL_KEY, countOf(view.map[ALL_KEY]), view.map)) return 'removed';
         const ran = underLock(acquireLock, () => {
             const { ok, map } = read();
             write({ [ALL_KEY]: nextCount(ok ? countOf(map[ALL_KEY]) : 0) });

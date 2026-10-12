@@ -10,7 +10,9 @@ import type { Challenge } from '../../../types/gurushots';
 const problemOf = (error: string | undefined, everyChallenge: boolean): string => {
     if (error === 'busy') return everyChallenge ? 'app.scenarioResetAllBusy' : 'app.scenarioResetBusy';
     if (error === 'locks-unavailable') return 'app.locksUnavailable';
-    return error === 'state-unreadable' ? 'app.scenarioResetUnreadable' : 'app.scenarioResetFailed';
+    if (error === 'state-unreadable') return 'app.scenarioResetUnreadable';
+    if (error === 'not-saved') return everyChallenge ? 'app.scenarioResetAllNotSaved' : 'app.scenarioResetNotSaved';
+    return everyChallenge ? 'app.scenarioResetAllFailed' : 'app.scenarioResetFailed';
 };
 
 /**

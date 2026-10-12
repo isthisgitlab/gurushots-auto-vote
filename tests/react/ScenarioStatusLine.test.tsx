@@ -195,6 +195,27 @@ describe('the reset button', () => {
         expect(screen.getByRole('status').textContent).toBe('app.scenarioStatusSpendStoppedPendingShort');
     });
 
+    test('an unreadable-progress notice names the reset control by its own label, not a fixed word', () => {
+        mockTranslator.t.mockImplementation((key) =>
+            key === 'app.scenarioReset'
+                ? 'Clear'
+                : key === 'app.scenarioResetAll'
+                  ? 'Clear all'
+                  : key === 'app.scenarioStatusCorruptShort' || key === 'app.scenarioStatusCorruptRecordShort'
+                    ? 'Press “{reset}”.'
+                    : key,
+        );
+        try {
+            render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'file' }} compact />);
+            expect(screen.getByRole('status').textContent).toContain('Press “Clear all”.');
+            cleanup();
+            render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'record' }} compact />);
+            expect(screen.getByRole('status').textContent).toContain('Press “Clear”.');
+        } finally {
+            mockTranslator.t.mockImplementation((key) => key);
+        }
+    });
+
     test('a short notice names the control that opens the card, by its own label', () => {
         mockTranslator.t.mockImplementation((key) =>
             key === 'app.details'

@@ -62,7 +62,10 @@ describe('ScenarioResetModal', () => {
         [{ success: false, error: 'busy' } as const, true, 'app.scenarioResetAllBusy'],
         [{ success: false, error: 'locks-unavailable' } as const, false, 'app.locksUnavailable'],
         [{ success: false, error: 'locks-unavailable' } as const, true, 'app.locksUnavailable'],
+        [{ success: false, error: 'not-saved' } as const, false, 'app.scenarioResetNotSaved'],
+        [{ success: false, error: 'not-saved' } as const, true, 'app.scenarioResetAllNotSaved'],
         [{ success: false, error: 'something else' } as const, false, 'app.scenarioResetFailed'],
+        [{ success: false, error: 'something else' } as const, true, 'app.scenarioResetAllFailed'],
         [null, false, 'app.scenarioResetFailed'],
     ])(
         'an answer of %p (every challenge: %s) keeps the dialog open and says why, changing nothing',

@@ -45,27 +45,52 @@ export const writeHeadlessKey = (prefKey: string, data: string, strict: boolean)
 
 /**
  * The ordered write-behind of one Capacitor key: writes apply in issue order, and one that fails is logged without
- * breaking the queue. A `strict` store's flush also tells the caller about a write that failed since the last flush.
+ * breaking the queue. The last write holds the whole value (every write is the full text), so what a flush has to say
+ * is whether THAT one persisted: an earlier failure that a later write made up for is nothing to report, and no flag is
+ * left for whichever flush comes first to swallow.
+ *
+ * A `strict` store's flush rejects when the last write failed, and the cache is rolled back to what is known to be
+ * persisted, so a value that did not reach storage is not read back, applied, or written along with a later one.
+ *
+ * @param rollBack - puts the store's cache back to a persisted value (null: nothing was)
  */
-export const createWriteBehind = (prefKey: string, strict: boolean, preferences: () => PreferencesPlugin) => {
+export const createWriteBehind = (
+    prefKey: string,
+    strict: boolean,
+    preferences: () => PreferencesPlugin,
+    rollBack: (persisted: string | null) => void,
+) => {
     let chain = Promise.resolve();
-    // The error of the last write that failed, until a flush reports it.
-    let failed: unknown = null;
+    let issued = 0;
+    // Whether the latest write persisted, and the text that is known to be in Preferences.
+    let lastPersisted = true;
+    let persisted: string | null = null;
     return {
         queue: (data: string) => {
+            const mine = ++issued;
             chain = chain
                 .then(() => preferences().set({ key: prefKey, value: data }))
-                .catch((err) => {
-                    logger.withCategory('settings').error(`Capacitor ${prefKey} write failed:`, err);
-                    failed = err;
-                });
+                .then(
+                    () => {
+                        persisted = data;
+                        if (mine === issued) lastPersisted = true;
+                    },
+                    (err) => {
+                        logger.withCategory('settings').error(`Capacitor ${prefKey} write failed:`, err);
+                        if (mine !== issued) return;
+                        lastPersisted = false;
+                        if (strict) rollBack(persisted);
+                    },
+                );
+        },
+        /** What hydrating or refreshing found in Preferences: that is what is persisted. */
+        confirm: (value: string | null) => {
+            persisted = value;
         },
         drained: () => chain,
         flush: async () => {
             await chain;
-            const cause = failed;
-            failed = null;
-            if (strict && cause !== null) throw new Error(`Capacitor ${prefKey} was not persisted`, { cause });
+            if (strict && !lastPersisted) throw new Error(`Capacitor ${prefKey} was not persisted`);
         },
     };
 };

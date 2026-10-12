@@ -339,11 +339,11 @@ export const app = {
     scenarioStatusCorrupt:
         'Scenārijs „{name}”: scenāriju saglabāto progresu nevar nolasīt, tāpēc visu izaicinājumu plāni ir apturēti. Ja atiestatīsi visu izaicinājumu progresu, plāni sāksies no jauna.',
     scenarioStatusCorruptShort:
-        'Spied „{details}”, tad „Atiestatīt” — scenārijs „{name}” ir apturēts: saglabāto progresu nevar nolasīt.',
+        'Spied „{details}”, tad „{reset}” — scenārijs „{name}” ir apturēts: saglabāto progresu nevar nolasīt.',
     scenarioStatusCorruptRecord:
         'Scenārijs „{name}”: šī izaicinājuma saglabāto progresu nevar nolasīt, tāpēc tā plāns ir apturēts. Ja to atiestatīsi, plāns sāksies no jauna.',
     scenarioStatusCorruptRecordShort:
-        'Spied „{details}”, tad „Atiestatīt” — scenārijs „{name}” ir apturēts: šī izaicinājuma saglabāto progresu nevar nolasīt.',
+        'Spied „{details}”, tad „{reset}” — scenārijs „{name}” ir apturēts: šī izaicinājuma saglabāto progresu nevar nolasīt.',
     scenarioStatusPhase: 'fāze {phase}',
     scenarioStatusNotStarted: 'nākamajā palaišanā sāksies fāzē {phase}',
     scenarioStatusNext: 'nākamā pārbaude pēc {time}',
@@ -366,9 +366,9 @@ export const app = {
     scenarioResetAll: 'Atiestatīt visu izaicinājumu progresu…',
     scenarioResetTitle: 'Scenārija progresa atiestatīšana',
     scenarioResetBody:
-        'Tas aizmirst, kurā scenārija vietā ir „{title}”: nākamajā balsošanas reizē plāns sāksies no pirmās fāzes. Tas var vēlreiz iztērēt darbību, uz kuru nebija atbildes, un atsāk scenārija tēriņu skaitīšanu.',
+        'Tas aizmirst, kurā scenārija vietā ir „{title}”: nākamajā balsošanas reizē plāns sāksies no pirmās fāzes. Tas var vēlreiz iztērēt darbību, kuras iznākums nav zināms (GuruShots neatbildēja vai lietotne to nevarēja saglabāt), un atsāk scenārija tēriņu skaitīšanu.',
     scenarioResetAllBody:
-        'Saglabāto scenāriju progresu nevar nolasīt, tāpēc to var atiestatīt tikai visiem izaicinājumiem uzreiz. Pazūd katra izaicinājuma progress: kurā vietā ir katrs plāns, kuri noteikumi jau darbojās (tie var darboties vēlreiz) un tēriņu skaitītāji. Darbība, uz kuru nebija atbildes, var tikt iztērēta vēlreiz.',
+        'Saglabāto scenāriju progresu nevar nolasīt, tāpēc to var atiestatīt tikai visiem izaicinājumiem uzreiz. Pazūd katra izaicinājuma progress: kurā vietā ir katrs plāns, kuri noteikumi jau darbojās (tie var darboties vēlreiz) un tēriņu skaitītāji. Darbība, kuras iznākums nav zināms (nebija atbildes vai lietotne to nevarēja saglabāt), var tikt iztērēta vēlreiz.',
     scenarioResetConfirm: 'Atiestatīt',
     scenarioResetWorking: 'Notiek atiestatīšana…',
     scenarioResetBusy:
@@ -380,6 +380,12 @@ export const app = {
     locksUnavailable:
         'Lietotne nevar izveidot savus bloķēšanas failus savā datu mapē, tāpēc šo darbību nevar droši veikt. Nekas netika mainīts. Pārbaudi mapes atļaujas un brīvo vietu diskā (sīkāk žurnālā) un mēģini vēlreiz.',
     scenarioResetFailed: 'Pašlaik neizdevās atiestatīt scenāriju. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
+    scenarioResetAllFailed:
+        'Pašlaik neizdevās atiestatīt visu izaicinājumu progresu. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
+    scenarioResetNotSaved:
+        'Ierīce nevarēja saglabāt atiestatīšanu, tāpēc nekas netika mainīts. Atbrīvo vietu krātuvē un mēģini vēlreiz.',
+    scenarioResetAllNotSaved:
+        'Ierīce nevarēja saglabāt visu izaicinājumu atiestatīšanu, tāpēc nekas netika mainīts. Atbrīvo vietu krātuvē un mēģini vēlreiz.',
     scenarioStatusAgainPhase: 'Noteikums var darboties vēlreiz, kad fāze tiek sākta no jauna.',
     scenarioStatusAgainReset: 'Noteikums var darboties vēlreiz tikai pēc atiestatīšanas.',
     scenarioStatusAgainDay: 'Noteikums var darboties vēlreiz nākamajā dienā.',

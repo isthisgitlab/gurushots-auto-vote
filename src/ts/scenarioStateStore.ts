@@ -203,9 +203,14 @@ export const refreshScenarioStateAsync = async () => {
     await scenarioStateStore.refreshAsync();
     await scenarioResetsStore.refreshAsync();
 };
+// Waits for both stores, whether or not the first one's last write persisted, and says so if either did not.
 export const flushScenarioStateWrites = async () => {
-    await scenarioStateStore.flushPendingWrites();
-    await scenarioResetsStore.flushPendingWrites();
+    const settled = await Promise.allSettled([
+        scenarioStateStore.flushPendingWrites(),
+        scenarioResetsStore.flushPendingWrites(),
+    ]);
+    const failed = settled.find((outcome) => outcome.status === 'rejected');
+    if (failed) throw failed.reason;
 };
 export {
     scenarioStateLedger,

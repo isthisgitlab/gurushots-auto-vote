@@ -702,9 +702,34 @@ describe('a spend is written down before it is made, so that a result that is ne
                 invalid({ challenge: challenge(), scenario: doc, beforeSpend }),
                 (send) => send(request),
             );
-            expect(refused).toMatchObject({ status: 'deferred' });
+            expect(refused).toMatchObject({
+                status: 'deferred',
+                message: expect.stringContaining('could not be written down first'),
+            });
         }
         expect(request).not.toHaveBeenCalled();
+    });
+
+    test('a spend’s request serves once: a second call is refused, with no second marker and no second request', async () => {
+        const beforeSpend = jest.fn(() => true);
+        const request = jest.fn<Promise<{ ok: boolean; outcome: string }>, []>(async () => ({
+            ok: true,
+            outcome: 'ok',
+        }));
+        const second: unknown[] = [];
+        const done = await lockedCurrencySpend(
+            'fillExposure',
+            invalid({ challenge: challenge(), scenario: single([{ type: 'fillExposure' }]), beforeSpend }),
+            async (send) => {
+                const first = await send(request);
+                second.push(await send(request));
+                return first;
+            },
+        );
+        expect(done).toBeNull();
+        expect(second).toEqual([{ ok: false, outcome: expect.any(String) }]);
+        expect(beforeSpend).toHaveBeenCalledTimes(1);
+        expect(request).toHaveBeenCalledTimes(1);
     });
 
     test('the marker is written inside the spend lock, after the spend’s own checks, just before the request', async () => {

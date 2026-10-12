@@ -440,7 +440,7 @@ describe('acquireUnlockLock', () => {
         expect(lock.ok).toBe(true);
         expect(logger.withCategory).toHaveBeenCalledWith('join');
         expect(warning).toHaveBeenCalledWith(
-            'cross-process lock unavailable for c9 (/cfg/joinlock-c9.lock): EACCES [EACCES]',
+            'cross-process lock unavailable for c9 (joinlock-c9.lock): EACCES [EACCES]',
             null,
         );
     });
@@ -485,7 +485,7 @@ describe('acquireUnlockLock', () => {
                 expect(warning).toHaveBeenCalledTimes(2);
                 expect(error).toHaveBeenCalledTimes(2);
                 expect(error).toHaveBeenCalledWith(
-                    'cross-process lock unavailable for joinstate (/cfg/statelock-joinstate.lock): EACCES [EACCES]',
+                    'cross-process lock unavailable for joinstate (statelock-joinstate.lock): EACCES [EACCES]',
                     null,
                 );
             } finally {
@@ -503,7 +503,7 @@ describe('acquireUnlockLock', () => {
         expect(joinState.acquireUnlockLock('scenario-7', { category: 'scenario' }).ok).toBe(true);
         expect(logger.withCategory).toHaveBeenCalledWith('scenario');
         expect(warning).toHaveBeenCalledWith(
-            'cross-process lock unavailable for scenario-7 (/cfg/joinlock-scenario-7.lock): EACCES [EACCES]',
+            'cross-process lock unavailable for scenario-7 (joinlock-scenario-7.lock): EACCES [EACCES]',
             null,
         );
     });
@@ -516,9 +516,25 @@ describe('acquireUnlockLock', () => {
         });
         joinState.acquireUnlockLock('c9\nforged line');
         expect(warning).toHaveBeenCalledWith(
-            'cross-process lock unavailable for c9 forged line (/cfg/joinlock-c9_forged_line.lock): EACCES [EACCES]',
+            'cross-process lock unavailable for c9 forged line (joinlock-c9_forged_line.lock): EACCES [EACCES]',
             null,
         );
+    });
+
+    test('what is logged names the lock file, not the folder it is in, even where the error itself carries the path', () => {
+        const warning = jest.fn();
+        jest.mocked(logger.withCategory).mockReturnValueOnce(invalid({ warning }));
+        fs.openSync.mockImplementationOnce(() => {
+            throw Object.assign(new Error("EACCES: permission denied, open '/cfg/joinlock-c9.lock'"), {
+                code: 'EACCES',
+            });
+        });
+        joinState.acquireUnlockLock('c9');
+        const [said] = warning.mock.calls[0] as [string];
+        expect(said).toBe(
+            "cross-process lock unavailable for c9 (joinlock-c9.lock): EACCES: permission denied, open 'joinlock-c9.lock' [EACCES]",
+        );
+        expect(said).not.toContain('/cfg');
     });
 
     test('a thrown non-Error value is still reported and fails open', () => {
@@ -528,10 +544,7 @@ describe('acquireUnlockLock', () => {
             throw 'weird';
         });
         expect(joinState.acquireUnlockLock('c9').ok).toBe(true);
-        expect(warning).toHaveBeenCalledWith(
-            'cross-process lock unavailable for c9 (/cfg/joinlock-c9.lock): weird',
-            null,
-        );
+        expect(warning).toHaveBeenCalledWith('cross-process lock unavailable for c9 (joinlock-c9.lock): weird', null);
     });
 
     test('an EEXIST that comes back after a takeover (lost the race for the new file) is busy, not a failure', () => {

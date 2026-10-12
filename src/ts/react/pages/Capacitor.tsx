@@ -72,7 +72,10 @@ const bootstrap = async () => {
                 void flushSwapBackWrites();
                 void flushAutoSpendWrites();
                 void flushEntryAgeWrites();
-                void flushScenarioStateWrites();
+                // The scenario stores' flush says when a write did not persist: logged, and nothing to undo here.
+                flushScenarioStateWrites().catch((err) =>
+                    withCategory('general').error('Scenario state not persisted', err),
+                );
                 void flushDiagnosticsWrites();
             } catch {
                 // never let a teardown handler throw

@@ -159,6 +159,7 @@ export interface AndroidHeadlessStore {
     read(): string | null;
     write(data: string): void;
     readKey?(key: string): string | null;
-    /** `false` when the native side did not persist the value; `true` (or nothing) when it did. */
+    /** `true` when the native side persisted the value. Anything else (`false`, or no answer) is not a write a strict
+     *  store takes for one. */
     writeKey?(key: string, data: string): boolean | void;
 }

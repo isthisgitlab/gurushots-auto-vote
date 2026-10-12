@@ -282,7 +282,10 @@ const createJsonStore = ({
 }) => {
     let initialized = false;
     let cachedJson: string | null = null;
-    const writes = createWriteBehind(prefKey, strict, getCapacitorPreferences);
+    // A strict store's write that did not persist takes its value out of the cache again.
+    const writes = createWriteBehind(prefKey, strict, getCapacitorPreferences, (value) => {
+        cachedJson = value;
+    });
     let swept = false;
 
     const filePath = () => path.join(path.dirname(getSettingsPath()), fileName);
@@ -333,6 +336,7 @@ const createJsonStore = ({
             try {
                 const { value } = await getCapacitorPreferences().get({ key: prefKey });
                 cachedJson = value;
+                writes.confirm(value);
             } catch (err) {
                 logger.withCategory('settings').error(`Capacitor ${prefKey} read failed:`, err);
                 cachedJson = null;
@@ -352,6 +356,7 @@ const createJsonStore = ({
             try {
                 const { value } = await getCapacitorPreferences().get({ key: prefKey });
                 cachedJson = value;
+                writes.confirm(value);
                 initialized = true;
             } catch (err) {
                 logger.withCategory('settings').error(`Capacitor ${prefKey} refresh failed:`, err);

@@ -73,8 +73,9 @@ Commands:
   scenario-status --challenge=<id> - Where a challenge is in its scenario
   scenario-dry-run --challenge=<id> - What the scenario would do right now (spends nothing)
   scenario-simulate --challenge=<id> - A what-if timeline until the challenge closes (spends nothing)
-  scenario-reset --challenge=<id> - Forget a challenge's scenario progress (the plan restarts). It can spend an action
-             that got no answer again, and it restarts the scenario's spend counter.
+  scenario-reset --challenge=<id> - Forget a challenge's scenario progress (the plan restarts). It may spend again an action
+             whose outcome is unknown (no answer, or the app could not record it), and it restarts the scenario's
+             spend counter.
   scenario-reset --all - Forget every challenge's scenario progress: the only way past a progress file that cannot be
              read. The rules that already ran can run again, with the same warning as above.
   scenario-vocabulary - List every condition, selector and action a scenario can use

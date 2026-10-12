@@ -230,7 +230,7 @@ const scenarioStatusCmd = async (challengeId: string) => {
 };
 
 const RESET_COST =
-    'Resetting can spend an action that got no answer again, and it restarts the scenario spend counter.';
+    'Resetting may spend again an action whose outcome is unknown (GuruShots gave no answer, or the app could not record it), and it restarts the scenario spend counter.';
 
 const RESET_BUSY =
     'This challenge’s scenario is being run, or the saved scenario progress is being updated, right now (by the app or by another process). Nothing was changed. Try again in a moment.';
@@ -241,6 +241,8 @@ const RESET_ALL_BUSY =
 const RESET_LOCKS_UNAVAILABLE =
     'The app cannot create its lock files in its data folder, so it cannot do this safely. Nothing was changed. Check the folder’s permissions and the free disk space (logs --error has the details), then try again.';
 
+const RESET_NOT_SAVED = 'The reset could not be saved, so nothing was changed. Free up storage space and try again.';
+
 const scenarioResetCmd = async (challengeId: string) => {
     const result = await handlers()['reset-scenario-state'](null, challengeId);
     if (!result.success && result.error === 'busy') {
@@ -249,6 +251,10 @@ const scenarioResetCmd = async (challengeId: string) => {
     }
     if (!result.success && result.error === 'locks-unavailable') {
         ui().error(RESET_LOCKS_UNAVAILABLE);
+        return 1;
+    }
+    if (!result.success && result.error === 'not-saved') {
+        ui().error(RESET_NOT_SAVED);
         return 1;
     }
     if (!result.success && result.error === 'state-unreadable') {
@@ -272,6 +278,10 @@ const scenarioResetAllCmd = async () => {
     }
     if (!result.success && result.error === 'locks-unavailable') {
         ui().error(RESET_LOCKS_UNAVAILABLE);
+        return 1;
+    }
+    if (!result.success && result.error === 'not-saved') {
+        ui().error(RESET_NOT_SAVED);
         return 1;
     }
     if (!result.success) return reportFailure(result, 'Could not reset the scenarios');

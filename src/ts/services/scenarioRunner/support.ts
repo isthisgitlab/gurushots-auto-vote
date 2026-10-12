@@ -159,8 +159,13 @@ const lockedCurrencySpend = async (
     // The only way a spend's request is made: the marker is written down first, and a request whose marker could not
     // be written (or that has no way to write one) is not made. Whatever the spend does before its request (a
     // preview, say) leaves no marker if it is refused there.
-    const request: SpendRequest = async (send) =>
-        ctx.beforeSpend?.(actionType) ? send() : { ok: false, outcome: NOT_WRITTEN };
+    // It serves one request: a second call is refused, with no second marker and no second spend.
+    let used = false;
+    const request: SpendRequest = async (send) => {
+        if (used) return { ok: false, outcome: NOT_WRITTEN };
+        used = true;
+        return ctx.beforeSpend?.(actionType) ? send() : { ok: false, outcome: NOT_WRITTEN };
+    };
     const result = await lockedSpend(SPEND[actionType].action, ctx.challenge, () => spend(request), LABEL);
     if (result === null) return { status: 'deferred', message: 'another spend is in progress' };
     // Every spend resolves {ok, outcome}; null is reserved for a busy lock.

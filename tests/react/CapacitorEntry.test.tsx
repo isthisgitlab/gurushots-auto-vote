@@ -82,7 +82,7 @@ describe('Capacitor entry', () => {
             initializeEntryAgesAsync: jest.fn().mockResolvedValue(undefined),
             flushEntryAgeWrites: jest.fn(),
             initializeScenarioStateAsync: jest.fn().mockResolvedValue(undefined),
-            flushScenarioStateWrites: jest.fn(),
+            flushScenarioStateWrites: jest.fn(async () => {}),
             initializeDiagnosticsAsync: jest.fn().mockResolvedValue(undefined),
             flushDiagnosticsWrites: jest.fn(),
             isCapacitor: jest.fn(() => native),
@@ -202,6 +202,15 @@ describe('Capacitor entry', () => {
             throw new Error('io');
         });
         expect(() => winListeners.pagehide()).not.toThrow();
+    });
+
+    test('a scenario write that did not persist is logged by the teardown flush, not left as an unhandled rejection', async () => {
+        const m = load();
+        await flush();
+        m.flushScenarioStateWrites.mockRejectedValueOnce(new Error('not persisted'));
+        winListeners.pagehide();
+        await flush();
+        expect(m.categoryError).toHaveBeenCalledWith('Scenario state not persisted', expect.any(Error));
     });
 
     test('login-success and logout re-mount by the current token', async () => {

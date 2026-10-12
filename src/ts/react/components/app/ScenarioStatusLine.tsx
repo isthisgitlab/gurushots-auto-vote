@@ -53,17 +53,15 @@ function Unavailable({
     const { t } = useTranslation();
     const corruptKeys = status.corrupt ? CORRUPT_KEY[status.corrupt] : null;
     const key = corruptKeys ? corruptKeys[compact ? 1 : 0] : 'app.scenarioStatusMissing';
+    // The button's own label, which the compact tile's notice names (the tile has no button of its own).
+    const resetLabel = status.corrupt === 'file' ? 'app.scenarioResetAll' : 'app.scenarioReset';
     return (
         <div className="text-xs text-warning space-y-1">
             <div role="status">
-                <span aria-hidden="true">⚠</span> {interp(t(key), { name: status.name, details: t('app.details') })}
+                <span aria-hidden="true">⚠</span>{' '}
+                {interp(t(key), { name: status.name, details: t('app.details'), reset: t(resetLabel) })}
             </div>
-            {status.corrupt && onReset && (
-                <ResetButton
-                    label={status.corrupt === 'file' ? 'app.scenarioResetAll' : 'app.scenarioReset'}
-                    onReset={onReset}
-                />
-            )}
+            {status.corrupt && onReset && <ResetButton label={resetLabel} onReset={onReset} />}
         </div>
     );
 }
