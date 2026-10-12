@@ -537,6 +537,23 @@ describe('api-client', () => {
             expect(axios).toHaveBeenCalledTimes(4);
         });
 
+        test('retry: false makes a single attempt on a 5xx and on a timeout (a call that must not be repeated)', async () => {
+            axios.mockRejectedValueOnce(httpError(503));
+            expect(await makePostRequest(mockUrl, headers, mockData, { retry: false })).toBeNull();
+            expect(axios).toHaveBeenCalledTimes(1);
+
+            axios.mockClear();
+            axios.mockRejectedValueOnce(timeoutError());
+            expect(await makePostRequest(mockUrl, headers, mockData, { retry: false })).toBeNull();
+            expect(axios).toHaveBeenCalledTimes(1);
+        });
+
+        test('retry: false still returns the body of a successful request', async () => {
+            axios.mockResolvedValueOnce({ status: 200, headers: {}, data: { ok: true } });
+            expect(await makePostRequest(mockUrl, headers, mockData, { retry: false })).toEqual({ ok: true });
+            expect(axios).toHaveBeenCalledTimes(1);
+        });
+
         test('does not retry a non-retryable 4xx response', async () => {
             axios.mockRejectedValue(httpError(400, { error: 'Bad request' }));
 

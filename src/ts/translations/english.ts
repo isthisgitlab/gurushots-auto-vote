@@ -537,7 +537,10 @@ export const app = {
     discoverJoining: 'Joining…',
     discoverChecking: 'Checking…',
     discoverPendingNoPhoto:
-        'Coins were already spent, but no photo qualifies for this challenge. Add an eligible photo (or adjust Chosen Photos), then press Join.',
+        'Coins were already spent, but no photo qualifies for this challenge. Add an eligible photo, or loosen Must Include Tags or turn on Submit Even Without a Tag Match, then press Join.',
+    discoverAccountUnknown:
+        'Could not confirm which account is logged in, so this attempt did nothing and spent no coins. Try again shortly, or log in again.',
+    discoverConfirmDialogFirst: 'Confirm or cancel the open dialog first, then join again.',
     discoverRetrySubmit: 'Retry submit',
     discoverRetrySubmitLabel: 'Retry submit for {title}',
     discoverConfirmTitle: 'Join paid challenge?',

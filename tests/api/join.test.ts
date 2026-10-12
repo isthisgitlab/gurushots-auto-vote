@@ -64,6 +64,12 @@ describe('coinsUnlock', () => {
         expect(res).toEqual({ ok: true, raw: { success: true } });
     });
 
+    test('is a single attempt: a timeout or 5xx that was retried could charge twice', async () => {
+        makePostRequest.mockResolvedValueOnce({ success: true });
+        await coinsUnlock(1, token);
+        expect(makePostRequest.mock.calls[0][3]).toEqual({ retry: false });
+    });
+
     test('ok:false on success:false and on null', async () => {
         makePostRequest.mockResolvedValueOnce({ success: false });
         expect((await coinsUnlock(1, token)).ok).toBe(false);

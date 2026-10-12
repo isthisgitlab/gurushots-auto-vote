@@ -73,7 +73,8 @@ const coinsUnlock = async (
     const data = [`challenge_id=${encodeURIComponent(String(challengeId))}`, `usage=${encodeURIComponent(usage)}`].join(
         '&',
     );
-    const response = await makePostRequest<SuccessResponse>(ENDPOINTS.coinsUnlock, headers, data);
+    // One attempt: a charge is not known to be idempotent, so a retry after a timeout could charge twice.
+    const response = await makePostRequest<SuccessResponse>(ENDPOINTS.coinsUnlock, headers, data, { retry: false });
     if (!response) {
         return { ok: false, raw: null };
     }

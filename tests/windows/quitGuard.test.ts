@@ -370,27 +370,21 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
         const proceed = jest.fn(() => {
             throw failure;
         });
-        const unhandled: unknown[] = [];
-        const onUnhandled = (reason: unknown) => unhandled.push(reason);
-        process.on('unhandledRejection', onUnhandled);
-        try {
-            const confirmed = setup({ response: 1 });
-            guard.holdQuitForOpenBoosts(confirmed.event, {
-                autovoteRunning: true,
-                dialog: confirmed.dialog,
-                parent: null,
-                t,
-                proceed,
-                now: NOW,
-                describeDeadlineActions: describe_,
-            });
-            await flush();
-            await flush();
-        } finally {
-            process.off('unhandledRejection', onUnhandled);
-        }
+        // Jest's sandboxed `process` never sees the real unhandledRejection event, so the proof that the throw
+        // is caught is the log call and the dialog-failure message staying out of it, not a listener.
+        const confirmed = setup({ response: 1 });
+        guard.holdQuitForOpenBoosts(confirmed.event, {
+            autovoteRunning: true,
+            dialog: confirmed.dialog,
+            parent: null,
+            t,
+            proceed,
+            now: NOW,
+            describeDeadlineActions: describe_,
+        });
+        await flush();
+        await flush();
         expect(proceed).toHaveBeenCalledTimes(1);
-        expect(unhandled).toEqual([]);
         expect(logger.cat.error).toHaveBeenCalledWith('Quit could not be completed:', failure);
         // A broken quit is not a broken dialog: the dialog's own failure message is not what is logged.
         expect(logger.cat.error).not.toHaveBeenCalledWith(

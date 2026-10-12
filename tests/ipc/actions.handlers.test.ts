@@ -24,6 +24,7 @@ import { claimTurboRun, releaseTurboRun } from '../../src/ts/services/turboRunLo
 import { registerMissionNeeds } from '../../src/ts/services/missions';
 import { clearOpenChallenges } from '../../src/ts/services/openChallengeCache';
 import { isPlainObject } from '../../src/ts/plainObject';
+import type { JoinSingleResult } from '../../src/ts/services/joinChallenges/shared';
 
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);
@@ -1087,9 +1088,14 @@ describe('join-challenge', () => {
         stubAuthGuardOk();
         const strategy = stubStrategy({
             joinChallenge: jest
-                .fn()
-                .mockResolvedValueOnce({ status: 'charged-pending-submit', cost: 100, reason: 'no-photo' })
-                .mockResolvedValueOnce({ status: 'charged-pending-submit', cost: 100 }),
+                .fn<Promise<JoinSingleResult>, [string | number, boolean, string, number?]>()
+                .mockResolvedValueOnce({
+                    status: 'charged-pending-submit',
+                    challengeId: 5,
+                    cost: 100,
+                    reason: 'no-photo',
+                })
+                .mockResolvedValueOnce({ status: 'charged-pending-submit', challengeId: 5, cost: 100 }),
         });
         const withReason = await buildHandlers()['join-challenge']({}, 5, false);
         const without = await buildHandlers()['join-challenge']({}, 5, false);

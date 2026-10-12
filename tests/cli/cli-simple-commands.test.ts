@@ -426,7 +426,17 @@ describe('join', () => {
         );
         await joinChallengeCmd('7');
         expect(msgs('error')).toEqual([
-            'Coins were already spent on 7, but no photo qualifies for this challenge. Add an eligible photo (or adjust Chosen Photos), then re-run "join 7 --yes" — you will NOT be charged again.',
+            'Coins were already spent on 7, but no photo qualifies for this challenge. Add an eligible photo, or loosen Must Include Tags or turn on Submit Even Without a Tag Match, then re-run "join 7 --yes" — you will NOT be charged again.',
+        ]);
+    });
+
+    test('an account that could not be identified says so, instead of "no coins were charged"', async () => {
+        handlers['join-challenge'].mockResolvedValue(
+            invalid({ status: 'failed-no-charge', reason: 'account-unknown', cost: 100 }),
+        );
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([
+            'Could not confirm which account is logged in, so this attempt to join 7 spent no coins. Try again shortly, or run "login" again.',
         ]);
     });
 

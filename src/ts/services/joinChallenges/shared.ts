@@ -35,9 +35,16 @@ export interface JoinDeps {
 }
 
 /**
+ * Why a join ended as it did, where the status alone would mislead: `no-photo` — coins were spent
+ * earlier, but no photo qualifies to finish the join with; `account-unknown` — a paid join could not
+ * tell which account is logged in, and did nothing (this attempt spent no coins).
+ */
+type JoinReason = 'no-photo' | 'account-unknown';
+
+/**
  * One join's result. `charged` is coins spent THIS call.
  */
-type JoinOutcome = { status: string; charged: number; imageId?: string; reason?: 'no-photo' };
+type JoinOutcome = { status: string; charged: number; imageId?: string; reason?: JoinReason };
 
 type UnlockState = { charged: number; alreadyUnlocked: boolean };
 
@@ -50,8 +57,7 @@ type JoinSingleResult = {
     cost: number;
     coins?: number;
     imageId?: string;
-    /** `no-photo`: coins were spent earlier, but no photo qualifies to finish the join with. */
-    reason?: 'no-photo';
+    reason?: JoinReason;
 };
 
 // Shared across the manual handler and the automatic pass IN THIS PROCESS so the

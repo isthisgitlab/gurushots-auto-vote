@@ -45,6 +45,8 @@ const OUTCOME: Record<string, { key: string; variant: keyof typeof TEXT_CLASS }>
     'not-started': { key: 'app.discoverNotStarted', variant: 'neutral' },
     // The price rose after the cost was shown: nothing was spent, and the list shows the new cost.
     'needs-confirm': { key: 'app.discoverPriceChanged', variant: 'warning' },
+    // A join answered while another row's price dialog was open: it is not shown, and asks to be pressed again.
+    'confirm-dialog-open': { key: 'app.discoverConfirmDialogFirst', variant: 'neutral' },
     busy: { key: 'app.discoverBusy', variant: 'neutral' },
 };
 
@@ -264,9 +266,12 @@ function RowOutcome({
     const { t } = useTranslation();
     // Coins spent earlier, nothing eligible left to finish with: a photo is what is missing, not a retry.
     const noPhoto = outcome.status === 'charged-pending-submit' && outcome.reason === 'no-photo';
+    const accountUnknown = outcome.status === 'failed-no-charge' && outcome.reason === 'account-unknown';
     const meta: { key: string | null; variant: keyof typeof TEXT_CLASS } = noPhoto
         ? { key: 'app.discoverPendingNoPhoto', variant: 'error' }
-        : OUTCOME[outcome.status as string] || { key: null, variant: 'error' };
+        : accountUnknown
+          ? { key: 'app.discoverAccountUnknown', variant: 'error' }
+          : OUTCOME[outcome.status as string] || { key: null, variant: 'error' };
     return (
         // Announced when it appears: a problem interrupts (alert), a result or a note waits its turn (status).
         <div

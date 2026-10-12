@@ -270,6 +270,16 @@ describe('Submit Only Chosen Photos on a join', () => {
         expect(deps.coinsUnlock).not.toHaveBeenCalled();
     });
 
+    test('a free join is not a paid one: a stray marker does not lift Submit Only Chosen Photos for it', async () => {
+        withSettings({ chosenPhotos: ['gone'], chosenPhotosOnly: true });
+        const deps = makeDeps(eleven, {
+            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false })),
+            joinStateStore: makeStore(JSON.stringify({ '1': { unlockedAt: 1 } })),
+        });
+        expect(await performJoin(challenge(), 'tok', deps, 0)).toEqual({ status: 'skipped-no-chosen', charged: 0 });
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
     test('a manual join auto-picks', async () => {
         withSettings({ chosenPhotos: ['gone'], chosenPhotosOnly: true });
         const deps = makeDeps(eleven, {

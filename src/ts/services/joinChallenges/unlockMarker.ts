@@ -110,7 +110,8 @@ const clearUnlocked = (store: RawJsonStore | null | undefined, id: string | numb
     if (!store) return;
     try {
         const state = readUnlocked(store);
-        const keys = [String(id), markerKey(id, owner)].filter((key) => has(state, key));
+        // Only this account's own claim: a bare one may be another account's protection against a second charge.
+        const keys = [markerKey(id, owner)].filter((key) => has(state, key));
         if (keys.length > 0) {
             keys.forEach((key) => delete state[key]);
             store.writeRaw(JSON.stringify(state));

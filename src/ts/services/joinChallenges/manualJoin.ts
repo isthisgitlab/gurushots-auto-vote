@@ -99,7 +99,7 @@ const joinChallengeSingle = async (
     const owner = cost > 0 ? await markerOwner(token, deps) : null;
     if (cost > 0 && paidOwnerUnknown(deps, owner)) {
         cat().warning(`challenge ${challengeId}: the account could not be identified — not joining`, null);
-        return { status: 'failed-no-charge', challengeId, cost };
+        return { status: 'failed-no-charge', challengeId, cost, reason: 'account-unknown' };
     }
 
     // Coins already spent (an unlock marker, left by a join whose submit failed) are not spent again:

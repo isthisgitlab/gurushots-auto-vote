@@ -542,7 +542,10 @@ export const app = {
     discoverJoining: 'Pievienojas…',
     discoverChecking: 'Pārbauda…',
     discoverPendingNoPhoto:
-        'Monētas jau ir iztērētas, bet šim izaicinājumam neder neviens foto. Pievieno derīgu foto (vai pielāgo izvēlētos foto) un nospied „Pievienoties”.',
+        'Monētas jau ir iztērētas, bet šim izaicinājumam neder neviens foto. Pievieno derīgu foto, mīkstini „Obligātie tagi” vai ieslēdz „Iesniegt arī bez tagu sakritības”, tad nospied „Pievienoties”.',
+    discoverAccountUnknown:
+        'Neizdevās noskaidrot, kurš konts ir pieteicies, tāpēc šis mēģinājums neko nedarīja un monētas netērēja. Mēģini vēlreiz pēc brīža vai piesakies vēlreiz.',
+    discoverConfirmDialogFirst: 'Vispirms apstiprini vai aizver atvērto logu, tad pievienojies vēlreiz.',
     discoverRetrySubmit: 'Mēģināt iesniegt vēlreiz',
     discoverRetrySubmitLabel: 'Mēģināt vēlreiz iesniegt izaicinājumam „{title}”',
     discoverConfirmTitle: 'Pievienoties maksas izaicinājumam?',

@@ -95,7 +95,7 @@ const joinLine = (
             if (result?.reason === 'no-photo') {
                 return {
                     level: 'error',
-                    text: `Coins were already spent on ${challengeId}, but no photo qualifies for this challenge. Add an eligible photo (or adjust Chosen Photos), then re-run "join ${challengeId} --yes" — you will NOT be charged again.`,
+                    text: `Coins were already spent on ${challengeId}, but no photo qualifies for this challenge. Add an eligible photo, or loosen Must Include Tags or turn on Submit Even Without a Tag Match, then re-run "join ${challengeId} --yes" — you will NOT be charged again.`,
                 };
             }
             return {
@@ -103,6 +103,12 @@ const joinLine = (
                 text: `Coins were charged for ${challengeId} but the join did not complete. Re-run "join ${challengeId} --yes" to retry the submit — you will NOT be charged again.`,
             };
         case 'failed-no-charge':
+            if (result?.reason === 'account-unknown') {
+                return {
+                    level: 'error',
+                    text: `Could not confirm which account is logged in, so this attempt to join ${challengeId} spent no coins. Try again shortly, or run "login" again.`,
+                };
+            }
             return { level: 'error', text: `Could not join ${challengeId}. No coins were charged.` };
         case 'skipped-no-photo':
             return {

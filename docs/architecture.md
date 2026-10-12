@@ -415,14 +415,21 @@ repeated six times is one that gets forgotten at one of them.
   new claim is always written as `<member id>:<challenge id>` (the member id survives a re-login; a token
   does not), so one account's leftover claim never makes another account's join a submit-only retry. A
   bare `<challenge id>` claim, from before accounts were told apart, is only ever read: it counts for
-  every account (it can only err towards not charging twice) and is removed by a paid join that finishes
-  with coins it spent or found spent — never by a free join. A **paid** join whose account cannot be
-  identified (a real claim store and a profile read are wired in, but no member id came) does nothing
-  paid: no unlock, no submit, and it answers `failed-no-charge`. A manual join or an auto-join pass that
+  every account (it can only err towards not charging twice) and is never deleted once the member id is known:
+  a paid join that finishes with coins it spent or found spent removes only the account's own keyed claim,
+  and a free join removes none. `coins_unlock` is a single attempt (`makePostRequest(..., { retry: false })`,
+  since a retried timeout or 5xx could charge twice), and a body that says no is the only answer that gives
+  the claim back: no answer at all (timeout, 5xx, network) may have charged, so the claim stays and the join
+  answers `charged-pending-submit`. A **paid** join whose account cannot be identified (a real claim store
+  and a profile read are wired in, but no member id came) does nothing paid: no unlock, no submit, and it
+  answers `failed-no-charge` with `reason: 'account-unknown'`, which the GUI and CLI word as "could not
+  confirm the account; this attempt spent no coins", not as "no coins were charged". A manual join or an auto-join pass that
   finds this account's claim skips the price, balance and budget checks and only submits (`submitOnly`: the
   join re-reads the claim and refuses to unlock if it is gone); with no eligible photo it answers
-  `charged-pending-submit` with `reason: 'no-photo'`, which the GUI and CLI word as a missing photo, not as
-  a retry; a per-process in-flight `Set` **plus** a
+  `charged-pending-submit` with `reason: 'no-photo'` only when the photo library was read and held nothing
+  eligible (the GUI and CLI name Must Include Tags and Submit Even Without a Tag Match, not Chosen Photos:
+  Submit Only Chosen Photos is lifted for a join whose coins are spent, and only for a paid one); a library
+  that could not be read answers plain `charged-pending-submit`, the ordinary Retry; a per-process in-flight `Set` **plus** a
   cross-process lockfile (`acquireUnlockLock`, real-fs platforms, TTL stale-recovery, fail-open) guard the
   check→unlock→mark section; a corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
   the pass is cancellation-checked between candidates and before each spend, and each candidate is

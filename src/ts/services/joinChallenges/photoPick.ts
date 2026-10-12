@@ -26,11 +26,12 @@ const VISUAL_SHORTLIST = 12;
 
 /**
  * What a join's photo pick came to: the photo, or why there is none —
- * 'no-photo' (nothing eligible, or the candidates could not be read) versus
+ * 'no-photo' (the photos were read and nothing is eligible) versus
  * 'no-chosen' (Submit Only Chosen Photos is on and no chosen photo can be
- * entered, so nothing was picked on purpose).
+ * entered, so nothing was picked on purpose) — and 'unreadable' when the photos could
+ * not be read at all (a network or API error), which says nothing about the library.
  */
-type JoinPick = { id: string; reason: 'picked' } | { id: null; reason: 'no-photo' | 'no-chosen' };
+type JoinPick = { id: string; reason: 'picked' } | { id: null; reason: 'no-photo' | 'no-chosen' | 'unreadable' };
 
 /**
  * The photos a join can choose from, or null when they could not be read. The
@@ -113,7 +114,7 @@ const pickJoinPhoto = async (
         shouldIncludeTags,
         ignoreWords,
     });
-    if (loaded === null) return { id: null, reason: 'no-photo' };
+    if (loaded === null) return { id: null, reason: 'unreadable' };
     // A chosen photo the themed search missed may still be in the library.
     const missed = await resolveMissingChosen({
         challenge,
@@ -166,4 +167,5 @@ const pickJoinPhoto = async (
     return { id: picked, reason: 'picked' };
 };
 
+export type { JoinPick };
 export { pickJoinPhoto };

@@ -35,6 +35,7 @@ import {
     readUnlockedState,
 } from './unlockMarker';
 import { pickJoinPhoto } from './photoPick';
+import type { JoinPick } from './photoPick';
 
 const failedNoCharge = (): JoinOutcome => ({ status: 'failed-no-charge', charged: 0 });
 
@@ -74,6 +75,16 @@ const claimAndUnlock = async (
     }
     const unlock = await deps.coinsUnlock(id, token);
     if (!unlock?.ok) {
+        // A body that says no is a refusal: nothing was charged, and the claim goes back. No answer at all
+        // (a timeout, a 5xx, the network) is unclear — the charge may have gone through, and the unlock is
+        // not known to be idempotent: keep the claim, so the next attempt only submits and never unlocks again.
+        if (!unlock?.raw) {
+            cat().error(
+                `${logger.challengeTag(challenge)}: coins_unlock got no answer — the charge may have gone through, keeping the claim`,
+                null,
+            );
+            return { outcome: { status: 'charged-pending-submit', charged: 0 } };
+        }
         clearUnlocked(deps.joinStateStore, id, owner);
         cat().warning(`coins_unlock failed for ${logger.challengeTag(challenge)} — no coins charged`, null);
         return { outcome: failedNoCharge() };
@@ -125,7 +136,7 @@ const submitJoin = async (
     // cycle), report pending-submit — not "no charge", which would misinform
     // the user about money spent.
     if (cancellation.isCancelled()) {
-        return coinsSpent ? { status: 'charged-pending-submit', charged } : failedNoCharge();
+        return needsCoins > 0 && coinsSpent ? { status: 'charged-pending-submit', charged } : failedNoCharge();
     }
     const submit = await deps.submitToChallenge(id, [imageId], token);
     if (submit?.ok) {
@@ -149,6 +160,20 @@ const submitJoin = async (
         return { status: 'charged-pending-submit', charged };
     }
     return failedNoCharge();
+};
+
+/**
+ * No photo was picked. Coins spent earlier are still owed their join: not "no coins were charged", and the marker
+ * stays. Only a library that was read and held nothing is "no photo"; a failed read is a failure like any other,
+ * and retrying is what helps.
+ */
+const noPhotoOutcome = (reason: JoinPick['reason'], coinsOwedJoin: boolean): JoinOutcome => {
+    if (coinsOwedJoin) {
+        return reason === 'unreadable'
+            ? { status: 'charged-pending-submit', charged: 0 }
+            : { status: 'charged-pending-submit', charged: 0, reason: 'no-photo' };
+    }
+    return { status: reason === 'no-chosen' ? 'skipped-no-chosen' : 'skipped-no-photo', charged: 0 };
 };
 
 /**
@@ -190,7 +215,7 @@ const performJoin = async (
                 `${logger.challengeTag(challenge)}: the account could not be identified — not joining a paid challenge`,
                 null,
             );
-            return failedNoCharge();
+            return { ...failedNoCharge(), reason: 'account-unknown' };
         }
         let unlock = { charged: 0, alreadyUnlocked: isUnlocked(deps.joinStateStore, id, owner) };
         if (submitOnly && !unlock.alreadyUnlocked) {
@@ -203,16 +228,10 @@ const performJoin = async (
 
         // 1. Photo first — no photo, no spend.
         const pick = await pickJoinPhoto(challenge, token, deps, {
-            ignoreChosenOnly: manual || unlock.alreadyUnlocked,
+            ignoreChosenOnly: manual || (unlock.alreadyUnlocked && needsCoins > 0),
         });
         const imageId = pick.id;
-        if (!imageId) {
-            // Coins spent earlier are still owed their join: not "no coins were charged", and the marker stays.
-            if (unlock.alreadyUnlocked && needsCoins > 0) {
-                return { status: 'charged-pending-submit', charged: 0, reason: 'no-photo' };
-            }
-            return { status: pick.reason === 'no-chosen' ? 'skipped-no-chosen' : 'skipped-no-photo', charged: 0 };
-        }
+        if (!imageId) return noPhotoOutcome(pick.reason, unlock.alreadyUnlocked && needsCoins > 0);
 
         // 2. Paid unlock (skipped when a prior pass already unlocked → retry submit only).
         if (needsCoins > 0 && !unlock.alreadyUnlocked) {

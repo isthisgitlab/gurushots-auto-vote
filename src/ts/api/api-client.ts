@@ -268,6 +268,8 @@ const warnIfRedirect = (url: string, response: RequestFailure['response']): void
  * @param url - The API endpoint URL
  * @param headers - Request headers including authentication token
  * @param data - URL-encoded form data (default: empty string)
+ * @param options.retry - false makes exactly one attempt: for a request that spends something and is
+ *   not known to be idempotent, where a retry after a timeout could spend twice (default: true)
  * @returns The response body as `T` (the shape the endpoint wrapper reads, all
  *   fields optional), or null if the request failed or the body was not a JSON
  *   object. Only the object check is enforced: the wrapper guards every read.
@@ -276,8 +278,9 @@ const makePostRequest = async <T extends object>(
     url: string,
     headers: RequestHeaders,
     data: string = '',
+    { retry = true }: { retry?: boolean } = {},
 ): Promise<T | null> => {
-    const maxRetries = coerceNonNegInt(settings.getSetting('apiMaxRetries'), 3);
+    const maxRetries = retry ? coerceNonNegInt(settings.getSetting('apiMaxRetries'), 3) : 0;
     const baseDelayMs = coerceNonNegInt(settings.getSetting('apiRetryBaseDelayMs'), 1000);
 
     for (let attempt = 0; ; attempt++) {
