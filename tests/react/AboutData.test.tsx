@@ -7,6 +7,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
 import { AboutDataSection } from '@/components/app/AboutDataSection';
 import { invalid } from '../helpers/invalid';
+import { about as englishAbout } from '../../src/ts/translations/english';
+import { about as latvianAbout } from '../../src/ts/translations/latvian';
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
 
 const open = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
@@ -354,5 +356,13 @@ describe('Delete all local data', () => {
         openDelete();
         expect(within(dialog()).queryByRole('alert')).toBeNull();
         expect(within(dialog()).getByRole('button', { name: 'app.cancel' })).toBeTruthy();
+    });
+});
+
+describe('the Android delete failure text', () => {
+    // The restart is announced once, by about.deleteRestartsOnClose; the failure text itself says nothing about it.
+    test('does not mention a restart in either language', () => {
+        expect(englishAbout.deleteFailedAndroid).not.toMatch(/restart/i);
+        expect(latvianAbout.deleteFailedAndroid).not.toMatch(/palaist|no jauna/i);
     });
 });
