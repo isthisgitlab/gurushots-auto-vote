@@ -106,7 +106,7 @@ allprojects {
                 if (id instanceof ModuleComponentIdentifier) {
                     def coordinate = "${id.group}:${id.module}".toString()
                     if (!resolved.contains(coordinate)) {
-                        def hasNoFileByDesign = component.variants.any { variant ->
+                        def hasNoFileByDesign = component.variants.every { variant ->
                             def category = variant.attributes.getAttribute(Category.CATEGORY_ATTRIBUTE)
                             (category != null && (category.name == Category.REGULAR_PLATFORM || category.name == Category.ENFORCED_PLATFORM)) ||
                                 variant.externalVariant.present
@@ -164,11 +164,11 @@ if [ ! -s "$new_artifacts" ]; then
     echo "No release runtime artifacts were found in the Gradle output; nothing was written." >&2
     exit 1
 fi
-# Every artifact of the dependency tree has to be one the scan opened, or one that has no file (a BOM or platform).
+# Every artifact of the dependency tree has to be one the scan opened, or one that has no file (a BOM, platform or redirect).
 sed -nE 's/^NOFILE ([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)$/\1/p' "$work/notices" > "$work/nofile"
 unaccounted=$(LC_ALL=C sort -u "$work/scanned" "$work/nofile" | LC_ALL=C comm -13 - "$new_artifacts")
 if [ -n "$unaccounted" ]; then
-    echo "These release runtime artifacts were neither scanned for a NOTICE file nor are a BOM or platform; nothing was written:" >&2
+    echo "These release runtime artifacts were neither scanned for a NOTICE file nor are a BOM, platform or redirect; nothing was written:" >&2
     echo "$unaccounted" | sed 's/^/    /' >&2
     exit 1
 fi

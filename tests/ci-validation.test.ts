@@ -111,10 +111,11 @@ describe('test typing', () => {
 
 describe('sends toward the Logs window', () => {
     // restrictToLogsChannels (ipc/registerHandlers.ts) filters only `webContents.send`; `postMessage`, a frame's
-    // `send` (`mainFrame.send`, `frames[i].send`, `sendToFrame`), an event's `reply` and a `webFrameMain` handle reach
-    // a window unfiltered, so no source may touch a frame handle (`mainFrame`, `senderFrame`, `framesInSubtree`,
-    // `webFrameMain`), reply on an event or post a message. A legitimate line is listed here as `relative/path.ts`,
-    // with the text of the line and the reason.
+    // `send` (`mainFrame.send`, `frames[i].send`, `sendToFrame`, or `send` on a stored frame handle), an event's
+    // `reply` and a `webFrameMain` handle reach a window unfiltered, so no source may touch a frame handle
+    // (`mainFrame`, `senderFrame`, `framesInSubtree`, `webFrameMain`), call `send` on anything but `webContents`,
+    // reply on an event or post a message. A legitimate line is listed here as `relative/path.ts`, with the text of
+    // the line and the reason.
     const ALLOWED: Readonly<Record<string, readonly string[]>> = {
         // The trusted-sender check and the refusal log read the sender's frame (its url, and whether it is the window's
         // main frame); they send nothing.
@@ -125,9 +126,11 @@ describe('sends toward the Logs window', () => {
             'const frame = event.senderFrame;',
             'event.senderFrame?.url ??',
         ],
+        // The preload's one-way send to the main process (renderer side, not a window).
+        'preloadApi.ts': ['ipcRenderer.send(channel)'],
     };
     const UNFILTERED_SEND_RE =
-        /\bpostMessage\(|\bmainFrame\b|\bsenderFrame\b|\bframesInSubtree\b|\bsendToFrame\(|\bwebFrameMain\b|\bframes\[[^\]]*\]\??\.send\(|\.reply\(/g;
+        /\bpostMessage\(|\bmainFrame\b|\bsenderFrame\b|\bframesInSubtree\b|\bsendToFrame\(|\bwebFrameMain\b|\bframes\[[^\]]*\]\??\.send\(|(?<!\bwebContents\??)\.send\(|\.reply\(/g;
     const SOURCE_FILE_RE = /\.(?:[cm]?ts|tsx)$/;
     const hitLines = (text: string) => [
         ...new Set(
@@ -139,7 +142,7 @@ describe('sends toward the Logs window', () => {
         return hitLines(text).filter((line) => !allowedLines.some((allowed) => lines[line - 1].includes(allowed)));
     };
 
-    test('no source uses postMessage or a frame handle (mainFrame, framesInSubtree, webFrameMain)', () => {
+    test('no source uses postMessage, a frame handle (mainFrame, senderFrame, framesInSubtree, webFrameMain, sendToFrame), a send off webContents, or .reply(', () => {
         const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
         const path = jest.requireActual<typeof import('node:path')>('node:path');
         const srcDir = path.join(__dirname, '..', 'src', 'ts');
@@ -160,19 +163,37 @@ describe('sends toward the Logs window', () => {
         expect(offenders).toEqual([]);
     });
 
+    const staleAllowances = (
+        allowed: Readonly<Record<string, readonly string[]>>,
+        read: (relative: string) => string,
+    ) => {
+        const stale: string[] = [];
+        for (const [relative, allowedLines] of Object.entries(allowed)) {
+            const text = read(relative);
+            const lines = text.split('\n');
+            for (const entry of allowedLines) {
+                if (!hitLines(text).some((line) => lines[line - 1].includes(entry)))
+                    stale.push(`${relative}: ${entry}`);
+            }
+        }
+        return stale;
+    };
+
     test('every allowed line still matches the check in its file, so none goes stale', () => {
         const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
         const path = jest.requireActual<typeof import('node:path')>('node:path');
-        const stale: string[] = [];
-        for (const [relative, allowedLines] of Object.entries(ALLOWED)) {
-            const text = fs.readFileSync(path.join(__dirname, '..', 'src', 'ts', relative), 'utf8');
-            const lines = text.split('\n');
-            for (const allowed of allowedLines) {
-                if (!hitLines(text).some((line) => lines[line - 1].includes(allowed)))
-                    stale.push(`${relative}: ${allowed}`);
-            }
-        }
-        expect(stale).toEqual([]);
+        expect(
+            staleAllowances(ALLOWED, (relative) =>
+                fs.readFileSync(path.join(__dirname, '..', 'src', 'ts', relative), 'utf8'),
+            ),
+        ).toEqual([]);
+    });
+
+    test('an allowance that matches no flagged line is reported as stale', () => {
+        const text = 'const frame = event.senderFrame;\nconst fine = 1;';
+        expect(
+            staleAllowances({ 'a.ts': ['event.senderFrame;', 'const fine = 1;', 'removed line'] }, () => text),
+        ).toEqual(['a.ts: const fine = 1;', 'a.ts: removed line']);
     });
 
     test('the check catches each unfiltered send, and passes the filtered one', () => {
@@ -190,13 +211,20 @@ describe('sends toward the Logs window', () => {
             'const all = framesInSubtree;',
             'const frame = event.senderFrame;',
             'event.reply("c", x);',
+            'const frame = event.senderFrame; frame.send("x");',
+            'frame.send("c", x);',
+            'port?.send("c", x);',
         ]) {
             expect(unfilteredSends(`ok\n${offender}`)).toEqual([2]);
         }
         expect(
             unfilteredSends('a\nconst frame = sender.mainFrame; // checked', ['sender.mainFrame; // checked']),
         ).toEqual([]);
-        expect(unfilteredSends('win.webContents.send("c", x);\nconst postMessageCount = 1;')).toEqual([]);
+        expect(
+            unfilteredSends(
+                'win.webContents.send("c", x);\nwin.webContents?.send("c", x);\nconst postMessageCount = 1;',
+            ),
+        ).toEqual([]);
     });
 
     test('every TypeScript source extension is scanned', () => {

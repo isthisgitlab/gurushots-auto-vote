@@ -366,14 +366,17 @@ describe('the Android component list', () => {
         );
     });
 
-    test("takes Cordova's NOTICE from the Cordova Android release the build uses", () => {
-        const vendored = vendoredNotices['org.apache.cordova:framework']?.version;
-        if (vendored !== variables.cordovaAndroidVersion) {
-            throw new Error(
-                `scripts/licenses/notices.json holds the NOTICE of cordova-android ${vendored}, but android/variables.gradle ` +
-                    `builds ${variables.cordovaAndroidVersion}: re-fetch the NOTICE from that release of ` +
-                    'https://github.com/apache/cordova-android, replace the vendored text, and update the version in notices.json.',
-            );
+    test('takes each vendored NOTICE from the release the build uses', () => {
+        for (const [coordinate, { version }] of Object.entries(vendoredNotices)) {
+            const component = components.find((candidate) => candidate.coordinates.includes(coordinate));
+            const built = component?.versionVariable ? variables[component.versionVariable] : undefined;
+            if (version !== built) {
+                throw new Error(
+                    `scripts/licenses/notices.json holds the NOTICE of ${coordinate} ${version}, but android/variables.gradle ` +
+                        `builds ${built}: re-fetch the NOTICE from that release, replace the vendored text, and update ` +
+                        'the version in notices.json.',
+                );
+            }
         }
     });
 
