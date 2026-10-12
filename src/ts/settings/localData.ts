@@ -49,8 +49,8 @@ const LOCAL_DATA_DIRECTORIES = ['logs', 'vision'] as const;
 const VISION_APP_NAME = 'gurushots-auto-vote';
 
 // Files that are not stores but sit beside them: the CLI session and desktop-app markers, and the lock files of the
-// join and scenario state (with the ".stale-<token>" copy a lock takeover can leave).
-const LOCK_FILE_RE = /^(?:(?:statelock|joinlock)-.+\.lock(?:\.stale-.+)?|cli-session\.lock|desktop-app\.lock)$/;
+// join and scenario state; each may have a ".stale-<token>" copy a takeover or a marker removal left (a crash mid-way).
+const LOCK_FILE_RE = /^(?:(?:statelock|joinlock)-.+\.lock|cli-session\.lock|desktop-app\.lock)(?:\.stale-.+)?$/;
 
 /**
  * The electron session the app's windows use, for the wipe to clear its cookies, local storage and cache.

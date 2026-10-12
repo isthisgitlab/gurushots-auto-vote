@@ -28,7 +28,7 @@ const clearLeftoverToken = async () => {
         if (await isCliSessionActive()) {
             logger
                 .withCategory('authentication')
-                .info('Kept the saved token: a CLI session is running and may be using it', null);
+                .info('Kept the saved login token because a CLI session is running and may be using it', null);
             return;
         }
         const now = settings.loadSettings();

@@ -1472,6 +1472,7 @@ export const about = {
     deleteAfterWeb:
         'The web server stops afterwards. Start pnpm web again, open the URL it prints and log in again. Your GuruShots account is not touched.',
     deleteConfirm: 'Delete everything',
+    deleteChecking: 'Checking that nothing else is using the data…',
     deleteBusyPass:
         'A voting pass is running, so nothing was deleted. Stop auto-vote, wait for the pass to end, then try again.',
     deleteBusyCli:
@@ -1479,8 +1480,7 @@ export const about = {
     deleteBusyApp: 'The desktop app is open, so nothing was deleted. Quit the desktop app, then try again.',
     deleteFailed:
         "Not everything could be deleted. A file or store could not be removed. Close other programs that use the app's files, then try again.",
-    deleteFailedAndroid:
-        "Not everything could be deleted: some of the background service's data could not be cleared. Closing this message restarts the app. Then try again.",
+    deleteFailedAndroid: 'Not everything could be deleted. Closing this message restarts the app; then try again.',
     deleteDone: 'All local data was deleted. The app restarts now; if it does not, close it and open it again.',
     deleteDoneWeb:
         'All local data was deleted. The web server has stopped. Start pnpm web again and open the URL it prints.',

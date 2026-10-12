@@ -1498,6 +1498,7 @@ export const about = {
     deleteAfterWeb:
         'Pēc tam tīmekļa serveris apstājas. Palaid pnpm web vēlreiz, atver adresi, ko tas izvada, un piesakies no jauna. Tavs GuruShots konts netiek skarts.',
     deleteConfirm: 'Dzēst visu',
+    deleteChecking: 'Pārbauda, vai neviens cits neizmanto datus…',
     deleteBusyPass:
         'Notiek balsošanas cikls, tāpēc nekas netika dzēsts. Aptur automātisko balsošanu, pagaidi, kamēr cikls beidzas, un mēģini vēlreiz.',
     deleteBusyCli:
@@ -1507,7 +1508,7 @@ export const about = {
     deleteFailed:
         'Ne viss tika izdzēsts. Kādu failu vai krātuvi neizdevās noņemt. Aizver citas programmas, kas izmanto lietotnes failus, un mēģini vēlreiz.',
     deleteFailedAndroid:
-        'Ne viss tika izdzēsts: daļu fona pakalpojuma datu neizdevās notīrīt. Aizverot šo paziņojumu, lietotne tiks palaista no jauna. Pēc tam mēģini vēlreiz.',
+        'Ne viss tika izdzēsts. Aizverot šo paziņojumu, lietotne tiks palaista no jauna; tad mēģini vēlreiz.',
     deleteDone:
         'Visi vietējie dati ir dzēsti. Lietotne tūlīt tiks palaista no jauna. Ja tas nenotiek, aizver to un atver vēlreiz.',
     deleteDoneWeb:

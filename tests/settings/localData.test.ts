@@ -204,6 +204,29 @@ describe('wipeLocalData', () => {
     });
 
     describe('desktop (files)', () => {
+        test('removes a .stale- copy of a session marker a crash left, and nothing else that merely looks like one', async () => {
+            load();
+            for (const name of [
+                'cli-session.lock.stale-12-abcd1234',
+                'desktop-app.lock.stale-12-abcd1234',
+                'cli-session.lock',
+            ]) {
+                fs.writeFileSync(path.join(userData, name), '{"pid":1}');
+            }
+            for (const name of ['cli-session.lock.bak', 'other.lock.stale-12', 'cli-session.lockstale-1']) {
+                fs.writeFileSync(path.join(userData, name), 'keep');
+            }
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(result.success).toBe(true);
+            expect(fs.readdirSync(userData).sort()).toEqual([
+                'cli-session.lock.bak',
+                'cli-session.lockstale-1',
+                'other.lock.stale-12',
+            ]);
+        });
+
         test('deletes every registry entry, its backups and temp files, the lock files and both directories', async () => {
             load();
             fillUserData();
@@ -456,8 +479,11 @@ describe('wipeLocalData', () => {
                 const wipe = ctx.localData.wipeLocalData({ clearSession: async () => {} });
                 // Both old markers with a live process are read again after one settle wait (together), and are still old.
                 await jest.advanceTimersByTimeAsync(ctx.lock.SETTLE_MS);
-                // Judged left over, each marker was removed on the way (nothing left for the wipe to list).
-                await expect(wipe).resolves.toEqual({ success: true, removed: [] });
+                // Judged left over (not removed by the first check), each marker goes with the rest of the data.
+                await expect(wipe).resolves.toEqual({
+                    success: true,
+                    removed: [path.join(userData, 'cli-session.lock'), path.join(userData, 'desktop-app.lock')],
+                });
                 expect(fs.existsSync(path.join(userData, 'cli-session.lock'))).toBe(false);
                 expect(fs.existsSync(path.join(userData, 'desktop-app.lock'))).toBe(false);
             } finally {

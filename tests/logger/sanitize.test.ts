@@ -37,6 +37,8 @@ describe('sanitizeForLog', () => {
             apiKey: 'k',
             secret: 's',
             cookie: 'c',
+            'set-cookie': 'sc',
+            setCookie: 'sc2',
             authorization: 'z',
             TOKEN: 't2',
             Password: 'p2',

@@ -154,10 +154,13 @@ describe('Delete all local data', () => {
         expect(busy.getAttribute('aria-busy')).toBe('true');
         expect((busy as HTMLButtonElement).disabled).toBe(true);
         expect((within(dialog()).getByRole('button', { name: 'app.cancel' }) as HTMLButtonElement).disabled).toBe(true);
+        // While the busy check and the delete run, the dialog says what it is doing.
+        expect(within(dialog()).getByText('about.deleteChecking')).toBeTruthy();
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(screen.getByRole('dialog')).toBeTruthy();
 
         await act(async () => finish({ success: true }));
+        expect(within(dialog()).queryByText('about.deleteChecking')).toBeNull();
         expect(within(dialog()).getByRole('status').textContent).toBe('about.deleteDone');
         // Nothing left to confirm: only a way to close.
         expect(within(dialog()).queryByRole('button', { name: 'about.deleteConfirm' })).toBeNull();
@@ -188,8 +191,10 @@ describe('Delete all local data', () => {
         confirm();
         const alert = await within(dialog()).findByRole('alert');
         expect(alert.textContent).toBe(key);
-        // Still offered: clear what is in the way, then try again.
+        // Still offered: clear what is in the way, then try again; the other button now closes.
         expect(within(dialog()).getByRole('button', { name: 'about.deleteConfirm' })).toBeTruthy();
+        expect(within(dialog()).getByRole('button', { name: 'app.close' })).toBeTruthy();
+        expect(within(dialog()).queryByRole('button', { name: 'app.cancel' })).toBeNull();
         expect(window.api.logError).not.toHaveBeenCalled();
     });
 
@@ -247,10 +252,10 @@ describe('Delete all local data', () => {
         openDelete();
         confirm();
 
-        expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailed');
+        expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailedAndroid');
         expect(window.api.reloadWindow).not.toHaveBeenCalled();
 
-        fireEvent.click(within(dialog()).getByRole('button', { name: 'app.cancel' }));
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'app.close' }));
         expect(screen.queryByRole('dialog')).toBeNull();
         expect(window.api.reloadWindow).toHaveBeenCalledTimes(1);
     });
@@ -263,7 +268,7 @@ describe('Delete all local data', () => {
         openDelete();
         confirm();
         await within(dialog()).findByRole('alert');
-        fireEvent.click(within(dialog()).getByRole('button', { name: 'app.cancel' }));
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'app.close' }));
         expect(window.api.reloadWindow).not.toHaveBeenCalled();
 
         openDelete();
@@ -286,11 +291,11 @@ describe('Delete all local data', () => {
         await waitFor(() => expect(within(dialog()).getByRole('alert').textContent).toBe('about.deleteBusyPass'));
         expect(window.api.reloadWindow).not.toHaveBeenCalled();
 
-        fireEvent.click(within(dialog()).getByRole('button', { name: 'app.cancel' }));
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'app.close' }));
         expect(window.api.reloadWindow).toHaveBeenCalledTimes(1);
     });
 
-    test('on Android the failure text is the one that says what Closing does', async () => {
+    test('a native failure on Android (the window will reload) says what Closing does', async () => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: 'x', reload: true });
         (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
         render(<AboutDataSection />);
@@ -299,15 +304,44 @@ describe('Delete all local data', () => {
         expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailedAndroid');
     });
 
+    test('on Android a failure that asks for no reload, or a call that throws, uses the plain text', async () => {
+        jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: false, error: 'preferences failed' });
+        jest.mocked(window.api.wipeLocalData).mockRejectedValueOnce(new Error('ipc closed'));
+        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        render(<AboutDataSection />);
+        openDelete();
+        confirm();
+        expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailed');
+
+        confirm();
+        await waitFor(() => expect(within(dialog()).getByRole('alert').textContent).toBe('about.deleteFailed'));
+        expect(window.api.reloadWindow).not.toHaveBeenCalled();
+    });
+
+    test('a call that throws after an attempt that emptied the caches still says the window restarts', async () => {
+        jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: false, error: 'x', reload: true });
+        jest.mocked(window.api.wipeLocalData).mockRejectedValueOnce(new Error('ipc closed'));
+        render(<AboutDataSection />);
+        openDelete();
+        confirm();
+        await within(dialog()).findByRole('alert');
+
+        confirm();
+        await waitFor(() => expect(within(dialog()).getByRole('alert').textContent).toBe('about.deleteFailedAndroid'));
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'app.close' }));
+        expect(window.api.reloadWindow).toHaveBeenCalledTimes(1);
+    });
+
     test('closing after an error clears it for the next time', async () => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: 'busy-pass' });
         render(<AboutDataSection />);
         openDelete();
         confirm();
         await within(dialog()).findByRole('alert');
-        fireEvent.click(within(dialog()).getByRole('button', { name: 'app.cancel' }));
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'app.close' }));
 
         openDelete();
         expect(within(dialog()).queryByRole('alert')).toBeNull();
+        expect(within(dialog()).getByRole('button', { name: 'app.cancel' })).toBeTruthy();
     });
 });

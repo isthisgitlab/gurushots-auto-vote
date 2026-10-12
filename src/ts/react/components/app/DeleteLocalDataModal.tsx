@@ -7,7 +7,7 @@ import * as ipc from '@/api/ipc';
 import { errorMessage } from '../../../errorMessage';
 
 type Busy = 'busy-pass' | 'busy-cli' | 'busy-app';
-type Outcome = 'idle' | Busy | 'failed' | 'done';
+type Outcome = 'idle' | Busy | 'failed' | 'failed-reload' | 'done';
 
 // Each refusal names what is in the way and the one step that clears it.
 const BUSY_KEYS: Record<Busy, string> = {
@@ -22,7 +22,7 @@ const isBusy = (error: unknown): error is Busy => typeof error === 'string' && O
  * and starts with focus on Cancel — Cancel is the first control and there is no close button, so nothing is
  * deleted by a stray Enter. While the delete runs the dialog cannot be dismissed. A refusal (a voting pass, a command-line
  * session or the desktop app is in the way) or a failure is worded for the user and stays on screen (a failure that left the
- * window's caches emptied reloads it when the dialog is closed); on success the
+ * window's caches emptied reloads it when the dialog is closed, and its text says so); on success the
  * shell relaunches the app, or, where it cannot (the web shell's server stops), the text says to start it again.
  */
 export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -48,11 +48,11 @@ export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onC
             } else {
                 void ipc.logRendererError(`Deleting the local data failed: ${result?.error ?? 'no answer'}`);
                 reloadOnClose.current ||= result?.success === false && result.reload === true;
-                setOutcome('failed');
+                setOutcome(reloadOnClose.current ? 'failed-reload' : 'failed');
             }
         } catch (err) {
             void ipc.logRendererError(`Deleting the local data threw: ${errorMessage(err) || err}`);
-            setOutcome('failed');
+            setOutcome(reloadOnClose.current ? 'failed-reload' : 'failed');
         } finally {
             setDeleting(false);
         }
@@ -71,7 +71,8 @@ export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onC
     const outcomeKey = (() => {
         if (outcome === 'idle') return null;
         if (outcome === 'done') return relaunchesAfterWipe ? 'about.deleteDone' : 'about.deleteDoneWeb';
-        if (outcome === 'failed') return backgroundService ? 'about.deleteFailedAndroid' : 'about.deleteFailed';
+        if (outcome === 'failed') return 'about.deleteFailed';
+        if (outcome === 'failed-reload') return 'about.deleteFailedAndroid';
         return BUSY_KEYS[outcome];
     })();
     const label = t('about.deleteConfirm');
@@ -95,6 +96,11 @@ export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onC
                     {backgroundService && <li>{t('about.deleteBackground')}</li>}
                 </ul>
                 <p>{t(relaunchesAfterWipe ? 'about.deleteAfter' : 'about.deleteAfterWeb')}</p>
+                {deleting && (
+                    <div role="status" className="alert alert-info py-2 text-sm">
+                        <span>{t('about.deleteChecking')}</span>
+                    </div>
+                )}
                 {outcomeKey && (
                     <div
                         role={done ? 'status' : 'alert'}
@@ -106,7 +112,7 @@ export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onC
             </div>
             <ModalActions>
                 <button type="button" className="btn btn-outline btn-sm" onClick={handleClose} disabled={deleting}>
-                    {done ? t('app.close') : t('app.cancel')}
+                    {outcome === 'idle' ? t('app.cancel') : t('app.close')}
                 </button>
                 {!done && (
                     <button

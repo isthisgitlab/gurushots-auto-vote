@@ -615,18 +615,24 @@ repeated six times is one that gets forgotten at one of them.
   holds `cli-session.lock`, the desktop app holds `desktop-app.lock` for its lifetime. A marker names its process id.
   The holder checks the clock every 2 s (`TICK_MS`) and rewrites the marker once a beat of wall-clock time (30 s,
   `HEARTBEAT_MS`) has passed since its last write: timers do not count a machine's sleep, so after waking the marker is
-  rewritten within one tick (the desktop app also rewrites it on the `resume` event). A marker counts only while its
-  process exists **and** it was refreshed within three beats (`STALE_AFTER_MS`), so one left by a crash or a reboot
-  goes stale even when its process id has since been given to another process. An old marker whose process exists is
-  read again after `SETTLE_MS` (5 s, a tick plus a margin): a holder that just woke has written it by then. One still
-  old is a confirmed leftover (its process id was reused) and is removed, but only if a re-read right before the
-  unlink still shows the same holder and mtime, so a marker another process just took over or refreshed is never
-  deleted; the wait is paid once per leftover. The desktop app reads the CLI marker at startup so it does not clear a
-  login the CLI session is using; that check runs beside the first window, which never waits for it, and re-reads the
-  settings before clearing, so a login made meanwhile is kept. The wipe (`wipeLocalData`) refuses to run while
-  anything live is in the way and touches nothing, answering the code of what it found, in this order: `busy-cli` (a
-  live CLI session holds its marker), `busy-app` (the desktop app holds its marker — what the CLI's `reset-data` and
-  the web shell see) or `busy-pass` (a voting pass runs in this process). The two markers are read together (one
+  rewritten within one tick (the desktop app also rewrites it on the `resume` event); a clock set back (a negative
+  delta) rewrites it at once, and a reader takes an mtime more than one tick ahead of its clock as old, not fresh. A
+  marker counts only while its process exists **and** it was refreshed within three beats (`STALE_AFTER_MS`), so one
+  left by a crash or a reboot goes stale even when its process id has since been given to another process. An old
+  marker whose process exists is read again after `SETTLE_MS` (10 s, five ticks, the longest a check waits): a holder
+  that just woke has written it by then, and a marker that is fresh or whose holder or mtime changed counts as held. One
+  still old and unchanged is not counted, and it is removed only when this process also judged the same holder and mtime
+  old more than one `HEARTBEAT_MS` earlier (the first check never removes; the wait is paid until a later check does).
+  The removal is a rename of the marker to a name of its own, then a check of the renamed file's holder and mtime: the
+  judged file is unlinked, any other file is put back with a hard link (which fails, leaving the newer file in place,
+  when another marker has been written meanwhile), so a marker written between the decision and the removal survives.
+  For the instant the file is moved the marker path is absent: a reader sees no marker and a holder's beat writes it
+  again. A crash in that instant leaves a `*.stale-<pid>-<random>` file beside the marker, which the wipe removes. The desktop app reads the
+  CLI marker at startup so it does not clear a login the CLI session is using; that check runs beside the first
+  window, which never waits for it, and re-reads the settings before clearing, so a login made meanwhile is kept. The
+  wipe (`wipeLocalData`) refuses to run while anything live is in the way and touches nothing, answering the code of
+  what it found, in this order: `busy-cli` (a live CLI session holds its marker), `busy-app` (the desktop app holds its
+  marker — what the CLI's `reset-data` and the web shell see) or `busy-pass` (a voting pass runs in this process). The two markers are read together (one
   wait, not two) and the pass is asked last, synchronously, right before the files go, so a pass that began during
   the wait is refused too. A saved "auto-vote running" flag is only a wish to resume at the next start and does not
   block. The delete modal words each code with its own next step (stop the CLI session in its terminal / quit the

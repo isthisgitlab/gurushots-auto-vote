@@ -90,6 +90,40 @@ describe('redactMessage', () => {
         expect(redactMessage(message)).toBe(expected);
     });
 
+    test.each([
+        ['{"password":"a\\"b c"}', '{"password":[REDACTED]}'],
+        ["{'secret':'it\\'s a b'}", "{'secret':[REDACTED]}"],
+        ['{"login":"al\\"ice b","ok":true}', '{"login":[REDACTED],"ok":true}'],
+        ['{"cookie":"a=\\"b\\"; c=d","ok":1}', '{"cookie":[REDACTED],"ok":1}'],
+        ['password: "a\\\\" then more', 'password: [REDACTED] then more'],
+    ])('a quoted value ends at its closing quote, an escaped quote inside it included: %s', (message, expected) => {
+        const out = redactMessage(message);
+        expect(out).toBe(expected);
+        expect(out).not.toMatch(/b c|a b|ice b|c=d/);
+    });
+
+    test.each([
+        ['cookie: sid=abc123; theme=dark; token=xyz', 'cookie: [REDACTED]'],
+        ['Set-Cookie: sid=abc123; Path=/; HttpOnly  ', 'Set-Cookie: [REDACTED]  '],
+        ['set_cookie=sid=abc123; Secure', 'set_cookie=[REDACTED]'],
+        ['cookie: a=b\nnext line', 'cookie: [REDACTED]\nnext line'],
+        ['sent cookie: sid=abc123 for alice', 'sent cookie: [REDACTED]'],
+    ])('a cookie value runs to the end of the line: %s', (message, expected) => {
+        const out = redactMessage(message);
+        expect(out).toBe(expected);
+        expect(out).not.toMatch(/abc123|theme|HttpOnly|xyz|alice/);
+    });
+
+    test('a banner line with a cookie word is left alone', () => {
+        expect(redactMessage('=== Cookie ===')).toBe('=== Cookie ===');
+        expect(redactMessage('cookies: 3')).toBe('cookies: 3');
+    });
+
+    test('a message that merely says a token is kept is not mangled', () => {
+        const message = 'Kept the saved login token because a CLI session is running and may be using it';
+        expect(redactMessage(message)).toBe(message);
+    });
+
     test('a credential value still ends at whitespace', () => {
         expect(redactMessage('password: hunter2 for alice')).toBe('password: [REDACTED] for alice');
     });

@@ -151,6 +151,21 @@ describe('desktop startup clears a leftover login', () => {
         expect(cat.info).toHaveBeenCalledWith(expect.stringContaining('a CLI session is running'), null);
     });
 
+    test('every message it logs survives the log redactor unchanged', async () => {
+        const { redactMessage } =
+            jest.requireActual<typeof import('../../src/ts/logger/sanitize')>('../../src/ts/logger/sanitize');
+        stored({ token: 'cli-uses-this', stayLoggedIn: false });
+        lock.isCliSessionActive.mockResolvedValueOnce(true);
+        await onReady();
+        stored({ token: 'left-over', stayLoggedIn: false });
+        settings.setSetting.mockReturnValue(true);
+        await onReady();
+
+        const messages = cat.info.mock.calls.map(([message]) => message);
+        expect(messages.length).toBeGreaterThanOrEqual(2);
+        for (const message of messages) expect(redactMessage(message)).toBe(message);
+    });
+
     test.each([
         ['Stay Logged In is on', { token: 'keep', stayLoggedIn: true }],
         ['there is no token', { token: '', stayLoggedIn: false }],

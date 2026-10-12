@@ -110,12 +110,17 @@ describe('test typing', () => {
 });
 
 describe('sends toward the Logs window', () => {
-    // restrictToLogsChannels (ipc/registerHandlers.ts) filters only `webContents.send`; `postMessage` and
-    // `mainFrame.send` reach a window unfiltered, so no source may use them. A legitimate use is listed here as
-    // `relative/path.ts`, with the reason.
+    // restrictToLogsChannels (ipc/registerHandlers.ts) filters only `webContents.send`; `postMessage`, a frame's
+    // `send` (`mainFrame.send`, `frames[i].send`, `sendToFrame`) and a `webFrameMain` handle reach a window
+    // unfiltered, so no source may use them. A legitimate use is listed here as `relative/path.ts`, with the reason.
     const ALLOWED: readonly string[] = [];
+    const UNFILTERED_SEND_RE =
+        /\bpostMessage\(|\bmainFrame\??\.send\(|\bsendToFrame\(|\bwebFrameMain\b|\bframes\[[^\]]*\]\??\.send\(/g;
+    const SOURCE_FILE_RE = /\.(?:[cm]?ts|tsx)$/;
+    const unfilteredSends = (text: string) =>
+        [...text.matchAll(UNFILTERED_SEND_RE)].map((match) => text.slice(0, match.index).split('\n').length);
 
-    test('no source uses postMessage or mainFrame.send', () => {
+    test('no source uses postMessage, a frame send or webFrameMain', () => {
         const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
         const path = jest.requireActual<typeof import('node:path')>('node:path');
         const srcDir = path.join(__dirname, '..', 'src', 'ts');
@@ -124,18 +129,36 @@ describe('sends toward the Logs window', () => {
             for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
                 const full = path.join(dir, entry.name);
                 if (entry.isDirectory()) walk(full);
-                else if (/\.(c?ts|tsx)$/.test(entry.name) && !ALLOWED.includes(path.relative(srcDir, full))) {
-                    const text = fs.readFileSync(full, 'utf8');
-                    for (const match of text.matchAll(/\.postMessage\(|\bmainFrame\.send\(/g)) {
-                        offenders.push(
-                            `${path.relative(srcDir, full)}:${text.slice(0, match.index).split('\n').length}`,
-                        );
+                else if (SOURCE_FILE_RE.test(entry.name) && !ALLOWED.includes(path.relative(srcDir, full))) {
+                    for (const line of unfilteredSends(fs.readFileSync(full, 'utf8'))) {
+                        offenders.push(`${path.relative(srcDir, full)}:${line}`);
                     }
                 }
             }
         };
         walk(srcDir);
         expect(offenders).toEqual([]);
+    });
+
+    test('the check catches each unfiltered send, and passes the filtered one', () => {
+        for (const offender of [
+            'win.webContents.mainFrame.send("c", x);',
+            'event.sender.mainFrame?.send("c", x);',
+            'window.postMessage(data, "*");',
+            'postMessage(data);',
+            'sendToFrame(frameId, "c", x);',
+            'const { webFrameMain } = require("electron");',
+            'win.webContents.mainFrame.frames[0].send("c", x);',
+            'frames[i]?.send("c", x);',
+        ]) {
+            expect(unfilteredSends(`ok\n${offender}`)).toEqual([2]);
+        }
+        expect(unfilteredSends('win.webContents.send("c", x);\nconst postMessageCount = 1;')).toEqual([]);
+    });
+
+    test('every TypeScript source extension is scanned', () => {
+        for (const name of ['a.ts', 'a.tsx', 'a.mts', 'a.cts']) expect(SOURCE_FILE_RE.test(name)).toBe(true);
+        expect(SOURCE_FILE_RE.test('a.js')).toBe(false);
     });
 });
 
