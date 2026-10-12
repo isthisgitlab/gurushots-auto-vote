@@ -9,6 +9,7 @@ import { errorMessage } from '../../errorMessage';
 import { cat } from './shared';
 import type { JoinDeps, JoinSingleResult } from './shared';
 import { performJoin } from './performJoin';
+import { isUnlocked } from './unlockMarker';
 
 /**
  * Live balance check for a confirmed paid manual join.
@@ -89,13 +90,18 @@ const joinChallengeSingle = async (
     const rawCost = Number(challenge.join_coins);
     const cost = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : 0;
 
+    // Coins already spent (an unlock marker, left by a join whose submit failed) are not spent again:
+    // the retry only submits, so neither consent to a price nor the balance has a say in it. An
+    // unreadable marker file reads as "no marker" here, as in performJoin, whose paid path then refuses.
+    const retryOnly = cost > 0 && isUnlocked(deps.joinStateStore, challengeId);
+
     // Consent covers a price: a cost above the one the caller confirmed (`expectedCost`) needs a new
     // confirmation, with the live cost, and unlocks nothing.
-    if (cost > 0 && (!spendCoins || (expectedCost !== undefined && cost > expectedCost))) {
+    if (!retryOnly && cost > 0 && (!spendCoins || (expectedCost !== undefined && cost > expectedCost))) {
         return { status: 'needs-confirm', challengeId, cost };
     }
 
-    if (cost > 0) {
+    if (!retryOnly && cost > 0) {
         const refusal = await checkAffordable(challengeId, cost, token, deps);
         if (refusal) return refusal;
     }

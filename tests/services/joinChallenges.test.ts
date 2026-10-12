@@ -1234,6 +1234,98 @@ describe('joinChallengeSingle — manual', () => {
             expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
         });
 
+        describe('a retry after coins were charged and the submit failed (an unlock marker is left)', () => {
+            const MARKED = JSON.stringify({ '2': { unlockedAt: 1 } });
+            const retrying = (marker: string | null, over: Record<string, unknown> = {}) => {
+                const deps = makeDeps({
+                    getMemberChallenges: jest.fn(async () => [{ id: 2, join_coins: 100, type: 'flash' }]),
+                    getBankroll: jest.fn(async () => ({ coins: 500 })),
+                    joinStateStore: { readRaw: () => marker, writeRaw: jest.fn() },
+                    ...over,
+                });
+                return deps;
+            };
+
+            test('only submits: a price that rose since the charge is not asked about again', async () => {
+                const deps = retrying(MARKED);
+                const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 40 });
+                expect(res).toMatchObject({ status: 'joined', cost: 100 });
+                expect(deps.coinsUnlock).not.toHaveBeenCalled();
+                expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+                expect(deps.getBankroll).not.toHaveBeenCalled();
+            });
+
+            test('only submits with a balance too low to pay the cost again', async () => {
+                const deps = retrying(MARKED, { getBankroll: jest.fn(async () => ({ coins: 3 })) });
+                const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 100 });
+                expect(res.status).toBe('joined');
+                expect(deps.coinsUnlock).not.toHaveBeenCalled();
+                expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+            });
+
+            test('a balance that cannot be read does not stop it either', async () => {
+                const deps = retrying(MARKED, { getBankroll: jest.fn(async () => null) });
+                expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
+                expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            });
+
+            test('a submit that fails again is reported as pending, still without a second charge', async () => {
+                const deps = retrying(MARKED, { submitToChallenge: jest.fn(async () => ({ ok: false, raw: null })) });
+                const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
+                expect(res.status).toBe('charged-pending-submit');
+                expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            });
+
+            test('without the marker nothing changes: a risen price needs consent, and a low balance is refused', async () => {
+                const risen = retrying(null);
+                expect(await joinChallengeSingle(2, 'tok', risen, { spendCoins: true, expectedCost: 40 })).toEqual({
+                    status: 'needs-confirm',
+                    challengeId: 2,
+                    cost: 100,
+                });
+                expect(risen.coinsUnlock).not.toHaveBeenCalled();
+                const poor = retrying(null, { getBankroll: jest.fn(async () => ({ coins: 3 })) });
+                expect((await joinChallengeSingle(2, 'tok', poor, { spendCoins: true })).status).toBe(
+                    'skipped-unaffordable',
+                );
+            });
+
+            test('a marker for another challenge does not count', async () => {
+                const deps = retrying(JSON.stringify({ '9': { unlockedAt: 1 } }));
+                expect((await joinChallengeSingle(2, 'tok', deps, { expectedCost: 40, spendCoins: true })).status).toBe(
+                    'needs-confirm',
+                );
+            });
+
+            test('an unreadable marker file reads as no marker: the gates stay, and nothing is spent', async () => {
+                const corrupt = retrying('{ not json');
+                expect(
+                    (await joinChallengeSingle(2, 'tok', corrupt, { spendCoins: true, expectedCost: 40 })).status,
+                ).toBe('needs-confirm');
+                const unreadable = retrying(null, {
+                    joinStateStore: {
+                        readRaw: () => {
+                            throw new Error('disk');
+                        },
+                        writeRaw: jest.fn(),
+                    },
+                });
+                expect(
+                    (await joinChallengeSingle(2, 'tok', unreadable, { spendCoins: true, expectedCost: 40 })).status,
+                ).toBe('needs-confirm');
+                expect(corrupt.coinsUnlock).not.toHaveBeenCalled();
+                expect(unreadable.coinsUnlock).not.toHaveBeenCalled();
+            });
+
+            test('a free challenge has nothing to retry, whatever the marker says', async () => {
+                const deps = makeDeps({
+                    getMemberChallenges: jest.fn(async () => [{ id: 2, join_coins: 0, type: 'flash' }]),
+                    joinStateStore: { readRaw: () => MARKED, writeRaw: jest.fn() },
+                });
+                expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: false })).status).toBe('joined');
+            });
+        });
+
         test('a free challenge joins whatever was confirmed, and one that turned paid is not joined for free', async () => {
             expect((await joinChallengeSingle(2, 'tok', priced(0), { spendCoins: true, expectedCost: 0 })).status).toBe(
                 'joined',
