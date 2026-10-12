@@ -102,7 +102,8 @@ export interface ScenarioState {
     /** notices for the host notifiers */
     outbox?: Array<{ id: string; at: number; message: string }>;
     lastAction?: { at: number; ruleId: string; action: string; outcome: string } | null;
-    lastError?: { at: number; message: string } | null;
+    /** `kind` and `action`: a spend that got no answer, which the status line words for the user in their language */
+    lastError?: { at: number; message: string; kind?: 'spend-unclear'; action?: string } | null;
     /** ms, for pruning */
     updatedAt?: number;
 }

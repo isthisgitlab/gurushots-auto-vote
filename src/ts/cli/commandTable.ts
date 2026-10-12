@@ -122,9 +122,10 @@ const FORGET_PAYMENT_USAGE = 'Usage: forget-payment <id>';
 
 // Strict like `join`: it changes what a later join pays for, so a typo must not reach another challenge.
 const runForgetPayment: CommandHandler = async (argv) => {
-    if (argv.length !== 1 || argv[0].startsWith('--')) return usageError('Wrong arguments', FORGET_PAYMENT_USAGE);
-    await forgetPaymentCmd(argv[0]);
-    return 0;
+    // Only a plain challenge id: the claims are keyed `<member id>:<challenge id>`, and a colon in the id must not
+    // reach another record.
+    if (argv.length !== 1 || !/^\d+$/.test(argv[0])) return usageError('Wrong arguments', FORGET_PAYMENT_USAGE);
+    return forgetPaymentCmd(argv[0]);
 };
 
 const runListPhotos: CommandHandler = async (argv) => {

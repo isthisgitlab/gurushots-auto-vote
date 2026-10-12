@@ -140,6 +140,26 @@ describe('useScenarioStatus', () => {
         await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalledTimes(4));
     });
 
+    test.each([
+        [{ message: 'x', kind: 'spend-unclear', action: 'unlockBoost' }, 'unlockBoost'],
+        [{ message: 'x', kind: 'spend-unclear' }, ''],
+        [{ message: 'x' }, null],
+    ])('a last problem %p reads as spend %p on the card', async (lastError, spend) => {
+        jest.mocked(window.api.getScenarioStatus).mockResolvedValue(
+            invalid({
+                success: true,
+                assigned: 'Plan',
+                scenario,
+                corrupt: false,
+                timezone: 'UTC',
+                state: { phase: 'main', phaseEnteredAt: NOW, fired: {}, memory: {}, lastError },
+            }),
+        );
+        render(<StatusProbe challenge={challenge()} />);
+        await waitFor(() => expect(out()).not.toBe('none'));
+        expect((JSON.parse(out()) as ScenarioSummary).lastErrorSpend).toEqual(spend);
+    });
+
     test('a challenge without entries, and a result that lands after unmount, are handled', async () => {
         let resolve!: (value: unknown) => void;
         jest.mocked(window.api.getScenarioStatus).mockReturnValueOnce(

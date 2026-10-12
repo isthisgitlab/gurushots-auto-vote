@@ -17,23 +17,23 @@ import { claimOf, markerOwner, paidOwnerUnknown, pruneClosedClaims } from './unl
 /**
  * Live balance check for a confirmed paid manual join.
  *
- *   the refusal result, or null when the balance covers the cost
+ *   the refusal result, or the balance when it covers the cost
  */
 const checkAffordable = async (
     challengeId: string | number,
     cost: number,
     token: string,
     deps: JoinDeps,
-): Promise<JoinSingleResult | null> => {
+): Promise<{ refusal: JoinSingleResult } | { coins: number }> => {
     const bankroll = await deps.getBankroll(token);
     const coins = Number(bankroll?.coins);
     if (bankroll == null || !Number.isFinite(coins)) {
-        return { status: 'balance-unknown', challengeId, cost };
+        return { refusal: { status: 'balance-unknown', challengeId, cost } };
     }
     if (coins < cost) {
-        return { status: 'skipped-unaffordable', challengeId, cost, coins };
+        return { refusal: { status: 'skipped-unaffordable', challengeId, cost, coins } };
     }
-    return null;
+    return { coins };
 };
 
 /**
@@ -131,14 +131,29 @@ const joinListed = async (
         return { status: 'needs-confirm', challengeId, cost };
     }
 
+    // The balance this read gives is what the claim records, for the user to compare with GuruShots if the
+    // payment is not confirmed: no read of its own, and nothing decides on it.
+    let coinsBefore: number | null = null;
     if (!retryOnly && cost > 0) {
-        const refusal = await checkAffordable(challengeId, cost, token, deps);
-        if (refusal) return refusal;
+        const checked = await checkAffordable(challengeId, cost, token, deps);
+        if ('refusal' in checked) return checked.refusal;
+        coinsBefore = checked.coins;
     }
 
     // An explicit click auto-picks even with Submit Only Chosen Photos on.
-    const outcome = await performJoin(challenge, token, deps, cost, { manual: true, submitOnly: retryOnly });
-    return { status: outcome.status, challengeId, cost, imageId: outcome.imageId, reason: outcome.reason };
+    const outcome = await performJoin(challenge, token, deps, cost, {
+        manual: true,
+        submitOnly: retryOnly,
+        coinsBefore,
+    });
+    return {
+        status: outcome.status,
+        challengeId,
+        cost,
+        imageId: outcome.imageId,
+        reason: outcome.reason,
+        coinsBefore: outcome.coinsBefore,
+    };
 };
 
 export { joinChallengeSingle };

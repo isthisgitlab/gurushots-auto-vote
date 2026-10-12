@@ -1049,22 +1049,54 @@ describe('forget-unconfirmed-payment', () => {
         expect(result).toEqual({ success: true, status: 'forgotten' });
     });
 
-    test.each(['nothing-to-forget', 'busy', 'account-unknown', 'unreadable', 'not-authenticated'] as const)(
-        'a %s answer is a failure that names it, and never throws',
-        async (status) => {
+    test.each([
+        'nothing-to-forget',
+        'other-account-possible',
+        'busy',
+        'account-unknown',
+        'unreadable',
+        'not-authenticated',
+    ] as const)('a %s answer is a failure that names it, and never throws', async (status) => {
+        stubAuthGuardOk();
+        stubStrategy({
+            forgetUnconfirmedPayment: jest
+                .fn<Promise<ForgetOutcome>, [string | number, string]>()
+                .mockResolvedValue({ status, challengeId: 5 }),
+        });
+        expect(await buildHandlers()['forget-unconfirmed-payment']({}, 5)).toEqual({
+            success: false,
+            error: status,
+            status,
+        });
+    });
+
+    // A claim is keyed `<member id>:<challenge id>`: an id with a colon in it could name another account's record.
+    test.each([['555:123'], ['abc'], ['1.5'], ['-1'], [' 5'], ['5\n'], ['0x10'], [1.5], [-1]])(
+        'the id %p is not a plain challenge id: refused, and nothing is forgotten',
+        async (id) => {
             stubAuthGuardOk();
-            stubStrategy({
-                forgetUnconfirmedPayment: jest
-                    .fn<Promise<ForgetOutcome>, [string | number, string]>()
-                    .mockResolvedValue({ status, challengeId: 5 }),
-            });
-            expect(await buildHandlers()['forget-unconfirmed-payment']({}, 5)).toEqual({
+            const strategy = stubStrategy({ forgetUnconfirmedPayment: jest.fn() });
+            expect(await buildHandlers()['forget-unconfirmed-payment']({}, invalid(id))).toMatchObject({
                 success: false,
-                error: status,
-                status,
+                error: 'invalid-args',
             });
+            expect(strategy.forgetUnconfirmedPayment).not.toHaveBeenCalled();
         },
     );
+
+    test.each([['123'], [123]])('a plain id (%p) goes through', async (id) => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({
+            forgetUnconfirmedPayment: jest
+                .fn<Promise<ForgetOutcome>, [string | number, string]>()
+                .mockResolvedValue({ status: 'forgotten', challengeId: id }),
+        });
+        expect(await buildHandlers()['forget-unconfirmed-payment']({}, id)).toEqual({
+            success: true,
+            status: 'forgotten',
+        });
+        expect(strategy.forgetUnconfirmedPayment).toHaveBeenCalledWith(id, 'tok');
+    });
 
     test.each([[undefined], [null], [{}], [''], [[]]])(
         'an invalid id %p is refused, and nothing is forgotten',
@@ -1104,6 +1136,27 @@ describe('join-challenge', () => {
         const result = await handlers['join-challenge']({}, 5, true);
         expect(strategy.joinChallenge).toHaveBeenCalledWith(5, true, 'tok');
         expect(result).toMatchObject({ success: true, status: 'joined', cost: 100 });
+    });
+
+    test('the balance recorded before a payment that is not confirmed travels with the answer, and only then', async () => {
+        stubAuthGuardOk();
+        stubStrategy({
+            joinChallenge: jest
+                .fn<Promise<JoinSingleResult>, [string | number, boolean, string, number?]>()
+                .mockResolvedValueOnce({
+                    status: 'charged-pending-submit',
+                    challengeId: 5,
+                    cost: 100,
+                    reason: 'unconfirmed',
+                    coinsBefore: 500,
+                })
+                .mockResolvedValueOnce({ status: 'joined', challengeId: 5, cost: 100 }),
+        });
+        expect(await buildHandlers()['join-challenge']({}, 5, true)).toMatchObject({
+            reason: 'unconfirmed',
+            coinsBefore: 500,
+        });
+        expect(await buildHandlers()['join-challenge']({}, 5, true)).toMatchObject({ coinsBefore: undefined });
     });
 
     test('an upcoming challenge is not joined: not-started is a failure that carries its status', async () => {

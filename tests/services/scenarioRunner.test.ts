@@ -631,7 +631,7 @@ describe('rule execution', () => {
         setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }]));
         await run();
         expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1 });
-        expect(state().lastError!.message).toContain('unlockBoost may have gone through');
+        expect(state().lastError!.message).toContain('the boost unlock may have gone through');
         expect(state().lastError!.message).not.toContain('refused');
     });
 
@@ -644,6 +644,42 @@ describe('rule execution', () => {
         await run();
         expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
         expect(state().lastError!.message).toContain("scenario's keys limit of 1 is reached");
+    });
+
+    test("a spend that got no answer as a rule's first step commits the rule: a live skip next cycle is passed over to the later steps", async () => {
+        currencyActions.unlockBoostWithKey
+            .mockResolvedValueOnce({ ok: false, outcome: 'unclear' })
+            // The live re-check of the next cycle finds the boost already unlocked: a skip, not a failure.
+            .mockResolvedValueOnce({ ok: false, outcome: 'not-available' });
+        setup(single([{ type: 'unlockBoost' }, { type: 'boost', entry: { by: 'fewestVotes' } }]));
+        const c = challenge();
+        await run(c);
+        expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0 });
+        expect(pass.api.applyBoostToEntry).not.toHaveBeenCalled();
+
+        await run(c);
+        expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(2);
+        expect(pass.api.applyBoostToEntry).toHaveBeenCalledTimes(1);
+        expect(state().inFlight).toBeNull();
+        expect(state().fired.r1).toBeDefined();
+    });
+
+    test('a spend that got no answer says so for the status line: its kind and action, not a skipped step', async () => {
+        currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'unclear' });
+        setup(single([{ type: 'fillExposure' }]));
+        await run();
+        expect(state().lastError).toEqual({
+            at: expect.any(Number),
+            message:
+                'r1 → fillExposure: the exposure fill may have gone through (GuruShots gave no answer); it will be checked again next cycle',
+            kind: 'spend-unclear',
+            action: 'fillExposure',
+        });
+        // An ordinary refusal carries no such marker.
+        ledger.remove(7);
+        currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'balance-unknown' });
+        await run();
+        expect(state().lastError).not.toHaveProperty('kind');
     });
 
     test('a committed rule passes over a permanently skipped step and still reaches its goto', async () => {

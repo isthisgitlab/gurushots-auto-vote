@@ -911,13 +911,43 @@ describe('edge paths', () => {
             await waitFor(() =>
                 expect(jest.mocked(window.api.getMemberChallenges).mock.calls.length).toBeGreaterThan(reads),
             );
+            // The button that opened the dialog is gone with the row's line: focus is on the row's Join.
+            await waitFor(() => expect(document.activeElement?.id).toBe('discover-join-900002'));
             fireEvent.click(screen.getByText('app.discoverJoinPaid'));
             expect(await screen.findByText('app.discoverConfirmTitle')).toBeTruthy();
             expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, false);
         });
 
+        test('a call that fails outright says so, and the dialog stays for another try', async () => {
+            window.api.forgetUnconfirmedPayment = forgetMock().mockRejectedValue(new Error('ipc down'));
+            await openForgetDialog();
+            fireEvent.click(screen.getByText('app.discoverForgetConfirm'));
+            const problem = await screen.findByText('app.discoverForgetFailed');
+            expect(problem.getAttribute('role')).toBe('alert');
+            expect(screen.getByText<HTMLButtonElement>('app.discoverForgetConfirm').disabled).toBe(false);
+            expect(screen.getByText('app.discoverUnconfirmed')).toBeTruthy();
+        });
+
+        test('Cancel cannot be pressed while the call is out', async () => {
+            let answer!: (value: Awaited<ReturnType<ForgetApi>>) => void;
+            window.api.forgetUnconfirmedPayment = forgetMock().mockImplementation(
+                () => new Promise((resolve) => (answer = resolve)),
+            );
+            await openForgetDialog();
+            fireEvent.click(screen.getByText('app.discoverForgetConfirm'));
+            await waitFor(() => expect(screen.getByText<HTMLButtonElement>('app.cancel').disabled).toBe(true));
+            expect(screen.getByText<HTMLButtonElement>('app.discoverForgetConfirm').disabled).toBe(true);
+            // Neither can Escape dismiss it.
+            fireEvent.keyDown(document, { key: 'Escape' });
+            expect(screen.getByText('app.discoverForgetTitle')).toBeTruthy();
+            await act(async () => answer(invalid({ success: true, status: 'forgotten' })));
+            await waitFor(() => expect(screen.queryByText('app.discoverForgetTitle')).toBeNull());
+        });
+
         test.each([
             ['nothing-to-forget', 'app.discoverForgetNothing'],
+            ['account-unknown', 'app.discoverForgetAccountUnknown'],
+            ['other-account-possible', 'app.discoverForgetOtherAccount'],
             ['busy', 'app.discoverForgetFailed'],
             ['unreadable', 'app.discoverForgetFailed'],
         ])('an answer of %s keeps the dialog open and says so, changing nothing', async (error, key) => {
@@ -930,9 +960,112 @@ describe('edge paths', () => {
             expect(problem.getAttribute('role')).toBe('alert');
             expect(screen.getByText('app.discoverForgetTitle')).toBeTruthy();
             expect(screen.getByText('app.discoverUnconfirmed')).toBeTruthy();
-            // Closing clears the problem for the next time.
+            // Closing clears the problem: opened again, the dialog shows none of the earlier one.
             fireEvent.click(screen.getByText('app.cancel'));
             await waitFor(() => expect(screen.queryByText('app.discoverForgetTitle')).toBeNull());
+            fireEvent.click(screen.getByText('app.discoverForgetPayment'));
+            await screen.findByText('app.discoverForgetTitle');
+            expect(screen.queryByText(key)).toBeNull();
+        });
+
+        describe('the balance before the payment, to compare with GuruShots', () => {
+            const unconfirmedWithBalance = (coinsBefore?: number) =>
+                joinMock().mockResolvedValue(
+                    invalid({
+                        success: false,
+                        status: 'charged-pending-submit',
+                        reason: 'unconfirmed',
+                        ...(coinsBefore === undefined ? {} : { coinsBefore }),
+                    }),
+                );
+            const open = async () => {
+                renderSection();
+                fireEvent.click(await screen.findByText('app.discoverJoinPaid'));
+                fireEvent.click(await screen.findByText('app.discoverForgetPayment'));
+                await screen.findByText('app.discoverForgetTitle');
+            };
+            const withText = () =>
+                mockTranslator.t.mockImplementation((key) =>
+                    key === 'app.discoverForgetBalances'
+                        ? 'Before {before}, now {now}'
+                        : key === 'app.discoverForgetBalanceBefore'
+                          ? 'Before {before}'
+                          : key,
+                );
+
+            test('it is set beside the balance GuruShots reports now, read when the dialog opens', async () => {
+                withText();
+                try {
+                    window.api.joinChallenge = unconfirmedWithBalance(500);
+                    window.api.getBankroll = jest
+                        .fn<ReturnType<WindowApi['getBankroll']>, []>()
+                        .mockResolvedValue(invalid({ success: true, keys: 0, swaps: 0, fills: 0, coins: 400 }));
+                    await open();
+                    expect(await screen.findByText('Before 500, now 400')).toBeTruthy();
+                    expect(window.api.getBankroll).toHaveBeenCalledTimes(1);
+                } finally {
+                    mockTranslator.t.mockImplementation((key) => key);
+                }
+            });
+
+            test.each([
+                [
+                    'cannot be read',
+                    () => invalid<Awaited<ReturnType<WindowApi['getBankroll']>>>({ success: false, error: 'down' }),
+                ],
+                [
+                    'is not a number',
+                    () => invalid<Awaited<ReturnType<WindowApi['getBankroll']>>>({ success: true, coins: 'many' }),
+                ],
+            ])('a balance now that %s leaves the one from before alone', async (_name, answer) => {
+                withText();
+                try {
+                    window.api.joinChallenge = unconfirmedWithBalance(500);
+                    window.api.getBankroll = jest
+                        .fn<ReturnType<WindowApi['getBankroll']>, []>()
+                        .mockResolvedValue(answer());
+                    await open();
+                    expect(await screen.findByText('Before 500')).toBeTruthy();
+                } finally {
+                    mockTranslator.t.mockImplementation((key) => key);
+                }
+            });
+
+            test('a read that throws is no balance either', async () => {
+                withText();
+                try {
+                    window.api.joinChallenge = unconfirmedWithBalance(500);
+                    window.api.getBankroll = jest
+                        .fn<ReturnType<WindowApi['getBankroll']>, []>()
+                        .mockRejectedValue(new Error('ipc down'));
+                    await open();
+                    expect(await screen.findByText('Before 500')).toBeTruthy();
+                } finally {
+                    mockTranslator.t.mockImplementation((key) => key);
+                }
+            });
+
+            test('a dialog closed before the balance arrives takes no part of it', async () => {
+                let arrive!: (value: Awaited<ReturnType<WindowApi['getBankroll']>>) => void;
+                window.api.joinChallenge = unconfirmedWithBalance(500);
+                window.api.getBankroll = jest
+                    .fn<ReturnType<WindowApi['getBankroll']>, []>()
+                    .mockImplementation(() => new Promise((resolve) => (arrive = resolve)));
+                await open();
+                fireEvent.click(screen.getByText('app.cancel'));
+                await waitFor(() => expect(screen.queryByText('app.discoverForgetTitle')).toBeNull());
+                await act(async () => arrive(invalid({ success: true, keys: 0, swaps: 0, fills: 0, coins: 400 })));
+                expect(screen.queryByText('app.discoverForgetBalances')).toBeNull();
+            });
+
+            test('with no balance recorded, nothing is shown and none is read', async () => {
+                window.api.joinChallenge = unconfirmedWithBalance();
+                window.api.getBankroll = jest.fn<ReturnType<WindowApi['getBankroll']>, []>();
+                await open();
+                expect(screen.queryByText('app.discoverForgetBalances')).toBeNull();
+                expect(screen.queryByText('app.discoverForgetBalanceBefore')).toBeNull();
+                expect(window.api.getBankroll).not.toHaveBeenCalled();
+            });
         });
     });
 

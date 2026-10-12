@@ -277,6 +277,7 @@ const handleJoinChallenge = (async (
             coins: outcome?.coins,
             challengeId: outcome?.challengeId,
             reason: outcome?.reason,
+            coinsBefore: outcome?.coinsBefore,
         };
     } catch (error) {
         logger.withCategory('join').error('Error handling join-challenge request:', error);
@@ -290,7 +291,11 @@ const handleJoinChallenge = (async (
  * challenge asks for its price. Never touches a claim known to be charged.
  */
 const handleForgetUnconfirmedPayment = (async (event: unknown, challengeId: string | number) => {
-    if (!isIdArg(challengeId)) return refuseInvalidArgs('join', 'forget-unconfirmed-payment');
+    // A plain challenge id only: a claim is keyed `<member id>:<challenge id>`, and an id with a colon in it must
+    // never be able to name another record.
+    if (!isIdArg(challengeId) || !/^\d+$/.test(String(challengeId))) {
+        return refuseInvalidArgs('join', 'forget-unconfirmed-payment');
+    }
     try {
         logger
             .withCategory('join')

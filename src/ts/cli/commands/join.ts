@@ -9,6 +9,7 @@
 import * as logger from '../../logger';
 import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
 import { stripTerminalControl } from '../../format/logSafe';
+import { isPlainObject } from '../../plainObject';
 import { formatDuration } from '../../format/duration';
 
 import type { NullEventHandlers } from '../../types/cli';
@@ -73,22 +74,36 @@ type JoinOutcome = {
     coins?: number;
     error?: string;
     reason?: string;
+    coinsBefore?: number;
+};
+
+// The balance before a payment that got no answer, and the balance now when it could be read: for the user to
+// compare with the coin history on GuruShots. The app does not decide anything from them.
+const balanceHint = (before: number | undefined, now: number | null): string => {
+    if (before === undefined) return '';
+    const nowText = now === null ? '' : `, and GuruShots reports ${now} now`;
+    return ` Before this payment you had ${before} coins${nowText}. Check your coin history on the GuruShots website: this app does not decide whether the payment went through.`;
 };
 
 // The line for a join that cannot tell whether its payment was taken: what is not known, why it is safe to retry,
 // and the way out when GuruShots shows the coins were not taken.
-const unconfirmedText = (reason: 'unconfirmed' | 'earlier-payment', challengeId: string | number) => {
+const unconfirmedText = (
+    reason: 'unconfirmed' | 'earlier-payment',
+    challengeId: string | number,
+    balances: { before?: number; now: number | null },
+) => {
     const known =
         reason === 'unconfirmed'
-            ? `The payment for ${challengeId} got no answer, so it may or may not have gone through, and the join did not finish.`
-            : `Challenge ${challengeId} has a payment record from before accounts were told apart, so it is not known whether the coins were taken, and the join did not finish.`;
-    return `${known} Re-run "join ${challengeId}": it only submits your photo, so you are never charged twice. If GuruShots shows the coins were not taken, run "forget-payment ${challengeId}" and join again.`;
+            ? `The payment for ${challengeId} got no answer, so it may or may not have gone through, and the join did not finish.${balanceHint(balances.before, balances.now)}`
+            : `Challenge ${challengeId} has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. The join did not finish.`;
+    return `${known} Re-run "join ${challengeId}": it only submits your photo, so you are never charged twice. If the GuruShots website shows the coins were not taken, run "forget-payment ${challengeId}" and join again.`;
 };
 
 // Map a join outcome status to a user-facing line; null for an unknown status.
 const joinLine = (
     result: JoinOutcome | null | undefined,
     challengeId: string | number,
+    coinsNow: number | null,
 ): { level: 'info' | 'error'; text: string } | null => {
     if (result?.error === 'invalid-args') return { level: 'error', text: INVALID_ID_TEXT };
     switch (result?.status) {
@@ -109,7 +124,10 @@ const joinLine = (
                 };
             }
             if (result?.reason === 'unconfirmed' || result?.reason === 'earlier-payment') {
-                return { level: 'error', text: unconfirmedText(result.reason, challengeId) };
+                return {
+                    level: 'error',
+                    text: unconfirmedText(result.reason, challengeId, { before: result.coinsBefore, now: coinsNow }),
+                };
             }
             return {
                 level: 'error',
@@ -157,8 +175,16 @@ const joinLine = (
     }
 };
 
-const reportJoin = (result: JoinOutcome | null | undefined, challengeId: string | number) => {
-    const line = joinLine(result, challengeId);
+// The balance now, read only to put beside the one from before a payment that got no answer.
+const coinsNow = async (result: JoinOutcome | null | undefined): Promise<number | null> => {
+    if (result?.reason !== 'unconfirmed' || result.coinsBefore === undefined) return null;
+    const bankroll = await handlers()['get-bankroll'](null);
+    const coins = bankroll?.success ? Number(bankroll.coins) : Number.NaN;
+    return Number.isFinite(coins) ? coins : null;
+};
+
+const reportJoin = async (result: JoinOutcome | null | undefined, challengeId: string | number) => {
+    const line = joinLine(result, challengeId, await coinsNow(result));
     if (line) {
         logger.withCategory('ui')[line.level](line.text);
         return;
@@ -192,7 +218,7 @@ const joinChallengeCmd = async (
     // back as 'needs-confirm' WITHOUT spending anything.
     const first = (await handlers()['join-challenge'](null, challengeId, false)) as JoinOutcome;
     if (first?.status !== 'needs-confirm') {
-        reportJoin(first, challengeId);
+        await reportJoin(first, challengeId);
         return;
     }
 
@@ -208,19 +234,24 @@ const joinChallengeCmd = async (
     const confirmed = (await (maxCoins === undefined
         ? handlers()['join-challenge'](null, challengeId, true)
         : handlers()['join-challenge'](null, challengeId, true, maxCoins))) as JoinOutcome;
-    reportJoin(confirmed, challengeId);
+    await reportJoin(confirmed, challengeId);
 };
 
 const FORGET_LINES: Record<string, { level: 'info' | 'error'; text: (id: string | number) => string }> = {
     forgotten: {
         level: 'info',
         text: (id) =>
-            `Forgot the unconfirmed payment for ${id}. Run "join ${id}" to join it again: a paid challenge asks for its price as usual.`,
+            `Forgot the unconfirmed payment for ${id}. If the coins were in fact taken, joining it again charges you a second time, and auto-join may join it again within its coin budget. Run "join ${id}" to join it: a paid challenge asks for its price as usual.`,
     },
     'nothing-to-forget': {
         level: 'error',
         text: (id) =>
             `Nothing to forget for ${id}: no unconfirmed payment is recorded for it (a payment known to have been taken cannot be forgotten).`,
+    },
+    'other-account-possible': {
+        level: 'error',
+        text: (id) =>
+            `The payment record for ${id} is from an older version of the app and may belong to another GuruShots account used on this device, so it can only be cleared from the account that paid, or once the challenge has ended. Nothing was changed.`,
     },
     busy: { level: 'error', text: (id) => `A join of ${id} is in progress. Try again in a moment.` },
     'account-unknown': {
@@ -237,24 +268,25 @@ const FORGET_LINES: Record<string, { level: 'info' | 'error'; text: (id: string 
 /**
  * Forget the unconfirmed payment of a challenge, after the user has checked on GuruShots that its coins were not
  * taken: the next join asks for the price again.
+ *
+ * @returns the exit code: 0 when it was forgotten, 1 when it was not
  */
-const forgetPaymentCmd = async (challengeId: string | number | undefined) => {
-    if (!ensureAuthenticated()) return;
+const forgetPaymentCmd = async (challengeId: string | number | undefined): Promise<number> => {
+    if (!ensureAuthenticated()) return 1;
     if (!challengeId) {
         logger.withCategory('ui').error('Please specify a challenge id');
         logger.withCategory('ui').info('Usage: forget-payment <id>');
         process.exit(1);
     }
-    const result = (await handlers()['forget-unconfirmed-payment'](null, challengeId)) as {
-        status?: string;
-        error?: string;
-    } | null;
-    const line = FORGET_LINES[result?.status ?? ''];
-    if (line) {
-        logger.withCategory('ui')[line.level](line.text(challengeId));
-        return;
+    const result: unknown = await handlers()['forget-unconfirmed-payment'](null, challengeId);
+    const status = isPlainObject(result) && typeof result.status === 'string' ? result.status : '';
+    const line = FORGET_LINES[status];
+    if (!line) {
+        logger.withCategory('ui').error(`Could not forget the payment for ${challengeId} right now. Please try again.`);
+        return 1;
     }
-    logger.withCategory('ui').error(`Could not forget the payment for ${challengeId} right now. Please try again.`);
+    logger.withCategory('ui')[line.level](line.text(challengeId));
+    return status === 'forgotten' ? 0 : 1;
 };
 
 export { showDiscover, joinChallengeCmd, forgetPaymentCmd };

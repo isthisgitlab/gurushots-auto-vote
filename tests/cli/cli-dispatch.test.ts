@@ -111,7 +111,7 @@ jest.mock('../../src/ts/cli/commands/bankroll', () => ({ showBankroll: jest.fn()
 jest.mock('../../src/ts/cli/commands/join', () => ({
     showDiscover: jest.fn(),
     joinChallengeCmd: jest.fn(),
-    forgetPaymentCmd: jest.fn(),
+    forgetPaymentCmd: jest.fn(async () => 0),
 }));
 jest.mock('../../src/ts/cli/commands/photos', () => ({
     ...jest.requireActual<typeof import('../../src/ts/cli/commands/photos')>('../../src/ts/cli/commands/photos'),
@@ -476,22 +476,35 @@ describe('challenge-scoped actions', () => {
 });
 
 describe('forget-payment', () => {
-    test('takes exactly one id', async () => {
-        const m = await run(['forget-payment', '77']);
+    test.each([
+        [0, 0],
+        [1, 1],
+    ])('takes exactly one plain challenge id, and exits with what the command answers (%p)', async (answer, code) => {
+        const m = await run(['forget-payment', '77'], (mods) => mods.join.forgetPaymentCmd.mockResolvedValue(answer));
         expect(m.join.forgetPaymentCmd).toHaveBeenCalledWith('77');
-        expect(m.exitCodes).toEqual([0]);
+        expect(m.exitCodes).toEqual([code]);
     });
 
-    // It changes what a later join pays for, so anything but `<id>` touches nothing.
-    test.each([[[]], [['77', '88']], [['--yes']], [['77', '--yes']], [['--challenge=77']]])(
-        'forget-payment %p is a usage error and forgets nothing',
-        async (args) => {
-            const m = await run(['forget-payment', ...args]);
-            expect(m.join.forgetPaymentCmd).not.toHaveBeenCalled();
-            expect(m.msgs('error')).toEqual(['Wrong arguments']);
-            expect(m.exitCodes).toEqual([1]);
-        },
-    );
+    // It changes what a later join pays for, so anything but `<digits>` touches nothing: a colon in the id
+    // would reach a record that is keyed by account.
+    test.each([
+        [[]],
+        [['77', '88']],
+        [['--yes']],
+        [['77', '--yes']],
+        [['--challenge=77']],
+        [['555:123']],
+        [['abc']],
+        [['-1']],
+        [['1.5']],
+        [['7 7']],
+        [['']],
+    ])('forget-payment %p is a usage error and forgets nothing', async (args) => {
+        const m = await run(['forget-payment', ...args]);
+        expect(m.join.forgetPaymentCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual(['Wrong arguments']);
+        expect(m.exitCodes).toEqual([1]);
+    });
 });
 
 describe('list-photos', () => {

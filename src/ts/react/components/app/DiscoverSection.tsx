@@ -33,6 +33,7 @@ export type JoinOutcome = {
     coins?: number;
     error?: string;
     reason?: JoinReason;
+    coinsBefore?: number;
 };
 
 // Static (purge-safe) text color per outcome variant — never build Tailwind
@@ -114,12 +115,14 @@ function ChosenMarks({ c, name, onChoose }: { c: OpenChallenge; name: string; on
  * its name says why.
  */
 function JoinButton({
+    id,
     name,
     cost,
     busy,
     waiting,
     onClick,
 }: {
+    id: OpenChallenge['id'];
     name: string;
     cost: number;
     busy: JoinPhase | null;
@@ -143,6 +146,7 @@ function JoinButton({
     return (
         <button
             className={`btn btn-sm ${paid ? 'btn-warning' : 'btn-primary'}`}
+            id={`discover-join-${id}`}
             aria-label={busy ? undefined : label}
             onClick={onClick}
             disabled={busy !== null || waiting !== null}
@@ -344,7 +348,7 @@ function DiscoverRow({
                 >
                     {t('app.choosePhotos')}
                 </button>
-                <JoinButton name={name} cost={cost} busy={busy} waiting={waiting} onClick={onJoin} />
+                <JoinButton id={c.id} name={name} cost={cost} busy={busy} waiting={waiting} onClick={onJoin} />
             </div>
         </li>
     );
@@ -473,10 +477,13 @@ export function DiscoverSection({
 
             <ForgetPaymentModal
                 challenge={forgetting}
+                coinsBefore={forgetting ? results[forgetting.id]?.coinsBefore : undefined}
                 onClose={() => setForgetting(null)}
                 onForgotten={(id) => {
                     clearResult(id);
                     void refetch();
+                    // The button that opened the dialog is gone with the row's line: focus goes to the row's Join.
+                    window.setTimeout(() => document.getElementById(`discover-join-${id}`)?.focus(), 0);
                 }}
             />
 

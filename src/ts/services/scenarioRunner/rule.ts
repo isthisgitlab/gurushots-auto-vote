@@ -8,7 +8,14 @@
 import * as logger from '../../logger';
 import { firedRecord } from '../../scenarios/evaluate';
 import type { ScenarioState } from '../../types/stores';
-import type { ActionEffects, ActionHandler, RunnerContext, ScenarioAction, ValidatedRule } from './types';
+import type {
+    ActionEffects,
+    ActionHandler,
+    NotDoneOutcome,
+    RunnerContext,
+    ScenarioAction,
+    ValidatedRule,
+} from './types';
 import { log, nowSec } from './support';
 import { ACTIONS } from './actions';
 
@@ -43,6 +50,35 @@ const applyEffects = (before: ScenarioState, effects: ActionEffects, at: number)
 };
 
 /**
+ * State when a step stops its rule. The rule resumes at that step when it was committed. A spend that got no answer
+ * may have gone through: it commits the rule from here, so the retry resumes at this step and a live re-check that
+ * then skips it passes over it to the steps that follow, and it counts toward the scenario's spend limit.
+ */
+const stoppedAt = (
+    state: ScenarioState,
+    stop: {
+        rule: ValidatedRule;
+        index: number;
+        action: ScenarioAction;
+        result: NotDoneOutcome;
+        message: string;
+        at: number;
+        committed: boolean;
+    },
+): ScenarioState => {
+    const { rule, index, action, result, message, at, committed } = stop;
+    const next: ScenarioState = {
+        ...state,
+        inFlight: committed || result.spent ? { ruleId: rule.id, actionIndex: index } : null,
+    };
+    if (result.status !== 'deferred') {
+        const unclear = result.spent ? { kind: 'spend-unclear' as const, action: action.type } : {};
+        next.lastError = { at, message, ...unclear };
+    }
+    return applyEffects(next, { spent: result.spent }, at);
+};
+
+/**
  * Execute one rule from `startIndex`. Returns the new state and whether the
  * rule finished (its actions all went through or were passed over).
  */
@@ -54,7 +90,8 @@ const runRule = async (
     const { rule, startIndex } = fire;
     const tag = logger.challengeTag(ctx.challenge);
     let state = startState;
-    let committed = startIndex > 0;
+    // A rule that was interrupted after a step went through, or whose spend got no answer, is committed to its steps.
+    let committed = startIndex > 0 || startState.inFlight?.ruleId === rule.id;
     let gotoPhase: string | null = null;
     let skippedStep: { at: number; message: string } | null = null;
     for (let index = startIndex; index < rule.do.length; index++) {
@@ -72,9 +109,7 @@ const runRule = async (
                 ctx.ledger.set(ctx.challengeId, state);
                 continue;
             }
-            state = { ...state, inFlight: committed ? { ruleId: rule.id, actionIndex: index } : null };
-            if (result.status !== 'deferred') state.lastError = { at, message };
-            state = applyEffects(state, { spent: result.spent }, at);
+            state = stoppedAt(state, { rule, index, action, result, message, at, committed });
             ctx.ledger.set(ctx.challengeId, state);
             return { state, completed: false };
         }

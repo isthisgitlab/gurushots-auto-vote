@@ -176,7 +176,12 @@ const joinCandidate = async (
     // abort the rest of the pass — mirrors the per-challenge voting loop.
     let outcome;
     try {
-        outcome = await performJoin(challenge, token, deps, decision.needsCoins, { submitOnly: alreadyPaid });
+        // The balance the pass already holds goes into the claim, for the user to compare with GuruShots.
+        const coins = Number(pass.bankroll?.coins);
+        outcome = await performJoin(challenge, token, deps, decision.needsCoins, {
+            submitOnly: alreadyPaid,
+            coinsBefore: Number.isFinite(coins) ? coins : null,
+        });
     } catch (error) {
         cat().warning(`join failed for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`, null);
         return 'error';

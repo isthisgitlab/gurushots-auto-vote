@@ -337,6 +337,8 @@ export const app = {
     scenarioStatusNotStarted: 'starts in phase {phase} on the next run',
     scenarioStatusNext: 'next check in {time}',
     scenarioStatusProblem: 'Last step skipped: {message}',
+    scenarioStatusSpendUnclear:
+        'GuruShots gave no answer to “{action}”, so it may have gone through. It will be checked again next cycle.',
     notifyOnScenario: 'Notify from scenarios',
     notifyOnScenarioDesc:
         "Show the messages your scenarios' notify steps send, and a warning when a scenario stops because it needs you.",
@@ -541,17 +543,25 @@ export const app = {
     discoverPendingNoPhoto:
         'Coins were already spent, but no photo qualifies for this challenge. Add an eligible photo, then press Join. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.',
     discoverUnconfirmed:
-        'The payment for this challenge got no answer, so it may or may not have gone through. Retrying only submits your photo, so you are never charged twice. If GuruShots shows the coins were not taken, press "I wasn\'t charged", then join again.',
+        'The payment for this challenge got no answer, so it may or may not have gone through. Retrying only submits your photo, so you are never charged twice. If the GuruShots website shows the coins were not taken, press "I wasn\'t charged", then join again.',
     discoverEarlierPayment:
-        'This challenge has a payment record from before the app told accounts apart, so it is not known whether the coins were taken. Retrying only submits your photo, so you are never charged twice. If GuruShots shows the coins were not taken, press "I wasn\'t charged", then join again.',
+        'This challenge has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. Retrying only submits your photo, so you are never charged twice. If the GuruShots website shows the coins were not taken, press "I wasn\'t charged", then join again.',
     discoverForgetPayment: "I wasn't charged",
     discoverForgetPaymentLabel: "I wasn't charged for {title}",
     discoverForgetTitle: 'Forget this payment?',
     discoverForgetBody:
-        'Check your coin history on GuruShots first. Only continue if the coins for {title} were not taken: if they were, joining again charges you a second time.',
+        'First check your coin history on the GuruShots website. Only continue if the coins for {title} were not taken: if they were, joining again charges you a second time.',
+    discoverForgetBalances:
+        "Before this payment you had {before} coins; GuruShots reports {now} now. If the difference is not the challenge's price, the payment probably did not go through. The app cannot tell: the coin history on the GuruShots website is what counts.",
+    discoverForgetBalanceBefore:
+        'Before this payment you had {before} coins. Compare that with your balance on the GuruShots website: the app cannot tell whether the payment went through.',
     discoverForgetConfirm: "I wasn't charged — forget it",
     discoverForgetNothing:
         'There was nothing to forget: the payment is already confirmed, or the join has finished. Refresh the list.',
+    discoverForgetAccountUnknown:
+        'Could not confirm which account is logged in, so nothing was changed. Try again shortly, or log in again.',
+    discoverForgetOtherAccount:
+        'This record is from an older version of the app and may belong to another GuruShots account used on this device, so it can only be cleared from the account that paid, or once the challenge has ended. Nothing was changed.',
     discoverForgetFailed: 'Could not forget the payment right now. Nothing was changed. Try again in a moment.',
     discoverAccountUnknown:
         'Could not confirm which account is logged in, so this attempt did nothing and spent no coins. Try again shortly, or log in again.',

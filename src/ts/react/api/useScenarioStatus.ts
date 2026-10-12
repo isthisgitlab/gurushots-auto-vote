@@ -17,6 +17,8 @@ export type ScenarioSummary = {
     phase?: string;
     started?: boolean;
     lastError?: string | null;
+    /** The last problem is a spend that got no answer: the line words it, with the action's own label. */
+    lastErrorSpend?: string | null;
     nextWakeAt?: number | null;
 };
 
@@ -85,6 +87,8 @@ function summarize(status: ScenarioStatus, challenge: Challenge): ScenarioSummar
         phase: state.phase,
         started: status.state !== null,
         lastError: status.state?.lastError?.message ?? null,
+        lastErrorSpend:
+            status.state?.lastError?.kind === 'spend-unclear' ? (status.state.lastError.action ?? '') : null,
         nextWakeAt: nextWakeAt({ scenario: status.scenario, state, challenge, now, timezone: status.timezone }),
     };
 }

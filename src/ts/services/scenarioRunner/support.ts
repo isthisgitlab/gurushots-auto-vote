@@ -33,10 +33,10 @@ const BOOST_APPLICABLE: ReadonlySet<BoostState | undefined> = new Set(['AVAILABL
 /**
  * Currency each spending action draws on, and its `limits` / `spent` key.
  */
-const SPEND: Record<SpendAction, { action: 'swap' | 'key' | 'fill'; limit: SpendKind }> = {
-    swap: { action: 'swap', limit: 'swaps' },
-    unlockBoost: { action: 'key', limit: 'keys' },
-    fillExposure: { action: 'fill', limit: 'fills' },
+const SPEND: Record<SpendAction, { action: 'swap' | 'key' | 'fill'; limit: SpendKind; label: string }> = {
+    swap: { action: 'swap', limit: 'swaps', label: 'photo swap' },
+    unlockBoost: { action: 'key', limit: 'keys', label: 'boost unlock' },
+    fillExposure: { action: 'fill', limit: 'fills', label: 'exposure fill' },
 };
 
 const nowSec = () => Math.floor(Date.now() / 1000);
@@ -121,7 +121,9 @@ const lockedCurrencySpend = async (
     // counted against the scenario's limit as if it had.
     if (result.outcome === CURRENCY_OUTCOME.unclear) {
         return {
-            ...failed(`${actionType} may have gone through (GuruShots gave no answer)`),
+            ...failed(
+                `the ${SPEND[actionType].label} may have gone through (GuruShots gave no answer); it will be checked again next cycle`,
+            ),
             spent: SPEND[actionType].limit,
         };
     }

@@ -6,6 +6,7 @@
 import { render, screen } from './helpers/test-utils';
 import { ScenarioStatusLine } from '@/components/app/ScenarioStatusLine';
 import type { ScenarioSummary } from '@/api/useScenarioStatus';
+import { mockTranslator } from './helpers/setup';
 
 const NOW = Math.floor(Date.now() / 1000);
 
@@ -30,6 +31,33 @@ test('a running plan: phase, next check and last problem (detail)', () => {
     );
     expect(screen.getByTitle('Plan').textContent).toContain('Plan · app.scenarioStatusPhase · app.scenarioStatusNext');
     expect(screen.getByRole('status').textContent).toBe('app.scenarioStatusProblem');
+});
+
+test("a spend that got no answer is worded as that, with the action's own label, not as a skipped step", () => {
+    mockTranslator.t.mockImplementation((key) =>
+        key === 'app.scenarioStatusSpendUnclear'
+            ? 'No answer to “{action}”'
+            : key === 'app.sbAct_unlockBoost'
+              ? 'Unlock the boost with a key'
+              : key,
+    );
+    try {
+        render(
+            <ScenarioStatusLine
+                status={{
+                    name: 'Plan',
+                    phase: 'main',
+                    started: true,
+                    lastError: 'r1 → unlockBoost: …',
+                    lastErrorSpend: 'unlockBoost',
+                    nextWakeAt: null,
+                }}
+            />,
+        );
+        expect(screen.getByRole('status').textContent).toBe('No answer to “Unlock the boost with a key”');
+    } finally {
+        mockTranslator.t.mockImplementation((key) => key);
+    }
 });
 
 test('a plan not started, with nothing pending or already due (compact)', () => {

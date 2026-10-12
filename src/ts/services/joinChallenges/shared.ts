@@ -44,6 +44,8 @@ type JoinOutcome = {
     status: string;
     charged: number;
     maybeCharged?: number;
+    /** The balance before a payment that is not confirmed, for the user to check against GuruShots. */
+    coinsBefore?: number;
     imageId?: string;
     reason?: JoinReason;
 };
@@ -51,9 +53,10 @@ type JoinOutcome = {
 /**
  * A persisted unlock claim as one join reads it: where it is stored, whether its payment is unconfirmed (an
  * unlock that got no answer), and whether it is a bare one from before
- * accounts were told apart (whose coins it holds is unknown).
+ * accounts were told apart (whose coins it holds is unknown). `coinsBefore` is the balance the caller had just before
+ * the unlock, kept for the user to compare with GuruShots; nothing decides on it.
  */
-type Claim = { key: string; unconfirmed: boolean; legacy: boolean };
+type Claim = { key: string; unconfirmed: boolean; legacy: boolean; coinsBefore: number | null };
 
 /**
  * The claim a join continues from (null: none), and the coins this call spent unlocking.
@@ -70,6 +73,7 @@ type JoinSingleResult = {
     coins?: number;
     imageId?: string;
     reason?: JoinReason;
+    coinsBefore?: number;
 };
 
 // Shared across the manual handler and the automatic pass IN THIS PROCESS so the
@@ -79,5 +83,11 @@ const inFlight: Set<string> = new Set();
 
 const cat = () => logger.withCategory('join');
 
-export { inFlight, cat };
+/**
+ * The cross-process unlock lock of one challenge (always granted where none is wired in: mock mode).
+ */
+const lockFor = (deps: JoinDeps, id: string | number): { ok: boolean; release: () => void } =>
+    deps.acquireUnlockLock ? deps.acquireUnlockLock(id) : { ok: true, release: () => {} };
+
+export { inFlight, cat, lockFor };
 export type { Claim, JoinOutcome, UnlockState, JoinSingleResult };

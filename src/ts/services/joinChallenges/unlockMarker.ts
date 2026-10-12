@@ -9,7 +9,8 @@ import type { RawJsonStore } from '../../types/stores';
 import { errorMessage } from '../../errorMessage';
 import * as logger from '../../logger';
 import { resolveMemberId } from '../autoFill/memberIdentity';
-import { cat } from './shared';
+import { sanitizeLogString } from '../../logger/sanitize';
+import { cat, lockFor } from './shared';
 import type { Claim, JoinDeps } from './shared';
 
 // Read the marker map, distinguishing "empty/never-written" (ok:true, {}) from
@@ -35,7 +36,7 @@ const readUnlockedState = (store: RawJsonStore | null | undefined): { state: Rec
         return { state: {}, ok: false };
     } catch (error) {
         // JSON.parse only ever throws a SyntaxError here (readRaw returns a string).
-        cat().warning(`join-state file is corrupt: ${(error as SyntaxError).message}`, null);
+        cat().warning(`join-state file is corrupt: ${errorMessage(error)}`, null);
         return { state: {}, ok: false };
     }
 };
@@ -78,11 +79,18 @@ const isFiniteNumber = (value: unknown): value is number => typeof value === 'nu
  */
 const findClaim = (state: Record<string, unknown>, id: string | number, owner: string | null): Claim | null => {
     const key = markerKey(id, owner);
+    // A key with a colon is some account's own (`<member id>:<challenge id>`), never a bare one.
     const bare = String(id);
-    const found = has(state, key) ? key : has(state, bare) ? bare : null;
+    const found = has(state, key) ? key : has(state, bare) && !bare.includes(':') ? bare : null;
     if (found === null) return null;
     const value = state[found];
-    return { key: found, unconfirmed: isPlainObject(value) && value.unconfirmed === true, legacy: found !== key };
+    const before = isPlainObject(value) ? value.coinsBefore : undefined;
+    return {
+        key: found,
+        unconfirmed: isPlainObject(value) && value.unconfirmed === true,
+        legacy: found !== key,
+        coinsBefore: isFiniteNumber(before) ? before : null,
+    };
 };
 
 const claimOf = (store: RawJsonStore | null | undefined, id: string | number, owner: string | null) =>
@@ -137,20 +145,39 @@ const idOfKey = (key: string) => key.slice(key.lastIndexOf(':') + 1);
 // — mock mode, which spends no real coins). Returns false when the file cannot be read or a real store
 // write fails: the caller MUST NOT spend coins it cannot record, or a crash /
 // retry could re-unlock and double-charge.
-const markUnlocked = (store: RawJsonStore | null | undefined, id: string | number, owner: string | null): boolean =>
-    changeClaims(store, `persist unlock marker for ${id}`, (state) => {
-        state[markerKey(id, owner)] = { unlockedAt: Date.now() };
+const markUnlocked = (
+    store: RawJsonStore | null | undefined,
+    id: string | number,
+    owner: string | null,
+    coinsBefore: number | null,
+): boolean =>
+    changeClaims(store, `persist unlock marker for ${sanitizeLogString(id)}`, (state) => {
+        state[markerKey(id, owner)] = {
+            unlockedAt: Date.now(),
+            ...(isFiniteNumber(coinsBefore) ? { coinsBefore } : {}),
+        };
         return true;
     });
 
-/** The unlock got no answer: the claim stays, flagged unconfirmed. */
-const markUnconfirmed = (store: RawJsonStore | null | undefined, id: string | number, owner: string | null): void => {
-    changeClaims(store, `flag the unlock marker for ${id} as unconfirmed`, (state) => {
+/**
+ * The unlock got no answer: the claim stays, flagged unconfirmed.
+ *
+ * @returns whether the flag is on the claim now: a claim that could not be flagged reads as a confirmed one
+ */
+const markUnconfirmed = (
+    store: RawJsonStore | null | undefined,
+    id: string | number,
+    owner: string | null,
+): boolean => {
+    let flagged = false;
+    changeClaims(store, `flag the unlock marker for ${sanitizeLogString(id)} as unconfirmed`, (state) => {
         const claim = state[markerKey(id, owner)];
         if (!isPlainObject(claim)) return false;
         state[markerKey(id, owner)] = { ...claim, unconfirmed: true };
+        flagged = true;
         return true;
     });
+    return flagged || !store;
 };
 
 /**
@@ -158,35 +185,49 @@ const markUnconfirmed = (store: RawJsonStore | null | undefined, id: string | nu
  * one may be another account's protection against a second charge.
  */
 const clearUnlocked = (store: RawJsonStore | null | undefined, key: string): void => {
-    changeClaims(store, `clear unlock marker for ${idOfKey(key)}`, (state) => {
+    changeClaims(store, `clear unlock marker for ${sanitizeLogString(idOfKey(key))}`, (state) => {
         if (!has(state, key)) return false;
         delete state[key];
         return true;
     });
 };
 
+type ForgetResult = 'forgotten' | 'nothing-to-forget' | 'other-account-possible' | 'unreadable';
+
+// Whether the store holds a claim keyed by an account other than this one: proof that more than one account has
+// paid on this device.
+const holdsOtherAccountClaim = (state: Record<string, unknown>, owner: string | null) =>
+    Object.keys(state).some((key) => key.includes(':') && !key.startsWith(`${owner}:`));
+
 /**
  * What the user may forget: this account's claim for the challenge when it is still unconfirmed, or a bare
  * one from before accounts were told apart. Never a confirmed claim (its coins are known to be taken), and never
- * a bare one while the account has its own claim for the challenge.
+ * a bare one while the account has its own claim for the challenge. A bare claim may be ANOTHER account's
+ * protection against a second charge, so it goes only when the store holds no claim of any other account: with
+ * one in it, more than one account has paid on this device, and the record can only be cleared by the account that
+ * paid (or once the challenge has ended and the claim is pruned).
  *
- * @returns 'forgotten', 'nothing-to-forget' (no claim, or only a confirmed one), or 'unreadable'
+ * @returns 'forgotten', 'nothing-to-forget' (no claim, or only a confirmed one), 'other-account-possible' (a bare
+ *   claim another account may own) or 'unreadable'
  */
 const forgetClaim = (
     store: RawJsonStore | null | undefined,
     id: string | number,
     owner: string | null,
-): 'forgotten' | 'nothing-to-forget' | 'unreadable' => {
-    let forgotten = false;
-    const done = changeClaims(store, `forget the unlock marker for ${id}`, (state) => {
+): ForgetResult => {
+    let result: ForgetResult = 'nothing-to-forget';
+    const done = changeClaims(store, `forget the unlock marker for ${sanitizeLogString(id)}`, (state) => {
         const claim = findClaim(state, id, owner);
         if (!claim || !(claim.unconfirmed || claim.legacy)) return false;
+        if (claim.legacy && holdsOtherAccountClaim(state, owner)) {
+            result = 'other-account-possible';
+            return false;
+        }
         delete state[claim.key];
-        forgotten = true;
+        result = 'forgotten';
         return true;
     });
-    if (!done) return 'unreadable';
-    return forgotten ? 'forgotten' : 'nothing-to-forget';
+    return done ? result : 'unreadable';
 };
 
 /**
@@ -218,15 +259,31 @@ const pruneClosedClaims = async (
         const old = isFiniteNumber(at) && now - at >= CLAIM_PRUNE_MIN_AGE_MS;
         return own && old && !openIds.has(key.slice(sep + 1));
     };
-    changeClaims(store, 'prune the unlock markers', (state) => {
-        const stale = Object.keys(state).filter((key) => closed(key, state[key]));
-        stale.forEach((key) => delete state[key]);
-        if (stale.length > 0)
-            cat().debug(`dropped ${stale.length} unlock claim(s) of challenges that are no longer open`, null);
-        return stale.length > 0;
-    });
+    // A challenge whose unlock lock another process holds is mid-join: its claim is left alone.
+    const held: Array<{ release: () => void }> = [];
+    let dropped = 0;
+    try {
+        const done = changeClaims(store, 'prune the unlock markers', (state) => {
+            const stale = Object.keys(state)
+                .filter((key) => closed(key, state[key]))
+                .filter((key) => {
+                    const lock = lockFor(deps, idOfKey(key));
+                    if (lock.ok) held.push(lock);
+                    return lock.ok;
+                });
+            stale.forEach((key) => delete state[key]);
+            dropped = stale.length;
+            return stale.length > 0;
+        });
+        if (done && dropped > 0) {
+            cat().debug(`dropped ${dropped} unlock claim(s) of challenges that are no longer open`, null);
+        }
+    } finally {
+        held.forEach((lock) => lock.release());
+    }
 };
 
+export type { ForgetResult };
 export {
     readUnlockedState,
     markerKey,

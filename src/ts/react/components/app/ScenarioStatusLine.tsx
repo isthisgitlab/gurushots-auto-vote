@@ -47,7 +47,11 @@ export function ScenarioStatusLine({
             </div>
             {status.lastError && (
                 <div className={`text-warning ${compact ? 'line-clamp-2' : ''}`} role="status">
-                    {interp(t('app.scenarioStatusProblem'), { message: status.lastError })}
+                    {status.lastErrorSpend != null
+                        ? interp(t('app.scenarioStatusSpendUnclear'), {
+                              action: t(`app.sbAct_${status.lastErrorSpend}`),
+                          })
+                        : interp(t('app.scenarioStatusProblem'), { message: status.lastError })}
                 </div>
             )}
         </div>
