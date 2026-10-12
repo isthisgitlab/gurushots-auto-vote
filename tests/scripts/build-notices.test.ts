@@ -49,6 +49,42 @@ const COMMITTED = path.join(ROOT, 'src', 'assets', 'THIRD_PARTY_NOTICES.txt');
 const LICENSES_DIR = path.join(ROOT, 'scripts', 'licenses');
 const read = (...segments: string[]) => fs.readFileSync(path.join(ROOT, ...segments), 'utf8');
 
+/** Whether an android.json coordinate (`group:artifact`, or a pattern ending in `*`) names this artifact, as the generator reads it. */
+const matches = (pattern: string, coordinate: string) =>
+    pattern.endsWith('*') ? coordinate.startsWith(pattern.slice(0, -1)) : pattern === coordinate;
+
+/**
+ * The problems with the release each vendored NOTICE was taken from: no android.json component covers the coordinate;
+ * the covering component's version variable is undefined in android/variables.gradle or differs from the vendored
+ * version; or, for a component with no version variable, the vendored version is not among the versions the release
+ * runtime resolves (`resolved`, from the verification metadata). A component with no version variable whose coordinate
+ * the verification metadata does not list has nothing to compare against, so it is skipped.
+ */
+const mismatchedNoticeVersions = (
+    vendored: Record<string, { version: string }>,
+    components: readonly { coordinates: string[]; versionVariable?: string }[],
+    variables: Record<string, string>,
+    resolved: Record<string, string[]>,
+) => {
+    const problems: string[] = [];
+    for (const [coordinate, { version }] of Object.entries(vendored)) {
+        const component = components.find((candidate) =>
+            candidate.coordinates.some((pattern) => matches(pattern, coordinate)),
+        );
+        if (!component) {
+            problems.push(`no component covers ${coordinate}`);
+        } else if (component.versionVariable) {
+            const built = variables[component.versionVariable];
+            if (version !== built) problems.push(`${coordinate} is vendored at ${version} but the build uses ${built}`);
+        } else if (resolved[coordinate] && !resolved[coordinate].includes(version)) {
+            problems.push(
+                `${coordinate} is vendored at ${version} but the runtime resolves ${resolved[coordinate].join(', ')}`,
+            );
+        }
+    }
+    return problems;
+};
+
 describe('the committed notices', () => {
     let directory: string;
     beforeEach(() => {
@@ -202,8 +238,6 @@ describe('the committed notices', () => {
 
 describe('the Android component list', () => {
     const components = loadAndroidComponents(path.join(LICENSES_DIR, 'android.json'));
-    const matches = (pattern: string, coordinate: string) =>
-        pattern.endsWith('*') ? coordinate.startsWith(pattern.slice(0, -1)) : pattern === coordinate;
     const covers = (coordinate: string) =>
         components.some((component) => component.coordinates.some((pattern) => matches(pattern, coordinate)));
 
@@ -366,18 +400,65 @@ describe('the Android component list', () => {
         );
     });
 
+    const resolvedVersions: Record<string, string[]> = {};
+    for (const [, group, artifact, version] of read('android', 'gradle', 'verification-metadata.xml').matchAll(
+        /<component group="([^"]+)" name="([^"]+)" version="([^"]+)"/g,
+    )) {
+        (resolvedVersions[`${group}:${artifact}`] ??= []).push(version);
+    }
+
     test('takes each vendored NOTICE from the release the build uses', () => {
-        for (const [coordinate, { version }] of Object.entries(vendoredNotices)) {
-            const component = components.find((candidate) => candidate.coordinates.includes(coordinate));
-            const built = component?.versionVariable ? variables[component.versionVariable] : undefined;
-            if (version !== built) {
-                throw new Error(
-                    `scripts/licenses/notices.json holds the NOTICE of ${coordinate} ${version}, but android/variables.gradle ` +
-                        `builds ${built}: re-fetch the NOTICE from that release, replace the vendored text, and update ` +
-                        'the version in notices.json.',
-                );
-            }
+        const problems = mismatchedNoticeVersions(vendoredNotices, components, variables, resolvedVersions);
+        if (problems.length > 0) {
+            throw new Error(
+                `scripts/licenses/notices.json disagrees with the build: ${problems.join('; ')}. Re-fetch the NOTICE ` +
+                    'from the release the build uses, replace the vendored text, and update the version in notices.json.',
+            );
         }
+        expect(Object.keys(vendoredNotices).length).toBeGreaterThan(0);
+    });
+
+    test('compares a vendored NOTICE with the version variable, the resolved runtime, and reports what no component covers', () => {
+        const vendored = {
+            'org.apache.cordova:framework': { version: '1.0' },
+            'androidx.core:core': { version: '2.0' },
+            'x:y': { version: '3.0' },
+            'z:w': { version: '4.0' },
+        };
+        const components = [
+            { coordinates: ['org.apache.cordova:framework'], versionVariable: 'cordovaVersion' },
+            { coordinates: ['androidx.*'] },
+            { coordinates: ['x:y'] },
+        ];
+        expect(
+            mismatchedNoticeVersions(
+                vendored,
+                components,
+                { cordovaVersion: '1.0' },
+                { 'androidx.core:core': ['2.0'] },
+            ),
+        ).toEqual(['no component covers z:w']);
+        expect(
+            mismatchedNoticeVersions(
+                vendored,
+                components,
+                { cordovaVersion: '1.1' },
+                { 'androidx.core:core': ['2.1', '2.2'] },
+            ),
+        ).toEqual([
+            'org.apache.cordova:framework is vendored at 1.0 but the build uses 1.1',
+            'androidx.core:core is vendored at 2.0 but the runtime resolves 2.1, 2.2',
+            'no component covers z:w',
+        ]);
+        expect(mismatchedNoticeVersions(vendored, components, {}, {})).toEqual([
+            'org.apache.cordova:framework is vendored at 1.0 but the build uses undefined',
+            'no component covers z:w',
+        ]);
+    });
+
+    test('accepts a module without a file only when every selected variant is a platform or a redirect', () => {
+        const script = read('scripts', 'android-runtime-artifacts.sh');
+        expect(script).toContain('!component.variants.isEmpty() && component.variants.every {');
     });
 
     test('keeps the runtime lists current: the Android CI job regenerates and diffs them, and so does the metadata script', () => {

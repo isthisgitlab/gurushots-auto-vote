@@ -96,7 +96,7 @@ allprojects {
             // The Capacitor projects (npm packages, not Maven artifacts) are ambiguous for a view without attributes and
             // are not what is scanned; a failure about any other component is a module the scan cannot see.
             def failures = everything.failures.collect { it.message.readLines().first() }.findAll { !(it ==~ /.*project ':.*/) }
-            // A module of the resolved graph with no file at all is a BOM or a platform (its selected variant has the
+            // A module of the resolved graph with no file at all is a BOM or a platform (every selected variant has the
             // category platform or enforced-platform) or the root of a multiplatform module whose variant redirects to
             // another module (that one is scanned): there is nothing to open. Any other module without a file is a gap
             // in the scan.
@@ -106,7 +106,7 @@ allprojects {
                 if (id instanceof ModuleComponentIdentifier) {
                     def coordinate = "${id.group}:${id.module}".toString()
                     if (!resolved.contains(coordinate)) {
-                        def hasNoFileByDesign = component.variants.every { variant ->
+                        def hasNoFileByDesign = !component.variants.isEmpty() && component.variants.every { variant ->
                             def category = variant.attributes.getAttribute(Category.CATEGORY_ATTRIBUTE)
                             (category != null && (category.name == Category.REGULAR_PLATFORM || category.name == Category.ENFORCED_PLATFORM)) ||
                                 variant.externalVariant.present
