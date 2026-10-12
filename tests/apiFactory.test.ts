@@ -22,6 +22,7 @@ jest.mock('../src/ts/strategies/real', () => ({
     getActiveChallenges: jest.fn(),
     applyBoost: jest.fn(),
     joinChallenge: jest.fn(),
+    forgetUnconfirmedPayment: jest.fn(),
 }));
 jest.mock('../src/ts/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
 jest.mock('../src/ts/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
@@ -56,6 +57,7 @@ jest.mock('../src/ts/mock', () => ({
         getCurrentMemberProfile: jest.fn(),
         searchTagAutocomplete: jest.fn(),
         joinChallenge: jest.fn(),
+        forgetUnconfirmedPayment: jest.fn(),
         keyUnlock: jest.fn(),
         swapPhoto: jest.fn(),
         exposureAutofill: jest.fn(),

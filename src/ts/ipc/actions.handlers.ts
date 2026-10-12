@@ -22,6 +22,7 @@ import {
     handleGetOpenChosenAnnotations,
     handleConfirmAccount,
     handleJoinChallenge,
+    handleForgetUnconfirmedPayment,
 } from './actions/account';
 import { handlePlayAutoTurbo, handleApplyTurboToEntry } from './actions/turbo';
 import { handleFillChallengeNow, handleApplyBoostToEntry } from './actions/entries';
@@ -45,6 +46,7 @@ const buildHandlers = () =>
         'get-open-chosen-annotations': handleGetOpenChosenAnnotations,
         'confirm-account': handleConfirmAccount,
         'join-challenge': handleJoinChallenge,
+        'forget-unconfirmed-payment': handleForgetUnconfirmedPayment,
         'get-library-photos': handleGetLibraryPhotos,
     }) satisfies IpcHandlerMap;
 

@@ -415,36 +415,46 @@ repeated six times is one that gets forgotten at one of them.
   new claim is always written as `<member id>:<challenge id>` (the member id survives a re-login; a token
   does not), so one account's leftover claim never makes another account's join a submit-only retry. A
   bare `<challenge id>` claim, from before accounts were told apart, counts for every account (it can only
-  err towards not charging twice) and is never deleted by a failure; a paid submit that succeeds using it
-  clears it (the submit proves this account held the unlock), and a paid join that only a bare claim holds
-  and whose submit fails answers `reason: 'unconfirmed'`, since whose coins it holds is unknown. A free join
-  removes no claim. **Refused vs unclear** (`api/api-client.ts`): `coins_unlock` and the currency spends go
-  through `postOnce`, a request that is never repeated after it was sent, and answers `body`, `refused` or
-  `unclear`. A 429 (after its Retry-After) and a request that never left (ECONNREFUSED, ENOTFOUND,
-  EAI_AGAIN) are retried like any request and are refused when they run out; a 3xx or 4xx is refused (the
-  server did not process it); a timeout, a reset, any 5xx and a 2xx whose body is no JSON object are
-  unclear. Boosts and Turbos keep the normal retrying `makePostRequest`: once USED the server refuses a
-  replay, and a single attempt would only lose a boost in its last window. A refused unlock gives the claim
-  back and answers `failed-no-charge`. An **unclear** unlock may have charged: the claim stays, stored as
-  `{ unlockedAt, unconfirmed: true, coinsBefore }` (`coinsBefore` is the balance `performJoin` read just
-  before the unlock, null when that read failed), and the join answers `charged-pending-submit` with
-  `reason: 'unconfirmed'` (GUI and CLI: the payment may or may not have gone through; only the submit is
-  retried) and `maybeCharged`, which the auto pass subtracts from its budget and balance without reporting
-  it as charged. The next attempt, manual or automatic, **settles** an unconfirmed claim of this account
-  (`reconcileClaim`) before anything else decides on the join: balance equal to `coinsBefore` → it was not
-  charged, the claim is cleared and the join is an ordinary unpaid one (manual: `needs-confirm` unless the
-  call was a consented spend with a matching `expectedCost`; auto: the normal paid decision with its budget
-  and balance checks); balance down by at least the cost → it was, the claim is confirmed and only the
-  submit is left; anything else (another amount, an unreadable balance, no `coinsBefore`) → still unknown,
-  the claim stays unconfirmed and the submit alone is retried. Spends of currency (keys, swaps, fills) that
-  are unclear say so (`outcome: 'unclear'`, never "rejected"), and an unclear swap re-reads the live entries
-  and records the swap in the swap-back ledger when it did land. A **paid** join whose account cannot be
-  identified (a real claim store and a profile read are wired in, but no member id came) does nothing
-  paid: no unlock, no submit, and it answers `failed-no-charge` with `reason: 'account-unknown'`, which the
-  GUI and CLI word as "could not confirm the account; this attempt spent no coins", not as "no coins were
-  charged". The reasons are one union (`types/join.ts`) shared by core and renderer. Claims whose challenge is no longer open are dropped when a successful, non-empty open list is read
-  (`pruneClosedClaims`, after the pass or manual join): only this account's own keyed claims, only ones older
-  than six hours (a list read a moment ago cannot know of a join under way), never on an unknown account,
+  err towards not charging twice). **Claims are never settled automatically.** A claim ends in exactly two
+  ways: a paid submit that used it succeeds (the submit proves this account held the unlock, so the claim it
+  used goes, bare or not), or the user explicitly forgets it (below). A failure never clears one, a balance is
+  never read to decide whether a claim was charged (a timed-out unlock can still commit, a reward can equal
+  the cost, another join can be paid in the same pass), and a free join removes none. **Refused vs unclear**
+  (`api/api-client.ts`, `api/postOutcome.ts`): `coins_unlock` and the currency spends go through `postOnce`, a
+  request that is never repeated after it was sent, and answers `body`, `refused` or `unclear`. A 429 (after
+  its Retry-After) and a request that never left (ECONNREFUSED, ENOTFOUND, EAI_AGAIN) are retried like any
+  request and are refused when they run out; a 4xx is refused (the server did not process it); a timeout, a
+  reset, a 3xx (a redirected POST may have been processed), any 5xx, a 2xx whose body is no JSON object and a
+  rejection that is no error object are unclear. Boosts and Turbos keep the normal retrying `makePostRequest`:
+  once USED the server refuses a replay, and a single attempt would only lose a boost in its last window. A
+  refused unlock gives the claim back and answers `failed-no-charge`. An **unclear** unlock may have charged:
+  the claim stays, stored as `{ unlockedAt, unconfirmed: true }`, and the join answers
+  `charged-pending-submit` with `reason: 'unconfirmed'` and `maybeCharged`, which the auto pass subtracts from
+  its budget and balance without reporting it as charged. Every later attempt, manual or automatic, only
+  submits on that claim (`submitOnly`), so nothing can pay again without asking; a submit that fails on an
+  unconfirmed claim answers `unconfirmed` again, and on a bare claim `reason: 'earlier-payment'` (a payment
+  record from before accounts were told apart, whose owner is unknown): both are worded for what is not known
+  (the GUI and CLI say that a retry only submits the photo, so nobody is charged twice). **Forgetting**
+  (`services/joinChallenges/forgetPayment.ts`, IPC `forget-unconfirmed-payment`, GUI "I wasn't charged" on a
+  Discover row with a confirmation dialog, CLI `forget-payment <id>`): for a user who checked on GuruShots
+  that the coins were not taken. Under the same cross-process lock as the unlock, and refused while a join of
+  the challenge is under way, it re-reads the claims (an unreadable file aborts), and deletes this account's
+  claim for the challenge only when it is still unconfirmed, or is a bare one while the account has none of
+  its own; never a claim known to have been charged. It refuses when the account cannot be told. The next
+  join then asks for the price like any first one. Every writer of the claims reads them with
+  `readUnlockedState` and writes nothing when the file is unreadable (read as empty it would wipe every other
+  claim; `markUnlocked` then returns false and nothing is spent), and logs by challenge id only, never by the
+  member id in a key. Spends of currency (keys, swaps, fills) that are unclear say so (`outcome: 'unclear'`,
+  never "rejected"); an unclear swap re-reads the live entries and records the swap in the swap-back ledger
+  when it did land; and a scenario step whose spend is unclear counts toward the scenario's `spent` limit
+  (conservatively, so a limit is never exceeded), is retried from the same step, and says it "may have gone
+  through". A **paid** join whose account cannot be identified (a real claim store and a profile read are
+  wired in, but no member id came) does nothing paid: no unlock, no submit, and it answers `failed-no-charge`
+  with `reason: 'account-unknown'`, which the GUI and CLI word as "could not confirm the account; this attempt
+  spent no coins", not as "no coins were charged". The reasons are one union (`types/join.ts`) shared by core
+  and renderer. Claims whose challenge is no longer open are dropped when a successful, non-empty open list is
+  read (`pruneClosedClaims`, after the pass or manual join): only this account's own keyed claims, only ones
+  older than six hours (a list read a moment ago cannot know of a join under way), never on an unknown account,
   and never another account's or a bare one. A manual join or an auto-join pass that
   finds this account's claim skips the price, balance and budget checks and only submits (`submitOnly`: the
   join re-reads the claim and refuses to unlock if it is gone); with no eligible photo it answers

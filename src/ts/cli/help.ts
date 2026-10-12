@@ -40,6 +40,8 @@ Commands:
              print the coin cost and require --yes before spending coins. --yes alone pays the
              cost at that moment; with --max-coins=<coins> it refuses (and spends nothing) if the cost
              is above that. An upcoming challenge answers that it has not started.
+  forget-payment <id> - Forget a join payment that could not be confirmed (the unlock got no answer), after
+             checking on GuruShots that the coins were not taken. The next join asks for the price again.
   list-photos [--challenge=<id>] [--search=<tag>] - List your photo ids, to choose them for auto-join / auto-submit.
              With --challenge each photo shows whether that challenge accepts it.
   check-updates - Check GitHub for a newer release
@@ -92,6 +94,7 @@ Examples:
   discover
   join 12345
   join 12345 --yes
+  forget-payment 12345
   check-updates
   list-photos --challenge=12345
   set-setting chosenPhotos '["<id>"]' --challenge=12345

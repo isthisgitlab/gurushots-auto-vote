@@ -48,7 +48,12 @@ jest.mock('../../src/ts/cli/prompts', () => ({
 }));
 
 jest.mock('../../src/ts/ipc/actions.handlers', () => {
-    const handlers = { 'get-bankroll': jest.fn(), 'get-member-challenges': jest.fn(), 'join-challenge': jest.fn() };
+    const handlers = {
+        'get-bankroll': jest.fn(),
+        'get-member-challenges': jest.fn(),
+        'join-challenge': jest.fn(),
+        'forget-unconfirmed-payment': jest.fn(),
+    };
     return { __handlers: handlers, buildHandlers: jest.fn(() => handlers) };
 });
 
@@ -89,7 +94,7 @@ type HandlersMock = {
     __handlers: jest.Mocked<
         Pick<
             ReturnType<typeof actionsHandlersModule.buildHandlers>,
-            'get-bankroll' | 'get-member-challenges' | 'join-challenge'
+            'get-bankroll' | 'get-member-challenges' | 'join-challenge' | 'forget-unconfirmed-payment'
         >
     >;
 };
@@ -107,7 +112,8 @@ const pkg = jest.requireActual<typeof import('../../package.json')>('../../packa
 
 const { handleLogin, handleLogout } = require('../../src/ts/cli/commands/auth') as typeof authCommandsModule;
 const { showBankroll } = require('../../src/ts/cli/commands/bankroll') as typeof bankrollModule;
-const { showDiscover, joinChallengeCmd } = require('../../src/ts/cli/commands/join') as typeof joinModule;
+const { showDiscover, joinChallengeCmd, forgetPaymentCmd } =
+    require('../../src/ts/cli/commands/join') as typeof joinModule;
 const { checkUpdates } = require('../../src/ts/cli/commands/update') as typeof updateModule;
 const { showLogs } = require('../../src/ts/cli/commands/logs') as typeof logsModule;
 
@@ -430,13 +436,23 @@ describe('join', () => {
         ]);
     });
 
-    test('a payment that got no answer says it may or may not have gone through, and that only the submit is retried', async () => {
+    test('a payment that got no answer says so, that a retry only submits, and how to forget it', async () => {
         handlers['join-challenge'].mockResolvedValue(
             invalid({ status: 'charged-pending-submit', reason: 'unconfirmed', cost: 100 }),
         );
         await joinChallengeCmd('7');
         expect(msgs('error')).toEqual([
-            'The payment for 7 got no answer, so it may or may not have gone through, and the join did not finish. Re-run "join 7 --yes": to avoid paying twice it only retries the submit, and checks your coin balance first.',
+            'The payment for 7 got no answer, so it may or may not have gone through, and the join did not finish. Re-run "join 7": it only submits your photo, so you are never charged twice. If GuruShots shows the coins were not taken, run "forget-payment 7" and join again.',
+        ]);
+    });
+
+    test('an earlier payment record is not described as a payment that got no answer', async () => {
+        handlers['join-challenge'].mockResolvedValue(
+            invalid({ status: 'charged-pending-submit', reason: 'earlier-payment', cost: 100 }),
+        );
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([
+            'Challenge 7 has a payment record from before accounts were told apart, so it is not known whether the coins were taken, and the join did not finish. Re-run "join 7": it only submits your photo, so you are never charged twice. If GuruShots shows the coins were not taken, run "forget-payment 7" and join again.',
         ]);
     });
 
@@ -509,6 +525,40 @@ describe('join', () => {
             'Challenge 7 costs 40 coins, more than --max-coins allows. Nothing was spent — to pay this cost, re-run: join 7 --yes --max-coins=40',
         ]);
         expect(msgs('info')).not.toContain('✅ Joined challenge 7.');
+    });
+});
+
+describe('forget-payment', () => {
+    test('requires authentication', async () => {
+        apiFactory.__mw.isAuthenticated.mockReturnValue(false);
+        await forgetPaymentCmd('1');
+        expect(handlers['forget-unconfirmed-payment']).not.toHaveBeenCalled();
+    });
+
+    test('exits with usage when no id is given', async () => {
+        await expect(forgetPaymentCmd(undefined)).rejects.toThrow('exit:1');
+        expect(msgs('info')).toEqual(['Usage: forget-payment <id>']);
+        expect(handlers['forget-unconfirmed-payment']).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['forgotten', 'info', 'Forgot the unconfirmed payment for 7. Run "join 7" to join it again'],
+        ['nothing-to-forget', 'error', 'Nothing to forget for 7'],
+        ['busy', 'error', 'A join of 7 is in progress'],
+        ['account-unknown', 'error', 'Could not confirm which account is logged in, so nothing was changed'],
+        ['unreadable', 'error', 'The saved payment records could not be read, so nothing was changed.'],
+        ['weird', 'error', 'Could not forget the payment for 7 right now'],
+    ])('answer %s is reported', async (status, level, text) => {
+        handlers['forget-unconfirmed-payment'].mockResolvedValue(invalid({ status }));
+        await forgetPaymentCmd('7');
+        expect(handlers['forget-unconfirmed-payment']).toHaveBeenCalledWith(null, '7');
+        expect(msgs(level).some((m) => m.includes(text))).toBe(true);
+    });
+
+    test('no answer at all is reported as a failure', async () => {
+        handlers['forget-unconfirmed-payment'].mockResolvedValue(invalid(null));
+        await forgetPaymentCmd('7');
+        expect(msgs('error')).toEqual(['Could not forget the payment for 7 right now. Please try again.']);
     });
 });
 

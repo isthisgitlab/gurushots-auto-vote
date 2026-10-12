@@ -19,7 +19,7 @@ import {
     fillExposureCmd,
 } from './commands/actions';
 import { showBankroll } from './commands/bankroll';
-import { showDiscover, joinChallengeCmd } from './commands/join';
+import { showDiscover, joinChallengeCmd, forgetPaymentCmd } from './commands/join';
 import { listPhotosCmd, parseSearchFlag } from './commands/photos';
 import { checkUpdates } from './commands/update';
 import {
@@ -115,6 +115,15 @@ const runJoin: CommandHandler = async (argv) => {
         yes: flags.includes('--yes'),
         ...(maxCoins === undefined ? {} : { maxCoins }),
     });
+    return 0;
+};
+
+const FORGET_PAYMENT_USAGE = 'Usage: forget-payment <id>';
+
+// Strict like `join`: it changes what a later join pays for, so a typo must not reach another challenge.
+const runForgetPayment: CommandHandler = async (argv) => {
+    if (argv.length !== 1 || argv[0].startsWith('--')) return usageError('Wrong arguments', FORGET_PAYMENT_USAGE);
+    await forgetPaymentCmd(argv[0]);
     return 0;
 };
 
@@ -233,6 +242,7 @@ const COMMANDS: Record<string, CommandHandler> = {
     coins: exitsZero(showBankroll),
     discover: exitsZero(showDiscover),
     join: runJoin,
+    'forget-payment': runForgetPayment,
     'list-photos': runListPhotos,
     'get-setting': runGetSetting,
     'set-setting': runSetSetting,

@@ -34,7 +34,6 @@ import {
     markerKey,
     markerOwner,
     paidOwnerUnknown,
-    readCoins,
     readUnlockedState,
 } from './unlockMarker';
 import { pickJoinPhoto } from './photoPick';
@@ -42,14 +41,14 @@ import type { JoinPick } from './photoPick';
 
 const failedNoCharge = (): JoinOutcome => ({ status: 'failed-no-charge', charged: 0 });
 
-// Whose coins a claim holds, or whether they were spent at all, is not known: an unconfirmed payment, or a bare
-// claim from before accounts were told apart.
-const isUnsure = (claim: Claim | null): boolean => claim !== null && (claim.unconfirmed || claim.legacy);
-
-const pendingOutcome = (unsure: boolean, charged: number): JoinOutcome =>
-    unsure
-        ? { status: 'charged-pending-submit', charged, reason: 'unconfirmed' }
-        : { status: 'charged-pending-submit', charged };
+// A pending submit, worded by what is known of the payment: an unconfirmed one (the unlock got no answer) says so,
+// a bare claim from before accounts were told apart is an earlier payment record whose owner is unknown, and any
+// other claim is a payment that is known to have been taken.
+const pendingOutcome = (claim: Claim | null, charged: number): JoinOutcome => {
+    const base = { status: 'charged-pending-submit', charged };
+    if (claim?.unconfirmed) return { ...base, reason: 'unconfirmed' };
+    return claim?.legacy ? { ...base, reason: 'earlier-payment' } : base;
+};
 
 /**
  * The check→claim→unlock section, run under the cross-process lock. Re-reads
@@ -86,26 +85,26 @@ const claimAndUnlock = async (
         cat().error(`${logger.challengeTag(challenge)}: could not record the unlock claim — not spending coins`, null);
         return { outcome: failedNoCharge() };
     }
-    // The balance just before the charge: what an unlock that gets no answer is judged against on the next attempt.
-    const coinsBefore = await readCoins(token, deps);
     const unlock = await deps.coinsUnlock(id, token);
     if (unlock?.ok) {
         return {
             charged: needsCoins,
             alreadyUnlocked: false,
-            claim: { key: markerKey(id, owner), unconfirmed: false, coinsBefore: null, legacy: false },
+            claim: { key: markerKey(id, owner), unconfirmed: false, legacy: false },
         };
     }
     // No usable answer (a timeout, a reset, a 5xx) is unclear: the charge may have gone through, and the unlock
     // is not known to be idempotent, so the claim stays — flagged, with the balance — and the next attempt only
     // submits. A refusal (a body that says no, or a 4xx) was not processed: nothing was charged, the claim goes back.
     if (!unlock || unlock.unclear) {
-        markUnconfirmed(deps.joinStateStore, id, owner, coinsBefore);
+        markUnconfirmed(deps.joinStateStore, id, owner);
         cat().error(
             `${logger.challengeTag(challenge)}: coins_unlock got no usable answer — the charge may have gone through, keeping the claim`,
             null,
         );
-        return { outcome: { ...pendingOutcome(true, 0), maybeCharged: needsCoins } };
+        return {
+            outcome: { status: 'charged-pending-submit', charged: 0, reason: 'unconfirmed', maybeCharged: needsCoins },
+        };
     }
     clearUnlocked(deps.joinStateStore, markerKey(id, owner));
     cat().warning(`coins_unlock failed for ${logger.challengeTag(challenge)} — no coins charged`, null);
@@ -151,12 +150,11 @@ const submitJoin = async (
 ): Promise<JoinOutcome> => {
     const id = challenge?.id;
     const coinsSpent = charged > 0 || alreadyUnlocked;
-    const unsure = isUnsure(claim);
     // If cancelled now and coins are already spent (this call or a prior
     // cycle), report pending-submit — not "no charge", which would misinform
     // the user about money spent.
     if (cancellation.isCancelled()) {
-        return needsCoins > 0 && coinsSpent ? pendingOutcome(unsure, charged) : failedNoCharge();
+        return needsCoins > 0 && coinsSpent ? pendingOutcome(claim, charged) : failedNoCharge();
     }
     const submit = await deps.submitToChallenge(id, [imageId], token);
     if (submit?.ok) {
@@ -178,7 +176,7 @@ const submitJoin = async (
             `${logger.challengeTag(challenge)}: coins were charged but the join did not complete — will retry the submit, not re-unlock`,
             null,
         );
-        return pendingOutcome(unsure, charged);
+        return pendingOutcome(claim, charged);
     }
     return failedNoCharge();
 };
@@ -190,10 +188,10 @@ const submitJoin = async (
  */
 const noPhotoOutcome = (reason: JoinPick['reason'], owedClaim: Claim | null): JoinOutcome => {
     if (owedClaim) {
-        // A payment that may not have happened is what the user is told about first.
-        if (isUnsure(owedClaim)) return pendingOutcome(true, 0);
+        // A payment that may not have happened (or whose owner is unknown) is what the user is told about first.
+        if (owedClaim.unconfirmed || owedClaim.legacy) return pendingOutcome(owedClaim, 0);
         return reason === 'unreadable'
-            ? pendingOutcome(false, 0)
+            ? pendingOutcome(owedClaim, 0)
             : { status: 'charged-pending-submit', charged: 0, reason: 'no-photo' };
     }
     return { status: reason === 'no-chosen' ? 'skipped-no-chosen' : 'skipped-no-photo', charged: 0 };

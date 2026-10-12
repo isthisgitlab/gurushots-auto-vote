@@ -8,7 +8,7 @@ import logger = require('../../src/ts/logger');
 import type * as autoFillModule from '../../src/ts/services/autoFill';
 import type * as currencyActionsModule from '../../src/ts/services/currencyActions';
 import type * as swapBackStoreModule from '../../src/ts/swapBackStore';
-import type { Challenge, MemberBoost, MemberRanking } from '../../src/ts/types/gurushots';
+import type { ActionResult, Challenge, MemberBoost, MemberRanking } from '../../src/ts/types/gurushots';
 import type * as settingsModule from '../../src/ts/settings';
 import { invalid } from '../helpers/invalid';
 const { __resetMemberIdCache } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
@@ -449,14 +449,17 @@ describe('a spend that got no answer is not "rejected"', () => {
     const { createMemoryLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
     const { swapBack } = require('../../src/ts/services/currencyActions') as typeof currencyActionsModule;
     const noAnswer = { ok: false, raw: null, unclear: true };
+    // A spend that answers with the given result, and the live challenge list as the strategy reads it.
+    const answering = (result: ActionResult) => jest.fn<Promise<ActionResult>, unknown[]>().mockResolvedValue(result);
+    const listOf = () => jest.fn<Promise<{ challenges: FixtureChallenge[] }>, unknown[]>();
 
     test('a key and a fill say "unclear": they may have gone through, which a rejection would deny', async () => {
-        const key = stubStrategy({ overrides: { keyUnlock: jest.fn().mockResolvedValue(noAnswer) } });
+        const key = stubStrategy({ overrides: { keyUnlock: answering(noAnswer) } });
         expect(await unlockBoostWithKey(555, 'tok', { strategy: key, logger })).toEqual({
             ok: false,
             outcome: 'unclear',
         });
-        const fill = stubStrategy({ overrides: { exposureAutofill: jest.fn().mockResolvedValue(noAnswer) } });
+        const fill = stubStrategy({ overrides: { exposureAutofill: answering(noAnswer) } });
         expect(await fillExposure(555, 'tok', { strategy: fill, logger })).toEqual({ ok: false, outcome: 'unclear' });
     });
 
@@ -478,10 +481,10 @@ describe('a spend that got no answer is not "rejected"', () => {
     const unclearSwap = (live: Array<FixtureChallenge | Error>) => {
         const strategy = stubStrategy({
             challenge: boostedOld(),
-            overrides: { swapPhoto: jest.fn().mockResolvedValue(noAnswer) },
+            overrides: { swapPhoto: answering(noAnswer) },
         });
         // The first read is the live re-check before the spend; the next ones settle the unanswered request.
-        const reads = jest.fn().mockResolvedValueOnce({ challenges: [boostedOld()] });
+        const reads = listOf().mockResolvedValueOnce({ challenges: [boostedOld()] });
         for (const next of live) {
             if (next instanceof Error) reads.mockRejectedValueOnce(next);
             else reads.mockResolvedValueOnce({ challenges: [next] });
@@ -531,10 +534,9 @@ describe('a spend that got no answer is not "rejected"', () => {
         ] as const) {
             const strategy = stubStrategy({
                 challenge: entered('repl'),
-                overrides: { swapPhoto: jest.fn().mockResolvedValue(noAnswer) },
+                overrides: { swapPhoto: answering(noAnswer) },
             });
-            strategy.getActiveChallenges = jest
-                .fn()
+            strategy.getActiveChallenges = listOf()
                 .mockResolvedValueOnce({ challenges: [entered('repl')] })
                 .mockResolvedValueOnce({ challenges: [after] });
             const ledger = createMemoryLedger();

@@ -15,6 +15,7 @@ jest.mock('../../src/ts/services/votingOrchestrator', () => ({
 jest.mock('../../src/ts/services/joinChallenges', () => ({
     runJoinPass: jest.fn(async () => ({ ran: false, joined: 0, results: [] })),
     joinChallengeSingle: jest.fn(async () => ({ status: 'joined' })),
+    forgetUnconfirmedPayment: jest.fn(async () => ({ status: 'nothing-to-forget', challengeId: 1 })),
 }));
 jest.mock('../../src/ts/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
@@ -39,7 +40,7 @@ type TwoArgAutocomplete = (token: string | null, term: unknown) => Promise<strin
 const { runVotingPass } = jest.mocked(
     require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
-const { runJoinPass, joinChallengeSingle } = jest.mocked(
+const { runJoinPass, joinChallengeSingle, forgetUnconfirmedPayment } = jest.mocked(
     require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule,
 );
 const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
@@ -110,6 +111,11 @@ describe('no-token contract for every endpoint not covered elsewhere', () => {
             'joinChallenge',
             () => mockApiClient.joinChallenge(1, true, invalid(null)),
             { status: 'not-authenticated', challengeId: 1, cost: 0 },
+        ],
+        [
+            'forgetUnconfirmedPayment',
+            () => mockApiClient.forgetUnconfirmedPayment(1, invalid(null)),
+            { status: 'not-authenticated', challengeId: 1 },
         ],
     ])('%s resolves its failure shape and logs the auth error', async (_name, call, expected) => {
         await expect(call()).resolves.toEqual(expected);
@@ -288,6 +294,18 @@ describe('join endpoints', () => {
             { spendCoins: true },
         );
         expect(cat.debug).toHaveBeenCalledWith('Join challenge ID: 900002, spendCoins: true', null);
+    });
+
+    test('forgetUnconfirmedPayment runs the shared service over the mock endpoints, whose join-state store is null', async () => {
+        await expect(mockApiClient.forgetUnconfirmedPayment(900002, 'tok')).resolves.toEqual({
+            status: 'nothing-to-forget',
+            challengeId: 1,
+        });
+        expect(forgetUnconfirmedPayment).toHaveBeenCalledWith(
+            900002,
+            'tok',
+            expect.objectContaining({ joinStateStore: null }),
+        );
     });
 
     test('joinChallenge passes the confirmed cost on to the shared service', async () => {

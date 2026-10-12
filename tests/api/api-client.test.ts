@@ -539,6 +539,49 @@ describe('api-client', () => {
             expect(axios).toHaveBeenCalledTimes(4);
         });
 
+        test('a Retry-After header past the in-call cap is refused without waiting, as the body field is', async () => {
+            const error = httpError(429);
+            error.response!.headers = { 'retry-after': '120' };
+            axios.mockRejectedValue(error);
+            expect(await once()).toEqual({ kind: 'refused' });
+            expect(axios).toHaveBeenCalledTimes(1);
+        });
+
+        describe('through the native adapters, whose failures are plain errors', () => {
+            const runtime = () => jest.mocked(require('../../src/ts/runtime') as typeof runtimeModule);
+            // axios hands the request to the adapter it was given, as the real one does.
+            const throughAdapter = () =>
+                axios.mockImplementation(async (config) => invalid<TestAdapter>(config.adapter)(config));
+
+            afterEach(() => {
+                runtime().isCapacitor.mockReturnValue(false);
+                runtime().isHeadlessService.mockReturnValue(false);
+                delete g.AndroidHeadlessHttp;
+            });
+
+            test('a CapacitorHttp request that rejects with a plain Error is unclear, and sent once', async () => {
+                runtime().isCapacitor.mockReturnValue(true);
+                throughAdapter();
+                const { CapacitorHttp } = jest.mocked(require('@capacitor/core') as typeof coreModule);
+                CapacitorHttp.request.mockRejectedValue(new Error('native transport failed'));
+                expect(await once()).toEqual({ kind: 'unclear' });
+                expect(CapacitorHttp.request).toHaveBeenCalledTimes(1);
+            });
+
+            test.each([
+                ['an error the native side reports', JSON.stringify({ error: 'socket closed' })],
+                ['a result that is not JSON (a SyntaxError)', 'not json{'],
+            ])('the headless adapter with %s is unclear, and sent once', async (_name, result) => {
+                runtime().isHeadlessService.mockReturnValue(true);
+                throughAdapter();
+                g.AndroidHeadlessHttp = {
+                    request: jest.fn((id) => g.__gsResolveHeadlessHttp!(id, result)),
+                };
+                expect(await once()).toEqual({ kind: 'unclear' });
+                expect(g.AndroidHeadlessHttp.request).toHaveBeenCalledTimes(1);
+            });
+        });
+
         test('a 429 whose cooldown is past the in-call cap is refused without waiting', async () => {
             axios.mockRejectedValue(httpError(429, { retry_after: 60 }));
             expect(await once()).toEqual({ kind: 'refused' });
@@ -551,9 +594,9 @@ describe('api-client', () => {
             expect(axios).toHaveBeenCalledTimes(1);
         });
 
-        test('a redirect (3xx, never followed) is refused', async () => {
+        test('a redirect (3xx, never followed) is unclear: a redirected POST may have been processed', async () => {
             axios.mockRejectedValue(httpError(302));
-            expect(await once()).toEqual({ kind: 'refused' });
+            expect(await once()).toEqual({ kind: 'unclear' });
             expect(axios).toHaveBeenCalledTimes(1);
         });
 
@@ -607,7 +650,7 @@ describe('api-client', () => {
             },
         );
 
-        test('an error with a code but no response, and none of the never-sent ones, is unclear', async () => {
+        test('an error with no code and no response is unclear', async () => {
             axios.mockRejectedValue(new Error('Network Error'));
             expect(await once()).toEqual({ kind: 'unclear' });
             expect(axios).toHaveBeenCalledTimes(1);

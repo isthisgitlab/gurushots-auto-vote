@@ -117,5 +117,12 @@ export function useDiscoverJoins({
 
     const dismiss = useCallback(() => setConfirm(null), []);
 
-    return { confirm, results, busy, withAnswerCost, ask, onConfirm, dismiss };
+    // A row's outcome line goes when its payment is forgotten: the next Join starts over and asks the price.
+    const clearResult = useCallback(
+        (id: OpenChallenge['id']) =>
+            setResults((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => key !== String(id)))),
+        [],
+    );
+
+    return { confirm, results, busy, withAnswerCost, ask, onConfirm, dismiss, clearResult };
 }

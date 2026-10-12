@@ -546,7 +546,18 @@ export const app = {
     discoverPendingNoPhoto:
         'Monētas jau ir iztērētas, bet šim izaicinājumam neder neviens foto. Pievieno derīgu foto un nospied „Pievienoties”. Ja izmanto „Obligātie tagi” vai ir izslēgts „Iesniegt arī bez tagu sakritības”, arī tie var neļaut izvēlēties foto.',
     discoverUnconfirmed:
-        'Par šī izaicinājuma maksājumu netika saņemta atbilde, tāpēc nav zināms, vai tas izdevās, un pievienošanās nav pabeigta. Lai nemaksātu divreiz, lietotne mēģinās tikai iesniegt foto un nākamajā reizē pārbaudīs tavu monētu atlikumu.',
+        'Par šī izaicinājuma maksājumu netika saņemta atbilde, tāpēc nav zināms, vai tas izdevās. Atkārtojot tiek iesniegts tikai tavs foto, tāpēc monētas netiks ieturētas divreiz. Ja GuruShots rāda, ka monētas netika ieturētas, nospied „Monētas netika ieturētas”, tad pievienojies vēlreiz.',
+    discoverEarlierPayment:
+        'Šim izaicinājumam ir maksājuma ieraksts no laika, kad lietotne vēl nešķīra kontus, tāpēc nav zināms, vai monētas tika ieturētas. Atkārtojot tiek iesniegts tikai tavs foto, tāpēc monētas netiks ieturētas divreiz. Ja GuruShots rāda, ka monētas netika ieturētas, nospied „Monētas netika ieturētas”, tad pievienojies vēlreiz.',
+    discoverForgetPayment: 'Monētas netika ieturētas',
+    discoverForgetPaymentLabel: 'Monētas par „{title}” netika ieturētas',
+    discoverForgetTitle: 'Aizmirst šo maksājumu?',
+    discoverForgetBody:
+        'Vispirms pārbaudi monētu vēsturi GuruShots. Turpini tikai tad, ja monētas par „{title}” netika ieturētas: ja tās tika ieturētas, atkārtota pievienošanās ieturēs otrreiz.',
+    discoverForgetConfirm: 'Monētas netika ieturētas — aizmirst',
+    discoverForgetNothing:
+        'Nebija ko aizmirst: maksājums jau ir apstiprināts vai pievienošanās ir pabeigta. Atsvaidzini sarakstu.',
+    discoverForgetFailed: 'Pašlaik neizdevās aizmirst maksājumu. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
     discoverAccountUnknown:
         'Neizdevās noskaidrot, kurā kontā esi pieteicies, tāpēc šis mēģinājums neko nedarīja un monētas netērēja. Mēģini vēlreiz pēc brīža vai piesakies vēlreiz.',
     discoverConfirmDialogFirst: 'Vispirms apstiprini vai aizver atvērto logu, tad pievienojies vēlreiz.',

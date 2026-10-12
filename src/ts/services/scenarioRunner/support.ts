@@ -99,7 +99,6 @@ const spendAllowed = async (
  */
 const TRANSIENT_OUTCOMES: ReadonlySet<string> = new Set([
     CURRENCY_OUTCOME.apiFailed,
-    CURRENCY_OUTCOME.unclear,
     CURRENCY_OUTCOME.balanceUnknown,
     CURRENCY_OUTCOME.busy,
 ]);
@@ -118,6 +117,14 @@ const lockedCurrencySpend = async (
     if (result === null) return { status: 'deferred', message: 'another spend is in progress' };
     // Every spend resolves {ok, outcome}; null is reserved for a busy lock.
     if (result.ok) return null;
+    // No answer: the spend may have gone through, so the step is retried (the live re-read guards the repeat) and
+    // counted against the scenario's limit as if it had.
+    if (result.outcome === CURRENCY_OUTCOME.unclear) {
+        return {
+            ...failed(`${actionType} may have gone through (GuruShots gave no answer)`),
+            spent: SPEND[actionType].limit,
+        };
+    }
     const message = `${actionType} was refused (${result.outcome ?? 'no response'})`;
     return result.outcome === undefined || TRANSIENT_OUTCOMES.has(result.outcome) ? failed(message) : skipped(message);
 };

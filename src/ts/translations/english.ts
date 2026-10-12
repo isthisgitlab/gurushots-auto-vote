@@ -541,7 +541,18 @@ export const app = {
     discoverPendingNoPhoto:
         'Coins were already spent, but no photo qualifies for this challenge. Add an eligible photo, then press Join. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.',
     discoverUnconfirmed:
-        'The payment for this challenge got no answer, so it may or may not have gone through, and the join did not finish. To avoid paying twice, the app will only retry the submit; it checks your coin balance on the next attempt.',
+        'The payment for this challenge got no answer, so it may or may not have gone through. Retrying only submits your photo, so you are never charged twice. If GuruShots shows the coins were not taken, press "I wasn\'t charged", then join again.',
+    discoverEarlierPayment:
+        'This challenge has a payment record from before the app told accounts apart, so it is not known whether the coins were taken. Retrying only submits your photo, so you are never charged twice. If GuruShots shows the coins were not taken, press "I wasn\'t charged", then join again.',
+    discoverForgetPayment: "I wasn't charged",
+    discoverForgetPaymentLabel: "I wasn't charged for {title}",
+    discoverForgetTitle: 'Forget this payment?',
+    discoverForgetBody:
+        'Check your coin history on GuruShots first. Only continue if the coins for {title} were not taken: if they were, joining again charges you a second time.',
+    discoverForgetConfirm: "I wasn't charged — forget it",
+    discoverForgetNothing:
+        'There was nothing to forget: the payment is already confirmed, or the join has finished. Refresh the list.',
+    discoverForgetFailed: 'Could not forget the payment right now. Nothing was changed. Try again in a moment.',
     discoverAccountUnknown:
         'Could not confirm which account is logged in, so this attempt did nothing and spent no coins. Try again shortly, or log in again.',
     discoverConfirmDialogFirst: 'Confirm or cancel the open dialog first, then join again.',

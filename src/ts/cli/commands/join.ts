@@ -75,6 +75,16 @@ type JoinOutcome = {
     reason?: string;
 };
 
+// The line for a join that cannot tell whether its payment was taken: what is not known, why it is safe to retry,
+// and the way out when GuruShots shows the coins were not taken.
+const unconfirmedText = (reason: 'unconfirmed' | 'earlier-payment', challengeId: string | number) => {
+    const known =
+        reason === 'unconfirmed'
+            ? `The payment for ${challengeId} got no answer, so it may or may not have gone through, and the join did not finish.`
+            : `Challenge ${challengeId} has a payment record from before accounts were told apart, so it is not known whether the coins were taken, and the join did not finish.`;
+    return `${known} Re-run "join ${challengeId}": it only submits your photo, so you are never charged twice. If GuruShots shows the coins were not taken, run "forget-payment ${challengeId}" and join again.`;
+};
+
 // Map a join outcome status to a user-facing line; null for an unknown status.
 const joinLine = (
     result: JoinOutcome | null | undefined,
@@ -98,11 +108,8 @@ const joinLine = (
                     text: `Coins were already spent on ${challengeId}, but no photo qualifies for this challenge. Add an eligible photo, then re-run "join ${challengeId} --yes" — you will NOT be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.`,
                 };
             }
-            if (result?.reason === 'unconfirmed') {
-                return {
-                    level: 'error',
-                    text: `The payment for ${challengeId} got no answer, so it may or may not have gone through, and the join did not finish. Re-run "join ${challengeId} --yes": to avoid paying twice it only retries the submit, and checks your coin balance first.`,
-                };
+            if (result?.reason === 'unconfirmed' || result?.reason === 'earlier-payment') {
+                return { level: 'error', text: unconfirmedText(result.reason, challengeId) };
             }
             return {
                 level: 'error',
@@ -204,4 +211,50 @@ const joinChallengeCmd = async (
     reportJoin(confirmed, challengeId);
 };
 
-export { showDiscover, joinChallengeCmd };
+const FORGET_LINES: Record<string, { level: 'info' | 'error'; text: (id: string | number) => string }> = {
+    forgotten: {
+        level: 'info',
+        text: (id) =>
+            `Forgot the unconfirmed payment for ${id}. Run "join ${id}" to join it again: a paid challenge asks for its price as usual.`,
+    },
+    'nothing-to-forget': {
+        level: 'error',
+        text: (id) =>
+            `Nothing to forget for ${id}: no unconfirmed payment is recorded for it (a payment known to have been taken cannot be forgotten).`,
+    },
+    busy: { level: 'error', text: (id) => `A join of ${id} is in progress. Try again in a moment.` },
+    'account-unknown': {
+        level: 'error',
+        text: () =>
+            'Could not confirm which account is logged in, so nothing was changed. Try again shortly, or run "login" again.',
+    },
+    unreadable: {
+        level: 'error',
+        text: () => 'The saved payment records could not be read, so nothing was changed.',
+    },
+};
+
+/**
+ * Forget the unconfirmed payment of a challenge, after the user has checked on GuruShots that its coins were not
+ * taken: the next join asks for the price again.
+ */
+const forgetPaymentCmd = async (challengeId: string | number | undefined) => {
+    if (!ensureAuthenticated()) return;
+    if (!challengeId) {
+        logger.withCategory('ui').error('Please specify a challenge id');
+        logger.withCategory('ui').info('Usage: forget-payment <id>');
+        process.exit(1);
+    }
+    const result = (await handlers()['forget-unconfirmed-payment'](null, challengeId)) as {
+        status?: string;
+        error?: string;
+    } | null;
+    const line = FORGET_LINES[result?.status ?? ''];
+    if (line) {
+        logger.withCategory('ui')[line.level](line.text(challengeId));
+        return;
+    }
+    logger.withCategory('ui').error(`Could not forget the payment for ${challengeId} right now. Please try again.`);
+};
+
+export { showDiscover, joinChallengeCmd, forgetPaymentCmd };

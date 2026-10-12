@@ -9,7 +9,6 @@ import type { JoinPhase } from '@/hooks/useDiscoverJoins';
 import { costOf } from '@/utils/discoverCost';
 import { outcomeMeta } from '@/utils/discoverOutcome';
 import type { OutcomeVariant } from '@/utils/discoverOutcome';
-import { Modal, ModalActions } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { interp } from '@/utils/interp';
@@ -17,6 +16,8 @@ import { formatDuration } from '@/utils/formatters';
 import * as ipc from '@/api/ipc';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { PhotoChooserModal } from './PhotoChooserModal';
+import { ForgetPaymentModal } from './ForgetPaymentModal';
+import { JoinConfirmModal } from './JoinConfirmModal';
 
 import type { Bankroll, Challenge, OpenChallenge } from '../../../types/gurushots';
 import type { JoinReason } from '../../../types/join';
@@ -240,12 +241,14 @@ function RowOutcome({
     name,
     busy,
     onRetry,
+    onForget,
 }: {
     outcome: JoinOutcome;
     cost: number;
     name: string;
     busy: boolean;
     onRetry: () => void;
+    onForget: () => void;
 }) {
     const { t } = useTranslation();
     const meta = outcomeMeta(outcome);
@@ -268,6 +271,16 @@ function RowOutcome({
                     {t('app.discoverRetrySubmit')}
                 </button>
             )}
+            {meta.forget && (
+                <button
+                    className="btn btn-ghost btn-sm ml-1"
+                    aria-label={interp(t('app.discoverForgetPaymentLabel'), { title: name })}
+                    onClick={onForget}
+                    disabled={busy}
+                >
+                    {t('app.discoverForgetPayment')}
+                </button>
+            )}
         </div>
     );
 }
@@ -281,6 +294,7 @@ function DiscoverRow({
     onChoose,
     onJoin,
     onRetry,
+    onForget,
 }: {
     c: OpenChallenge;
     outcome: JoinOutcome | undefined;
@@ -289,6 +303,7 @@ function DiscoverRow({
     onChoose: () => void;
     onJoin: () => void;
     onRetry: () => void;
+    onForget: () => void;
 }) {
     const { t } = useTranslation();
     const cost = costOf(c);
@@ -311,7 +326,14 @@ function DiscoverRow({
                     <div className="text-xs text-base-content/60 mt-0.5">{t('app.discoverUpcomingChosenHint')}</div>
                 )}
                 {outcome && (
-                    <RowOutcome outcome={outcome} cost={cost} name={name} busy={busy !== null} onRetry={onRetry} />
+                    <RowOutcome
+                        outcome={outcome}
+                        cost={cost}
+                        name={name}
+                        busy={busy !== null}
+                        onRetry={onRetry}
+                        onForget={onForget}
+                    />
                 )}
             </div>
             <div className="flex items-center gap-2">
@@ -376,7 +398,8 @@ export function DiscoverSection({
     const chosen = useOpenChosenAnnotations(rows.map((c) => String(c.id)));
     useOnChosenPhotosCleared(() => void chosen.refetch());
     const [choosing, setChoosing] = useState<OpenChallenge | null>(null); // challenge whose photos are being chosen
-    const { confirm, results, busy, withAnswerCost, ask, onConfirm, dismiss } = useDiscoverJoins({
+    const [forgetting, setForgetting] = useState<OpenChallenge | null>(null); // challenge whose payment is being forgotten
+    const { confirm, results, busy, withAnswerCost, ask, onConfirm, dismiss, clearResult } = useDiscoverJoins({
         items,
         isLoggedIn,
         refetch,
@@ -438,6 +461,7 @@ export function DiscoverSection({
                                     onChoose={() => setChoosing(c)}
                                     onJoin={() => ask(c)}
                                     onRetry={() => ask(c)}
+                                    onForget={() => setForgetting(c)}
                                 />
                             ))}
                         </ul>
@@ -445,61 +469,16 @@ export function DiscoverSection({
                 </div>
             </details>
 
-            {/* Paid-join confirmation: names the challenge, the cost, and the
-                current → resulting coin balance before any coins are spent. */}
-            <Modal isOpen={!!confirm} onClose={dismiss} title={t('app.discoverConfirmTitle')}>
-                {(() => {
-                    if (!confirm) return null;
-                    const cCost = costOf(confirm);
-                    const coins = bankroll?.coins;
-                    const known = typeof coins === 'number' && Number.isFinite(coins);
-                    // Block the spend when we know the balance is short (server
-                    // rejects it too, but never show a negative "resulting" or an
-                    // enabled Spend button that can only fail).
-                    const insufficient = known && coins < cCost;
-                    return (
-                        <>
-                            <div className="space-y-2 text-sm">
-                                <p>
-                                    {interp(t('app.discoverConfirmBody'), {
-                                        title: confirm.title || confirm.url,
-                                        coins: cCost,
-                                    })}
-                                </p>
-                                {confirm.chosenEffectiveCount > 0 && (
-                                    <p className="text-base-content/70">{t('app.discoverConfirmChosen')}</p>
-                                )}
-                                <p className={insufficient ? 'text-error' : 'text-base-content/70'}>
-                                    {!known
-                                        ? t('app.discoverConfirmBalanceUnknown')
-                                        : insufficient
-                                          ? interp(t('app.discoverConfirmInsufficient'), {
-                                                current: coins,
-                                                cost: cCost,
-                                            })
-                                          : interp(t('app.discoverConfirmBalance'), {
-                                                current: coins,
-                                                cost: cCost,
-                                                resulting: coins - cCost,
-                                            })}
-                                </p>
-                            </div>
-                            <ModalActions>
-                                <button className="btn btn-outline btn-sm" onClick={dismiss}>
-                                    {t('app.cancel')}
-                                </button>
-                                <button
-                                    className="btn btn-warning btn-sm"
-                                    onClick={() => void onConfirm()}
-                                    disabled={insufficient}
-                                >
-                                    {interp(t('app.discoverConfirmSpend'), { coins: cCost })}
-                                </button>
-                            </ModalActions>
-                        </>
-                    );
-                })()}
-            </Modal>
+            <JoinConfirmModal confirm={confirm} bankroll={bankroll} onConfirm={onConfirm} dismiss={dismiss} />
+
+            <ForgetPaymentModal
+                challenge={forgetting}
+                onClose={() => setForgetting(null)}
+                onForgotten={(id) => {
+                    clearResult(id);
+                    void refetch();
+                }}
+            />
 
             <RowPhotoChooser challenge={choosing} onClose={() => setChoosing(null)} onSaved={chosen.refetch} />
         </>

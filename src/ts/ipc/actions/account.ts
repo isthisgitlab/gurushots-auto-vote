@@ -284,7 +284,31 @@ const handleJoinChallenge = (async (
     }
 }) satisfies IpcReplyFn;
 
+/**
+ * The user forgetting a payment that could not be confirmed (the claim of an unlock that got no answer, or one from
+ * before accounts were told apart), after checking GuruShots shows the coins were not taken: the next join of the
+ * challenge asks for its price. Never touches a claim known to be charged.
+ */
+const handleForgetUnconfirmedPayment = (async (event: unknown, challengeId: string | number) => {
+    if (!isIdArg(challengeId)) return refuseInvalidArgs('join', 'forget-unconfirmed-payment');
+    try {
+        logger
+            .withCategory('join')
+            .info(`▶️ Forget unconfirmed payment: Challenge=${sanitizeForLog(challengeId)}`, null);
+        const guard = auth.requireAuthToken('forget payment');
+        if (!guard.ok) return guard.response;
+        const outcome = await apiFactory.getApiStrategy().forgetUnconfirmedPayment(challengeId, guard.token);
+        return outcome.status === 'forgotten'
+            ? { success: true as const, status: outcome.status }
+            : { success: false as const, error: outcome.status, status: outcome.status };
+    } catch (error) {
+        logger.withCategory('join').error('Error handling forget-unconfirmed-payment request:', error);
+        return errorResult(error, 'Failed to forget the payment');
+    }
+}) satisfies IpcReplyFn;
+
 export {
+    handleForgetUnconfirmedPayment,
     handleGetAutoClaimStatus,
     handleGetActiveChallenges,
     handleAuthenticate,

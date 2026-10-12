@@ -21,6 +21,7 @@ import {
     applyBoost,
     runTurboMiniGame,
     joinChallenge,
+    forgetUnconfirmedPayment,
 } from './strategies/real';
 import { getVoteImages, submitVotes } from './api/voting';
 import { applyBoostToEntry } from './api/boost';
@@ -51,6 +52,7 @@ const realApi = {
     getCurrentMemberProfile,
     searchTagAutocomplete,
     joinChallenge,
+    forgetUnconfirmedPayment,
     keyUnlock,
     swapPhoto,
     exposureAutofill,
@@ -99,6 +101,7 @@ const mockApi: ApiStrategy = {
     getCurrentMemberProfile: withMockDebug('getCurrentMemberProfile', mockApiClient.getCurrentMemberProfile),
     searchTagAutocomplete: withMockDebug('searchTagAutocomplete', mockApiClient.searchTagAutocomplete),
     joinChallenge: withMockDebug('joinChallenge', mockApiClient.joinChallenge),
+    forgetUnconfirmedPayment: withMockDebug('forgetUnconfirmedPayment', mockApiClient.forgetUnconfirmedPayment),
     keyUnlock: withMockDebug('keyUnlock', mockApiClient.keyUnlock),
     swapPhoto: withMockDebug('swapPhoto', mockApiClient.swapPhoto),
     exposureAutofill: withMockDebug('exposureAutofill', mockApiClient.exposureAutofill),

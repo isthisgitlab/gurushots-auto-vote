@@ -29,7 +29,11 @@ import * as logger from '../../logger';
 import { runVotingPass } from '../../services/votingOrchestrator';
 import { runSuspendBoosts } from '../../services/votingOrchestrator/boost';
 import { createMetadataEntryTracker } from '../../services/newEntryTracker';
-import { runJoinPass, joinChallengeSingle } from '../../services/joinChallenges';
+import {
+    runJoinPass,
+    joinChallengeSingle,
+    forgetUnconfirmedPayment as forgetPayment,
+} from '../../services/joinChallenges';
 import { runClaimPass } from '../../services/autoClaim';
 import { loadMissionNeeds, registerMissionNeeds } from '../../services/missions';
 import * as runtime from '../../runtime';
@@ -173,6 +177,12 @@ const runTurboMiniGame = async (challenge: Challenge, token: string): Promise<Tu
 };
 
 /**
+ * The user forgetting a claim whose payment could not be confirmed (real strategy): the next join asks the price again.
+ */
+const forgetUnconfirmedPayment = (challengeId: string | number, token: string) =>
+    forgetPayment(challengeId, token, joinDeps);
+
+/**
  * The endpoints runVotingPass reads off `deps.api`. Read per call (not at module
  * load) so jest.mock'd api modules take effect.
  */
@@ -287,4 +297,5 @@ export {
     applyBoost,
     runTurboMiniGame,
     joinChallenge,
+    forgetUnconfirmedPayment,
 };

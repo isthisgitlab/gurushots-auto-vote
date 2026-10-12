@@ -814,6 +814,128 @@ describe('edge paths', () => {
         await waitFor(() => expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, false));
     });
 
+    describe('"I wasn\'t charged": forgetting a payment that could not be confirmed', () => {
+        type ForgetApi = WindowApi['forgetUnconfirmedPayment'];
+        const forgetMock = () => jest.fn<ReturnType<ForgetApi>, Parameters<ForgetApi>>();
+        const pendingWith = (reason?: string) =>
+            joinMock().mockResolvedValue(
+                invalid({ success: false, status: 'charged-pending-submit', ...(reason ? { reason } : {}) }),
+            );
+
+        const openForgetDialog = async (reason = 'unconfirmed') => {
+            window.api.joinChallenge = pendingWith(reason);
+            renderSection();
+            await screen.findByText('Paid One');
+            fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+            fireEvent.click(await screen.findByText('app.discoverForgetPayment'));
+            await screen.findByText('app.discoverForgetTitle');
+        };
+
+        test.each(['unconfirmed', 'earlier-payment'])(
+            'a %s payment offers it, next to Retry submit',
+            async (reason) => {
+                window.api.joinChallenge = pendingWith(reason);
+                renderSection();
+                await screen.findByText('Paid One');
+                fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+                const forget = await screen.findByText<HTMLButtonElement>('app.discoverForgetPayment');
+                expect(forget.disabled).toBe(false);
+                expect(screen.getByText('app.discoverRetrySubmit')).toBeTruthy();
+            },
+        );
+
+        test.each([undefined, 'no-photo'])(
+            'a payment known to have been taken (reason %s) does not',
+            async (reason) => {
+                window.api.joinChallenge = pendingWith(reason);
+                renderSection();
+                await screen.findByText('Paid One');
+                fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+                await screen.findByRole('alert');
+                expect(screen.queryByText('app.discoverForgetPayment')).toBeNull();
+            },
+        );
+
+        test('the button is named by its challenge', async () => {
+            mockTranslator.t.mockImplementation((key) =>
+                key === 'app.discoverForgetPaymentLabel' ? 'Not charged for {title}' : key,
+            );
+            try {
+                window.api.joinChallenge = pendingWith('unconfirmed');
+                renderSection();
+                await screen.findByText('Paid One');
+                fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+                expect(await screen.findByRole('button', { name: 'Not charged for Paid One' })).toBeTruthy();
+            } finally {
+                mockTranslator.t.mockImplementation((key) => key);
+            }
+        });
+
+        test('a challenge with no title is named by its address', async () => {
+            window.api.getMemberChallenges = listMock().mockResolvedValue(
+                invalid({ success: true, items: [{ ...items[1], title: '', url: 'paid-challenge-url' }] }),
+            );
+            mockTranslator.t.mockImplementation((key) => (key === 'app.discoverForgetBody' ? 'Forget {title}?' : key));
+            try {
+                window.api.joinChallenge = pendingWith('unconfirmed');
+                renderSection();
+                fireEvent.click(await screen.findByText('app.discoverJoinPaid'));
+                fireEvent.click(await screen.findByText('app.discoverForgetPayment'));
+                expect(await screen.findByText('Forget paid-challenge-url?')).toBeTruthy();
+            } finally {
+                mockTranslator.t.mockImplementation((key) => key);
+            }
+        });
+
+        test('it asks first, and Cancel forgets nothing', async () => {
+            window.api.forgetUnconfirmedPayment = forgetMock();
+            await openForgetDialog();
+            expect(screen.getByText('app.discoverForgetBody')).toBeTruthy();
+            fireEvent.click(screen.getByText('app.cancel'));
+            await waitFor(() => expect(screen.queryByText('app.discoverForgetTitle')).toBeNull());
+            expect(window.api.forgetUnconfirmedPayment).not.toHaveBeenCalled();
+            expect(screen.getByText('app.discoverUnconfirmed')).toBeTruthy();
+        });
+
+        test("confirming forgets it: the row's line goes, the list is read again, and the next Join asks the price", async () => {
+            window.api.forgetUnconfirmedPayment = forgetMock().mockResolvedValue(
+                invalid({ success: true, status: 'forgotten' }),
+            );
+            await openForgetDialog();
+            const reads = jest.mocked(window.api.getMemberChallenges).mock.calls.length;
+            window.api.joinChallenge = joinMock().mockResolvedValue(invalid(priceAsk(100)));
+            fireEvent.click(screen.getByText('app.discoverForgetConfirm'));
+            await waitFor(() => expect(window.api.forgetUnconfirmedPayment).toHaveBeenCalledWith(900002));
+            await waitFor(() => expect(screen.queryByText('app.discoverForgetTitle')).toBeNull());
+            expect(screen.queryByText('app.discoverUnconfirmed')).toBeNull();
+            await waitFor(() =>
+                expect(jest.mocked(window.api.getMemberChallenges).mock.calls.length).toBeGreaterThan(reads),
+            );
+            fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+            expect(await screen.findByText('app.discoverConfirmTitle')).toBeTruthy();
+            expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, false);
+        });
+
+        test.each([
+            ['nothing-to-forget', 'app.discoverForgetNothing'],
+            ['busy', 'app.discoverForgetFailed'],
+            ['unreadable', 'app.discoverForgetFailed'],
+        ])('an answer of %s keeps the dialog open and says so, changing nothing', async (error, key) => {
+            window.api.forgetUnconfirmedPayment = forgetMock().mockResolvedValue(
+                invalid({ success: false, error, status: error }),
+            );
+            await openForgetDialog();
+            fireEvent.click(screen.getByText('app.discoverForgetConfirm'));
+            const problem = await screen.findByText(key);
+            expect(problem.getAttribute('role')).toBe('alert');
+            expect(screen.getByText('app.discoverForgetTitle')).toBeTruthy();
+            expect(screen.getByText('app.discoverUnconfirmed')).toBeTruthy();
+            // Closing clears the problem for the next time.
+            fireEvent.click(screen.getByText('app.cancel'));
+            await waitFor(() => expect(screen.queryByText('app.discoverForgetTitle')).toBeNull());
+        });
+    });
+
     test('the Retry submit button is named by its challenge', async () => {
         window.api.joinChallenge = spendLater({ status: 'charged-pending-submit', cost: 100 });
         mockTranslator.t.mockImplementation((key) =>

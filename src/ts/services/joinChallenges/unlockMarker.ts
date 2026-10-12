@@ -82,13 +82,7 @@ const findClaim = (state: Record<string, unknown>, id: string | number, owner: s
     const found = has(state, key) ? key : has(state, bare) ? bare : null;
     if (found === null) return null;
     const value = state[found];
-    const coinsBefore = isPlainObject(value) && isFiniteNumber(value.coinsBefore) ? value.coinsBefore : null;
-    return {
-        key: found,
-        unconfirmed: isPlainObject(value) && value.unconfirmed === true,
-        coinsBefore,
-        legacy: found !== key,
-    };
+    return { key: found, unconfirmed: isPlainObject(value) && value.unconfirmed === true, legacy: found !== key };
 };
 
 const claimOf = (store: RawJsonStore | null | undefined, id: string | number, owner: string | null) =>
@@ -96,9 +90,8 @@ const claimOf = (store: RawJsonStore | null | undefined, id: string | number, ow
 
 /**
  * Whether this account already paid for the (paid) candidate and only has its submit left: it must
- * be finished whatever the balance or the budget now say, since the charge itself lowered them. A claim
- * whose payment got no answer is first settled against the balance (reconcileClaim): one that did not
- * go through is gone, and the candidate is an ordinary unpaid one again.
+ * be finished whatever the balance or the budget now say, since the charge itself lowered them. An
+ * unconfirmed claim stands like any other until a paid submit that used it succeeds, or the user forgets it.
  */
 const paidByThisAccount = async (
     challenge: { id?: string | number; join_coins?: number },
@@ -108,80 +101,92 @@ const paidByThisAccount = async (
     const cost = Number(challenge?.join_coins);
     if (challenge?.id == null || !(cost > 0) || !deps.joinStateStore) return false;
     const owner = await markerOwner(token, deps);
-    if (paidOwnerUnknown(deps, owner)) return false;
-    return reconcileClaim(challenge.id, cost, token, deps, owner);
+    return !paidOwnerUnknown(deps, owner) && claimOf(deps.joinStateStore, challenge.id, owner) !== null;
 };
 
-// Persist the unlock claim. Returns true on success (or when there is no store
-// — mock mode, which spends no real coins). Returns false when a real store
-// write fails: the caller MUST NOT spend coins it cannot record, or a crash /
-// retry could re-unlock and double-charge.
-const markUnlocked = (store: RawJsonStore | null | undefined, id: string | number, owner: string | null): boolean => {
+/**
+ * Reads the claims, lets `change` edit them and writes them back. Nothing is written when the file cannot be
+ * read (an unreadable file read as empty would wipe every other claim on the next write); false then, and when
+ * the write fails. `change` answers whether it changed anything. A store of none (mock mode) changes nothing and
+ * succeeds. Failures are logged by challenge id only.
+ */
+const changeClaims = (
+    store: RawJsonStore | null | undefined,
+    what: string,
+    change: (state: Record<string, unknown>) => boolean,
+): boolean => {
     if (!store) return true;
+    const { state, ok } = readUnlockedState(store);
+    if (!ok) {
+        cat().warning(`could not ${what}: join-state is unreadable — nothing written`, null);
+        return false;
+    }
     try {
-        const state = readUnlocked(store);
-        state[markerKey(id, owner)] = { unlockedAt: Date.now() };
-        store.writeRaw(JSON.stringify(state));
+        if (change(state)) store.writeRaw(JSON.stringify(state));
         return true;
     } catch (error) {
-        cat().warning(`could not persist unlock marker for ${id}: ${errorMessage(error) || error}`, null);
+        cat().warning(`could not ${what}: ${errorMessage(error) || error}`, null);
         return false;
     }
 };
 
-/**
- * Rewrites one stored claim. A claim that cannot be rewritten stays as it was, which is the conservative side:
- * an unconfirmed one stays "paid, unconfirmed", never silently cleared.
- */
-const rewriteClaim = (
-    store: RawJsonStore | null | undefined,
-    key: string,
-    rewrite: (claim: Record<string, unknown>) => Record<string, unknown>,
-): void => {
-    if (!store) return;
-    try {
-        const state = readUnlocked(store);
-        const current = state[key];
-        if (!isPlainObject(current)) return;
-        state[key] = rewrite(current);
-        store.writeRaw(JSON.stringify(state));
-    } catch (error) {
-        cat().warning(`could not update unlock marker ${key}: ${errorMessage(error) || error}`, null);
-    }
-};
+// The challenge id of a stored claim key (`<member id>:<challenge id>`, or the bare id).
+const idOfKey = (key: string) => key.slice(key.lastIndexOf(':') + 1);
 
-/** The unlock got no answer: the claim stays, flagged unconfirmed, with the balance read before it. */
-const markUnconfirmed = (
-    store: RawJsonStore | null | undefined,
-    id: string | number,
-    owner: string | null,
-    coinsBefore: number | null,
-): void => rewriteClaim(store, markerKey(id, owner), (claim) => ({ ...claim, unconfirmed: true, coinsBefore }));
-
-/** The payment is known to have gone through: the claim loses its flag and its balance. */
-const confirmClaim = (store: RawJsonStore | null | undefined, key: string): void =>
-    rewriteClaim(store, key, (claim) => {
-        const confirmed = { ...claim };
-        delete confirmed.unconfirmed;
-        delete confirmed.coinsBefore;
-        return confirmed;
+// Persist the unlock claim. Returns true on success (or when there is no store
+// — mock mode, which spends no real coins). Returns false when the file cannot be read or a real store
+// write fails: the caller MUST NOT spend coins it cannot record, or a crash /
+// retry could re-unlock and double-charge.
+const markUnlocked = (store: RawJsonStore | null | undefined, id: string | number, owner: string | null): boolean =>
+    changeClaims(store, `persist unlock marker for ${id}`, (state) => {
+        state[markerKey(id, owner)] = { unlockedAt: Date.now() };
+        return true;
     });
+
+/** The unlock got no answer: the claim stays, flagged unconfirmed. */
+const markUnconfirmed = (store: RawJsonStore | null | undefined, id: string | number, owner: string | null): void => {
+    changeClaims(store, `flag the unlock marker for ${id} as unconfirmed`, (state) => {
+        const claim = state[markerKey(id, owner)];
+        if (!isPlainObject(claim)) return false;
+        state[markerKey(id, owner)] = { ...claim, unconfirmed: true };
+        return true;
+    });
+};
 
 /**
  * Removes one claim, by the key it is stored under. Never a claim that was not read as the one in use: a bare
  * one may be another account's protection against a second charge.
  */
-const clearUnlocked = (store: RawJsonStore | null | undefined, key: string) => {
-    if (!store) return;
-    try {
-        const state = readUnlocked(store);
-        if (has(state, key)) {
-            delete state[key];
-            store.writeRaw(JSON.stringify(state));
-        }
-    } catch (error) {
-        cat().warning(`could not clear unlock marker for ${key}: ${errorMessage(error) || error}`, null);
-    }
+const clearUnlocked = (store: RawJsonStore | null | undefined, key: string): void => {
+    changeClaims(store, `clear unlock marker for ${idOfKey(key)}`, (state) => {
+        if (!has(state, key)) return false;
+        delete state[key];
+        return true;
+    });
+};
+
+/**
+ * What the user may forget: this account's claim for the challenge when it is still unconfirmed, or a bare
+ * one from before accounts were told apart. Never a confirmed claim (its coins are known to be taken), and never
+ * a bare one while the account has its own claim for the challenge.
+ *
+ * @returns 'forgotten', 'nothing-to-forget' (no claim, or only a confirmed one), or 'unreadable'
+ */
+const forgetClaim = (
+    store: RawJsonStore | null | undefined,
+    id: string | number,
+    owner: string | null,
+): 'forgotten' | 'nothing-to-forget' | 'unreadable' => {
+    let forgotten = false;
+    const done = changeClaims(store, `forget the unlock marker for ${id}`, (state) => {
+        const claim = findClaim(state, id, owner);
+        if (!claim || !(claim.unconfirmed || claim.legacy)) return false;
+        delete state[claim.key];
+        forgotten = true;
+        return true;
+    });
+    if (!done) return 'unreadable';
+    return forgotten ? 'forgotten' : 'nothing-to-forget';
 };
 
 /**
@@ -213,60 +218,13 @@ const pruneClosedClaims = async (
         const old = isFiniteNumber(at) && now - at >= CLAIM_PRUNE_MIN_AGE_MS;
         return own && old && !openIds.has(key.slice(sep + 1));
     };
-    try {
-        const state = readUnlocked(store);
+    changeClaims(store, 'prune the unlock markers', (state) => {
         const stale = Object.keys(state).filter((key) => closed(key, state[key]));
-        if (stale.length === 0) return;
         stale.forEach((key) => delete state[key]);
-        store.writeRaw(JSON.stringify(state));
-        cat().debug(`dropped ${stale.length} unlock claim(s) of challenges that are no longer open`, null);
-    } catch (error) {
-        cat().warning(`could not prune unlock markers: ${errorMessage(error) || error}`, null);
-    }
-};
-
-/** The coin balance, or null when it could not be read. */
-const readCoins = async (token: string, deps: JoinDeps): Promise<number | null> => {
-    try {
-        const coins = Number((await deps.getBankroll(token))?.coins);
-        return Number.isFinite(coins) ? coins : null;
-    } catch (error) {
-        cat().warning(`could not read balance: ${errorMessage(error) || error}`, null);
-        return null;
-    }
-};
-
-/**
- * Whether this account has paid for the challenge (a claim stands), after settling its unconfirmed claim (an
- * unlock that got no answer) against the balance, before anything decides on the join:
- *   balance unchanged since just before the unlock → it was not charged: the claim goes;
- *   balance down by at least the cost → it was: the claim is confirmed;
- *   anything else (a changed amount, an unreadable balance, no balance recorded) → still unknown: it stays.
- */
-const reconcileClaim = async (
-    id: string | number,
-    cost: number,
-    token: string,
-    deps: JoinDeps,
-    owner: string | null,
-): Promise<boolean> => {
-    const claim = claimOf(deps.joinStateStore, id, owner);
-    if (!claim?.unconfirmed) return claim !== null;
-    const tag = `challenge ${id}`;
-    const coins = await readCoins(token, deps);
-    if (coins === null || claim.coinsBefore === null) {
-        cat().warning(`${tag}: the payment is still unconfirmed (no balance to compare)`, null);
-    } else if (coins === claim.coinsBefore) {
-        cat().info(`${tag}: the unconfirmed payment did not go through — the claim is cleared`, null);
-        clearUnlocked(deps.joinStateStore, claim.key);
-        return false;
-    } else if (coins <= claim.coinsBefore - cost) {
-        cat().info(`${tag}: the unconfirmed payment went through — the claim is confirmed`, null);
-        confirmClaim(deps.joinStateStore, claim.key);
-    } else {
-        cat().warning(`${tag}: the payment is still unconfirmed (the balance moved by another amount)`, null);
-    }
-    return true;
+        if (stale.length > 0)
+            cat().debug(`dropped ${stale.length} unlock claim(s) of challenges that are no longer open`, null);
+        return stale.length > 0;
+    });
 };
 
 export {
@@ -274,10 +232,9 @@ export {
     markerKey,
     findClaim,
     claimOf,
-    readCoins,
-    reconcileClaim,
     pruneClosedClaims,
     markUnconfirmed,
+    forgetClaim,
     markerOwner,
     paidOwnerUnknown,
     paidByThisAccount,

@@ -108,7 +108,11 @@ jest.mock('../../src/ts/cli/commands/actions', () => {
 });
 
 jest.mock('../../src/ts/cli/commands/bankroll', () => ({ showBankroll: jest.fn() }));
-jest.mock('../../src/ts/cli/commands/join', () => ({ showDiscover: jest.fn(), joinChallengeCmd: jest.fn() }));
+jest.mock('../../src/ts/cli/commands/join', () => ({
+    showDiscover: jest.fn(),
+    joinChallengeCmd: jest.fn(),
+    forgetPaymentCmd: jest.fn(),
+}));
 jest.mock('../../src/ts/cli/commands/photos', () => ({
     ...jest.requireActual<typeof import('../../src/ts/cli/commands/photos')>('../../src/ts/cli/commands/photos'),
     listPhotosCmd: jest.fn(async () => 0),
@@ -469,6 +473,25 @@ describe('challenge-scoped actions', () => {
         const none = await run(['join', '--yes']);
         expect(none.join.joinChallengeCmd).toHaveBeenCalledWith(undefined, { yes: true });
     });
+});
+
+describe('forget-payment', () => {
+    test('takes exactly one id', async () => {
+        const m = await run(['forget-payment', '77']);
+        expect(m.join.forgetPaymentCmd).toHaveBeenCalledWith('77');
+        expect(m.exitCodes).toEqual([0]);
+    });
+
+    // It changes what a later join pays for, so anything but `<id>` touches nothing.
+    test.each([[[]], [['77', '88']], [['--yes']], [['77', '--yes']], [['--challenge=77']]])(
+        'forget-payment %p is a usage error and forgets nothing',
+        async (args) => {
+            const m = await run(['forget-payment', ...args]);
+            expect(m.join.forgetPaymentCmd).not.toHaveBeenCalled();
+            expect(m.msgs('error')).toEqual(['Wrong arguments']);
+            expect(m.exitCodes).toEqual([1]);
+        },
+    );
 });
 
 describe('list-photos', () => {

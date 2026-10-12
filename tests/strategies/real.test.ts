@@ -44,6 +44,7 @@ jest.mock('../../src/ts/services/newEntryTracker', () => ({
 jest.mock('../../src/ts/services/joinChallenges', () => ({
     runJoinPass: jest.fn(),
     joinChallengeSingle: jest.fn(),
+    forgetUnconfirmedPayment: jest.fn(),
 }));
 jest.mock('../../src/ts/services/autoClaim', () => ({ runClaimPass: jest.fn() }));
 jest.mock('../../src/ts/services/missions', () => ({
@@ -82,7 +83,7 @@ const { joinStateStore, acquireUnlockLock } = jest.mocked(
 const { runVotingPass } = jest.mocked(
     require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
-const { runJoinPass, joinChallengeSingle } = jest.mocked(
+const { runJoinPass, joinChallengeSingle, forgetUnconfirmedPayment } = jest.mocked(
     require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule,
 );
 const { runClaimPass } = jest.mocked(require('../../src/ts/services/autoClaim') as typeof autoClaimModule);
@@ -312,6 +313,18 @@ describe('joinChallenge', () => {
             expect(joinChallengeSingle).toHaveBeenCalledWith('7', 'tok', expect.any(Object), { spendCoins: false });
         },
     );
+});
+
+describe('forgetUnconfirmedPayment', () => {
+    test('forwards to the service with the shared join deps, so it sees the same claims a join writes', async () => {
+        forgetUnconfirmedPayment.mockResolvedValue({ status: 'forgotten', challengeId: 7 });
+        expect(await main.forgetUnconfirmedPayment(7, 'tok')).toEqual({ status: 'forgotten', challengeId: 7 });
+        expect(forgetUnconfirmedPayment).toHaveBeenCalledWith(
+            7,
+            'tok',
+            expect.objectContaining({ joinStateStore, acquireUnlockLock }),
+        );
+    });
 });
 
 describe('fetchChallengesAndVote', () => {

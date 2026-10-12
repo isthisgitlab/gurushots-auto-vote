@@ -25,6 +25,7 @@ import { registerMissionNeeds } from '../../src/ts/services/missions';
 import { clearOpenChallenges } from '../../src/ts/services/openChallengeCache';
 import { isPlainObject } from '../../src/ts/plainObject';
 import type { JoinSingleResult } from '../../src/ts/services/joinChallenges/shared';
+import type { ForgetOutcome } from '../../src/ts/services/joinChallenges/forgetPayment';
 
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);
@@ -1032,6 +1033,64 @@ describe('get-open-chosen-annotations — read from the settings, with one cache
             error: 'Failed to read the chosen photos',
             annotations: {},
         });
+    });
+});
+
+describe('forget-unconfirmed-payment', () => {
+    test('forgets through the strategy and answers success', async () => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({
+            forgetUnconfirmedPayment: jest
+                .fn<Promise<ForgetOutcome>, [string | number, string]>()
+                .mockResolvedValue({ status: 'forgotten', challengeId: 5 }),
+        });
+        const result = await buildHandlers()['forget-unconfirmed-payment']({}, 5);
+        expect(strategy.forgetUnconfirmedPayment).toHaveBeenCalledWith(5, 'tok');
+        expect(result).toEqual({ success: true, status: 'forgotten' });
+    });
+
+    test.each(['nothing-to-forget', 'busy', 'account-unknown', 'unreadable', 'not-authenticated'] as const)(
+        'a %s answer is a failure that names it, and never throws',
+        async (status) => {
+            stubAuthGuardOk();
+            stubStrategy({
+                forgetUnconfirmedPayment: jest
+                    .fn<Promise<ForgetOutcome>, [string | number, string]>()
+                    .mockResolvedValue({ status, challengeId: 5 }),
+            });
+            expect(await buildHandlers()['forget-unconfirmed-payment']({}, 5)).toEqual({
+                success: false,
+                error: status,
+                status,
+            });
+        },
+    );
+
+    test.each([[undefined], [null], [{}], [''], [[]]])(
+        'an invalid id %p is refused, and nothing is forgotten',
+        async (id) => {
+            stubAuthGuardOk();
+            const strategy = stubStrategy({ forgetUnconfirmedPayment: jest.fn() });
+            const result = await buildHandlers()['forget-unconfirmed-payment']({}, invalid(id));
+            expect(result).toMatchObject({ success: false, error: 'invalid-args' });
+            expect(strategy.forgetUnconfirmedPayment).not.toHaveBeenCalled();
+        },
+    );
+
+    test('without a login it forgets nothing', async () => {
+        stubAuthGuardFail();
+        const strategy = stubStrategy({ forgetUnconfirmedPayment: jest.fn() });
+        expect(await buildHandlers()['forget-unconfirmed-payment']({}, 5)).toEqual({
+            success: false,
+            error: 'No authentication token found',
+        });
+        expect(strategy.forgetUnconfirmedPayment).not.toHaveBeenCalled();
+    });
+
+    test('a strategy that throws becomes a {success,error} reply', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ forgetUnconfirmedPayment: jest.fn().mockRejectedValue(new Error('boom')) });
+        expect(await buildHandlers()['forget-unconfirmed-payment']({}, 5)).toMatchObject({ success: false });
     });
 });
 

@@ -61,8 +61,15 @@ import type { RuleMatchChallenge } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
 import { isPlainObject } from '../../src/ts/plainObject';
 import type { JoinDeps } from '../../src/ts/services/joinChallenges';
-const { performJoin, runJoinPass, joinChallengeSingle, resolveJoinSetting, isAutoJoinActive, inFlight } =
-    require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule;
+const {
+    performJoin,
+    runJoinPass,
+    joinChallengeSingle,
+    forgetUnconfirmedPayment,
+    resolveJoinSetting,
+    isAutoJoinActive,
+    inFlight,
+} = require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule;
 
 // The logger factory above: withCategory() hands back one shared level object.
 // The join-state file readUnlockedState parses: one unlock marker per challenge id.
@@ -227,7 +234,7 @@ describe('performJoin — ordering & idempotency', () => {
                 ...over,
             });
 
-        test('the claim stays, flagged unconfirmed with the balance read just before; nothing is submitted', async () => {
+        test('the claim stays, flagged unconfirmed; nothing is submitted and no balance is read', async () => {
             const store = fileWith({});
             const deps = unclear(store);
             const res = await performJoin(invalid({ id: 3 }), 'tok', deps, 100);
@@ -238,31 +245,8 @@ describe('performJoin — ordering & idempotency', () => {
                 reason: 'unconfirmed',
             });
             expect(deps.submitToChallenge).not.toHaveBeenCalled();
-            expect(store.read()).toEqual({
-                '3': { unlockedAt: expect.any(Number), unconfirmed: true, coinsBefore: 500 },
-            });
-            // The balance was read before the unlock was sent.
-            expect(jest.mocked(deps.getBankroll).mock.invocationCallOrder[0]).toBeLessThan(
-                jest.mocked(deps.coinsUnlock).mock.invocationCallOrder[0],
-            );
-        });
-
-        test('a balance that cannot be read (null, or a throw) leaves no balance on the claim', async () => {
-            for (const getBankroll of [
-                balance(null),
-                double<'getBankroll'>(async () => {
-                    throw new Error('down');
-                }),
-                double<'getBankroll'>(async () => {
-                    throw new Error('');
-                }),
-            ]) {
-                const store = fileWith({});
-                await performJoin(invalid({ id: 3 }), 'tok', unclear(store, { getBankroll }), 100);
-                expect(store.read()).toEqual({
-                    '3': { unlockedAt: expect.any(Number), unconfirmed: true, coinsBefore: null },
-                });
-            }
+            expect(store.read()).toEqual({ '3': { unlockedAt: expect.any(Number), unconfirmed: true } });
+            expect(deps.getBankroll).not.toHaveBeenCalled();
         });
 
         test('no answer object at all is the same', async () => {
@@ -276,7 +260,7 @@ describe('performJoin — ordering & idempotency', () => {
             const mock = makeDeps({ coinsUnlock: double<'coinsUnlock'>(async () => noAnswer), joinStateStore: null });
             expect((await performJoin(invalid({ id: 3 }), 'tok', mock, 100)).reason).toBe('unconfirmed');
             // A store that reads back empty whatever is written: the claim is gone when it would be flagged.
-            const forgetful = { readRaw: () => '{}', writeRaw: jest.fn() };
+            const forgetful = { readRaw: () => '{}', writeRaw: jest.fn<void, [string]>() };
             const deps = unclear(invalid<ReturnType<typeof fileWith>>(forgetful));
             expect((await performJoin(invalid({ id: 3 }), 'tok', deps, 100)).reason).toBe('unconfirmed');
             expect(forgetful.writeRaw).toHaveBeenCalledTimes(1);
@@ -302,7 +286,7 @@ describe('performJoin — ordering & idempotency', () => {
                     logged
                         .withCategory()
                         .warning.mock.calls.some(([msg]) =>
-                            String(msg).startsWith('could not update unlock marker 3:'),
+                            String(msg).startsWith('could not flag the unlock marker for 3 as unconfirmed:'),
                         ),
                 ).toBe(true);
             },
@@ -1744,147 +1728,61 @@ describe('unlock markers are kept per account', () => {
         }
     });
 
-    test('a bare marker is never cleared by a submit that fails, and says whose coins it was is unknown', async () => {
+    test('a bare marker is never cleared by a submit that fails, and is worded as an earlier payment record, not as no answer', async () => {
         const store = fileWith({ '2': { unlockedAt: 1 } });
         const deps = joiningAs(A, store, {
             submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false, raw: null })),
         });
         const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
-        expect(res).toMatchObject({ status: 'charged-pending-submit', reason: 'unconfirmed' });
+        expect(res).toMatchObject({ status: 'charged-pending-submit', reason: 'earlier-payment' });
         expect(Object.keys(store.read())).toEqual(['2']);
     });
 
-    describe('an unconfirmed payment is settled against the balance before anything decides', () => {
-        const unconfirmed = (coinsBefore: number | null) => ({
-            [`${A}:2`]: { unlockedAt: 1, unconfirmed: true, coinsBefore },
-        });
+    describe('an unconfirmed payment is never settled by itself: it stands until a submit succeeds or the user forgets it', () => {
+        const unconfirmed = () => ({ [`${A}:2`]: { unlockedAt: 1, unconfirmed: true } });
         const asking = (
             store: ReturnType<typeof fileWith>,
             coins: number | null,
             over: NonNullable<Parameters<typeof makeDeps>[0]> = {},
         ) => joiningAs(A, store, { getBankroll: balance(coins === null ? null : { coins }), ...over });
+        const failingSubmit = double<'submitToChallenge'>(async () => ({ ok: false, raw: null }));
 
-        test('the balance is what it was: it was not charged — the claim goes and this is an ordinary unpaid join (needs-confirm)', async () => {
-            const store = fileWith(unconfirmed(500));
+        test.each([500, 450, 400, null])(
+            'whatever the balance is (%s), a manual join only submits, saying the payment is unconfirmed, and the claim stays',
+            async (coins) => {
+                const store = fileWith(unconfirmed());
+                const deps = asking(store, coins, { submitToChallenge: failingSubmit });
+                const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
+                expect(res).toMatchObject({ status: 'charged-pending-submit', reason: 'unconfirmed' });
+                expect(store.read()).toEqual(unconfirmed());
+                expect(deps.coinsUnlock).not.toHaveBeenCalled();
+                expect(deps.getBankroll).not.toHaveBeenCalled();
+            },
+        );
+
+        test('without consent to a price a manual join still only submits: nothing asks for a price it cannot take', async () => {
+            const store = fileWith(unconfirmed());
             const deps = asking(store, 500);
-            expect(await joinChallengeSingle(2, 'tok', deps)).toEqual({
-                status: 'needs-confirm',
-                challengeId: 2,
-                cost: 100,
-            });
-            expect(store.read()).toEqual({});
+            expect((await joinChallengeSingle(2, 'tok', deps)).status).toBe('joined');
             expect(deps.coinsUnlock).not.toHaveBeenCalled();
-        });
-
-        test('…and a consented spend with the price it was shown pays once, as any first join', async () => {
-            const store = fileWith(unconfirmed(500));
-            const deps = asking(store, 500);
-            const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 100 });
-            expect(res.status).toBe('joined');
-            expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
             expect(store.read()).toEqual({});
-        });
-
-        test('the balance fell by at least the cost: it was charged — the claim is confirmed, and only the submit is left', async () => {
-            const store = fileWith(unconfirmed(500));
-            const failing = asking(store, 400, {
-                submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false, raw: null })),
-            });
-            const res = await joinChallengeSingle(2, 'tok', failing, { spendCoins: true });
-            // Confirmed: no "unconfirmed" wording any more, and the claim carries no flag.
-            expect(res).toEqual({
-                status: 'charged-pending-submit',
-                challengeId: 2,
-                cost: 100,
-                imageId: undefined,
-                reason: undefined,
-            });
-            expect(store.read()).toEqual({ [`${A}:2`]: { unlockedAt: 1 } });
-            expect(failing.coinsUnlock).not.toHaveBeenCalled();
-            const ok = asking(store, 400);
-            expect((await joinChallengeSingle(2, 'tok', ok, { spendCoins: true })).status).toBe('joined');
-            expect(ok.coinsUnlock).not.toHaveBeenCalled();
-            expect(store.read()).toEqual({});
-        });
-
-        test.each([
-            ['another amount', 450, 500],
-            ['no balance recorded before the unlock', 500, null],
-            ['a balance that cannot be read now', null, 500],
-        ])('%s: still unknown — it stays unconfirmed, submit only, saying so', async (_name, coinsNow, coinsBefore) => {
-            const store = fileWith(unconfirmed(coinsBefore));
-            const deps = asking(store, coinsNow, {
-                submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false, raw: null })),
-            });
-            const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
-            expect(res).toMatchObject({ status: 'charged-pending-submit', reason: 'unconfirmed' });
-            expect(store.read()).toEqual(unconfirmed(coinsBefore));
-            expect(deps.coinsUnlock).not.toHaveBeenCalled();
         });
 
         test('with no photo to finish with, the unconfirmed payment is what the user is told, not "no photo"', async () => {
             photoPicker.pickPhotosForChallenge.mockReturnValue([]);
-            const store = fileWith(unconfirmed(500));
+            const store = fileWith(unconfirmed());
             const deps = asking(store, 450);
             const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
             expect(res).toMatchObject({ status: 'charged-pending-submit', reason: 'unconfirmed' });
-            expect(store.read()).toEqual(unconfirmed(500));
+            expect(store.read()).toEqual(unconfirmed());
         });
 
-        test('a balance read that throws is unknown too', async () => {
-            const store = fileWith(unconfirmed(500));
-            const deps = asking(store, 500, {
-                getBankroll: double<'getBankroll'>(async () => {
-                    throw new Error('down');
-                }),
-                submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false, raw: null })),
-            });
-            expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toMatchObject({
-                reason: 'unconfirmed',
-            });
-            expect(store.read()).toEqual(unconfirmed(500));
-        });
-
-        test('a claim that cannot be rewritten stays as it is', async () => {
-            const stored = JSON.stringify(unconfirmed(500));
-            const deps = asking(
-                invalid<ReturnType<typeof fileWith>>({
-                    readRaw: () => stored,
-                    writeRaw: () => {
-                        throw new Error('read-only');
-                    },
-                }),
-                400,
-                { submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false, raw: null })) },
-            );
-            // Confirming could not be written: the claim is still the unconfirmed one, so the wording says so.
-            expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toMatchObject({
-                reason: 'unconfirmed',
-            });
-        });
-
-        test('the automatic pass settles it the same way: not charged → an ordinary paid decision with its checks', async () => {
-            const store = fileWith(unconfirmed(500));
-            const deps = asking(store, 500);
-            const res = await runJoinPass('tok', Date.now(), deps);
-            expect(res.results).toEqual([{ id: 2, status: 'joined' }]);
-            expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
-        });
-
-        test('…and the same decision refuses what its checks refuse, once the claim is gone (too poor)', async () => {
-            const store = fileWith(unconfirmed(60));
-            const deps = asking(store, 60);
-            const res = await runJoinPass('tok', Date.now(), deps);
-            expect(res.results).toEqual([{ id: 2, status: 'skipped:insufficient-coins' }]);
-            expect(store.read()).toEqual({});
-            expect(deps.coinsUnlock).not.toHaveBeenCalled();
-        });
-
-        test('the automatic pass: charged → submit only, whatever the balance and budget now say', async () => {
-            const store = fileWith(unconfirmed(500));
+        test('the automatic pass submits it whatever the balance and budget now say, and never unlocks', async () => {
+            const store = fileWith(unconfirmed());
             const deps = asking(store, 3);
             expect((await runJoinPass('tok', Date.now(), deps)).results).toEqual([{ id: 2, status: 'joined' }]);
             expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.getBankroll).toHaveBeenCalledTimes(1); // the pass's own read, not a settling one
             expect(store.read()).toEqual({});
         });
 
@@ -1983,6 +1881,29 @@ describe('unlock markers are kept per account', () => {
             expect(Object.keys(store.read())).toEqual(['12']);
         });
 
+        test('an empty open list prunes nothing, through a manual join too', async () => {
+            const store = fileWith(claims());
+            const deps = joiningAs(A, store, { getMemberChallenges: openList([]) });
+            expect((await joinChallengeSingle(7, 'tok', deps)).status).toBe('unavailable');
+            expect(store.writeRaw).not.toHaveBeenCalled();
+        });
+
+        test('a file that became unreadable between the look and the rewrite is left alone', async () => {
+            const reads = [JSON.stringify(claims())];
+            const writeRaw = jest.fn<void, [string]>();
+            const deps = joiningAs(
+                A,
+                invalid<ReturnType<typeof fileWith>>({
+                    readRaw: () => (reads.length > 0 ? reads.shift()! : 'not json{{'),
+                    writeRaw,
+                }),
+                { getMemberChallenges: freeOpen(5) },
+            );
+            // pruneClosedClaims' own look is the first read the pass makes of it (the free join reads none).
+            await runJoinPass('tok', Date.now(), deps);
+            expect(writeRaw).not.toHaveBeenCalled();
+        });
+
         test('nothing stored, nothing written', async () => {
             const store = fileWith({});
             const deps = joiningAs(A, store, { getMemberChallenges: freeOpen(5) });
@@ -1993,6 +1914,8 @@ describe('unlock markers are kept per account', () => {
         test.each([new Error('read-only'), new Error('')])(
             'a store that cannot be written is logged, and the pass goes on (%s)',
             async (failure) => {
+                const logged: LoggerMock = invalid(require('../../src/ts/logger'));
+                logged.withCategory().warning.mockClear();
                 const stored = JSON.stringify(claims());
                 const deps = joiningAs(
                     A,
@@ -2005,8 +1928,80 @@ describe('unlock markers are kept per account', () => {
                     { getMemberChallenges: freeOpen(5) },
                 );
                 expect((await runJoinPass('tok', Date.now(), deps)).results).toEqual([{ id: 5, status: 'joined' }]);
+                expect(
+                    logged
+                        .withCategory()
+                        .warning.mock.calls.some(([msg]) =>
+                            String(msg).startsWith('could not prune the unlock markers:'),
+                        ),
+                ).toBe(true);
             },
         );
+    });
+
+    describe('the user forgetting an unconfirmed payment', () => {
+        const forgetting = (member: string | null, store: ReturnType<typeof fileWith>, over: Partial<JoinDeps> = {}) =>
+            joiningAs(member, store, over);
+
+        test("this account's unconfirmed claim goes, and the next join asks for its price", async () => {
+            const store = fileWith({
+                [`${A}:2`]: { unlockedAt: 1, unconfirmed: true },
+                [`${B}:2`]: { unlockedAt: 1, unconfirmed: true },
+            });
+            const deps = forgetting(A, store);
+            expect(await forgetUnconfirmedPayment(2, 'tok', deps)).toEqual({ status: 'forgotten', challengeId: 2 });
+            expect(Object.keys(store.read())).toEqual([`${B}:2`]);
+            expect(await joinChallengeSingle(2, 'tok', deps)).toEqual({
+                status: 'needs-confirm',
+                challengeId: 2,
+                cost: 100,
+            });
+        });
+
+        test('a bare claim from before accounts were told apart can be forgotten too, when the account has none of its own', async () => {
+            const store = fileWith({ '2': { unlockedAt: 1 } });
+            expect((await forgetUnconfirmedPayment(2, 'tok', forgetting(A, store))).status).toBe('forgotten');
+            expect(store.read()).toEqual({});
+        });
+
+        test("never a claim known to have been charged, and never a bare one behind the account's own confirmed claim", async () => {
+            const own = fileWith({ [`${A}:2`]: { unlockedAt: 1 }, '2': { unlockedAt: 1 } });
+            expect((await forgetUnconfirmedPayment(2, 'tok', forgetting(A, own))).status).toBe('nothing-to-forget');
+            expect(own.writeRaw).not.toHaveBeenCalled();
+            const empty = fileWith({});
+            expect((await forgetUnconfirmedPayment(2, 'tok', forgetting(A, empty))).status).toBe('nothing-to-forget');
+        });
+
+        test('an account that cannot be told, no token, and an unreadable file change nothing', async () => {
+            const store = fileWith({ [`${A}:2`]: { unlockedAt: 1, unconfirmed: true } });
+            const unknown = forgetting(null, store, { getCurrentMemberProfile: jest.fn(async () => null) });
+            expect((await forgetUnconfirmedPayment(2, 'tok', unknown)).status).toBe('account-unknown');
+            expect((await forgetUnconfirmedPayment(2, '', forgetting(A, store))).status).toBe('not-authenticated');
+            memberIdentity.__resetMemberIdCache();
+            const corrupt = { readRaw: () => 'not json{{', writeRaw: jest.fn<void, [string]>() };
+            const deps = forgetting(A, invalid<ReturnType<typeof fileWith>>(corrupt));
+            expect((await forgetUnconfirmedPayment(2, 'tok', deps)).status).toBe('unreadable');
+            expect(corrupt.writeRaw).not.toHaveBeenCalled();
+            expect(store.writeRaw).not.toHaveBeenCalled();
+        });
+
+        test('under the unlock lock: a held lock or a join under way is busy, and the lock is let go afterwards', async () => {
+            const store = fileWith({ [`${A}:2`]: { unlockedAt: 1, unconfirmed: true } });
+            const release = jest.fn();
+            const held = forgetting(A, store, { acquireUnlockLock: () => ({ ok: false, release }) });
+            expect((await forgetUnconfirmedPayment(2, 'tok', held)).status).toBe('busy');
+            inFlight.add('2');
+            expect((await forgetUnconfirmedPayment(2, 'tok', forgetting(A, store))).status).toBe('busy');
+            inFlight.delete('2');
+            const free = forgetting(A, store, { acquireUnlockLock: () => ({ ok: true, release }) });
+            expect((await forgetUnconfirmedPayment(2, 'tok', free)).status).toBe('forgotten');
+            expect(release).toHaveBeenCalledTimes(1);
+        });
+
+        test('with no store (mock mode) there is nothing to forget', async () => {
+            const deps = forgetting(A, fileWith({}), { joinStateStore: null });
+            expect((await forgetUnconfirmedPayment(2, 'tok', deps)).status).toBe('nothing-to-forget');
+        });
     });
 
     test('a new claim is written under the account that makes it', async () => {
@@ -2337,6 +2332,67 @@ describe('joinChallenges — edge paths', () => {
             });
             expect(warnings()).toContain('join-state file is malformed (not an object) — treating as unreadable');
             expect(errors()).toContain('challenge 3: join-state is unreadable — not spending coins');
+        });
+
+        // A store that reads as the given files in turn, then as a corrupt one: a writer that read it as empty would wipe
+        // every other claim on its next write.
+        const readsThenCorrupt = (files: string[]) => {
+            const queue = [...files];
+            const writeRaw = jest.fn<void, [string]>();
+            return { readRaw: () => (queue.length > 0 ? queue.shift()! : 'not json{{'), writeRaw };
+        };
+
+        test('a claim cannot be recorded when the file became unreadable since it was checked: no spend, nothing written', async () => {
+            // The join's own read, the unlock section's read, then the writer's.
+            const store = readsThenCorrupt(['{}', '{}']);
+            const deps = makeDeps({ joinStateStore: store });
+            expect(await performJoin(invalid({ id: 3 }), 'tok', deps, 100)).toEqual({
+                status: 'failed-no-charge',
+                charged: 0,
+            });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(store.writeRaw).not.toHaveBeenCalled();
+        });
+
+        test('an unlock that got no answer cannot be flagged in an unreadable file: nothing written, still reported unconfirmed', async () => {
+            const store = readsThenCorrupt(['{}', '{}', '{}']);
+            const deps = makeDeps({
+                joinStateStore: store,
+                coinsUnlock: double<'coinsUnlock'>(async () => ({ ok: false, raw: null, unclear: true })),
+            });
+            expect((await performJoin(invalid({ id: 3 }), 'tok', deps, 100)).reason).toBe('unconfirmed');
+            // Only the claim itself was written; the flag was not, so the other claims were not wiped.
+            expect(store.writeRaw).toHaveBeenCalledTimes(1);
+        });
+
+        test('a claim is not cleared from an unreadable file after a successful join: nothing written, the join still succeeds', async () => {
+            const store = readsThenCorrupt([JSON.stringify({ 4: { unlockedAt: 1 }, 5: { unlockedAt: 1 } })]);
+            const deps = makeDeps({ joinStateStore: store });
+            expect(await performJoin(invalid({ id: 4 }), 'tok', deps, 100)).toMatchObject({ status: 'joined' });
+            expect(store.writeRaw).not.toHaveBeenCalled();
+            expect(warnings()).toContain(
+                'could not clear unlock marker for 4: join-state is unreadable — nothing written',
+            );
+        });
+
+        test('a claim of an account is logged by its challenge id only, never by the member id in its key', async () => {
+            const member = 'c'.repeat(32);
+            (
+                require('../../src/ts/services/autoFill/memberIdentity') as typeof memberIdentityModule
+            ).__resetMemberIdCache();
+            const store = {
+                readRaw: () => JSON.stringify({ [`${member}:4`]: { unlockedAt: 1 } }),
+                writeRaw: jest.fn(() => {
+                    throw new Error('read-only');
+                }),
+            };
+            const deps = makeDeps({
+                joinStateStore: store,
+                getCurrentMemberProfile: jest.fn(async () => ({ id: member, userName: 'u' })),
+            });
+            await performJoin(invalid({ id: 4 }), 'tok', deps, 100);
+            expect(warnings()).toContain('could not clear unlock marker for 4: read-only');
+            expect(warnings().some((line) => String(line).includes(member))).toBe(false);
         });
 
         test('a failure to clear the marker after a successful join is logged, the join still succeeds', async () => {

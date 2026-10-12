@@ -74,6 +74,7 @@ const runRule = async (
             }
             state = { ...state, inFlight: committed ? { ruleId: rule.id, actionIndex: index } : null };
             if (result.status !== 'deferred') state.lastError = { at, message };
+            state = applyEffects(state, { spent: result.spent }, at);
             ctx.ledger.set(ctx.challengeId, state);
             return { state, completed: false };
         }

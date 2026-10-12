@@ -29,6 +29,7 @@ const REASON_OUTCOME: Record<string, Partial<Record<JoinReason, OutcomeMeta>>> =
     'charged-pending-submit': {
         'no-photo': { key: 'app.discoverPendingNoPhoto', variant: 'error' },
         unconfirmed: { key: 'app.discoverUnconfirmed', variant: 'error' },
+        'earlier-payment': { key: 'app.discoverEarlierPayment', variant: 'error' },
     },
     'failed-no-charge': { 'account-unknown': { key: 'app.discoverAccountUnknown', variant: 'error' } },
 };
@@ -36,13 +37,22 @@ const REASON_OUTCOME: Record<string, Partial<Record<JoinReason, OutcomeMeta>>> =
 /**
  * What a join left behind for its row: the line to show (`key` null: the result carries its own error text),
  * and whether the row offers "Retry submit" — only a charged join that can still be finished by one, which
- * is not one that is waiting for a photo.
+ * is not one that is waiting for a photo — and "I wasn't charged", which only a payment that is not known to
+ * have been taken offers.
  */
-const outcomeMeta = (outcome: { status?: string; reason?: JoinReason }): OutcomeMeta & { retry: boolean } => {
+const outcomeMeta = (outcome: {
+    status?: string;
+    reason?: JoinReason;
+}): OutcomeMeta & { retry: boolean; forget: boolean } => {
     const { status, reason } = outcome;
     const byReason = status !== undefined && reason !== undefined ? REASON_OUTCOME[status]?.[reason] : undefined;
     const meta = byReason ?? (status === undefined ? undefined : OUTCOME[status]) ?? { key: null, variant: 'error' };
-    return { ...meta, retry: status === 'charged-pending-submit' && reason !== 'no-photo' };
+    const pending = status === 'charged-pending-submit';
+    return {
+        ...meta,
+        retry: pending && reason !== 'no-photo',
+        forget: pending && (reason === 'unconfirmed' || reason === 'earlier-payment'),
+    };
 };
 
 export type { OutcomeVariant };

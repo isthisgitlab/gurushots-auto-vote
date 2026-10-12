@@ -60,7 +60,8 @@ type ActionEffects = {
 
 type DoneOutcome = { status: 'done' } & ActionEffects;
 
-type NotDoneOutcome = { status: 'skipped' | 'failed' | 'deferred'; message: string };
+// `spent`: the spend of a failed step may have gone through (it got no answer), so the run counts it conservatively.
+type NotDoneOutcome = { status: 'skipped' | 'failed' | 'deferred'; message: string; spent?: SpendKind };
 
 type ActionOutcome = DoneOutcome | NotDoneOutcome;
 

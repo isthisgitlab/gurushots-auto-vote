@@ -50,10 +50,10 @@ type JoinOutcome = {
 
 /**
  * A persisted unlock claim as one join reads it: where it is stored, whether its payment is unconfirmed (an
- * unlock that got no answer, with the balance read just before it), and whether it is a bare one from before
+ * unlock that got no answer), and whether it is a bare one from before
  * accounts were told apart (whose coins it holds is unknown).
  */
-type Claim = { key: string; unconfirmed: boolean; coinsBefore: number | null; legacy: boolean };
+type Claim = { key: string; unconfirmed: boolean; legacy: boolean };
 
 /**
  * The claim a join continues from (null: none), and the coins this call spent unlocking.

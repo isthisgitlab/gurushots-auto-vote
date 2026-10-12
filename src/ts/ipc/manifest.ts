@@ -95,6 +95,7 @@ const invokeChannels = [
     'get-open-chosen-annotations',
     'confirm-account',
     'join-challenge',
+    'forget-unconfirmed-payment',
     'get-library-photos',
     'get-auto-join-active',
     'get-auto-claim-status',

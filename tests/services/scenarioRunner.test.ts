@@ -386,7 +386,7 @@ describe('actions', () => {
             ],
             ['a refused preview', {}, {}, 'swap was refused (no-alternative)', 'preview'],
             ['a refused swap', {}, {}, 'swap was refused (api-failed)', 'swap'],
-            ['a swap that got no answer', {}, {}, 'swap was refused (unclear)', 'unclear'],
+            ['a swap that got no answer', {}, {}, 'swap may have gone through (GuruShots gave no answer)', 'unclear'],
             ['a refused swap without an outcome', {}, {}, 'swap was refused (no response)', 'bare'],
         ])('%s', async (label, extra, memory, message, mode) => {
             setup(swapRule(extra));
@@ -631,6 +631,19 @@ describe('rule execution', () => {
         setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }]));
         await run();
         expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1 });
+        expect(state().lastError!.message).toContain('unlockBoost may have gone through');
+        expect(state().lastError!.message).not.toContain('refused');
+    });
+
+    test('a spend that got no answer counts toward the limit, so the scenario never goes over it', async () => {
+        currencyActions.unlockBoostWithKey.mockResolvedValueOnce({ ok: false, outcome: 'unclear' });
+        setup(single([{ type: 'unlockBoost' }]));
+        settings.getScenario.mockReturnValue({ ...single([{ type: 'unlockBoost' }]), limits: { keys: 1 } });
+        await run();
+        expect(state().spent.keys).toBe(1);
+        await run();
+        expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
+        expect(state().lastError!.message).toContain("scenario's keys limit of 1 is reached");
     });
 
     test('a committed rule passes over a permanently skipped step and still reaches its goto', async () => {

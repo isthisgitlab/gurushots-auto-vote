@@ -14,7 +14,11 @@ import * as logger from '../logger';
 import { runVotingPass } from '../services/votingOrchestrator';
 import { runSuspendBoosts } from '../services/votingOrchestrator/boost';
 import { createMemoryEntryTracker } from '../services/newEntryTracker';
-import { runJoinPass, joinChallengeSingle } from '../services/joinChallenges';
+import {
+    runJoinPass,
+    joinChallengeSingle,
+    forgetUnconfirmedPayment as forgetPayment,
+} from '../services/joinChallenges';
 import type { JoinDeps } from '../services/joinChallenges';
 import { runClaimPass } from '../services/autoClaim';
 import { loadMissionNeeds, registerMissionNeeds } from '../services/missions';
@@ -166,6 +170,20 @@ const mockVotingPassDeps = (client: MockEndpoints, token: string, missions: Miss
 });
 
 /**
+ * The mock counterpart of forgetting an unconfirmed payment: the same service over the mock deps, whose
+ * join-state store is null, so there is never a claim to forget.
+ */
+const createMockForget = (client: MockEndpoints): typeof realModule.forgetUnconfirmedPayment =>
+    mockMethod(
+        {
+            name: 'forgetUnconfirmedPayment',
+            tokenArg: 1,
+            onNoToken: (challengeId) => ({ status: 'not-authenticated', challengeId }),
+        },
+        async (challengeId, token) => forgetPayment(challengeId, token, mockJoinDeps(client)),
+    );
+
+/**
  * @param client - the assembled mock endpoints
  */
 const createMockStrategy = (client: MockEndpoints) => {
@@ -231,7 +249,12 @@ const createMockStrategy = (client: MockEndpoints) => {
             entryAges: mockEntryAgeLedger,
         });
 
-    return { joinChallenge, fetchChallengesAndVote, applyBoostsOnSuspend };
+    return {
+        joinChallenge,
+        forgetUnconfirmedPayment: createMockForget(client),
+        fetchChallengesAndVote,
+        applyBoostsOnSuspend,
+    };
 };
 
 export { createMockStrategy };

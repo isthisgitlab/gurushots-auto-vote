@@ -12,7 +12,7 @@ import type { Challenge } from '../../types/gurushots';
 import { cat } from './shared';
 import type { JoinDeps, JoinSingleResult } from './shared';
 import { performJoin } from './performJoin';
-import { markerOwner, paidOwnerUnknown, pruneClosedClaims, reconcileClaim } from './unlockMarker';
+import { claimOf, markerOwner, paidOwnerUnknown, pruneClosedClaims } from './unlockMarker';
 
 /**
  * Live balance check for a confirmed paid manual join.
@@ -121,10 +121,9 @@ const joinListed = async (
 
     // Coins already spent (an unlock marker, left by a join whose submit failed) are not spent again:
     // the retry only submits, so neither consent to a price nor the balance has a say in it. An
-    // unreadable marker file reads as "no marker" here, as in performJoin, whose paid path then refuses. A payment
-    // that got no answer is settled against the balance first: one that did not go through is forgotten, and this
-    // is an ordinary unpaid join again.
-    const retryOnly = cost > 0 && (await reconcileClaim(challengeId, cost, token, deps, owner));
+    // unreadable marker file reads as "no marker" here, as in performJoin, whose paid path then refuses. An
+    // unconfirmed claim stands like any other: only a submit that succeeds, or the user forgetting it, ends it.
+    const retryOnly = cost > 0 && claimOf(deps.joinStateStore, challengeId, owner) !== null;
 
     // Consent covers a price: a cost above the one the caller confirmed (`expectedCost`) needs a new
     // confirmation, with the live cost, and unlocks nothing.

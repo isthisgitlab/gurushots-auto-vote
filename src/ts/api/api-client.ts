@@ -15,8 +15,15 @@ import { FORM_CONTENT_TYPE } from './constants';
 import { isPlainObject } from '../plainObject';
 
 import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { failureVerdict, isSafeToRepeat } from './postOutcome';
-import type { PostOutcome, RequestFailure } from './postOutcome';
+import {
+    describeFailure,
+    failureVerdict,
+    getRetryAfterMs,
+    isRetryableError,
+    isSafeToRepeat,
+    redirectOf,
+} from './postOutcome';
+import type { PostOutcome } from './postOutcome';
 
 /**
  * Request headers as the api/ modules build them. A value may be undefined
@@ -183,42 +190,6 @@ const coerceNonNegInt = (value: unknown, fallback: number): number => {
 };
 
 /**
- * Whether a failed request is worth retrying. Transient conditions —
- * no response (network drop), a client timeout, a 429, or any 5xx —
- * are retryable; every other 4xx (bad request, invalid token, …) is
- * a definitive answer and is not retried.
- */
-const isRetryableError = (error: RequestFailure | null | undefined): boolean => {
-    // A TypeError (or similar) means an adapter/programmer bug, not a
-    // transient network failure — retrying it just wastes the backoff. So
-    // does a rejection with no error object at all (a custom adapter
-    // rejecting with null/undefined).
-    if (error == null || error instanceof TypeError) return false;
-    if (!error.response) return true; // network error / no response
-    if (error.code === 'ECONNABORTED') return true; // client timeout
-    const status = error.response.status;
-    return status === 429 || (typeof status === 'number' && status >= 500);
-};
-
-/**
- * Server-requested cooldown in ms, read from a `retry_after` body field
- * or a `Retry-After` header (both expressed in seconds), or null when
- * the server didn't ask for one.
- */
-const getRetryAfterMs = (error: RequestFailure): number | null => {
-    const fromBody = error.response?.data?.retry_after;
-    if (typeof fromBody === 'number' && Number.isFinite(fromBody) && fromBody >= 0) {
-        return fromBody * 1000;
-    }
-    const fromHeader = error.response?.headers?.['retry-after'];
-    if (fromHeader != null) {
-        const seconds = Number(fromHeader);
-        if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
-    }
-    return null;
-};
-
-/**
  * The one place a 2xx body becomes a response type. Anything that is not a
  * JSON object (an HTML error page, a bare string, an array) is no GuruShots
  * response and reads as a failed request. The fields stay unverified on
@@ -233,20 +204,6 @@ const responseObject = <T extends object>(url: string, body: unknown): T | null 
         type: Array.isArray(body) ? 'array' : typeof body,
     });
     return null;
-};
-
-/**
- * Names a 3xx answer (status and Location only, never the headers object) —
- * requests are sent with redirects disabled, so it surfaces as a failure.
- */
-const warnIfRedirect = (url: string, response: RequestFailure['response']): void => {
-    const status = response?.status;
-    if (typeof status !== 'number' || status < 300 || status >= 400) return;
-    logger.withCategory('api').warning('API request answered with a redirect, not followed', {
-        url,
-        status,
-        location: response?.headers?.location ?? response?.headers?.Location,
-    });
 };
 
 /**
@@ -275,8 +232,8 @@ const postConfig = (url: string, headers: RequestHeaders, data: string): AxiosRe
  * backoff with jitter. Null when the cooldown is longer than the in-call cap, which defers the request to the
  * next scheduled cycle.
  */
-const retryDelayMs = (error: RequestFailure, attempt: number, baseDelayMs: number): number | null => {
-    const cooldownMs = getRetryAfterMs(error);
+const retryDelayMs = (caught: unknown, attempt: number, baseDelayMs: number): number | null => {
+    const cooldownMs = getRetryAfterMs(caught);
     if (cooldownMs == null) {
         return Math.min(baseDelayMs * 2 ** attempt + Math.random() * baseDelayMs, MAX_RETRY_DELAY_MS);
     }
@@ -322,35 +279,35 @@ const sendPost = async <T extends object>(
             const body = responseObject<T>(url, response.data);
             return body ? { kind: 'body', body } : { kind: 'unclear' };
         } catch (caught) {
-            const error = caught as RequestFailure | null | undefined;
-            const duration = Date.now() - startTime;
-            const status = error?.response?.status || 'NO_RESPONSE';
+            const failure = describeFailure(caught);
 
             // Log failed response with full error details
             logger.withCategory('api').api('API Error Response', {
                 method: 'POST',
                 url: url,
-                status: status,
-                duration: duration,
-                error: error?.message,
-                responseData: error?.response?.data || null,
-                timeout: error?.code === 'ECONNABORTED',
+                ...failure,
+                duration: Date.now() - startTime,
             });
 
-            warnIfRedirect(url, error?.response);
-
-            const mayRepeat = repeatable ? isRetryableError(error) : isSafeToRepeat(error);
-            if (!mayRepeat || attempt >= maxRetries) {
-                return { kind: failureVerdict(error) }; // An outcome instead of a throw, to prevent crashing
+            const redirect = redirectOf(caught);
+            if (redirect) {
+                logger.withCategory('api').warning('API request answered with a redirect, not followed', {
+                    url,
+                    ...redirect,
+                });
             }
 
-            // isRetryableError / isSafeToRepeat already rejected a null/undefined failure.
-            const delayMs = retryDelayMs(error as RequestFailure, attempt, baseDelayMs);
-            if (delayMs === null) return { kind: failureVerdict(error) };
+            const mayRepeat = repeatable ? isRetryableError(caught) : isSafeToRepeat(caught);
+            if (!mayRepeat || attempt >= maxRetries) {
+                return { kind: failureVerdict(caught) }; // An outcome instead of a throw, to prevent crashing
+            }
+
+            const delayMs = retryDelayMs(caught, attempt, baseDelayMs);
+            if (delayMs === null) return { kind: failureVerdict(caught) };
 
             logger.withCategory('api').warning('Retrying API request after transient failure', {
                 url,
-                status,
+                status: failure.status,
                 attempt: attempt + 1,
                 maxRetries,
                 delayMs: Math.round(delayMs),
