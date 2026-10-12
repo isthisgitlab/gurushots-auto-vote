@@ -13,7 +13,10 @@ import type * as loginModule from '../../api/login';
 const authenticate: typeof loginModule.authenticate = async (email, password) => {
     logger
         .withCategory('authentication')
-        .debug(`Mock authentication with: ${email}, password: ${password ? '[hidden]' : 'no password'}`, null);
+        .debug(
+            `Mock authentication: ${email ? 'email given' : 'no email'}, ${password ? 'password given' : 'no password'}`,
+            null,
+        );
 
     // Accept any non-empty email and password for mock mode
     if (email && email.trim() !== '' && password && password.trim() !== '') {

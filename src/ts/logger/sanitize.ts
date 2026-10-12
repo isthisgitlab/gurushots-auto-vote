@@ -53,9 +53,10 @@ const sanitizeLogString = (value: unknown, maxLength: number = 200): string =>
 // otherwise leak plaintext to disk. This scrubs the value after any
 // sensitive key written as `key: value` or `key=value` (quotes optional)
 // and runs on every writeLog message. The key set mirrors SENSITIVE_KEY_RE;
-// \b anchors keep `tokenizer` etc. from matching.
+// \b anchors keep `tokenizer` etc. from matching, and a run of `=` is no value, so a banner line such as
+// `=== Login ===` is left alone.
 const SENSITIVE_MSG_RE =
-    /\b(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]?auth[_-]?token|x[_-]?token)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|\S+)/gi;
+    /\b(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]?auth[_-]?token|x[_-]?token|email|login|user[_-]?name|phone)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|(?!=+(?:\s|$))\S+)/gi;
 
 function redactMessage(message: string): string;
 function redactMessage(message: unknown): unknown;

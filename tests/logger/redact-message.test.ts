@@ -43,6 +43,28 @@ describe('redactMessage', () => {
         expect(redactMessage('tokenizer: fast')).toBe('tokenizer: fast');
     });
 
+    test.each([
+        ['email=person@example.com', 'email=[REDACTED]'],
+        ['login: person@example.com', 'login: [REDACTED]'],
+        ['user_name = "alice b"', 'user_name = [REDACTED]'],
+        ['username=alice', 'username=[REDACTED]'],
+        ['user-name: alice', 'user-name: [REDACTED]'],
+        ['Phone: +371 20000000', 'Phone: [REDACTED] 20000000'],
+        ['phone="+371 20000000"', 'phone=[REDACTED]'],
+    ])('redacts the account identifier in %s', (message, expected) => {
+        expect(redactMessage(message)).toBe(expected);
+    });
+
+    test('does not redact words that merely start with an identifier key', () => {
+        expect(redactMessage('emailed: yes')).toBe('emailed: yes');
+        expect(redactMessage('login screen shown')).toBe('login screen shown');
+    });
+
+    test('leaves a banner line alone but still redacts a value that starts with =', () => {
+        expect(redactMessage('=== Login ===')).toBe('=== Login ===');
+        expect(redactMessage('token==abc')).toBe('token=[REDACTED]');
+    });
+
     test('returns non-string input unchanged', () => {
         expect(redactMessage(null)).toBeNull();
         expect(redactMessage(42)).toBe(42);
