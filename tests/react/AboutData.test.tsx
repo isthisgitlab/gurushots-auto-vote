@@ -361,8 +361,22 @@ describe('Delete all local data', () => {
 
 describe('the Android delete failure text', () => {
     // The restart is announced once, by about.deleteRestartsOnClose; the failure text itself says nothing about it.
+    const ENGLISH_RESTART = /restart|relaunch|start again|open (?:it|the app) again|reopen/i;
+    const LATVIAN_RESTART = /palai|restart|pārstart|atsāknē|no jauna|atver\S*\s+(?:\S+\s+)?(?:vēlreiz|no jauna)/i;
+
     test('does not mention a restart in either language', () => {
-        expect(englishAbout.deleteFailedAndroid).not.toMatch(/restart|relaunch|start again/i);
-        expect(latvianAbout.deleteFailedAndroid).not.toMatch(/palai|restart|pārstart|atsāknē|no jauna/i);
+        expect(englishAbout.deleteFailedAndroid).not.toMatch(ENGLISH_RESTART);
+        expect(latvianAbout.deleteFailedAndroid).not.toMatch(LATVIAN_RESTART);
+    });
+
+    test('the guard matches the texts that do announce the restart, so a broken pattern fails', () => {
+        for (const key of ['deleteRestartsOnClose', 'deleteDone'] as const) {
+            expect(englishAbout[key]).toMatch(ENGLISH_RESTART);
+            expect(latvianAbout[key]).toMatch(LATVIAN_RESTART);
+        }
+        expect('Open the app again.').toMatch(ENGLISH_RESTART);
+        expect('Reopen it.').toMatch(ENGLISH_RESTART);
+        expect('Lūdzu atver lietotni vēlreiz.').toMatch(LATVIAN_RESTART);
+        expect('Atver no jauna.').toMatch(LATVIAN_RESTART);
     });
 });

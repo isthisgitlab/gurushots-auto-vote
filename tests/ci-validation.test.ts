@@ -113,7 +113,7 @@ describe('sends toward the Logs window', () => {
     // restrictToLogsChannels (ipc/registerHandlers.ts) filters only `webContents.send`; `postMessage`, a frame's
     // `send` (`mainFrame.send`, `frames[i].send`, `sendToFrame`, or `send` on a stored frame handle), an event's
     // `reply` and a `webFrameMain` handle reach a window unfiltered, so no source may touch a frame handle
-    // (`mainFrame`, `senderFrame`, `framesInSubtree`, `webFrameMain`, `focusedFrame`, `opener`, the `frame-created` event), call `send` on anything but `webContents`,
+    // (`mainFrame`, `senderFrame`, `framesInSubtree`, `webFrameMain`, `focusedFrame`, `opener`, the `frame-created` event, and the `frame` or `initiator` an event or a navigation's details carry), call `send` on anything but `webContents`,
     // reply on an event or post a message. A legitimate line is listed here as `relative/path.ts`, with the text of
     // the line and the reason.
     const ALLOWED: Readonly<Record<string, readonly string[]>> = {
@@ -130,7 +130,7 @@ describe('sends toward the Logs window', () => {
         'preloadApi.ts': ['ipcRenderer.send(channel)'],
     };
     const UNFILTERED_SEND_RE =
-        /\bpostMessage\(|\bmainFrame\b|\bsenderFrame\b|\bframesInSubtree\b|\bsendToFrame\(|\bwebFrameMain\b|\bfocusedFrame\b|\bopener\b|\bframe-created\b|\bframes\[[^\]]*\]\??\.send\(|(?<!\bwebContents\??)\.send\(|\.reply\(/g;
+        /\bpostMessage\(|\bmainFrame\b|\bsenderFrame\b|\bframesInSubtree\b|\bsendToFrame\(|\bwebFrameMain\b|\bfocusedFrame\b|\bopener\b|\bframe-created\b|\b(?:details|event)\.(?:frame|initiator)\b|\bframes\[[^\]]*\]\??\.send\(|(?<!\bwebContents\??)\.send\(|\.reply\(/g;
     const SOURCE_FILE_RE = /\.(?:[cm]?ts|tsx)$/;
     const hitLines = (text: string) => [
         ...new Set(
@@ -142,7 +142,7 @@ describe('sends toward the Logs window', () => {
         return hitLines(text).filter((line) => !allowedLines.some((allowed) => lines[line - 1].includes(allowed)));
     };
 
-    test('no source uses postMessage, a frame handle (mainFrame, senderFrame, framesInSubtree, webFrameMain, sendToFrame, focusedFrame, opener, frame-created), a send off webContents, or .reply(', () => {
+    test('no source uses postMessage, a frame handle (mainFrame, senderFrame, framesInSubtree, webFrameMain, sendToFrame, focusedFrame, opener, frame-created, event.frame, details.initiator), a send off webContents, or .reply(', () => {
         const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
         const path = jest.requireActual<typeof import('node:path')>('node:path');
         const srcDir = path.join(__dirname, '..', 'src', 'ts');
@@ -213,6 +213,8 @@ describe('sends toward the Logs window', () => {
             'window.opener.postMessage(x);',
             "win.webContents.on('frame-created', (_event, details) => details.frame);",
             'const parent = window.opener;',
+            "win.webContents.on('did-start-navigation', (details) => details.frame);",
+            "win.webContents.on('will-frame-navigate', (event) => event.initiator);",
             'const frame = event.senderFrame;',
             'event.reply("c", x);',
             'const frame = event.senderFrame; frame.send("x");',
@@ -233,6 +235,8 @@ describe('sends toward the Logs window', () => {
                     'window.open(url, "_blank", "noopener");',
                     'const openerCount = 1;',
                     'const focusedFrameId = 1;',
+                    'const frameCreatedAt = 1;',
+                    'const detailsFrameCount = 1;',
                 ].join('\n'),
             ),
         ).toEqual([]);
