@@ -215,6 +215,40 @@ const rereadTitleRules = async (
 };
 
 /**
+ * The handler for a profile that was edited or deleted: when it is the one the rules matched, the
+ * rules are read again for the challenge on screen (see rereadTitleRules). A reply is dropped once
+ * the dialog closed or showed another challenge, and carries the suppression the dialog holds when
+ * the reply lands.
+ */
+function useProfileReread({
+    isOpen,
+    challengeId,
+    challengeTitle,
+    rules,
+    setTitleRules,
+}: {
+    isOpen: boolean;
+    challengeId: string | number | null | undefined;
+    challengeTitle: string;
+    rules: TitleRuleInfo;
+    setTitleRules: SetTitleRules;
+}) {
+    const onScreen = useLatestRef(isOpen ? `${challengeId}\0${challengeTitle}` : null);
+    const suppressedNow = useLatestRef(rules.suppressed);
+    return ({ name }: { name: string; values?: ChallengeValues; deleted?: boolean }) => {
+        if (!challengeId || name.toLowerCase() !== rules.profile?.name.toLowerCase()) return;
+        const asked = onScreen.current;
+        void rereadTitleRules(
+            challengeTitle,
+            challengeId,
+            setTitleRules,
+            () => onScreen.current === asked,
+            () => suppressedNow.current,
+        );
+    };
+}
+
+/**
  * What the challenge's rules contribute and the value resolution built on it:
  * override → rule values (inline values and the matched profile's, or the inline
  * values alone once the profile is suppressed) → global default → schema default.
@@ -246,10 +280,8 @@ function useTitleRules({
         if (isOpen) setProfileReplacesWarning(false);
     }, [isOpen]);
 
-    // Which challenge is on screen, now: a reply to a read of another one is stale.
-    const onScreen = useLatestRef(isOpen ? `${challengeId}\0${challengeTitle}` : null);
     const rules = titleRules ?? NO_RULES;
-    const suppressedNow = useLatestRef(rules.suppressed);
+    const onProfilesChanged = useProfileReread({ isOpen, challengeId, challengeTitle, rules, setTitleRules });
     // A suppressed profile drops out, the rules' own inline values do not: a rule that sets a
     // scenario or an auto-join directly keeps setting it.
     const ruleLayer: ChallengeValues = rules.suppressed ? rules.inlineValues : rules.ruleValues;
@@ -270,20 +302,6 @@ function useTitleRules({
         setProfileReplacesWarning(next.scheduledFillReplaces === true && !replacesWasOn);
         setOverrides(next);
         setTitleRules((current) => ({ ...(current ?? NO_RULES), suppressed: true }));
-    };
-
-    // Keep the rules' contribution in step when the matched profile is edited or deleted: the settings'
-    // first-match order decides what runs, so it is read again rather than merged client-side.
-    const onProfilesChanged = ({ name }: { name: string; values?: ChallengeValues; deleted?: boolean }) => {
-        if (name.toLowerCase() !== titleRules?.profile?.name.toLowerCase() || !challengeId) return;
-        const asked = onScreen.current;
-        void rereadTitleRules(
-            challengeTitle,
-            challengeId,
-            setTitleRules,
-            () => onScreen.current === asked,
-            () => suppressedNow.current,
-        );
     };
 
     // The matched profile's own values, while it applies (the "Using profile" badge).

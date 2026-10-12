@@ -134,6 +134,19 @@ const imminentBoosts = (now: number, describe: DescribeDeadlineActions): Array<{
 const describeBoost = (b: { title: string; dueIn: number }, t: (key: string) => string, locale: string) =>
     `• ${b.title} — ${b.dueIn <= 0 ? t('quitGuard.dueNow') : t('quitGuard.dueIn').replace('{time}', formatDuration(b.dueIn, { locale }))}`;
 
+const quitDialogOptions = (
+    boosts: Array<{ title: string; dueIn: number }>,
+    t: (key: string) => string,
+    locale: string,
+): MessageBoxOptions => ({
+    type: 'warning',
+    buttons: [t('quitGuard.keepRunning'), t('quitGuard.quitAnyway')],
+    defaultId: 0,
+    cancelId: 0,
+    message: t('quitGuard.title'),
+    detail: `${t('quitGuard.detail')}\n\n${boosts.map((b) => describeBoost(b, t, locale)).join('\n')}`,
+});
+
 /**
  * Hold a quit/close that would forfeit an imminent boost, and ask.
  *
@@ -185,14 +198,7 @@ const holdQuitForOpenBoosts = (
     if (prompting) return true;
     prompting = true;
 
-    const options: MessageBoxOptions = {
-        type: 'warning',
-        buttons: [t('quitGuard.keepRunning'), t('quitGuard.quitAnyway')],
-        defaultId: 0,
-        cancelId: 0,
-        message: t('quitGuard.title'),
-        detail: `${t('quitGuard.detail')}\n\n${boosts.map((b) => describeBoost(b, t, locale)).join('\n')}`,
-    };
+    const options = quitDialogOptions(boosts, t, locale);
     const shown =
         parent && !parent.isDestroyed() ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options);
 
