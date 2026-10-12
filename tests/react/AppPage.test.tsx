@@ -58,7 +58,9 @@ const mockAutovote = {
     statusClass: 'x',
     lastRun: null,
     cycles: 0,
-    nextRunAt: null,
+    nextRunAt: null as number | null,
+    pendingStartAt: null as number | null,
+    start: jest.fn(),
     stop: jest.fn(),
     toggle: jest.fn(),
 };
@@ -111,6 +113,7 @@ describe('App page', () => {
         for (const k of Object.keys(mockProps)) delete (mockProps as Record<string, unknown>)[k];
         mockChallenges.challenges = [];
         mockAutovote.running = false;
+        mockAutovote.pendingStartAt = null;
         mockAutovote.cycles = 0;
         originals = Object.fromEntries(API_METHODS.map((m) => [m, window.api[m]]));
         window.api.getSettings = jest.fn().mockResolvedValue({ onboardingCompleted: true });
@@ -228,6 +231,14 @@ describe('App page', () => {
         );
     });
 
+    test('logout while a resume is held stops it first', async () => {
+        mockAutovote.pendingStartAt = Date.now() + 30_000;
+        await renderReady();
+        fireEvent.click(screen.getByTitle('app.logout'));
+        await waitFor(() => expect(window.api.logout).toHaveBeenCalledTimes(1));
+        expect(mockAutovote.stop).toHaveBeenCalledTimes(1);
+    });
+
     test.each([
         [new Error('net'), 'Error during logout: net'],
         ['plain', 'Error during logout: plain'],
@@ -305,6 +316,35 @@ describe('App page', () => {
         mockAutovote.toggle.mockRejectedValueOnce(thrown);
         await act(async () => {
             await mockProps.AutoVoteControls.onToggle();
+        });
+        expect(window.api.logError).toHaveBeenCalledWith(logged);
+    });
+
+    test("a held resume is passed down, and Start now / Don't resume start and stop it", async () => {
+        mockAutovote.pendingStartAt = 1_700_000_000_000;
+        await renderReady();
+        expect(mockProps.AutoVoteControls.pendingStartAt).toBe(1_700_000_000_000);
+        expect(mockProps.StatusHeader.pendingStartAt).toBe(1_700_000_000_000);
+        await act(async () => {
+            await mockProps.AutoVoteControls.onStartNow();
+        });
+        expect(mockAutovote.start).toHaveBeenCalledTimes(1);
+        await act(async () => {
+            await mockProps.AutoVoteControls.onCancelResume();
+        });
+        expect(mockAutovote.stop).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+        ['start', 'Start now', 'Autovote start failed: down'],
+        ['stop', "Don't resume", 'Autovote resume cancel failed: down'],
+    ] as const)('a rejected %s from %s is logged, not left unhandled', async (method, _label, logged) => {
+        await renderReady();
+        mockAutovote[method].mockRejectedValueOnce(new Error('down'));
+        await act(async () => {
+            await (method === 'start'
+                ? mockProps.AutoVoteControls.onStartNow()
+                : mockProps.AutoVoteControls.onCancelResume());
         });
         expect(window.api.logError).toHaveBeenCalledWith(logged);
     });

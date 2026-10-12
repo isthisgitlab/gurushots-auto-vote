@@ -197,8 +197,8 @@ function AppContent() {
 
     const handleLogout = useCallback(async () => {
         try {
-            // Stop autovote if running
-            if (autovote.running) {
+            // Stop autovote if running, or held at launch for a resume
+            if (autovote.running || autovote.pendingStartAt !== null) {
                 await autovote.stop();
             }
             await ipc.logout();
@@ -207,15 +207,27 @@ function AppContent() {
         }
     }, [autovote]);
 
-    const handleAutovoteToggle = useCallback(async () => {
+    // start/stop await bridge calls; a failure there must reach the log
+    // rather than surface as an unhandled rejection from a click.
+    const logAutovoteFailure = useCallback(async (action: string, run: () => Promise<void>) => {
         try {
-            await autovote.toggle();
+            await run();
         } catch (err) {
-            // start/stop await bridge calls; a failure there must reach the log
-            // rather than surface as an unhandled rejection from a click.
-            await ipc.logRendererError(`Autovote toggle failed: ${errorMessage(err) || err}`);
+            await ipc.logRendererError(`Autovote ${action} failed: ${errorMessage(err) || err}`);
         }
-    }, [autovote]);
+    }, []);
+    const handleAutovoteToggle = useCallback(
+        () => logAutovoteFailure('toggle', autovote.toggle),
+        [autovote.toggle, logAutovoteFailure],
+    );
+    const handleStartNow = useCallback(
+        () => logAutovoteFailure('start', autovote.start),
+        [autovote.start, logAutovoteFailure],
+    );
+    const handleCancelResume = useCallback(
+        () => logAutovoteFailure('resume cancel', autovote.stop),
+        [autovote.stop, logAutovoteFailure],
+    );
 
     // Show loading while initializing
     if (!ready || settingsLoading) {
@@ -247,6 +259,9 @@ function AppContent() {
                         cycles={autovote.cycles}
                         onToggle={handleAutovoteToggle}
                         autoJoinActive={autoJoinActive}
+                        pendingStartAt={autovote.pendingStartAt}
+                        onStartNow={handleStartNow}
+                        onCancelResume={handleCancelResume}
                     />
 
                     {/* At-a-glance status summary — counts + next-action countdown + bankroll */}
@@ -256,6 +271,7 @@ function AppContent() {
                         running={autovote.running}
                         bankroll={bankroll}
                         autoClaimStatus={autoClaimStatus}
+                        pendingStartAt={autovote.pendingStartAt}
                     />
 
                     {/* Challenges Section — the primary view (joined/active) */}

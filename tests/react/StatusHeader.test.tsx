@@ -80,6 +80,33 @@ describe('StatusHeader', () => {
         expect(screen.getByTestId('status-header').textContent).toContain('~1m 54s');
     });
 
+    test('a held resume counts down to its start, with its own label and hint', () => {
+        wrap(
+            <StatusHeader
+                challenges={oneChallenge}
+                running={false}
+                nextRunAt={null}
+                pendingStartAt={BASE_MS + 45_000}
+                autoClaimStatus={{ enabled: true, nextClaimAt: BASE_MS + 3_600_000 }}
+            />,
+        );
+        expect(screen.getByText('app.statusHeaderResumesIn:')).toBeTruthy();
+        expect(screen.queryByText('app.statusHeaderNext:')).toBeNull();
+        const resumes = screen.getByTitle('app.statusHeaderResumesInHint');
+        expect(resumes.textContent).toBe('~45s');
+        act(() => jest.advanceTimersByTime(1000));
+        expect(resumes.textContent).toBe('~44s');
+        // The claim countdown stays as it was (autovote is not running yet).
+        expect(screen.getByText('app.statusHeaderNextClaim:').parentElement!.textContent).toContain(
+            'app.statusHeaderNotRunning',
+        );
+    });
+
+    test('the bar stays visible while a resume is pending, even with nothing else to show', () => {
+        wrap(<StatusHeader challenges={[]} running={false} pendingStartAt={BASE_MS + 45_000} />);
+        expect(screen.getByTestId('status-header')).toBeTruthy();
+    });
+
     test('claim countdown is independent and its tick does not re-render the header', () => {
         wrap(
             <StatusHeader

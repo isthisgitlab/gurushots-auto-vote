@@ -285,6 +285,22 @@ Deliberate semantics and caveats:
 - **Lifecycle**: tied to the renderer window. Closing the window stops
   the loop. The persisted `autovoteRunning` flag means a relaunch
   resumes voting without the user re-clicking Start.
+- **Startup hold**: that resume waits until `autovoteStartupDelay`
+  seconds (default 60, `0` = off) after the app _launched_, so settings
+  can be checked before the first cycle spends anything. The anchor is
+  `launchedAt` from `getEnvironmentInfo()` (captured when the process
+  hosting the IPC handlers loads), not the mount: a window reload during
+  the hold continues the same countdown, and one after it resumes at
+  once. While held, `pendingStartAt` drives a countdown with Start now /
+  Don't resume (`stop()` cancels the pending timer and persists
+  `autovoteRunning=false`). A native Android service that is already
+  running is adopted at once, never held. The Electron main process
+  honours the hold too: `start()` persists `autovoteStartedAt` just
+  before the running flag, and the sleep boost and the quit guard count
+  a session as running only when `autovoteStartedAt >= launchedAt`. A
+  resume still held carries the previous launch's value, so it is not
+  live; a manual Start or Start now is live at once. `cli:start` is an
+  explicit start and ignores it.
 - **Staying schedulable** — the "never sleep past a boundary" guarantee
   is only as good as the timer that carries it, and this chain runs in a
   _renderer_. Two mechanisms will hold that timer for tens of minutes

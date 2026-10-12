@@ -239,6 +239,9 @@ jest.mock('../../src/ts/windows/quitGuard', () => ({
     resetQuitGuard: jest.fn(),
 }));
 jest.mock('../../src/ts/windows/suspendBoost', () => ({
+    // The real helper, run against the mocked settings above.
+    autovoteSessionLive: jest.requireActual<typeof suspendBoostModule>('../../src/ts/windows/suspendBoost')
+        .autovoteSessionLive,
     applyImminentBoostsOnSuspend: jest.fn(() => Promise.resolve()),
 }));
 jest.mock('../../src/ts/ui/applicationMenu', () => ({ createApplicationMenu: jest.fn() }));
@@ -552,7 +555,10 @@ describe('quit guard wiring', () => {
 
     it('before-quit asks first; a held quit neither clears the token nor force-exits', () => {
         m.ipcMain.handlers['login-success']({});
-        m.settings.getSetting.mockImplementation((key) => key === 'autovoteRunning');
+        m.settings.getSetting.mockImplementation((key) =>
+            key === 'autovoteStartedAt' ? 1 : key === 'autovoteRunning',
+        );
+        m.settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 0 }));
         m.quitGuard.holdQuitForOpenBoosts.mockReturnValueOnce(true);
         const event = { preventDefault: jest.fn() };
 
@@ -569,6 +575,24 @@ describe('quit guard wiring', () => {
 
         deps.proceed();
         expect(m.app.quit).toHaveBeenCalled();
+    });
+
+    it('the quit guard holds for a session started in this launch, not for a resume still held at launch', () => {
+        m.ipcMain.handlers['login-success']({});
+        m.settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 5000 }));
+        const sessionStartedAt = (startedAt: number) =>
+            m.settings.getSetting.mockImplementation((key) =>
+                key === 'autovoteStartedAt' ? startedAt : key === 'autovoteRunning',
+            );
+
+        sessionStartedAt(1000);
+        m.app.handlers['before-quit']({ preventDefault: jest.fn() });
+        expect(m.quitGuard.holdQuitForOpenBoosts.mock.calls[0][1].autovoteRunning).toBe(false);
+
+        m.quitGuard.holdQuitForOpenBoosts.mockClear();
+        sessionStartedAt(6000);
+        m.app.handlers['before-quit']({ preventDefault: jest.fn() });
+        expect(m.quitGuard.holdQuitForOpenBoosts.mock.calls[0][1].autovoteRunning).toBe(true);
     });
 
     it('closing the main window asks first, re-closes on confirm, and resets the guard once closed', () => {

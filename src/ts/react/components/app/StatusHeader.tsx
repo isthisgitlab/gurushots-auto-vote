@@ -195,10 +195,13 @@ export function StatusHeader({
     running,
     bankroll,
     autoClaimStatus,
+    pendingStartAt,
 }: {
     challenges: Challenge[];
     nextRunAt?: number | null;
     running: boolean;
+    /** Unix ms a held auto-resume starts; the next-action stat counts down to it */
+    pendingStartAt?: number | null;
     bankroll?: Bankroll | null;
     autoClaimStatus?: { enabled: boolean; nextClaimAt: number } | null;
 }) {
@@ -217,8 +220,10 @@ export function StatusHeader({
     // and needs to see their coins before a paid join. Only fully idle + no
     // bankroll hides it.
     const hasBankroll = bankroll !== undefined && bankroll !== null;
-    // When running the bar always renders, so no extra term is needed here.
-    if (activeCount === 0 && !running && !hasBankroll) return null;
+    const pending = typeof pendingStartAt === 'number';
+    // When running the bar always renders, so no extra term is needed here. A held
+    // resume keeps it too: its countdown is the only sign of when voting starts.
+    if (activeCount === 0 && !running && !hasBankroll && !pending) return null;
 
     return (
         // The card is NOT role="status"/aria-live: the next-action countdown
@@ -236,7 +241,13 @@ export function StatusHeader({
                 <HeaderStat icon="⚡" value={turbosAvailable} label={t('app.statusHeaderTurbos')} />
                 {missedBoosts.length > 0 && <MissedBoostsJump missed={missedBoosts} bankroll={bankroll} />}
                 {lowExposureCount > 0 && <HeaderStat icon="👁" value={lowExposureCount} label={t('app.lowExposure')} />}
-                <HeaderCountdown icon="⏳" labelKey="app.statusHeaderNext" nextRunAt={nextRunAt} running={running} />
+                <HeaderCountdown
+                    icon="⏳"
+                    labelKey={pending ? 'app.statusHeaderResumesIn' : 'app.statusHeaderNext'}
+                    nextRunAt={pending ? pendingStartAt : nextRunAt}
+                    running={pending || running}
+                    titleKey={pending ? 'app.statusHeaderResumesInHint' : undefined}
+                />
                 {autoClaimStatus?.enabled && (
                     <HeaderCountdown
                         icon="🎁"

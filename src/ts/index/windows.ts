@@ -5,6 +5,7 @@ import * as logger from '../logger';
 import { watchSettingsFile } from '../windows/settingsWatcher';
 import { syncBackgroundActivity } from '../windows/backgroundActivity';
 import { holdQuitForOpenBoosts, bypassQuitGuard, resetQuitGuard } from '../windows/quitGuard';
+import { autovoteSessionLive } from '../windows/suspendBoost';
 import { translationManager } from '../translations/index';
 import { appState } from './state';
 
@@ -14,7 +15,7 @@ import type { WebPreferences } from 'electron';
 // and ask first; `proceed` re-issues it once confirmed. See windows/quitGuard.ts.
 function holdForOpenBoosts(event: { preventDefault: () => void }, proceed: () => void) {
     return holdQuitForOpenBoosts(event, {
-        autovoteRunning: settings.getSetting('autovoteRunning') === true,
+        autovoteRunning: autovoteSessionLive(),
         dialog,
         parent: appState.mainWindow,
         t: (key) => translationManager.t(key),

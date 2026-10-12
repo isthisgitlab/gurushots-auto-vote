@@ -238,6 +238,10 @@ const getUserDataPath = () => {
     return path.dirname(getSettingsPath());
 };
 
+// When this process loaded, in ms: the anchor of the startup hold on auto-resume
+// (scheduling/startupDelay.ts). Captured once, so a window reload does not move it.
+const launchedAt = Date.now();
+
 // Get current environment information
 const getEnvironmentInfo = () => {
     const isElectronPackaged = electronApp ? electronApp.isPackaged : false;
@@ -252,6 +256,7 @@ const getEnvironmentInfo = () => {
         isElectronPackaged: isElectronPackaged,
         isBuiltApp: isBuiltApp,
         appName: getAppName(),
+        launchedAt,
     };
 };
 

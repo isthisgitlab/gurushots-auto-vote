@@ -434,6 +434,15 @@ describe('settings storage — edge cases', () => {
             expect(info.userDataPath).toBe(USER_DATA);
         });
 
+        test('getEnvironmentInfo reports when the process loaded, the same on every call', () => {
+            const before = Date.now();
+            const { mod } = loadStorage();
+            const { launchedAt } = mod.getEnvironmentInfo();
+            expect(launchedAt).toBeGreaterThanOrEqual(before);
+            expect(launchedAt).toBeLessThanOrEqual(Date.now());
+            expect(mod.getEnvironmentInfo().launchedAt).toBe(launchedAt);
+        });
+
         test('getEnvironmentInfo without Electron: built only when not running from source', () => {
             const fromSource = loadStorage().mod.getEnvironmentInfo();
             expect(fromSource.isElectronPackaged).toBe(false);

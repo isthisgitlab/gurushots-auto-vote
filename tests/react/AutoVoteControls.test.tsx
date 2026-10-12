@@ -1,5 +1,8 @@
-import { render, screen, fireEvent } from './helpers/test-utils';
+import { render, screen, fireEvent, act } from './helpers/test-utils';
 import { AutoVoteControls } from '@/components/app/AutoVoteControls';
+import { mockTranslator } from './helpers/setup';
+
+const BASE_MS = 1_700_000_000_000;
 
 describe('AutoVoteControls', () => {
     it('offers Start while stopped and shows placeholders for an unrun session', () => {
@@ -13,6 +16,9 @@ describe('AutoVoteControls', () => {
                 cycles={0}
                 onToggle={onToggle}
                 autoJoinActive={false}
+                pendingStartAt={null}
+                onStartNow={jest.fn()}
+                onCancelResume={jest.fn()}
             />,
         );
 
@@ -36,6 +42,9 @@ describe('AutoVoteControls', () => {
                 cycles={7}
                 onToggle={jest.fn()}
                 autoJoinActive={false}
+                pendingStartAt={null}
+                onStartNow={jest.fn()}
+                onCancelResume={jest.fn()}
             />,
         );
 
@@ -56,6 +65,9 @@ describe('AutoVoteControls', () => {
                 cycles={0}
                 onToggle={jest.fn()}
                 autoJoinActive
+                pendingStartAt={null}
+                onStartNow={jest.fn()}
+                onCancelResume={jest.fn()}
             />,
         );
 
@@ -77,6 +89,9 @@ describe('AutoVoteControls', () => {
                 cycles={0}
                 onToggle={jest.fn()}
                 autoJoinActive
+                pendingStartAt={null}
+                onStartNow={jest.fn()}
+                onCancelResume={jest.fn()}
             />,
         );
 
@@ -93,9 +108,81 @@ describe('AutoVoteControls', () => {
                 cycles={0}
                 onToggle={jest.fn()}
                 autoJoinActive={false}
+                pendingStartAt={null}
+                onStartNow={jest.fn()}
+                onCancelResume={jest.fn()}
             />,
         );
 
         expect(screen.queryByText('app.autoJoinBadge')).toBeNull();
+    });
+
+    describe('while an auto-resume is held at launch', () => {
+        const renderPending = (over: { onStartNow?: () => void; onCancelResume?: () => void } = {}) =>
+            render(
+                <AutoVoteControls
+                    running={false}
+                    status="Stopped"
+                    statusClass="badge-neutral"
+                    lastRun={null}
+                    cycles={0}
+                    onToggle={jest.fn()}
+                    autoJoinActive={false}
+                    pendingStartAt={BASE_MS + 45_000}
+                    onStartNow={over.onStartNow ?? jest.fn()}
+                    onCancelResume={over.onCancelResume ?? jest.fn()}
+                />,
+            );
+
+        beforeEach(() => {
+            jest.useFakeTimers();
+            jest.setSystemTime(BASE_MS);
+            mockTranslator.t.mockImplementation((key: string) =>
+                key === 'app.resumeHold' ? 'Resumes in {time}.' : key,
+            );
+        });
+        afterEach(() => {
+            mockTranslator.t.mockImplementation((key: string) => key);
+            jest.useRealTimers();
+        });
+
+        it('shows the translated Starting badge, hides the toggle, and counts down', () => {
+            renderPending();
+
+            expect(screen.getByText('app.statusStarting').className).toContain('badge-warning');
+            expect(screen.queryByText('Stopped')).toBeNull();
+            expect(screen.queryByText('app.startAutoVote')).toBeNull();
+            expect(screen.getByText('Resumes in 45s.')).toBeTruthy();
+
+            act(() => jest.advanceTimersByTime(5000));
+            expect(screen.getByText('Resumes in 40s.')).toBeTruthy();
+        });
+
+        it('clamps a late timer at zero', () => {
+            renderPending();
+            act(() => jest.advanceTimersByTime(90_000));
+            expect(screen.getByText('Resumes in 0s.')).toBeTruthy();
+        });
+
+        it("has Start now and Don't resume buttons that call their handlers", () => {
+            const onStartNow = jest.fn();
+            const onCancelResume = jest.fn();
+            renderPending({ onStartNow, onCancelResume });
+
+            fireEvent.click(screen.getByText('app.resumeStartNow'));
+            expect(onStartNow).toHaveBeenCalledTimes(1);
+            expect(onCancelResume).not.toHaveBeenCalled();
+            fireEvent.click(screen.getByText('app.resumeCancel'));
+            expect(onCancelResume).toHaveBeenCalledTimes(1);
+        });
+
+        it('is not a live region, so the ticking countdown is not re-announced', () => {
+            const { container } = renderPending();
+            const alert = container.querySelector('.alert.alert-info')!;
+            expect(alert).toBeTruthy();
+            expect(alert.getAttribute('role')).toBeNull();
+            expect(alert.getAttribute('aria-live')).toBeNull();
+            expect(alert.querySelector('[role], [aria-live]')).toBeNull();
+        });
     });
 });

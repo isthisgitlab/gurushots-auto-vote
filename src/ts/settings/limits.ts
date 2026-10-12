@@ -59,7 +59,15 @@ const MAX_UPCOMING_HOURS = 168;
 // while the open list has not shown it: Discover keeps its row, and cleanup keeps its chosen photos.
 const UPCOMING_GRACE_SEC = 600;
 
+// The hold, in seconds, between the app launching and an interrupted auto-vote session resuming by
+// itself (schema/general.ts autovoteStartupDelay), so settings can be checked first. The default is
+// here, not only in the schema, because the renderer must not import the zod schema (bundle size).
+const DEFAULT_STARTUP_DELAY_SECONDS = 60;
+const MAX_STARTUP_DELAY_SECONDS = 3600;
+
 export {
+    DEFAULT_STARTUP_DELAY_SECONDS,
+    MAX_STARTUP_DELAY_SECONDS,
     UPCOMING_GRACE_SEC,
     MAX_SCHEDULED_FILL_ENTRIES,
     MAX_VOTING_PAUSE_MINUTES,

@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import { MAX_UPCOMING_HOURS } from '../limits';
+import { DEFAULT_STARTUP_DELAY_SECONDS, MAX_STARTUP_DELAY_SECONDS, MAX_UPCOMING_HOURS } from '../limits';
 import { percentage, percentageOrZero, validatedNumber, zBool } from './validators';
 import type { SettingsSchemaEntry } from './entry';
 
@@ -112,6 +112,22 @@ export const generalSettings = {
         group: 'general',
         label: 'app.discoverUpcomingHours',
         description: 'app.discoverUpcomingHoursDesc',
+    },
+    // Global only: how long the app waits after launching before it resumes an auto-vote session
+    // that was running when it closed, so settings can be checked first. 0 = off (resume at once).
+    // CLI `start` is an explicit start and ignores it.
+    autovoteStartupDelay: {
+        type: 'number',
+        default: DEFAULT_STARTUP_DELAY_SECONDS,
+        perChallenge: false,
+        validation: z.number().int().min(0).max(MAX_STARTUP_DELAY_SECONDS),
+        min: 0,
+        max: MAX_STARTUP_DELAY_SECONDS,
+        unit: 'app.unitSeconds',
+        validationOrder: 1,
+        group: 'general',
+        label: 'app.autovoteStartupDelay',
+        description: 'app.autovoteStartupDelayDesc',
     },
     compactCards: {
         type: 'boolean',

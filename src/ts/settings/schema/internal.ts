@@ -3,6 +3,7 @@
  * settings section, so SETTINGS_GROUPS has no entry for them.
  */
 
+import { z } from 'zod';
 import { zBool, zString } from './validators';
 import type { SettingsSchemaEntry } from './entry';
 
@@ -19,6 +20,20 @@ export const internalSettings = {
         validationOrder: 1,
         label: 'app.autovoteRunning',
         description: 'app.autovoteRunningDesc',
+    },
+    // Unix ms the renderer last started a session (written just before
+    // autovoteRunning). The main process compares it with the launch time to
+    // tell a session started in this launch from one still held at launch.
+    autovoteStartedAt: {
+        type: 'number',
+        default: 0,
+        perChallenge: false,
+        validation: z.number().int().min(0),
+        min: 0,
+        unit: 'app.unitMilliseconds',
+        validationOrder: 1,
+        label: 'app.autovoteStartedAt',
+        description: 'app.autovoteStartedAtDesc',
     },
     // Update version the user chose to skip. Electron persists this in
     // metadata.json (fs); the Android/Capacitor bridge has no fs, so it

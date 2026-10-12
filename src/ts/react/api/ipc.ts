@@ -91,6 +91,7 @@ export const getEffectiveSetting = forward('getEffectiveSetting');
 export const getGlobalDefault = forward('getGlobalDefault');
 export const setGlobalDefault = forward('setGlobalDefault');
 export const getSettingsSchema = forward('getSettingsSchema');
+export const getEnvironmentInfo = forward('getEnvironmentInfo');
 
 // Per-challenge overrides, profiles and title rules
 export const getChallengeOverride = forward('getChallengeOverride');

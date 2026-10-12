@@ -11,6 +11,7 @@ export const ACTIONS = {
     UPDATE_LAST_RUN: 'UPDATE_LAST_RUN',
     SET_ERROR: 'SET_ERROR',
     SET_NEXT_RUN: 'SET_NEXT_RUN',
+    SET_PENDING_START: 'SET_PENDING_START',
 } as const;
 
 export interface AutovoteState {
@@ -19,6 +20,8 @@ export interface AutovoteState {
     /** locale time string of the last successful cycle */
     lastRun: string | null;
     nextRunAt: number | null;
+    /** Unix ms an auto-resume held at launch will start, or null when none is pending */
+    pendingStartAt: number | null;
     status: 'Stopped' | 'Running' | 'Error';
     statusClass: 'badge-neutral' | 'badge-success' | 'badge-error';
     error: string | null;
@@ -30,7 +33,8 @@ export type AutovoteAction =
     | { type: typeof ACTIONS.INCREMENT_CYCLE }
     | { type: typeof ACTIONS.UPDATE_LAST_RUN; payload: string }
     | { type: typeof ACTIONS.SET_ERROR; payload: string }
-    | { type: typeof ACTIONS.SET_NEXT_RUN; payload: number | null };
+    | { type: typeof ACTIONS.SET_NEXT_RUN; payload: number | null }
+    | { type: typeof ACTIONS.SET_PENDING_START; payload: number | null };
 
 export const initialState: AutovoteState = {
     running: false,
@@ -41,6 +45,9 @@ export const initialState: AutovoteState = {
     // powers the status header's next-action countdown. Only meaningful while
     // running — STOP clears it.
     nextRunAt: null,
+    // Set while the startup hold (scheduling/startupDelay.ts) delays an auto-resume;
+    // START and STOP clear it.
+    pendingStartAt: null,
     status: 'Stopped',
     statusClass: 'badge-neutral',
     error: null,
@@ -52,6 +59,7 @@ export function autovoteReducer(state: AutovoteState, action: AutovoteAction): A
             return {
                 ...state,
                 running: true,
+                pendingStartAt: null,
                 status: 'Running',
                 statusClass: 'badge-success',
                 error: null,
@@ -61,6 +69,7 @@ export function autovoteReducer(state: AutovoteState, action: AutovoteAction): A
                 ...state,
                 running: false,
                 nextRunAt: null,
+                pendingStartAt: null,
                 status: 'Stopped',
                 statusClass: 'badge-neutral',
             };
@@ -81,6 +90,11 @@ export function autovoteReducer(state: AutovoteState, action: AutovoteAction): A
             return {
                 ...state,
                 nextRunAt: action.payload,
+            };
+        case ACTIONS.SET_PENDING_START:
+            return {
+                ...state,
+                pendingStartAt: action.payload,
             };
         case ACTIONS.SET_ERROR:
             return {

@@ -119,6 +119,9 @@ export const app = {
     autovoteRunning: 'Automātiskā balsošana darbojas',
     autovoteRunningDesc:
         'Iekšējs — atceras, vai automātiskā balsošana bija ieslēgta, lai pēc lietotnes restartēšanas tā atsāktos pati',
+    autovoteStartedAt: 'Automātiskās balsošanas sākuma laiks',
+    autovoteStartedAtDesc:
+        'Iekšējs — kad automātiskā balsošana pēdējo reizi tika sākta, lai lietotne atšķirtu šajā palaišanas reizē sākto balsošanu no tādas, kas vēl gaida atsākšanu',
     skipUpdateVersion: 'Izlaistā atjauninājuma versija',
     skipUpdateVersionDesc:
         'Iekšējs — atjauninājuma versija, ko lietotājs izvēlējās izlaist; lietotne šo versiju nepiedāvās, kamēr šī vērtība nav notīrīta',
@@ -154,6 +157,9 @@ export const app = {
         'Balvas saņem pirmajā balsošanas ciklā pēc tam, kad beidzies stundu garais gaidīšanas periods.',
     statusHeaderNotRunning: 'automātiskā balsošana izslēgta',
     statusHeaderNextApprox: 'aptuveni — pārrēķina katrā ciklā',
+    statusHeaderResumesIn: 'Atsāksies pēc',
+    statusHeaderResumesInHint:
+        'Pēc palaišanas lietotne uzgaida, pirms atsāk automātisko balsošanu, lai vari vispirms pārbaudīt uzstādījumus.',
     settingHelpLabel: 'Ko tas nozīmē?',
     autoJoinBadge: 'automātiskā pievienošanās ieslēgta',
     autoJoinBadgeTitle:
@@ -244,6 +250,8 @@ export const app = {
     unitPercent: '%',
     unitMinutes: 'min',
     unitHours: 'h',
+    unitSeconds: 's',
+    unitMilliseconds: 'ms',
     unitCoins: 'monētas',
     unitVotes: 'balsis',
     unitKeys: 'atslēgas',
@@ -1020,6 +1028,9 @@ export const app = {
     discoverUpcomingHours: 'Cik stundas uz priekšu rādīt gaidāmos izaicinājumus',
     discoverUpcomingHoursDesc:
         'Cik tālu uz priekšu „Atrast izaicinājumus” rāda izaicinājumus, kas vēl nav sākušies, lai foto tiem varētu izvēlēties jau iepriekš. Tiem nevar pievienoties, kamēr tie nav sākušies, un izvēlētos foto lietotne izmanto automātiski tikai tad, ja šim izaicinājumam ir ieslēgta automātiskā pievienošanās. 0 = izslēgts: rāda tikai atvērtos izaicinājumus.',
+    autovoteStartupDelay: 'Gaidīt pēc palaišanas, pirms atsākt automātisko balsošanu',
+    autovoteStartupDelayDesc:
+        'Ja lietotne tika aizvērta, kamēr automātiskā balsošana bija ieslēgta, cik sekundes pēc palaišanas tā uzgaida, pirms atsāk balsošanu pati, lai vari vispirms pārbaudīt uzstādījumus. Kamēr tā gaida, galvenajā ekrānā ir pogas „Sākt tūlīt” un „Neatsākt”. Attiecas tikai uz lietotnes automātisko atsākšanu, nevis uz sākšanu no komandrindas. 0 = izslēgts: balsošana atsākas uzreiz. Android ierīcē, ja lietotni aizver gaidīšanas laikā, balsošana atsāksies nākamreiz, kad to atver.',
     override: 'Pielāgots',
     overrideForChallenge: 'Pielāgot uzstādījumus izaicinājumam',
     photo: 'foto',
@@ -1049,6 +1060,11 @@ export const app = {
     skipThisVersion: 'Izlaist šo versiju',
     speed: 'Ātrums',
     startAutoVote: 'Sākt automātisko balsošanu',
+    statusStarting: 'Sāk darbu',
+    resumeHold:
+        'Automātiskā balsošana atsāksies pēc {time}. Pēc palaišanas lietotne uzgaida, lai vari vispirms pārbaudīt uzstādījumus.',
+    resumeStartNow: 'Sākt tūlīt',
+    resumeCancel: 'Neatsākt',
     stayLoggedIn: 'Saglabāt pieteikšanos',
     stayLoggedInDesc: 'Saglabāt sesiju, lai pēc lietotnes aizvēršanas tu paliktu pieteicies.',
     stopAutoVote: 'Apturēt automātisko balsošanu',

@@ -39,6 +39,7 @@ import * as logger from '../logger';
 import * as settings from '../settings';
 import * as apiFactory from '../apiFactory';
 import * as votingLogic from '../services/VotingLogic';
+import { isInteger } from '../numbers';
 import { formatDuration } from '../format/duration';
 import { failureText } from '../format/logSafe';
 import {
@@ -52,7 +53,21 @@ import {
 let running = false;
 
 /**
- * Nothing is boosted unless auto-vote is running; that is read here, inside the
+ * Auto-vote is running AND was started in this launch. A resume still held at
+ * launch carries the previous launch's `autovoteStartedAt`, so it is not live
+ * (nothing to boost or forfeit); a manual Start or Start now is live at once.
+ */
+const autovoteSessionLive = (): boolean => {
+    const startedAt = settings.getSetting('autovoteStartedAt');
+    return (
+        settings.getSetting('autovoteRunning') === true &&
+        isInteger(startedAt) &&
+        startedAt >= settings.getEnvironmentInfo().launchedAt
+    );
+};
+
+/**
+ * Nothing is boosted unless auto-vote is running (and started in this launch, not still held); that is read here, inside the
  * try, so a failing settings read is logged rather than thrown at the listener.
  *
  * @param deps.now - Unix seconds
@@ -70,7 +85,7 @@ const applyImminentBoostsOnSuspend = async ({
     // The batch can stay pending across the sleep while transport retries run, so
     // `running` is released in `finally`.
     try {
-        if (settings.getSetting('autovoteRunning') !== true) return;
+        if (!autovoteSessionLive()) return;
         const { token, mock } = settings.loadSettings();
         if (!token) return;
         // The remembered list must be the one the current API surface would act on.
@@ -140,4 +155,4 @@ const applyImminentBoostsOnSuspend = async ({
     }
 };
 
-export { applyImminentBoostsOnSuspend };
+export { applyImminentBoostsOnSuspend, autovoteSessionLive };

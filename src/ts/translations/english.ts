@@ -118,6 +118,9 @@ export const app = {
     autovoteRunning: 'Auto-Vote Running',
     autovoteRunningDesc:
         'Internal flag — persists auto-vote state across app restarts so voting can resume automatically',
+    autovoteStartedAt: 'Auto-Vote Started At',
+    autovoteStartedAtDesc:
+        'Internal — when auto-vote was last started, so the app can tell a session started in this launch from one still waiting to resume',
     skipUpdateVersion: 'Skipped Update Version',
     skipUpdateVersionDesc:
         'Internal — the update version the user chose to skip; the app stops prompting for this version until cleared',
@@ -152,6 +155,9 @@ export const app = {
     statusHeaderNextClaimHint: 'Claims run on the first voting cycle after the hourly cooldown ends.',
     statusHeaderNotRunning: 'autovote off',
     statusHeaderNextApprox: 'approximate — recomputed each cycle',
+    statusHeaderResumesIn: 'Resumes in',
+    statusHeaderResumesInHint:
+        'After launch the app waits before it resumes auto-vote, so you can check your settings first.',
     settingHelpLabel: 'What does this mean?',
     autoJoinBadge: 'auto-join on',
     autoJoinBadgeTitle: 'Auto-join runs each voting cycle while autovote is on. Configure it in Settings › Auto Join.',
@@ -241,6 +247,8 @@ export const app = {
     unitPercent: '%',
     unitMinutes: 'min',
     unitHours: 'h',
+    unitSeconds: 's',
+    unitMilliseconds: 'ms',
     unitCoins: 'coins',
     unitVotes: 'votes',
     unitKeys: 'keys',
@@ -1003,6 +1011,9 @@ export const app = {
     discoverUpcomingHours: 'Show upcoming challenges starting within',
     discoverUpcomingHoursDesc:
         'How far ahead Discover Challenges lists challenges that have not started yet, so you can choose photos for them early. They cannot be joined until they start, and chosen photos are used automatically only if auto-join is on for that challenge. 0 = off: Discover lists the open challenges alone.',
+    autovoteStartupDelay: 'Wait after launch before resuming auto-vote',
+    autovoteStartupDelayDesc:
+        "When the app was closed with auto-vote on, how long it waits after launching before it resumes by itself, so you can check your settings first. Start now or Don't resume are on the main screen while it waits. Applies to the app's automatic resume only, not to the command-line start. 0 = off: auto-vote resumes at once. On Android, closing the app during the wait means it resumes the next time you open it.",
     override: 'Override',
     overrideForChallenge: 'Override for Challenge',
     photo: 'photo',
@@ -1032,6 +1043,10 @@ export const app = {
     skipThisVersion: 'Skip This Version',
     speed: 'Speed',
     startAutoVote: 'Start Auto Vote',
+    statusStarting: 'Starting',
+    resumeHold: 'Auto-vote resumes in {time}. After launch it waits so you can check your settings first.',
+    resumeStartNow: 'Start now',
+    resumeCancel: "Don't resume",
     stayLoggedIn: 'Stay Logged In',
     stayLoggedInDesc: 'Keep your session so you stay signed in after closing the app.',
     stopAutoVote: 'Stop Auto Vote',

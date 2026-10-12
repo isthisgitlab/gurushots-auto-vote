@@ -257,6 +257,7 @@ const buildEnvironmentHandlers = () => ({
                 defaultMock: true,
                 platform: process.platform,
                 userDataPath: 'unknown',
+                launchedAt: undefined,
             };
         }
     },

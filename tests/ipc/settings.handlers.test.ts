@@ -216,6 +216,7 @@ describe('get-environment-info', () => {
             defaultMock: true,
             platform: process.platform,
             userDataPath: 'unknown',
+            launchedAt: undefined,
         });
     });
 });

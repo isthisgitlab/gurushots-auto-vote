@@ -29,6 +29,7 @@ jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(),
     getSetting: jest.fn(),
     getEffectiveSetting: jest.fn(),
+    getEnvironmentInfo: jest.fn(),
 }));
 jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
 jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
@@ -83,7 +84,8 @@ beforeEach(() => {
         settle(...challenges.map(() => 'applied' as const)),
     );
     apiFactory.getApiStrategy.mockReturnValue(invalid({ applyBoostsOnSuspend }));
-    settings.getSetting.mockImplementation((key) => key === 'autovoteRunning');
+    settings.getSetting.mockImplementation((key) => (key === 'autovoteStartedAt' ? 1000 : key === 'autovoteRunning'));
+    settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 0 }));
     settings.getEffectiveSetting.mockReturnValue(true);
     settings.loadSettings.mockReturnValue(invalid({ token: TOKEN, mock: false }));
     guard.rememberChallenges([boostChallenge(1, 'One'), boostChallenge(2, 'Two'), boostChallenge(3, 'Three')], false);
@@ -106,6 +108,21 @@ describe('applyImminentBoostsOnSuspend — no-ops', () => {
     test('a boost due at exactly 30 min is applied, one due at 31 min is not', async () => {
         await run();
         expect(applyBoostsOnSuspend.mock.calls[0][0].map((c) => c.id)).toEqual([1, 2]);
+    });
+
+    test('does nothing for a resume still held at launch, but runs for a session started in this launch', async () => {
+        settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 5000 }));
+        // Held: autovoteStartedAt is still the previous launch's.
+        await run();
+        expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
+        expect(settings.loadSettings).not.toHaveBeenCalled();
+
+        // Start / Start now inside the hold persists a newer one: live at once.
+        settings.getSetting.mockImplementation((key) =>
+            key === 'autovoteStartedAt' ? 6000 : key === 'autovoteRunning',
+        );
+        await run();
+        expect(applyBoostsOnSuspend).toHaveBeenCalledTimes(1);
     });
 
     test('does nothing without a token', async () => {
