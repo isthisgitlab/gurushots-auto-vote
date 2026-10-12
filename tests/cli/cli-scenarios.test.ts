@@ -329,6 +329,9 @@ describe('scenario-status', () => {
         await expect(cmd.scenarioStatusCmd('7')).resolves.toBe(1);
         expect(text('error')).toContain('This challenge’s saved scenario progress is unreadable');
         expect(text('error')).toContain('scenario-reset --challenge=7');
+        h['get-scenario-status'].mockResolvedValueOnce(status({ corrupt: 'unloaded' }));
+        await expect(cmd.scenarioStatusCmd('7')).resolves.toBe(1);
+        expect(text('error')).toContain('could not be loaded yet; the app retries — reopen the app if it persists');
         h['get-scenario-status'].mockResolvedValueOnce(status());
         await cmd.scenarioStatusCmd('7');
         expect(text()).toContain('Not started yet');
@@ -398,7 +401,9 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         h['reset-all-scenario-state'].mockResolvedValueOnce({ success: true });
         await expect(cmd.scenarioResetAllCmd()).resolves.toBe(0);
         expect(text('success')).toContain('every challenge');
-        expect(text('success')).toContain('rules that already ran can run again');
+        expect(text('success').split('every challenge')[1]).toContain(
+            'rules that already ran can run (and spend) again',
+        );
     });
 
     test('a busy challenge or file is an error that changed nothing, never a success', async () => {
@@ -423,7 +428,7 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         expect(text('error')).not.toContain('Try again in a moment');
     });
 
-    test('a reset that could not be saved says nothing was changed and points at the free space, for both resets', async () => {
+    test('a reset that could not be saved says nothing was changed and where to look, for both resets', async () => {
         h['reset-scenario-state'].mockResolvedValueOnce({ success: false, error: 'not-saved' });
         await expect(cmd.scenarioResetCmd('7')).resolves.toBe(1);
         h['reset-all-scenario-state'].mockResolvedValueOnce({ success: false, error: 'not-saved' });
@@ -431,8 +436,21 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         expect(lines('error')).toHaveLength(2);
         for (const line of lines('error')) {
             expect(line).toContain('nothing was changed');
-            expect(line).toContain('Free up storage space');
+            expect(line).toContain('storage is full or not writable — logs --error has the details');
         }
+    });
+
+    test('progress that was not loaded yet is not reset, and the line says the app retries', async () => {
+        h['reset-scenario-state'].mockResolvedValueOnce({ success: false, error: 'state-unloaded' });
+        await expect(cmd.scenarioResetCmd('7')).resolves.toBe(1);
+        h['reset-all-scenario-state'].mockResolvedValueOnce({ success: false, error: 'state-unloaded' });
+        await expect(cmd.scenarioResetAllCmd()).resolves.toBe(1);
+        expect(lines('error')).toHaveLength(2);
+        for (const line of lines('error')) {
+            expect(line).toContain('could not be loaded yet; the app retries — reopen the app if it persists');
+            expect(line).toContain('Nothing is reset.');
+        }
+        expect(text('success')).toBe('');
     });
 
     test('an unreadable progress file can only be reset for every challenge, and the line says what that costs', async () => {

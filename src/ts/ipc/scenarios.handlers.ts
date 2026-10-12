@@ -29,14 +29,13 @@ import * as auth from '../services/auth';
 import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 import { isIdArg } from './isIdArg';
-import { errorMessage } from '../errorMessage';
 import { stampChosenPhotosOwner } from './chosenPhotosOwner';
 import { getScenarioStatus, ledgerForMode, stepLockForMode } from '../services/scenarioStatus';
 import { findActiveChallenge } from '../services/findActiveChallenge';
 import { evaluateScenario, startState } from '../scenarios/evaluate';
 import { simulateScenario } from '../scenarios/simulate';
 import { SCENARIO_TEMPLATES } from '../scenarios/templates';
-import { refreshScenarioStateAsync, watchScenarioWrites } from '../scenarioStateStore';
+import { refreshScenarioStateAsync } from '../scenarioStateStore';
 
 import type { IpcMain } from 'electron';
 import type { IpcHandlerMap } from './registerHandlers';
@@ -127,7 +126,7 @@ const loadLiveScenario = async (
         status = { ...status, scenario: checked.scenario, state: null, corrupt: false };
     }
     if (!status.scenario) return refuse(status.assigned ? 'unknown-scenario' : 'no-scenario');
-    if (status.corrupt) return refuse('state-unreadable');
+    if (status.corrupt) return refuse(status.corrupt === 'unloaded' ? 'state-unloaded' : 'state-unreadable');
     const strategy = apiFactory.getApiStrategy();
     const response: ActiveChallengesResponse | null = await strategy.getActiveChallenges(guard.token);
     const challenge = findActiveChallenge(response?.challenges, challengeId);
@@ -158,28 +157,17 @@ const runInput = ({ status, challenge, state, now, bankroll }: LiveScenario) => 
     bankroll,
 });
 
-// What a reset that was not made says: a lock is held, the app cannot make its locks, or the file cannot be read.
+// What a reset that was not made says: a lock is held, the app cannot make its locks, the file cannot be read or was not
+// loaded yet, it reads again where the caller meant to clear an unreadable one, or the reset could not be saved (it
+// takes effect only once it is, so nothing changed).
 const RESET_ERROR = {
     busy: 'busy',
     unavailable: 'locks-unavailable',
     unreadable: 'state-unreadable',
+    unloaded: 'state-unloaded',
+    readable: 'state-readable',
+    'not-saved': 'not-saved',
 } as const;
-
-/**
- * Waits for a reset's writes to reach storage (on Android the app's writes go behind a cache): a reset that did not is
- * an error, not a success.
- *
- * @param written - what watchScenarioWrites answered just before the reset was made
- */
-const persisted = async (written: () => Promise<void>): Promise<boolean> => {
-    try {
-        await written();
-        return true;
-    } catch (error) {
-        log().error(`scenario reset was not persisted: ${errorMessage(error)}`, null);
-        return false;
-    }
-};
 
 /**
  * Forgets one challenge's progress, under the challenge's step lock so that it never runs in the middle of its rule
@@ -190,10 +178,8 @@ const resetScenario = async (challengeId: string | number) => {
     const lock = stepLockForMode(challengeId);
     if (!lock.ok) return { success: false as const, error: lock.unavailable ? 'locks-unavailable' : 'busy' };
     try {
-        const written = watchScenarioWrites();
-        const result = ledgerForMode().remove(String(challengeId));
+        const result = await ledgerForMode().remove(String(challengeId));
         if (result !== 'removed') return { success: false as const, error: RESET_ERROR[result] };
-        if (!(await persisted(written))) return { success: false as const, error: 'not-saved' };
         log().info(`Scenario progress reset for challenge ${logger.sanitizeLogString(String(challengeId))}`, null);
         return { success: true as const };
     } finally {
@@ -202,14 +188,13 @@ const resetScenario = async (challengeId: string | number) => {
 };
 
 /**
- * Forgets every challenge's progress: the only way past a state file that cannot be read.
+ * Forgets every challenge's progress: the only way past a state file that cannot be read. With `onlyIfUnreadable`
+ * (the dialog that offers it for that reason) a file that turns out to read again is left alone.
  */
-const resetEveryScenario = async () => {
+const resetEveryScenario = async (onlyIfUnreadable: boolean) => {
     await refreshScenarioStateAsync();
-    const written = watchScenarioWrites();
-    const result = ledgerForMode().removeAll();
+    const result = await ledgerForMode().removeAll(onlyIfUnreadable);
     if (result !== 'removed') return { success: false as const, error: RESET_ERROR[result] };
-    if (!(await persisted(written))) return { success: false as const, error: 'not-saved' };
     log().warning('Scenario progress reset for every challenge', null);
     return { success: true as const };
 };
@@ -283,7 +268,8 @@ const buildHandlers = () =>
             return safely('reset-scenario-state', () => resetScenario(challengeId));
         },
 
-        'reset-all-scenario-state': async () => safely('reset-all-scenario-state', resetEveryScenario),
+        'reset-all-scenario-state': async (event: unknown, onlyIfUnreadable?: boolean) =>
+            safely('reset-all-scenario-state', () => resetEveryScenario(onlyIfUnreadable === true)),
 
         'dry-run-scenario': async (event: unknown, challengeId: string | number) => {
             if (!isIdArg(challengeId)) return invalidArgs;

@@ -19,6 +19,7 @@ test.each<[ScenarioSummary, string]>([
     [{ name: 'Gone', missing: true }, 'app.scenarioStatusMissing'],
     [{ name: 'Plan', corrupt: 'file' }, 'app.scenarioStatusCorrupt'],
     [{ name: 'Plan', corrupt: 'record' }, 'app.scenarioStatusCorruptRecord'],
+    [{ name: 'Plan', corrupt: 'unloaded' }, 'app.scenarioStatusUnloaded'],
 ])('warns for %p', (status, key) => {
     render(<ScenarioStatusLine status={status} />);
     expect(screen.getByRole('status').textContent).toContain(key);
@@ -126,6 +127,16 @@ describe('the reset button', () => {
         fireEvent.click(screen.getByText('app.scenarioResetAll'));
         expect(onReset).toHaveBeenCalledTimes(1);
         expect(screen.queryByText('app.scenarioReset')).toBeNull();
+    });
+
+    test('is not offered for progress that was not loaded yet: nothing is known of it, and nothing is reset', () => {
+        const onReset = jest.fn();
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'unloaded' }} onReset={onReset} />);
+        expect(screen.queryByText('app.scenarioReset')).toBeNull();
+        expect(screen.queryByText('app.scenarioResetAll')).toBeNull();
+        cleanup();
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'unloaded' }} compact />);
+        expect(screen.getByRole('status').textContent).toContain('app.scenarioStatusUnloadedShort');
     });
 
     test('is the reset of this challenge alone when only its record cannot be read', () => {

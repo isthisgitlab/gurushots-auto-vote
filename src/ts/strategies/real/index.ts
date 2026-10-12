@@ -22,7 +22,12 @@ import { cleanupStaleMetadata } from '../../metadata';
 import { swapBackLedger } from '../../swapBackStore';
 import { autoSpendLedger } from '../../currencyAutoStore';
 import { entryAgeLedger } from '../../entryAgeStore';
-import { scenarioStateLedger, scenarioStepLock, refreshScenarioStateAsync } from '../../scenarioStateStore';
+import {
+    scenarioStateLedger,
+    scenarioStateLoaded,
+    scenarioStepLock,
+    refreshScenarioStateAsync,
+} from '../../scenarioStateStore';
 import { backgroundServiceOwnsScenarios } from '../../services/scenarioRunner';
 import { sleep, getRandomDelay } from '../../timing';
 import * as logger from '../../logger';
@@ -256,8 +261,9 @@ const fetchChallengesAndVote = async (
             }
         }
         // The Android background service advances scenarios in its own JS context;
-        // re-read its state so this pass's phase-settings overlay is current.
-        if (backgroundServiceOwnsScenarios()) await refreshScenarioStateAsync();
+        // re-read its state so this pass's phase-settings overlay is current. Also while the app's cache of it was
+        // never filled (a start-up read failed): until it is, plans stay paused.
+        if (backgroundServiceOwnsScenarios() || !scenarioStateLoaded()) await refreshScenarioStateAsync();
         return await runVotingPass(token, challengeIdFilter, {
             api: votingPassApi(),
             cleanupStaleMetadata,

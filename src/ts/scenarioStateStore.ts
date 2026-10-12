@@ -46,13 +46,15 @@
  * open too, so the app re-reads the store (refreshScenarioStateAsync) before it reads or resets scenario state. A
  * reset made in the app is not written into the file from the app's cache (the service may have written it since):
  * it is asked for in a store of its own (`gs_scenario_resets`: `{ "<challengeId>": count, "@all": count }`), and
- * applied by whichever runtime reads or writes the file next.
+ * applied by whichever runtime reads or writes the file next. A request is saved before anything can read it, so one
+ * that could not be saved has taken effect nowhere. While the app's caches hold nothing known (a start-up read failed)
+ * the file reads as `corrupt: 'unloaded'`: plans stay paused and nothing is reset, until a read succeeds.
  */
 
 import type { RawJsonStore, ScenarioEpoch, ScenarioState } from './types/stores';
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
-import { isCacheKnown, rollBackFailedWrites } from './settings/storeTransport';
+import { isCacheKnown } from './settings/storeTransport';
 import * as runtime from './runtime';
 import { errorMessage } from './errorMessage';
 import { acquireUnlockLock } from './joinStateStore';
@@ -65,32 +67,28 @@ const RESETS_KEY = 'gs_scenario_resets';
 // `strict`: a write the native bridge did not persist is a failed write, not a quiet one (the write-ahead marker is
 // worth nothing otherwise). Its cache keeps the latest write when the app's Preferences refuse it: that is the record
 // of a spend that may already have been made, and taking it back would let the rule spend again.
-const scenarioStateFileStore = createJsonStore({
+const scenarioStateStore = createJsonStore({
     fileName: 'scenarioState.json',
     prefKey: STATE_KEY,
     atomic: true,
     strict: true,
 });
 
-// The app's cache of the file reads as unreadable (not as empty) until it holds something known: a Preferences read
-// that failed at start-up says nothing about what was there, and a plan restarted from nothing could spend again.
-const scenarioStateStore = {
-    ...scenarioStateFileStore,
-    readRaw: (): string | null =>
-        runtime.isCapacitor() && !runtime.isHeadlessService() && !isCacheKnown(STATE_KEY)
-            ? ''
-            : scenarioStateFileStore.readRaw(),
-};
-
-// The resets asked for on Android (see the header). A reset that was not saved must not take effect, so its cache goes
-// back to what is saved when a write fails.
-rollBackFailedWrites(RESETS_KEY);
+// The resets asked for on Android (see the header).
 const scenarioResetsStore = createJsonStore({
     fileName: 'scenarioResets.json',
     prefKey: RESETS_KEY,
     atomic: true,
     strict: true,
 });
+
+/**
+ * Whether the stores hold what is saved. The Android app's caches are filled by a read at start-up that can fail: a
+ * cache that was not is empty because it could not be filled, not because nothing is saved, and a plan restarted from
+ * nothing could spend again. Everywhere else the stores are the files themselves.
+ */
+const scenarioStateLoaded = (): boolean =>
+    !runtime.isCapacitor() || runtime.isHeadlessService() || (isCacheKnown(STATE_KEY) && isCacheKnown(RESETS_KEY));
 
 /**
  * A fresh record for a challenge entering `scenario` at its start phase.
@@ -117,9 +115,15 @@ type SetResult = 'saved' | 'refused' | 'failed';
  *
  * @param acquireLock - see createStateFile
  * @param requests - see createStateFile
+ * @param isLoaded - see createStateFile
  */
-const createStateLedger = (store: RawJsonStore, acquireLock?: (id: string) => StateLock, requests?: RawJsonStore) => {
-    const { read, mutate, resetOne, resetAll } = createStateFile(store, acquireLock, requests);
+const createStateLedger = (
+    store: RawJsonStore,
+    acquireLock?: (id: string) => StateLock,
+    requests?: RawJsonStore,
+    isLoaded?: () => boolean,
+) => {
+    const { read, mutate, resetOne, resetAll } = createStateFile(store, acquireLock, requests, isLoaded);
 
     // Writes one challenge's state into the file as it is now (see `set` for what it answers).
     const persist = (key: string, { epoch, ...state }: ScenarioState): SetResult => {
@@ -151,10 +155,10 @@ const createStateLedger = (store: RawJsonStore, acquireLock?: (id: string) => St
          */
         get: (
             challengeId: string | number,
-        ): { corrupt: false | 'file' | 'record'; state: ScenarioState | null; epoch: ScenarioEpoch } => {
+        ): { corrupt: false | 'file' | 'record' | 'unloaded'; state: ScenarioState | null; epoch: ScenarioEpoch } => {
             const key = String(challengeId);
-            const { ok, map } = read();
-            if (!ok) return { corrupt: 'file', state: null, epoch: { all: 0, gen: 0 } };
+            const { ok, map, unloaded } = read();
+            if (!ok) return { corrupt: unloaded ? 'unloaded' : 'file', state: null, epoch: { all: 0, gen: 0 } };
             const epoch = epochOf(map, key);
             const record = map[key];
             if (record === undefined || isTombstone(record)) return { corrupt: false, state: null, epoch };
@@ -175,13 +179,13 @@ const createStateLedger = (store: RawJsonStore, acquireLock?: (id: string) => St
          * from bringing it back. An unreadable file is left as it is: clearing it takes a reset of every challenge
          * (removeAll).
          */
-        remove: (challengeId: string | number): ResetResult => resetOne(String(challengeId)),
+        remove: (challengeId: string | number): Promise<ResetResult> => resetOne(String(challengeId)),
 
         /**
          * Forget every challenge's state, an unreadable file included, and count it: no step that was running
          * writes its progress back.
          */
-        removeAll: (): ResetResult => resetAll(),
+        removeAll: (onlyIfUnreadable?: boolean): Promise<ResetResult> => resetAll(onlyIfUnreadable),
     };
 };
 
@@ -200,6 +204,7 @@ const scenarioStateLedger = createStateLedger(
     scenarioStateStore,
     (id) => acquireUnlockLock(id, { category: 'scenario', internal: true }),
     scenarioResetsStore,
+    scenarioStateLoaded,
 );
 
 /**
@@ -231,17 +236,9 @@ export const flushScenarioStateWrites = async () => {
     if (failed) throw failed.reason;
 };
 
-/**
- * Marks now, as the point a reset's writes are counted from: call it just before making the reset, with nothing
- * awaited in between. What it returns waits for the writes made since, and says so if one did not persist; a write
- * that failed before the mark is not held against the reset.
- */
-export const watchScenarioWrites = (): (() => Promise<void>) => {
-    void Promise.allSettled([scenarioStateStore.flushPendingWrites(), scenarioResetsStore.flushPendingWrites()]);
-    return flushScenarioStateWrites;
-};
 export {
     scenarioStateLedger,
+    scenarioStateLoaded,
     mockScenarioStateLedger,
     createStateLedger,
     createMemoryStateLedger,

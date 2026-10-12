@@ -30,7 +30,7 @@ const stepLockForMode = (challengeId: string | number) =>
  * @param ledger - defaults to the ledger for the current mode
  *   `assigned` is the challenge's `scenario` setting ('' = none); `scenario`
  *   is null when that name is unknown; `state` is null until the plan starts
- *   (or when it belongs to another scenario); `corrupt` means unreadable state.
+ *   (or when it belongs to another scenario); `corrupt` means unreadable state (`unloaded`: not read in yet).
  */
 const getScenarioStatus = (
     challengeId: string | number,
@@ -39,7 +39,7 @@ const getScenarioStatus = (
     assigned: string;
     scenario: ScenarioDocument | null;
     state: ScenarioState | null;
-    corrupt: false | 'file' | 'record';
+    corrupt: false | 'file' | 'record' | 'unloaded';
     timezone: string;
 } => {
     const id = String(challengeId);
@@ -64,7 +64,7 @@ const scenarioWakeInput = ({
 }: {
     scenario: ScenarioDocument | null;
     state: ScenarioState | null;
-    corrupt: false | 'file' | 'record';
+    corrupt: false | 'file' | 'record' | 'unloaded';
     timezone: string;
 }) => (scenario && !corrupt ? { scenario, state, timezone } : null);
 

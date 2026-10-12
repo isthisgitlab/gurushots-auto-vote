@@ -90,10 +90,11 @@ describe('scenarioWakeInput / resolveScenarioWake', () => {
         });
         expect(scenarioWakeInput({ scenario, state: null, corrupt: 'file', timezone: 'UTC' })).toBeNull();
         expect(scenarioWakeInput({ scenario, state: null, corrupt: 'record', timezone: 'UTC' })).toBeNull();
+        expect(scenarioWakeInput({ scenario, state: null, corrupt: 'unloaded', timezone: 'UTC' })).toBeNull();
         expect(scenarioWakeInput({ scenario: null, state: null, corrupt: false, timezone: 'UTC' })).toBeNull();
     });
 
-    test('the Node resolver reads the status of the challenge', () => {
+    test('the Node resolver reads the status of the challenge', async () => {
         topLevel.mock = true;
         mockScenarioStateLedger.set(9, initialState('Plan', 'main', 1));
         expect(resolveScenarioWake('9')).toEqual({
@@ -101,7 +102,7 @@ describe('scenarioWakeInput / resolveScenarioWake', () => {
             state: expect.objectContaining({ phase: 'main' }),
             timezone: 'Europe/Riga',
         });
-        mockScenarioStateLedger.remove(9);
+        await mockScenarioStateLedger.remove(9);
     });
 });
 

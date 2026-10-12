@@ -344,6 +344,10 @@ export const app = {
     scenarioTemplateFailed: 'Šablona kopija netika saglabāta.',
     scenarioStatusMissing:
         'Scenārijs „{name}” vairs nepastāv — nekas netiek izpildīts. Izvēlies citu izaicinājuma uzstādījumos.',
+    scenarioStatusUnloaded:
+        'Scenārijs „{name}”: saglabāto progresu vēl neizdevās ielādēt, tāpēc tā plāns ir apturēts. Lietotne mēģina vēlreiz; ja tas nemainās, atver to no jauna. Nekas netiek atiestatīts.',
+    scenarioStatusUnloadedShort:
+        'Scenārijs „{name}” ir apturēts: saglabāto progresu vēl neizdevās ielādēt. Lietotne mēģina vēlreiz.',
     scenarioStatusCorrupt:
         'Scenārijs „{name}”: scenāriju saglabāto progresu nevar nolasīt, tāpēc visu izaicinājumu plāni ir apturēti. Ja atiestatīsi visu izaicinājumu progresu, plāni sāksies no jauna.',
     scenarioStatusCorruptShort:
@@ -374,7 +378,7 @@ export const app = {
     scenarioResetAll: 'Atiestatīt visu izaicinājumu progresu…',
     scenarioResetTitle: 'Scenārija progresa atiestatīšana',
     scenarioResetBody:
-        'Tas aizmirst, kurā scenārija vietā ir „{title}”: nākamajā balsošanas reizē plāns sāksies no pirmās fāzes. Tas var vēlreiz iztērēt darbību, kuras iznākums nav zināms (GuruShots neatbildēja vai lietotne to nevarēja saglabāt), un atsāk scenārija tēriņu skaitīšanu.',
+        'Tas aizmirst, kurā scenārija vietā ir „{title}”: nākamajā balsošanas reizē plāns sāksies no pirmās fāzes, un noteikumi, kas jau darbojās, var darboties (un tērēt) vēlreiz. Tas var vēlreiz iztērēt darbību, kuras iznākums nav zināms (GuruShots neatbildēja vai lietotne to nevarēja saglabāt), un atsāk scenārija tēriņu skaitīšanu.',
     scenarioResetAllBody:
         'Saglabāto scenāriju progresu nevar nolasīt, tāpēc to var atiestatīt tikai visiem izaicinājumiem uzreiz. Pazūd katra izaicinājuma progress: kurā vietā ir katrs plāns, kuri noteikumi jau darbojās (tie var darboties vēlreiz) un tēriņu skaitītāji. Darbība, kuras iznākums nav zināms (nebija atbildes vai lietotne to nevarēja saglabāt), var tikt iztērēta vēlreiz.',
     scenarioResetConfirm: 'Atiestatīt',
@@ -383,6 +387,10 @@ export const app = {
         'Šī izaicinājuma scenārijs pašlaik tiek izpildīts vai saglabātais progress tiek atjaunināts (lietotnē vai citā procesā). Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
     scenarioResetAllBusy:
         'Saglabāto scenāriju progresu pašlaik atjaunina lietotne vai cits process. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
+    scenarioResetUnloaded:
+        'Saglabāto progresu vēl neizdevās ielādēt, tāpēc nekas netika atiestatīts. Lietotne mēģina vēlreiz; ja tas nemainās, atver to no jauna.',
+    scenarioResetReadable:
+        'Saglabāto progresu atkal var nolasīt, tāpēc nekas netika atiestatīts. Aizver šo logu, lai redzētu, kur ir plāni.',
     scenarioResetUnreadable:
         'Saglabāto progresu nevar nolasīt, tāpēc šo izaicinājumu nevar atiestatīt atsevišķi. Aizver šo logu un atver to vēlreiz, lai atiestatītu visus izaicinājumus.',
     locksUnavailable:

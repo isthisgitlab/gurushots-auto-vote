@@ -53,7 +53,8 @@ describe('ScenarioResetModal', () => {
         expect(screen.queryByText('app.scenarioResetBody')).toBeNull();
         fireEvent.click(screen.getByText('app.scenarioResetConfirm'));
         await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
-        expect(window.api.resetAllScenarioState).toHaveBeenCalledTimes(1);
+        // Asked for only while the progress cannot be read: one that reads again is not wiped.
+        expect(window.api.resetAllScenarioState).toHaveBeenCalledWith(true);
         expect(window.api.resetScenarioState).not.toHaveBeenCalled();
     });
 
@@ -85,6 +86,18 @@ describe('ScenarioResetModal', () => {
         const { onClose, onChanged } = open();
         fireEvent.click(screen.getByText('app.scenarioResetConfirm'));
         expect((await screen.findByText('app.scenarioResetUnreadable')).getAttribute('role')).toBe('alert');
+        expect(onChanged).toHaveBeenCalledTimes(1);
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['state-readable', 'app.scenarioResetReadable', true],
+        ['state-unloaded', 'app.scenarioResetUnloaded', false],
+    ])('%s: the dialog says nothing was reset, and the card reads its status again', async (error, key, all) => {
+        answers({ success: false, error });
+        const { onClose, onChanged } = open({ everyChallenge: all });
+        fireEvent.click(screen.getByText('app.scenarioResetConfirm'));
+        expect((await screen.findByText(key)).getAttribute('role')).toBe('alert');
         expect(onChanged).toHaveBeenCalledTimes(1);
         expect(onClose).not.toHaveBeenCalled();
     });

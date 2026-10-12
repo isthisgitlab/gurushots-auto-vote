@@ -209,13 +209,14 @@ describe('when nothing runs', () => {
         setup(single([{ type: 'fillExposure' }]));
         const broken = createMemoryStateLedger();
         const epoch = { all: 0, gen: 0 };
-        for (const corrupt of ['file', 'record'] as const) {
+        for (const corrupt of ['file', 'record', 'unloaded'] as const) {
             jest.spyOn(broken, 'get').mockReturnValue({ corrupt, state: null, epoch });
             await runScenarioStep(challenge(), NOW, invalid({ ...pass, scenarios: { ledger: broken } }));
         }
         // What is said names the reset that helps: every challenge's, or this challenge's.
         expect(log.error).toHaveBeenCalledWith(expect.stringContaining('scenario-reset --all'), null);
         expect(log.error).toHaveBeenCalledWith(expect.stringContaining('scenario-reset --challenge=7'), null);
+        expect(log.error).toHaveBeenCalledWith(expect.stringContaining('not loaded yet'), null);
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
     });
 
@@ -622,7 +623,7 @@ describe('a spend is written down before it is made, so that a result that is ne
 
     test('a spend recovered from its marker is counted: the limit holds across a crash, landed or not', async () => {
         for (const landed of [true, false]) {
-            ledger.remove(7);
+            await ledger.remove(7);
             const { first, second } = processes();
             currencyActions.unlockBoostWithKey.mockResolvedValue(invalid({ ok: true }));
             setup({ ...single([{ type: 'unlockBoost' }]), limits: { keys: 1 } });
@@ -817,7 +818,7 @@ describe('a result that cannot be written is written once more', () => {
         expect(log.warning).not.toHaveBeenCalledWith(expect.stringContaining('may stop this rule needlessly'), null);
 
         jest.restoreAllMocks();
-        ledger.remove(7);
+        await ledger.remove(7);
         failing(4, 5);
         currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'balance-unknown' });
         await run();
@@ -1316,7 +1317,7 @@ describe('rule execution', () => {
                 'r1 → fillExposure: the exposure fill may have gone through (GuruShots gave no answer); it will be checked again next cycle, not spent again',
         });
         // An ordinary refusal carries no such marker.
-        ledger.remove(7);
+        await ledger.remove(7);
         currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'balance-unknown' });
         await run();
         expect(state().inFlight).toBeNull();
@@ -1549,7 +1550,7 @@ describe('rule execution', () => {
             expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
             expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
 
-            ledger.remove(7);
+            await ledger.remove(7);
             currencyActions.fillExposure.mockResolvedValueOnce(unclear);
             const d = challenge();
             await run(d);
@@ -1601,7 +1602,7 @@ describe('rule execution', () => {
         expect(state()).toEqual(expect.objectContaining({ inFlight: null }));
         expect(state().lastError!.message).toContain('fillExposure was refused (no-balance)');
 
-        ledger.remove(7);
+        await ledger.remove(7);
         currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'balance-unknown' });
         await run();
         expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1 });

@@ -11,6 +11,8 @@ const problemOf = (error: string | undefined, everyChallenge: boolean): string =
     if (error === 'busy') return everyChallenge ? 'app.scenarioResetAllBusy' : 'app.scenarioResetBusy';
     if (error === 'locks-unavailable') return 'app.locksUnavailable';
     if (error === 'state-unreadable') return 'app.scenarioResetUnreadable';
+    if (error === 'state-unloaded') return 'app.scenarioResetUnloaded';
+    if (error === 'state-readable') return 'app.scenarioResetReadable';
     if (error === 'not-saved') return everyChallenge ? 'app.scenarioResetAllNotSaved' : 'app.scenarioResetNotSaved';
     return everyChallenge ? 'app.scenarioResetAllFailed' : 'app.scenarioResetFailed';
 };
@@ -42,12 +44,13 @@ export function ScenarioResetModal({
     const reset = (target: Pick<Challenge, 'id'>) =>
         run(async () => {
             const answer = await ipc.callOrNull(() =>
-                everyChallenge ? ipc.resetAllScenarioState() : ipc.resetScenarioState(target.id),
+                everyChallenge ? ipc.resetAllScenarioState(true) : ipc.resetScenarioState(target.id),
             );
             const error = answer?.success ? undefined : answer?.error;
             // The file turned out unreadable since the card read it: the card learns, and offers the right reset.
             if (!answer?.success) {
-                if (error === 'state-unreadable') onChanged();
+                if (error === 'state-unreadable' || error === 'state-readable' || error === 'state-unloaded')
+                    onChanged();
                 return problemOf(error, everyChallenge);
             }
             onChanged();

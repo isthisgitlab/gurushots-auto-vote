@@ -10,9 +10,10 @@ const AGAIN_KEY = {
     day: 'app.scenarioStatusAgainDay',
 } as const;
 
-// The notice for progress that cannot be read — the whole file, or this challenge's record — on the card and (short)
-// on the compact tile.
+// The notice for progress that cannot be read — the whole file, or this challenge's record — or that is not read in
+// yet, on the card and (short) on the compact tile.
 const CORRUPT_KEY = {
+    unloaded: ['app.scenarioStatusUnloaded', 'app.scenarioStatusUnloadedShort'],
     file: ['app.scenarioStatusCorrupt', 'app.scenarioStatusCorruptShort'],
     record: ['app.scenarioStatusCorruptRecord', 'app.scenarioStatusCorruptRecordShort'],
 } as const;
@@ -61,7 +62,9 @@ function Unavailable({
                 <span aria-hidden="true">⚠</span>{' '}
                 {interp(t(key), { name: status.name, details: t('app.details'), reset: t(resetLabel) })}
             </div>
-            {status.corrupt && onReset && <ResetButton label={resetLabel} onReset={onReset} />}
+            {status.corrupt && status.corrupt !== 'unloaded' && onReset && (
+                <ResetButton label={resetLabel} onReset={onReset} />
+            )}
         </div>
     );
 }

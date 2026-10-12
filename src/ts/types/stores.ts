@@ -12,6 +12,12 @@ export interface RawJsonStore {
     /** Raw JSON string, or null when never written. */
     readRaw(): string | null;
     writeRaw(data: string): void;
+    /**
+     * Writes a value made from the current one that nothing reads before it is saved (the Android app, whose writes
+     * go behind a cache, puts it in the cache only once it is). `false`: it was not saved, and nothing changed.
+     * Absent where a write is made before it returns.
+     */
+    updateThrough?(update: (current: string | null) => string): Promise<boolean>;
 }
 
 /** One challenge's entry in metadata.json. */

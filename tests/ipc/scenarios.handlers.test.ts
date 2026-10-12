@@ -16,7 +16,7 @@ jest.mock('../../src/ts/settings', () => ({
 }));
 jest.mock('../../src/ts/ipc/chosenPhotosOwner', () => ({ stampChosenPhotosOwner: jest.fn() }));
 jest.mock('../../src/ts/services/scenarioStatus', () => {
-    const ledger = { remove: jest.fn(() => 'removed'), removeAll: jest.fn(() => 'removed') };
+    const ledger = { remove: jest.fn(async () => 'removed'), removeAll: jest.fn(async () => 'removed') };
     const release = jest.fn();
     return {
         getScenarioStatus: jest.fn(),
@@ -26,14 +26,9 @@ jest.mock('../../src/ts/services/scenarioStatus', () => {
         __release: release,
     };
 });
-jest.mock('../../src/ts/scenarioStateStore', () => {
-    const written = jest.fn(async () => {});
-    return {
-        refreshScenarioStateAsync: jest.fn(async () => {}),
-        watchScenarioWrites: jest.fn(() => written),
-        __written: written,
-    };
-});
+jest.mock('../../src/ts/scenarioStateStore', () => ({
+    refreshScenarioStateAsync: jest.fn(async () => {}),
+}));
 jest.mock('../../src/ts/services/auth', () => ({ requireAuthToken: jest.fn(() => ({ ok: true, token: 'tok' })) }));
 jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
 jest.mock('../../src/ts/logger', () => ({
@@ -49,14 +44,8 @@ import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import scenarioStatusModule = require('../../src/ts/services/scenarioStatus');
 const scenarioStatus = jest.mocked(scenarioStatusModule);
-const {
-    refreshScenarioStateAsync,
-    watchScenarioWrites,
-    __written: written,
-} = jest.mocked(
-    require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule & {
-        __written: jest.Mock<Promise<void>, []>;
-    },
+const { refreshScenarioStateAsync } = jest.mocked(
+    require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule,
 );
 import authModule = require('../../src/ts/services/auth');
 const auth = jest.mocked(authModule);
@@ -257,65 +246,47 @@ describe('status and reset', () => {
             success: false,
             error: 'locks-unavailable',
         });
-        mocked.__ledger.remove.mockReturnValueOnce('unavailable');
+        mocked.__ledger.remove.mockResolvedValueOnce('unavailable');
         await expect(handlers['reset-scenario-state'](null, 7)).resolves.toEqual({
             success: false,
             error: 'locks-unavailable',
         });
-        mocked.__ledger.removeAll.mockReturnValueOnce('unavailable');
-        await expect(handlers['reset-all-scenario-state']()).resolves.toEqual({
+        mocked.__ledger.removeAll.mockResolvedValueOnce('unavailable');
+        await expect(handlers['reset-all-scenario-state'](null)).resolves.toEqual({
             success: false,
             error: 'locks-unavailable',
         });
     });
 
-    test.each<['busy' | 'unreadable', string]>([
+    test.each<['busy' | 'unreadable' | 'unloaded' | 'not-saved', string]>([
         ['busy', 'busy'],
         ['unreadable', 'state-unreadable'],
+        ['unloaded', 'state-unloaded'],
+        ['not-saved', 'not-saved'],
     ])('a ledger that answers %s is reported as %s, never as done, and the lock is let go', async (answer, error) => {
-        mocked.__ledger.remove.mockReturnValueOnce(answer);
+        mocked.__ledger.remove.mockResolvedValueOnce(answer);
         await expect(handlers['reset-scenario-state'](null, 7)).resolves.toEqual({ success: false, error });
         expect(mocked.__release).toHaveBeenCalledTimes(1);
     });
 
-    test('a reset waits for what it wrote to reach storage, and one that did not is an error, not a success', async () => {
-        await handlers['reset-scenario-state'](null, 7);
-        await handlers['reset-all-scenario-state']();
-        expect(watchScenarioWrites).toHaveBeenCalledTimes(2);
-        expect(written).toHaveBeenCalledTimes(2);
-        written.mockRejectedValueOnce(new Error('not persisted'));
-        await expect(handlers['reset-scenario-state'](null, 7)).resolves.toEqual({
-            success: false,
-            error: 'not-saved',
-        });
-        expect(mocked.__release).toHaveBeenCalledTimes(2);
-        written.mockRejectedValueOnce(new Error('not persisted'));
-        await expect(handlers['reset-all-scenario-state']()).resolves.toEqual({ success: false, error: 'not-saved' });
+    test.each<['busy' | 'unreadable' | 'unloaded' | 'readable' | 'not-saved', string]>([
+        ['busy', 'busy'],
+        ['unloaded', 'state-unloaded'],
+        ['readable', 'state-readable'],
+        ['not-saved', 'not-saved'],
+    ])('a reset of every challenge that the ledger answers %s is reported as %s', async (answer, error) => {
+        mocked.__ledger.removeAll.mockResolvedValueOnce(answer);
+        await expect(handlers['reset-all-scenario-state'](null)).resolves.toEqual({ success: false, error });
     });
 
-    test('what a reset wrote is counted from just before it is made, and a reset that was not made waits for nothing', async () => {
-        const order: string[] = [];
-        watchScenarioWrites.mockImplementationOnce(() => {
-            order.push('mark');
-            return written;
-        });
-        mocked.__ledger.remove.mockImplementationOnce(() => {
-            order.push('remove');
-            return 'removed';
-        });
-        await handlers['reset-scenario-state'](null, 7);
-        expect(order).toEqual(['mark', 'remove']);
-        written.mockClear();
-        mocked.__ledger.remove.mockReturnValueOnce('busy');
-        await handlers['reset-scenario-state'](null, 7);
-        expect(written).not.toHaveBeenCalled();
-    });
-
-    test('a reset of every challenge, the only way past an unreadable file', async () => {
-        await expect(handlers['reset-all-scenario-state']()).resolves.toEqual({ success: true });
+    test('a reset of every challenge, the only way past an unreadable file; asked for only while it is unreadable when the caller says so', async () => {
+        await expect(handlers['reset-all-scenario-state'](null)).resolves.toEqual({ success: true });
         expect(refreshScenarioStateAsync).toHaveBeenCalled();
-        mocked.__ledger.removeAll.mockReturnValueOnce('busy');
-        await expect(handlers['reset-all-scenario-state']()).resolves.toEqual({ success: false, error: 'busy' });
+        expect(mocked.__ledger.removeAll).toHaveBeenLastCalledWith(false);
+        await handlers['reset-all-scenario-state'](null, true);
+        expect(mocked.__ledger.removeAll).toHaveBeenLastCalledWith(true);
+        await handlers['reset-all-scenario-state'](null, invalid<boolean>('yes'));
+        expect(mocked.__ledger.removeAll).toHaveBeenLastCalledWith(false);
     });
 
     test('a throw becomes an error result', async () => {
@@ -386,6 +357,7 @@ describe('dry-run-scenario', () => {
         [{ assigned: '', scenario: null }, 'no-scenario'],
         [{ assigned: 'Gone', scenario: null }, 'unknown-scenario'],
         [{ assigned: 'Plan', scenario, corrupt: true }, 'state-unreadable'],
+        [{ assigned: 'Plan', scenario, corrupt: 'unloaded' }, 'state-unloaded'],
     ])('refuses %p', async (status, error) => {
         scenarioStatus.getScenarioStatus.mockReturnValue(invalid(status));
         await expect(handlers['dry-run-scenario'](null, 7)).resolves.toEqual({ success: false, error });

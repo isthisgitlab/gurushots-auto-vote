@@ -15,6 +15,7 @@ jest.mock('../../src/ts/services/votingOrchestrator', () => ({
 jest.mock('../../src/ts/services/scenarioRunner', () => ({ backgroundServiceOwnsScenarios: jest.fn() }));
 jest.mock('../../src/ts/scenarioStateStore', () => ({
     scenarioStateLedger: {},
+    scenarioStateLoaded: jest.fn(() => true),
     refreshScenarioStateAsync: jest.fn(async () => {}),
 }));
 jest.mock('../../src/ts/services/joinChallenges', () => ({ runJoinPass: jest.fn(), joinChallengeSingle: jest.fn() }));
@@ -26,7 +27,7 @@ const { runVotingPass } = jest.mocked(
 const { backgroundServiceOwnsScenarios } = jest.mocked(
     require('../../src/ts/services/scenarioRunner') as typeof scenarioRunnerModule,
 );
-const { refreshScenarioStateAsync } = jest.mocked(
+const { refreshScenarioStateAsync, scenarioStateLoaded } = jest.mocked(
     require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule,
 );
 const { fetchChallengesAndVote } = require('../../src/ts/strategies/real') as typeof realModule;
@@ -47,5 +48,16 @@ test('elsewhere the pass starts straight away and owns scenarios', async () => {
     backgroundServiceOwnsScenarios.mockReturnValue(false);
     await fetchChallengesAndVote('tok', '7');
     expect(refreshScenarioStateAsync).not.toHaveBeenCalled();
+    expect(runVotingPass.mock.calls[0][2].scenarios!.enabled!()).toBe(true);
+});
+
+test('a cache of the scenario state that was never filled is read again before the pass, whoever owns scenarios', async () => {
+    backgroundServiceOwnsScenarios.mockReturnValue(false);
+    scenarioStateLoaded.mockReturnValueOnce(false);
+    await fetchChallengesAndVote('tok', '7');
+    expect(refreshScenarioStateAsync).toHaveBeenCalledTimes(1);
+    expect(refreshScenarioStateAsync.mock.invocationCallOrder[0]).toBeLessThan(
+        runVotingPass.mock.invocationCallOrder[0],
+    );
     expect(runVotingPass.mock.calls[0][2].scenarios!.enabled!()).toBe(true);
 });

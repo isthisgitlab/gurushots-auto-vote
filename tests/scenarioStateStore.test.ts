@@ -17,7 +17,6 @@ const {
     initializeScenarioStateAsync,
     refreshScenarioStateAsync,
     flushScenarioStateWrites,
-    watchScenarioWrites,
 } = require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
 import fsModule = require('node:fs');
 import joinStateStoreModule = require('../src/ts/joinStateStore');
@@ -193,50 +192,50 @@ describe('createStateLedger', () => {
     );
 
     describe('an unreadable file is never replaced by one challenge’s change: it takes a reset of every challenge', () => {
-        test('set writes nothing, and remove says the file is unreadable', () => {
+        test('set writes nothing, and remove says the file is unreadable', async () => {
             const store = rawStore('{not json');
             const ledger = createStateLedger(store);
             expect(ledger.set(7, state())).toBe('failed');
-            expect(ledger.remove(7)).toBe('unreadable');
+            await expect(ledger.remove(7)).resolves.toBe('unreadable');
             expect(store.writeRaw).not.toHaveBeenCalled();
             expect(store.raw).toBe('{not json');
         });
 
-        test('removeAll clears it, and every challenge starts again', () => {
+        test('removeAll clears it, and every challenge starts again', async () => {
             const store = rawStore('{not json');
             const ledger = createStateLedger(store);
-            expect(ledger.removeAll()).toBe('removed');
+            await expect(ledger.removeAll()).resolves.toBe('removed');
             expect(ledger.get(7)).toMatchObject({ corrupt: false, state: null });
             expect(ledger.set(7, state())).toBe('saved');
         });
 
-        test('a readable file loses only the challenge removed, and removeAll loses them all', () => {
+        test('a readable file loses only the challenge removed, and removeAll loses them all', async () => {
             const ledger = createMemoryStateLedger();
             ledger.set(7, state());
             ledger.set(8, state());
-            expect(ledger.remove(7)).toBe('removed');
+            await expect(ledger.remove(7)).resolves.toBe('removed');
             expect(ledger.get(8).state).not.toBeNull();
-            expect(ledger.removeAll()).toBe('removed');
+            await expect(ledger.removeAll()).resolves.toBe('removed');
             expect(ledger.get(8).state).toBeNull();
         });
 
-        test('a bad record of one challenge is reset by that challenge alone, the rest of the file untouched', () => {
+        test('a bad record of one challenge is reset by that challenge alone, the rest of the file untouched', async () => {
             const store = rawStore(
                 JSON.stringify({ 7: { ...state(), phase: 3 }, 8: { ...state(), updatedAt: Date.now() } }),
             );
             const ledger = createStateLedger(store);
             expect(ledger.get(7).corrupt).toBe('record');
-            expect(ledger.remove(7)).toBe('removed');
+            await expect(ledger.remove(7)).resolves.toBe('removed');
             expect(ledger.get(7)).toMatchObject({ corrupt: false, state: null });
             expect(ledger.get(8).state!.phase).toBe('buildup');
         });
     });
 
-    test('remove forgets one challenge', () => {
+    test('remove forgets one challenge', async () => {
         const ledger = createMemoryStateLedger();
         ledger.set(7, state());
         ledger.set(8, state());
-        ledger.remove(7);
+        await ledger.remove(7);
         expect(ledger.get(7).state).toBeNull();
         expect(ledger.get(8).state).not.toBeNull();
     });
@@ -260,7 +259,7 @@ describe('createStateLedger', () => {
             expect(kept(store)).toEqual(['10', '11', '8', '@all']);
         });
 
-        test('a record that still holds a spend not known to have been made, or a stopped rule, is kept until it is reset', () => {
+        test('a record that still holds a spend not known to have been made, or a stopped rule, is kept until it is reset', async () => {
             const fresh = Date.now();
             const store = rawStore(
                 JSON.stringify({
@@ -276,13 +275,13 @@ describe('createStateLedger', () => {
             ledger.set(8, state());
             // Those that guard against a second spend stay; an old record that guards nothing goes.
             expect(kept(store)).toEqual(['1', '2', '3', '6', '8']);
-            ledger.remove(1);
+            await ledger.remove(1);
             ledger.set(8, state());
             expect(kept(store)).toEqual(['1', '2', '3', '6', '8']);
             expect((JSON.parse(store.raw!) as Record<string, unknown>)['1']).toMatchObject({ tombstone: true });
         });
 
-        test('what cannot be read is not deleted by the write of another challenge: it is for its user to reset', () => {
+        test('what cannot be read is not deleted by the write of another challenge: it is for its user to reset', async () => {
             const store = rawStore(
                 JSON.stringify({ 7: { ...state(), phase: 3, updatedAt: OLD }, 9: 'junk', 12: { tombstone: true } }),
             );
@@ -291,19 +290,19 @@ describe('createStateLedger', () => {
             expect(kept(store)).toEqual(['12', '7', '8', '9']);
             expect(ledger.get(7).corrupt).toBe('record');
             // …until its own reset.
-            ledger.remove(7);
+            await ledger.remove(7);
             expect(ledger.get(7)).toMatchObject({ corrupt: false, state: null });
         });
     });
 
-    test('a count at the edge of what can be counted is not one: it reads as none, and the next reset moves past it', () => {
+    test('a count at the edge of what can be counted is not one: it reads as none, and the next reset moves past it', async () => {
         const store = rawStore(
             JSON.stringify({ '@all': 2 ** 53, 7: { tombstone: true, gen: 2 ** 53 + 2, updatedAt: Date.now() } }),
         );
         const ledger = createStateLedger(store);
         expect(ledger.get(7).epoch).toEqual({ all: 0, gen: 0 });
-        ledger.remove(7);
-        ledger.removeAll();
+        await ledger.remove(7);
+        await ledger.removeAll();
         const { epoch } = ledger.get(7);
         expect(Number.isSafeInteger(epoch.all) && epoch.all > 0).toBe(true);
     });
@@ -404,16 +403,16 @@ describe('the file’s changes are made under a lock across processes', () => {
         expect(Atomics.wait).not.toHaveBeenCalled();
     });
 
-    test('a reset waits for the lock too, and answers busy when it is not free', () => {
+    test('a reset waits for the lock too, and answers busy when it is not free', async () => {
         const store = rawStore(JSON.stringify({ 7: { ...state(), updatedAt: Date.now() } }));
         const lock = sharedLock();
         const ledger = createStateLedger(store, lock.forWho('mine'));
         lock.take('other');
-        expect(ledger.remove(7)).toBe('busy');
-        expect(ledger.removeAll()).toBe('busy');
+        await expect(ledger.remove(7)).resolves.toBe('busy');
+        await expect(ledger.removeAll()).resolves.toBe('busy');
         expect(store.writeRaw).not.toHaveBeenCalled();
         lock.free();
-        expect(ledger.remove(7)).toBe('removed');
+        await expect(ledger.remove(7)).resolves.toBe('removed');
     });
 
     test('the lock is let go whatever happens in the change, and a write that fails is a failed write, not a throw', () => {
@@ -441,11 +440,11 @@ describe('a reset is not undone by what was running when it was made', () => {
     // Two ledgers over one file: two processes (the app and the CLI), or a step and a reset in the one.
     const twoOver = (store = rawStore()) => ({ store, a: createStateLedger(store), b: createStateLedger(store) });
 
-    test('a state read before a reset of its challenge is not written back, and the reset stays', () => {
+    test('a state read before a reset of its challenge is not written back, and the reset stays', async () => {
         const { a, b } = twoOver();
         a.set(7, state());
         const running = a.get(7).state!;
-        expect(b.remove(7)).toBe('removed');
+        await expect(b.remove(7)).resolves.toBe('removed');
         expect(a.set(7, { ...running, phase: 'old progress' })).toBe('refused');
         expect(a.get(7)).toMatchObject({ corrupt: false, state: null });
         expect(invalid<() => CategoryLogger>(logger.withCategory)().warning).toHaveBeenCalledWith(
@@ -454,13 +453,13 @@ describe('a reset is not undone by what was running when it was made', () => {
         );
     });
 
-    test('a state read before a reset of every challenge is not written back either, for any challenge', () => {
+    test('a state read before a reset of every challenge is not written back either, for any challenge', async () => {
         const { a, b } = twoOver();
         a.set(7, state());
         a.set(8, state());
         const first = a.get(7).state!;
         const second = a.get(8).state!;
-        expect(b.removeAll()).toBe('removed');
+        await expect(b.removeAll()).resolves.toBe('removed');
         expect(a.set(7, first)).toBe('refused');
         expect(a.set(8, second)).toBe('refused');
         expect(a.get(7).state).toBeNull();
@@ -469,41 +468,41 @@ describe('a reset is not undone by what was running when it was made', () => {
         expect(a.set(7, { ...state(), epoch: fresh.epoch })).toBe('saved');
     });
 
-    test('a reset of one challenge leaves the steps of the others running', () => {
+    test('a reset of one challenge leaves the steps of the others running', async () => {
         const { a, b } = twoOver();
         a.set(7, state());
         a.set(8, state());
         const other = a.get(8).state!;
-        b.remove(7);
+        await b.remove(7);
         expect(a.set(8, { ...other, phase: 'moved on' })).toBe('saved');
         expect(a.get(8).state!.phase).toBe('moved on');
     });
 
-    test('a plan that was being started when its challenge was reset does not start from before the reset', () => {
+    test('a plan that was being started when its challenge was reset does not start from before the reset', async () => {
         const { a, b } = twoOver();
         const { epoch } = a.get(7);
-        b.remove(7);
+        await b.remove(7);
         expect(a.set(7, { ...state(), epoch })).toBe('refused');
     });
 
-    test('a reset is counted as a reset even where the earlier count is not to be read, and counts keep rising', () => {
+    test('a reset is counted as a reset even where the earlier count is not to be read, and counts keep rising', async () => {
         const store = rawStore(
             JSON.stringify({ 7: { tombstone: true, gen: 'x', updatedAt: Date.now() }, '@all': 'x' }),
         );
         const ledger = createStateLedger(store);
         const before = ledger.get(7);
         expect(before.epoch).toEqual({ all: 0, gen: 0 });
-        ledger.remove(7);
-        ledger.removeAll();
+        await ledger.remove(7);
+        await ledger.removeAll();
         const after = ledger.get(7).epoch;
         expect(after.all).toBeGreaterThan(0);
-        ledger.remove(7);
+        await ledger.remove(7);
         expect(ledger.get(7).epoch.gen).toBeGreaterThan(after.gen);
     });
 
-    test('a reset of every challenge keeps its count through a write, and a count is not written into a state', () => {
+    test('a reset of every challenge keeps its count through a write, and a count is not written into a state', async () => {
         const { store, a } = twoOver();
-        a.removeAll();
+        await a.removeAll();
         a.set(7, { ...state(), epoch: a.get(7).epoch });
         const written = JSON.parse(store.raw!) as Record<string, Record<string, unknown>>;
         expect(written['@all']).toEqual(expect.any(Number));
@@ -511,12 +510,12 @@ describe('a reset is not undone by what was running when it was made', () => {
         expect(written['7']).not.toHaveProperty('epoch');
     });
 
-    test('no lock is needed for it: a store with no other process to lock against (Android, Capacitor) refuses the same', () => {
+    test('no lock is needed for it: a store with no other process to lock against (Android, Capacitor) refuses the same', async () => {
         const store = rawStore();
         const ledger = createStateLedger(store);
         ledger.set(7, state());
         const running = ledger.get(7).state!;
-        ledger.removeAll();
+        await ledger.removeAll();
         expect(ledger.set(7, running)).toBe('refused');
     });
 });
@@ -544,14 +543,14 @@ describe('on Android a reset is asked for, never written into a file the service
     });
     const requestsOf = (store: ReturnType<typeof rawStore>) => JSON.parse(store.raw!) as Record<string, number>;
 
-    test('the app writes the request and leaves the file alone; the service sees the reset when it reads', () => {
+    test('the app writes the request and leaves the file alone; the service sees the reset when it reads', async () => {
         const { main, asked, app, service } = both();
         asService();
         service.set(7, state());
         service.set(8, state());
         asApp();
         const before = main.raw;
-        expect(app.remove(7)).toBe('removed');
+        await expect(app.remove(7)).resolves.toBe('removed');
         expect(main.raw).toBe(before);
         expect(requestsOf(asked)).toEqual({ 7: expect.any(Number) });
         // The app's own reads apply it too.
@@ -561,14 +560,14 @@ describe('on Android a reset is asked for, never written into a file the service
         expect(service.get(7)).toMatchObject({ corrupt: false, state: null });
     });
 
-    test('a step of the service that was running is refused after the reset, and its next write carries the reset into the file', () => {
+    test('a step of the service that was running is refused after the reset, and its next write carries the reset into the file', async () => {
         const { main, app, service } = both();
         asService();
         service.set(7, state());
         const running = service.get(7).state!;
         service.set(8, state());
         asApp();
-        app.remove(7);
+        await app.remove(7);
         asService();
         expect(service.set(7, { ...running, phase: 'old progress' })).toBe('refused');
         // Another challenge's write is made on the file as it reads with the reset applied: no other progress is lost.
@@ -578,12 +577,12 @@ describe('on Android a reset is asked for, never written into a file the service
         expect(written['8']).toMatchObject({ phase: 'moved on' });
     });
 
-    test('a reset of every challenge is asked for the same way, and applied once', () => {
+    test('a reset of every challenge is asked for the same way, and applied once', async () => {
         const { main, asked, app, service } = both();
         asService();
         service.set(7, state());
         asApp();
-        expect(app.removeAll()).toBe('removed');
+        await expect(app.removeAll()).resolves.toBe('removed');
         expect(Object.keys(requestsOf(asked))).toEqual(['@all']);
         expect(app.get(7).state).toBeNull();
         asService();
@@ -610,7 +609,7 @@ describe('on Android a reset is asked for, never written into a file the service
             expect(asked.writeRaw).not.toHaveBeenCalled();
         });
 
-        test('a request that is not applied yet to a record that still stands does not age out: that reset is not undone', () => {
+        test('a request that is not applied yet to a record that still stands does not age out: that reset is not undone', async () => {
             const { asked, app } = both(
                 rawStore(
                     JSON.stringify({
@@ -629,29 +628,29 @@ describe('on Android a reset is asked for, never written into a file the service
             expect(app.get(7)).toMatchObject({ corrupt: false, state: null });
             expect(app.get(8).state).not.toBeNull();
             // The record still holds its stop in the file, so the request is kept when the app asks for another reset.
-            app.remove(9);
+            await app.remove(9);
             expect(Object.keys(requestsOf(asked)).sort()).toEqual(['7', '9']);
             expect(app.get(7)).toMatchObject({ corrupt: false, state: null });
         });
 
-        test('a reset of every challenge asked for long ago is kept while a record stands that it was not applied to', () => {
+        test('a reset of every challenge asked for long ago is kept while a record stands that it was not applied to', async () => {
             const { asked, app } = both(
                 rawStore(JSON.stringify({ 8: { ...state(), updatedAt: Date.now() } })),
                 rawStore(JSON.stringify({ '@all': OLD })),
             );
             asApp();
             expect(app.get(8).state).toBeNull();
-            app.remove(9);
+            await app.remove(9);
             expect(Object.keys(requestsOf(asked)).sort()).toEqual(['9', '@all']);
         });
 
-        test('a reset of every challenge asked for long ago goes when no record is left for it to apply to', () => {
+        test('a reset of every challenge asked for long ago goes when no record is left for it to apply to', async () => {
             const { asked, app } = both(
                 rawStore(JSON.stringify({ '@all': OLD - 1000 })),
                 rawStore(JSON.stringify({ '@all': OLD })),
             );
             asApp();
-            app.remove(9);
+            await app.remove(9);
             expect(Object.keys(requestsOf(asked))).toEqual(['9']);
         });
 
@@ -669,37 +668,37 @@ describe('on Android a reset is asked for, never written into a file the service
             expect(app.get(7).epoch.gen).toBe(recent);
         });
 
-        test('the app drops the requests that have aged out when it asks for another', () => {
+        test('the app drops the requests that have aged out when it asks for another', async () => {
             const { asked, app } = both(rawStore(), rawStore(JSON.stringify({ 7: OLD, 9: Date.now() })));
             asApp();
-            app.remove(8);
+            await app.remove(8);
             expect(Object.keys(requestsOf(asked)).sort()).toEqual(['8', '9']);
         });
     });
 
-    test('a second reset of the same challenge counts past the first', () => {
+    test('a second reset of the same challenge counts past the first', async () => {
         const { asked, app } = both();
         asApp();
-        app.remove(7);
+        await app.remove(7);
         const first = requestsOf(asked)['7'];
-        app.remove(7);
+        await app.remove(7);
         expect(requestsOf(asked)['7']).toBeGreaterThan(first);
     });
 
-    test('a file that cannot be read is cleared by the app itself, as there is nothing to lose in it', () => {
+    test('a file that cannot be read is cleared by the app itself, as there is nothing to lose in it', async () => {
         const { main, asked, app } = both(rawStore('{not json'));
         asApp();
-        expect(app.remove(7)).toBe('unreadable');
+        await expect(app.remove(7)).resolves.toBe('unreadable');
         expect(asked.writeRaw).not.toHaveBeenCalled();
-        expect(app.removeAll()).toBe('removed');
+        await expect(app.removeAll()).resolves.toBe('removed');
         expect(JSON.parse(main.raw!)).toEqual({ '@all': expect.any(Number) });
         expect(asked.writeRaw).not.toHaveBeenCalled();
     });
 
-    test('where resets are made on the file (the desktop apps), a store of requests, if given, is not used', () => {
+    test('where resets are made on the file (the desktop apps), a store of requests, if given, is not used', async () => {
         const { main, asked, app } = both();
         app.set(7, state());
-        expect(app.remove(7)).toBe('removed');
+        await expect(app.remove(7)).resolves.toBe('removed');
         expect(asked.writeRaw).not.toHaveBeenCalled();
         expect((JSON.parse(main.raw!) as Record<string, unknown>)['7']).toMatchObject({ tombstone: true });
     });
@@ -723,16 +722,126 @@ describe('on Android a reset is asked for, never written into a file the service
     });
 });
 
+describe('a reset is saved before anything can read it', () => {
+    const g = globalThis as typeof globalThis & { Capacitor?: unknown };
+    beforeEach(() => {
+        g.Capacitor = { isNativePlatform: () => true };
+    });
+    afterEach(() => {
+        delete g.Capacitor;
+    });
+    // A store whose writes are saved before they show, and that can be made to refuse them.
+    const throughStore = (initial: string | null = null) => {
+        const refuse = { next: false };
+        const base = rawStore(initial);
+        const store = Object.assign(base, {
+            updateThrough: jest.fn(async (update: (current: string | null) => string) => {
+                if (refuse.next) {
+                    refuse.next = false;
+                    return false;
+                }
+                base.raw = update(base.raw);
+                return true;
+            }),
+        });
+        return { store, refuse };
+    };
+    const live = JSON.stringify({ 7: { ...state(), updatedAt: Date.now() }, 8: { ...state(), updatedAt: Date.now() } });
+
+    test('one that could not be saved is not applied by the next read, and the next reset does not carry it', async () => {
+        const main = rawStore(live);
+        const { store: asked, refuse } = throughStore();
+        const app = createStateLedger(main, undefined, asked);
+        refuse.next = true;
+        await expect(app.remove(7)).resolves.toBe('not-saved');
+        expect(asked.raw).toBeNull();
+        expect(app.get(7).state).not.toBeNull();
+        await expect(app.remove(8)).resolves.toBe('removed');
+        expect(Object.keys(JSON.parse(asked.raw!) as object)).toEqual(['8']);
+        expect(app.get(7).state).not.toBeNull();
+        expect(app.get(8).state).toBeNull();
+    });
+
+    test('is made from the requests as they stand when its turn comes, not as they were when it was asked', async () => {
+        const main = rawStore(live);
+        const { store: asked } = throughStore();
+        const app = createStateLedger(main, undefined, asked);
+        const first = app.remove(7);
+        const second = app.remove(8);
+        await Promise.all([first, second]);
+        expect(asked.updateThrough).toHaveBeenCalledTimes(2);
+        asked.raw = JSON.stringify({ 7: Date.now() });
+        const update = asked.updateThrough.mock.calls[1][0];
+        expect(Object.keys(JSON.parse(update(asked.raw)) as object).sort()).toEqual(['7', '8']);
+    });
+
+    test('of every challenge, on a file that cannot be read, is written into the file only once it is saved', async () => {
+        const { store: main, refuse } = throughStore('{no');
+        const app = createStateLedger(main, undefined, rawStore());
+        refuse.next = true;
+        await expect(app.removeAll()).resolves.toBe('not-saved');
+        expect(main.raw).toBe('{no');
+        expect(app.get(7).corrupt).toBe('file');
+        await expect(app.removeAll()).resolves.toBe('removed');
+        expect(app.get(7).corrupt).toBe(false);
+    });
+
+    test('of every challenge, asked for only while the file cannot be read, leaves one that reads again alone', async () => {
+        const main = rawStore(live);
+        const { store: asked } = throughStore();
+        const app = createStateLedger(main, undefined, asked);
+        await expect(app.removeAll(true)).resolves.toBe('readable');
+        expect(asked.updateThrough).not.toHaveBeenCalled();
+        expect(app.get(7).state).not.toBeNull();
+        main.raw = '{no';
+        const { store: unreadable } = throughStore('{no');
+        const again = createStateLedger(unreadable, undefined, rawStore());
+        await expect(again.removeAll(true)).resolves.toBe('removed');
+    });
+
+    test('is not made at all while the saved progress was never loaded, and every challenge reads as paused', async () => {
+        const main = rawStore(live);
+        const { store: asked } = throughStore();
+        const app = createStateLedger(main, undefined, asked, () => false);
+        expect(app.get(7)).toMatchObject({ corrupt: 'unloaded', state: null });
+        expect(app.set(7, state())).toBe('failed');
+        await expect(app.remove(7)).resolves.toBe('unloaded');
+        await expect(app.removeAll()).resolves.toBe('unloaded');
+        await expect(app.removeAll(true)).resolves.toBe('unloaded');
+        expect(asked.updateThrough).not.toHaveBeenCalled();
+        expect(main.writeRaw).not.toHaveBeenCalled();
+    });
+
+    test('reads again once what is saved was loaded', async () => {
+        let loaded = false;
+        const app = createStateLedger(rawStore(live), undefined, rawStore(), () => loaded);
+        expect(app.get(7).corrupt).toBe('unloaded');
+        loaded = true;
+        expect(app.get(7)).toMatchObject({ corrupt: false });
+        expect(app.get(7).state).not.toBeNull();
+    });
+
+    test('on the desktop it is made on the file itself, and the requests are never read', async () => {
+        delete g.Capacitor;
+        const main = rawStore(live);
+        const asked = throughStore();
+        const desktop = createStateLedger(main, undefined, asked.store);
+        await expect(desktop.remove(7)).resolves.toBe('removed');
+        expect(asked.store.readRaw).not.toHaveBeenCalled();
+        expect(asked.store.updateThrough).not.toHaveBeenCalled();
+    });
+});
+
 describe('a lock the app cannot make at all is not a lock held by another', () => {
     const unavailable = () => ({ ok: false, release: () => {}, unavailable: true as const });
 
-    test('a write, and each reset, say so instead of "busy", at once, and write nothing', () => {
+    test('a write, and each reset, say so instead of "busy", at once, and write nothing', async () => {
         const store = rawStore();
         const acquire = jest.fn((_id: string) => unavailable());
         const ledger = createStateLedger(store, acquire);
         expect(ledger.set(7, state())).toBe('failed');
-        expect(ledger.remove(7)).toBe('unavailable');
-        expect(ledger.removeAll()).toBe('unavailable');
+        await expect(ledger.remove(7)).resolves.toBe('unavailable');
+        await expect(ledger.removeAll()).resolves.toBe('unavailable');
         expect(store.writeRaw).not.toHaveBeenCalled();
         // No waiting for a lock that will not come.
         expect(acquire).toHaveBeenCalledTimes(3);
@@ -744,16 +853,16 @@ describe('a lock the app cannot make at all is not a lock held by another', () =
 });
 
 describe('module ledgers', () => {
-    test('the persisted and mock ledgers are distinct', () => {
+    test('the persisted and mock ledgers are distinct', async () => {
         expect(scenarioStateLedger).not.toBe(mockScenarioStateLedger);
         mockScenarioStateLedger.set(1, state());
         expect(mockScenarioStateLedger.get(1).state!.phase).toBe('buildup');
-        mockScenarioStateLedger.remove(1);
+        await mockScenarioStateLedger.remove(1);
     });
 
-    test('the persisted ledger and the step lock take the cross-process lock, the file’s under its own key', () => {
+    test('the persisted ledger and the step lock take the cross-process lock, the file’s under its own key', async () => {
         jest.mocked(fsModule.readdirSync).mockReturnValue([]);
-        scenarioStateLedger.removeAll();
+        await scenarioStateLedger.removeAll();
         expect(acquireUnlockLock).toHaveBeenCalledWith('scenariostate', { category: 'scenario', internal: true });
         expect(scenarioStepLock(7)).toEqual({ ok: true, release: expect.any(Function) });
         expect(acquireUnlockLock).toHaveBeenLastCalledWith('scenario-7', { category: 'scenario', internal: true });
@@ -813,31 +922,6 @@ describe('flushing the state and the resets asked for', () => {
     test('says so when only the second store did not persist', async () => {
         const flush = flushOf([async () => {}, fails('store 1 not persisted')]);
         await expect(flush()).rejects.toThrow('store 1 not persisted');
-    });
-
-    test('marking a point to count writes from asks both stores to judge nothing before it', async () => {
-        const flushes = [jest.fn(fails('old failure')), jest.fn(async () => {})];
-        let watch!: typeof watchScenarioWrites;
-        jest.isolateModules(() => {
-            let next = 0;
-            jest.doMock('../src/ts/settings/storage', () => ({
-                createJsonStore: jest.fn(() => ({
-                    readRaw: () => null,
-                    writeRaw: jest.fn(),
-                    initializeAsync: jest.fn(),
-                    refreshAsync: jest.fn(),
-                    flushPendingWrites: flushes[next++],
-                })),
-            }));
-            watch = (require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule).watchScenarioWrites;
-        });
-        jest.dontMock('../src/ts/settings/storage');
-        const judge = watch();
-        expect(flushes[0]).toHaveBeenCalledTimes(1);
-        expect(flushes[1]).toHaveBeenCalledTimes(1);
-        flushes[0].mockImplementationOnce(async () => {});
-        await expect(judge()).resolves.toBeUndefined();
-        expect(flushes[0]).toHaveBeenCalledTimes(2);
     });
 });
 

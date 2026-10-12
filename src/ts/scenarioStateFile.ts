@@ -12,10 +12,15 @@ import { acquireWithin } from './lockWait';
 /** A cross-process lock, as joinStateStore's acquireUnlockLock gives one. */
 type StateLock = { ok: boolean; release: () => void; unavailable?: true };
 
-type ParsedStateFile = { ok: boolean; map: Record<string, unknown> };
+// `unloaded`: the app's cache has not been filled yet (a start-up read of the file failed), which is not the same as a
+// file that cannot be read: nothing is known of what is stored, and nothing is reset until it is.
+type ParsedStateFile = { ok: boolean; map: Record<string, unknown>; unloaded?: true };
 
-/** How a reset ended: done, or why not (a lock is held, the app cannot make its locks, the file is unreadable). */
-type ResetResult = 'removed' | 'busy' | 'unavailable' | 'unreadable';
+/**
+ * How a reset ended: done, or why not: a lock is held, the app cannot make its locks, the file is unreadable or not
+ * loaded yet, it was asked for only if it is unreadable and it reads again, or the write was not saved (nothing changed).
+ */
+type ResetResult = 'removed' | 'busy' | 'unavailable' | 'unreadable' | 'unloaded' | 'readable' | 'not-saved';
 
 /**
  * What a change of the file came to: `refused` is a write of a state read before a reset, `busy` a lock another
@@ -195,24 +200,33 @@ const viewOf = (raw: string | null, asked: string | null): ParsedStateFile => {
 };
 
 /**
- * Asks for the reset of `key` (a challenge id, or ALL_KEY) rather than making it: writes only the small store of
- * requests, with a count ahead of the one asked for before and of `current`.
- *
- * @param requests - the store of asked-for resets; none where resets are made on the file itself
- * @returns whether it was asked for (false: make the reset on the file)
+ * Writes to `target` a text made from its current one, saved before anything can read it where that takes a moment (the
+ * Android app: see RawJsonStore.updateThrough). False: it was not saved, and nothing changed.
  */
-const askFor = (
-    requests: RawJsonStore | undefined,
-    key: string,
-    current: number,
-    map: Record<string, unknown>,
-): boolean => {
-    if (!requests) return false;
-    const asked = parseRequests(requests.readRaw());
-    requests.writeRaw(
-        JSON.stringify({ ...liveRequests(asked, map), [key]: nextCount(Math.max(asked[key] ?? 0, current)) }),
-    );
+const through = async (target: RawJsonStore, update: (current: string | null) => string): Promise<boolean> => {
+    if (target.updateThrough) return target.updateThrough(update);
+    target.writeRaw(update(target.readRaw()));
     return true;
+};
+
+// How many times `key` (a challenge id, or ALL_KEY) was reset, as the map has it.
+const resetsOf = (map: Record<string, unknown>, key: string): number =>
+    key === ALL_KEY ? countOf(map[ALL_KEY]) : epochOf(map, key).gen;
+
+/**
+ * Takes the file's cross-process lock, waited for a moment: the lock, or why there is none.
+ */
+const takeLock = (acquireLock: ((id: string) => StateLock) | undefined): StateLock | 'busy' | 'unavailable' => {
+    const lock = acquireLock ? acquireWithin(() => acquireLock(FILE_LOCK_ID), FILE_LOCK_WAIT_MS) : NO_LOCK;
+    if (lock === 'unavailable') {
+        logger
+            .withCategory('scenario')
+            .error('the app cannot create its lock files in its data folder — scenario state not written', null);
+    }
+    if (lock === 'busy') {
+        logger.withCategory('scenario').warning('scenario state is locked by another process — nothing written', null);
+    }
+    return lock;
 };
 
 /**
@@ -222,23 +236,107 @@ const underLock = (
     acquireLock: ((id: string) => StateLock) | undefined,
     change: () => void,
 ): 'done' | 'busy' | 'unavailable' => {
-    const lock = acquireLock ? acquireWithin(() => acquireLock(FILE_LOCK_ID), FILE_LOCK_WAIT_MS) : NO_LOCK;
-    if (lock === 'unavailable') {
-        logger
-            .withCategory('scenario')
-            .error('the app cannot create its lock files in its data folder — scenario state not written', null);
-        return 'unavailable';
-    }
-    if (lock === 'busy') {
-        logger.withCategory('scenario').warning('scenario state is locked by another process — nothing written', null);
-        return 'busy';
-    }
+    const lock = takeLock(acquireLock);
+    if (typeof lock === 'string') return lock;
     try {
         change();
         return 'done';
     } finally {
         lock.release();
     }
+};
+
+/** underLock for a change that waits for something (a write that is only saved later). */
+const underLockAsync = async (
+    acquireLock: ((id: string) => StateLock) | undefined,
+    change: () => Promise<void>,
+): Promise<'done' | 'busy' | 'unavailable'> => {
+    const lock = takeLock(acquireLock);
+    if (typeof lock === 'string') return lock;
+    try {
+        await change();
+        return 'done';
+    } finally {
+        lock.release();
+    }
+};
+
+/**
+ * The resets over the state file (see createStateFile): asked for where resets are asked for, else made on the file under
+ * its lock.
+ */
+const createResets = ({
+    store,
+    acquireLock,
+    read,
+    asRequests,
+    write,
+}: {
+    store: RawJsonStore;
+    acquireLock: ((id: string) => StateLock) | undefined;
+    read: () => ParsedStateFile;
+    asRequests: () => RawJsonStore | undefined;
+    write: (map: Record<string, unknown>) => void;
+}) => {
+    // The file as it is stored, without the resets asked for since: what a request is judged against.
+    const stored = () => parseStateFile(store.readRaw()).map;
+
+    /**
+     * Asks for the reset of `key` (a challenge id, or ALL_KEY) rather than making it: writes only the small store of
+     * requests, with a count ahead of the one asked for before and of the file's. The request shows only once it is
+     * saved, so one that was not has taken effect nowhere.
+     */
+    const askFor = async (asking: RawJsonStore, key: string): Promise<ResetResult> => {
+        const saved = await through(asking, (current) => {
+            const asked = parseRequests(current);
+            const count = nextCount(Math.max(asked[key] ?? 0, resetsOf(read().map, key)));
+            return JSON.stringify({ ...liveRequests(asked, stored()), [key]: count });
+        });
+        return saved ? 'removed' : 'not-saved';
+    };
+
+    /**
+     * Resets one challenge: asked for where resets are asked for, else made on the file under its lock (a tombstone
+     * that keeps the count). An unreadable file is left as it is: clearing it takes a reset of every challenge.
+     */
+    const resetOne = async (key: string): Promise<ResetResult> => {
+        const view = read();
+        if (view.unloaded) return 'unloaded';
+        const asking = asRequests();
+        if (view.ok && asking) return askFor(asking, key);
+        let result: ResetResult = 'unreadable';
+        const ran = underLock(acquireLock, () => {
+            const { ok, map } = read();
+            if (!ok) return;
+            write({ ...map, [key]: tombstone(nextCount(epochOf(map, key).gen)) });
+            result = 'removed';
+        });
+        return ran === 'done' ? result : ran;
+    };
+
+    /**
+     * Resets every challenge, an unreadable file included (there is nothing in it to lose). With `onlyIfUnreadable`
+     * the reset is made only while the file cannot be read: one that reads again was a failed read, and its progress
+     * is not what the caller meant to wipe.
+     */
+    const resetAll = async (onlyIfUnreadable = false): Promise<ResetResult> => {
+        const view = read();
+        if (view.unloaded) return 'unloaded';
+        if (onlyIfUnreadable && view.ok) return 'readable';
+        const asking = asRequests();
+        if (view.ok && asking) return askFor(asking, ALL_KEY);
+        let result: ResetResult = 'not-saved';
+        const ran = await underLockAsync(acquireLock, async () => {
+            const { ok, map } = read();
+            const saved = await through(store, () =>
+                JSON.stringify({ [ALL_KEY]: nextCount(ok ? countOf(map[ALL_KEY]) : 0) }),
+            );
+            if (saved) result = 'removed';
+        });
+        return ran === 'done' ? result : ran;
+    };
+
+    return { resetOne, resetAll };
 };
 
 /**
@@ -253,8 +351,15 @@ const underLock = (
  * @param acquireLock - the cross-process lock of the file's changes; none where one process owns the file (mock
  *   mode, Android) and in tests
  * @param requests - the store of asked-for resets, used on Android only
+ * @param isLoaded - whether the stores hold what is saved (the Android app's caches do not until they are read); until
+ *   they do, the file reads as `unloaded` and nothing is changed
  */
-const createStateFile = (store: RawJsonStore, acquireLock?: (id: string) => StateLock, requests?: RawJsonStore) => {
+const createStateFile = (
+    store: RawJsonStore,
+    acquireLock?: (id: string) => StateLock,
+    requests?: RawJsonStore,
+    isLoaded: () => boolean = () => true,
+) => {
     let lastRaw: string | null | undefined;
     let lastRequests: string | null | undefined;
     let lastParsed: ParsedStateFile | undefined;
@@ -263,6 +368,7 @@ const createStateFile = (store: RawJsonStore, acquireLock?: (id: string) => Stat
         runtime.isCapacitor() || runtime.isHeadlessService() ? requests : undefined;
 
     const read = (): ParsedStateFile => {
+        if (!isLoaded()) return { ok: false, map: {}, unloaded: true };
         const raw = store.readRaw();
         const asked = asRequests()?.readRaw() ?? null;
         // lastParsed is set together with lastRaw, and readRaw never returns undefined.
@@ -272,9 +378,6 @@ const createStateFile = (store: RawJsonStore, acquireLock?: (id: string) => Stat
         lastParsed = viewOf(raw, asked);
         return lastParsed;
     };
-
-    // The file as it is stored, without the resets asked for since: what a request is judged against.
-    const stored = () => parseStateFile(store.readRaw()).map;
 
     const write = (map: Record<string, unknown>) => store.writeRaw(JSON.stringify(pruned(map)));
 
@@ -295,37 +398,7 @@ const createStateFile = (store: RawJsonStore, acquireLock?: (id: string) => Stat
         return ran === 'done' ? result : ran;
     };
 
-    /**
-     * Resets one challenge: asked for where resets are asked for, else made on the file under its lock (a tombstone
-     * that keeps the count). An unreadable file is left as it is: clearing it takes a reset of every challenge.
-     */
-    const resetOne = (key: string): ResetResult => {
-        const view = read();
-        if (view.ok && askFor(asRequests(), key, epochOf(view.map, key).gen, stored())) return 'removed';
-        let result: ResetResult = 'unreadable';
-        const ran = underLock(acquireLock, () => {
-            const { ok, map } = read();
-            if (!ok) return;
-            write({ ...map, [key]: tombstone(nextCount(epochOf(map, key).gen)) });
-            result = 'removed';
-        });
-        return ran === 'done' ? result : ran;
-    };
-
-    /**
-     * Resets every challenge, an unreadable file included (there is nothing in it to lose).
-     */
-    const resetAll = (): ResetResult => {
-        const view = read();
-        if (view.ok && askFor(asRequests(), ALL_KEY, countOf(view.map[ALL_KEY]), stored())) return 'removed';
-        const ran = underLock(acquireLock, () => {
-            const { ok, map } = read();
-            write({ [ALL_KEY]: nextCount(ok ? countOf(map[ALL_KEY]) : 0) });
-        });
-        return ran === 'done' ? 'removed' : ran;
-    };
-
-    return { read, mutate, resetOne, resetAll };
+    return { read, mutate, ...createResets({ store, acquireLock, read, asRequests, write }) };
 };
 
 export { createStateFile, epochOf, isRecord, isTombstone };

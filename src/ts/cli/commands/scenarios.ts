@@ -198,6 +198,10 @@ const scenarioStatusCmd = async (challengeId: string) => {
         ui().warning(`Challenge ${challengeId} is assigned "${status.assigned}", which does not exist — nothing runs.`);
         return 0;
     }
+    if (status.corrupt === 'unloaded') {
+        ui().error(UNLOADED);
+        return 1;
+    }
     if (status.corrupt) {
         ui().error(
             status.corrupt === 'file'
@@ -241,7 +245,11 @@ const RESET_ALL_BUSY =
 const RESET_LOCKS_UNAVAILABLE =
     'The app cannot create its lock files in its data folder, so it cannot do this safely. Nothing was changed. Check the folder’s permissions and the free disk space (logs --error has the details), then try again.';
 
-const RESET_NOT_SAVED = 'The reset could not be saved, so nothing was changed. Free up storage space and try again.';
+const RESET_NOT_SAVED =
+    'The reset could not be saved (the storage is full or not writable — logs --error has the details), so nothing was changed. Try again.';
+
+const UNLOADED =
+    'The saved scenario progress could not be loaded yet; the app retries — reopen the app if it persists. Nothing is reset.';
 
 const scenarioResetCmd = async (challengeId: string) => {
     const result = await handlers()['reset-scenario-state'](null, challengeId);
@@ -253,8 +261,8 @@ const scenarioResetCmd = async (challengeId: string) => {
         ui().error(RESET_LOCKS_UNAVAILABLE);
         return 1;
     }
-    if (!result.success && result.error === 'not-saved') {
-        ui().error(RESET_NOT_SAVED);
+    if (!result.success && (result.error === 'not-saved' || result.error === 'state-unloaded')) {
+        ui().error(result.error === 'not-saved' ? RESET_NOT_SAVED : UNLOADED);
         return 1;
     }
     if (!result.success && result.error === 'state-unreadable') {
@@ -271,7 +279,7 @@ const scenarioResetCmd = async (challengeId: string) => {
 };
 
 const scenarioResetAllCmd = async () => {
-    const result = await handlers()['reset-all-scenario-state']();
+    const result = await handlers()['reset-all-scenario-state'](null);
     if (!result.success && result.error === 'busy') {
         ui().error(RESET_ALL_BUSY);
         return 1;
@@ -280,13 +288,13 @@ const scenarioResetAllCmd = async () => {
         ui().error(RESET_LOCKS_UNAVAILABLE);
         return 1;
     }
-    if (!result.success && result.error === 'not-saved') {
-        ui().error(RESET_NOT_SAVED);
+    if (!result.success && (result.error === 'not-saved' || result.error === 'state-unloaded')) {
+        ui().error(result.error === 'not-saved' ? RESET_NOT_SAVED : UNLOADED);
         return 1;
     }
     if (!result.success) return reportFailure(result, 'Could not reset the scenarios');
     ui().success(
-        `Scenario progress reset for every challenge — every plan starts again on the next voting pass, and the rules that already ran can run again. ${RESET_COST}`,
+        `Scenario progress reset for every challenge — every plan starts again on the next voting pass, and the rules that already ran can run (and spend) again. ${RESET_COST}`,
     );
     return 0;
 };

@@ -151,13 +151,13 @@ describe('scenario phase-settings overlay', () => {
         expect(settings.getEffectiveSetting('exposure', '7')).toBe(10);
     });
 
-    test('mock mode reads the in-memory ledger, never the persisted one', () => {
+    test('mock mode reads the in-memory ledger, never the persisted one', async () => {
         assign();
         settings.setSetting('mock', true);
         scenarioStateLedger.set(7, initialState('Plan', 'buildup', 1));
         expect(settings.getEffectiveSetting('exposure', '7')).toBe(100);
         mockScenarioStateLedger.set(7, initialState('Plan', 'buildup', 1));
         expect(settings.getEffectiveSetting('exposure', '7')).toBe(10);
-        mockScenarioStateLedger.remove(7);
+        await mockScenarioStateLedger.remove(7);
     });
 });

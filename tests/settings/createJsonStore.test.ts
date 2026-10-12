@@ -310,19 +310,13 @@ describe('createJsonStore', () => {
         });
 
         describe('a write that did not persist', () => {
-            const transport = () => require('../../src/ts/settings/storeTransport') as typeof storeTransportModule;
             const strictStore = (prefKey = 'gs_scenario_state') => {
                 const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
                 return createJsonStore({ fileName: 'scenarioState.json', prefKey, strict: true });
             };
-            // The one whose cache goes back to what is saved (the key is its own, so no other test is affected).
-            const rolledBackStore = () => {
-                transport().rollBackFailedWrites('gs_test_requests');
-                return strictStore('gs_test_requests');
-            };
             const failOnce = () => mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
 
-            test('is told by the flush of a strict store that is asked right after it, with the error as its cause', async () => {
+            test('is told by the flush of a strict store, with the error as its cause', async () => {
                 const strict = strictStore();
                 failOnce();
                 strict.writeRaw('{"x":1}');
@@ -331,50 +325,24 @@ describe('createJsonStore', () => {
                 await expect(told).rejects.toMatchObject({ cause: expect.objectContaining({ message: 'disk full' }) });
             });
 
-            test('is not held against a write that came after the flush that told of it', async () => {
+            test('is nothing to tell once a later write persisted what it held', async () => {
+                const strict = strictStore();
+                failOnce();
+                strict.writeRaw('{"x":1}');
+                strict.writeRaw('{"x":2}');
+                await expect(strict.flushPendingWrites()).resolves.toBeUndefined();
+                strict.writeRaw('{"x":3}');
+                await expect(strict.flushPendingWrites()).resolves.toBeUndefined();
+            });
+
+            test('is told while the latest write is the one that failed, and not after a write that persisted', async () => {
                 const strict = strictStore();
                 failOnce();
                 strict.writeRaw('{"x":1}');
                 await expect(strict.flushPendingWrites()).rejects.toThrow('was not persisted');
-                await expect(strict.flushPendingWrites()).resolves.toBeUndefined();
+                await expect(strict.flushPendingWrites()).rejects.toThrow('was not persisted');
                 strict.writeRaw('{"x":2}');
                 await expect(strict.flushPendingWrites()).resolves.toBeUndefined();
-            });
-
-            test('is nothing to tell when a later write persisted what it held', async () => {
-                const strict = strictStore();
-                failOnce();
-                strict.writeRaw('{"x":1}');
-                strict.writeRaw('{"x":2}');
-                await expect(strict.flushPendingWrites()).resolves.toBeUndefined();
-            });
-
-            test('is nothing to tell when a write queued after the flush was asked persisted what the failed one held', async () => {
-                const strict = strictStore();
-                failOnce();
-                strict.writeRaw('{"x":1}');
-                const told = strict.flushPendingWrites();
-                strict.writeRaw('{"x":2}');
-                await expect(told).resolves.toBeUndefined();
-            });
-
-            test('is told, though a later write failed too: nothing of it reached storage', async () => {
-                const strict = strictStore();
-                failOnce();
-                failOnce();
-                strict.writeRaw('{"x":1}');
-                const told = strict.flushPendingWrites();
-                strict.writeRaw('{"x":2}');
-                await expect(told).rejects.toThrow('was not persisted');
-            });
-
-            test('is not made worse by a write that is queued after the flush was asked and fails: the flush judges its own', async () => {
-                const strict = strictStore();
-                mockPrefSet.mockResolvedValueOnce().mockRejectedValueOnce(new Error('later'));
-                strict.writeRaw('{"x":1}');
-                const told = strict.flushPendingWrites();
-                strict.writeRaw('{"x":2}');
-                await expect(told).resolves.toBeUndefined();
             });
 
             test('is waited for until the queue is quiet, a write queued meanwhile included', async () => {
@@ -396,7 +364,7 @@ describe('createJsonStore', () => {
                 expect(mockPrefSet).toHaveBeenLastCalledWith({ key: 'gs_scenario_state', value: '{"x":2}' });
             });
 
-            test('keeps its value in the cache of a store that did not opt in: it is the record of something done', async () => {
+            test('keeps its value in the cache: it is the record of something done', async () => {
                 const strict = strictStore();
                 failOnce();
                 strict.writeRaw('{"marker":1}');
@@ -404,62 +372,101 @@ describe('createJsonStore', () => {
                 expect(strict.readRaw()).toBe('{"marker":1}');
             });
 
-            test('takes its value out of the cache of a store that opted in, before the flush answers', async () => {
-                mockPrefGet.mockResolvedValue({ value: '{"persisted":true}' });
-                const strict = rolledBackStore();
-                await strict.initializeAsync();
-                failOnce();
-                strict.writeRaw('{"x":1}');
-                expect(strict.readRaw()).toBe('{"x":1}');
-                await expect(strict.flushPendingWrites()).rejects.toThrow('was not persisted');
-                expect(strict.readRaw()).toBe('{"persisted":true}');
-            });
-
-            test('goes back to nothing when nothing was persisted, and to the last write that was when one was', async () => {
-                mockPrefGet.mockResolvedValue({ value: null });
-                const strict = rolledBackStore();
-                await strict.initializeAsync();
-                failOnce();
-                strict.writeRaw('{"x":1}');
-                await expect(strict.flushPendingWrites()).rejects.toThrow();
-                expect(strict.readRaw()).toBeNull();
-                strict.writeRaw('{"x":2}');
-                await strict.flushPendingWrites();
-                failOnce();
-                strict.writeRaw('{"x":3}');
-                await expect(strict.flushPendingWrites()).rejects.toThrow();
-                expect(strict.readRaw()).toBe('{"x":2}');
-            });
-
-            test('is not rolled back over a later write that is queued before it failed, and that persisted', async () => {
-                mockPrefGet.mockResolvedValue({ value: '{"persisted":true}' });
-                const strict = rolledBackStore();
-                await strict.initializeAsync();
-                failOnce();
-                strict.writeRaw('{"x":1}');
-                strict.writeRaw('{"x":2}');
-                await expect(strict.flushPendingWrites()).resolves.toBeUndefined();
-                expect(strict.readRaw()).toBe('{"x":2}');
-            });
-
-            test('is no later write’s to carry once it was rolled back: the next write does not hold it', async () => {
-                mockPrefGet.mockResolvedValue({ value: '{"persisted":true}' });
-                const strict = rolledBackStore();
-                await strict.initializeAsync();
-                failOnce();
-                strict.writeRaw('{"x":1}');
-                const first = strict.flushPendingWrites();
-                await expect(first).rejects.toThrow();
-                strict.writeRaw(`${strict.readRaw()}!`);
-                await strict.flushPendingWrites();
-                expect(mockPrefSet).toHaveBeenLastCalledWith({ key: 'gs_test_requests', value: '{"persisted":true}!' });
-            });
-
             test('passes quietly through the flush of any other store, as before, with its value kept', async () => {
                 failOnce();
                 store.writeRaw('{"x":1}');
                 await expect(store.flushPendingWrites()).resolves.toBeUndefined();
                 expect(store.readRaw()).toBe('{"x":1}');
+            });
+        });
+
+        describe('a write that must not show before it is saved (updateThrough)', () => {
+            const strictStore = () => {
+                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                return createJsonStore({
+                    fileName: 'scenarioResets.json',
+                    prefKey: 'gs_scenario_resets',
+                    strict: true,
+                });
+            };
+            const hold = () => {
+                let release!: () => void;
+                mockPrefSet.mockImplementationOnce(
+                    () =>
+                        new Promise<void>((resolve) => {
+                            release = resolve;
+                        }),
+                );
+                return () => release();
+            };
+
+            test('is in the cache only once Preferences has it', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                const release = hold();
+                const saved = strict.updateThrough(() => '{"asked":1}');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                expect(mockPrefSet).toHaveBeenCalledWith({ key: 'gs_scenario_resets', value: '{"asked":1}' });
+                expect(strict.readRaw()).toBe('{"persisted":true}');
+                release();
+                await expect(saved).resolves.toBe(true);
+                expect(strict.readRaw()).toBe('{"asked":1}');
+            });
+
+            test('that was not saved answers false and leaves the cache, and what is read or written next, as they were', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
+                await expect(strict.updateThrough(() => '{"asked":1}')).resolves.toBe(false);
+                expect(strict.readRaw()).toBe('{"persisted":true}');
+                await expect(strict.updateThrough((current) => `${current}!`)).resolves.toBe(true);
+                expect(mockPrefSet).toHaveBeenLastCalledWith({
+                    key: 'gs_scenario_resets',
+                    value: '{"persisted":true}!',
+                });
+            });
+
+            test('is made from the cache as it is when its turn comes, behind the writes queued before it', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                strict.writeRaw('{"a":1}');
+                const first = strict.updateThrough((current) => `${current}1`);
+                const second = strict.updateThrough((current) => `${current}2`);
+                await Promise.all([first, second]);
+                expect(mockPrefSet.mock.calls.map(([{ value }]) => value)).toEqual([
+                    '{"a":1}',
+                    '{"a":1}1',
+                    '{"a":1}12',
+                ]);
+                expect(strict.readRaw()).toBe('{"a":1}12');
+            });
+
+            test('shows to a flush as a write of its own, and fills a cache that was never read', async () => {
+                const { isCacheKnown } = require('../../src/ts/settings/storeTransport') as typeof storeTransportModule;
+                const strict = strictStore();
+                expect(isCacheKnown('gs_scenario_resets')).toBe(false);
+                mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
+                await strict.updateThrough(() => 'x');
+                await expect(strict.flushPendingWrites()).rejects.toThrow('was not persisted');
+                expect(isCacheKnown('gs_scenario_resets')).toBe(false);
+                await strict.updateThrough(() => '{"a":1}');
+                expect(isCacheKnown('gs_scenario_resets')).toBe(true);
+            });
+
+            test('off the app window is written before it answers, and false when that write throws', async () => {
+                delete g.Capacitor;
+                fs.existsSync.mockReturnValue(false);
+                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const file = createJsonStore({ fileName: 'scenarioResets.json', prefKey: 'gs_scenario_resets' });
+                await expect(file.updateThrough((current) => `${current}!`)).resolves.toBe(true);
+                expect(fs.writeFileSync).toHaveBeenCalledWith(expect.stringContaining('scenarioResets.json'), 'null!', {
+                    encoding: 'utf8',
+                    mode: 0o600,
+                });
+                fs.writeFileSync.mockImplementationOnce(() => {
+                    throw new Error('EACCES');
+                });
+                await expect(file.updateThrough(() => '{}')).resolves.toBe(false);
             });
         });
 
@@ -478,17 +485,43 @@ describe('createJsonStore', () => {
                 const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
                 return createJsonStore({ fileName: 'scenarioState.json', prefKey: 'gs_scenario_state', strict: true });
             };
+            const inFlight = () => new Promise((resolve) => setTimeout(resolve, 0));
 
             test('does not take the write’s value out of the cache: the read may predate it', async () => {
                 const strict = strictStore();
                 await strict.initializeAsync();
                 const answer = deferredGet();
                 const refreshed = strict.refreshAsync();
-                await new Promise((resolve) => setTimeout(resolve, 0));
+                await inFlight();
                 strict.writeRaw('{"w":1}');
                 answer('{"stale":1}');
                 await refreshed;
                 expect(strict.readRaw()).toBe('{"w":1}');
+            });
+
+            test('does not take it out either when the write was one that had to be saved first', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                const answer = deferredGet();
+                const refreshed = strict.refreshAsync();
+                await inFlight();
+                await strict.updateThrough(() => '{"w":1}');
+                answer('{"stale":1}');
+                await refreshed;
+                expect(strict.readRaw()).toBe('{"w":1}');
+            });
+
+            test('leaves a write that was not saved out of the cache, whatever the read says', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                const answer = deferredGet();
+                const refreshed = strict.refreshAsync();
+                await inFlight();
+                mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
+                await expect(strict.updateThrough(() => '{"w":1}')).resolves.toBe(false);
+                answer('{"persisted":true}');
+                await refreshed;
+                expect(strict.readRaw()).toBe('{"persisted":true}');
             });
 
             test('takes what it read when nothing was written meanwhile', async () => {
@@ -496,29 +529,10 @@ describe('createJsonStore', () => {
                 await strict.initializeAsync();
                 const answer = deferredGet();
                 const refreshed = strict.refreshAsync();
-                await new Promise((resolve) => setTimeout(resolve, 0));
+                await inFlight();
                 answer('{"fresh":1}');
                 await refreshed;
                 expect(strict.readRaw()).toBe('{"fresh":1}');
-            });
-
-            test('is what a failed write is rolled back to, for a store that opted in', async () => {
-                const { rollBackFailedWrites } =
-                    require('../../src/ts/settings/storeTransport') as typeof storeTransportModule;
-                rollBackFailedWrites('gs_test_requests');
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
-                const strict = createJsonStore({
-                    fileName: 'scenarioResets.json',
-                    prefKey: 'gs_test_requests',
-                    strict: true,
-                });
-                await strict.initializeAsync();
-                mockPrefGet.mockResolvedValueOnce({ value: '{"service":1}' });
-                await strict.refreshAsync();
-                mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
-                strict.writeRaw('{"x":1}');
-                await expect(strict.flushPendingWrites()).rejects.toThrow();
-                expect(strict.readRaw()).toBe('{"service":1}');
             });
         });
 

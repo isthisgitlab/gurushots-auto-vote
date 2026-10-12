@@ -43,19 +43,8 @@ export const writeHeadlessKey = (prefKey: string, data: string, strict: boolean)
     if (strict && answer !== true) throw new Error(`Headless ${prefKey} was not persisted`);
 };
 
-// The Preferences keys whose strict store takes a failed write out of its cache again (see createWriteBehind), and
-// those whose cache holds something known: hydrated, refreshed or written.
-const rolledBackKeys = new Set<string>();
+// The Preferences keys whose cache holds something known: hydrated, refreshed or written.
 const knownKeys = new Set<string>();
-
-/**
- * Opts one Capacitor key in to having a failed write taken out of its cache again, so that what the store reads back
- * is only what reached storage. For a store whose cache is a request that must not take effect unless it was saved;
- * a store whose cache is the record of something already done (a spend marker) keeps its latest value instead.
- */
-export const rollBackFailedWrites = (prefKey: string): void => {
-    rolledBackKeys.add(prefKey);
-};
 
 /**
  * Whether the cache of one Capacitor key holds something known: what Preferences held (hydrated or refreshed), or what
@@ -64,8 +53,8 @@ export const rollBackFailedWrites = (prefKey: string): void => {
  */
 export const isCacheKnown = (prefKey: string): boolean => knownKeys.has(prefKey);
 
-/** What one write came to: persisted, or the error that said it did not (and whether the cache went back from it). */
-type WriteOutcome = { ok: true } | { ok: false; error: unknown; rolledBack: boolean };
+/** What one write came to: persisted, or the error that said it did not. */
+type WriteOutcome = { ok: true } | { ok: false; error: unknown };
 
 // Waits for a queue that writes may still be added to, until it is quiet.
 const untilQuiet = async (current: () => Promise<void>): Promise<void> => {
@@ -79,76 +68,80 @@ const untilQuiet = async (current: () => Promise<void>): Promise<void> => {
 /**
  * The ordered write-behind of one Capacitor key: writes apply in issue order, and one that fails is logged without
  * breaking the queue. Every write holds the whole value, so a failed write is made up for by a later one that did
- * persist, unless the cache was put back from it.
+ * persist.
  *
- * `flush` judges the write that was last when it was called, not the store: waits until the queue is quiet, then a
- * `strict` store's flush rejects (with the write's error as its cause) when that write did not persist. A flush with no
- * write since the previous one has nothing to judge, so an old failure is never held against a later write.
+ * `flush` waits until the queue is quiet, then a `strict` store's flush rejects (with the write's error as its cause)
+ * when the latest write did not persist.
  *
- * A `strict` store that opted in (rollBackFailedWrites) has its cache put back, when its latest write fails, to what is
- * known to be persisted: a value that did not reach storage is not read back, applied, or written along with a later one.
+ * `updateThrough` is for a write that must not show before it is saved: it waits its turn in the queue, makes the
+ * value from the cache as it is then, and puts it in the cache only once Preferences has it. When it fails the cache
+ * was never changed, so nothing read, applied or written since has seen it.
  *
- * Besides the counters it keeps the text last queued (`intended`) and the text known to be in Preferences (`persisted`).
+ * `intended` is the text last queued or written through: a read that was in flight when it was must not replace it.
  *
- * @param setCache - sets the store's cache (null: nothing is there)
+ * @param cache - the store's cache (null: nothing is there)
  */
 export const createWriteBehind = (
     prefKey: string,
     strict: boolean,
     preferences: () => PreferencesPlugin,
-    setCache: (value: string | null) => void,
+    cache: { get: () => string | null; set: (value: string | null) => void },
 ) => {
     let chain = Promise.resolve();
     let latest: Promise<WriteOutcome> = Promise.resolve({ ok: true });
     let issued = 0;
     let drainedAt = 0;
-    let flushedAt = 0;
     let intended: string | null = null;
-    let persisted: string | null = null;
     knownKeys.delete(prefKey);
+    // Runs one write after the ones before it; what it came to, never a rejection.
+    const enqueue = (write: () => Promise<void>): Promise<WriteOutcome> => {
+        latest = chain.then(write).then(
+            (): WriteOutcome => ({ ok: true }),
+            (error: unknown): WriteOutcome => {
+                logger.withCategory('settings').error(`Capacitor ${prefKey} write failed:`, error);
+                return { ok: false, error };
+            },
+        );
+        chain = latest.then(() => undefined);
+        return latest;
+    };
     return {
         queue: (data: string) => {
-            const mine = ++issued;
+            issued++;
             intended = data;
             knownKeys.add(prefKey);
-            latest = chain
-                .then(() => preferences().set({ key: prefKey, value: data }))
-                .then(
-                    (): WriteOutcome => {
-                        persisted = data;
-                        return { ok: true };
-                    },
-                    (error: unknown): WriteOutcome => {
-                        logger.withCategory('settings').error(`Capacitor ${prefKey} write failed:`, error);
-                        const rolledBack = strict && mine === issued && rolledBackKeys.has(prefKey);
-                        if (rolledBack) setCache(persisted);
-                        return { ok: false, error, rolledBack };
-                    },
-                );
-            chain = latest.then(() => undefined);
+            void enqueue(() => preferences().set({ key: prefKey, value: data }));
+        },
+        updateThrough: async (update: (current: string | null) => string): Promise<boolean> => {
+            let data = '';
+            const outcome = await enqueue(async () => {
+                data = update(cache.get());
+                await preferences().set({ key: prefKey, value: data });
+            });
+            if (!outcome.ok) return false;
+            issued++;
+            intended = data;
+            knownKeys.add(prefKey);
+            cache.set(data);
+            return true;
         },
         /**
          * What hydrating or refreshing found in Preferences. When a write was queued while it was being read, that read
-         * may predate it: the cache keeps the latest write, and what is persisted is not known from it.
+         * may predate it: the cache keeps the latest write.
          */
-        confirm: (value: string | null) => {
+        confirm: () => {
             knownKeys.add(prefKey);
-            if (issued !== drainedAt) return setCache(intended);
-            persisted = value;
+            if (issued !== drainedAt) cache.set(intended);
         },
         drained: () => {
             drainedAt = issued;
             return chain;
         },
         flush: async () => {
-            const own = latest;
-            const fresh = issued > flushedAt;
-            flushedAt = issued;
             await untilQuiet(() => chain);
-            const outcome = await own;
-            if (!strict || !fresh || outcome.ok) return;
-            if (!outcome.rolledBack && (await latest).ok) return;
-            throw new Error(`Capacitor ${prefKey} was not persisted`, { cause: outcome.error });
+            const outcome = await latest;
+            if (strict && !outcome.ok)
+                throw new Error(`Capacitor ${prefKey} was not persisted`, { cause: outcome.error });
         },
     };
 };

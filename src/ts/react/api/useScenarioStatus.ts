@@ -26,8 +26,11 @@ export const refreshScenarioStatuses = () => {
 export type ScenarioSummary = {
     name: string;
     missing?: true;
-    /** The saved progress cannot be read: all of it (`file`), or this challenge's record (`record`). */
-    corrupt?: 'file' | 'record';
+    /**
+     * The saved progress cannot be read: all of it (`file`), or this challenge's record (`record`); or it was not read
+     * in yet (`unloaded`: nothing is known of it, and nothing is reset).
+     */
+    corrupt?: 'file' | 'record' | 'unloaded';
     phase?: string;
     started?: boolean;
     lastError?: string | null;

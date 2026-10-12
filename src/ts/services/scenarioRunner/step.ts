@@ -24,10 +24,12 @@ import { runRule, withNotice } from './rule';
 
 const NO_LOCK: { ok: boolean; release: () => void; unavailable?: true } = { ok: true, release: () => {} };
 
-const corruptText = (kind: 'file' | 'record', challengeId: string) =>
-    kind === 'file'
-        ? 'scenario state is unreadable — reset the progress of every challenge (scenario-reset --all, or the Reset button on a challenge card) to start the plans again'
-        : `scenario state of this challenge is unreadable — reset it (scenario-reset --challenge=${challengeId}, or the Reset button on its card) to start the plan again`;
+const corruptText = (kind: 'file' | 'record' | 'unloaded', challengeId: string) =>
+    kind === 'unloaded'
+        ? 'scenario state is not loaded yet (the saved progress could not be read in) — nothing runs until it is'
+        : kind === 'file'
+          ? 'scenario state is unreadable — reset the progress of every challenge (scenario-reset --all, or the Reset button on a challenge card) to start the plans again'
+          : `scenario state of this challenge is unreadable — reset it (scenario-reset --challenge=${challengeId}, or the Reset button on its card) to start the plan again`;
 
 /**
  * The challenge's state for `scenario`, starting it (at the start phase) when

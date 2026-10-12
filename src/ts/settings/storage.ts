@@ -261,6 +261,25 @@ const getEnvironmentInfo = () => {
 };
 
 /**
+ * Writes a value made from a store's current one, before answering where a write is made at once (not behind a cache).
+ *
+ * @returns false when the write threw: nothing was saved
+ */
+const writeBeforeAnswering = async (
+    prefKey: string,
+    store: { readRaw: () => string | null; writeRaw: (data: string) => void },
+    update: (current: string | null) => string,
+): Promise<boolean> => {
+    try {
+        store.writeRaw(update(store.readRaw()));
+        return true;
+    } catch (err) {
+        logger.withCategory('settings').error(`${prefKey} write failed:`, err);
+        return false;
+    }
+};
+
+/**
  * Generic platform-aware JSON store — the same transport pattern the
  * settings store above uses, packaged for other stores (metadata.ts).
  *
@@ -287,10 +306,13 @@ const createJsonStore = ({
 }) => {
     let initialized = false;
     let cachedJson: string | null = null;
-    // A strict store's write that did not persist takes its value out of the cache again.
-    const writes = createWriteBehind(prefKey, strict, getCapacitorPreferences, (value) => {
-        cachedJson = value;
-    });
+    const cache = {
+        get: () => cachedJson,
+        set: (value: string | null) => {
+            cachedJson = value;
+        },
+    };
+    const writes = createWriteBehind(prefKey, strict, getCapacitorPreferences, cache);
     let swept = false;
 
     const filePath = () => path.join(path.dirname(getSettingsPath()), fileName);
@@ -301,7 +323,7 @@ const createJsonStore = ({
         sweepStaleTemps(filePath());
     };
 
-    return {
+    const store = {
         /**
          * Raw JSON string, or null when never written.
          */
@@ -341,7 +363,7 @@ const createJsonStore = ({
             try {
                 const { value } = await getCapacitorPreferences().get({ key: prefKey });
                 cachedJson = value;
-                writes.confirm(value);
+                writes.confirm();
             } catch (err) {
                 logger.withCategory('settings').error(`Capacitor ${prefKey} read failed:`, err);
                 cachedJson = null;
@@ -361,12 +383,17 @@ const createJsonStore = ({
             try {
                 const { value } = await getCapacitorPreferences().get({ key: prefKey });
                 cachedJson = value;
-                writes.confirm(value);
+                writes.confirm();
                 initialized = true;
             } catch (err) {
                 logger.withCategory('settings').error(`Capacitor ${prefKey} refresh failed:`, err);
             }
         },
+        /** Writes a value made from the current one that nothing reads before it is saved; `false`: not saved, nothing changed. */
+        updateThrough: (update: (current: string | null) => string): Promise<boolean> =>
+            runtime.isCapacitor() && !runtime.isHeadlessService()
+                ? writes.updateThrough(update)
+                : writeBeforeAnswering(prefKey, store, update),
         /**
          * Await to guarantee the write-behind queue has drained. A `strict` store rejects when a write since the last
          * flush did not persist, so a caller that waits for it can tell.
@@ -375,6 +402,7 @@ const createJsonStore = ({
         /** fs path (Electron/CLI) — for debug/info surfaces. */
         getFilePath: filePath,
     };
+    return store;
 };
 
 export {

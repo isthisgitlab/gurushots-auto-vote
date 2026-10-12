@@ -1,7 +1,7 @@
 /**
  * The scenario state on the Android app window (Capacitor, write-behind to Preferences): a spend's marker stays in the
- * cache when Preferences refuses it, a start-up read that failed reads as unreadable, and a reset is judged by its own
- * write — through the real stores, the real transport and a Preferences that can be made to fail.
+ * cache when Preferences refuses it, a reset shows only once it is saved, and a start-up read that failed reads as not
+ * loaded — through the real stores, the real transport and a Preferences that can be made to fail.
  */
 
 import type { GetOptions, GetResult, SetOptions } from '@capacitor/preferences';
@@ -12,10 +12,11 @@ const mockPrefSet = jest.fn<Promise<void>, [SetOptions]>(async ({ key, value }) 
     if (failing.has(key)) throw new Error('disk full');
     stored.set(key, value);
 });
-const mockPrefGet = jest.fn<Promise<GetResult>, [GetOptions]>(async ({ key }) => {
+const readOne = async ({ key }: GetOptions): Promise<GetResult> => {
     if (failing.has(`read:${key}`)) throw new Error('bridge down');
     return { value: stored.get(key) ?? null };
-});
+};
+const mockPrefGet = jest.fn<Promise<GetResult>, [GetOptions]>(readOne);
 jest.mock(
     '@capacitor/preferences',
     () => ({
@@ -64,6 +65,7 @@ beforeEach(() => {
 afterEach(() => {
     delete g.Capacitor;
     failing.clear();
+    mockPrefGet.mockImplementation(readOne);
     stored.clear();
     jest.clearAllMocks();
 });
@@ -79,63 +81,114 @@ describe('a spend’s marker when Preferences refuses it', () => {
     });
 });
 
-describe('a start-up read that failed', () => {
-    test('reads as an unreadable file, never as an empty one, until the cache holds something known', async () => {
-        failing.add(`read:${STATE}`);
-        await boot({ [STATE]: file({ 7: stopped() }) });
-        expect(store.scenarioStateLedger.get(7)).toMatchObject({ corrupt: 'file', state: null });
-        expect(store.scenarioStateLedger.set(7, record())).toBe('failed');
-        failing.delete(`read:${STATE}`);
-        await store.refreshScenarioStateAsync();
-        expect(store.scenarioStateLedger.get(7)).toMatchObject({ corrupt: false });
-        expect(store.scenarioStateLedger.get(7).state?.inFlight?.unclear).toEqual(['swap']);
+describe('a reset asked for on the app window', () => {
+    const files = () => ({ [STATE]: file({ 7: stopped(), 8: stopped() }) });
+    const ledger = () => store.scenarioStateLedger;
+
+    test('that was not saved changed nothing: no read applies it, and the next reset does not carry it', async () => {
+        await boot(files());
+        failing.add(RESETS);
+        await expect(ledger().remove(7)).resolves.toBe('not-saved');
+        expect(ledger().get(7).state).not.toBeNull();
+        failing.delete(RESETS);
+        await expect(ledger().remove(8)).resolves.toBe('removed');
+        expect(Object.keys(JSON.parse(stored.get(RESETS) ?? '{}') as object)).toEqual(['8']);
+        expect(ledger().get(7).state).not.toBeNull();
+        expect(ledger().get(8).state).toBeNull();
     });
 
-    test('is cleared by the reset of every challenge, which is what the card then offers', async () => {
-        failing.add(`read:${STATE}`);
-        await boot();
-        expect(store.scenarioStateLedger.get(7).corrupt).toBe('file');
-        expect(store.scenarioStateLedger.removeAll()).toBe('removed');
-        expect(store.scenarioStateLedger.get(7).corrupt).toBe(false);
+    test('that was not saved is not applied by a refresh that was in flight meanwhile', async () => {
+        await boot(files());
+        let answer!: (value: GetResult) => void;
+        const refreshed = new Promise<void>((resolve) => {
+            mockPrefGet.mockImplementationOnce(readOne);
+            mockPrefGet.mockImplementationOnce(() => {
+                resolve();
+                return new Promise<GetResult>((resolveGet) => {
+                    answer = resolveGet;
+                });
+            });
+        });
+        const refreshing = store.refreshScenarioStateAsync();
+        await refreshed;
+        failing.add(RESETS);
+        await expect(ledger().remove(7)).resolves.toBe('not-saved');
+        answer({ value: null });
+        await refreshing;
+        expect(ledger().get(7).state).not.toBeNull();
+    });
+
+    test('that was saved while a refresh that predates it was in flight is still applied after it', async () => {
+        await boot(files());
+        let answer!: (value: GetResult) => void;
+        const reading = new Promise<void>((resolve) => {
+            mockPrefGet.mockImplementationOnce(async ({ key }) => ({ value: stored.get(key) ?? null }));
+            mockPrefGet.mockImplementationOnce(() => {
+                resolve();
+                return new Promise<GetResult>((resolveGet) => {
+                    answer = resolveGet;
+                });
+            });
+        });
+        const refreshing = store.refreshScenarioStateAsync();
+        await reading;
+        await expect(ledger().remove(7)).resolves.toBe('removed');
+        answer({ value: null });
+        await refreshing;
+        expect(ledger().get(7).state).toBeNull();
     });
 });
 
-describe('a reset asked for on the app window', () => {
-    const files = () => ({ [STATE]: file({ 7: stopped(), 8: stopped() }) });
-
-    test('that was not saved is taken back: the next read does not apply it, and a later reset does not persist it', async () => {
-        await boot(files());
-        failing.add(RESETS);
-        const judge = store.watchScenarioWrites();
-        expect(store.scenarioStateLedger.remove(7)).toBe('removed');
-        await expect(judge()).rejects.toThrow('was not persisted');
-        expect(store.scenarioStateLedger.get(7).state).not.toBeNull();
-        failing.delete(RESETS);
-        const next = store.watchScenarioWrites();
-        expect(store.scenarioStateLedger.remove(8)).toBe('removed');
-        await expect(next()).resolves.toBeUndefined();
-        expect(Object.keys(JSON.parse(stored.get(RESETS) ?? '{}') as object)).toEqual(['8']);
-        expect(store.scenarioStateLedger.get(7).state).not.toBeNull();
-        expect(store.scenarioStateLedger.get(8).state).toBeNull();
-    });
-
-    test('is saved though a write of the state failed before it and was never asked about', async () => {
-        await boot(files());
+describe('a reset of every challenge on progress that cannot be read', () => {
+    test('that was not saved changed nothing: the file still cannot be read, and a retry that is saved clears it', async () => {
+        await boot({ [STATE]: '{no' });
+        expect(store.scenarioStateLedger.get(7).corrupt).toBe('file');
         failing.add(STATE);
-        store.scenarioStateLedger.set(9, record());
+        await expect(store.scenarioStateLedger.removeAll(true)).resolves.toBe('not-saved');
+        expect(store.scenarioStateLedger.get(7).corrupt).toBe('file');
         failing.delete(STATE);
-        const judge = store.watchScenarioWrites();
-        store.scenarioStateLedger.remove(7);
-        await expect(judge()).resolves.toBeUndefined();
+        await expect(store.scenarioStateLedger.removeAll(true)).resolves.toBe('removed');
+        expect(store.scenarioStateLedger.get(7).corrupt).toBe(false);
     });
 
-    test('is saved though a write queued after its own fails', async () => {
-        await boot(files());
-        const judge = store.watchScenarioWrites();
-        store.scenarioStateLedger.remove(7);
-        const told = judge();
-        failing.add(STATE);
-        store.scenarioStateLedger.set(9, record());
-        await expect(told).resolves.toBeUndefined();
+    test('is not made once the file turns out to read again: its progress is not wiped', async () => {
+        failing.add(`read:${STATE}`);
+        await boot({ [STATE]: file({ 7: stopped() }) });
+        failing.delete(`read:${STATE}`);
+        await store.refreshScenarioStateAsync();
+        await expect(store.scenarioStateLedger.removeAll(true)).resolves.toBe('readable');
+        expect(store.scenarioStateLedger.get(7).state?.inFlight?.unclear).toEqual(['swap']);
+        expect(stored.get(RESETS)).toBeUndefined();
+    });
+});
+
+describe('a start-up read that failed', () => {
+    const ledger = () => store.scenarioStateLedger;
+
+    test.each([STATE, RESETS])('of %s reads as not loaded: paused, nothing written, nothing reset', async (key) => {
+        failing.add(`read:${key}`);
+        await boot({ [STATE]: file({ 7: stopped() }) });
+        expect(ledger().get(7)).toMatchObject({ corrupt: 'unloaded', state: null });
+        expect(ledger().set(7, record())).toBe('failed');
+        await expect(ledger().remove(7)).resolves.toBe('unloaded');
+        await expect(ledger().removeAll()).resolves.toBe('unloaded');
+        expect(store.scenarioStateLoaded()).toBe(false);
+        expect(mockPrefSet).not.toHaveBeenCalled();
+    });
+
+    test('is retried by the next refresh, and the plans read again from what is saved', async () => {
+        failing.add(`read:${RESETS}`);
+        await boot({ [STATE]: file({ 7: stopped() }) });
+        failing.delete(`read:${RESETS}`);
+        await store.refreshScenarioStateAsync();
+        expect(store.scenarioStateLoaded()).toBe(true);
+        expect(ledger().get(7).state?.inFlight?.unclear).toEqual(['swap']);
+    });
+
+    test('is nothing to a platform that reads its files itself', async () => {
+        delete g.Capacitor;
+        failing.add(`read:${STATE}`);
+        await boot();
+        expect(store.scenarioStateLoaded()).toBe(true);
     });
 });
