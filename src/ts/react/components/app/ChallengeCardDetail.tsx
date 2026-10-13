@@ -292,7 +292,11 @@ function EntryDetails({
             const button = clearedButtonRef.current;
             if (!button || event.target !== button) return;
             queueMicrotask(() => {
-                if (button.isConnected) clearedButtonRef.current = null;
+                // Still focused and in the page: the whole window lost focus, not just the button. A newer record
+                // (another button) is not this microtask's to wipe.
+                if (clearedButtonRef.current === button && button.isConnected && document.activeElement !== button) {
+                    clearedButtonRef.current = null;
+                }
             });
         };
         document.addEventListener('focusout', forgetOnBlur);
@@ -306,7 +310,8 @@ function EntryDetails({
         detailsRef.current?.focus({ preventScroll: true });
     });
 
-    // WebKit does not focus a button on a mouse click: nothing was focused there, so there is nothing to restore.
+    // Some engines (WebKit, Firefox on macOS) do not focus a button on a mouse click: nothing to restore is
+    // recorded (in WebKit focus is already on the group).
     const clearPin = async (kind: EntryPinKind, button: HTMLButtonElement) => {
         clearedButtonRef.current = document.activeElement === button ? button : null;
         await setPin(kind, null);

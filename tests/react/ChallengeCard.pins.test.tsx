@@ -371,7 +371,7 @@ describe('a stored pin that no longer applies', () => {
         expect(focus).not.toHaveBeenCalled();
     });
 
-    test('a click that did not focus the button (WebKit) leaves focus where it was when the note unmounts', async () => {
+    test('a click that leaves focus on another element (engines that do not focus a button on click) does not move it when the note unmounts', async () => {
         window.api.getEntryPins = jest
             .fn()
             .mockResolvedValueOnce({ boost: 'gone', turbo: null })
@@ -392,11 +392,54 @@ describe('a stored pin that no longer applies', () => {
         // `remove()` on the note's root) fires one from the button first, within the very update that removes it.
         const note = clear.closest('[role="group"] > *') as HTMLElement;
         const removeNote = note.remove.bind(note);
+        let removeRan = false;
         note.remove = () => {
+            removeRan = true;
             clear.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
             removeNote();
         };
         unmountNote();
+        await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
+        expect(removeRan).toBe(true);
+        expect(document.activeElement).toBe(details);
+    });
+
+    test('the window losing focus (a focusout while the button keeps focus) does not forget the clear', async () => {
+        const { details, unmountNote } = await clearThenUnmountOnLaterRead();
+        const clear = screen.getByRole('button', { name: 'app.pinClear' });
+        clear.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+        await Promise.resolve();
+        expect(document.activeElement).toBe(clear);
+        unmountNote();
+        await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
+        expect(document.activeElement).toBe(details);
+    });
+
+    test('a blur microtask left over from one clear does not forget a newer clear', async () => {
+        window.api.getEntryPins = jest
+            .fn()
+            .mockResolvedValueOnce({ boost: 'gone', turbo: 'gone' })
+            .mockResolvedValueOnce({ boost: 'gone', turbo: 'gone' })
+            .mockResolvedValueOnce({ boost: 'gone', turbo: 'gone' })
+            .mockResolvedValue({ boost: null, turbo: null });
+        const challenge = makeChallenge();
+        const view = renderCard(challenge);
+        const clears = await screen.findAllByRole('button', { name: 'app.pinClear' });
+        expect(clears).toHaveLength(2);
+        const details = screen.getByRole('group', { name: 'app.entryDetails' });
+        clears[0].focus();
+        fireEvent.click(clears[0]);
+        await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(clears[0].getAttribute('aria-busy')).toBe('false'));
+        // Moving focus fires the first button's focusout (its forget-microtask is queued while it is still the
+        // recorded one), and the second click records the second button before that microtask runs.
+        clears[1].focus();
+        fireEvent.click(clears[1]);
+        await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalledTimes(3));
+        await waitFor(() => expect(clears[1].getAttribute('aria-busy')).toBe('false'));
+        expect(document.activeElement).toBe(clears[1]);
+
+        view.rerender(cardElement(challenge, 1));
         await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
         expect(document.activeElement).toBe(details);
     });
