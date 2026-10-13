@@ -9,10 +9,12 @@ const ROW_ICON_CLASS = 'w-4 h-4 mr-1';
 // `className`): the opaque footer covers the bottom of the scroll area, and the
 // scroll padding keeps a focused control scrolled above it. On phones the
 // footer is at its tallest, about 13.2rem (buttons wrapped onto two rows and a
-// multi-line Latvian save-error alert at 320px), so 15rem; from `md` up the
-// hosts' `size="2xl"` box is at least ~704px, the buttons fit one row and it is
-// about 7rem, so 8rem. Each includes room for the focus ring. A larger Android
-// system font scale can still outgrow the phone value.
+// multi-line Latvian save-error alert at 320px), so 15rem. The `md:` value
+// assumes a `size="2xl"` host, whose box is 91.67% of the viewport: about 704px
+// at 768px (a classic scrollbar takes ~15px off). There the buttons and the
+// Latvian save-error alert each fit one line and the footer is about 7rem, so
+// 8rem. Each includes room for the focus ring. A larger Android system font
+// scale can still outgrow the phone value.
 export const MODAL_ACTION_ROW_SCROLL_PADDING = 'scroll-pb-60 md:scroll-pb-32';
 
 /**
