@@ -80,14 +80,20 @@ const pinButtons = (kind: 'Boost' | 'Turbo') =>
 // Moves focus with no focusout or focusin reaching any listener below the window: the move's own events are swallowed.
 const focusSilently = (element: HTMLElement) => {
     const swallow = (event: Event) => event.stopPropagation();
+    const leaked = jest.fn();
     window.addEventListener('focusout', swallow, true);
     window.addEventListener('focusin', swallow, true);
+    document.addEventListener('focusout', leaked);
+    document.addEventListener('focusin', leaked);
     try {
         element.focus();
     } finally {
         window.removeEventListener('focusout', swallow, true);
         window.removeEventListener('focusin', swallow, true);
+        document.removeEventListener('focusout', leaked);
+        document.removeEventListener('focusin', leaked);
     }
+    expect(leaked).not.toHaveBeenCalled();
 };
 
 beforeEach(() => {
@@ -474,13 +480,14 @@ describe('a stored pin that no longer applies', () => {
         // happy-dom never leaves a disconnected element as activeElement: report it, as an engine that does would.
         const active = jest.spyOn(document, 'activeElement', 'get').mockReturnValue(clear);
         try {
-            // The layout effect has run synchronously by the time this returns: the stub only has to cover it.
+            // The note unmounts once the re-keyed read resolves: the stub must stay live until the layout effect
+            // has seen the button disconnected, so only `!active.isConnected` can report the focus as lost.
             unmountNote();
+            await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
+            expect(clear.isConnected).toBe(false);
         } finally {
             active.mockRestore();
         }
-        await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
-        expect(clear.isConnected).toBe(false);
         expect(document.activeElement).toBe(details);
     });
 
