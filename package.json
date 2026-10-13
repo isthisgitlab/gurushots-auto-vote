@@ -131,7 +131,7 @@
         "@types/yauzl": "^3.4.0",
         "concurrently": "^10.0.6",
         "cross-env": "^10.1.0",
-        "daisyui": "^5.7.47",
+        "daisyui": "^5.7.48",
         "electron": "^44.7.0",
         "electron-builder": "^26.17.0",
         "electronmon": "^2.0.4",

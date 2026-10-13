@@ -8,7 +8,7 @@ ext {
     androidxCoreVersion = '1.19.0'
     androidxFragmentVersion = '1.8.9'
     coreSplashScreenVersion = '1.2.0'
-    androidxWebkitVersion = '1.16.0'
+    androidxWebkitVersion = '1.17.1'
     junitVersion = '4.13.2'
     // JVM unit-test stack (android/app/src/test). Robolectric 4.17 is the first
     // release that runs SDK 37 (compileSdkVersion); mockwebserver3 must match
