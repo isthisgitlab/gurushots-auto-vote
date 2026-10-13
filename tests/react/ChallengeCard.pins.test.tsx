@@ -77,6 +77,19 @@ const renderCard = (challenge: Challenge) => render(cardElement(challenge));
 const pinButtons = (kind: 'Boost' | 'Turbo') =>
     screen.queryAllByRole('button', { name: new RegExp(`app\\.pinFor${kind}`) });
 
+// Moves focus with no focusout or focusin reaching any listener below the window: the move's own events are swallowed.
+const focusSilently = (element: HTMLElement) => {
+    const swallow = (event: Event) => event.stopPropagation();
+    window.addEventListener('focusout', swallow, true);
+    window.addEventListener('focusin', swallow, true);
+    try {
+        element.focus();
+    } finally {
+        window.removeEventListener('focusout', swallow, true);
+        window.removeEventListener('focusin', swallow, true);
+    }
+};
+
 beforeEach(() => {
     mockChallengeSettings.isCompact = false;
     window.api.getSettingsSchema = jest.fn().mockResolvedValue({ schema: {}, defaults: {} });
@@ -412,6 +425,8 @@ describe('a stored pin that no longer applies', () => {
         clear.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
         await Promise.resolve();
         expect(document.activeElement).toBe(clear);
+        // The window regains focus: the browser fires focusin on the button that still holds it, which keeps the record.
+        clear.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
         unmountNote();
         await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
         expect(document.activeElement).toBe(details);
@@ -424,14 +439,9 @@ describe('a stored pin that no longer applies', () => {
         // The window loses focus: the focusout reaches the listener, the button keeps its record.
         clear.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
         await Promise.resolve();
-        // Focus then moves with no focusout or focusin reaching the listener: the move's own events are swallowed.
+        // Focus then moves with no focusout or focusin reaching the listener.
         const elsewhere = pinButtons('Turbo')[0];
-        const swallow = (event: Event) => event.stopPropagation();
-        window.addEventListener('focusout', swallow, true);
-        window.addEventListener('focusin', swallow, true);
-        elsewhere.focus();
-        window.removeEventListener('focusout', swallow, true);
-        window.removeEventListener('focusin', swallow, true);
+        focusSilently(elsewhere);
         expect(document.activeElement).toBe(elsewhere);
         unmountNote();
         await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
@@ -446,12 +456,7 @@ describe('a stored pin that no longer applies', () => {
         clear.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
         await Promise.resolve();
         const elsewhere = pinButtons('Turbo')[0];
-        const swallow = (event: Event) => event.stopPropagation();
-        window.addEventListener('focusout', swallow, true);
-        window.addEventListener('focusin', swallow, true);
-        elsewhere.focus();
-        window.removeEventListener('focusout', swallow, true);
-        window.removeEventListener('focusin', swallow, true);
+        focusSilently(elsewhere);
         // The window regains focus: the browser fires focusin on the element that already holds it.
         elsewhere.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
         // The user then lands on <body> (the record, if kept, would claim it).
@@ -469,12 +474,13 @@ describe('a stored pin that no longer applies', () => {
         // happy-dom never leaves a disconnected element as activeElement: report it, as an engine that does would.
         const active = jest.spyOn(document, 'activeElement', 'get').mockReturnValue(clear);
         try {
+            // The layout effect has run synchronously by the time this returns: the stub only has to cover it.
             unmountNote();
-            await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
-            expect(clear.isConnected).toBe(false);
         } finally {
             active.mockRestore();
         }
+        await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
+        expect(clear.isConnected).toBe(false);
         expect(document.activeElement).toBe(details);
     });
 
@@ -497,7 +503,9 @@ describe('a stored pin that no longer applies', () => {
         // Moving focus fires the first button's focusout (its forget-microtask is queued while it is still the
         // recorded one), and the second click records the second button before that microtask runs. That is a
         // race only script can produce (focus() and click() in one task): a microtask checkpoint follows every
-        // listener the browser dispatches, so there the microtask runs before any later click handler.
+        // listener the browser dispatches, so there the microtask runs before any later click handler. The same
+        // focus() also fires a focusin on the second button, which already clears the first record before the
+        // click, so the test still pins the microtask's newer-record guard (the second click's record survives).
         clears[1].focus();
         fireEvent.click(clears[1]);
         await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalledTimes(3));

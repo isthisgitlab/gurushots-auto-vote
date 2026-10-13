@@ -289,14 +289,15 @@ function EntryDetails({
     // A cleared pin's note unmounts with the focused button inside it: focus would drop to <body>, so it moves to
     // the section instead. The note can unmount well after the write resolves (a settings-changed read supersedes
     // the write's own), hence the check runs after every render rather than after the write. Focus that has landed
-    // anywhere else since — another element, or <body> after leaving the button — is never stolen: the record is
-    // forgotten once the button loses focus while still in the page, and once focus lands on any other element, so a
-    // failed clear (the note, and focus, stay where they are) followed by the user moving on never acts later. A
-    // focusout from the button's own removal (some engines fire one) is left to the layout effect, which has already
-    // run by the time the deferred check sees the button gone. The record survives the window losing focus, and
-    // focus can move without a focusout from the button (a dialog focusing its first button while the window is
-    // unfocused): the focusin that follows when the window regains focus forgets the record, and the layout effect
-    // moves focus only if it is actually lost.
+    // on another element since is never moved: a record is forgotten by a focusout from the button (while it is
+    // still in the page) or by a focusin elsewhere, so a failed clear (the note, and focus, stay where they are)
+    // followed by the user moving on never acts later. A focusout from the button's own removal (some engines fire
+    // one) is left to the layout effect, which has already run by the time the deferred check sees the button gone.
+    // The record survives the window losing focus, and focus can move without a focusout from the button (a dialog
+    // focusing its first button while the window is unfocused): the focusin that follows when the window regains
+    // focus forgets the record, and the layout effect moves focus only if it is actually lost. One ordering can
+    // still act: focus moves silently, then to <body>, and the note unmounts, all while the window is in the
+    // background — the section then receives focus instead of nothing.
     useEffect(() => {
         const forgetOnBlur = (event: FocusEvent) => {
             const button = clearedButtonRef.current;
