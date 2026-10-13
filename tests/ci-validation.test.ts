@@ -182,6 +182,54 @@ describe('sends toward the Logs window', () => {
         walk(path.join(root, 'src/ts'));
         expect(found.sort()).toEqual([...EXEMPTIONS].sort());
     });
+
+    // A directive that names no rule switches off every rule, frame-guard included.
+    const bareDisableLines = (text: string): number[] => {
+        const bare: number[] = [];
+        text.split('\n').forEach((line, index) => {
+            const match = /(?:\/\/|\/\*)\s*(?:oxlint|eslint)-disable(?:-next-line|-line)?(?![\w-])(.*)$/.exec(line);
+            if (!match) return;
+            // What follows the directive, minus a block comment's close and a `-- reason`.
+            const rules = match[1].split('*/')[0].split(/\s--(?:\s|$)/)[0];
+            if (rules.trim() === '') bare.push(index + 1);
+        });
+        return bare;
+    };
+
+    test('a disable directive that names no rule is reported, one that names a rule is not', () => {
+        const sample = [
+            '// oxlint-disable-next-line',
+            '// eslint-disable-line',
+            '/* eslint-disable */',
+            '// oxlint-disable-next-line -- because',
+            '// oxlint-disable-next-line no-control-regex',
+            'const a = 1; // eslint-disable-line no-console, no-undef',
+            '/* oxlint-disable no-console */',
+            '// oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- reason',
+            'const text = "oxlint-disable";',
+        ].join('\n');
+        expect(bareDisableLines(sample)).toEqual([1, 2, 3, 4]);
+    });
+
+    test('every disable directive in src/ts names the rule it silences', () => {
+        const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+        const path = jest.requireActual<typeof import('node:path')>('node:path');
+        const root = path.join(__dirname, '..');
+        const offenders: string[] = [];
+        const walk = (dir: string): void => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) walk(full);
+                else if (/\.tsx?$/.test(entry.name)) {
+                    for (const line of bareDisableLines(fs.readFileSync(full, 'utf8'))) {
+                        offenders.push(`${path.relative(root, full)}:${line}`);
+                    }
+                }
+            }
+        };
+        walk(path.join(root, 'src/ts'));
+        expect(offenders).toEqual([]);
+    });
 });
 
 describe('stylesheet sources', () => {
