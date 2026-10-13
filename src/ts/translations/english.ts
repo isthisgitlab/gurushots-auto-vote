@@ -766,8 +766,12 @@ export const app = {
     photoChooserTruncated: 'Showing the first {count} photos. Search by tag to find others.',
     photoChooserWonHidden:
         "Hidden: {count} photo(s) that have won a challenge. A winning photo can't be entered again.",
-    photoChooserWonInList: "Has won a challenge, so it can't be entered again.",
+    photoChooserWonHiddenTruncated:
+        "Hidden: at least {count} photo(s) that have won a challenge. A winning photo can't be entered again.",
+    photoChooserWonInList: "Has won a challenge, so it can't be entered again. Click it to remove it from your list.",
     photoChooserEmpty: 'No photos found. Try another tag, or upload photos to your GuruShots library.',
+    photoChooserEmptyAllWon:
+        'No photos you can enter were found: every match has won a challenge. Try another tag, or upload new photos to your GuruShots library.',
     photoChooserMissing: 'Not available for this challenge (in another challenge, or deleted)',
     photoChooserMissingTruncated:
         'Not available for this challenge (in another challenge, deleted, or beyond the first {count} photos)',

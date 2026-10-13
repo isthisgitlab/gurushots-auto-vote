@@ -1,6 +1,7 @@
 /**
  * htmlToText: the plain text of the server's short HTML messages — line breaks as a dash, tags gone, a fixed set of
- * named entities decoded after the tags are removed (so an encoded tag stays text), numeric entities left alone.
+ * named entities decoded after the tags are removed (so an encoded tag stays text), numeric entities left alone,
+ * control and invisible format characters dropped.
  */
 
 import { htmlToText } from '../../src/ts/format/htmlToText';
@@ -37,6 +38,13 @@ describe('htmlToText', () => {
         ['&quot;', '"'],
         ['&#39;', "'"],
         ['a&nbsp;b', 'a b'],
+        ['&rsquo;', '\u2019'],
+        ['&lsquo;', '\u2018'],
+        ['&rdquo;', '\u201D'],
+        ['&ldquo;', '\u201C'],
+        ['&hellip;', '\u2026'],
+        ['a&mdash;b', 'a\u2014b'],
+        ['&ndash;', '\u2013'],
     ])('decodes the named entity %s', (entity, text) => {
         expect(htmlToText(entity)).toBe(text);
     });
@@ -62,5 +70,39 @@ describe('htmlToText', () => {
 
     test.each(['', '   ', '<b></b>', '<span> </span>'])('nothing is left of %j', (html) => {
         expect(htmlToText(html)).toBe('');
+    });
+
+    test('a dash the server wrote at either end of the message stays, unlike a break', () => {
+        expect(htmlToText('&mdash; reason')).toBe('\u2014 reason');
+        expect(htmlToText('reason &mdash;')).toBe('reason \u2014');
+        expect(htmlToText('<br>&mdash; reason &mdash;<br>')).toBe('\u2014 reason \u2014');
+    });
+
+    test('a private-use character in the input is not mistaken for a break', () => {
+        expect(htmlToText('a\uE000b')).toBe('ab');
+    });
+
+    test('a `>` inside a quoted attribute value does not end the tag', () => {
+        expect(htmlToText('<a title="a > b" href=\'x>y\'>link</a> after')).toBe('link after');
+    });
+
+    test('an HTML comment is removed, with what it holds', () => {
+        expect(htmlToText('before<!-- <br> hidden -->after')).toBe('beforeafter');
+        expect(htmlToText('<!-- never closed')).toBe('<!-- never closed');
+    });
+
+    test('an unknown entity is left as written', () => {
+        expect(htmlToText('&bogus; &amp;')).toBe('&bogus; &');
+    });
+
+    test('control and invisible format characters are dropped, the joiners stay', () => {
+        expect(htmlToText('a\u202Eb\u001B[31mc\u200Bd\u0007e')).toBe('abcde');
+        expect(htmlToText('x\u200Dy\u200Cz')).toBe('x\u200Dy\u200Cz');
+    });
+
+    test('a very long input is converted in one pass', () => {
+        const long = `${'<b>x</b> &amp; '.repeat(20_000)}<br>`;
+        expect(htmlToText(long)).toBe(`${'x & '.repeat(20_000).trim()}`);
+        expect(htmlToText(`<a ${'"'.repeat(50_001)}`)).toBe(`<a ${'"'.repeat(50_001)}`);
     });
 });

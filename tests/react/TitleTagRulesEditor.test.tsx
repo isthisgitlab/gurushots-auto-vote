@@ -185,6 +185,7 @@ describe('TitleTagRulesEditor', () => {
                     memberId: null,
                     truncated: false,
                     wonIds: [],
+                    wonCount: 0,
                     allowedKnown: false,
                 });
             });

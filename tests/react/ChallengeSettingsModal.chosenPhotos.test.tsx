@@ -45,6 +45,7 @@ beforeEach(() => {
             memberId: 'c'.repeat(32),
             truncated: false,
             wonIds: [],
+            wonCount: 0,
             allowedKnown: true,
         }),
     );

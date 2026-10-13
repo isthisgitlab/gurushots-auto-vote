@@ -135,6 +135,7 @@ describe('the listing', () => {
             ],
             memberId: 'member-1',
             wonIds: [],
+            wonCount: 0,
             truncated: true,
             allowedKnown: true,
         });
@@ -167,16 +168,37 @@ describe('the listing', () => {
         expect(result.photos[1].message).toBe('x'.repeat(200));
     });
 
-    test('the photos the walk left out for having won a challenge are reported by id, safe ids only, at most 1000', async () => {
-        const skipped = [...Array.from({ length: 1005 }, (_, i) => `w${i}`), 'has space', 'a/b'];
+    test('the photos the walk left out for having won a challenge are reported by id, safe ids only, at most 1000, and counted in full', async () => {
+        const skipped = ['has space', 'a/b', ...Array.from({ length: 1005 }, (_, i) => `w${i}`)];
         stubStrategy({ getEligiblePhotosWalk: newWalk({ items: [rawPhoto], truncated: false, skipped }) });
-        const result = (await call(5)) as { wonIds: string[] };
+        const result = (await call(5)) as { wonIds: string[]; wonCount: number };
+        // The unsafe ids lead the walk's list and are dropped, and the cap still fills with safe ones.
         expect(result.wonIds).toHaveLength(1000);
         expect(result.wonIds[0]).toBe('w0');
         expect(result.wonIds).not.toContain('has space');
+        // wonCount is what the walk recorded, unsafe and over-cap ids included.
+        expect(result.wonCount).toBe(1007);
         stubStrategy({ getEligiblePhotosWalk: newWalk({ items: [rawPhoto], truncated: false, skipped: ['a/b'] }) });
         __resetLibraryThrottle();
-        expect(((await call(5)) as { wonIds: string[] }).wonIds).toEqual([]);
+        expect(await call(5)).toMatchObject({ wonIds: [], wonCount: 1 });
+    });
+
+    test('a reason is converted from its first 800 characters at most, and what shows is capped at 200 after that', async () => {
+        stubStrategy({
+            getEligiblePhotosWalk: newWalk({
+                items: [
+                    { id: 'b1', permission: { allowed: false, message: `${'<b></b> '.repeat(100)}tail` } },
+                    { id: 'b2', permission: { allowed: false, message: `${'x'.repeat(790)}<b>yy</b>zz` } },
+                ],
+                truncated: false,
+            }),
+        });
+        const result = (await call(5)) as { photos: Array<{ message: string }> };
+        // 100 empty tags are 800 characters: the text after them is never reached.
+        expect(result.photos[0].message).toBe('');
+        // The cut falls inside the markup: the half tag is left as it is.
+        expect(result.photos[1].message).toBe(`${'x'.repeat(790)}yy`.slice(0, 200));
+        expect(result.photos[1].message).toHaveLength(200);
     });
 
     test('a library read through a borrowed challenge leaves won photos out too: a won photo is barred from every challenge', async () => {
@@ -346,5 +368,11 @@ describe('hasWonChallenge', () => {
         ['no permission', undefined],
     ])('%s is not', (_name, permission) => {
         expect(hasWonChallenge(photoWith(permission))).toBe(false);
+    });
+
+    test('only the first 800 characters of the message are read', () => {
+        const wording = 'has won a challenge';
+        expect(hasWonChallenge(photoWith({ allowed: false, message: `${' '.repeat(781)}${wording}` }))).toBe(true);
+        expect(hasWonChallenge(photoWith({ allowed: false, message: `${' '.repeat(790)}${wording}` }))).toBe(false);
     });
 });

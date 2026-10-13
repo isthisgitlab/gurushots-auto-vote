@@ -98,8 +98,10 @@ function PhotoSubmitBody({
         if (from === null || state.status !== 'ready' || generation < from) return;
         pruneFromRef.current = null;
         if (!state.listing.allowedKnown) return;
+        // A photo that has won since the last read is left out of the listing, so `known` still has it as allowed.
+        const won = new Set(state.listing.wonIds);
         setSelected((prev) => {
-            const kept = prev.filter((id) => known.get(id)?.allowed !== false);
+            const kept = prev.filter((id) => known.get(id)?.allowed !== false && !won.has(id));
             return kept.length === prev.length ? prev : kept;
         });
     }, [state, known, generation]);

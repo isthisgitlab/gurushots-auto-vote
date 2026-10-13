@@ -56,6 +56,7 @@ describe('list-photos', () => {
             photos,
             truncated: true,
             wonIds: [],
+            wonCount: 0,
             allowedKnown: true,
             memberId: 'm',
         });
@@ -82,6 +83,7 @@ describe('list-photos', () => {
             photos: [photos[0]],
             truncated: false,
             wonIds: [],
+            wonCount: 0,
             allowedKnown: false,
             memberId: null,
         });
@@ -96,6 +98,7 @@ describe('list-photos', () => {
             photos: [{ ...photos[0], labels: [] }],
             truncated: false,
             wonIds: [],
+            wonCount: 0,
             allowedKnown: true,
             memberId: null,
         });
@@ -108,6 +111,7 @@ describe('list-photos', () => {
             photos: [],
             truncated: false,
             wonIds: [],
+            wonCount: 0,
             allowedKnown: false,
             memberId: null,
         });
@@ -124,26 +128,73 @@ describe('list-photos', () => {
             success: true,
             photos: [photos[0]],
             wonIds: ['w1', 'w2'],
+            wonCount: 2,
             truncated: false,
             allowedKnown: true,
             memberId: 'm',
         });
         await expect(listPhotosCmd('5', null)).resolves.toBe(0);
-        expect(text('info')).toContain('2 photo(s) that have won a challenge are hidden.');
+        expect(text('info')).toContain(
+            "2 photo(s) that have won a challenge are hidden (a winning photo can't be entered again).",
+        );
         expect(text('stdout')).toEqual(['  \u2022 p1  allowed  [Pink, Flower]']);
+        // The count is the walk's, not the length of the capped id list.
         calls.length = 0;
         handlers['get-library-photos'].mockResolvedValue({
             success: true,
-            photos: [],
+            photos: [photos[0]],
             wonIds: ['w1'],
+            wonCount: 1500,
             truncated: false,
             allowedKnown: true,
             memberId: 'm',
         });
+        await listPhotosCmd('5', null);
+        expect(text('info')).toContain(
+            "1500 photo(s) that have won a challenge are hidden (a winning photo can't be entered again).",
+        );
+        // A cut-short listing may have hidden more.
+        calls.length = 0;
+        handlers['get-library-photos'].mockResolvedValue({
+            success: true,
+            photos: [photos[0]],
+            wonIds: ['w1'],
+            wonCount: 1,
+            truncated: true,
+            allowedKnown: true,
+            memberId: 'm',
+        });
+        await listPhotosCmd('5', null);
+        expect(text('info')).toContain(
+            "At least 1 photo(s) that have won a challenge are hidden (a winning photo can't be entered again).",
+        );
+    });
+
+    test('a listing with every match hidden says so in one line, for a tag or for the whole library', async () => {
+        const allWon = {
+            success: true as const,
+            photos: [],
+            wonIds: ['w1'],
+            wonCount: 3,
+            truncated: false,
+            allowedKnown: true,
+            memberId: 'm',
+        };
+        handlers['get-library-photos'].mockResolvedValue(allWon);
         await expect(listPhotosCmd('5', null)).resolves.toBe(0);
         expect(text('info')).toEqual([
-            'No photos found in your library.',
-            '1 photo(s) that have won a challenge are hidden.',
+            "No photos you can enter were found in your library; 3 photo(s) that have won a challenge are hidden (a winning photo can't be entered again).",
+        ]);
+        calls.length = 0;
+        await listPhotosCmd('5', 'pi\u001bnk');
+        expect(text('info')).toEqual([
+            `No photos you can enter were found for "pink"; 3 photo(s) that have won a challenge are hidden (a winning photo can't be entered again).`,
+        ]);
+        calls.length = 0;
+        handlers['get-library-photos'].mockResolvedValue({ ...allWon, truncated: true });
+        await listPhotosCmd('5', null);
+        expect(text('info')).toEqual([
+            "No photos you can enter were found in your library; at least 3 photo(s) that have won a challenge are hidden (a winning photo can't be entered again).",
         ]);
         // Nothing hidden, nothing said.
         calls.length = 0;
@@ -151,6 +202,7 @@ describe('list-photos', () => {
             success: true,
             photos: [photos[0]],
             wonIds: [],
+            wonCount: 0,
             truncated: false,
             allowedKnown: true,
             memberId: 'm',
@@ -159,7 +211,7 @@ describe('list-photos', () => {
         expect(text('info').some((line) => line.includes('have won a challenge'))).toBe(false);
     });
 
-    test('a blocked photo is printed with its reason as the handler gives it: plain text, no HTML', async () => {
+    test('a blocked photo is printed with its reason exactly as the handler gives it, control characters stripped and nothing decoded again', async () => {
         handlers['get-library-photos'].mockResolvedValue({
             success: true,
             photos: [
@@ -167,17 +219,18 @@ describe('list-photos', () => {
                     id: 'p3',
                     labels: [],
                     allowed: false,
-                    message: "Already in another challenge — it can't take part twice",
+                    message: 'Used <b>twice</b> &amp; \u001b[31mred\u001b[0m',
                     uploadDate: null,
                 },
             ],
             wonIds: [],
+            wonCount: 0,
             truncated: false,
             allowedKnown: true,
             memberId: 'm',
         });
         await listPhotosCmd('5', null);
-        expect(text('stdout').join('\n')).not.toMatch(/<|&lt;|&amp;/);
+        expect(text('stdout')).toEqual(['  \u2022 p3  not allowed', '      Used <b>twice</b> &amp; red']);
     });
 
     test('a not-allowed photo without a message prints no second line', async () => {
@@ -186,6 +239,7 @@ describe('list-photos', () => {
             photos: [{ id: 'p3', labels: [], allowed: false, message: null, uploadDate: null }],
             truncated: false,
             wonIds: [],
+            wonCount: 0,
             allowedKnown: true,
             memberId: null,
         });

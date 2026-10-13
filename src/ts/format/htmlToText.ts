@@ -1,33 +1,58 @@
+import { stripTerminalControl } from './logSafe';
+
 /**
  * The plain text of a short HTML message the server sends (a photo's reason it cannot enter a challenge, say), as
- * the terminal and the renderer's text nodes show it: `<br>` becomes a dash between the lines, every other tag is
- * removed, and only then a fixed set of named entities is decoded, so an encoded tag stays literal text. Numeric
- * entities are left as they are: decoding them would let the server write any character, a control character included.
+ * the terminal and the renderer's text nodes show it. In order: an HTML comment is removed; `<br>` becomes a dash
+ * between the lines, and a break at either end of the message separates nothing and is dropped; every other tag the
+ * pattern recognises is removed (a `>` inside a quoted attribute value does not end it); the named entities in
+ * `ENTITIES` are decoded in one pass, so an encoded tag or entity stays literal text and any other entity, numeric
+ * ones included, is left as written (a real `&mdash;` at either end stays); then control and invisible format
+ * characters are dropped (`stripTerminalControl`, which keeps the two joiners) and whitespace is collapsed. Markup
+ * the pattern does not recognise (an unterminated comment, a `<` not followed by a letter) stays as text, and the
+ * result is not escaped: a caller that prints it must still treat it as text. The comment pass is not linear in the
+ * length of the input, so a caller must bound it first (library.ts cuts the message to 800 characters).
  */
 
-const ENTITIES: Record<string, string> = {
-    '&amp;': '&',
-    '&lt;': '<',
-    '&gt;': '>',
-    '&quot;': '"',
-    '&#39;': "'",
-    '&nbsp;': ' ',
-};
+const ENTITIES = new Map<string, string>([
+    ['&amp;', '&'],
+    ['&lt;', '<'],
+    ['&gt;', '>'],
+    ['&quot;', '"'],
+    ['&#39;', "'"],
+    ['&nbsp;', ' '],
+    ['&rsquo;', '’'],
+    ['&lsquo;', '‘'],
+    ['&rdquo;', '”'],
+    ['&ldquo;', '“'],
+    ['&hellip;', '…'],
+    ['&mdash;', '—'],
+    ['&ndash;', '–'],
+]);
 
+const COMMENTS = /<!--[\s\S]*?-->/g;
 const LINE_BREAKS = /(?:<br\s*\/?>\s*)+/gi;
-// A tag opens with a letter (or a slash and a letter): a `<` in running text is not one.
-const TAGS = /<\/?[a-z][^<>]*>/gi;
-const NAMED_ENTITIES = /&(?:amp|lt|gt|quot|#39|nbsp);/g;
-const LINE_SEPARATOR = '—';
+// A tag opens with a letter (or a slash and a letter): a `<` in running text is not one. A quoted attribute value
+// may hold `<` and `>`.
+const TAGS = /<\/?[a-z](?:"[^"]*"|'[^']*'|[^<>"'])*>/gi;
+// Anything shaped like an entity: only those in ENTITIES change.
+const ENTITY_SHAPE = /&#?\w+;/g;
+// Stands for a `<br>` until the entities are decoded, so a dash the server wrote itself is told from a break.
+const BREAK = '\uE000';
+const BREAKS_AND_SPACE = new RegExp(`^[\\s${BREAK}]+|[\\s${BREAK}]+$`, 'g');
 
 const htmlToText = (html: string): string =>
-    html
-        .replace(LINE_BREAKS, ` ${LINE_SEPARATOR} `)
-        .replace(TAGS, '')
-        .replace(NAMED_ENTITIES, (entity) => ENTITIES[entity])
+    stripTerminalControl(
+        html
+            .replaceAll(BREAK, '')
+            .replace(COMMENTS, '')
+            .replace(LINE_BREAKS, BREAK)
+            .replace(TAGS, '')
+            // A break at either end separates nothing.
+            .replace(BREAKS_AND_SPACE, '')
+            .replace(ENTITY_SHAPE, (entity) => ENTITIES.get(entity) ?? entity)
+            .replaceAll(BREAK, ' \u2014 '),
+    )
         .replace(/\s+/g, ' ')
-        .trim()
-        // A break at either end separates nothing.
-        .replace(new RegExp(`^${LINE_SEPARATOR}\\s*|\\s*${LINE_SEPARATOR}$`, 'g'), '');
+        .trim();
 
 export { htmlToText };

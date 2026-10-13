@@ -25,6 +25,7 @@ const libraryOf = (...numbers: number[]) => ({
     memberId: MEMBER,
     truncated: false,
     wonIds: [],
+    wonCount: 0,
     allowedKnown: true,
 });
 

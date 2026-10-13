@@ -367,6 +367,55 @@ describe('submissions', () => {
                 }
             });
 
+            test('a photo already kept is not also skipped, and one kept after being skipped leaves the skipped list', async () => {
+                // `a` is read as kept and then as skipped; `b` the other way round.
+                const answers: Record<string, boolean[]> = { a: [false, true], b: [true, false] };
+                const reads: Record<string, number> = { a: 0, b: 0 };
+                const skip = (photo: { id: string }) => answers[photo.id][reads[photo.id]++];
+                makePostRequest
+                    .mockResolvedValueOnce(page('a', 'b'))
+                    .mockResolvedValueOnce(page('a', 'b'))
+                    .mockResolvedValueOnce(page());
+                const walk = await getEligiblePhotosWalk('c1', token, { limit: 2, skip });
+                expect(ids(walk).sort()).toEqual(['a', 'b']);
+                expect(walk.skipped).toEqual([]);
+            });
+
+            test('records no more skipped ids than the page ceiling could hold, even when pages carry more rows than asked', async () => {
+                let next = 0;
+                makePostRequest.mockImplementation(async () => page(...Array.from({ length: 5 }, () => `w${next++}`)));
+                const walk = await getEligiblePhotosWalk('c1', token, { limit: 2, skip: isWinner });
+                expect(makePostRequest).toHaveBeenCalledTimes(2 * MAX_LIBRARY_PAGES);
+                expect(walk.skipped).toHaveLength(2 * MAX_LIBRARY_PAGES * 2);
+                expect(walk.skipped?.[0]).toBe('w0');
+                expect(walk.items).toEqual([]);
+            });
+
+            test('a mixed page that crosses the cap is kept whole, and the walk is truncated', async () => {
+                let next = 0;
+                const fresh = (n: number) => Array.from({ length: n }, () => `p${next++}`);
+                makePostRequest.mockImplementation(async () => {
+                    // Nine full pages of kept photos, then one with a winner among them that takes it past the cap.
+                    return next < 9 * 4 ? page(...fresh(4)) : page(...fresh(2), 'wx', ...fresh(3));
+                });
+                const walk = await getEligiblePhotosWalk('c1', token, { limit: 4, skip: isWinner });
+                expect(makePostRequest).toHaveBeenCalledTimes(MAX_LIBRARY_PAGES);
+                expect(walk.items).toHaveLength(9 * 4 + 5);
+                expect(walk.items.at(-1)?.id).toBe(`p${9 * 4 + 4}`);
+                expect(walk.skipped).toEqual(['wx']);
+                expect(walk.truncated).toBe(true);
+            });
+
+            test('a short last page that reaches the cap is still the end of the library', async () => {
+                makePostRequest
+                    .mockResolvedValueOnce(page(...Array.from({ length: 19 }, (_, i) => `p${i}`)))
+                    .mockResolvedValueOnce(page('last'));
+                const walk = await getEligiblePhotosWalk('c1', token, { limit: 2, skip: isWinner });
+                expect(walk.items).toHaveLength(MAX_LIBRARY_PAGES * 2);
+                expect(walk.truncated).toBe(false);
+                expect(warnings()).toEqual([]);
+            });
+
             test('without a skip the result has no skipped list and the cap is the page limit', async () => {
                 makePostRequest.mockResolvedValue(page('a', 'b'));
                 const walk = await getEligiblePhotosWalk('c1', token, { limit: 2 });

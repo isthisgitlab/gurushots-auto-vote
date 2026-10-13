@@ -1252,6 +1252,7 @@ describe('chosen photos', () => {
                     memberId: 'c'.repeat(32),
                     truncated: false,
                     wonIds: [],
+                    wonCount: 0,
                     allowedKnown: true,
                 }),
         });
@@ -1333,6 +1334,7 @@ describe('chosen photos', () => {
                     memberId: OWNER,
                     truncated: false,
                     wonIds: [],
+                    wonCount: 0,
                     allowedKnown: true,
                 };
             });

@@ -27,7 +27,7 @@ import type { LibraryPhoto } from '../../types/gurushots';
 
 // Shortest gap between the end of one walk and the start of the next. The chooser
 // runs a search on every submit; this stops a held Enter key (or a script) from
-// queueing one walk of up to ten page requests after another.
+// queueing one walk of up to twenty page requests (ten, doubled when photos are left out) after another.
 const MIN_WALK_INTERVAL_MS = 1500;
 
 // Per-photo caps on what is forwarded: a labels list and a server message are
@@ -35,6 +35,8 @@ const MIN_WALK_INTERVAL_MS = 1500;
 const MAX_LABELS_PER_PHOTO = 32;
 const MAX_LABEL_LENGTH = 80;
 const MAX_MESSAGE_LENGTH = 200;
+// How much of the raw HTML message is converted: markup makes the raw text longer than what it shows.
+const MAX_RAW_MESSAGE_LENGTH = 4 * MAX_MESSAGE_LENGTH;
 // How many ids of photos left out of the listing (they have won a challenge) are reported with it.
 const MAX_WON_IDS = 1000;
 
@@ -96,6 +98,9 @@ const cleanSearch = (search: string): string | undefined =>
         .trim()
         .slice(0, MAX_TAG_LENGTH) || undefined;
 
+/** The server's HTML reason as text, converted from no more than MAX_RAW_MESSAGE_LENGTH of it. */
+const messageText = (html: string): string => htmlToText(html.slice(0, MAX_RAW_MESSAGE_LENGTH));
+
 /** The fields of one library photo the renderer and CLI are given — nothing else is forwarded. */
 const mapPhoto = (photo: LibraryPhoto) => ({
     id: String(photo.id),
@@ -107,7 +112,7 @@ const mapPhoto = (photo: LibraryPhoto) => ({
     // The server words the reason as HTML; it goes on as text.
     message:
         typeof photo.permission?.message === 'string'
-            ? htmlToText(photo.permission.message).slice(0, MAX_MESSAGE_LENGTH)
+            ? messageText(photo.permission.message).slice(0, MAX_MESSAGE_LENGTH)
             : null,
     uploadDate: typeof photo.upload_date === 'number' && Number.isFinite(photo.upload_date) ? photo.upload_date : null,
 });
@@ -120,7 +125,7 @@ const mapPhoto = (photo: LibraryPhoto) => ({
 const hasWonChallenge = (photo: LibraryPhoto): boolean =>
     photo.permission?.allowed === false &&
     typeof photo.permission.message === 'string' &&
-    /has won a challenge/i.test(htmlToText(photo.permission.message));
+    /has won a challenge/i.test(messageText(photo.permission.message));
 
 /**
  * The challenge id the library is read through when the caller named none: any
@@ -172,13 +177,16 @@ const handleGetLibraryPhotos = (async (
         });
         if (outcome === SUPERSEDED) return { success: false as const, error: 'superseded' as const };
         if (outcome === null) return { success: false as const, error: 'no-challenge-context' as const };
+        const skipped = outcome.walk.skipped ?? [];
         return {
             success: true as const,
             // An id that is not a safe token could never be stored in a list, so it is not offered.
             photos: outcome.walk.items.filter((photo) => CHOSEN_PHOTO_ID_RE.test(String(photo.id))).map(mapPhoto),
             memberId: outcome.memberId,
-            // The photos left out for having won a challenge, by id (kept in memory only).
-            wonIds: (outcome.walk.skipped ?? []).filter((id) => CHOSEN_PHOTO_ID_RE.test(id)).slice(0, MAX_WON_IDS),
+            // The photos left out for having won a challenge: how many the walk recorded, and their ids (kept in
+            // memory only, capped).
+            wonCount: skipped.length,
+            wonIds: skipped.filter((id) => CHOSEN_PHOTO_ID_RE.test(id)).slice(0, MAX_WON_IDS),
             truncated: outcome.walk.truncated,
             allowedKnown: hasChallenge,
         };

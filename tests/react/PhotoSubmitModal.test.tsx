@@ -35,6 +35,7 @@ const listing = (photos: LibraryPhoto[], over: Partial<Listing> = {}): Listing =
     memberId: MEMBER,
     truncated: false,
     wonIds: [],
+    wonCount: 0,
     allowedKnown: true,
     ...over,
 });
@@ -196,6 +197,21 @@ describe('picking and submitting', () => {
         await waitFor(() => expect(tile(2).getAttribute('aria-pressed')).toBe('false'));
         expect(tile(1).getAttribute('aria-pressed')).toBe('true');
         expect(submitButton().textContent).toBe('Submit 1');
+    });
+
+    test('after a refreshed failure a picked photo the re-read listing reports as won leaves the pick', async () => {
+        const onSubmit = jest.fn<Promise<PickOutcome>, [string[]]>().mockResolvedValue('refreshed');
+        setup({ onSubmit });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.click(tile(1));
+        fireEvent.click(tile(2));
+        // Photo 2 won between the reads: the listing leaves it out, so `known` still has it as allowed.
+        getLibrary().mockResolvedValue(listing([photo(1), photo(3)], { wonIds: [idOf(2)], wonCount: 1 }));
+        fireEvent.click(submitButton());
+        // Only photo 1 is still picked; the won photo is no longer listed or held.
+        await waitFor(() => expect(submitButton().textContent).toBe('Submit 1'));
+        expect(tile(1).getAttribute('aria-pressed')).toBe('true');
+        expect(screen.queryByRole('button', { name: new RegExp(`${shortOf(2)}:`) })).toBeNull();
     });
 
     test.each([

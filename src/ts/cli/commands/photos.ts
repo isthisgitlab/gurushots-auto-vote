@@ -42,10 +42,15 @@ const parseSearchFlag = (argv: string[]): string | null => {
 
 type Listing = Extract<Awaited<ReturnType<ActionHandlers['get-library-photos']>>, { success: true }>;
 
+/** How many photos the listing left out for having won a challenge, and why (a cut-short listing may hide more). */
+const wonHiddenText = (listing: Listing): string =>
+    `${listing.truncated ? 'at least ' : ''}${listing.wonCount} photo(s) that have won a challenge are hidden (a winning photo can't be entered again)`;
+
 /** The note of the photos the listing left out for having won a challenge, when there are any. */
 const printWonHidden = (listing: Listing): void => {
-    if (listing.wonIds.length > 0) {
-        ui().info(`${listing.wonIds.length} photo(s) that have won a challenge are hidden.`);
+    if (listing.wonCount > 0) {
+        const text = wonHiddenText(listing);
+        ui().info(`${text.charAt(0).toUpperCase()}${text.slice(1)}.`);
     }
 };
 
@@ -81,8 +86,12 @@ const listPhotosCmd = async (challengeId: string | null, search: string | null):
         return 1;
     }
     if (result.photos.length === 0) {
-        ui().info(`No photos found${search ? ` for "${stripTerminalControl(search)}"` : ' in your library'}.`);
-        printWonHidden(result);
+        const where = search ? `for "${stripTerminalControl(search)}"` : 'in your library';
+        ui().info(
+            result.wonCount > 0
+                ? `No photos you can enter were found ${where}; ${wonHiddenText(result)}.`
+                : `No photos found ${where}.`,
+        );
         return 0;
     }
     ui().info(`=== Your photos (${result.photos.length}${result.truncated ? ', list cut short' : ''}) ===`);

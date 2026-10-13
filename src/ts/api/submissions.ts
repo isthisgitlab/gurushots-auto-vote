@@ -29,6 +29,8 @@ const requireValue = makeRequireValue('submissions');
 // photos may have no eligible image in the first 1000 sorted by votes.
 // Hitting the cap is logged, never silent: truncating the candidate list
 // without saying so would misreport "considered the whole library".
+// A walk given a `skip` (the library listing, which leaves won photos out) may
+// read up to twice as many pages, within the same wall-clock budget below.
 const MAX_LIBRARY_PAGES = 10;
 
 // Wall-clock ceiling on one paginated walk. A page count alone does NOT bound
@@ -100,8 +102,9 @@ type LibraryOptions = {
     readState?: { firstPageFailed: boolean };
     /**
      * A walk only (getEligiblePhotosWalk): photos this answers true for are left out of `items` and do not count
-     * toward the walk's cap (their ids are reported as `skipped`). The walk then ends at MAX_LIBRARY_PAGES * limit
-     * kept photos, or at twice MAX_LIBRARY_PAGES pages, whichever comes first, besides the budget.
+     * toward the walk's cap (their ids are reported as `skipped`, up to 2 * MAX_LIBRARY_PAGES * limit of them). The
+     * walk then ends at MAX_LIBRARY_PAGES * limit kept photos, or at twice MAX_LIBRARY_PAGES pages, whichever comes
+     * first, besides the budget.
      */
     skip?: (photo: LibraryPhoto) => boolean;
 };
@@ -137,6 +140,10 @@ const markFirstPageFailed = (readState: LibraryOptions['readState'], page: numbe
 
 /**
  * The paginated library walk (see getEligiblePhotos for its stop conditions).
+ * Given a `skip`, the cap is on the photos kept rather than the pages read: the walk ends once at least
+ * MAX_LIBRARY_PAGES * limit photos are kept (checked after each page, so the page that crosses it is kept whole), or at
+ * twice MAX_LIBRARY_PAGES pages. Rows the server repeats are kept once, so a walk can need more than MAX_LIBRARY_PAGES
+ * pages to see that many distinct photos, but never reads past its page ceiling.
  * `truncated` is true whenever it stopped for any reason other than reaching a
  * short page: the budget, a failed or unreadable page (the first included), or
  * the page cap. A caller that wants to conclude "this photo is not in the
@@ -167,6 +174,8 @@ const walkLibrary = async (
     const { skip } = options;
     const maxPages = skip ? 2 * MAX_LIBRARY_PAGES : MAX_LIBRARY_PAGES;
     const keepCap = MAX_LIBRARY_PAGES * limit;
+    // A bound on what a skipping walk records, however many photos the library holds.
+    const skippedCap = 2 * MAX_LIBRARY_PAGES * limit;
     const skipped = new Set<string>();
     const result = (truncated: boolean): LibraryWalk => ({
         items: Array.from(byId.values()),
@@ -216,9 +225,10 @@ const walkLibrary = async (
         for (const item of items) {
             if (!item || item.id === undefined || item.id === null) continue;
             if (skip?.(item)) {
-                skipped.add(String(item.id));
+                if (!byId.has(item.id) && skipped.size < skippedCap) skipped.add(String(item.id));
             } else if (!byId.has(item.id)) {
                 byId.set(item.id, item);
+                skipped.delete(String(item.id));
             }
         }
         if (items.length < limit) {
@@ -276,7 +286,7 @@ const walkLibrary = async (
 const getEligiblePhotos = async (
     challengeId: string | number,
     token: string,
-    options: LibraryOptions = {},
+    options: Omit<LibraryOptions, 'skip'> = {},
 ): Promise<LibraryPhoto[]> => {
     requireValue(challengeId, 'challengeId');
     requireValue(token, 'token');

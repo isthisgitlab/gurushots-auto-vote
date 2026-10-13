@@ -22,6 +22,7 @@ const ready = (memberId: string | null): ListState => ({
         memberId,
         truncated: false,
         wonIds: [],
+        wonCount: 0,
         allowedKnown: true,
     }),
 });
@@ -214,6 +215,7 @@ describe('useLibraryListing.setMember — a member the listing could not name, f
             memberId,
             truncated: false,
             wonIds: [],
+            wonCount: 0,
             allowedKnown: true,
         });
 

@@ -39,6 +39,7 @@ const listing = (photos: LibraryPhoto[], over: Partial<Listing> = {}): Listing =
     memberId: MEMBER,
     truncated: false,
     wonIds: [],
+    wonCount: 0,
     allowedKnown: true,
     ...over,
 });
@@ -406,11 +407,29 @@ describe('selection', () => {
     });
 
     test('says how many winning photos the listing left out, and only when it left some out', async () => {
-        getLibrary().mockResolvedValue(listing([photo(1)], { wonIds: [idOf(7), idOf(8)] }));
+        getLibrary().mockResolvedValue(listing([photo(1)], { wonIds: [idOf(7), idOf(8)], wonCount: 2 }));
         setup();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(
             screen.getByText("Hidden: 2 photo(s) that have won a challenge. A winning photo can't be entered again."),
+        ).toBeTruthy();
+    });
+
+    test('the hidden count is the listing’s own count, not the length of its capped id list', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1)], { wonIds: [idOf(7)], wonCount: 1500 }));
+        setup();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(screen.getByText(/^Hidden: 1500 photo\(s\)/)).toBeTruthy();
+    });
+
+    test('a cut-off listing says at least that many were hidden', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1)], { wonIds: [idOf(7)], wonCount: 1, truncated: true }));
+        setup();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(
+            screen.getByText(
+                "Hidden: at least 1 photo(s) that have won a challenge. A winning photo can't be entered again.",
+            ),
         ).toBeTruthy();
     });
 
@@ -421,15 +440,52 @@ describe('selection', () => {
         expect(screen.queryByText(/have won a challenge/)).toBeNull();
     });
 
-    test('a chosen photo that has won gets its own tile text and can still be removed', async () => {
-        getLibrary().mockResolvedValue(listing([photo(1)], { wonIds: [idOf(9)] }));
+    test('a listing with every match hidden says so instead of "No photos found"', async () => {
+        getLibrary().mockResolvedValue(listing([], { wonIds: [idOf(7)], wonCount: 1 }));
+        setup();
+        expect(
+            await screen.findByText(
+                'No photos you can enter were found: every match has won a challenge. Try another tag, or upload new photos to your GuruShots library.',
+            ),
+        ).toBeTruthy();
+        expect(screen.queryByText(/^No photos found/)).toBeNull();
+    });
+
+    test('a cut-off listing with nothing kept does not claim every match has won: eligible photos may lie beyond what was read', async () => {
+        getLibrary().mockResolvedValue(listing([], { wonIds: [idOf(7)], wonCount: 1, truncated: true }));
+        setup();
+        expect(await screen.findByText(/^No photos found\./)).toBeTruthy();
+        expect(screen.queryByText(/every match has won/)).toBeNull();
+        expect(screen.getByText(/^Hidden: at least 1 photo/)).toBeTruthy();
+    });
+
+    test('a chosen photo that has won gets its own tile text, with the next step, and can still be removed', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1)], { wonIds: [idOf(9)], wonCount: 1 }));
         setup({ value: [idOf(9)] });
         const won = await missingTile();
-        expect(won.textContent).toContain("Has won a challenge, so it can't be entered again.");
+        expect(won.textContent).toContain(
+            "Has won a challenge, so it can't be entered again. Click it to remove it from your list.",
+        );
         expect(won.textContent).not.toContain('Not available for this challenge');
         expect(won.getAttribute('aria-pressed')).toBe('true');
         fireEvent.click(won);
         expect(screen.queryByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) })).toBeNull();
+    });
+
+    test('a chosen photo keeps its has-won text after a search whose listing no longer names it', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(listing([photo(1)], { wonIds: [idOf(9)], wonCount: 1 }))
+            .mockResolvedValueOnce(listing([photo(2)]));
+        setup({ value: [idOf(9)] });
+        expect((await missingTile()).textContent).toContain("Has won a challenge, so it can't be entered again.");
+        fireEvent.change(screen.getByLabelText('Search your photos by tag'), { target: { value: 'x' } });
+        fireEvent.submit(screen.getByLabelText('Search your photos by tag').closest('form')!);
+        await screen.findByRole('button', { name: /^Photo 00000002:/ });
+        // The count line describes this listing, which hid nothing; the tile still says why it is missing.
+        expect(screen.queryByText(/^Hidden:/)).toBeNull();
+        const won = await missingTile();
+        expect(won.textContent).toContain("Has won a challenge, so it can't be entered again.");
+        expect(won.textContent).not.toContain('Not available for this challenge');
     });
 
     test('stops at the cap: other photos cannot be added and a line says so, selected ones can still be removed', async () => {

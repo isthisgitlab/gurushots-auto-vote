@@ -774,8 +774,13 @@ export const app = {
     photoChooserTruncated: 'Rāda tikai pirmos {count} foto. Meklē pēc taga, lai atrastu citus.',
     photoChooserWonHidden:
         'Paslēpti foto, kas uzvarējuši izaicinājumā: {count}. Uzvarējušo foto nevar iesniegt vēlreiz.',
-    photoChooserWonInList: 'Uzvarējis izaicinājumā, tāpēc to nevar iesniegt vēlreiz.',
+    photoChooserWonHiddenTruncated:
+        'Paslēpti foto, kas uzvarējuši izaicinājumā: vismaz {count}. Uzvarējušo foto nevar iesniegt vēlreiz.',
+    photoChooserWonInList:
+        'Uzvarējis izaicinājumā, tāpēc to nevar iesniegt vēlreiz. Noklikšķini uz tā, lai to noņemtu no saraksta.',
     photoChooserEmpty: 'Foto nav atrasti. Pamēģini citu tagu vai augšupielādē foto savā GuruShots bibliotēkā.',
+    photoChooserEmptyAllWon:
+        'Nav atrasts neviens foto, ko var iesniegt: visi atrastie foto ir uzvarējuši izaicinājumā. Pamēģini citu tagu vai augšupielādē jaunus foto savā GuruShots bibliotēkā.',
     photoChooserMissing: 'Nav pieejams šim izaicinājumam (atrodas citā izaicinājumā vai ir dzēsts)',
     photoChooserMissingTruncated:
         'Nav pieejams šim izaicinājumam (atrodas citā izaicinājumā, ir dzēsts vai ir tālāk par pirmajiem {count} foto)',

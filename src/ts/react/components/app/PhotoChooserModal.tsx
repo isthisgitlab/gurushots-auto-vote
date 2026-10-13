@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { InlineLoader, LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -251,6 +251,8 @@ export function PhotoGrid({
     numbered?: boolean;
 }) {
     const { t } = useTranslation();
+    // Every won id this chooser has been told of: a search that no longer lists a chosen photo still knows it has won.
+    const everWon = useRef(new Set<string>());
     if (state.status === 'loading') return <InlineLoader text={t('app.photoChooserLoading')} />;
     if (state.status === 'no-context') {
         return (
@@ -274,7 +276,8 @@ export function PhotoGrid({
     }
     const { listing } = state;
     const chosen = new Set(selected);
-    const won = new Set(listing.wonIds);
+    for (const id of listing.wonIds) everWon.current.add(id);
+    const won = everWon.current;
     const atCap = selected.length >= max;
     let position = 0;
     const blockedReasonOf = (photo: LibraryPhoto): string | null =>
@@ -300,9 +303,11 @@ export function PhotoGrid({
             {!listing.allowedKnown && (
                 <p className="text-base-content/70 text-xs">{t('app.photoChooserEligibilityLater')}</p>
             )}
-            {listing.wonIds.length > 0 && (
+            {listing.wonCount > 0 && (
                 <p className="text-base-content/70 text-xs">
-                    {interp(t('app.photoChooserWonHidden'), { count: listing.wonIds.length })}
+                    {interp(t(listing.truncated ? 'app.photoChooserWonHiddenTruncated' : 'app.photoChooserWonHidden'), {
+                        count: listing.wonCount,
+                    })}
                 </p>
             )}
             {listing.truncated && (
@@ -311,7 +316,13 @@ export function PhotoGrid({
                 </p>
             )}
             {listing.photos.length === 0 && (
-                <p className="text-base-content/60 text-sm">{t('app.photoChooserEmpty')}</p>
+                <p className="text-base-content/60 text-sm">
+                    {t(
+                        listing.wonCount > 0 && !listing.truncated
+                            ? 'app.photoChooserEmptyAllWon'
+                            : 'app.photoChooserEmpty',
+                    )}
+                </p>
             )}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                 {/* Numbered 1, 2, 3… as shown: a photo left out (another account's) leaves no gap. */}
