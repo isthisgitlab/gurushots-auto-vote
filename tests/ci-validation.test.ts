@@ -114,8 +114,10 @@ describe('sends toward the Logs window', () => {
     // `send` (`mainFrame.send`, `frames[i].send`, `sendToFrame`, or `send` on a stored frame handle), an event's
     // `reply` and a `webFrameMain` handle reach a window unfiltered, so no source may touch a frame handle
     // (`mainFrame`, `senderFrame`, `framesInSubtree`, `webFrameMain`, `focusedFrame`, `opener`, the `frame-created`
-    // event, a `.frame` or `.initiator` property read off any receiver, and a one-line brace pair that names `frame` or
-    // `initiator` in a binding position: followed by `=`, `)` or `=>`, or opening a parameter list with `(`), call
+    // event, a `.frame` or `.initiator` property read off any receiver, a `['frame']` or `["initiator"]` bracket read,
+    // and a one-line brace pair that names `frame` or `initiator` in a binding position: followed by `=`, `)`, `=>`,
+    // `:` (a type annotation), `,` (a parameter list) or `}` (a nested pattern), or opening a parameter list with
+    // `(`), call
     // `send` on anything but `webContents`, reply on an event or post a message. A legitimate line is listed here as
     // `relative/path.ts`, with the text of the line and the reason.
     const ALLOWED: Readonly<Record<string, readonly string[]>> = {
@@ -132,7 +134,7 @@ describe('sends toward the Logs window', () => {
         'preloadApi.ts': ['ipcRenderer.send(channel)'],
     };
     const UNFILTERED_SEND_RE =
-        /\bpostMessage\(|\bmainFrame\b|\bsenderFrame\b|\bframesInSubtree\b|\bsendToFrame\(|\bwebFrameMain\b|\bfocusedFrame\b|\bopener\b|\bframe-created\b|\??\.(?:frame|initiator)\b|\{[^{}\n]*\b(?:frame|initiator)\b[^{}\n]*\}[ \t]*(?:=(?!=)|\)|=>)|\([ \t]*\{[^{}\n]*\b(?:frame|initiator)\b|\bframes\[[^\]]*\]\??\.send\(|(?<!\bwebContents\??)\.send\(|\.reply\(/g;
+        /\bpostMessage\(|\bmainFrame\b|\bsenderFrame\b|\bframesInSubtree\b|\bsendToFrame\(|\bwebFrameMain\b|\bfocusedFrame\b|\bopener\b|\bframe-created\b|\??\.(?:frame|initiator)\b|\{[^{}\n]*\b(?:frame|initiator)\b[^{}\n]*\}[ \t]*(?:=(?!=)|\)|=>|:|,|\})|\[\s*['"](?:frame|initiator)['"]\s*\]|\([ \t]*\{[^{}\n]*\b(?:frame|initiator)\b|\bframes\[[^\]]*\]\??\.send\(|(?<!\bwebContents\??)\.send\(|\.reply\(/g;
     const SOURCE_FILE_RE = /\.(?:[cm]?ts|tsx)$/;
     // Lines that share a prefix with a flagged name and are cleared by the check's `\b` boundaries alone.
     const WORD_BOUNDARY_NEGATIVES = [
@@ -140,6 +142,8 @@ describe('sends toward the Logs window', () => {
         'const o = event.initiatorOrigin;',
         'const s = "iframe-created";',
     ];
+    // Multi-line text the one-line brace pairs must not span: each reads as a binding or a call once its newlines count.
+    const NEWLINE_NEGATIVES = ['p.then(() => {\n    log(frame);\n});', 'const {\n    frame,\n} = details;'];
     const hitLines = (text: string) => [
         ...new Set(
             [...text.matchAll(UNFILTERED_SEND_RE)].map((match) => text.slice(0, match.index).split('\n').length),
@@ -235,6 +239,13 @@ describe('sends toward the Logs window', () => {
             'const { frame } = details;',
             'function f({ initiator }) {}',
             'on(({ frame }, x) => x);',
+            'const { frame }: Details = details;',
+            'function h(e: Event, { frame }: Details) {}',
+            '(event, { frame }: Details) => frame',
+            'function f(a, { frame }, b) {}',
+            "const f = details['frame'];",
+            'const i = details?.["initiator"];',
+            'const { a: { frame } } = x;',
         ]) {
             expect(unfilteredSends(`ok\n${offender}`)).toEqual([2]);
         }
@@ -251,8 +262,7 @@ describe('sends toward the Logs window', () => {
                     'const openerCount = 1;',
                     'const focusedFrameId = 1;',
                     ...WORD_BOUNDARY_NEGATIVES,
-                    'const block = {\n    a: 1,\n    note: "the frame",\n};',
-                    'if (ok) {\n    const frame = 1;\n}\nfoo(a, b);',
+                    ...NEWLINE_NEGATIVES,
                 ].join('\n'),
             ),
         ).toEqual([]);
@@ -264,6 +274,15 @@ describe('sends toward the Logs window', () => {
         for (const negative of WORD_BOUNDARY_NEGATIVES) {
             expect(unfilteredSends(`ok\n${negative}`)).toEqual([]);
             expect([...negative.matchAll(withoutBoundaries)]).not.toEqual([]);
+        }
+    });
+
+    test('each multi-line negative passes only because the brace pairs exclude newlines', () => {
+        const withoutNewlines = new RegExp(UNFILTERED_SEND_RE.source.replaceAll('\\n', ''), 'g');
+        expect(withoutNewlines.source).not.toBe(UNFILTERED_SEND_RE.source);
+        for (const negative of NEWLINE_NEGATIVES) {
+            expect(unfilteredSends(`ok\n${negative}`)).toEqual([]);
+            expect([...negative.matchAll(withoutNewlines)]).not.toEqual([]);
         }
     });
 
