@@ -187,7 +187,9 @@ export const app = {
     pinnedForTurbo: 'Pinned for Turbo',
     pinClear: 'Clear pin',
     pinNotApplying: "The photo pinned for {kind} isn't applying. Open the card for details.",
-    pinNotApplyingShort: 'Pin not applying',
+    pinNotApplyingBoth: "The photos pinned for {boost} and {turbo} aren't applying. Open the card for details.",
+    pinNotApplyingShort: '{kind} pin not applying',
+    pinNotApplyingShortBoth: '{boost} and {turbo} pins not applying',
     pinGoneNote:
         "The photo pinned for {kind} isn't in this challenge right now, so {kind} will use your usual {kind} settings. Pin another photo or clear the pin.",
     pinConflictNote:

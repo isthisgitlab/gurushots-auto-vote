@@ -8,6 +8,8 @@ import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import type { Challenge } from '../../src/ts/types/gurushots';
+import english = require('../../src/ts/translations/english');
+import latvian = require('../../src/ts/translations/latvian');
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
@@ -242,6 +244,26 @@ describe('a stored pin that no longer applies', () => {
         await waitFor(() => expect(window.api.setEntryPin).toHaveBeenCalledWith('boost', 101, null));
     });
 
+    test('while a pin write is in flight Clear is aria-disabled and busy, does nothing, and keeps focus', async () => {
+        let finish: (value: { success: true }) => void = () => {};
+        window.api.setEntryPin = jest.fn(() => new Promise<{ success: true }>((resolve) => (finish = resolve)));
+        window.api.getEntryPins = jest.fn().mockResolvedValue({ boost: 'gone', turbo: null });
+        renderCard(makeChallenge());
+        const clear = await screen.findByRole('button', { name: 'app.pinClear' });
+        clear.focus();
+        expect(clear.getAttribute('aria-busy')).toBe('false');
+        fireEvent.click(clear);
+        await waitFor(() => expect(clear.getAttribute('aria-busy')).toBe('true'));
+        expect(clear.getAttribute('aria-disabled')).toBe('true');
+        // Never `disabled`: that would drop the keyboard focus to <body>.
+        expect((clear as HTMLButtonElement).disabled).toBe(false);
+        fireEvent.click(clear);
+        expect(window.api.setEntryPin).toHaveBeenCalledTimes(1);
+        expect(document.activeElement).toBe(clear);
+        finish({ success: true });
+        await waitFor(() => expect(clear.getAttribute('aria-busy')).toBe('false'));
+    });
+
     test('a photo that carries the other feature gets the conflict note', async () => {
         window.api.getEntryPins = jest.fn().mockResolvedValue({ boost: null, turbo: 'e1' });
         renderCard(
@@ -318,6 +340,30 @@ describe('the compact tile', () => {
         const visible = screen.getByText('📌 app.pinNotApplyingShort');
         expect(visible.getAttribute('aria-hidden')).toBe('true');
         expect(mark.contains(visible)).toBe(true);
+    });
+
+    test('both features not applying read as one mark and one sentence, naming them once', async () => {
+        window.api.getEntryPins = jest.fn().mockResolvedValue({ boost: 'gone', turbo: 'also-gone' });
+        renderCard(makeChallenge());
+        const hidden = await screen.findAllByText('app.pinNotApplyingBoth');
+        expect(hidden).toHaveLength(1);
+        expect(hidden[0].className).toContain('sr-only');
+        const mark = hidden[0].parentElement!;
+        expect(mark.getAttribute('title')).toBe('app.pinNotApplyingBoth');
+        expect(screen.getAllByText('📌 app.pinNotApplyingShortBoth')).toHaveLength(1);
+        expect(screen.queryByText('app.pinNotApplying')).toBeNull();
+        expect(screen.queryByText('📌 app.pinNotApplyingShort')).toBeNull();
+    });
+
+    test('the tile’s strings carry the placeholders it fills in, in both languages', () => {
+        for (const { app } of [english, latvian]) {
+            expect(app.pinNotApplying).toContain('{kind}');
+            expect(app.pinNotApplyingShort).toContain('{kind}');
+            for (const text of [app.pinNotApplyingBoth, app.pinNotApplyingShortBoth]) {
+                expect(text).toContain('{boost}');
+                expect(text).toContain('{turbo}');
+            }
+        }
     });
 
     test('no mark for a usable pin, no pin, a spent feature or a feature that never fires', async () => {

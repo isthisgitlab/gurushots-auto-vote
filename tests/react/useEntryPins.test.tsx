@@ -102,6 +102,35 @@ describe('useEntryPins', () => {
         expect(result.current.pins.boost).toBe('imgA');
     });
 
+    test('overlapping writes keep loading true until both have settled', async () => {
+        const { result } = renderHook(() => useEntryPins(7));
+        await waitFor(() => expect(mockApi.getEntryPins).toHaveBeenCalledTimes(1));
+
+        const finishes: Array<(value: { success: true }) => void> = [];
+        mockApi.setEntryPin.mockImplementation(() => new Promise((resolve) => finishes.push(resolve)));
+        let first!: Promise<void>;
+        let second!: Promise<void>;
+        act(() => {
+            first = result.current.setPin('boost', 'imgA');
+            second = result.current.setPin('turbo', 'imgB');
+        });
+        await waitFor(() => expect(finishes).toHaveLength(2));
+        expect(result.current.loading).toBe(true);
+
+        await act(async () => {
+            finishes[0]({ success: true });
+            await first;
+        });
+        // The first write is done; the second is still in flight.
+        expect(result.current.loading).toBe(true);
+
+        await act(async () => {
+            finishes[1]({ success: true });
+            await second;
+        });
+        expect(result.current.loading).toBe(false);
+    });
+
     test('loading ends after a failed write too', async () => {
         mockApi.setEntryPin.mockResolvedValue({ success: false, error: 'pin-write-failed' });
         const { result } = renderHook(() => useEntryPins(7));

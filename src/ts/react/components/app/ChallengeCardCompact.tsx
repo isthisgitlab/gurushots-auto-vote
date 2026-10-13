@@ -95,10 +95,13 @@ export function ChallengeCardCompact({
     const progress = (challenge as RankedChallenge).member.ranking.total;
     const rank = progress?.rank;
     const hasRank = rank !== undefined && rank > 0;
-    // One muted mark for the pins that are stored but not taking effect: the card says which and why.
-    const notApplying = unusablePins(challenge, pins)
-        .map(({ kind }) => interp(t('app.pinNotApplying'), { kind: t(kind === 'boost' ? 'app.boost' : 'app.turbo') }))
-        .join(' ');
+    // One muted mark for the pins that are stored but not taking effect: it names the feature(s) once, the card says why.
+    const notApplying = unusablePins(challenge, pins).map(({ kind }) => kind);
+    const names = { boost: t('app.boost'), turbo: t('app.turbo') };
+    const nameVars = { ...names, kind: names[notApplying[0]] };
+    const both = notApplying.length > 1;
+    const notApplyingShort = interp(t(both ? 'app.pinNotApplyingShortBoth' : 'app.pinNotApplyingShort'), nameVars);
+    const notApplyingText = interp(t(both ? 'app.pinNotApplyingBoth' : 'app.pinNotApplying'), nameVars);
 
     return (
         <div className="space-y-2">
@@ -165,12 +168,12 @@ export function ChallengeCardCompact({
                 </div>
             )}
 
-            {notApplying && (
+            {notApplying.length > 0 && (
                 // Visible short text, not just a glyph: a title is invisible on touch, and a dimmed pin alone reads
-                // like the live-pin mark. The full reason is for screen readers and the title.
-                <div className="text-xs text-base-content/60" title={notApplying}>
-                    <span aria-hidden="true">📌 {t('app.pinNotApplyingShort')}</span>
-                    <span className="sr-only">{notApplying}</span>
+                // like the live-pin mark. The full sentence is for screen readers and the title.
+                <div className="text-xs text-base-content/60" title={notApplyingText}>
+                    <span aria-hidden="true">📌 {notApplyingShort}</span>
+                    <span className="sr-only">{notApplyingText}</span>
                 </div>
             )}
 

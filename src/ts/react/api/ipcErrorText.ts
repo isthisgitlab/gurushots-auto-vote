@@ -44,4 +44,4 @@ export const ipcErrorText = <E extends string | null | undefined>(
     error: E,
     t: (key: string) => string,
     fallbackKey = 'errors.actionFailed',
-) => (error ? t(KNOWN_ERRORS[error] ?? fallbackKey) : error);
+) => (error ? t(Object.hasOwn(KNOWN_ERRORS, error) ? KNOWN_ERRORS[error] : fallbackKey) : error);

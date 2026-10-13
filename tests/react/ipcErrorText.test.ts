@@ -34,6 +34,13 @@ describe('ipcErrorText', () => {
         }
     });
 
+    test('a name every object inherits is not a known failure', () => {
+        for (const error of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+            expect(ipcErrorText(error, t)).toBe('[errors.actionFailed]');
+            expect(ipcErrorText(error, t, 'errors.pinFailed')).toBe('[errors.pinFailed]');
+        }
+    });
+
     test('a surface with a better generic text names it', () => {
         expect(ipcErrorText('Bad credentials', t, 'errors.loginFailed')).toBe('[errors.loginFailed]');
         // A known failure still gets its own text there.

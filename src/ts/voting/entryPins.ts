@@ -49,7 +49,8 @@ const featureNeverFires = (challenge: Challenge, kind: EntryPinKind): NeverFires
 /**
  * Whether `kind` can still be spent on the challenge: the challenge type allows it, no entry carries it yet
  * and its state is neither USED nor UNAVAILABLE. LOCKED and MISSED Boosts and
- * LOCKED, FREE and TIMER Turbos still count — a key or a mini-game can open them.
+ * LOCKED, FREE and TIMER Turbos still count — a key or a mini-game can open them. The exception is a LOCKED Boost
+ * on a single-photo challenge: it never unlocks there (see `featureNeverFires`), so it does not count.
  */
 const canStillFire = (challenge: Challenge, kind: EntryPinKind): boolean => {
     if (featureNeverFires(challenge, kind)) return false;

@@ -35,17 +35,18 @@ export function useEntryPins(challengeId: Challenge['id'], settingsVersion: numb
     const { data: pins, refetch } = useIpcQuery(queryFn, { initialData: NO_PINS, apply: applyPins, latestOnly: true });
     const { run, error, clearError } = useAsyncIpcAction(ipc.setEntryPin);
     // Busy from the write until the pins are read back: the write's own loading flag ends when it returns, and
-    // until the read lands `pins` still shows the old state, which a second tap would act on.
-    const [busy, setBusy] = useState(false);
+    // until the read lands `pins` still shows the old state, which a second tap would act on. Writes are
+    // counted, so the first of two overlapping writes ending does not end the busy state of the second.
+    const [writesInFlight, setWritesInFlight] = useState(0);
 
     const setPin = useCallback(
         async (kind: EntryPinKind, imageId: string | null) => {
-            setBusy(true);
+            setWritesInFlight((count) => count + 1);
             try {
                 const result = await run(kind, challengeId, imageId);
                 if (result.success) await refetch();
             } finally {
-                setBusy(false);
+                setWritesInFlight((count) => count - 1);
             }
         },
         [run, challengeId, refetch],
@@ -55,5 +56,5 @@ export function useEntryPins(challengeId: Challenge['id'], settingsVersion: numb
         [setPin, pins],
     );
 
-    return { pins, setPin, togglePin, loading: busy, error, clearError };
+    return { pins, setPin, togglePin, loading: writesInFlight > 0, error, clearError };
 }

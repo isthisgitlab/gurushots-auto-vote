@@ -188,7 +188,9 @@ export const app = {
     pinnedForTurbo: 'Piesprausts Turbo',
     pinClear: 'Noņemt piespraudi',
     pinNotApplying: 'Piespraustais {kind} foto netiek piemērots. Atver kartīti, lai uzzinātu vairāk.',
-    pinNotApplyingShort: 'Piespraude netiek piemērota',
+    pinNotApplyingBoth: 'Piespraustie {boost} un {turbo} foto netiek piemēroti. Atver kartīti, lai uzzinātu vairāk.',
+    pinNotApplyingShort: '{kind} piespraude netiek piemērota',
+    pinNotApplyingShortBoth: '{boost} un {turbo} piespraudes netiek piemērotas',
     pinGoneNote:
         'Piespraustā {kind} foto šajā izaicinājumā pašlaik nav, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus. Piespraud citu foto vai noņem piespraudi.',
     pinConflictNote:

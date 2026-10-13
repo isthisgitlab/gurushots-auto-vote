@@ -216,14 +216,17 @@ function StatusCells({
 /**
  * A stored pin that cannot take its feature right now (its photo left the challenge, or carries the other
  * feature), with a way to clear it. Only while the feature can still fire: a spent feature's pin is inert.
+ * The button is inert while a pin write is in flight, like the pin toggles: aria-disabled, never `disabled`.
  */
 function DanglingPinNote({
     kind,
     state,
+    busy,
     onClear,
 }: {
     kind: EntryPinKind;
     state: 'gone' | 'conflict';
+    busy: boolean;
     onClear: () => void | Promise<void>;
 }) {
     const { t } = useTranslation();
@@ -234,7 +237,15 @@ function DanglingPinNote({
     return (
         <div className="alert alert-info py-2 text-xs" role="status">
             <span>{text}</span>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => void onClear()}>
+            <button
+                type="button"
+                className={`btn btn-ghost btn-sm${busy ? ' btn-disabled' : ''}`}
+                aria-disabled={busy}
+                aria-busy={busy}
+                onClick={() => {
+                    if (!busy) void onClear();
+                }}
+            >
                 {t('app.pinClear')}
             </button>
         </div>
@@ -294,7 +305,13 @@ function EntryDetails({
                 ))}
             </div>
             {unusablePins(challenge, pins).map(({ kind, state }) => (
-                <DanglingPinNote key={kind} kind={kind} state={state} onClear={() => setPin(kind, null)} />
+                <DanglingPinNote
+                    key={kind}
+                    kind={kind}
+                    state={state}
+                    busy={pinBusy}
+                    onClear={() => setPin(kind, null)}
+                />
             ))}
             {pinError && (
                 <InlineError className="mt-1" onDismiss={clearPinError}>
