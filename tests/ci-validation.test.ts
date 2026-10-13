@@ -117,7 +117,9 @@ describe('sends toward the Logs window', () => {
     // event, a `.frame` or `.initiator` property read off any receiver, a `['frame']` or `["initiator"]` bracket read,
     // and a one-line brace pair that names `frame` or `initiator` in a binding position: followed by `=`, `)`, `=>`,
     // `:` (a type annotation), `,` (a parameter list) or `}` (a nested pattern), or opening a parameter list with
-    // `(`), call
+    // `(`), a multi-line brace pair holding only identifiers, renames, commas and a trailing `...rest` that names
+    // `frame` or `initiator` and is followed by one of those bindings (the way Prettier wraps a long destructuring),
+    // call
     // `send` on anything but `webContents`, reply on an event or post a message. A legitimate line is listed here as
     // `relative/path.ts`, with the text of the line and the reason.
     const ALLOWED: Readonly<Record<string, readonly string[]>> = {
@@ -134,7 +136,7 @@ describe('sends toward the Logs window', () => {
         'preloadApi.ts': ['ipcRenderer.send(channel)'],
     };
     const UNFILTERED_SEND_RE =
-        /\bpostMessage\(|\bmainFrame\b|\bsenderFrame\b|\bframesInSubtree\b|\bsendToFrame\(|\bwebFrameMain\b|\bfocusedFrame\b|\bopener\b|\bframe-created\b|\??\.(?:frame|initiator)\b|\{[^{}\n]*\b(?:frame|initiator)\b[^{}\n]*\}[ \t]*(?:=(?!=)|\)|=>|:|,|\})|\[\s*['"](?:frame|initiator)['"]\s*\]|\([ \t]*\{[^{}\n]*\b(?:frame|initiator)\b|\bframes\[[^\]]*\]\??\.send\(|(?<!\bwebContents\??)\.send\(|\.reply\(/g;
+        /\bpostMessage\(|\bmainFrame\b|\bsenderFrame\b|\bframesInSubtree\b|\bsendToFrame\(|\bwebFrameMain\b|\bfocusedFrame\b|\bopener\b|\bframe-created\b|\??\.(?:frame|initiator)\b|\{[^{}\n]*\b(?:frame|initiator)\b[^{}\n]*\}[ \t]*(?:=(?!=)|\)|=>|:|,|\})|\{\s*(?:[\w$]+(?:\s*:\s*[\w$]+)?\s*,\s*)*(?:frame|initiator)(?:\s*:\s*[\w$]+)?(?:\s*,\s*(?:\.\.\.)?[\w$]+(?:\s*:\s*[\w$]+)?)*\s*,?\s*\}\s*(?:=(?!=)|\)|=>|:|,)|\[\s*['"](?:frame|initiator)['"]\s*\]|\([ \t]*\{[^{}\n]*\b(?:frame|initiator)\b|\bframes\[[^\]]*\]\??\.send\(|(?<!\bwebContents\??)\.send\(|\.reply\(/g;
     const SOURCE_FILE_RE = /\.(?:[cm]?ts|tsx)$/;
     // Lines that share a prefix with a flagged name and are cleared by the check's `\b` boundaries alone.
     const WORD_BOUNDARY_NEGATIVES = [
@@ -143,7 +145,7 @@ describe('sends toward the Logs window', () => {
         'const s = "iframe-created";',
     ];
     // Multi-line text the one-line brace pairs must not span: each reads as a binding or a call once its newlines count.
-    const NEWLINE_NEGATIVES = ['p.then(() => {\n    log(frame);\n});', 'const {\n    frame,\n} = details;'];
+    const NEWLINE_NEGATIVES = ['p.then(() => {\n    log(frame);\n});'];
     const hitLines = (text: string) => [
         ...new Set(
             [...text.matchAll(UNFILTERED_SEND_RE)].map((match) => text.slice(0, match.index).split('\n').length),
@@ -246,9 +248,13 @@ describe('sends toward the Logs window', () => {
             "const f = details['frame'];",
             'const i = details?.["initiator"];',
             'const { a: { frame } } = x;',
+            'const {\n    frame,\n} = details;',
+            'const {\n    a,\n    initiator,\n}: D = d;',
         ]) {
             expect(unfilteredSends(`ok\n${offender}`)).toEqual([2]);
         }
+        // A hit is reported on the line where the brace pair opens.
+        expect(unfilteredSends('ok\n(\n    {\n        frame,\n    },\n) => frame')).toEqual([3]);
         expect(
             unfilteredSends('a\nconst frame = sender.mainFrame; // checked', ['sender.mainFrame; // checked']),
         ).toEqual([]);
@@ -261,6 +267,8 @@ describe('sends toward the Logs window', () => {
                     'window.open(url, "_blank", "noopener");',
                     'const openerCount = 1;',
                     'const focusedFrameId = 1;',
+                    'const block = {\n    a: 1,\n    note: "the frame",\n};',
+                    'if (ok) {\n    const frame = 1;\n}\nfoo(a, b);',
                     ...WORD_BOUNDARY_NEGATIVES,
                     ...NEWLINE_NEGATIVES,
                 ].join('\n'),
