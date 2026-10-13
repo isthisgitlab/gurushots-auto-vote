@@ -166,6 +166,7 @@ describe('sends toward the Logs window', () => {
             'if (event.sender?.mainFrame && frame !== event.sender.mainFrame) return false;',
         ],
         ['src/ts/ipc/registerHandlers.ts', "return event.senderFrame?.url ?? event.sender?.getURL?.() ?? '<unknown>';"],
+        ['src/ts/ipc/registerHandlers.ts', 'webContents.send = (channel: string, ...args: unknown[]) =>'],
         ['src/ts/preloadApi.ts', 'api[method] = () => ipcRenderer.send(channel);'],
     ];
 

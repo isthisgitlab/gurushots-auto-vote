@@ -24,6 +24,9 @@ interface Node {
     arguments?: Node[];
     expression?: Node;
     key?: Node;
+    left?: Node;
+    argument?: Node;
+    operator?: string;
     properties?: Node[];
     expressions?: Node[];
     quasis?: Quasi[];
@@ -132,6 +135,29 @@ const keepsReceiver = (send: Node): boolean => {
     return receiver !== undefined && sameReference(receiver, send.object as Node);
 };
 
+// Whether a member is written rather than read: the left of an assignment (any operator) or a `delete` operand.
+// Replacing or removing a webContents' `send` undoes the instance filter.
+const isWritten = (member: Node): boolean => {
+    const { top, parent } = enclosing(member);
+    if (parent?.type === 'AssignmentExpression') return parent.left === top;
+    return parent?.type === 'UnaryExpression' && parent.operator === 'delete' && parent.argument === top;
+};
+
+// `Object.defineProperty(wc, 'send', …)`, `Reflect.deleteProperty(wc, 'send')`: the call forms of the same write.
+const REFLECTION_WRITERS: ReadonlySet<string | null> = new Set(['defineProperty', 'deleteProperty', 'set']);
+const REFLECTION_OBJECTS: ReadonlySet<string> = new Set(['Object', 'Reflect']);
+
+const rewritesSend = (call: Node): boolean => {
+    const callee = unwrap(call.callee as Node);
+    if (callee.type !== 'MemberExpression' || !REFLECTION_WRITERS.has(memberName(callee))) return false;
+    const owner = unwrap(callee.object as Node);
+    if (owner.type !== 'Identifier' || !REFLECTION_OBJECTS.has(owner.name as string)) return false;
+    const [target, key] = call.arguments as Node[];
+    return target !== undefined && isWebContents(target) && staticName(key) === 'send';
+};
+
+const REWRITES_SEND = '`send` on webContents is replaced or removed: that undoes the Logs-channel filter.';
+
 const noUnfilteredFrameSend = {
     meta: {
         type: 'problem',
@@ -147,7 +173,13 @@ const noUnfilteredFrameSend = {
                 }
                 if (!SEND_METHODS.has(name)) return;
                 // The one send the filter covers is `send` on a webContents, invoked on that same webContents.
-                if (name === 'send' && isWebContents(node.object as Node) && keepsReceiver(node)) return;
+                if (name === 'send' && isWebContents(node.object as Node)) {
+                    if (isWritten(node)) {
+                        context.report({ node, message: REWRITES_SEND });
+                        return;
+                    }
+                    if (keepsReceiver(node)) return;
+                }
                 context.report({
                     node,
                     message: isWebContents(node.object as Node)
@@ -169,6 +201,7 @@ const noUnfilteredFrameSend = {
                 }
             },
             CallExpression(node: Node) {
+                if (rewritesSend(node)) context.report({ node, message: REWRITES_SEND });
                 const callee = unwrap(node.callee as Node);
                 if (callee.type === 'Identifier') {
                     if (BARE_SEND_FUNCTIONS.has(callee.name as string)) {

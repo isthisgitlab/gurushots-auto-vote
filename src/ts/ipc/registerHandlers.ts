@@ -114,6 +114,7 @@ const restrictToLogsChannels = (webContents: WebContents): void => {
     logsWindowSenders.add(webContents);
     const send = webContents.send;
     if (typeof send !== 'function') return;
+    // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- installs the Logs-window channel filter
     webContents.send = (channel: string, ...args: unknown[]) =>
         send.call(webContents, channel, ...(channel === 'settings-changed' ? args.map(logsWindowSettings) : args));
 };

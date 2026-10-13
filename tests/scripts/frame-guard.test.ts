@@ -66,6 +66,7 @@ const send = (method: string) => `\`${method}\` off anything but webContents rea
 const unfiltered = (method: string) =>
     `\`${method}\` on webContents is not filtered: only \`send\` is, and only called on that webContents.`;
 const bare = (name: string) => `\`${name}\` reaches a window unfiltered.`;
+const REWRITES_SEND = '`send` on webContents is replaced or removed: that undoes the Logs-channel filter.';
 const WEB_FRAME_MAIN = '`webFrameMain` hands out a frame handle.';
 const FRAME_CREATED = 'The `frame-created` event hands out frame handles.';
 
@@ -109,8 +110,18 @@ const VALID: readonly string[] = [
     '(0, win.webContents.send)("c", x);',
     '(win.webContents as WC).send("c", x);',
     'const send = win.webContents.send;',
-    'win.webContents.send = (channel, ...args) => 1;',
     'a.webContents.send.name;',
+    'const send = webContents.send;',
+    'delete win.webContents.other;',
+    'typeof win.webContents.send;',
+    'win.webContents.other = 1;',
+    "Object.defineProperty(win.webContents, 'other', { value: 1 });",
+    "Object.defineProperty(win.other, 'send', { value: 1 });",
+    'Object.defineProperty(win.webContents);',
+    "Reflect.has(win.webContents, 'send');",
+    "Other.defineProperty(win.webContents, 'send', x);",
+    "obj[name](win.webContents, 'send');",
+    "(Object.defineProperty)(win.webContents, 'other', x);",
     'a.webContents.send.call;',
     'const o = { send: 1, reply: 2, postMessage: 3 };',
     'const sendCount = x.sendCount; const replyTo = x.replyTo;',
@@ -221,6 +232,17 @@ const INVALID: ReadonlyArray<readonly [string, ...string[]]> = [
     ['webContents.sendToFrame(id, "c", x);', unfiltered('sendToFrame')],
     ['win.webContents.reply("c", x);', unfiltered('reply')],
     ['win.webContents?.postMessage("c", x);', unfiltered('postMessage')],
+    // Replacing or removing the instance `send` undoes the Logs-channel filter.
+    ['win.webContents.send = (channel, ...args) => 1;', REWRITES_SEND],
+    ['logsWin.webContents.send = otherWin.webContents.send;', REWRITES_SEND],
+    ['webContents.send ||= other;', REWRITES_SEND],
+    ['(win.webContents as WC).send = other;', REWRITES_SEND],
+    ['win.webContents["send"] = other;', REWRITES_SEND],
+    ['delete logsWin.webContents.send;', REWRITES_SEND],
+    ['delete (win.webContents as WC).send;', REWRITES_SEND],
+    ["Object.defineProperty(win.webContents, 'send', { value: other });", REWRITES_SEND],
+    ["Reflect.deleteProperty(win.webContents, 'send');", REWRITES_SEND],
+    ["Reflect.set(win.webContents, 'send', other);", REWRITES_SEND],
     // Binding or aliasing a send method, by destructuring or a member read.
     ["ipcMain.on('x', ({ reply }) => reply('c', s));", destructure('reply')],
     ['const { postMessage: post } = port;', destructure('postMessage')],
