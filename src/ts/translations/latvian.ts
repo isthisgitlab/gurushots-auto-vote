@@ -45,11 +45,13 @@ export const errors = {
         'Šis izaicinājums vairs nav atvērts, tāpēc darbība netika veikta. Atsvaidzini sarakstu, lai redzētu pašreizējos izaicinājumus.',
     boostFailed: 'Boost netika piemērots. GuruShots to noraidīja vai neatbildēja. Mēģini vēlreiz pēc brīža.',
     pickNotEnoughSlots:
-        'Foto netika iesniegti. Izaicinājumā ir mazāk brīvo vietu nekā izvēlēto foto, jo tā iesniegumi ir mainījušies. Aizver šo logu; kartīte rāda brīvās vietas.',
+        'Foto netika iesniegti. Izaicinājumā ir mazāk brīvo vietu nekā izvēlēto foto, jo tā iesniegumi ir mainījušies. Noņem foto, līdz skaits ietilpst brīvajās vietās, un iesniedz vēlreiz.',
     pickAlreadyEntered:
-        'Foto netika iesniegti. Viens no tiem jau ir iesniegts šajā izaicinājumā. Foto saraksts tiek atsvaidzināts; izvēlies vēlreiz.',
+        'Foto netika iesniegti. Viens no tiem jau ir iesniegts šajā izaicinājumā. Foto saraksts tiek atsvaidzināts, un foto, ko tas atzīmē kā nederīgus, no izvēles tiek izņemti. Pārbaudi izvēli un iesniedz vēlreiz.',
     pickRejected:
         'Foto netika iesniegti. GuruShots tos noraidīja, tāpēc kāds foto šim izaicinājumam, iespējams, vairs neder. Izvēlies citus foto un mēģini vēlreiz.',
+    pickBusy:
+        'Foto netika iesniegti. Šajā izaicinājumā foto iesniegšana jau notiek. Pagaidi, kamēr tā beidzas, un pārbaudi kartīti.',
     pickUnclear:
         'Foto, iespējams, tika iesniegti. GuruShots neatbildēja skaidri, un kartīte tiek atsvaidzināta. Pārbaudi kartīti, pirms mēģini vēlreiz.',
     fetchChallengesFailed: 'Izaicinājumus neizdevās ielādēt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
@@ -807,8 +809,8 @@ export const app = {
     pickTitle: 'Izvēlēties iesniedzamos foto',
     pickHelp:
         'Izvēlētie foto šim izaicinājumam tiek iesniegti uzreiz un tieši tādi, kādus izvēlējies: tavi tagu filtri un uzstādījums „Izvēlētie foto” netiek piemēroti, un nekas netiek saglabāts.',
-    pickCount: 'Izvēlēto foto: {count} no {max} brīvajām vietām',
-    pickOverCap: 'Izvēlēto foto: {count}, bet brīvu vietu ir tikai {max}. Noņem dažus, lai iesniegtu.',
+    pickCount: 'Izvēlēti: {count}, brīvās vietas: {max}',
+    pickOverCap: 'Izvēlēti: {count}, brīvās vietas: {max}. Noņem dažus, lai iesniegtu.',
     pickFull: 'Visām brīvajām vietām foto izvēlēti',
     pickNoSlots: 'Brīvu vietu vairs nav: katrā vietā jau ir foto. Aizver šo logu.',
     pickSubmit: 'Iesniegt',

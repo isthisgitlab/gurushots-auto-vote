@@ -45,11 +45,13 @@ export const errors = {
         'This challenge is no longer open, so the action was not made. Refresh the list to see the current challenges.',
     boostFailed: 'The boost was not applied. GuruShots refused it or did not answer. Try again in a moment.',
     pickNotEnoughSlots:
-        'The photos were not submitted. The challenge has fewer open slots than photos picked, because its entries changed. Close this window; the card shows the open slots.',
+        'The photos were not submitted. The challenge has fewer open slots than photos picked, because its entries changed. Remove photos until the count fits the open slots, then submit again.',
     pickAlreadyEntered:
-        'The photos were not submitted. One of them is already entered in this challenge. The photo list is refreshing; pick again.',
+        'The photos were not submitted. One of them is already entered in this challenge. The photo list is refreshing, and photos it marks as not allowed are taken out of your pick. Check the pick, then submit again.',
     pickRejected:
         'The photos were not submitted. GuruShots refused them, so a photo may no longer be allowed in this challenge. Pick other photos and try again.',
+    pickBusy:
+        'The photos were not submitted. A submit for this challenge is already running. Wait for it to finish, then check the card.',
     pickUnclear:
         'The photos may have been submitted. GuruShots did not answer clearly, and the card is refreshing. Check the card before you try again.',
     fetchChallengesFailed: 'The challenges could not be loaded. GuruShots did not answer. Try again in a moment.',
@@ -798,8 +800,8 @@ export const app = {
     pickTitle: 'Choose photos to submit',
     pickHelp:
         'The photos you pick are submitted to this challenge right away, exactly as picked: your tag filters and Chosen Photos settings are not applied, and nothing is saved.',
-    pickCount: '{count} of {max} open slots picked',
-    pickOverCap: '{count} picked, but only {max} slots are open. Remove some to submit.',
+    pickCount: 'Picked: {count}/{max} open slots',
+    pickOverCap: 'Picked: {count}, open slots: {max}. Remove some to submit.',
     pickFull: 'All open slots picked',
     pickNoSlots: 'No open slots left: every slot already holds a photo. Close this window.',
     pickSubmit: 'Submit',

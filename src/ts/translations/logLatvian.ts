@@ -469,6 +469,8 @@ export const logMessages = {
     mac92b562e159: 'Nederīgs profila nosaukums: "{0}"',
     mace0b6fa2afc: 'Spēlē Turbo minispēli izaicinājumā {0} Turbo misijas izpildei (vēl jāizpilda: {1})',
     maced70909050: 'Pieteikšanās tokens iegūts un saglabāts uzstādījumos',
+    mad2037e25b72:
+        '📝 Manuālās iesniegšanas pieprasījums (izvēlēti foto) atteikts: izaicinājumam {0} iesniegšana jau notiek',
     mad3ace8b901f: 'Nav atrasts pieteikšanās tokens. Lūdzu, vispirms piesakies',
     mad60c736b293: 'Kļūda, apstrādājot get-environment-info pieprasījumu:',
     mae075be90b4b: 'Kļūda, apturot žurnāla straumi:',

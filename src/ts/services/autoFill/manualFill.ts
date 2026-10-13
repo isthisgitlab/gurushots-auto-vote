@@ -156,7 +156,8 @@ type SubmitPickedResult =
  * no longer fits (fewer open slots than photos) or that holds a photo already
  * entered, without sending anything.
  *
- * Logs name the count and the challenge, never the photo ids.
+ * The request and outcome lines name only the count and the challenge, never the photo ids. A rejection
+ * logs the server's own reason, the way auto-fill does.
  */
 const submitPickedPhotos = async (
     challenge: Challenge,

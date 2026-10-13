@@ -152,7 +152,14 @@ function usePickModal({
             onVoteComplete();
             return 'done';
         }
-        if (result?.error === 'invalid-args' || result?.error === 'not-logged-in') return 'failed';
+        // Answered before anything was sent: bad arguments, no login, or another submit already running.
+        if (
+            result?.error === 'invalid-args' ||
+            result?.error === 'No authentication token found' ||
+            result?.error === 'submit-busy'
+        ) {
+            return 'failed';
+        }
         onVoteComplete();
         return 'refreshed';
     };

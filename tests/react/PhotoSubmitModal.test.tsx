@@ -90,7 +90,7 @@ describe('opening', () => {
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(getLibrary()).toHaveBeenCalledWith(7, undefined);
         expect(screen.getByText('Choose photos to submit')).toBeTruthy();
-        expect(countLine().textContent).toBe('0 of 3 open slots picked');
+        expect(countLine().textContent).toBe('Picked: 0/3 open slots');
         expect(submitButton().hasAttribute('disabled')).toBe(true);
         expect(submitButton().textContent).toBe('Submit');
     });
@@ -112,7 +112,7 @@ describe('picking and submitting', () => {
         fireEvent.click(tile(3));
         fireEvent.click(tile(1));
         expect(submitButton().textContent).toBe('Submit 2');
-        expect(countLine().textContent).toBe('2 of 3 open slots picked');
+        expect(countLine().textContent).toBe('Picked: 2/3 open slots');
         fireEvent.click(submitButton());
         await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith([idOf(3), idOf(1)]));
         // Done: the card closes it, and nothing is read again.
@@ -136,7 +136,7 @@ describe('picking and submitting', () => {
         expect(tile(3).getAttribute('aria-disabled')).toBe('true');
         expect(tile(3).textContent).toContain('All open slots picked');
         fireEvent.click(tile(3));
-        expect(countLine().textContent).toBe('2 of 2 open slots picked');
+        expect(countLine().textContent).toBe('Picked: 2/2 open slots');
     });
 
     test('with one open slot a tap swaps the pick instead of being refused', async () => {
@@ -164,6 +164,76 @@ describe('picking and submitting', () => {
         await waitFor(() => expect(getLibrary()).toHaveBeenCalledTimes(3));
         expect(getLibrary()).toHaveBeenLastCalledWith(7, 'sun');
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(tile(2).getAttribute('aria-pressed')).toBe('true');
+    });
+
+    test('after a refreshed failure Submit stays held until the re-read listing is in', async () => {
+        const onSubmit = jest.fn<Promise<PickOutcome>, [string[]]>().mockResolvedValue('refreshed');
+        setup({ onSubmit });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.click(tile(1));
+        let answer: (value: Listing) => void = () => undefined;
+        getLibrary().mockReturnValueOnce(new Promise<Listing>((resolve) => (answer = resolve)));
+        fireEvent.click(submitButton());
+        await waitFor(() => expect(getLibrary()).toHaveBeenCalledTimes(2));
+        expect(submitButton().hasAttribute('disabled')).toBe(true);
+        fireEvent.click(submitButton());
+        expect(onSubmit).toHaveBeenCalledTimes(1);
+        await act(async () => answer(listing([photo(1), photo(2)])));
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(submitButton().hasAttribute('disabled')).toBe(false);
+    });
+
+    test('after a refreshed failure a picked photo the listing says is not allowed leaves the pick', async () => {
+        const onSubmit = jest.fn<Promise<PickOutcome>, [string[]]>().mockResolvedValue('refreshed');
+        setup({ onSubmit });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.click(tile(1));
+        fireEvent.click(tile(2));
+        getLibrary().mockResolvedValue(listing([photo(1), photo(2, { allowed: false }), photo(3)]));
+        fireEvent.click(submitButton());
+        await waitFor(() => expect(tile(2).getAttribute('aria-pressed')).toBe('false'));
+        expect(tile(1).getAttribute('aria-pressed')).toBe('true');
+        expect(submitButton().textContent).toBe('Submit 1');
+    });
+
+    test.each([
+        ['allows', listing([photo(1), photo(2), photo(3)])],
+        [
+            'cannot judge (no allowed flags)',
+            listing([photo(1, { allowed: false }), photo(2, { allowed: false })], { allowedKnown: false }),
+        ],
+    ])('a refreshed failure keeps every pick the re-read listing %s', async (_label, reread) => {
+        const onSubmit = jest.fn<Promise<PickOutcome>, [string[]]>().mockResolvedValue('refreshed');
+        setup({ onSubmit });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.click(tile(1));
+        fireEvent.click(tile(2));
+        let answer: (value: Listing) => void = () => undefined;
+        getLibrary().mockReturnValueOnce(new Promise<Listing>((resolve) => (answer = resolve)));
+        fireEvent.click(submitButton());
+        await waitFor(() => expect(getLibrary()).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(screen.queryByRole('button', { name: /^Photo 00000001:/ })).toBeNull());
+        await act(async () => answer(reread));
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        // The listing's effects (the prune) run after the tiles appear.
+        await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+        expect(tile(1).getAttribute('aria-pressed')).toBe('true');
+        expect(tile(2).getAttribute('aria-pressed')).toBe('true');
+        expect(submitButton().textContent).toBe('Submit 2');
+    });
+
+    test('the picks do not change while a submit is in flight', async () => {
+        const { update } = setup();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.click(tile(1));
+        update({ submitting: true });
+        fireEvent.click(tile(2));
+        fireEvent.click(tile(1));
+        expect(tile(1).getAttribute('aria-pressed')).toBe('true');
+        expect(tile(2).getAttribute('aria-pressed')).toBe('false');
+        update({ submitting: false });
+        fireEvent.click(tile(2));
         expect(tile(2).getAttribute('aria-pressed')).toBe('true');
     });
 
@@ -208,13 +278,30 @@ describe('the cap changing while open', () => {
         fireEvent.click(tile(2));
         fireEvent.click(tile(3));
         update({ max: 2 });
-        expect(countLine().textContent).toBe('3 picked, but only 2 slots are open. Remove some to submit.');
+        expect(countLine().textContent).toBe('Picked: 3, open slots: 2. Remove some to submit.');
         expect(submitButton().hasAttribute('disabled')).toBe(true);
         // Picked tiles stay removable; unpicked ones are held.
         expect(tile(4).getAttribute('aria-disabled')).toBe('true');
         fireEvent.click(tile(3));
         expect(submitButton().hasAttribute('disabled')).toBe(false);
         expect(submitButton().textContent).toBe('Submit 2');
+    });
+
+    test('a cap of one under several picks: tapping an unpicked photo leaves just that photo, ready to submit', async () => {
+        const { update, props } = setup({ max: 3 });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.click(tile(1));
+        fireEvent.click(tile(2));
+        update({ max: 1 });
+        expect(submitButton().hasAttribute('disabled')).toBe(true);
+        fireEvent.click(tile(3));
+        expect(tile(3).getAttribute('aria-pressed')).toBe('true');
+        expect(tile(1).getAttribute('aria-pressed')).toBe('false');
+        expect(tile(2).getAttribute('aria-pressed')).toBe('false');
+        expect(submitButton().hasAttribute('disabled')).toBe(false);
+        expect(submitButton().textContent).toBe('Submit 1');
+        fireEvent.click(submitButton());
+        await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith([idOf(3)]));
     });
 
     test('no open slots left: says so with Close only, whatever was picked', async () => {
@@ -231,11 +318,12 @@ describe('the cap changing while open', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    test('with no open slots the failure that ended them still shows', async () => {
+    test('with no open slots no failure alert is shown: its next step would contradict "Close this window"', async () => {
         const { update } = setup({ max: 1 });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         update({ max: 0, error: 'The photos may have been submitted.' });
-        expect(screen.getByRole('alert').textContent).toBe('The photos may have been submitted.');
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.getByText(/^No open slots left/)).toBeTruthy();
     });
 
     test('with no open slots a submit in flight keeps Close held', async () => {

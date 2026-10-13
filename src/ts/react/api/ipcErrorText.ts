@@ -18,6 +18,7 @@ const KNOWN_ERRORS: Record<string, string> = {
     'already-entered': 'errors.pickAlreadyEntered',
     'submit-rejected': 'errors.pickRejected',
     'submit-unclear': 'errors.pickUnclear',
+    'submit-busy': 'errors.pickBusy',
     'Failed to apply boost': 'errors.boostFailed',
     'Failed to fetch challenges': 'errors.fetchChallengesFailed',
     'Could not list challenges': 'errors.fetchChallengesFailed',

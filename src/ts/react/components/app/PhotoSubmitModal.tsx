@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
@@ -13,7 +13,10 @@ import { PhotoGrid } from './PhotoChooserModal';
  */
 export type PickOutcome = 'done' | 'refreshed' | 'failed';
 
-/** Cancel and Submit: Submit names how many are picked and is held with none, over the cap, or while sending. */
+/**
+ * Cancel and Submit: Submit names how many are picked and is held with none, while the pick cannot be sent
+ * (over the cap, or the listing is being read), or while sending.
+ */
 function SubmitFooter({
     count,
     held,
@@ -70,22 +73,42 @@ function PhotoSubmitBody({
 }) {
     const { t } = useTranslation();
     const [selected, setSelected] = useState<string[]>([]);
-    const { state, known, load, retry } = useLibraryListing(challengeId);
+    const { state, known, generation, load, retry } = useLibraryListing(challengeId);
 
-    // With one slot a tap swaps the pick instead of being refused.
+    // The generation of the read a failed submit asked for: once a listing of that generation (or later) is
+    // in, photos it says can no longer be entered leave the pick. Null when nothing is waiting.
+    const pruneFromRef = useRef<number | null>(null);
+
+    // With one slot a tap swaps the pick instead of being refused. The pick is what is being sent while a
+    // submit is in flight, so it does not change then.
     const toggle = useCallback(
         (id: string) => {
+            if (submitting) return;
             setSelected((prev) => {
                 if (prev.includes(id)) return prev.filter((other) => other !== id);
                 return max === 1 ? [id] : [...prev, id];
             });
         },
-        [max],
+        [max, submitting],
     );
+
+    useEffect(() => {
+        const from = pruneFromRef.current;
+        // `generation < from`: a guard for a read that has not landed yet (defence in depth).
+        if (from === null || state.status !== 'ready' || generation < from) return;
+        pruneFromRef.current = null;
+        if (!state.listing.allowedKnown) return;
+        setSelected((prev) => {
+            const kept = prev.filter((id) => known.get(id)?.allowed !== false);
+            return kept.length === prev.length ? prev : kept;
+        });
+    }, [state, known, generation]);
 
     const submit = () => {
         void (async () => {
-            if ((await onSubmit(selected)) === 'refreshed') retry();
+            if ((await onSubmit(selected)) === 'refreshed') {
+                pruneFromRef.current = retry();
+            }
         })();
     };
 
@@ -98,7 +121,6 @@ function PhotoSubmitBody({
     if (max < 1) {
         return (
             <div className="space-y-3">
-                {alert}
                 <p className="text-sm" role="status">
                     {t('app.pickNoSlots')}
                 </p>
@@ -135,7 +157,7 @@ function PhotoSubmitBody({
             {alert}
             <SubmitFooter
                 count={selected.length}
-                held={over}
+                held={over || state.status !== 'ready'}
                 submitting={submitting}
                 onSubmit={submit}
                 onCancel={onClose}

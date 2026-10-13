@@ -76,12 +76,24 @@ const isPickedIds = (imageIds: unknown): imageIds is string[] => {
     return new Set(imageIds).size === imageIds.length;
 };
 
+// Challenges with a picked-photos submit running, by id: a second submit for one of them is turned away
+// instead of racing the first (the live re-read cannot see a submit that has not landed yet).
+const submitsInFlight = new Set<string>();
+
 // Manual submit of exactly the photos the user picked on the challenge card. Unlike
 // fill-challenge-now nothing is ranked or filtered: the ids go to the challenge as
 // given, after a check that they still fit the open slots.
 const handleSubmitPickedPhotos = (async (event: unknown, challengeId: string | number, imageIds: string[]) => {
     if (!isIdArg(challengeId) || !isPickedIds(imageIds)) return refuseInvalidArgs('autoFill', 'submit-picked-photos');
+    const inFlightKey = String(challengeId);
     const safeChallengeId = sanitizeForLog(challengeId);
+    if (submitsInFlight.has(inFlightKey)) {
+        logger
+            .withCategory('autoFill')
+            .info(`📝 Manual pick request refused: a submit for Challenge=${safeChallengeId} is already running`, null);
+        return { success: false as const, error: 'submit-busy' };
+    }
+    submitsInFlight.add(inFlightKey);
     try {
         logger
             .withCategory('autoFill')
@@ -102,6 +114,8 @@ const handleSubmitPickedPhotos = (async (event: unknown, challengeId: string | n
     } catch (error) {
         logger.withCategory('autoFill').error('Error handling submit-picked-photos request:', error);
         return errorResult(error, 'Failed to submit photos');
+    } finally {
+        submitsInFlight.delete(inFlightKey);
     }
 }) satisfies IpcReplyFn;
 

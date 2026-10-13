@@ -458,6 +458,7 @@ export const logMessages = {
     mac92b562e159: 'Invalid profile name: "{0}"',
     mace0b6fa2afc: 'Playing turbo mini-game on {0} for the turbo mission ({1} to go)',
     maced70909050: 'Token obtained and saved to settings',
+    mad2037e25b72: '📝 Manual pick request refused: a submit for Challenge={0} is already running',
     mad3ace8b901f: 'No authentication token found. Please login first',
     mad60c736b293: 'Error handling get-environment-info request:',
     mae075be90b4b: 'Error stopping log stream:',

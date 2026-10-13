@@ -686,6 +686,8 @@ describe('fill-challenge-now', () => {
 
 describe('submit-picked-photos', () => {
     const liveChallenge = { id: 123, title: 'C' };
+    // The module is auto-mocked (typed by jest.mocked): start each use from a bare mock.
+    const stubSubmitPicked = () => autoFill.submitPickedPhotos.mockReset();
 
     test.each([
         ['a non-array', 'abc'],
@@ -728,7 +730,7 @@ describe('submit-picked-photos', () => {
         const strategy = stubStrategy({
             getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
         });
-        autoFill.submitPickedPhotos = jest.fn().mockResolvedValue({ success: true, submitted: 2 });
+        stubSubmitPicked().mockResolvedValue({ success: true, submitted: 2 });
         const result = await buildHandlers()['submit-picked-photos']({}, '123', ['a', 'b']);
         expect(result).toEqual({ success: true, submitted: 2 });
         expect(autoFill.submitPickedPhotos).toHaveBeenCalledWith(liveChallenge, 'tok', ['a', 'b'], {
@@ -741,7 +743,7 @@ describe('submit-picked-photos', () => {
     test('logs the challenge and the number of photos, never the ids', async () => {
         stubAuthGuardOk();
         stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }) });
-        autoFill.submitPickedPhotos = jest.fn().mockResolvedValue({ success: true, submitted: 1 });
+        stubSubmitPicked().mockResolvedValue({ success: true, submitted: 1 });
         await buildHandlers()['submit-picked-photos']({}, '123', ['secretphoto']);
         const logged = logger.withCategory.mock.results.flatMap((result) =>
             Object.values(result.value as Record<string, jest.Mock<unknown, unknown[]>>).flatMap(
@@ -752,11 +754,111 @@ describe('submit-picked-photos', () => {
         expect(logCategories('info', '📝 Manual pick request: Challenge=123, Photos=1', null)).toEqual(['autoFill']);
     });
 
-    test('answers a failure instead of throwing', async () => {
+    test.each([
+        ['its message', new Error('network down'), 'network down'],
+        ['the generic fallback', new Error(''), 'Failed to submit photos'],
+    ])('answers %s instead of throwing, and logs the error under autoFill', async (_label, err, expected) => {
         stubAuthGuardOk();
-        stubStrategy({ getActiveChallenges: jest.fn().mockRejectedValue(new Error('network down')) });
-        const result = await buildHandlers()['submit-picked-photos']({}, '123', ['a']);
-        expect(result.success).toBe(false);
+        stubStrategy({ getActiveChallenges: jest.fn().mockRejectedValue(err) });
+        await expect(buildHandlers()['submit-picked-photos']({}, '123', ['a'])).resolves.toEqual({
+            success: false,
+            error: expected,
+        });
+        expect(logCategories('error', 'Error handling submit-picked-photos request:', err)).toEqual(['autoFill']);
+    });
+
+    describe('a second submit for the same challenge', () => {
+        const stubLive = () =>
+            stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }) });
+
+        test('is turned away as submit-busy while the first runs, without sending, and goes through after it ends', async () => {
+            stubAuthGuardOk();
+            stubLive();
+            let finish: (value: { success: true; submitted: number }) => void = () => undefined;
+            const submitPicked = stubSubmitPicked().mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+            const handlers = buildHandlers();
+            const first = handlers['submit-picked-photos']({}, '123', ['a']);
+            // The numeric and string forms of an id are the same challenge.
+            await expect(handlers['submit-picked-photos']({}, 123, ['b'])).resolves.toEqual({
+                success: false,
+                error: 'submit-busy',
+            });
+            await expect(handlers['submit-picked-photos']({}, '123', ['a'])).resolves.toEqual({
+                success: false,
+                error: 'submit-busy',
+            });
+            // Each refusal says so in the log, naming the challenge and never the photos.
+            expect(
+                logCategories(
+                    'info',
+                    '📝 Manual pick request refused: a submit for Challenge=123 is already running',
+                    null,
+                ),
+            ).toEqual(['autoFill', 'autoFill']);
+            finish({ success: true, submitted: 1 });
+            await expect(first).resolves.toEqual({ success: true, submitted: 1 });
+            expect(submitPicked).toHaveBeenCalledTimes(1);
+
+            submitPicked.mockResolvedValue({ success: true, submitted: 1 });
+            await expect(handlers['submit-picked-photos']({}, '123', ['a'])).resolves.toEqual({
+                success: true,
+                submitted: 1,
+            });
+            expect(submitPicked).toHaveBeenCalledTimes(2);
+        });
+
+        test.each([
+            [
+                'the auth guard fails',
+                () => {
+                    stubAuthGuardFail();
+                    stubStrategy();
+                },
+            ],
+            [
+                'the challenge is no longer active',
+                () => {
+                    stubAuthGuardOk();
+                    stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 999 }] }) });
+                },
+            ],
+        ])('is not refused as busy after a submit that returned early because %s', async (_label, stubEarlyReturn) => {
+            const handlers = buildHandlers();
+            stubEarlyReturn();
+            const first = await handlers['submit-picked-photos']({}, '123', ['a']);
+            expect(first.success).toBe(false);
+            expect(first).not.toEqual({ success: false, error: 'submit-busy' });
+            const second = await handlers['submit-picked-photos']({}, '123', ['a']);
+            expect(second).toEqual(first);
+            expect(autoFill.submitPickedPhotos).not.toHaveBeenCalled();
+        });
+
+        test('does not hold another challenge, and a submit that throws releases its own', async () => {
+            stubAuthGuardOk();
+            stubLive();
+            let finish: (value: { success: true; submitted: number }) => void = () => undefined;
+            const submitPicked = stubSubmitPicked().mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+            const handlers = buildHandlers();
+            const first = handlers['submit-picked-photos']({}, '123', ['a']);
+            await expect(handlers['submit-picked-photos']({}, '124', ['a'])).resolves.toEqual({
+                success: false,
+                error: 'Challenge no longer active',
+            });
+            finish({ success: true, submitted: 1 });
+            await first;
+            stubAuthGuardOk();
+            stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 125 }] }) });
+            submitPicked.mockRejectedValueOnce(new Error('boom'));
+            await expect(handlers['submit-picked-photos']({}, '125', ['a'])).resolves.toEqual({
+                success: false,
+                error: 'boom',
+            });
+            submitPicked.mockResolvedValueOnce({ success: true, submitted: 1 });
+            await expect(handlers['submit-picked-photos']({}, '125', ['a'])).resolves.toEqual({
+                success: true,
+                submitted: 1,
+            });
+        });
     });
 });
 

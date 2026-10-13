@@ -509,6 +509,8 @@ describe('pick', () => {
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         fireEvent.click(tile(n));
     };
+    type SubmitPicked = WindowApi['submitPickedPhotos'];
+    const submitPicked = () => jest.fn<ReturnType<SubmitPicked>, Parameters<SubmitPicked>>();
     const submit = () => fireEvent.click(screen.getByRole('button', { name: /^Submit/ }));
     const slotsOpen = (open: number) =>
         makeChallenge({
@@ -519,7 +521,7 @@ describe('pick', () => {
     beforeEach(() => {
         mockTranslator.t.mockImplementation(english);
         window.api.getLibraryPhotos = jest.fn().mockResolvedValue(listing());
-        window.api.submitPickedPhotos = jest.fn().mockResolvedValue({ success: true, submitted: 1 });
+        window.api.submitPickedPhotos = submitPicked().mockResolvedValue({ success: true, submitted: 1 });
     });
     afterEach(() => {
         mockTranslator.t.mockImplementation((key) => key);
@@ -555,7 +557,10 @@ describe('pick', () => {
     ])(
         '%s: the picker stays open on the translated text, the card refreshes and the listing is read again',
         async (code, key) => {
-            window.api.submitPickedPhotos = jest.fn().mockResolvedValue({ success: false, submitted: 0, error: code });
+            window.api.submitPickedPhotos = submitPicked().mockResolvedValue({
+                success: false,
+                error: code,
+            });
             const { onVoteComplete } = renderCard(makeChallenge());
             await openAndPick();
             submit();
@@ -568,18 +573,29 @@ describe('pick', () => {
         },
     );
 
-    test.each(['invalid-args', 'not-logged-in'])('%s: nothing was sent, so nothing is refreshed', async (code) => {
-        window.api.submitPickedPhotos = jest.fn().mockResolvedValue({ success: false, error: code });
-        const { onVoteComplete } = renderCard(makeChallenge());
+    test.each(['invalid-args', 'No authentication token found', 'submit-busy'])(
+        '%s: nothing was sent, so nothing is refreshed',
+        async (code) => {
+            window.api.submitPickedPhotos = submitPicked().mockResolvedValue({ success: false, error: code });
+            const { onVoteComplete } = renderCard(makeChallenge());
+            await openAndPick();
+            submit();
+            await screen.findByRole('alert');
+            expect(onVoteComplete).not.toHaveBeenCalled();
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(1);
+        },
+    );
+
+    test('submit-busy: the picker says another submit is running', async () => {
+        window.api.submitPickedPhotos = submitPicked().mockResolvedValue({ success: false, error: 'submit-busy' });
+        renderCard(makeChallenge());
         await openAndPick();
         submit();
-        await screen.findByRole('alert');
-        expect(onVoteComplete).not.toHaveBeenCalled();
-        expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(errors.pickBusy));
     });
 
     test('an empty answer is treated as a failure after the send: generic text and a refresh', async () => {
-        window.api.submitPickedPhotos = jest.fn().mockResolvedValue(undefined);
+        window.api.submitPickedPhotos = submitPicked().mockResolvedValue(invalid(undefined));
         const { onVoteComplete } = renderCard(makeChallenge());
         await openAndPick();
         submit();
@@ -588,7 +604,7 @@ describe('pick', () => {
     });
 
     test('closing clears a failure: the next opening starts without it', async () => {
-        window.api.submitPickedPhotos = jest.fn().mockResolvedValue({ success: false, error: 'submit-rejected' });
+        window.api.submitPickedPhotos = submitPicked().mockResolvedValue({ success: false, error: 'submit-rejected' });
         renderCard(makeChallenge());
         await openAndPick();
         submit();
@@ -602,7 +618,7 @@ describe('pick', () => {
 
     test('while a submit is in flight every submit button is held and the picker cannot be closed', async () => {
         const d = deferred<Awaited<ReturnType<WindowApi['submitPickedPhotos']>>>();
-        window.api.submitPickedPhotos = jest.fn(() => d.promise);
+        window.api.submitPickedPhotos = submitPicked().mockReturnValue(d.promise);
         renderCard(makeChallenge());
         await openAndPick();
         submit();
@@ -632,7 +648,7 @@ describe('pick', () => {
 
     test('a refresh that leaves no open slot keeps the picker, says so, and still delivers an answer in flight', async () => {
         const d = deferred<Awaited<ReturnType<WindowApi['submitPickedPhotos']>>>();
-        window.api.submitPickedPhotos = jest.fn(() => d.promise);
+        window.api.submitPickedPhotos = submitPicked().mockReturnValue(d.promise);
         const { rerender, onVoteComplete } = renderCard(slotsOpen(1));
         await openAndPick();
         submit();
