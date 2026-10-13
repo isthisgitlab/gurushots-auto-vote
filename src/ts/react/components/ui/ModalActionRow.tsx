@@ -7,11 +7,13 @@ const ROW_ICON_CLASS = 'w-4 h-4 mr-1';
 
 // The modal hosting the row must put this on its `.modal-box` (via Modal's
 // `className`): the opaque footer covers the bottom of the scroll area, and the
-// scroll padding keeps a focused control scrolled above it. 13rem covers the
-// footer at its tallest (about 12rem: buttons wrapped onto two rows and a
-// three-line save-error alert on a 360px phone in Latvian) plus room for the
-// focus ring.
-export const MODAL_ACTION_ROW_SCROLL_PADDING = 'scroll-pb-52';
+// scroll padding keeps a focused control scrolled above it. On phones the
+// footer is at its tallest, about 13.2rem (buttons wrapped onto two rows and a
+// multi-line Latvian save-error alert at 320px), so 15rem; from `md` up the
+// buttons fit one row and it is about 7rem, so 8rem. Each includes room for the
+// focus ring. A larger Android system font scale can still outgrow the phone
+// value.
+export const MODAL_ACTION_ROW_SCROLL_PADDING = 'scroll-pb-60 md:scroll-pb-32';
 
 /**
  * Shared Save / secondary / Cancel action row used by the settings modals
