@@ -273,11 +273,13 @@ describe('settings recovery (real fs)', () => {
         test('a save replaces the file, leaves no temp file and keeps it owner-only', () => {
             loadFresh();
             expect(settings.setSetting('theme', 'dark')).toBe(true);
-            const inode = fs.statSync(settingsFile).ino;
+            // A hard link outside userData keeps the file that was there: a write in place would change it too.
+            const before = path.join(root, 'before.json');
+            fs.linkSync(settingsFile, before);
             expect(settings.setSetting('theme', 'light')).toBe(true);
 
             expect(fs.readdirSync(userData)).toEqual(['settings.json']);
-            expect(fs.statSync(settingsFile).ino).not.toBe(inode);
+            expect(parseJsonObject(fs.readFileSync(before, 'utf8')).theme).toBe('dark');
             if (process.platform !== 'win32') expect(fs.statSync(settingsFile).mode & 0o777).toBe(0o600);
             expect(parseJsonObject(fs.readFileSync(settingsFile, 'utf8')).theme).toBe('light');
         });
