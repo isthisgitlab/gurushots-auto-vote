@@ -288,29 +288,39 @@ function EntryDetails({
 
     // A cleared pin's note unmounts with the focused button inside it: focus would drop to <body>, so it moves to
     // the section instead. The note can unmount well after the write resolves (a settings-changed read supersedes
-    // the write's own), hence the check runs after every render rather than after the write. Focus the user moved
-    // elsewhere (another element, or <body>) is never stolen: the button is forgotten once it loses focus while
-    // still in the page, so a failed clear (the note, and focus, stay where they are) followed by the user moving
-    // on never acts later. A focusout from the button's own removal (some engines fire one) is left to the layout
-    // effect, which has already run by the time the deferred check sees the button gone. The record survives the
-    // window losing focus, so focus can also have moved without a focusout from the button (a dialog focusing its
-    // first button while the window is unfocused): the layout effect moves focus only if it is actually lost.
+    // the write's own), hence the check runs after every render rather than after the write. Focus that has landed
+    // anywhere else since — another element, or <body> after leaving the button — is never stolen: the record is
+    // forgotten once the button loses focus while still in the page, and once focus lands on any other element, so a
+    // failed clear (the note, and focus, stay where they are) followed by the user moving on never acts later. A
+    // focusout from the button's own removal (some engines fire one) is left to the layout effect, which has already
+    // run by the time the deferred check sees the button gone. The record survives the window losing focus, and
+    // focus can move without a focusout from the button (a dialog focusing its first button while the window is
+    // unfocused): the focusin that follows when the window regains focus forgets the record, and the layout effect
+    // moves focus only if it is actually lost.
     useEffect(() => {
         const forgetOnBlur = (event: FocusEvent) => {
             const button = clearedButtonRef.current;
             if (!button || event.target !== button) return;
             queueMicrotask(() => {
                 // Still focused and in the page: the whole window lost focus, not just the button. A newer record
-                // (another button) is not this microtask's to wipe — a race only script can produce (focus() and
-                // click() in one task, as tests do); in a browser the focus move and the click are separate tasks,
-                // so this microtask has already run by the time the next clear records.
+                // (another button) is not this microtask's to wipe — a race only script can produce (a focus() and a
+                // click() in one task, as tests do): a microtask checkpoint follows every listener the browser
+                // dispatches, so this microtask runs before any later click handler, and only a script-called
+                // focus() keeps the stack busy.
                 if (clearedButtonRef.current === button && button.isConnected && document.activeElement !== button) {
                     clearedButtonRef.current = null;
                 }
             });
         };
+        const forgetOnFocusElsewhere = (event: FocusEvent) => {
+            if (clearedButtonRef.current && event.target !== clearedButtonRef.current) clearedButtonRef.current = null;
+        };
         document.addEventListener('focusout', forgetOnBlur);
-        return () => document.removeEventListener('focusout', forgetOnBlur);
+        document.addEventListener('focusin', forgetOnFocusElsewhere);
+        return () => {
+            document.removeEventListener('focusout', forgetOnBlur);
+            document.removeEventListener('focusin', forgetOnFocusElsewhere);
+        };
     }, []);
 
     useLayoutEffect(() => {

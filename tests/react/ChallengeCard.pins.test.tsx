@@ -395,10 +395,9 @@ describe('a stored pin that no longer applies', () => {
         let removeRan = false;
         note.remove = () => {
             removeRan = true;
-            // Focus leaves the button first (its own focusout, <body> active), so a forget that ran synchronously
-            // here — the button still connected — would wipe the record and lose the hand-off.
+            // Focus leaves the button first (blur() fires its focusout, <body> active), so a forget that ran
+            // synchronously here — the button still connected — would wipe the record and lose the hand-off.
             clear.blur();
-            clear.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
             removeNote();
         };
         unmountNote();
@@ -425,17 +424,58 @@ describe('a stored pin that no longer applies', () => {
         // The window loses focus: the focusout reaches the listener, the button keeps its record.
         clear.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
         await Promise.resolve();
-        // Focus then moves with no focusout reaching the listener: the move's own event is swallowed.
+        // Focus then moves with no focusout or focusin reaching the listener: the move's own events are swallowed.
         const elsewhere = pinButtons('Turbo')[0];
         const swallow = (event: Event) => event.stopPropagation();
         window.addEventListener('focusout', swallow, true);
+        window.addEventListener('focusin', swallow, true);
         elsewhere.focus();
         window.removeEventListener('focusout', swallow, true);
+        window.removeEventListener('focusin', swallow, true);
         expect(document.activeElement).toBe(elsewhere);
         unmountNote();
         await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
         expect(document.activeElement).toBe(elsewhere);
         expect(focus).not.toHaveBeenCalled();
+    });
+
+    test('a silent focus move is forgotten when the focusin reaches its element, so a later move to <body> is not pulled back', async () => {
+        const { details, unmountNote } = await clearThenUnmountOnLaterRead();
+        const clear = screen.getByRole('button', { name: 'app.pinClear' });
+        const focus = jest.spyOn(details, 'focus');
+        clear.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+        await Promise.resolve();
+        const elsewhere = pinButtons('Turbo')[0];
+        const swallow = (event: Event) => event.stopPropagation();
+        window.addEventListener('focusout', swallow, true);
+        window.addEventListener('focusin', swallow, true);
+        elsewhere.focus();
+        window.removeEventListener('focusout', swallow, true);
+        window.removeEventListener('focusin', swallow, true);
+        // The window regains focus: the browser fires focusin on the element that already holds it.
+        elsewhere.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+        // The user then lands on <body> (the record, if kept, would claim it).
+        elsewhere.blur();
+        expect(document.activeElement).toBe(document.body);
+        unmountNote();
+        await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
+        expect(document.activeElement).toBe(document.body);
+        expect(focus).not.toHaveBeenCalled();
+    });
+
+    test('a removed button still reported as the active element (focus lost with it) hands focus to the entry details', async () => {
+        const { details, unmountNote } = await clearThenUnmountOnLaterRead();
+        const clear = screen.getByRole('button', { name: 'app.pinClear' });
+        // happy-dom never leaves a disconnected element as activeElement: report it, as an engine that does would.
+        const active = jest.spyOn(document, 'activeElement', 'get').mockReturnValue(clear);
+        try {
+            unmountNote();
+            await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
+            expect(clear.isConnected).toBe(false);
+        } finally {
+            active.mockRestore();
+        }
+        expect(document.activeElement).toBe(details);
     });
 
     test('a blur microtask left over from one clear does not forget a newer clear', async () => {
@@ -456,8 +496,8 @@ describe('a stored pin that no longer applies', () => {
         await waitFor(() => expect(clears[0].getAttribute('aria-busy')).toBe('false'));
         // Moving focus fires the first button's focusout (its forget-microtask is queued while it is still the
         // recorded one), and the second click records the second button before that microtask runs. That is a
-        // race only script can produce (focus() and click() in one task); in a browser they are separate tasks,
-        // so the microtask has already run.
+        // race only script can produce (focus() and click() in one task): a microtask checkpoint follows every
+        // listener the browser dispatches, so there the microtask runs before any later click handler.
         clears[1].focus();
         fireEvent.click(clears[1]);
         await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalledTimes(3));
