@@ -93,7 +93,7 @@
         "name": "isthisgitlab",
         "email": "isthisgitlab@isthisgitlab.com"
     },
-    "license": "ISC",
+    "license": "Apache-2.0",
     "type": "commonjs",
     "bugs": {
         "url": "https://github.com/isthisgitlab/gurushots-auto-vote/issues"

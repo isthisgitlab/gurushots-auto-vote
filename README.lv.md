@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/isthisgitlab/gurushots-auto-vote/actions/workflows/build.yml/badge.svg?branch=master&event=push)](https://github.com/isthisgitlab/gurushots-auto-vote/actions/workflows/build.yml)
 [![Coverage Status](https://coveralls.io/repos/github/isthisgitlab/gurushots-auto-vote/badge.svg?branch=master)](https://coveralls.io/github/isthisgitlab/gurushots-auto-vote?branch=master)
-[![License](https://img.shields.io/badge/license-ISC-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Automātiska balsošana GuruShots izaicinājumos. Viens un tas pats balsošanas dzinējs pieejams trīs veidos: kā darbvirsmas **grafiskā lietotne** (Electron), kā **komandrindas rīks** (`gurucli`) un kā **Android** lietotne (APK fails, ko instalē ārpus Play Store), kas turpina balsot fonā.
 
@@ -220,7 +220,7 @@ Norādījumus par grafisko lietotni un CLI, balsošanas noteikumus, uzstādījum
 
 ## 📄 Licence un atbalsts
 
-Lietotne tiek izplatīta saskaņā ar **ISC licenci**.
+Lietotne tiek izplatīta saskaņā ar **Apache 2.0 licenci**. Ikvienam, kas izplata kodu vai atvasinātu darbu, atbilstoši licencei jāsaglabā failā [`NOTICE`](NOTICE) norādītā atribūcija.
 
 Ja nepieciešama palīdzība, vispirms skatiet sadaļu [Problēmu risināšana](docs/usage.lv.md#-problēmu-risināšana), pēc tam [izveidojiet problēmas pieteikumu](https://github.com/isthisgitlab/gurushots-auto-vote/issues).
 

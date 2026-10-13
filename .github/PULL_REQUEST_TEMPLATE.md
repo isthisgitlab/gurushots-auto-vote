@@ -5,6 +5,6 @@
 | New feature?  | `yes` / `no`         |
 | Deprecations? | `yes` / `no`         |
 | Tickets       | Fix `#`              |
-| License       | `ISC`                |
+| License       | `Apache-2.0`         |
 
 ---

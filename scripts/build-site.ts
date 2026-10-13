@@ -136,7 +136,7 @@ const LANGUAGES: Record<Lang, { entry: string; switchLabel: string; privacy: str
 // built page never requests another host; any other remote image (a live build or coverage badge) is dropped and
 // its alt text stays.
 const BADGES: Record<string, Badge> = {
-    License: { label: 'license', message: 'ISC', color: '#007ec6' },
+    License: { label: 'license', message: 'Apache-2.0', color: '#007ec6' },
     Bitcoin: { message: 'Bitcoin', color: '#000000' },
     Ethereum: { message: 'Ethereum', color: '#3c3c3d' },
 };

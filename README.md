@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/isthisgitlab/gurushots-auto-vote/actions/workflows/build.yml/badge.svg?branch=master&event=push)](https://github.com/isthisgitlab/gurushots-auto-vote/actions/workflows/build.yml)
 [![Coverage Status](https://coveralls.io/repos/github/isthisgitlab/gurushots-auto-vote/badge.svg?branch=master)](https://coveralls.io/github/isthisgitlab/gurushots-auto-vote?branch=master)
-[![License](https://img.shields.io/badge/license-ISC-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Automated voting for GuruShots challenges. The same voting engine ships three ways: a desktop **GUI** (Electron), a **CLI** (`gurucli`), and an **Android** app (sideloaded APK) that keeps voting in the background.
 
@@ -220,7 +220,7 @@ For GUI and CLI instructions, voting rules, settings, logs, and troubleshooting,
 
 ## 📄 License & Support
 
-Licensed under the **ISC License**.
+Licensed under the **Apache License 2.0**. Anyone who redistributes the code or a derived work must keep the attribution in [`NOTICE`](NOTICE), as the license requires.
 
 For help, check [Troubleshooting](docs/usage.md#-troubleshooting) first, then [open an issue](https://github.com/isthisgitlab/gurushots-auto-vote/issues).
 

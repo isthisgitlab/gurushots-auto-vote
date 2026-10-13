@@ -54,7 +54,7 @@ interface Lockfile {
 }
 
 interface NoticeInputs {
-    projectLicense: string;
+    projectNotice: string;
     packages: PackageRef[];
     licenses: Record<string, LicenseEntry>;
     android: AndroidComponent[];
@@ -152,7 +152,7 @@ const NOTICE_HEADER = [
     'THIRD-PARTY NOTICES',
     '===================',
     '',
-    'GuruShotsAutoVote is licensed under the ISC License (section 1). It includes, or is built on, the',
+    'GuruShotsAutoVote is licensed under the Apache License 2.0. It includes, or is built on, the',
     'third-party software, data and models listed below, each under its own license. The full texts of',
     'those licenses are reproduced in the sections that name them and in section 7.',
     '',
@@ -296,7 +296,9 @@ const renderNotices = (inputs: NoticeInputs) => {
     const out: string[] = [
         ...NOTICE_HEADER,
         ...heading('1. GuruShotsAutoVote'),
-        inputs.projectLicense,
+        inputs.projectNotice,
+        '',
+        'The text of the Apache License 2.0 is in section 7.',
         '',
         ...heading('2. Desktop shell'),
         "The desktop app is built on Electron. Electron's license (MIT) and the license list of the",
@@ -325,7 +327,7 @@ interface MainOptions {
     lockPath?: string;
     licensesDir?: string;
     androidVariablesPath?: string;
-    licensePath?: string;
+    noticePath?: string;
     outPath?: string;
 }
 
@@ -333,7 +335,7 @@ const main = ({
     lockPath = path.join(ROOT, 'pnpm-lock.yaml'),
     licensesDir = path.join(__dirname, 'licenses'),
     androidVariablesPath = path.join(ROOT, 'android', 'variables.gradle'),
-    licensePath = path.join(ROOT, 'LICENSE'),
+    noticePath = path.join(ROOT, 'NOTICE'),
     outPath = path.join(ROOT, 'src', 'assets', 'THIRD_PARTY_NOTICES.txt'),
 }: MainOptions = {}) => {
     const packages = collectPackages(parseLockfile(fs.readFileSync(lockPath, 'utf8')));
@@ -361,7 +363,7 @@ const main = ({
         throw new Error(`scripts/licenses/notices.json names no artifact for the vendored ${unnamed.join(', ')}`);
     }
     const text = renderNotices({
-        projectLicense: fs.readFileSync(licensePath, 'utf8').trimEnd(),
+        projectNotice: fs.readFileSync(noticePath, 'utf8').trimEnd(),
         packages,
         licenses: loadLicenses(path.join(licensesDir, 'packages.json')),
         android: loadAndroidComponents(path.join(licensesDir, 'android.json')),

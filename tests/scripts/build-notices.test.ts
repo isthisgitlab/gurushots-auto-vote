@@ -162,9 +162,10 @@ describe('the committed notices', () => {
             expect(text).toContain('GNU GENERAL PUBLIC LICENSE');
         });
 
-        test('carry the project license, Node.js, ONNX Runtime, the SigLIP model and GloVe', () => {
+        test('carry the project NOTICE, Node.js, ONNX Runtime, the SigLIP model and GloVe', () => {
             const text = notices();
-            expect(text).toContain(read('LICENSE').trimEnd());
+            expect(text).toContain(read('NOTICE').trimEnd());
+            expect(text).toContain('The text of the Apache License 2.0 is in section 7.');
             expect(text).toContain(`LICENSE of Node.js v${NODE_LICENSE_VERSION}`);
             expect(text).toContain('Node.js is licensed for use as follows');
             expect(text).toContain('======== ONNX Runtime LICENSE ========');
@@ -912,7 +913,7 @@ describe('main failures and rendering', () => {
         );
         fs.writeFileSync(path.join(directory, 'licenses', 'notices.json'), JSON.stringify({}));
         fs.writeFileSync(path.join(directory, 'variables.gradle'), "ext {\n  v = '7.1'\n}\n");
-        fs.writeFileSync(path.join(directory, 'LICENSE'), 'ISC License\n\nCopyright (c) test\n\n');
+        fs.writeFileSync(path.join(directory, 'NOTICE'), 'Fake Project\nCopyright (c) test\n\n');
         const dependencies = onnxruntimeVersion
             ? `    dependencies:\n      onnxruntime-node:\n        version: ${onnxruntimeVersion}\n      plain:\n        version: 1.0.0\n`
             : '    dependencies:\n      plain:\n        version: 1.0.0\n';
@@ -939,7 +940,7 @@ describe('main failures and rendering', () => {
             lockPath: path.join(directory, 'pnpm-lock.yaml'),
             licensesDir: path.join(directory, 'licenses'),
             androidVariablesPath: path.join(directory, 'variables.gradle'),
-            licensePath: path.join(directory, 'LICENSE'),
+            noticePath: path.join(directory, 'NOTICE'),
             outPath: path.join(directory, 'out.txt'),
         };
     };
@@ -950,7 +951,9 @@ describe('main failures and rendering', () => {
         const text = fs.readFileSync(options.outPath, 'utf8');
         expect(text).toMatch(/\n$/);
         expect(text).not.toMatch(/\n\n$/);
-        expect(text).toContain('1. GuruShotsAutoVote\n--------------------\n\nISC License\n\nCopyright (c) test\n\n2.');
+        expect(text).toContain(
+            '1. GuruShotsAutoVote\n--------------------\n\nFake Project\nCopyright (c) test\n\nThe text of the Apache License 2.0 is in section 7.\n\n2.',
+        );
         expect(text).toContain('3. npm packages (4)');
         expect(text).toContain('plain 1.0.0\n  License: MIT\n  Copyright P\n  Source: https://example.test/1.0.0\n');
         expect(text).toContain('Versioned 7.1\n  License: Apache-2.0\n  C1\n  u1\n');
@@ -1030,7 +1033,7 @@ describe('main failures and rendering', () => {
     test('renderNotices fails on a package without a license entry', () => {
         expect(() =>
             renderNotices({
-                projectLicense: '',
+                projectNotice: '',
                 packages: [{ name: 'mystery', version: '1.0.0' }],
                 licenses: {},
                 android: [],
@@ -1048,7 +1051,7 @@ describe('main failures and rendering', () => {
             noticeText = 'Apache Thing\nCopyright 2012\n\nIncludes more.',
         ) =>
             renderNotices({
-                projectLicense: '',
+                projectNotice: '',
                 packages: [],
                 licenses: {},
                 android: [
@@ -1093,7 +1096,7 @@ describe('main failures and rendering', () => {
 
         test('matches by coordinate, so two coordinates whose names would collide each get their own notice', () => {
             const text = renderNotices({
-                projectLicense: '',
+                projectNotice: '',
                 packages: [],
                 licenses: {},
                 android: [

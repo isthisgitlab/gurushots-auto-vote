@@ -174,12 +174,12 @@ describe('rewriteImage', () => {
 describe('badgeSvg', () => {
     it('draws a two-part badge with an accessible name', () => {
         const svg = badgeSvg(BADGES.License);
-        expect(svg).toContain('role="img" aria-label="license: ISC"');
-        expect(svg).toContain('<title>license: ISC</title>');
+        expect(svg).toContain('role="img" aria-label="license: Apache-2.0"');
+        expect(svg).toContain('<title>license: Apache-2.0</title>');
         expect(svg).toContain('fill="#555"');
         expect(svg).toContain('fill="#007ec6"');
         expect(svg).toContain('>license</text>');
-        expect(svg).toContain('>ISC</text>');
+        expect(svg).toContain('>Apache-2.0</text>');
     });
 
     it('draws a single coloured block when there is no label, and escapes the text', () => {
@@ -310,7 +310,7 @@ describe('main (full render into a temp tree)', () => {
             'license.svg',
         ]);
         expect(fs.readFileSync(nodePath.join(out, 'badges', 'license.svg'), 'utf8')).toContain(
-            'aria-label="license: ISC"',
+            'aria-label="license: Apache-2.0"',
         );
         expect(fs.readFileSync(nodePath.join(out, 'images', 'src', 'assets', 'logo.png'), 'utf8')).toBe('PNG');
         const index = fs.readFileSync(nodePath.join(out, 'index.html'), 'utf8');
