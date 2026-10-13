@@ -26,7 +26,7 @@
  *
  *   staggeredFill.ts   maybeAutoFillChallenge (cycle-driven, schedule-based)
  *   emergencyFill.ts   maybeEmergencyFillChallenge + its shared stand-down check
- *   manualFill.ts      fillChallengeNow (GUI "Fill Now")
+ *   manualFill.ts      fillChallengeNow (GUI "Fill Now"), submitPickedPhotos (GUI "Pick…")
  *   fillNew.ts         submitNewEntryForAction (boost/turbo "fill new")
  *   pipeline.ts        the shared fill pipeline and the submit-free ranking
  *   candidates.ts      on-theme candidate fetch, ignore words, semantic scores
@@ -39,7 +39,7 @@
 
 import { maybeAutoFillChallenge } from './autoFill/staggeredFill';
 import { evaluateEmergencyFill, maybeEmergencyFillChallenge } from './autoFill/emergencyFill';
-import { fillChallengeNow } from './autoFill/manualFill';
+import { fillChallengeNow, submitPickedPhotos } from './autoFill/manualFill';
 import { submitNewEntryForAction } from './autoFill/fillNew';
 import { rankCandidatesForChallenge } from './autoFill/pipeline';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './autoFill/candidates';
@@ -53,6 +53,7 @@ export {
     maybeAutoFillChallenge,
     maybeEmergencyFillChallenge,
     fillChallengeNow,
+    submitPickedPhotos,
     submitNewEntryForAction,
     reflectNewEntry,
     reflectEntryFlag,

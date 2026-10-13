@@ -104,30 +104,28 @@ export function ChallengeCard({
         hasCustomSettings,
     };
 
-    if (isCompact) {
-        return (
-            <div id={cardId} className={cardClass} tabIndex={-1}>
-                <ChallengeCardCompact
-                    challenge={challenge}
-                    badgeRowProps={badgeRowProps}
-                    timeRemaining={timeRemaining}
-                    exposureFactor={view.exposureFactor}
-                    exposureClass={view.exposureClass}
-                    boostStatus={view.boostStatus}
-                    turboStatus={view.turboStatus}
-                    entries={view.entries}
-                    hasCompactOverride={hasCompactOverride}
-                    onToggleCompact={toggleCompact}
-                    boostBlocked={boostBlocked}
-                    deadlineActions={deadlineActions}
-                    scenarioStatus={scenarioStatus}
-                    actions={buildCompactActionRow({ actions, canFill: view.canFill, enabled: compactActions })}
-                />
-            </div>
-        );
-    }
-
-    return (
+    // The Pick… modal sits beside the card, in the same place whichever layout shows, so switching
+    // layouts (or a refresh that hides the submit buttons) never unmounts it.
+    const card = isCompact ? (
+        <div id={cardId} className={cardClass} tabIndex={-1}>
+            <ChallengeCardCompact
+                challenge={challenge}
+                badgeRowProps={badgeRowProps}
+                timeRemaining={timeRemaining}
+                exposureFactor={view.exposureFactor}
+                exposureClass={view.exposureClass}
+                boostStatus={view.boostStatus}
+                turboStatus={view.turboStatus}
+                entries={view.entries}
+                hasCompactOverride={hasCompactOverride}
+                onToggleCompact={toggleCompact}
+                boostBlocked={boostBlocked}
+                deadlineActions={deadlineActions}
+                scenarioStatus={scenarioStatus}
+                actions={buildCompactActionRow({ actions, canFill: view.canFill, enabled: compactActions })}
+            />
+        </div>
+    ) : (
         // col-span-full: a detailed card takes a whole row of the grid.
         <div id={cardId} className={`${cardClass} col-span-full`} tabIndex={-1}>
             <ChallengeCardDetail
@@ -148,5 +146,12 @@ export function ChallengeCard({
                 onCurrencySpent={onCurrencySpent}
             />
         </div>
+    );
+
+    return (
+        <>
+            {card}
+            {actions.pickModal}
+        </>
     );
 }

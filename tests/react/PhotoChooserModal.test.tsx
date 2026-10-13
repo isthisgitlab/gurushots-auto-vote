@@ -303,6 +303,50 @@ describe('selection', () => {
         });
     });
 
+    describe('PhotoGrid as a plain set (max, fullKey, numbered)', () => {
+        const photos = [photo(1), photo(2), photo(3)];
+        const grid = (props: Partial<Parameters<typeof PhotoGrid>[0]> = {}) =>
+            render(
+                <PhotoGrid
+                    state={{ status: 'ready', listing: listing(photos) }}
+                    known={new Map(photos.map((p) => [p.id, p]))}
+                    selected={[idOf(1), idOf(9)]}
+                    hideUnlisted={false}
+                    locked={false}
+                    onToggle={jest.fn()}
+                    onRetry={jest.fn()}
+                    {...props}
+                />,
+            );
+
+        test('unnumbered: no badge and no position in any selected tile, the missing one included', () => {
+            grid({ numbered: false });
+            expect(tile(1).querySelector('.badge')).toBeNull();
+            expect(tile(1).getAttribute('aria-label')).not.toMatch(/Number/);
+            const missing = screen.getByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) });
+            expect(missing.querySelector('.badge')).toBeNull();
+            expect(missing.getAttribute('aria-label')).not.toMatch(/Number/);
+        });
+
+        test('by default selected tiles are numbered', () => {
+            grid();
+            expect(tile(1).getAttribute('aria-label')).toMatch(/Number 1 in your list\.$/);
+        });
+
+        test('a smaller max stops offering tiles once reached, with the given full text', () => {
+            grid({ max: 2, fullKey: 'app.pickFull' });
+            expect(tile(2).getAttribute('aria-disabled')).toBe('true');
+            expect(tile(2).textContent).toContain('All open slots picked');
+            expect(tile(2).textContent).not.toContain('List full');
+        });
+
+        test('by default the cap is the Chosen Photos one and the text is "List full"', () => {
+            grid({ selected: Array.from({ length: MAX_CHOSEN_PHOTOS }, (_, i) => idOf(i + 10)) });
+            expect(tile(1).getAttribute('aria-disabled')).toBe('true');
+            expect(tile(1).textContent).toContain('List full');
+        });
+    });
+
     test('starts from the saved value', async () => {
         setup({ value: [idOf(1)] });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });

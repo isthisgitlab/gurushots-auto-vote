@@ -5,6 +5,7 @@ import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import * as autoFill from '../../services/autoFill';
+import { CHOSEN_PHOTO_ID_RE, MAX_CHOSEN_PHOTOS } from '../../settings/limits';
 import { sanitizeForLog, refuseInvalidArgs, fetchLiveChallenge } from './shared';
 
 import type { IpcReplyFn } from '../registerHandlers';
@@ -61,6 +62,49 @@ const handleFillChallengeNow = (async (event: unknown, challengeId: string | num
     }
 }) satisfies IpcReplyFn;
 
+/**
+ * Whether `imageIds` is a plausible pick: 1..MAX_CHOSEN_PHOTOS distinct ids of the
+ * shape a library photo has. Indexed so a sparse array's holes fail the id test
+ * (`every` would skip them).
+ */
+const isPickedIds = (imageIds: unknown): imageIds is string[] => {
+    if (!Array.isArray(imageIds) || imageIds.length < 1 || imageIds.length > MAX_CHOSEN_PHOTOS) return false;
+    for (let i = 0; i < imageIds.length; i++) {
+        const id: unknown = imageIds[i];
+        if (typeof id !== 'string' || !CHOSEN_PHOTO_ID_RE.test(id)) return false;
+    }
+    return new Set(imageIds).size === imageIds.length;
+};
+
+// Manual submit of exactly the photos the user picked on the challenge card. Unlike
+// fill-challenge-now nothing is ranked or filtered: the ids go to the challenge as
+// given, after a check that they still fit the open slots.
+const handleSubmitPickedPhotos = (async (event: unknown, challengeId: string | number, imageIds: string[]) => {
+    if (!isIdArg(challengeId) || !isPickedIds(imageIds)) return refuseInvalidArgs('autoFill', 'submit-picked-photos');
+    const safeChallengeId = sanitizeForLog(challengeId);
+    try {
+        logger
+            .withCategory('autoFill')
+            .info(`📝 Manual pick request: Challenge=${safeChallengeId}, Photos=${imageIds.length}`, null);
+        const guard = auth.requireAuthToken('manual pick');
+        if (!guard.ok) return guard.response;
+
+        const strategy = apiFactory.getApiStrategy();
+        const liveChallenge = await fetchLiveChallenge(strategy, guard.token, challengeId);
+        if (!liveChallenge) {
+            return { success: false as const, error: 'Challenge no longer active' };
+        }
+
+        return await autoFill.submitPickedPhotos(liveChallenge, guard.token, imageIds, {
+            logger,
+            submitToChallenge: strategy.submitToChallenge,
+        });
+    } catch (error) {
+        logger.withCategory('autoFill').error('Error handling submit-picked-photos request:', error);
+        return errorResult(error, 'Failed to submit photos');
+    }
+}) satisfies IpcReplyFn;
+
 const logBoostRequest = (message: string) => logger.withCategory(logger.CATEGORIES.VOTING).info(message, null);
 
 const handleApplyBoostToEntry = (async (event: unknown, challengeId: string | number, imageId: string) => {
@@ -92,4 +136,4 @@ const handleApplyBoostToEntry = (async (event: unknown, challengeId: string | nu
     }
 }) satisfies IpcReplyFn;
 
-export { handleFillChallengeNow, handleApplyBoostToEntry };
+export { handleFillChallengeNow, handleSubmitPickedPhotos, handleApplyBoostToEntry };

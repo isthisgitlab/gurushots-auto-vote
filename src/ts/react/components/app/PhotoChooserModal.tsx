@@ -38,19 +38,21 @@ const tileReason = ({
     locked,
     blockedReason,
     full,
+    fullKey,
     allowedKnown,
     t,
 }: {
     locked: boolean;
     blockedReason: string | null;
     full: boolean;
+    fullKey: string;
     allowedKnown: boolean;
     t: (key: string) => string;
 }): string | null => {
     // Nothing can be added yet, so the tile must not say it can be.
     if (locked) return t('app.photoChooserTileLocked');
     if (blockedReason !== null) return blockedReason;
-    if (full) return t('app.photoChooserListFull');
+    if (full) return t(fullKey);
     return allowedKnown ? t('app.photoChooserAllowed') : null;
 };
 
@@ -82,6 +84,7 @@ function PhotoTile({
     position,
     blockedReason,
     atCap,
+    fullKey,
     allowedKnown,
     locked,
     onToggle,
@@ -93,6 +96,8 @@ function PhotoTile({
     position: number | null;
     blockedReason: string | null;
     atCap: boolean;
+    /** The translation key of what a tile that cannot be added because the selection is full says. */
+    fullKey: string;
     allowedKnown: boolean;
     locked: boolean;
     onToggle: (id: string) => void;
@@ -106,7 +111,7 @@ function PhotoTile({
     // Tab still reaches it and a screen reader can read why it cannot be added.
     const unavailable = locked || (!selected && (blockedReason !== null || atCap));
     const full = !selected && atCap;
-    const reason = tileReason({ locked, blockedReason, full, allowedKnown, t });
+    const reason = tileReason({ locked, blockedReason, full, fullKey, allowedKnown, t });
     // Only the picture and its tags are dimmed: the reason line stays at full contrast, since it is
     // what says why the tile cannot be added.
     const dim = unavailable ? 'opacity-50' : '';
@@ -182,7 +187,7 @@ function MissingTile({
     onToggle,
 }: {
     id: string;
-    position: number;
+    position: number | null;
     count: number;
     hasChallenge: boolean;
     truncated: boolean;
@@ -212,6 +217,7 @@ function MissingTile({
 /**
  * The library listing with its states: loading, an error with Retry, the
  * missing-challenge explanation, and the tiles (selected ones pinned first).
+ * The defaults are the Chosen Photos list's: numbered, capped at MAX_CHOSEN_PHOTOS.
  */
 export function PhotoGrid({
     state,
@@ -221,6 +227,9 @@ export function PhotoGrid({
     locked,
     onToggle,
     onRetry,
+    max = MAX_CHOSEN_PHOTOS,
+    fullKey = 'app.photoChooserListFull',
+    numbered = true,
 }: {
     state: ListState;
     known: Map<string, LibraryPhoto>;
@@ -231,6 +240,12 @@ export function PhotoGrid({
     locked: boolean;
     onToggle: (id: string) => void;
     onRetry: () => void;
+    /** How many photos may be selected: the rest are offered no more. */
+    max?: number;
+    /** The translation key of what a tile says when the selection is full. */
+    fullKey?: string;
+    /** Selected tiles show their position (a list's order); off for a plain set. */
+    numbered?: boolean;
 }) {
     const { t } = useTranslation();
     if (state.status === 'loading') return <InlineLoader text={t('app.photoChooserLoading')} />;
@@ -256,10 +271,11 @@ export function PhotoGrid({
     }
     const { listing } = state;
     const chosen = new Set(selected);
-    const atCap = selected.length >= MAX_CHOSEN_PHOTOS;
+    const atCap = selected.length >= max;
     let position = 0;
     const blockedReasonOf = (photo: LibraryPhoto): string | null =>
         listing.allowedKnown && !photo.allowed ? photo.message || t('app.photoChooserNotEligible') : null;
+    const shown = (n: number): number | null => (numbered ? n : null);
     const tile = (photo: LibraryPhoto, position: number | null) => (
         <PhotoTile
             key={photo.id}
@@ -269,6 +285,7 @@ export function PhotoGrid({
             position={position}
             blockedReason={blockedReasonOf(photo)}
             atCap={atCap}
+            fullKey={fullKey}
             allowedKnown={listing.allowedKnown}
             locked={locked}
             onToggle={onToggle}
@@ -291,12 +308,12 @@ export function PhotoGrid({
                 {/* Numbered 1, 2, 3… as shown: a photo left out (another account's) leaves no gap. */}
                 {selected.map((id) => {
                     const photo = known.get(id);
-                    if (photo) return tile(photo, ++position);
+                    if (photo) return tile(photo, shown(++position));
                     return hideUnlisted ? null : (
                         <MissingTile
                             key={id}
                             id={id}
-                            position={++position}
+                            position={shown(++position)}
                             count={listing.photos.length}
                             hasChallenge={listing.allowedKnown}
                             truncated={listing.truncated}

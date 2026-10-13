@@ -44,6 +44,14 @@ export const errors = {
     challengeNoLongerActive:
         'This challenge is no longer open, so the action was not made. Refresh the list to see the current challenges.',
     boostFailed: 'The boost was not applied. GuruShots refused it or did not answer. Try again in a moment.',
+    pickNotEnoughSlots:
+        'The photos were not submitted. The challenge has fewer open slots than photos picked, because its entries changed. Close this window; the card shows the open slots.',
+    pickAlreadyEntered:
+        'The photos were not submitted. One of them is already entered in this challenge. The photo list is refreshing; pick again.',
+    pickRejected:
+        'The photos were not submitted. GuruShots refused them, so a photo may no longer be allowed in this challenge. Pick other photos and try again.',
+    pickUnclear:
+        'The photos may have been submitted. GuruShots did not answer clearly, and the card is refreshing. Check the card before you try again.',
     fetchChallengesFailed: 'The challenges could not be loaded. GuruShots did not answer. Try again in a moment.',
     accountChanged: 'The account changed while the list was loading, so the result was dropped. Open the list again.',
     accountCheckFailed: 'The account could not be checked. GuruShots did not answer. Try again in a moment.',
@@ -705,7 +713,7 @@ export const app = {
         "With Chosen Photos set, enter them in the order you picked them (the numbers in the chooser) instead of ranking them the way the app ranks its own picks. A photo that fails your must-include tags, is already entered or isn't offered for the challenge is skipped, and the next one in the list is used; any slots left over are filled by ranking as usual. Off by default.",
     chosenPhotosOnly: 'Submit Only Chosen Photos',
     chosenPhotosOnlyDesc:
-        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically, Emergency Submit ignores this setting (turn Emergency Submit off for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted. Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your must-include tags, they can still be entered. With an empty list this does nothing.',
+        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically (Pick… on a challenge card submits photos you choose, once), Emergency Submit ignores this setting (turn Emergency Submit off for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted. Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your must-include tags, they can still be entered. With an empty list this does nothing.',
     chosenPhotosMemberId: 'Chosen Photos Account',
     chosenPhotosClearedAt: 'Chosen Photos Cleared At',
     chosenPhotosClearedAtDesc:
@@ -785,6 +793,17 @@ export const app = {
         "Saving is blocked: without an active or open challenge the app can't check which account this list belongs to. Clear the list to save, or join a challenge first.",
     photoChooserSaveError: "The chosen photos weren't saved because the setting couldn't be written. Try again.",
     photoChooserUse: 'Use these photos',
+    fillPick: 'Pick…',
+    fillPickLabel: 'Choose which photos to submit now',
+    pickTitle: 'Choose photos to submit',
+    pickHelp:
+        'The photos you pick are submitted to this challenge right away, exactly as picked: your tag filters and Chosen Photos settings are not applied, and nothing is saved.',
+    pickCount: '{count} of {max} open slots picked',
+    pickOverCap: '{count} picked, but only {max} slots are open. Remove some to submit.',
+    pickFull: 'All open slots picked',
+    pickNoSlots: 'No open slots left: every slot already holds a photo. Close this window.',
+    pickSubmit: 'Submit',
+    pickSubmitCount: 'Submit {count}',
     discoverChosenChip: 'Chosen',
     discoverChosenChipHint: 'This challenge has chosen photos. Click to change them.',
     discoverChosenChipLabel: 'Chosen photos for {title}: change them',

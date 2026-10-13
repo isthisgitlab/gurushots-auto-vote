@@ -515,6 +515,12 @@ describe('id-taking action handlers — invalid args', () => {
             (h: Handlers, id: unknown) => h['fill-challenge-now']({}, invalid<string>(id), 'one'),
         ],
         [
+            'submit-picked-photos',
+            'submit-picked-photos',
+            'autoFill',
+            (h: Handlers, id: unknown) => h['submit-picked-photos']({}, invalid<string>(id), ['abc']),
+        ],
+        [
             'apply-boost-to-entry',
             'apply-boost-to-entry',
             'voting',
@@ -556,6 +562,7 @@ describe('id-taking action handlers — invalid args', () => {
                     expect(fn).not.toHaveBeenCalled();
                 }
                 expect(autoFill.fillChallengeNow).not.toHaveBeenCalled();
+                expect(autoFill.submitPickedPhotos).not.toHaveBeenCalled();
             },
         );
     });
@@ -674,6 +681,82 @@ describe('fill-challenge-now', () => {
         // an empty stub instead of the real module would break tag-rule
         // resolution and silently degrade.
         expect(depsArg.settings).toBe(settings);
+    });
+});
+
+describe('submit-picked-photos', () => {
+    const liveChallenge = { id: 123, title: 'C' };
+
+    test.each([
+        ['a non-array', 'abc'],
+        ['an empty list', []],
+        ['more than the chosen-photos cap', Array.from({ length: 21 }, (_, i) => `p${i}`)],
+        ['duplicates', ['a', 'a']],
+        ['a non-string element', ['a', 7]],
+        // eslint-disable-next-line no-sparse-arrays -- the hole is the case
+        ['a sparse array', ['a', , 'c']],
+        ['an id failing the id pattern', ['ok', 'not ok!']],
+    ])('refuses %s with the invalid-args code, before touching auth or the API', async (_label, imageIds) => {
+        stubAuthGuardOk();
+        stubStrategy();
+        const result = await buildHandlers()['submit-picked-photos']({}, '123', invalid<string[]>(imageIds));
+        expect(result).toEqual({ success: false, error: 'invalid-args' });
+        expect(logCategories('warning', 'Refused submit-picked-photos: invalid id argument', null)).toEqual([
+            'autoFill',
+        ]);
+        expect(auth.requireAuthToken).not.toHaveBeenCalled();
+        expect(apiFactory.getApiStrategy).not.toHaveBeenCalled();
+        expect(autoFill.submitPickedPhotos).not.toHaveBeenCalled();
+    });
+
+    test('rejects when auth guard fails', async () => {
+        stubAuthGuardFail();
+        const result = await buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+        expect(result).toEqual({ success: false, error: 'No authentication token found' });
+    });
+
+    test('rejects when the challenge is no longer active', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 999 }] }) });
+        const result = await buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+        expect(result).toEqual({ success: false, error: 'Challenge no longer active' });
+        expect(autoFill.submitPickedPhotos).not.toHaveBeenCalled();
+    });
+
+    test('submits the ids to the live challenge through the strategy and returns the service result', async () => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
+        });
+        autoFill.submitPickedPhotos = jest.fn().mockResolvedValue({ success: true, submitted: 2 });
+        const result = await buildHandlers()['submit-picked-photos']({}, '123', ['a', 'b']);
+        expect(result).toEqual({ success: true, submitted: 2 });
+        expect(autoFill.submitPickedPhotos).toHaveBeenCalledWith(liveChallenge, 'tok', ['a', 'b'], {
+            logger: expect.any(Object),
+            submitToChallenge: strategy.submitToChallenge,
+        });
+        expect(autoFill.submitPickedPhotos.mock.calls[0][3].logger.withCategory).toBe(logger.withCategory);
+    });
+
+    test('logs the challenge and the number of photos, never the ids', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }) });
+        autoFill.submitPickedPhotos = jest.fn().mockResolvedValue({ success: true, submitted: 1 });
+        await buildHandlers()['submit-picked-photos']({}, '123', ['secretphoto']);
+        const logged = logger.withCategory.mock.results.flatMap((result) =>
+            Object.values(result.value as Record<string, jest.Mock<unknown, unknown[]>>).flatMap(
+                (fn): unknown[][] => fn.mock.calls,
+            ),
+        );
+        expect(JSON.stringify(logged)).not.toContain('secretphoto');
+        expect(logCategories('info', '📝 Manual pick request: Challenge=123, Photos=1', null)).toEqual(['autoFill']);
+    });
+
+    test('answers a failure instead of throwing', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getActiveChallenges: jest.fn().mockRejectedValue(new Error('network down')) });
+        const result = await buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+        expect(result.success).toBe(false);
     });
 });
 

@@ -189,10 +189,63 @@ describe('compact ChallengeCard tile with compactActions', () => {
         renderWithActions();
         const texts = buttonTexts();
         expect(texts).toEqual(
-            expect.arrayContaining(['app.details', 'app.vote', 'app.run', '🎯 app.earnTurbo', '🖼 +1', 'app.settings']),
+            expect.arrayContaining([
+                'app.details',
+                'app.vote',
+                'app.run',
+                '🎯 app.earnTurbo',
+                '🖼 +1',
+                'app.fillPick',
+                'app.settings',
+            ]),
         );
         // One open slot → no "+N" button; no per-entry Boost / Turbo / swap.
-        expect(texts).toHaveLength(6);
+        expect(texts).toHaveLength(7);
+    });
+
+    test('"Pick…" is text only (the image prefix belongs to +1 / +N), named for what it does, and opens the picker', async () => {
+        const challenge = makeChallenge();
+        challenge.member!.ranking!.entries = challenge.member!.ranking!.entries!.slice(0, 1);
+        renderWithActions(challenge);
+        const pick = screen.getByText('app.fillPick');
+        expect(pick.textContent).toBe('app.fillPick');
+        expect(pick.hasAttribute('aria-label')).toBe(false);
+        expect(pick.getAttribute('title')).toBe('app.fillPickLabel');
+        fireEvent.click(pick);
+        expect(await screen.findByText('app.pickTitle')).toBeTruthy();
+        expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(202, undefined);
+    });
+
+    test('the picker stays open, with its listing, when the card switches layout', async () => {
+        const challenge = makeChallenge();
+        challenge.member!.ranking!.entries = challenge.member!.ranking!.entries!.slice(0, 1);
+        const props = {
+            challenge,
+            timeRemaining: '2h 30m',
+            timezone: 'local',
+            autovoteRunning: false,
+            compactActions: true,
+            onVoteComplete: jest.fn(),
+            onSettingsClick: jest.fn(),
+            onCurrencySpent: () => {},
+        };
+        const { rerender } = render(<ChallengeCard {...props} />);
+        fireEvent.click(screen.getByText('app.fillPick'));
+        await screen.findByText('app.pickTitle');
+        const dialog = screen.getByRole('dialog');
+        mockChallengeSettings.isCompact = false;
+        rerender(<ChallengeCard {...props} />);
+        expect(screen.getByRole('dialog')).toBe(dialog);
+        expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(1);
+    });
+
+    test('a fill in flight disables Pick… along with +1 / +N', () => {
+        Object.assign(mockFill, { loading: true });
+        const challenge = makeChallenge();
+        challenge.member!.ranking!.entries = challenge.member!.ranking!.entries!.slice(0, 1);
+        renderWithActions(challenge);
+        expect(screen.getByText('app.fillPick').hasAttribute('disabled')).toBe(true);
+        expect(screen.getAllByRole('button', { name: /\+/ }).every((b) => b.hasAttribute('disabled'))).toBe(true);
     });
 
     test('offers "+N" when several slots are open', () => {

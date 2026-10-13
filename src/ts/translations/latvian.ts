@@ -44,6 +44,14 @@ export const errors = {
     challengeNoLongerActive:
         'Šis izaicinājums vairs nav atvērts, tāpēc darbība netika veikta. Atsvaidzini sarakstu, lai redzētu pašreizējos izaicinājumus.',
     boostFailed: 'Boost netika piemērots. GuruShots to noraidīja vai neatbildēja. Mēģini vēlreiz pēc brīža.',
+    pickNotEnoughSlots:
+        'Foto netika iesniegti. Izaicinājumā ir mazāk brīvo vietu nekā izvēlēto foto, jo tā iesniegumi ir mainījušies. Aizver šo logu; kartīte rāda brīvās vietas.',
+    pickAlreadyEntered:
+        'Foto netika iesniegti. Viens no tiem jau ir iesniegts šajā izaicinājumā. Foto saraksts tiek atsvaidzināts; izvēlies vēlreiz.',
+    pickRejected:
+        'Foto netika iesniegti. GuruShots tos noraidīja, tāpēc kāds foto šim izaicinājumam, iespējams, vairs neder. Izvēlies citus foto un mēģini vēlreiz.',
+    pickUnclear:
+        'Foto, iespējams, tika iesniegti. GuruShots neatbildēja skaidri, un kartīte tiek atsvaidzināta. Pārbaudi kartīti, pirms mēģini vēlreiz.',
     fetchChallengesFailed: 'Izaicinājumus neizdevās ielādēt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
     accountChanged: 'Saraksta ielādes laikā mainījās konts, tāpēc rezultāts tika atmests. Atver sarakstu vēlreiz.',
     tokenNotSaved:
@@ -713,7 +721,7 @@ export const app = {
         'Kad ir uzstādīti izvēlētie foto, iesniedz tos tādā secībā, kādā tos izvēlējies (numuri izvēles logā), nevis kārto tā, kā lietotne kārto savas automātiskās izvēles. Foto, kas neiztur tavus obligātos tagus, jau ir iesniegts vai šim izaicinājumam nav pieejams, izlaiž un izmanto nākamo sarakstā; atlikušās vietas aizpilda pēc kārtojuma kā parasti. Pēc noklusējuma izslēgts.',
     chosenPhotosOnly: 'Iesniegt tikai izvēlētos foto',
     chosenPhotosOnlyDesc:
-        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski, ārkārtas iesniegšana šo uzstādījumu neņem vērā (izslēdz to izaicinājumam, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā. Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem obligātajiem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
+        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski (ar pogu „Izvēlēties…” izaicinājuma kartītē vienreiz iesniedz tevis izvēlētos foto), ārkārtas iesniegšana šo uzstādījumu neņem vērā (izslēdz to izaicinājumam, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā. Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem obligātajiem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
     chosenPhotosMemberId: 'Izvēlēto foto konts',
     chosenPhotosClearedAt: 'Izvēlēto foto notīrīšanas laiks',
     chosenPhotosClearedAtDesc:
@@ -794,6 +802,17 @@ export const app = {
         'Saglabāšana ir bloķēta: bez aktīva vai atvērta izaicinājuma lietotne nevar pārbaudīt, kuram kontam šis saraksts pieder. Notīri sarakstu, lai saglabātu, vai vispirms pievienojies izaicinājumam.',
     photoChooserSaveError: 'Izvēlētos foto neizdevās saglabāt, jo uzstādījumu nevarēja ierakstīt. Mēģini vēlreiz.',
     photoChooserUse: 'Izmantot šos foto',
+    fillPick: 'Izvēlēties…',
+    fillPickLabel: 'Izvēlēties, kurus foto iesniegt tagad',
+    pickTitle: 'Izvēlēties iesniedzamos foto',
+    pickHelp:
+        'Izvēlētie foto šim izaicinājumam tiek iesniegti uzreiz un tieši tādi, kādus izvēlējies: tavi tagu filtri un uzstādījums „Izvēlētie foto” netiek piemēroti, un nekas netiek saglabāts.',
+    pickCount: 'Izvēlēto foto: {count} no {max} brīvajām vietām',
+    pickOverCap: 'Izvēlēto foto: {count}, bet brīvu vietu ir tikai {max}. Noņem dažus, lai iesniegtu.',
+    pickFull: 'Visām brīvajām vietām foto izvēlēti',
+    pickNoSlots: 'Brīvu vietu vairs nav: katrā vietā jau ir foto. Aizver šo logu.',
+    pickSubmit: 'Iesniegt',
+    pickSubmitCount: 'Iesniegt {count} foto',
     discoverChosenChip: 'Izvēlētie foto',
     discoverChosenChipHint: 'Šim izaicinājumam ir izvēlēti foto. Spied, lai tos mainītu.',
     discoverChosenChipLabel: 'Izvēlētie foto izaicinājumam „{title}”: mainīt',

@@ -41,6 +41,7 @@ const {
     maybeEmergencyFillChallenge,
     evaluateEmergencyFill,
     fillChallengeNow,
+    submitPickedPhotos,
     submitNewEntryForAction,
     reflectNewEntry,
     getSlotsRemaining,
@@ -1732,6 +1733,107 @@ describe('fillChallengeNow — manual fill', () => {
             submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
         });
         expect(debug).toHaveBeenCalledWith(expect.stringMatching(/settings module not provided/), null);
+    });
+});
+
+describe('submitPickedPhotos — the photos the user picked', () => {
+    const picked = (submitToChallenge: jest.MockedFunction<SubmitToChallenge>, logger = makeLogger()) => ({
+        logger,
+        submitToChallenge,
+    });
+    const submit = () => jest.fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>();
+    const logged = (logger: MockFillLogger, method: 'info' | 'success' | 'warning') =>
+        logger.withCategory.mock.results.flatMap((r) =>
+            (r.value as jest.MockedObject<CategoryLogger>)[method].mock.calls.map(([message]) => message),
+        );
+
+    test('sends exactly the picked ids in one request and reports the count', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 86400 });
+        const submitToChallenge = submit().mockResolvedValue({ ok: true, raw: { success: true } });
+        const logger = makeLogger();
+        const result = await submitPickedPhotos(challenge, 'tok', ['p2', 'p1'], picked(submitToChallenge, logger));
+        expect(result).toEqual({ success: true, submitted: 2 });
+        expect(submitToChallenge).toHaveBeenCalledTimes(1);
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p2', 'p1'], 'tok');
+        expect(logged(logger, 'success')).toEqual([
+            'manualFill: submitted 2 picked entries for [Challenge c1: Pink In Nature]',
+        ]);
+    });
+
+    test('refuses a pick larger than the open slots, sending nothing', async () => {
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 86400 });
+        const submitToChallenge = submit();
+        const result = await submitPickedPhotos(challenge, 'tok', ['p1', 'p2'], picked(submitToChallenge));
+        expect(result).toEqual({ success: false, submitted: 0, error: 'not-enough-slots' });
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('refuses a photo that is already entered, whether the entry id is a number or a string', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 12345 }], closeIn: 86400 });
+        const submitToChallenge = submit();
+        const result = await submitPickedPhotos(challenge, 'tok', ['p1', '12345'], picked(submitToChallenge));
+        expect(result).toEqual({ success: false, submitted: 0, error: 'already-entered' });
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a refusal with a body is submit-rejected: the reason is logged, never returned', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, closeIn: 86400 });
+        const submitToChallenge = submit().mockResolvedValue({
+            ok: false,
+            raw: invalid({ message: 'Photo not allowed' }),
+        });
+        const logger = makeLogger();
+        const result = await submitPickedPhotos(challenge, 'tok', ['p1'], picked(submitToChallenge, logger));
+        expect(result).toEqual({ success: false, submitted: 0, error: 'submit-rejected' });
+        expect(logged(logger, 'warning')).toEqual([
+            'manualFill: submit rejected for [Challenge c1: Pink In Nature]: Photo not allowed',
+        ]);
+    });
+
+    test('no body at all is submit-unclear: the request may have landed', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, closeIn: 86400 });
+        const submitToChallenge = submit().mockResolvedValue({ ok: false, raw: null });
+        const logger = makeLogger();
+        const result = await submitPickedPhotos(challenge, 'tok', ['p1'], picked(submitToChallenge, logger));
+        expect(result).toEqual({ success: false, submitted: 0, error: 'submit-unclear' });
+        expect(logged(logger, 'warning')).toEqual([
+            'manualFill: submit got no answer for [Challenge c1: Pink In Nature]',
+        ]);
+    });
+
+    test('a throw is submit-unclear too', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, closeIn: 86400 });
+        const submitToChallenge = submit().mockRejectedValue(new Error('socket hang up'));
+        const logger = makeLogger();
+        const result = await submitPickedPhotos(challenge, 'tok', ['p1'], picked(submitToChallenge, logger));
+        expect(result).toEqual({ success: false, submitted: 0, error: 'submit-unclear' });
+        expect(logged(logger, 'warning')).toEqual([
+            'manualFill: submit threw for [Challenge c1: Pink In Nature]: socket hang up',
+        ]);
+    });
+
+    test('a throw with no message is still logged', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, closeIn: 86400 });
+        const submitToChallenge = submit().mockRejectedValue('boom');
+        const logger = makeLogger();
+        await submitPickedPhotos(challenge, 'tok', ['p1'], picked(submitToChallenge, logger));
+        expect(logged(logger, 'warning')).toEqual([
+            'manualFill: submit threw for [Challenge c1: Pink In Nature]: boom',
+        ]);
+    });
+
+    test('never logs the picked ids', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 86400 });
+        const logger = makeLogger();
+        await submitPickedPhotos(
+            challenge,
+            'tok',
+            ['secretid'],
+            picked(submit().mockResolvedValue({ ok: true, raw: {} }), logger),
+        );
+        await submitPickedPhotos(challenge, 'tok', ['e1'], picked(submit(), logger));
+        expect(JSON.stringify(logged(logger, 'info'))).not.toContain('secretid');
+        expect(JSON.stringify(logged(logger, 'success'))).not.toContain('secretid');
     });
 });
 

@@ -77,6 +77,10 @@ Object.assign(mockApi, {
 
     // Auto-fill
     fillChallengeNow: jest.fn().mockResolvedValue({ success: true, submitted: 0, skipped: 0 }),
+    submitPickedPhotos: jest.fn().mockResolvedValue({ success: true, submitted: 1 }),
+    getLibraryPhotos: jest
+        .fn()
+        .mockResolvedValue({ success: true, photos: [], memberId: 'm', truncated: false, allowedKnown: true }),
 
     // Per-challenge overrides
     getChallengeOverride: jest.fn().mockResolvedValue(null),

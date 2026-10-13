@@ -5,6 +5,8 @@
 
 import { resetPassState as resetPhotoStatsPassState } from '../photoStats';
 import { getSlotsRemaining } from './challengeState';
+import { enteredIds } from './chosenPhotos';
+import { describeSubmitFailure } from './fillLogging';
 import { runFillAttempt } from './pipeline';
 
 import type { Challenge } from '../../types/gurushots';
@@ -137,4 +139,64 @@ const fillChallengeNow = async (
     };
 };
 
-export { fillChallengeNow };
+/** What submitPickedPhotos answers: how many photos went in, or why none were sent or none are known to have gone in. */
+type SubmitPickedResult =
+    | { success: true; submitted: number }
+    | {
+          success: false;
+          submitted: 0;
+          /** `submit-unclear`: the request may have landed (no answer, or it threw). */
+          error: 'not-enough-slots' | 'already-entered' | 'submit-rejected' | 'submit-unclear';
+      };
+
+/**
+ * Manual submit of photos the user picked (GUI "Pick…"). Sends exactly those
+ * ids in one request: no ranking, no tag rules, no Chosen Photos settings, and
+ * none of the Chosen Photos refusal memory is touched. It refuses a pick that
+ * no longer fits (fewer open slots than photos) or that holds a photo already
+ * entered, without sending anything.
+ *
+ * Logs name the count and the challenge, never the photo ids.
+ */
+const submitPickedPhotos = async (
+    challenge: Challenge,
+    token: string,
+    imageIds: string[],
+    deps: Pick<FillDeps, 'logger' | 'submitToChallenge'>,
+): Promise<SubmitPickedResult> => {
+    const { logger, submitToChallenge } = deps;
+    const log = logger.withCategory('autoFill');
+    const tag = logger.challengeTag(challenge);
+
+    const slotsRemaining = getSlotsRemaining(challenge);
+    if (slotsRemaining < imageIds.length) {
+        log.info(`manualFill: ${imageIds.length} picked photos but only ${slotsRemaining} open slots for ${tag}`, null);
+        return { success: false, submitted: 0, error: 'not-enough-slots' };
+    }
+    const entered = enteredIds(challenge);
+    if (imageIds.some((id) => entered.has(id))) {
+        log.info(`manualFill: a picked photo is already entered in ${tag}`, null);
+        return { success: false, submitted: 0, error: 'already-entered' };
+    }
+
+    try {
+        const result = await submitToChallenge(challenge.id, imageIds, token);
+        if (result && result.ok) {
+            log.success(`manualFill: submitted ${imageIds.length} picked entries for ${tag}`, null);
+            return { success: true, submitted: imageIds.length };
+        }
+        if (result?.raw) {
+            const reason = describeSubmitFailure(result.raw);
+            log.warning(`manualFill: submit rejected for ${tag}: ${reason}`, null);
+            return { success: false, submitted: 0, error: 'submit-rejected' };
+        }
+        // No body at all is "no answer", not a refusal: the request may have landed.
+        log.warning(`manualFill: submit got no answer for ${tag}`, null);
+        return { success: false, submitted: 0, error: 'submit-unclear' };
+    } catch (error) {
+        log.warning(`manualFill: submit threw for ${tag}: ${errorMessage(error) || error}`, null);
+        return { success: false, submitted: 0, error: 'submit-unclear' };
+    }
+};
+
+export { fillChallengeNow, submitPickedPhotos };

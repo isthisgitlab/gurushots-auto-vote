@@ -17,6 +17,8 @@ import type { Challenge, MemberTurbo, RankingTotal } from '../../src/ts/types/gu
 import type { WindowApi } from '../../src/ts/types/ipc';
 import { invalid } from '../helpers/invalid';
 import { parseJson, parseJsonObject } from '../helpers/parseJson';
+import { mockTranslator } from './helpers/setup';
+import { app, errors } from '../../src/ts/translations/english';
 
 jest.mock('@/components/app/EntryBadge', () => ({
     EntryBadge: ({
@@ -474,6 +476,185 @@ describe('fill', () => {
         renderCard(makeChallenge({ max_photo_submits: undefined, member: { ranking: { entries: undefined } } }));
         expect(screen.queryByText('+1')).toBeNull();
         expect(screen.getByText('0/')).toBeTruthy();
+    });
+});
+
+describe('pick', () => {
+    type Listing = Extract<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>, { success: true }>;
+    const idOf = (n: number) => `${String(n).padStart(8, '0')}${'a'.repeat(24)}`;
+    const listing = (): Listing => ({
+        success: true,
+        photos: [1, 2, 3].map((n) => ({
+            id: idOf(n),
+            labels: [`tag${n}`],
+            allowed: true,
+            message: null,
+            uploadDate: 1,
+        })),
+        memberId: 'c'.repeat(32),
+        truncated: false,
+        allowedKnown: true,
+    });
+    const english = (key: string) =>
+        key.startsWith('app.')
+            ? ((app as Record<string, string>)[key.slice(4)] ?? key)
+            : key.startsWith('errors.')
+              ? ((errors as Record<string, string>)[key.slice(7)] ?? key)
+              : key;
+    const tile = (n: number) =>
+        screen.getByRole('button', { name: new RegExp(`^Photo ${String(n).padStart(8, '0')}:`) });
+    const pickButton = () => screen.getByRole('button', { name: app.fillPick });
+    const openAndPick = async (n = 1) => {
+        fireEvent.click(pickButton());
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.click(tile(n));
+    };
+    const submit = () => fireEvent.click(screen.getByRole('button', { name: /^Submit/ }));
+    const slotsOpen = (open: number) =>
+        makeChallenge({
+            max_photo_submits: 3,
+            member: { ranking: { entries: Array.from({ length: 3 - open }, (_, i) => ({ id: i + 1 })) } },
+        });
+
+    beforeEach(() => {
+        mockTranslator.t.mockImplementation(english);
+        window.api.getLibraryPhotos = jest.fn().mockResolvedValue(listing());
+        window.api.submitPickedPhotos = jest.fn().mockResolvedValue({ success: true, submitted: 1 });
+    });
+    afterEach(() => {
+        mockTranslator.t.mockImplementation((key) => key);
+    });
+
+    test('Pick… sits beside +1 / +N, named for what it does, and the row wraps', () => {
+        const { container } = renderCard(makeChallenge());
+        const pick = pickButton();
+        expect(pick.textContent).toBe('Pick…');
+        expect(pick.getAttribute('title')).toBe('Choose which photos to submit now');
+        expect(pick.parentElement).toBe(screen.getByText('+1').parentElement);
+        expect(pick.parentElement!.className).toContain('flex-wrap');
+        expect(container.querySelector('[role="dialog"]')).toBeNull();
+    });
+
+    test('picking and submitting sends the ids, closes the picker and refreshes the card', async () => {
+        const { onVoteComplete } = renderCard(makeChallenge());
+        await openAndPick(2);
+        submit();
+        await waitFor(() => expect(window.api.submitPickedPhotos).toHaveBeenCalledWith(101, [idOf(2)]));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(onVoteComplete).toHaveBeenCalledTimes(1);
+        expect(window.api.fillChallengeNow).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['not-enough-slots', 'pickNotEnoughSlots'],
+        ['already-entered', 'pickAlreadyEntered'],
+        ['submit-rejected', 'pickRejected'],
+        ['submit-unclear', 'pickUnclear'],
+        ['Challenge no longer active', 'challengeNoLongerActive'],
+        ['something unexpected', 'actionFailed'],
+    ])(
+        '%s: the picker stays open on the translated text, the card refreshes and the listing is read again',
+        async (code, key) => {
+            window.api.submitPickedPhotos = jest.fn().mockResolvedValue({ success: false, submitted: 0, error: code });
+            const { onVoteComplete } = renderCard(makeChallenge());
+            await openAndPick();
+            submit();
+            await waitFor(() =>
+                expect(screen.getByRole('alert').textContent).toBe((errors as Record<string, string>)[key]),
+            );
+            expect(screen.getByRole('dialog')).toBeTruthy();
+            expect(onVoteComplete).toHaveBeenCalledTimes(1);
+            await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(2));
+        },
+    );
+
+    test.each(['invalid-args', 'not-logged-in'])('%s: nothing was sent, so nothing is refreshed', async (code) => {
+        window.api.submitPickedPhotos = jest.fn().mockResolvedValue({ success: false, error: code });
+        const { onVoteComplete } = renderCard(makeChallenge());
+        await openAndPick();
+        submit();
+        await screen.findByRole('alert');
+        expect(onVoteComplete).not.toHaveBeenCalled();
+        expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(1);
+    });
+
+    test('an empty answer is treated as a failure after the send: generic text and a refresh', async () => {
+        window.api.submitPickedPhotos = jest.fn().mockResolvedValue(undefined);
+        const { onVoteComplete } = renderCard(makeChallenge());
+        await openAndPick();
+        submit();
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(errors.actionFailed));
+        expect(onVoteComplete).toHaveBeenCalledTimes(1);
+    });
+
+    test('closing clears a failure: the next opening starts without it', async () => {
+        window.api.submitPickedPhotos = jest.fn().mockResolvedValue({ success: false, error: 'submit-rejected' });
+        renderCard(makeChallenge());
+        await openAndPick();
+        submit();
+        await screen.findByRole('alert');
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(screen.queryByRole('dialog')).toBeNull();
+        fireEvent.click(pickButton());
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    test('while a submit is in flight every submit button is held and the picker cannot be closed', async () => {
+        const d = deferred<Awaited<ReturnType<WindowApi['submitPickedPhotos']>>>();
+        window.api.submitPickedPhotos = jest.fn(() => d.promise);
+        renderCard(makeChallenge());
+        await openAndPick();
+        submit();
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: /Submit/ }).getAttribute('aria-busy')).toBe('true'),
+        );
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.getByRole('dialog')).toBeTruthy();
+        // The card's own buttons sit behind the dialog, held as well.
+        for (const name of ['+1', '+3']) {
+            expect(screen.getByText(name, { selector: 'button' }).hasAttribute('disabled')).toBe(true);
+        }
+        expect(pickButton().hasAttribute('disabled')).toBe(true);
+        await act(async () => d.resolve(invalid({ success: true })));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    });
+
+    test('a fill in flight holds Pick…, and a held +1 is not what spins', async () => {
+        const d = deferred<Awaited<ReturnType<WindowApi['fillChallengeNow']>>>();
+        window.api.fillChallengeNow = jest.fn(() => d.promise);
+        renderCard(makeChallenge());
+        fireEvent.click(screen.getByText('+1'));
+        await waitFor(() => expect(pickButton().hasAttribute('disabled')).toBe(true));
+        await act(async () => d.resolve(invalid({ success: true })));
+        await waitFor(() => expect(pickButton().hasAttribute('disabled')).toBe(false));
+    });
+
+    test('a refresh that leaves no open slot keeps the picker, says so, and still delivers an answer in flight', async () => {
+        const d = deferred<Awaited<ReturnType<WindowApi['submitPickedPhotos']>>>();
+        window.api.submitPickedPhotos = jest.fn(() => d.promise);
+        const { rerender, onVoteComplete } = renderCard(slotsOpen(1));
+        await openAndPick();
+        submit();
+        await waitFor(() => expect(window.api.submitPickedPhotos).toHaveBeenCalled());
+        // The card is refreshed with the slot taken: the submit buttons' gate closes.
+        rerender(
+            <ChallengeCard
+                challenge={slotsOpen(0)}
+                timeRemaining="2h"
+                timezone="local"
+                autovoteRunning={false}
+                onVoteComplete={onVoteComplete}
+                onSettingsClick={jest.fn()}
+                onCurrencySpent={jest.fn()}
+            />,
+        );
+        expect(screen.queryByText('+1')).toBeNull();
+        expect(screen.getByRole('dialog')).toBeTruthy();
+        expect(screen.getByText(/^No open slots left/)).toBeTruthy();
+        await act(async () => d.resolve(invalid({ success: true })));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(onVoteComplete).toHaveBeenCalledTimes(1);
     });
 });
 

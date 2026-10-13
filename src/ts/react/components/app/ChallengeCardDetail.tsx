@@ -193,7 +193,7 @@ function StatusCells({
                     {view.entries.length}/{challenge.max_photo_submits}
                 </div>
                 {view.canFill && (
-                    <div className="flex gap-1 mt-1 justify-center">
+                    <div className="flex flex-wrap gap-1 mt-1 justify-center">
                         <FillButtons {...actions.fillButtonProps} />
                     </div>
                 )}
