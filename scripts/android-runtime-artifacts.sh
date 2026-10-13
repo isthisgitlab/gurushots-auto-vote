@@ -38,6 +38,10 @@ if [ "${1:-}" = "--check-versions" ]; then
         echo "usage: $0 --check-versions <artifacts-file> <versions-file>" >&2
         exit 2
     fi
+    if [ ! -r "$2" ] || [ ! -r "$3" ]; then
+        echo "usage: $0 --check-versions <artifacts-file> <versions-file> (both files must be readable)" >&2
+        exit 2
+    fi
     check_versions "$2" "$3"
     exit
 fi

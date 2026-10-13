@@ -586,7 +586,47 @@ describe('the Android component list', () => {
 
         test('compares the sorted lists bytewise, under the same collation they were sorted with', () => {
             const text = read('scripts', 'android-runtime-artifacts.sh');
-            expect(text).toContain('unversioned=$(LC_ALL=C comm -3 ');
+            expect(text).toContain(
+                `unversioned=$(LC_ALL=C comm -3 <(cut -d: -f1,2 "$2" | LC_ALL=C sort) <(LC_ALL=C sort "$1") | tr -d '\\t')`,
+            );
+        });
+
+        test('refuses the wrong number of arguments with a usage message and exit 2', () => {
+            try {
+                execFileSync('bash', [script, '--check-versions', 'only-one'], { stdio: 'pipe' });
+                throw new Error('expected the script to fail');
+            } catch (error) {
+                const failure = invalid<{ status: number; stderr: Buffer }>(error);
+                expect(failure.status).toBe(2);
+                expect(failure.stderr.toString()).toContain(
+                    'usage: ' + script + ' --check-versions <artifacts-file> <versions-file>',
+                );
+            }
+        });
+
+        test.each([
+            ['artifacts', 'missing-artifacts.txt', 'versions.txt'],
+            ['versions', 'artifacts.txt', 'missing-versions.txt'],
+        ])('refuses an unreadable %s file with a usage message and exit 2', (_name, artifactsName, versionsName) => {
+            fs.writeFileSync(path.join(directory, 'artifacts.txt'), 'g:a\n');
+            fs.writeFileSync(path.join(directory, 'versions.txt'), 'g:a:1\n');
+            try {
+                execFileSync(
+                    'bash',
+                    [
+                        script,
+                        '--check-versions',
+                        path.join(directory, artifactsName),
+                        path.join(directory, versionsName),
+                    ],
+                    { stdio: 'pipe' },
+                );
+                throw new Error('expected the script to fail');
+            } catch (error) {
+                const failure = invalid<{ status: number; stderr: Buffer }>(error);
+                expect(failure.status).toBe(2);
+                expect(failure.stderr.toString()).toContain('both files must be readable');
+            }
         });
 
         test('the generating flow calls the same check and writes nothing when it fails', () => {
