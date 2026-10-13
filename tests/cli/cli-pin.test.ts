@@ -128,8 +128,8 @@ describe('pin', () => {
         expect(handlers['set-entry-pin']).not.toHaveBeenCalled();
         expect(apiFactory.__getActiveChallenges).not.toHaveBeenCalled();
         expect(msgsAt('error')).toEqual([
-            `--challenge takes a challenge id of at most 64 characters. ${PIN_USAGE}`,
-            `--challenge takes a challenge id of at most 64 characters. ${PIN_USAGE}`,
+            `--challenge takes a non-blank challenge id of at most 64 characters. ${PIN_USAGE}`,
+            `--challenge takes a non-blank challenge id of at most 64 characters. ${PIN_USAGE}`,
         ]);
     });
 

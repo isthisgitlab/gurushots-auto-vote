@@ -59,18 +59,20 @@ const makeChallenge = (
         ...overrides,
     });
 
-const renderCard = (challenge: Challenge) =>
-    render(
-        <ChallengeCard
-            challenge={challenge}
-            timeRemaining="2h"
-            timezone="local"
-            autovoteRunning={false}
-            onVoteComplete={jest.fn()}
-            onSettingsClick={jest.fn()}
-            onCurrencySpent={jest.fn()}
-        />,
-    );
+const cardElement = (challenge: Challenge, settingsVersion = 0) => (
+    <ChallengeCard
+        challenge={challenge}
+        timeRemaining="2h"
+        timezone="local"
+        autovoteRunning={false}
+        settingsVersion={settingsVersion}
+        onVoteComplete={jest.fn()}
+        onSettingsClick={jest.fn()}
+        onCurrencySpent={jest.fn()}
+    />
+);
+
+const renderCard = (challenge: Challenge) => render(cardElement(challenge));
 
 const pinButtons = (kind: 'Boost' | 'Turbo') =>
     screen.queryAllByRole('button', { name: new RegExp(`app\\.pinFor${kind}`) });
@@ -285,9 +287,85 @@ describe('a stored pin that no longer applies', () => {
         expect(clear.isConnected).toBe(true);
         expect(document.activeElement).toBe(clear);
 
+        // Focus returning to the very button the clear was started from keeps the clear on record.
+        clear.blur();
+        clear.focus();
         fireEvent.click(clear);
         await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
         await waitFor(() => expect(document.activeElement).toBe(details));
+    });
+
+    test('the entry details are a named group, labelled by the "Entry details" heading', async () => {
+        renderCard(makeChallenge());
+        const group = await screen.findByRole('group', { name: 'app.entryDetails:' });
+        const label = screen.getByText('app.entryDetails:');
+        expect(group).toBe(label.parentElement);
+        expect(group.getAttribute('aria-labelledby')).toBe(label.id);
+        expect(label.id).not.toBe('');
+    });
+
+    // The clear's own read still returns the pin, so the note outlives the write; a later read (a settings-changed
+    // broadcast bumps settingsVersion) is what removes it.
+    const clearThenUnmountOnLaterRead = async () => {
+        window.api.getEntryPins = jest
+            .fn()
+            .mockResolvedValueOnce({ boost: 'gone', turbo: null })
+            .mockResolvedValueOnce({ boost: 'gone', turbo: null })
+            .mockResolvedValue({ boost: null, turbo: null });
+        const challenge = makeChallenge();
+        const view = renderCard(challenge);
+        const clear = await screen.findByRole('button', { name: 'app.pinClear' });
+        clear.focus();
+        fireEvent.click(clear);
+        await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(clear.getAttribute('aria-busy')).toBe('false'));
+        expect(clear.isConnected).toBe(true);
+        expect(document.activeElement).toBe(clear);
+        const details = screen.getByRole('group', { name: 'app.entryDetails:' });
+        const unmountNote = () => view.rerender(cardElement(challenge, 1));
+        return { details, unmountNote };
+    };
+
+    test('a note that unmounts on a read after the clear resolved still hands focus to the entry details', async () => {
+        const { details, unmountNote } = await clearThenUnmountOnLaterRead();
+        unmountNote();
+        await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
+        await waitFor(() => expect(document.activeElement).toBe(details));
+    });
+
+    test('focus the user moved elsewhere before the note unmounts is not stolen', async () => {
+        const { details, unmountNote } = await clearThenUnmountOnLaterRead();
+        const elsewhere = pinButtons('Turbo')[0];
+        elsewhere.focus();
+        expect(document.activeElement).toBe(elsewhere);
+        unmountNote();
+        await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
+        expect(document.activeElement).toBe(elsewhere);
+        expect(document.activeElement).not.toBe(details);
+    });
+
+    test('after a failed clear, focus that moved on is not pulled back when the note unmounts later', async () => {
+        window.api.getEntryPins = jest
+            .fn()
+            .mockResolvedValueOnce({ boost: 'gone', turbo: null })
+            .mockResolvedValue({ boost: null, turbo: null });
+        window.api.setEntryPin = jest.fn().mockResolvedValue({ success: false, error: 'pin-write-failed' });
+        const challenge = makeChallenge();
+        const view = renderCard(challenge);
+        const clear = await screen.findByRole('button', { name: 'app.pinClear' });
+        clear.focus();
+        fireEvent.click(clear);
+        await screen.findByText('errors.pinFailed');
+        expect(clear.isConnected).toBe(true);
+
+        const elsewhere = pinButtons('Turbo')[0];
+        elsewhere.focus();
+        elsewhere.blur();
+        expect(document.activeElement).toBe(document.body);
+
+        view.rerender(cardElement(challenge, 1));
+        await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
+        expect(document.activeElement).toBe(document.body);
     });
 
     test('a photo that carries the other feature gets the conflict note', async () => {

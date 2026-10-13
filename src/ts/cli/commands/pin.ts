@@ -97,7 +97,9 @@ const pinCmd = async (
     if (!isIdArg(challengeId)) {
         logger
             .withCategory('settings')
-            .error(`--challenge takes a challenge id of at most ${MAX_IPC_ID_LENGTH} characters. ${PIN_USAGE}`);
+            .error(
+                `--challenge takes a non-blank challenge id of at most ${MAX_IPC_ID_LENGTH} characters. ${PIN_USAGE}`,
+            );
         return false;
     }
     const kinds = (['boost', 'turbo'] as const).filter((kind) => pins[kind] !== undefined);

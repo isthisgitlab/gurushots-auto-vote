@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getLevelStatus, isBoostAvailable, statusText } from '@/utils/formatters';
 import { getNextLevelInfo } from '@/utils/challengeCardView';
@@ -277,17 +277,39 @@ function EntryDetails({
     const { pins, togglePin, setPin, loading: pinBusy, error: pinError, clearError: clearPinError } = entryPins;
     const canPin = { boost: canStillFire(challenge, 'boost'), turbo: canStillFire(challenge, 'turbo') };
     const detailsRef = useRef<HTMLDivElement>(null);
+    const labelId = useId();
+    const clearedButtonRef = useRef<HTMLButtonElement | null>(null);
 
     // A cleared pin's note unmounts with the focused button inside it: focus would drop to <body>, so it moves to
-    // the section instead. A failed clear leaves the note, and focus, where they are.
+    // the section instead. The note can unmount well after the write resolves (a settings-changed read supersedes
+    // the write's own), hence the check runs after every render rather than after the write. Focus the user moved
+    // elsewhere is never stolen: any focus landing off the recorded button forgets it, so a failed clear (the
+    // note, and focus, stay where they are) followed by the user moving on never acts later.
+    useEffect(() => {
+        const forgetOnRefocus = (event: FocusEvent) => {
+            if (event.target !== clearedButtonRef.current) clearedButtonRef.current = null;
+        };
+        document.addEventListener('focusin', forgetOnRefocus);
+        return () => document.removeEventListener('focusin', forgetOnRefocus);
+    }, []);
+
+    useLayoutEffect(() => {
+        const button = clearedButtonRef.current;
+        if (!button || button.isConnected) return;
+        clearedButtonRef.current = null;
+        detailsRef.current?.focus();
+    });
+
     const clearPin = async (kind: EntryPinKind, button: HTMLButtonElement) => {
+        clearedButtonRef.current = button;
         await setPin(kind, null);
-        if (!button.isConnected) detailsRef.current?.focus();
     };
 
     return (
-        <div ref={detailsRef} tabIndex={-1}>
-            <div className="text-xs text-base-content/60 mb-1">{t('app.entryDetails')}:</div>
+        <div ref={detailsRef} tabIndex={-1} role="group" aria-labelledby={labelId}>
+            <div id={labelId} className="text-xs text-base-content/60 mb-1">
+                {t('app.entryDetails')}:
+            </div>
             <div className="flex flex-col items-start gap-1">
                 {view.entries.map((entry) => (
                     <EntryBadge
