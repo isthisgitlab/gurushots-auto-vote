@@ -20,7 +20,11 @@ jest.mock('@/hooks/useChallengeSettings', () => ({ useChallengeSettings: () => m
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
-const makeChallenge = (member: Record<string, unknown> = {}, entries: Array<Record<string, unknown>> = []) =>
+const makeChallenge = (
+    member: Record<string, unknown> = {},
+    entries: Array<Record<string, unknown>> = [],
+    overrides: Record<string, unknown> = {},
+) =>
     buildChallenge({
         id: 101,
         title: 'Sunset',
@@ -50,6 +54,7 @@ const makeChallenge = (member: Record<string, unknown> = {}, entries: Array<Reco
             },
             ...member,
         },
+        ...overrides,
     });
 
 const renderCard = (challenge: Challenge) =>
@@ -120,7 +125,72 @@ describe('pin toggles by boost / turbo state', () => {
     });
 });
 
+describe('pin toggles for a feature that can never fire on the challenge', () => {
+    test.each([
+        ['a flash challenge', { type: 'flash' }, 0, 0],
+        ['a single-photo challenge', { max_photo_submits: 1 }, 0, 2],
+        ['an exhibition challenge', { type: 'exhibition' }, 2, 0],
+    ])('%s: Boost toggles %i, Turbo toggles %i', async (_name, overrides, boostToggles, turboToggles) => {
+        renderCard(makeChallenge({}, [], overrides));
+        await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalled());
+        expect(pinButtons('Boost')).toHaveLength(boostToggles);
+        expect(pinButtons('Turbo')).toHaveLength(turboToggles);
+    });
+
+    test('no dangling-pin note for a pin on such a feature', async () => {
+        window.api.getEntryPins = jest.fn().mockResolvedValue({ boost: 'gone', turbo: null });
+        renderCard(makeChallenge({}, [], { type: 'flash' }));
+        await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalled());
+        expect(screen.queryByText('app.pinGoneNote')).toBeNull();
+    });
+});
+
 describe('pinning from the card', () => {
+    const isBusy = (toggle: HTMLElement) =>
+        toggle.getAttribute('aria-busy') === 'true' && toggle.getAttribute('aria-disabled') === 'true';
+
+    test('while a write is in flight the toggles are aria-disabled and busy, ignore a press, and keep focus', async () => {
+        let finish: (value: { success: true }) => void = () => {};
+        window.api.setEntryPin = jest.fn(() => new Promise<{ success: true }>((resolve) => (finish = resolve)));
+        renderCard(makeChallenge());
+        const first = pinButtons('Boost')[0];
+        first.focus();
+        fireEvent.click(first);
+        await waitFor(() => expect(isBusy(pinButtons('Boost')[0])).toBe(true));
+        for (const toggle of [...pinButtons('Boost'), ...pinButtons('Turbo')]) {
+            expect(isBusy(toggle)).toBe(true);
+            // Never `disabled`: that would drop the keyboard focus to <body>.
+            expect((toggle as HTMLButtonElement).disabled).toBe(false);
+        }
+        expect(document.activeElement).toBe(first);
+        fireEvent.click(pinButtons('Boost')[1]);
+        fireEvent.click(first);
+        expect(window.api.setEntryPin).toHaveBeenCalledTimes(1);
+        finish({ success: true });
+        await waitFor(() => expect(pinButtons('Boost')[0].getAttribute('aria-busy')).toBe('false'));
+        expect(pinButtons('Boost')[0].getAttribute('aria-disabled')).toBe('false');
+        expect(document.activeElement).toBe(first);
+    });
+
+    test('the toggles stay busy until the pins are read back, so a second tap never acts on stale pins', async () => {
+        let release: (pins: { boost: string | null; turbo: string | null }) => void = () => {};
+        renderCard(makeChallenge());
+        await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalledTimes(1));
+        window.api.getEntryPins = jest.fn(
+            () => new Promise<{ boost: string | null; turbo: string | null }>((resolve) => (release = resolve)),
+        );
+        fireEvent.click(pinButtons('Boost')[0]);
+        // The save has returned, the read-back is still pending.
+        await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalledTimes(1));
+        expect(window.api.setEntryPin).toHaveBeenCalledTimes(1);
+        expect(isBusy(pinButtons('Boost')[0])).toBe(true);
+        fireEvent.click(pinButtons('Boost')[0]);
+        expect(window.api.setEntryPin).toHaveBeenCalledTimes(1);
+        release({ boost: 'e1', turbo: null });
+        await waitFor(() => expect(pinButtons('Boost')[0].getAttribute('aria-pressed')).toBe('true'));
+        expect(pinButtons('Boost')[0].getAttribute('aria-busy')).toBe('false');
+    });
+
     test('pressing a toggle writes the pin for that entry, then shows it pressed', async () => {
         renderCard(makeChallenge());
         const [first] = pinButtons('Boost');
@@ -141,12 +211,25 @@ describe('pinning from the card', () => {
     });
 
     test('a failed write says so with fixed translated text, until dismissed', async () => {
-        window.api.setEntryPin = jest.fn().mockResolvedValue({ success: false, error: 'The pin could not be saved' });
+        window.api.setEntryPin = jest.fn().mockResolvedValue({ success: false, error: 'pin-write-failed' });
         renderCard(makeChallenge());
         fireEvent.click(pinButtons('Boost')[0]);
         expect(await screen.findByText('errors.pinFailed')).not.toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
         expect(screen.queryByText('errors.pinFailed')).toBeNull();
+    });
+
+    test('the pin cap has its own text, and anything unlisted falls back to the write failure', async () => {
+        window.api.setEntryPin = jest.fn().mockResolvedValue({ success: false, error: 'pin-cap-reached' });
+        renderCard(makeChallenge());
+        fireEvent.click(pinButtons('Boost')[0]);
+        expect(await screen.findByText('errors.pinCapReached')).not.toBeNull();
+        expect(screen.queryByText('errors.pinFailed')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
+
+        window.api.setEntryPin = jest.fn().mockResolvedValue({ success: false, error: 'boom' });
+        fireEvent.click(pinButtons('Boost')[0]);
+        expect(await screen.findByText('errors.pinFailed')).not.toBeNull();
     });
 });
 
@@ -208,6 +291,52 @@ describe('the compact tile', () => {
         renderCard(makeChallenge({ boost: { state: 'USED', timeout: 0 } }));
         await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalled());
         expect(screen.queryByText('app.pinnedForBoost')).toBeNull();
+    });
+
+    test.each([
+        ['a photo that left the challenge', { boost: 'gone', turbo: null }, {}, 'app.pinNotApplying'],
+        [
+            'a photo that carries the other feature',
+            { boost: null, turbo: 'e1' },
+            { boosted: true },
+            'app.pinNotApplying',
+        ],
+    ])('%s gets one muted pin mark with its text', async (_name, pins, flags, text) => {
+        window.api.getEntryPins = jest.fn().mockResolvedValue(pins);
+        renderCard(
+            makeChallenge({}, [
+                { id: 'e1', member_id: 'm', rank: 3, votes: 40, ...flags },
+                { id: 'e2', member_id: 'm', rank: 5, votes: 20 },
+            ]),
+        );
+        const hidden = await screen.findByText(text);
+        expect(hidden.className).toContain('sr-only');
+        const mark = hidden.parentElement!;
+        expect(mark.getAttribute('title')).toBe(text);
+        expect(mark.className).toContain('text-base-content/60');
+        // The short reason is visible text (a title is invisible on touch), hidden from screen readers.
+        const visible = screen.getByText('📌 app.pinNotApplyingShort');
+        expect(visible.getAttribute('aria-hidden')).toBe('true');
+        expect(mark.contains(visible)).toBe(true);
+    });
+
+    test('no mark for a usable pin, no pin, a spent feature or a feature that never fires', async () => {
+        window.api.getEntryPins = jest.fn().mockResolvedValue({ boost: 'e1', turbo: null });
+        renderCard(makeChallenge());
+        await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalled());
+        expect(screen.queryByText('app.pinNotApplying')).toBeNull();
+        expect(screen.queryByText('📌 app.pinNotApplyingShort')).toBeNull();
+    });
+
+    test.each([
+        ['spent', makeChallenge({ boost: { state: 'USED', timeout: 0 } })],
+        ['never fires', makeChallenge({}, [], { type: 'flash' })],
+    ])('no mark for a stored pin whose feature is %s', async (_name, challenge) => {
+        window.api.getEntryPins = jest.fn().mockResolvedValue({ boost: 'gone', turbo: null });
+        renderCard(challenge);
+        await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalled());
+        expect(screen.queryByText('app.pinNotApplying')).toBeNull();
+        expect(screen.queryByText('📌 app.pinNotApplyingShort')).toBeNull();
     });
 
     test('has no toggles: pinning stays in the detailed card', async () => {

@@ -78,6 +78,40 @@ describe('useEntryPins', () => {
         expect(mockApi.setEntryPin).toHaveBeenLastCalledWith('boost', 7, null);
     });
 
+    test('loading stays true from the write until the pins are read back', async () => {
+        const { result } = renderHook(() => useEntryPins(7));
+        await waitFor(() => expect(mockApi.getEntryPins).toHaveBeenCalledTimes(1));
+        expect(result.current.loading).toBe(false);
+
+        let release: (pins: { boost: string | null; turbo: string | null }) => void = () => {};
+        mockApi.getEntryPins.mockImplementation(() => new Promise((resolve) => (release = resolve)));
+        let pending!: Promise<void>;
+        act(() => {
+            pending = result.current.setPin('boost', 'imgA');
+        });
+        // The save has returned; the read-back is held open.
+        await waitFor(() => expect(mockApi.getEntryPins).toHaveBeenCalledTimes(2));
+        expect(mockApi.setEntryPin).toHaveBeenCalledTimes(1);
+        expect(result.current.loading).toBe(true);
+
+        await act(async () => {
+            release({ boost: 'imgA', turbo: null });
+            await pending;
+        });
+        expect(result.current.loading).toBe(false);
+        expect(result.current.pins.boost).toBe('imgA');
+    });
+
+    test('loading ends after a failed write too', async () => {
+        mockApi.setEntryPin.mockResolvedValue({ success: false, error: 'pin-write-failed' });
+        const { result } = renderHook(() => useEntryPins(7));
+        await waitFor(() => expect(mockApi.getEntryPins).toHaveBeenCalledTimes(1));
+        await act(async () => {
+            await result.current.setPin('boost', 'imgA');
+        });
+        expect(result.current.loading).toBe(false);
+    });
+
     test('a failed write keeps its error, does not read again, and clears on request', async () => {
         mockApi.setEntryPin.mockResolvedValue({ success: false, error: 'The pin could not be saved' });
         const { result } = renderHook(() => useEntryPins(7));

@@ -587,7 +587,7 @@ describe('set-entry-pin', () => {
 
     test('pins a photo, broadcasts the change and answers success', async () => {
         const broadcast = jest.fn();
-        jest.mocked(settings.setEntryPin).mockReturnValue(true);
+        jest.mocked(settings.setEntryPin).mockReturnValue('ok');
         jest.mocked(settings.loadSettings).mockReturnValue(invalid({ token: 'secret', theme: 'dark' }));
         await expect(pin(broadcast, 'boost', 100, 'img_a')).resolves.toEqual({ success: true });
         expect(settings.setEntryPin).toHaveBeenCalledWith('boost', 100, 'img_a');
@@ -595,7 +595,7 @@ describe('set-entry-pin', () => {
     });
 
     test('clears a pin (imageId null) and works without a broadcast listener', async () => {
-        jest.mocked(settings.setEntryPin).mockReturnValue(true);
+        jest.mocked(settings.setEntryPin).mockReturnValue('ok');
         await expect(pin(undefined, 'turbo', '100', null)).resolves.toEqual({ success: true });
         expect(settings.setEntryPin).toHaveBeenCalledWith('turbo', '100', null);
     });
@@ -617,13 +617,14 @@ describe('set-entry-pin', () => {
         expect(broadcast).not.toHaveBeenCalled();
     });
 
-    test('a refused or failed save is an error result, with no broadcast', async () => {
+    test.each([
+        ['a refused argument', 'invalid', 'invalid-args'],
+        ['the pin cap', 'cap', 'pin-cap-reached'],
+        ['a failed write', 'write-failed', 'pin-write-failed'],
+    ] as const)('%s is its own error code, with no broadcast', async (_name, outcome, error) => {
         const broadcast = jest.fn();
-        jest.mocked(settings.setEntryPin).mockReturnValue(false);
-        await expect(pin(broadcast, 'boost', 100, 'has space')).resolves.toEqual({
-            success: false,
-            error: 'The pin could not be saved',
-        });
+        jest.mocked(settings.setEntryPin).mockReturnValue(outcome);
+        await expect(pin(broadcast, 'boost', 100, 'has space')).resolves.toEqual({ success: false, error });
         expect(broadcast).not.toHaveBeenCalled();
     });
 

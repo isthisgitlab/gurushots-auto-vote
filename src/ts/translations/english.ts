@@ -45,6 +45,8 @@ export const errors = {
         'This challenge is no longer open, so the action was not made. Refresh the list to see the current challenges.',
     boostFailed: 'The boost was not applied. GuruShots refused it or did not answer. Try again in a moment.',
     pinFailed: "Couldn't save the pin. The settings file could not be written. Try again.",
+    pinCapReached:
+        "Couldn't save the pin. Too many challenges already have pins, and a challenge's pins are removed when it ends. Clear a pin on another challenge, then try again.",
     pickNotEnoughSlots:
         'The photos were not submitted. The challenge has fewer open slots than photos picked, because its entries changed. Remove photos until the count fits the open slots, then submit again.',
     pickAlreadyEntered:
@@ -184,8 +186,10 @@ export const app = {
     pinnedForBoost: 'Pinned for Boost',
     pinnedForTurbo: 'Pinned for Turbo',
     pinClear: 'Clear pin',
+    pinNotApplying: "The photo pinned for {kind} isn't applying. Open the card for details.",
+    pinNotApplyingShort: 'Pin not applying',
     pinGoneNote:
-        'The photo pinned for {kind} is no longer in this challenge, so {kind} will use your usual {kind} settings. Pin another photo or clear the pin.',
+        "The photo pinned for {kind} isn't in this challenge right now, so {kind} will use your usual {kind} settings. Pin another photo or clear the pin.",
     pinConflictNote:
         'The photo pinned for {kind} already has {other}, so {kind} will use your usual {kind} settings. Pin another photo or clear the pin.',
     pinSwapWarning:

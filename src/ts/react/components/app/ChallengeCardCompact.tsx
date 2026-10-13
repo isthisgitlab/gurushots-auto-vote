@@ -13,7 +13,8 @@ import { Countdown } from './Countdown';
 import type { TimeRemaining } from './Countdown';
 import { DeadlineTimeline } from './DeadlineTimeline';
 import { ScenarioStatusLine } from './ScenarioStatusLine';
-import { livePinKindOf } from '../../../voting/entryPins';
+import { livePinKindOf, unusablePins } from '../../../voting/entryPins';
+import { interp } from '@/utils/interp';
 import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 
 /**
@@ -94,6 +95,10 @@ export function ChallengeCardCompact({
     const progress = (challenge as RankedChallenge).member.ranking.total;
     const rank = progress?.rank;
     const hasRank = rank !== undefined && rank > 0;
+    // One muted mark for the pins that are stored but not taking effect: the card says which and why.
+    const notApplying = unusablePins(challenge, pins)
+        .map(({ kind }) => interp(t('app.pinNotApplying'), { kind: t(kind === 'boost' ? 'app.boost' : 'app.turbo') }))
+        .join(' ');
 
     return (
         <div className="space-y-2">
@@ -157,6 +162,15 @@ export function ChallengeCardCompact({
                             </span>
                         );
                     })}
+                </div>
+            )}
+
+            {notApplying && (
+                // Visible short text, not just a glyph: a title is invisible on touch, and a dimmed pin alone reads
+                // like the live-pin mark. The full reason is for screen readers and the title.
+                <div className="text-xs text-base-content/60" title={notApplying}>
+                    <span aria-hidden="true">📌 {t('app.pinNotApplyingShort')}</span>
+                    <span className="sr-only">{notApplying}</span>
                 </div>
             )}
 

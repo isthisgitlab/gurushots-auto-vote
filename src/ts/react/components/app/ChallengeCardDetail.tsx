@@ -15,7 +15,7 @@ import { InlineError } from '@/components/ui/InlineError';
 import * as ipc from '@/api/ipc';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { interp } from '@/utils/interp';
-import { canStillFire, findPinnedEntry, livePinKindOf } from '../../../voting/entryPins';
+import { canStillFire, livePinKindOf, unusablePins } from '../../../voting/entryPins';
 import { challengePageUrl } from '@/utils/challengePageUrl';
 
 import type { ComponentChildren } from 'preact';
@@ -31,8 +31,6 @@ import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 
 export type SwapBackOffers = ReturnType<typeof useSwapBacksModule.useSwapBacks>;
 export type EntryPinsState = ReturnType<typeof useEntryPinsModule.useEntryPins>;
-
-const PIN_KINDS: readonly EntryPinKind[] = ['boost', 'turbo'];
 
 /**
  * One labelled cell of the detailed card's stat grids.
@@ -265,7 +263,7 @@ function EntryDetails({
     onCurrencySpent: () => void;
 }) {
     const { t } = useTranslation();
-    const { pins, togglePin, setPin, error: pinError, clearError: clearPinError } = entryPins;
+    const { pins, togglePin, setPin, loading: pinBusy, error: pinError, clearError: clearPinError } = entryPins;
     const canPin = { boost: canStillFire(challenge, 'boost'), turbo: canStillFire(challenge, 'turbo') };
 
     return (
@@ -285,16 +283,19 @@ function EntryDetails({
                         bankroll={bankroll}
                         onSwapped={onCurrencySpent}
                         swapBack={swapBacks.find((r) => r.currentId === String(entry.id)) ?? null}
-                        pin={{ pins, canPin, livePin: livePinKindOf(challenge, entry, pins), onToggle: togglePin }}
+                        pin={{
+                            pins,
+                            canPin,
+                            livePin: livePinKindOf(challenge, entry, pins),
+                            busy: pinBusy,
+                            onToggle: togglePin,
+                        }}
                     />
                 ))}
             </div>
-            {PIN_KINDS.map((kind) => {
-                const { state } = findPinnedEntry(challenge, kind, pins[kind]);
-                return (state === 'gone' || state === 'conflict') && canPin[kind] ? (
-                    <DanglingPinNote key={kind} kind={kind} state={state} onClear={() => setPin(kind, null)} />
-                ) : null;
-            })}
+            {unusablePins(challenge, pins).map(({ kind, state }) => (
+                <DanglingPinNote key={kind} kind={kind} state={state} onClear={() => setPin(kind, null)} />
+            ))}
             {pinError && (
                 <InlineError className="mt-1" onDismiss={clearPinError}>
                     {ipcErrorText(pinError, t, 'errors.pinFailed')}

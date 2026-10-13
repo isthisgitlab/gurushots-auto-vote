@@ -14,6 +14,8 @@ describe('ipcErrorText', () => {
         ['No battles to play right now', 'errors.turboNoBattles'],
         ['A turbo run is already in progress for this challenge', 'errors.turboRunInProgress'],
         ['Challenge no longer active', 'errors.challengeNoLongerActive'],
+        ['pin-cap-reached', 'errors.pinCapReached'],
+        ['pin-write-failed', 'errors.pinFailed'],
         ['Failed to apply boost', 'errors.boostFailed'],
         ['Failed to fetch challenges', 'errors.fetchChallengesFailed'],
         ['Could not list challenges', 'errors.fetchChallengesFailed'],

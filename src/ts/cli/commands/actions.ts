@@ -19,12 +19,9 @@ import type { Challenge } from '../../types/gurushots';
 import type { NullEventHandlers } from '../../types/cli';
 import type * as actions_handlersModule from '../../ipc/actions.handlers';
 import type * as currency_handlersModule from '../../ipc/currency.handlers';
-import type * as settings_handlersModule from '../../ipc/settings.handlers';
-import type { EntryPinKind } from '../../types/settings';
 import { errorMessage } from '../../errorMessage';
 type ActionHandlers = NullEventHandlers<ReturnType<typeof actions_handlersModule.buildHandlers>>;
 type CurrencyHandlers = NullEventHandlers<ReturnType<typeof currency_handlersModule.buildHandlers>>;
-type SettingsHandlers = NullEventHandlers<ReturnType<typeof settings_handlersModule.buildHandlers>>;
 type CurrencyField = 'keys' | 'swaps' | 'fills';
 
 // Built lazily on first use so simply requiring this module (e.g. when the
@@ -39,12 +36,6 @@ let _currencyHandlers: CurrencyHandlers | undefined;
 const currencyHandlers = (): CurrencyHandlers =>
     (_currencyHandlers ??= (
         require('../../ipc/currency.handlers') as typeof import('../../ipc/currency.handlers')
-    ).buildHandlers());
-
-let _settingsHandlers: SettingsHandlers | undefined;
-const settingsHandlers = (): SettingsHandlers =>
-    (_settingsHandlers ??= (
-        require('../../ipc/settings.handlers') as typeof import('../../ipc/settings.handlers')
     ).buildHandlers());
 
 /**
@@ -105,65 +96,6 @@ const boostChallenge = async (challengeId: string, { imageId = null }: { imageId
         }
     } catch (err) {
         logger.withCategory('boost').error(`Failed to apply boost: ${errorMessage(err) || err}`);
-    }
-};
-
-const PIN_USAGE = 'Usage: pin --challenge=<id> [--boost=<imageId|none>] [--turbo=<imageId|none>]';
-
-/**
- * Pin a photo for a challenge's Boost and/or Turbo (`none` clears a pin), or —
- * with neither flag — print the current pins. Saves through the same
- * `set-entry-pin` handler the GUI uses, so the id is validated the same way; an
- * id that is not one of the challenge's current entries is saved with a warning
- * (the pin takes effect if that photo is entered later).
- *
- * @param pins - per feature: an image id, null to clear, undefined to leave as is
- * @returns false when a pin could not be read or saved
- */
-const pinCmd = async (
-    challengeId: string,
-    pins: Partial<Record<EntryPinKind, string | null>> = {},
-): Promise<boolean> => {
-    const challenge = await resolveChallenge(challengeId);
-    if (!challenge) return false;
-    const kinds = (['boost', 'turbo'] as const).filter((kind) => pins[kind] !== undefined);
-    try {
-        if (kinds.length === 0) {
-            const current = await settingsHandlers()['get-entry-pins'](null, challengeId);
-            logger.withCategory('settings').info(`Pins on "${challenge.title}":`);
-            logger.withCategory('settings').info(`  Boost: ${current?.boost ?? 'none'}`);
-            logger.withCategory('settings').info(`  Turbo: ${current?.turbo ?? 'none'}`);
-            return true;
-        }
-        const entryIds = (challenge.member?.ranking?.entries ?? []).map((entry) => String(entry.id));
-        let ok = true;
-        for (const kind of kinds) {
-            const imageId = pins[kind] ?? null;
-            if (imageId !== null && !entryIds.includes(imageId)) {
-                logger
-                    .withCategory('settings')
-                    .warning(
-                        `${imageId} is not one of the entries in "${challenge.title}" (${entryIds.join(', ') || 'none'}) — pinning it anyway.`,
-                    );
-            }
-            const result = await settingsHandlers()['set-entry-pin'](null, kind, challengeId, imageId);
-            if (result?.success) {
-                logger
-                    .withCategory('settings')
-                    .success(
-                        imageId === null
-                            ? `Cleared the ${kind} pin on "${challenge.title}"`
-                            : `Pinned ${imageId} for ${kind} on "${challenge.title}"`,
-                    );
-            } else {
-                ok = false;
-                logger.withCategory('settings').error(actionError(result, `Failed to pin for ${kind}`));
-            }
-        }
-        return ok;
-    } catch (err) {
-        logger.withCategory('settings').error(`Failed to pin: ${errorMessage(err) || err}`);
-        return false;
     }
 };
 
@@ -448,8 +380,8 @@ const fillExposureCmd = async (challengeId: string, { yes = false }: { yes?: boo
 
 export {
     boostChallenge,
-    pinCmd,
-    PIN_USAGE,
+    resolveChallenge,
+    actionError,
     turboChallenge,
     fillChallenge,
     unlockBoostCmd,

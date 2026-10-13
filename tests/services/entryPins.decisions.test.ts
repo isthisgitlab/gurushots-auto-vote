@@ -231,6 +231,33 @@ describe('a spent feature’s pin is inert', () => {
     });
 });
 
+describe('a pin for a feature that can never fire on the challenge protects nothing', () => {
+    const entries = [A, B];
+    const challengeOf = (type: string, maxPhotoSubmits: number) =>
+        buildChallenge({
+            id: '42',
+            type,
+            close_time: CLOSE,
+            max_photo_submits: maxPhotoSubmits,
+            member: { boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' }, ranking: { entries } },
+        });
+
+    test.each([
+        ['Boost on a flash challenge', 'flash', 3, { boost: 'aaa' }],
+        ['Turbo on a flash challenge', 'flash', 3, { turbo: 'aaa' }],
+        ['Boost on a single-photo challenge', 'open', 1, { boost: 'aaa' }],
+        ['Turbo on an exhibition challenge', 'exhibition', 3, { turbo: 'aaa' }],
+    ])('%s: no auto-swap protection', (_name, type, slots, pins) => {
+        setup(pins);
+        expect(VotingLogic.livePinnedIds(challengeOf(type, slots), '42')).toEqual([]);
+    });
+
+    test('a pin for the feature that does fire still protects', () => {
+        setup({ boost: 'aaa' });
+        expect(VotingLogic.livePinnedIds(challengeOf('exhibition', 3), '42')).toEqual(['aaa']);
+    });
+});
+
 describe('resolveBoostFillNewMode', () => {
     test('a usable pin makes it no, over both fill-new modes', () => {
         setup({ boost: 'aaa' }, { boostFillNew: true, boostFillNewOnConflict: true });
@@ -305,7 +332,9 @@ describe('pinFallbackOf and describePinFallback', () => {
     });
 
     test('word each fallback for the log', () => {
-        expect(VotingLogic.describePinFallback('boost', 'gone')).toContain('no longer in the challenge');
+        expect(VotingLogic.describePinFallback('boost', 'gone')).toContain(
+            "isn't in the challenge right now — using the usual boost settings",
+        );
         expect(VotingLogic.describePinFallback('boost', 'conflict')).toContain('already has Turbo');
         expect(VotingLogic.describePinFallback('turbo', 'conflict')).toContain('already has Boost');
     });

@@ -119,6 +119,12 @@ export type EntryPinKind = 'boost' | 'turbo';
 /** The photos one challenge pins for Boost and Turbo (entry ids); a missing key is no pin. */
 export type EntryPinRecord = { [K in EntryPinKind]?: string };
 
+/**
+ * What `setEntryPin` did: `ok`; `invalid` (an argument was refused); `cap` (a new challenge over the pin cap);
+ * `write-failed` (the settings file could not be written).
+ */
+export type EntryPinResult = 'ok' | 'invalid' | 'cap' | 'write-failed';
+
 /** A challenge's pins as read back: the pinned entry id per feature, null = no pin. */
 export type EntryPins = Record<EntryPinKind, string | null>;
 

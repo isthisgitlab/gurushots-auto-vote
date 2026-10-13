@@ -45,6 +45,8 @@ export const errors = {
         'Šis izaicinājums vairs nav atvērts, tāpēc darbība netika veikta. Atsvaidzini sarakstu, lai redzētu pašreizējos izaicinājumus.',
     boostFailed: 'Boost netika piemērots. GuruShots to noraidīja vai neatbildēja. Mēģini vēlreiz pēc brīža.',
     pinFailed: 'Piespraudi neizdevās saglabāt. Uzstādījumu failu neizdevās ierakstīt. Mēģini vēlreiz.',
+    pinCapReached:
+        'Piespraudi neizdevās saglabāt. Pārāk daudziem izaicinājumiem jau ir piespraudes, un tās tiek noņemtas, kad izaicinājums beidzas. Noņem piespraudi citā izaicinājumā un mēģini vēlreiz.',
     pickNotEnoughSlots:
         'Foto netika iesniegti. Izaicinājumā ir mazāk brīvo vietu nekā izvēlēto foto, jo tā iesniegumi ir mainījušies. Noņem foto, līdz skaits ietilpst brīvajās vietās, un iesniedz vēlreiz.',
     pickAlreadyEntered:
@@ -185,8 +187,10 @@ export const app = {
     pinnedForBoost: 'Piesprausts Boost',
     pinnedForTurbo: 'Piesprausts Turbo',
     pinClear: 'Noņemt piespraudi',
+    pinNotApplying: 'Piespraustais {kind} foto netiek piemērots. Atver kartīti, lai uzzinātu vairāk.',
+    pinNotApplyingShort: 'Piespraude netiek piemērota',
     pinGoneNote:
-        'Piespraustā {kind} foto šajā izaicinājumā vairs nav, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus. Piespraud citu foto vai noņem piespraudi.',
+        'Piespraustā {kind} foto šajā izaicinājumā pašlaik nav, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus. Piespraud citu foto vai noņem piespraudi.',
     pinConflictNote:
         'Piespraustajam {kind} foto jau ir {other}, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus. Piespraud citu foto vai noņem piespraudi.',
     pinSwapWarning:

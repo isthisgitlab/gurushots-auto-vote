@@ -1,8 +1,9 @@
 /**
  * Unit tests for the CLI `pin` command: it reads or writes a challenge's pinned
  * Boost/Turbo photos through the same `get-entry-pins` / `set-entry-pin`
- * handlers the GUI uses, and warns (but still saves) for a photo that is not one
- * of the challenge's current entries.
+ * handlers the GUI uses; listing and clearing never look the challenge up, and
+ * pinning warns (but still saves) for a photo that is not one of its current
+ * entries, and says when a save displaced the other feature's pin.
  */
 
 jest.mock('../../src/ts/logger', () => {
@@ -52,10 +53,10 @@ const apiFactory = jest.mocked(
         }
     >(apiFactoryModule),
 );
-import type * as actionsModule from '../../src/ts/cli/commands/actions';
+import type * as pinModule from '../../src/ts/cli/commands/pin';
 type HandlerTable = Record<string, jest.Mock<Promise<unknown>, unknown[]>>;
 const handlers = invalid<{ __handlers: HandlerTable }>(require('../../src/ts/ipc/settings.handlers')).__handlers;
-const { pinCmd } = require('../../src/ts/cli/commands/actions') as typeof actionsModule;
+const { pinCmd, PIN_USAGE } = require('../../src/ts/cli/commands/pin') as typeof pinModule;
 
 const msgsAt = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 
@@ -75,17 +76,57 @@ beforeEach(() => {
 });
 
 describe('pin', () => {
-    test('with no flags lists the current pins and saves nothing', async () => {
+    test('exports the usage line', () => {
+        expect(PIN_USAGE).toBe('Usage: pin --challenge=<id> [--boost=<imageId|none>] [--turbo=<imageId|none>]');
+    });
+
+    test('with no flags lists the current pins and saves nothing, naming the challenge by its id', async () => {
         expect(await pinCmd('111')).toBe(true);
         expect(handlers['get-entry-pins']).toHaveBeenCalledWith(null, '111');
         expect(handlers['set-entry-pin']).not.toHaveBeenCalled();
-        expect(msgsAt('info')).toEqual(['Pins on "Sunset":', '  Boost: imgA', '  Turbo: none']);
+        expect(msgsAt('info')).toEqual(['Pins on challenge 111:', '  Boost: imgA', '  Turbo: none']);
+    });
+
+    test('listing works offline: no authentication, no challenge lookup', async () => {
+        apiFactory.__isAuthenticated.mockReturnValue(false);
+        expect(await pinCmd('111')).toBe(true);
+        expect(apiFactory.__isAuthenticated).not.toHaveBeenCalled();
+        expect(apiFactory.__getActiveChallenges).not.toHaveBeenCalled();
+    });
+
+    test('the challenge id is printed as plain text', async () => {
+        expect(await pinCmd('7\nforged\u001b[2J')).toBe(true);
+        expect(msgsAt('info')[0]).toBe('Pins on challenge 7 forged:');
     });
 
     test('a failed read of the pins lists none', async () => {
         handlers['get-entry-pins'].mockResolvedValue(null);
         expect(await pinCmd('111')).toBe(true);
-        expect(msgsAt('info')).toEqual(['Pins on "Sunset":', '  Boost: none', '  Turbo: none']);
+        expect(msgsAt('info')).toEqual(['Pins on challenge 111:', '  Boost: none', '  Turbo: none']);
+    });
+
+    test('clearing works offline: no lookup, named by id', async () => {
+        handlers['get-entry-pins'].mockResolvedValue({ boost: null, turbo: 'imgA' });
+        apiFactory.__isAuthenticated.mockReturnValue(false);
+        expect(await pinCmd('111', { turbo: null })).toBe(true);
+        expect(apiFactory.__getActiveChallenges).not.toHaveBeenCalled();
+        expect(handlers['set-entry-pin']).toHaveBeenCalledWith(null, 'turbo', '111', null);
+        expect(msgsAt('success')).toEqual(['Cleared the turbo pin on challenge 111']);
+    });
+
+    test('clearing a feature that had no pin says so, saves nothing and still succeeds', async () => {
+        expect(await pinCmd('111', { turbo: null })).toBe(true);
+        expect(handlers['set-entry-pin']).not.toHaveBeenCalled();
+        expect(msgsAt('success')).toEqual([]);
+        expect(msgsAt('error')).toEqual([]);
+        expect(msgsAt('info')).toEqual(['challenge 111 had no turbo pin']);
+    });
+
+    test('clearing with unreadable pins still clears', async () => {
+        handlers['get-entry-pins'].mockResolvedValue(null);
+        expect(await pinCmd('111', { turbo: null })).toBe(true);
+        expect(handlers['set-entry-pin']).toHaveBeenCalledWith(null, 'turbo', '111', null);
+        expect(msgsAt('success')).toEqual(['Cleared the turbo pin on challenge 111']);
     });
 
     test('pins one entry for one feature through the shared handler', async () => {
@@ -94,13 +135,25 @@ describe('pin', () => {
         expect(handlers['set-entry-pin']).toHaveBeenCalledWith(null, 'boost', '111', 'imgB');
         expect(msgsAt('success')).toEqual(['Pinned imgB for boost on "Sunset"']);
         expect(msgsAt('warning')).toEqual([]);
+        expect(msgsAt('info')).toEqual([]);
     });
 
-    test('pins both features, and null clears a pin', async () => {
-        expect(await pinCmd('111', { boost: 'imgA', turbo: null })).toBe(true);
-        expect(handlers['set-entry-pin']).toHaveBeenNthCalledWith(1, null, 'boost', '111', 'imgA');
+    test('pins one feature and clears the other, looking the challenge up once', async () => {
+        handlers['get-entry-pins'].mockResolvedValue({ boost: null, turbo: 'imgA' });
+        expect(await pinCmd('111', { boost: 'imgB', turbo: null })).toBe(true);
+        expect(apiFactory.__getActiveChallenges).toHaveBeenCalledTimes(1);
+        expect(handlers['set-entry-pin']).toHaveBeenNthCalledWith(1, null, 'boost', '111', 'imgB');
         expect(handlers['set-entry-pin']).toHaveBeenNthCalledWith(2, null, 'turbo', '111', null);
-        expect(msgsAt('success')).toEqual(['Pinned imgA for boost on "Sunset"', 'Cleared the turbo pin on "Sunset"']);
+        expect(msgsAt('success')).toEqual(['Pinned imgB for boost on "Sunset"', 'Cleared the turbo pin on "Sunset"']);
+    });
+
+    test('a challenge without a title is named by its id', async () => {
+        apiFactory.__getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 111 }] }));
+        expect(await pinCmd('111', { boost: 'zzz' })).toBe(true);
+        expect(msgsAt('success')).toEqual(['Pinned zzz for boost on challenge 111']);
+        expect(msgsAt('warning')).toEqual([
+            'zzz is not one of the entries in challenge 111 (none) — pinning it anyway.',
+        ]);
     });
 
     test('an id that is not a current entry is saved with a warning that lists the real ones', async () => {
@@ -117,16 +170,66 @@ describe('pin', () => {
         expect(msgsAt('warning')).toEqual(['zzz is not one of the entries in "Sunset" (none) — pinning it anyway.']);
     });
 
+    describe('a save that displaces the other feature’s pin on that photo', () => {
+        test('says so in one line, after the save', async () => {
+            // Boost holds imgA: pinning imgA for turbo drops the boost pin.
+            expect(await pinCmd('111', { turbo: 'imgA' })).toBe(true);
+            expect(msgsAt('success')).toEqual(['Pinned imgA for turbo on "Sunset"']);
+            expect(msgsAt('info')).toEqual([
+                'Cleared the boost pin on "Sunset": a photo is pinned for one feature only.',
+            ]);
+        });
+
+        test('says nothing when the other feature pins a different photo, or the pins cannot be read', async () => {
+            expect(await pinCmd('111', { turbo: 'imgB' })).toBe(true);
+            handlers['get-entry-pins'].mockResolvedValue(null);
+            expect(await pinCmd('111', { turbo: 'imgA' })).toBe(true);
+            expect(msgsAt('info')).toEqual([]);
+        });
+
+        test('swapping the two photos in one command says nothing about a displaced pin, in this order', async () => {
+            // Turbo holds imgA; `--boost=imgA --turbo=imgB` ends with boost imgA, turbo imgB.
+            handlers['get-entry-pins'].mockResolvedValue({ boost: null, turbo: 'imgA' });
+            expect(await pinCmd('111', { boost: 'imgA', turbo: 'imgB' })).toBe(true);
+            expect(handlers['set-entry-pin'].mock.calls).toEqual([
+                [null, 'boost', '111', 'imgA'],
+                [null, 'turbo', '111', 'imgB'],
+            ]);
+            expect(logger.__calls.map((c) => `${c.level}: ${String(c.msg)}`)).toEqual([
+                'success: Pinned imgA for boost on "Sunset"',
+                'success: Pinned imgB for turbo on "Sunset"',
+            ]);
+        });
+
+        test('setting one feature and clearing the one it displaced reports the clear once, from what was held', async () => {
+            handlers['get-entry-pins'].mockResolvedValue({ boost: null, turbo: 'imgA' });
+            expect(await pinCmd('111', { boost: 'imgA', turbo: null })).toBe(true);
+            expect(logger.__calls.map((c) => `${c.level}: ${String(c.msg)}`)).toEqual([
+                'success: Pinned imgA for boost on "Sunset"',
+                'success: Cleared the turbo pin on "Sunset"',
+            ]);
+        });
+
+        test('says nothing when the save failed', async () => {
+            handlers['set-entry-pin'].mockResolvedValue({ success: false, error: 'pin-write-failed' });
+            expect(await pinCmd('111', { turbo: 'imgA' })).toBe(false);
+            expect(msgsAt('info')).toEqual([]);
+        });
+    });
+
     test.each([
-        [{ success: false, error: 'The pin could not be saved' }, 'The pin could not be saved'],
-        [{ success: false, error: 'invalid-args' }, undefined],
-        [{ success: false }, 'Failed to pin for boost'],
-        [null, 'Failed to pin for boost'],
-    ])('a refused save %p is reported and fails the command', async (result, text) => {
+        [{ success: false, error: 'pin-cap-reached' }, /^Too many challenges already have pins\..*clear a pin/],
+        [{ success: false, error: 'pin-write-failed' }, /^The settings file could not be written\. Try again\.$/],
+        [{ success: false, error: 'invalid-args' }, /^Invalid challenge or image id\.$/],
+        [{ success: false, error: 'something else' }, /^something else$/],
+        [{ success: false }, /^Failed to pin for boost$/],
+        [null, /^Failed to pin for boost$/],
+    ])('a refused save %p is reported with its own reason and fails the command', async (result, text) => {
         handlers['set-entry-pin'].mockResolvedValue(result);
         expect(await pinCmd('111', { boost: 'imgA' })).toBe(false);
         expect(msgsAt('error')).toHaveLength(1);
-        if (text) expect(msgsAt('error')).toEqual([text]);
+        expect(msgsAt('error')[0]).toMatch(text);
+        expect(msgsAt('success')).toEqual([]);
     });
 
     test('keeps going after one feature fails, and still fails overall', async () => {
@@ -145,7 +248,7 @@ describe('pin', () => {
         expect(msgsAt('error').pop()).toBe('Failed to pin: plain');
     });
 
-    test('an unknown challenge or a logged-out user changes nothing and fails', async () => {
+    test('pinning on an unknown challenge or while logged out changes nothing and fails', async () => {
         expect(await pinCmd('999', { boost: 'imgA' })).toBe(false);
         apiFactory.__isAuthenticated.mockReturnValue(false);
         expect(await pinCmd('111', { boost: 'imgA' })).toBe(false);

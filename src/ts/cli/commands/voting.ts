@@ -14,6 +14,7 @@ import { getMiddleware } from '../../apiFactory';
 import { createScheduler } from '../../scheduling/runScheduler';
 import { formatDateTime } from '../../dateFormat';
 import { formatDuration } from '../../format/duration';
+import { oneLine, stripTerminalControl } from '../../format/logSafe';
 import { openBoostWindows } from '../../voting/boostWindow';
 import { findActiveChallenge } from '../../services/findActiveChallenge';
 import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
@@ -226,6 +227,9 @@ const startContinuousVoting = async () => {
     process.stdin.resume();
 };
 
+// A stored challenge id is printed at most this long: a hand-edited key can be any length.
+const MAX_PRINTED_ID = 64;
+
 const showStatus = async () => {
     const userSettings = settings.loadSettings();
     const isMockMode = userSettings.mock;
@@ -271,15 +275,20 @@ const showStatus = async () => {
             });
     }
 
-    // The photos pinned for Boost / Turbo, not a challenge's settings: labelled on their own.
-    const pinnedIds = Object.keys(userSettings.challengeSettings?.entryPins ?? {});
-    if (pinnedIds.length > 0) {
+    // The photos pinned for Boost / Turbo, not a challenge's settings: labelled on their own. Only ids that hold a
+    // valid pin are listed, and an id is printed as text: a raw settings write or a hand edit can put anything in a key.
+    const pinned = Object.keys(userSettings.challengeSettings?.entryPins ?? {}).flatMap((challengeId) => {
+        const { boost, turbo } = settings.getEntryPins(challengeId);
+        return boost === null && turbo === null ? [] : [{ challengeId, boost, turbo }];
+    });
+    if (pinned.length > 0) {
         logger.withCategory('settings').info('\nPinned entries:');
-        for (const challengeId of pinnedIds) {
-            const { boost, turbo } = settings.getEntryPins(challengeId);
+        for (const { challengeId, boost, turbo } of pinned) {
             logger
                 .withCategory('settings')
-                .info(`  Challenge ${challengeId}: Boost ${boost ?? 'none'}, Turbo ${turbo ?? 'none'}`);
+                .info(
+                    `  Challenge ${stripTerminalControl(oneLine(challengeId)).slice(0, MAX_PRINTED_ID)}: Boost ${boost ?? 'none'}, Turbo ${turbo ?? 'none'}`,
+                );
         }
     }
 

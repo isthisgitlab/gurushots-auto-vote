@@ -19,12 +19,15 @@ import { SwapEntryButton, SwapBackButton } from './SwapEntryButton';
  * @property pins - the challenge's stored pins
  * @property canPin - per feature, whether it can still fire (a toggle for a spent feature stays hidden)
  * @property livePin - the feature this entry is live-pinned for (the Swap warning names it)
+ * @property busy - a pin write is in flight: the toggles are aria-disabled and ignore a press (focus stays put), so a
+ *   second press cannot repeat a stale action
  * @property onToggle - pin this entry, or clear the pin when it already holds it
  */
 export type EntryPinControls = {
     pins: EntryPins;
     canPin: Record<EntryPinKind, boolean>;
     livePin: EntryPinKind | null;
+    busy: boolean;
     onToggle: (kind: EntryPinKind, imageId: string) => void | Promise<void>;
 };
 
@@ -34,19 +37,26 @@ export type EntryPinControls = {
 function PinToggle({
     kind,
     pressed,
+    busy,
     onToggle,
 }: {
     kind: EntryPinKind;
     pressed: boolean;
+    busy: boolean;
     onToggle: () => void | Promise<void>;
 }) {
     const { t } = useTranslation();
     return (
         <ActionButton
             variant={kind === 'boost' ? 'success' : 'warning'}
-            className={pressed ? '' : 'btn-outline'}
+            className={[pressed ? '' : 'btn-outline', busy ? 'btn-disabled' : ''].filter(Boolean).join(' ')}
             aria-pressed={pressed}
-            onClick={() => void onToggle()}
+            // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body> mid-write.
+            onClick={() => {
+                if (!busy) void onToggle();
+            }}
+            aria-disabled={busy}
+            aria-busy={busy}
         >
             <span aria-hidden="true">📌</span> {t(kind === 'boost' ? 'app.pinForBoost' : 'app.pinForTurbo')}
         </ActionButton>
@@ -78,6 +88,7 @@ function PinToggles({
                 <PinToggle
                     kind="boost"
                     pressed={pin.pins.boost === imageId}
+                    busy={pin.busy}
                     onToggle={() => pin.onToggle('boost', imageId)}
                 />
             )}
@@ -85,6 +96,7 @@ function PinToggles({
                 <PinToggle
                     kind="turbo"
                     pressed={pin.pins.turbo === imageId}
+                    busy={pin.busy}
                     onToggle={() => pin.onToggle('turbo', imageId)}
                 />
             )}
@@ -169,8 +181,9 @@ export function EntryBadge({
     return (
         // h-auto + py-1: a stock DaisyUI badge is ~20px tall, which would clip
         // the thumbnail. Growing the badge keeps the chip, the text and the
-        // action buttons on one baseline.
-        <div className={`badge badge-outline badge-sm ${entryTypeClass} flex h-auto items-center gap-1 py-1`}>
+        // action buttons on one baseline. flex-wrap: up to six buttons, with longer
+        // translated labels, must not overflow a narrow (Android) width.
+        <div className={`badge badge-outline badge-sm ${entryTypeClass} flex h-auto flex-wrap items-center gap-1 py-1`}>
             <EntryPhoto entry={entry} />
             <span>{icon}</span>
             <span>

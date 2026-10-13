@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 import { useAsyncIpcAction } from './useAsyncIpcAction';
 import * as ipc from './ipc';
@@ -22,7 +22,8 @@ const applyPins: IpcQueryApply<EntryPins | null, EntryPins, Error, []> = (result
  *
  * @param settingsVersion - bumped when settings change
  * @returns `setPin` pins an entry (null clears) and `togglePin` clears the
- *   pin when the entry already holds it; `error` is a failed write's code
+ *   pin when the entry already holds it; `loading` is true from the write
+ *   until the pins are read back; `error` is a failed write's code
  *   (word it with ipcErrorText)
  */
 export function useEntryPins(challengeId: Challenge['id'], settingsVersion: number = 0) {
@@ -32,12 +33,20 @@ export function useEntryPins(challengeId: Challenge['id'], settingsVersion: numb
         return ipc.getEntryPins(challengeId);
     }, [challengeId, settingsVersion]);
     const { data: pins, refetch } = useIpcQuery(queryFn, { initialData: NO_PINS, apply: applyPins, latestOnly: true });
-    const { run, loading, error, clearError } = useAsyncIpcAction(ipc.setEntryPin);
+    const { run, error, clearError } = useAsyncIpcAction(ipc.setEntryPin);
+    // Busy from the write until the pins are read back: the write's own loading flag ends when it returns, and
+    // until the read lands `pins` still shows the old state, which a second tap would act on.
+    const [busy, setBusy] = useState(false);
 
     const setPin = useCallback(
         async (kind: EntryPinKind, imageId: string | null) => {
-            const result = await run(kind, challengeId, imageId);
-            if (result.success) await refetch();
+            setBusy(true);
+            try {
+                const result = await run(kind, challengeId, imageId);
+                if (result.success) await refetch();
+            } finally {
+                setBusy(false);
+            }
         },
         [run, challengeId, refetch],
     );
@@ -46,5 +55,5 @@ export function useEntryPins(challengeId: Challenge['id'], settingsVersion: numb
         [setPin, pins],
     );
 
-    return { pins, setPin, togglePin, loading, error, clearError };
+    return { pins, setPin, togglePin, loading: busy, error, clearError };
 }

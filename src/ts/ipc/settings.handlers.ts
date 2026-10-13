@@ -108,6 +108,13 @@ const handleClearChosenPhotos = async (broadcastSettingsChange: BroadcastSetting
     }
 };
 
+// The machine code per way a pin save fails (ipcErrorText words each); a refused argument is 'invalid-args', like the checks above.
+const PIN_FAILURE_CODE = {
+    invalid: 'invalid-args',
+    cap: 'pin-cap-reached',
+    'write-failed': 'pin-write-failed',
+} as const;
+
 // Pins a photo for a challenge's Boost or Turbo, or clears the pin (imageId null). The renderer, the CLI and a
 // web-shell client all send anything, so every argument is checked before the facade (which validates again).
 const handleSetEntryPin = async (
@@ -120,9 +127,8 @@ const handleSetEntryPin = async (
         return refuseInvalidArgs('settings', 'set-entry-pin');
     }
     try {
-        if (!settings.setEntryPin(kind, challengeId, imageId === null ? null : String(imageId))) {
-            return { success: false as const, error: 'The pin could not be saved' };
-        }
+        const outcome = settings.setEntryPin(kind, challengeId, imageId === null ? null : String(imageId));
+        if (outcome !== 'ok') return { success: false as const, error: PIN_FAILURE_CODE[outcome] };
         if (typeof broadcastSettingsChange === 'function') {
             broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
         }

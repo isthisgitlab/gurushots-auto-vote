@@ -21,6 +21,7 @@ const controls = (overrides: Partial<EntryPinControls> = {}): EntryPinControls =
     pins: { boost: null, turbo: null },
     canPin: { boost: true, turbo: true },
     livePin: null,
+    busy: false,
     onToggle: jest.fn(),
     ...overrides,
 });
@@ -48,6 +49,32 @@ describe('EntryBadge pin toggles', () => {
         renderBadge();
         expect(pinBoost()).toBeNull();
         expect(pinTurbo()).toBeNull();
+    });
+
+    test('while a pin write is in flight both toggles are aria-disabled and busy, ignore a press, and idle otherwise', () => {
+        const onToggle = jest.fn();
+        const { unmount } = renderBadge(controls({ busy: true, onToggle }));
+        for (const toggle of [pinBoost(), pinTurbo()]) {
+            expect(toggle!.getAttribute('aria-disabled')).toBe('true');
+            expect(toggle!.getAttribute('aria-busy')).toBe('true');
+            // Focusable still: `disabled` would drop the keyboard focus.
+            expect((toggle as HTMLButtonElement).disabled).toBe(false);
+            toggle!.focus();
+            expect(document.activeElement).toBe(toggle);
+            fireEvent.click(toggle!);
+        }
+        expect(onToggle).not.toHaveBeenCalled();
+        unmount();
+        renderBadge(controls({ onToggle }));
+        expect(pinBoost()!.getAttribute('aria-disabled')).toBe('false');
+        expect(pinBoost()!.getAttribute('aria-busy')).toBe('false');
+        fireEvent.click(pinBoost()!);
+        expect(onToggle).toHaveBeenCalledWith('boost', 'e1');
+    });
+
+    test('the entry badge wraps, so six buttons do not overflow a narrow screen', () => {
+        const { container } = renderBadge(controls());
+        expect(container.querySelector('.badge')!.className).toContain('flex-wrap');
     });
 
     test('both toggles show with a fixed name and text label, unpressed by default', () => {

@@ -72,13 +72,13 @@ describe('settings facade — entry pins', () => {
     });
 
     test('pins a photo per feature, reads it back and clears it', () => {
-        expect(settings.setEntryPin('boost', '100', 'img_a')).toBe(true);
-        expect(settings.setEntryPin('turbo', '100', 'entry_007')).toBe(true);
+        expect(settings.setEntryPin('boost', '100', 'img_a')).toBe('ok');
+        expect(settings.setEntryPin('turbo', '100', 'entry_007')).toBe('ok');
         expect(settings.getEntryPins('100')).toEqual({ boost: 'img_a', turbo: 'entry_007' });
         // A numeric id addresses the same record.
         expect(settings.getEntryPins(invalid(100))).toEqual({ boost: 'img_a', turbo: 'entry_007' });
 
-        expect(settings.setEntryPin('boost', '100', null)).toBe(true);
+        expect(settings.setEntryPin('boost', '100', null)).toBe('ok');
         expect(settings.getEntryPins('100')).toEqual({ boost: null, turbo: 'entry_007' });
     });
 
@@ -104,19 +104,19 @@ describe('settings facade — entry pins', () => {
     });
 
     test('clearing a pin that was never set writes nothing and succeeds', () => {
-        expect(settings.setEntryPin('turbo', '100', null)).toBe(true);
+        expect(settings.setEntryPin('turbo', '100', null)).toBe('ok');
         expect(settings.getEntryPins('100')).toEqual({ boost: null, turbo: null });
     });
 
     test.each([['bogus'], [''], [null], [undefined], [42]])('refuses the feature %p', (kind) => {
-        expect(settings.setEntryPin(invalid(kind), '100', 'img_a')).toBe(false);
+        expect(settings.setEntryPin(invalid(kind), '100', 'img_a')).toBe('invalid');
         expect(store.write).not.toHaveBeenCalled();
     });
 
     test.each([[''], ['has space'], ['a'.repeat(65)], ['a\nb'], ['../x'], [42]])(
         'refuses the image id %p',
         (imageId) => {
-            expect(settings.setEntryPin('boost', '100', invalid(imageId))).toBe(false);
+            expect(settings.setEntryPin('boost', '100', invalid(imageId))).toBe('invalid');
             expect(store.write).not.toHaveBeenCalled();
         },
     );
@@ -124,7 +124,7 @@ describe('settings facade — entry pins', () => {
     test.each([['__proto__'], ['constructor'], ['prototype'], ['   '], ['']])(
         'refuses the challenge id %p on set and get',
         (challengeId) => {
-            expect(settings.setEntryPin('boost', challengeId, 'img_a')).toBe(false);
+            expect(settings.setEntryPin('boost', challengeId, 'img_a')).toBe('invalid');
             expect(settings.getEntryPins(challengeId)).toEqual({ boost: null, turbo: null });
             expect(({} as { boost?: unknown }).boost).toBeUndefined();
             expect(({} as { turbo?: unknown }).turbo).toBeUndefined();
@@ -132,8 +132,17 @@ describe('settings facade — entry pins', () => {
         },
     );
 
+    test('the facade exposes the image-id check', () => {
+        expect(settings.isPinnableImageId('entry_007')).toBe(true);
+        expect(settings.isPinnableImageId('a'.repeat(64))).toBe(true);
+        expect(settings.isPinnableImageId('a'.repeat(65))).toBe(false);
+        expect(settings.isPinnableImageId('has space')).toBe(false);
+        expect(settings.isPinnableImageId('line\nbreak')).toBe(false);
+        expect(settings.isPinnableImageId(42)).toBe(false);
+    });
+
     test('a non-id challenge argument is refused', () => {
-        expect(settings.setEntryPin('boost', invalid({}), 'img_a')).toBe(false);
+        expect(settings.setEntryPin('boost', invalid({}), 'img_a')).toBe('invalid');
         expect(settings.getEntryPins(invalid(null))).toEqual({ boost: null, turbo: null });
     });
 
@@ -142,7 +151,7 @@ describe('settings facade — entry pins', () => {
             Object.defineProperty(pins, '__proto__', { value: { boost: 'evil' }, enumerable: true });
         });
         expect(settings.getEntryPins('seed')).toEqual({ boost: 'seedimg', turbo: null });
-        expect(settings.setEntryPin('turbo', '100', 'img_b')).toBe(true);
+        expect(settings.setEntryPin('turbo', '100', 'img_b')).toBe('ok');
         const saved = parseJsonAs(store.value!, isAppSettings).challengeSettings.entryPins;
         expect(Object.keys(saved).sort()).toEqual(['100', 'seed']);
     });
@@ -178,7 +187,7 @@ describe('settings facade — entry pins', () => {
         blob.challengeSettings.entryPins = invalid(['not', 'a', 'map']);
         store.value = JSON.stringify(blob);
         expect(settings.getEntryPins('100')).toEqual({ boost: null, turbo: null });
-        expect(settings.setEntryPin('boost', '100', 'img_b')).toBe(true);
+        expect(settings.setEntryPin('boost', '100', 'img_b')).toBe('ok');
         expect(settings.getEntryPins('100')).toEqual({ boost: 'img_b', turbo: null });
     });
 
@@ -186,7 +195,7 @@ describe('settings facade — entry pins', () => {
         store.write.mockImplementation(() => {
             throw new Error('disk full');
         });
-        expect(settings.setEntryPin('boost', '100', 'img_a')).toBe(false);
+        expect(settings.setEntryPin('boost', '100', 'img_a')).toBe('write-failed');
     });
 
     describe('the map cap', () => {
@@ -196,14 +205,14 @@ describe('settings facade — entry pins', () => {
 
         test('refuses a new challenge over the cap, warns once, and still edits a known one', () => {
             fill(500);
-            expect(settings.setEntryPin('boost', 'extra', 'img_a')).toBe(false);
-            expect(settings.setEntryPin('turbo', 'extra2\nforged', 'img_a')).toBe(false);
+            expect(settings.setEntryPin('boost', 'extra', 'img_a')).toBe('cap');
+            expect(settings.setEntryPin('turbo', 'extra2\nforged', 'img_a')).toBe('cap');
             expect(mockWarning).toHaveBeenCalledTimes(1);
             expect(String(mockWarning.mock.calls[0][0])).toContain('pin cap of 500');
             expect(String(mockWarning.mock.calls[0][0])).not.toContain('\n');
             expect(settings.getEntryPins('extra')).toEqual({ boost: null, turbo: null });
             // A challenge already in the map is not "new": it still edits.
-            expect(settings.setEntryPin('turbo', 'c0', 'img_b')).toBe(true);
+            expect(settings.setEntryPin('turbo', 'c0', 'img_b')).toBe('ok');
         });
 
         test('the warning latch resets once the map is back under the cap', () => {
@@ -211,14 +220,14 @@ describe('settings facade — entry pins', () => {
             settings.setEntryPin('boost', 'extra', 'img_a');
             expect(mockWarning).toHaveBeenCalledTimes(1);
             settings.setEntryPin('boost', 'c0', null);
-            expect(settings.setEntryPin('boost', 'extra', 'img_a')).toBe(true);
+            expect(settings.setEntryPin('boost', 'extra', 'img_a')).toBe('ok');
             settings.setEntryPin('boost', 'extra2', 'img_a');
             expect(mockWarning).toHaveBeenCalledTimes(2);
         });
 
         test('clearing at the cap is not blocked', () => {
             fill(500);
-            expect(settings.setEntryPin('boost', 'c1', null)).toBe(true);
+            expect(settings.setEntryPin('boost', 'c1', null)).toBe('ok');
         });
     });
 

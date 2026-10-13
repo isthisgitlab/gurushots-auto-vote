@@ -386,6 +386,50 @@ describe('showStatus', () => {
         expect(info).not.toContain('  Challenge entryPins:');
     });
 
+    test('only challenge ids that hold a valid pin are listed, and an id is printed as plain text', async () => {
+        const forged = '77\nChallenge 1: Boost forged\u001b[2J';
+        settings.loadSettings.mockReturnValue(
+            invalid({
+                mock: true,
+                challengeSettings: {
+                    entryPins: {
+                        42: { boost: 'imgA' },
+                        junk: 'x',
+                        43: { boost: 'bad id' },
+                        [forged]: { turbo: 'imgB' },
+                    },
+                },
+            }),
+        );
+        settings.getEntryPins.mockImplementation((id) =>
+            String(id) === '42'
+                ? { boost: 'imgA', turbo: null }
+                : id === forged
+                  ? { boost: null, turbo: 'imgB' }
+                  : { boost: null, turbo: null },
+        );
+        await showStatus();
+        const info = msgs('info');
+        expect(info).toContain('  Challenge 42: Boost imgA, Turbo none');
+        expect(info).toContain('  Challenge 77 Challenge 1: Boost forged: Boost none, Turbo imgB');
+        expect(info.filter((line) => line.includes('Challenge junk') || line.includes('Challenge 43'))).toEqual([]);
+        expect(
+            info
+                .filter((line) => line.startsWith('  Challenge '))
+                .some((line) => line.includes('\u001b') || line.includes('\n')),
+        ).toBe(false);
+    });
+
+    test('a long challenge id is cut to 64 characters after it is cleaned', async () => {
+        const long = `${'7'.repeat(70)}`;
+        settings.loadSettings.mockReturnValue(
+            invalid({ mock: true, challengeSettings: { entryPins: { [long]: {} } } }),
+        );
+        settings.getEntryPins.mockReturnValue({ boost: 'imgA', turbo: null });
+        await showStatus();
+        expect(msgs('info')).toContain(`  Challenge ${'7'.repeat(64)}: Boost imgA, Turbo none`);
+    });
+
     test('no pins prints no pinned-entries section', async () => {
         settings.loadSettings.mockReturnValue(invalid({ mock: true, challengeSettings: { entryPins: {} } }));
         await showStatus();

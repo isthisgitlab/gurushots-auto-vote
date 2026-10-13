@@ -51,7 +51,7 @@ const pinFallbackOf = (challenge: Challenge, challengeId: string, kind: EntryPin
  */
 const describePinFallback = (kind: EntryPinKind, fallback: 'gone' | 'conflict'): string =>
     fallback === 'gone'
-        ? `pinned photo is no longer in the challenge — using the usual ${kind} settings`
+        ? `pinned photo isn't in the challenge right now — using the usual ${kind} settings`
         : `pinned photo already has ${kind === 'boost' ? 'Turbo' : 'Boost'} — using the usual ${kind} settings`;
 
 /**

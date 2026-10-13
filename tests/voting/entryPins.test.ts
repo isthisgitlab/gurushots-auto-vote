@@ -7,7 +7,7 @@ import type * as entryPinsModule from '../../src/ts/voting/entryPins';
 import type { Challenge, RankingEntry } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const { findPinnedEntry, canStillFire, livePinKindOf } =
+const { findPinnedEntry, canStillFire, featureNeverFires, unusablePins, livePinKindOf } =
     require('../../src/ts/voting/entryPins') as typeof entryPinsModule;
 
 const build = (
@@ -71,6 +71,71 @@ describe('canStillFire', () => {
     test('a payload without a member or entries can fire', () => {
         expect(canStillFire(invalid<Challenge>({ id: 1 }), 'boost')).toBe(true);
         expect(canStillFire(invalid<Challenge>(null), 'turbo')).toBe(true);
+    });
+});
+
+describe('featureNeverFires', () => {
+    const typed = (type: string, maxPhotoSubmits = 4) =>
+        invalid<Challenge>({ id: 1, type, max_photo_submits: maxPhotoSubmits, member: {} });
+
+    test.each([
+        ['boost', 'flash', 4, 'flash'],
+        ['boost', 'open', 1, 'single-photo'],
+        ['boost', 'exhibition', 4, null],
+        ['boost', 'open', 4, null],
+        ['turbo', 'flash', 4, 'flash'],
+        ['turbo', 'exhibition', 4, 'exhibition'],
+        ['turbo', 'open', 1, null],
+        ['turbo', 'open', 4, null],
+    ] as const)('%s on a %s challenge with %i slot(s) → %p', (kind, type, slots, expected) => {
+        expect(featureNeverFires(typed(type, slots), kind)).toBe(expected);
+    });
+
+    test('a payload without a type or a slot count can fire', () => {
+        expect(featureNeverFires(invalid<Challenge>({ id: 1 }), 'boost')).toBeNull();
+        expect(featureNeverFires(invalid<Challenge>(null), 'turbo')).toBeNull();
+    });
+
+    test('a feature that never fires cannot still fire, whatever its state', () => {
+        expect(canStillFire(typed('flash'), 'boost')).toBe(false);
+        expect(canStillFire(typed('flash'), 'turbo')).toBe(false);
+        expect(canStillFire(typed('open', 1), 'boost')).toBe(false);
+        expect(canStillFire(typed('exhibition'), 'turbo')).toBe(false);
+        expect(canStillFire(typed('open', 1), 'turbo')).toBe(true);
+        expect(canStillFire(typed('exhibition'), 'boost')).toBe(true);
+    });
+
+    test('a pin for such a feature is never live', () => {
+        const entry = { id: 'a' };
+        expect(livePinKindOf(typed('flash'), entry, { boost: 'a', turbo: null })).toBeNull();
+        expect(livePinKindOf(typed('open', 1), entry, { boost: 'a', turbo: null })).toBeNull();
+        expect(livePinKindOf(typed('exhibition'), entry, { boost: null, turbo: 'a' })).toBeNull();
+        expect(livePinKindOf(typed('exhibition'), entry, { boost: 'a', turbo: null })).toBe('boost');
+    });
+});
+
+describe('unusablePins', () => {
+    test('lists a pin whose photo is gone, for each feature that can still fire', () => {
+        expect(unusablePins(build([{ id: 'a' }]), { boost: 'zzz', turbo: 'yyy' })).toEqual([
+            { kind: 'boost', state: 'gone' },
+            { kind: 'turbo', state: 'gone' },
+        ]);
+    });
+
+    test('lists a pin whose photo carries the other feature', () => {
+        expect(unusablePins(build([{ id: 'a', turbo: true }]), { boost: 'a', turbo: null })).toEqual([
+            { kind: 'boost', state: 'conflict' },
+        ]);
+        expect(unusablePins(build([{ id: 'a', boosted: true }]), { boost: null, turbo: 'a' })).toEqual([
+            { kind: 'turbo', state: 'conflict' },
+        ]);
+    });
+
+    test('lists nothing for a usable pin, no pin, or a spent feature', () => {
+        expect(unusablePins(build([{ id: 'a' }]), { boost: 'a', turbo: null })).toEqual([]);
+        expect(unusablePins(build([{ id: 'a' }], { boost: { state: 'USED' } }), { boost: 'zzz', turbo: null })).toEqual(
+            [],
+        );
     });
 });
 

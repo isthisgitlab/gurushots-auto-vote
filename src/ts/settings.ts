@@ -114,6 +114,7 @@ export const mergeTitlePins = titlePins.mergeTitlePins;
 // The photo a challenge's Boost and Turbo are pinned to (IPC: get-entry-pins / set-entry-pin).
 export const getEntryPins = entryPins.getEntryPins;
 export const setEntryPin = entryPins.setEntryPin;
+export const isPinnableImageId = entryPins.isPinnableImageId;
 // Cleanup functions
 export const cleanupStaleChallengeSetting = staleChallengeCleanup.cleanupStaleChallengeSetting;
 // The open (joinable) challenge ids cleanupStaleChallengeSetting spares chosen-photo entries for

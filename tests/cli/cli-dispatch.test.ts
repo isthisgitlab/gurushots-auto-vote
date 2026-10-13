@@ -18,6 +18,7 @@ import type * as votingModule from '../../src/ts/cli/commands/voting';
 import type * as actionsModule from '../../src/ts/cli/commands/actions';
 import type * as bankrollModule from '../../src/ts/cli/commands/bankroll';
 import type * as joinModule from '../../src/ts/cli/commands/join';
+import type * as pinModule from '../../src/ts/cli/commands/pin';
 import type * as photosModule from '../../src/ts/cli/commands/photos';
 import type * as updateModule from '../../src/ts/cli/commands/update';
 import type * as logsModule from '../../src/ts/cli/commands/logs';
@@ -36,6 +37,7 @@ type Mods = {
     actions: jest.MockedObjectDeep<typeof actionsModule>;
     bankroll: jest.MockedObjectDeep<typeof bankrollModule>;
     join: jest.MockedObjectDeep<typeof joinModule>;
+    pin: jest.MockedObjectDeep<typeof pinModule>;
     photos: jest.MockedObjectDeep<typeof photosModule>;
     update: jest.MockedObjectDeep<typeof updateModule>;
     logs: jest.MockedObjectDeep<typeof logsModule>;
@@ -65,6 +67,8 @@ jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(() => 1),
     setSetting: jest.fn(() => true),
     seedIntentProfiles: jest.fn(),
+    // The facade's check, as the plain image-id pattern.
+    isPinnableImageId: jest.fn((value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value)),
 }));
 
 jest.mock('../../src/ts/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
@@ -96,15 +100,13 @@ jest.mock('../../src/ts/cli/commands/voting', () => {
 });
 
 jest.mock('../../src/ts/cli/commands/actions', () => {
-    const { parseSwapFlags, SWAP_USAGE, SWAP_BACK_USAGE, PIN_USAGE } = jest.requireActual<
+    const { parseSwapFlags, SWAP_USAGE, SWAP_BACK_USAGE } = jest.requireActual<
         typeof import('../../src/ts/cli/commands/actions')
     >('../../src/ts/cli/commands/actions');
     return {
         parseSwapFlags,
         SWAP_USAGE,
         SWAP_BACK_USAGE,
-        PIN_USAGE,
-        pinCmd: jest.fn(),
         boostChallenge: jest.fn(),
         turboChallenge: jest.fn(),
         fillChallenge: jest.fn(),
@@ -114,6 +116,11 @@ jest.mock('../../src/ts/cli/commands/actions', () => {
         fillExposureCmd: jest.fn(),
     };
 });
+
+jest.mock('../../src/ts/cli/commands/pin', () => ({
+    PIN_USAGE: 'Usage: pin --challenge=<id> [--boost=<imageId|none>] [--turbo=<imageId|none>]',
+    pinCmd: jest.fn(),
+}));
 
 jest.mock('../../src/ts/cli/commands/bankroll', () => ({ showBankroll: jest.fn() }));
 jest.mock('../../src/ts/cli/commands/join', () => ({
@@ -202,6 +209,7 @@ const run = async (argv: string[], setup?: (mods: Mods) => void) => {
             actions: require('../../src/ts/cli/commands/actions') as typeof actionsModule,
             bankroll: require('../../src/ts/cli/commands/bankroll') as typeof bankrollModule,
             join: require('../../src/ts/cli/commands/join') as typeof joinModule,
+            pin: require('../../src/ts/cli/commands/pin') as typeof pinModule,
             photos: require('../../src/ts/cli/commands/photos') as typeof photosModule,
             update: require('../../src/ts/cli/commands/update') as typeof updateModule,
             logs: require('../../src/ts/cli/commands/logs') as typeof logsModule,
@@ -441,25 +449,66 @@ describe('challenge-scoped actions', () => {
         [['--challenge=5', '--boost=abc'], { boost: 'abc' }],
         [['--challenge=5', '--turbo=none'], { turbo: null }],
         [['--turbo=NONE', '--challenge', '5', '--boost=x'], { boost: 'x', turbo: null }],
+        [['--challenge=5', '--boost=entry_007', '--turbo=a-B_9'], { boost: 'entry_007', turbo: 'a-B_9' }],
+        [['--challenge=5', '--boost=none', '--turbo=none'], { boost: null, turbo: null }],
     ])('pin %p', async (tail, pins) => {
-        const m = await run(['pin', ...tail], (mods) => mods.actions.pinCmd.mockResolvedValue(true));
-        expect(m.guards.requireChallenge).toHaveBeenCalledWith({ challengeId: '5' }, m.actions.PIN_USAGE);
-        expect(m.actions.pinCmd).toHaveBeenCalledWith('5', pins);
+        const m = await run(['pin', ...tail], (mods) => mods.pin.pinCmd.mockResolvedValue(true));
+        expect(m.guards.requireChallenge).toHaveBeenCalledWith({ challengeId: '5' }, m.pin.PIN_USAGE);
+        expect(m.pin.pinCmd).toHaveBeenCalledWith('5', pins);
         expect(m.exitCodes).toEqual([0]);
     });
 
     test('pin exits 1 when the pin could not be read or saved', async () => {
         const m = await run(['pin', '--challenge=5', '--boost=abc'], (mods) =>
-            mods.actions.pinCmd.mockResolvedValue(false),
+            mods.pin.pinCmd.mockResolvedValue(false),
         );
         expect(m.exitCodes).toEqual([1]);
     });
 
     test.each([['--boost='], ['--turbo=']])('pin %s with no value is a usage error', async (flag) => {
         const m = await run(['pin', '--challenge=5', flag]);
-        expect(m.actions.pinCmd).not.toHaveBeenCalled();
+        expect(m.pin.pinCmd).not.toHaveBeenCalled();
         expect(m.msgs('error')).toEqual([`${flag.slice(0, -1)} needs an image id, or none to clear the pin`]);
-        expect(m.msgs('info')).toEqual([m.actions.PIN_USAGE]);
+        expect(m.msgs('info')).toEqual([m.pin.PIN_USAGE]);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test.each([
+        [['--boost', 'abc']],
+        [['--boots=abc']],
+        [['--boost=abc', 'stray']],
+        [['--yes']],
+        [['--boost=a', '--boost=b']],
+        [['--turbo=a', '--turbo=b']],
+    ])('pin %p is a usage error, never a listing', async (tail) => {
+        const m = await run(['pin', '--challenge=5', ...tail]);
+        expect(m.pin.pinCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual(['Wrong arguments']);
+        expect(m.msgs('info')).toEqual([m.pin.PIN_USAGE]);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test.each([
+        ['--boost=has space', 'boost'],
+        ['--turbo=a\nb', 'turbo'],
+        ['--boost=' + 'a'.repeat(65), 'boost'],
+        ['--turbo=../x', 'turbo'],
+    ])('pin %j names the characters an image id may use and logs no raw input', async (arg, kind) => {
+        const m = await run(['pin', '--challenge=5', arg]);
+        expect(m.pin.pinCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual([
+            `--${kind} takes an image id: letters, digits, _ and -, at most 64 characters (or none to clear the pin)`,
+        ]);
+        expect(m.msgs('info')).toEqual([m.pin.PIN_USAGE]);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test('pin --boost and --turbo naming the same image is a usage error', async () => {
+        const m = await run(['pin', '--challenge=5', '--boost=abc', '--turbo=abc']);
+        expect(m.pin.pinCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual([
+            '--boost and --turbo name the same image: a photo is pinned for one feature only',
+        ]);
         expect(m.exitCodes).toEqual([1]);
     });
 

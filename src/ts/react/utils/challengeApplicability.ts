@@ -1,4 +1,5 @@
 import type { Challenge, ChallengeMember } from '../../types/gurushots';
+import { featureNeverFires } from '../../voting/entryPins';
 /**
  * Per-challenge settings applicability.
  *
@@ -45,29 +46,28 @@ export function getGroupApplicability(
     if (!challenge) return applicable;
 
     const member: ChallengeMember = challenge.member || {};
-    // Slot state. maxSlots drives the boost single-photo check (=== 1) and the
-    // autoFill "all full" check; entries feeds slotsFull. Derive once.
+    // Slot state. maxSlots drives the autoFill "all full" check; entries feeds
+    // slotsFull. Derive once.
     const entries = member.ranking?.entries || [];
     const maxSlots = challenge.max_photo_submits || 0;
     const slotsFull = maxSlots > 0 && entries.length >= maxSlots;
 
     switch (groupId) {
         case 'boost': {
-            if (challenge.type === 'flash') return { applicable: false, reasonKey: 'app.naFlashNoBoost' };
+            // Whether Boost can never fire (flash; or a single-photo challenge, where its state stays LOCKED for
+            // the whole challenge and can never reach AVAILABLE — unlike a multi-photo challenge, where LOCKED is
+            // transient, so those must stay configurable) is shared with the pin toggles.
+            const never = featureNeverFires(challenge, 'boost');
+            if (never === 'flash') return { applicable: false, reasonKey: 'app.naFlashNoBoost' };
             if (member.boost?.state === 'USED') return { applicable: false, reasonKey: 'app.naBoostUsed' };
-            // A single-photo challenge never unlocks Boost: its boost state stays
-            // LOCKED for the whole challenge and can never reach AVAILABLE — unlike
-            // a multi-photo challenge, where LOCKED is transient and may flip to
-            // AVAILABLE later, so those must stay configurable. maxSlots === 1 also
-            // covers the Boost-vs-Turbo conflict (Boost and Turbo can't share an
-            // entry, and with one turbo per challenge that only bites at 1/1).
-            if (maxSlots === 1) return { applicable: false, reasonKey: 'app.naBoostSinglePhoto' };
+            if (never === 'single-photo') return { applicable: false, reasonKey: 'app.naBoostSinglePhoto' };
             return applicable;
         }
 
         case 'turbo': {
-            if (challenge.type === 'flash') return { applicable: false, reasonKey: 'app.naFlashNoTurbo' };
-            if (challenge.type === 'exhibition') return { applicable: false, reasonKey: 'app.naExhibitionNoTurbo' };
+            const never = featureNeverFires(challenge, 'turbo');
+            if (never === 'flash') return { applicable: false, reasonKey: 'app.naFlashNoTurbo' };
+            if (never === 'exhibition') return { applicable: false, reasonKey: 'app.naExhibitionNoTurbo' };
             return member.turbo?.state === 'USED' ? { applicable: false, reasonKey: 'app.naTurboUsed' } : applicable;
         }
 

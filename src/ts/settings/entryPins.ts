@@ -14,7 +14,7 @@ import { isUnsafeChallengeKey } from '../metadata/validation';
 import { isPlainObject } from '../plainObject';
 import { loadSettings, saveSettings } from './persistence';
 
-import type { EntryPinKind, EntryPinRecord, EntryPins } from '../types/settings';
+import type { EntryPinKind, EntryPinRecord, EntryPinResult, EntryPins } from '../types/settings';
 
 // Defensive cap on the map size, like the title pins': real active lists are
 // tens of challenges.
@@ -31,7 +31,12 @@ let entryPinCapWarned = false;
 
 const _isKind = (kind: unknown): kind is EntryPinKind => kind === 'boost' || kind === 'turbo';
 
-const _isPinnableId = (value: unknown): value is string => typeof value === 'string' && IMAGE_ID_PATTERN.test(value);
+/**
+ * Whether `value` is an image id a pin may name: letters, digits, `_` and `-`, 1 to 64 characters. The one place
+ * the pattern lives, for the facade's own checks and for callers that check an id before they log or send it.
+ */
+const isPinnableImageId = (value: unknown): value is string =>
+    typeof value === 'string' && IMAGE_ID_PATTERN.test(value);
 
 /**
  * The map key for a challenge id, or null when the id may not address a pin
@@ -52,7 +57,7 @@ const _validRecord = (stored: unknown): EntryPinRecord => {
     if (!isPlainObject(stored)) return record;
     for (const kind of KINDS) {
         const imageId = Object.hasOwn(stored, kind) ? stored[kind] : undefined;
-        if (_isPinnableId(imageId)) record[kind] = imageId;
+        if (isPinnableImageId(imageId)) record[kind] = imageId;
     }
     return record;
 };
@@ -96,12 +101,12 @@ const _warnPinCapOnce = (key: string) => {
  * null). A photo is never pinned for both: pinning it for one feature clears
  * the other feature's pin on it. An empty record is dropped.
  *
- * @returns false when the arguments are refused, the cap blocks a new
- *   challenge, or the write fails
+ * @returns which of `ok`, a refused argument, the cap blocking a new
+ *   challenge, or a failed write it was
  */
-const setEntryPin = (kind: EntryPinKind, challengeId: string | number, imageId: string | null): boolean => {
+const setEntryPin = (kind: EntryPinKind, challengeId: string | number, imageId: string | null): EntryPinResult => {
     const key = _keyOf(challengeId);
-    if (!_isKind(kind) || key === null || (imageId !== null && !_isPinnableId(imageId))) return false;
+    if (!_isKind(kind) || key === null || (imageId !== null && !isPinnableImageId(imageId))) return 'invalid';
 
     const settings = loadSettings();
     const pins = _validMap(settings.challengeSettings.entryPins);
@@ -120,14 +125,14 @@ const setEntryPin = (kind: EntryPinKind, challengeId: string | number, imageId: 
     } else {
         if (!known && Object.keys(pins).length >= MAX_ENTRY_PINS) {
             _warnPinCapOnce(key);
-            return false;
+            return 'cap';
         }
         pins[key] = next;
     }
     if (Object.keys(pins).length < MAX_ENTRY_PINS) entryPinCapWarned = false;
 
     settings.challengeSettings.entryPins = pins;
-    return saveSettings(settings);
+    return saveSettings(settings) ? 'ok' : 'write-failed';
 };
 
-export { getEntryPins, setEntryPin, MAX_ENTRY_PINS };
+export { getEntryPins, setEntryPin, isPinnableImageId, MAX_ENTRY_PINS };

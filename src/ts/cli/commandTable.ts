@@ -8,8 +8,6 @@ import {
 } from './commands/voting';
 import {
     boostChallenge,
-    pinCmd,
-    PIN_USAGE,
     turboChallenge,
     fillChallenge,
     unlockBoostCmd,
@@ -20,10 +18,12 @@ import {
     SWAP_BACK_USAGE,
     fillExposureCmd,
 } from './commands/actions';
+import { pinCmd, PIN_USAGE } from './commands/pin';
 import { showBankroll } from './commands/bankroll';
 import { showDiscover, joinChallengeCmd, forgetPaymentCmd } from './commands/join';
 import { listPhotosCmd, parseSearchFlag } from './commands/photos';
 import { checkUpdates } from './commands/update';
+import { isPinnableImageId } from '../settings';
 import {
     getSetting,
     setSetting,
@@ -162,15 +162,34 @@ const runBoost = async (challengeId: string, rest: string[]) => {
     return 0;
 };
 
-// --boost= / --turbo= take an image id, or `none` to clear; a flag with no value is a usage error.
+// --boost= / --turbo= take an image id, or `none` to clear, each at most once. It changes what a later Boost or Turbo
+// lands on, so like `join` anything it does not recognise (`--boost abc`, a typo) is a usage error, never a listing.
 const runPin = async (challengeId: string, rest: string[]) => {
+    const flagsOf = (kind: string) => rest.filter((a) => a.startsWith(`--${kind}=`));
+    if (
+        rest.some((a) => !a.startsWith('--boost=') && !a.startsWith('--turbo=')) ||
+        flagsOf('boost').length > 1 ||
+        flagsOf('turbo').length > 1
+    ) {
+        return usageError('Wrong arguments', PIN_USAGE);
+    }
     const pins: Parameters<typeof pinCmd>[1] = {};
     for (const kind of ['boost', 'turbo'] as const) {
-        const arg = rest.find((a) => a.startsWith(`--${kind}=`));
+        const [arg] = flagsOf(kind);
         if (arg === undefined) continue;
         const value = arg.slice(`--${kind}=`.length);
         if (value === '') return usageError(`--${kind} needs an image id, or none to clear the pin`, PIN_USAGE);
+        // The raw text never reaches a log line unless it is a plain image id.
+        if (value.toLowerCase() !== 'none' && !isPinnableImageId(value)) {
+            return usageError(
+                `--${kind} takes an image id: letters, digits, _ and -, at most 64 characters (or none to clear the pin)`,
+                PIN_USAGE,
+            );
+        }
         pins[kind] = value.toLowerCase() === 'none' ? null : value;
+    }
+    if (pins.boost && pins.boost === pins.turbo) {
+        return usageError('--boost and --turbo name the same image: a photo is pinned for one feature only', PIN_USAGE);
     }
     return exitCodeOf(await pinCmd(challengeId, pins));
 };
