@@ -232,14 +232,6 @@
         // (scripts/lint/frame-guard.mts).
         {
             "files": ["src/ts/**/*.ts", "src/ts/**/*.tsx"],
-            "excludeFiles": [
-                // isTrustedSender and the refusal log read the sender's frame (its url, and
-                // whether it is the window's main frame); they send nothing.
-                "src/ts/ipc/registerHandlers.ts",
-                // The preload's one-way ipcRenderer.send to the main process (the renderer
-                // side of a channel, not a window).
-                "src/ts/preloadApi.ts"
-            ],
             "rules": {
                 "frame-guard/no-unfiltered-frame-send": "error"
             }

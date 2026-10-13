@@ -115,7 +115,7 @@ describe('sends toward the Logs window', () => {
     // restrictToLogsChannels (ipc/registerHandlers.ts) filters only `webContents.send`; the frame-guard Oxlint rule
     // (scripts/lint/frame-guard.mts) keeps every other route to a window out of src/ts. Switching it off, or widening
     // its exemptions, has to show up here.
-    test('Oxlint runs the frame-guard rule over src/ts, exempting only the two files that read or send off-window', () => {
+    test('Oxlint runs the frame-guard rule over all of src/ts with no file exempt', () => {
         const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
         const path = jest.requireActual<typeof import('node:path')>('node:path');
         const { execFileSync } = jest.requireActual<typeof import('node:child_process')>('node:child_process');
@@ -138,9 +138,49 @@ describe('sends toward the Logs window', () => {
         expect(enabling).toHaveLength(1);
         expect(enabling[0]).toMatchObject({
             files: ['src/ts/**/*.ts', 'src/ts/**/*.tsx'],
-            excludeFiles: ['src/ts/ipc/registerHandlers.ts', 'src/ts/preloadApi.ts'],
             rules: { [RULE]: 'deny' },
         });
+        // A file exemption would let a new send through in the file that implements the filter.
+        expect(enabling[0]).not.toHaveProperty('excludeFiles');
+    });
+
+    // The only legitimate frame reads and off-window sends, each a line-level disable with a reason.
+    const EXEMPTIONS: ReadonlyArray<readonly [string, string]> = [
+        ['src/ts/ipc/registerHandlers.ts', 'const frame = event.senderFrame;'],
+        [
+            'src/ts/ipc/registerHandlers.ts',
+            'if (event.sender?.mainFrame && frame !== event.sender.mainFrame) return false;',
+        ],
+        ['src/ts/ipc/registerHandlers.ts', "return event.senderFrame?.url ?? event.sender?.getURL?.() ?? '<unknown>';"],
+        ['src/ts/preloadApi.ts', 'api[method] = () => ipcRenderer.send(channel);'],
+    ];
+
+    test('the frame-guard disable comments in src/ts are exactly the pinned set, each with a reason', () => {
+        const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+        const path = jest.requireActual<typeof import('node:path')>('node:path');
+        const root = path.join(__dirname, '..');
+        const found: Array<readonly [string, string]> = [];
+        const walk = (dir: string): void => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) {
+                    walk(full);
+                    continue;
+                }
+                if (!/\.tsx?$/.test(entry.name)) continue;
+                const lines = fs.readFileSync(full, 'utf8').split('\n');
+                lines.forEach((line, index) => {
+                    // Anything on a line that names the rule next to a disable directive counts.
+                    if (!/(?:oxlint|eslint)-disable/.test(line) || !line.includes('frame-guard')) return;
+                    const directive =
+                        /^\s*\/\/ oxlint-disable-next-line frame-guard\/no-unfiltered-frame-send -- \S.*$/;
+                    expect(line).toMatch(directive);
+                    found.push([path.relative(root, full), lines[index + 1].trim()]);
+                });
+            }
+        };
+        walk(path.join(root, 'src/ts'));
+        expect(found.sort()).toEqual([...EXEMPTIONS].sort());
     });
 });
 

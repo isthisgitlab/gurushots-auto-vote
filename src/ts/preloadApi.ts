@@ -59,6 +59,7 @@ const buildApi = (
 
     // Send-style window-control hints (login-success / logout).
     for (const [method, channel] of Object.entries(surface.sendMethods)) {
+        // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- the renderer side of a one-way channel to the main process, not a window
         api[method] = () => ipcRenderer.send(channel);
     }
 

@@ -166,6 +166,14 @@ const INVALID: ReadonlyArray<readonly [string, ...string[]]> = [
     ['postMessage(data);', bare('postMessage')],
     ['sendToFrame(frameId, "c", x);', bare('sendToFrame')],
     // `.send` reached through call/apply/bind keeps its original receiver.
+    // A snippet shaped like ipc/registerHandlers.ts, with no disable comment: the file is not exempt.
+    [
+        'const restrict = (event, webContents) => {\n    event.sender.mainFrame.send("c", x);\n    event.senderFrame.postMessage("c", x);\n    webContents.send("c", x);\n};',
+        send('send'),
+        read('mainFrame'),
+        send('postMessage'),
+        read('senderFrame'),
+    ],
     ['frame.send.call(frame, "c", x);', send('send')],
     ['port.send.apply(port, ["c"]);', send('send')],
     ['const s = ports[0].send.bind(ports[0]);', send('send')],

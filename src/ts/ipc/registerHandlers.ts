@@ -70,9 +70,11 @@ const isTrustedSender = (event: IpcMainInvokeEvent | IpcMainEvent | null | undef
         // has already been disposed (renderer navigated or closed while the message was in
         // flight). Outside the try that propagated as an uncaught exception in the main
         // process — a crash rather than the refusal this function is supposed to fall back to.
+        // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- reads the sender's frame to check its url; sends nothing
         const frame = event.senderFrame;
         // A real event whose sender cannot be identified is not trusted.
         if (!frame || typeof frame.url !== 'string') return false;
+        // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- compares the sender's frame with the window's main frame; sends nothing
         if (event.sender?.mainFrame && frame !== event.sender.mainFrame) return false;
         return frame.url.startsWith('file://');
     } catch {
@@ -83,6 +85,7 @@ const isTrustedSender = (event: IpcMainInvokeEvent | IpcMainEvent | null | undef
 // Where a refused message came from, for the log. Reading a disposed frame throws.
 const senderUrl = (event: IpcMainInvokeEvent): string => {
     try {
+        // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- reads the sender's frame url for the refusal log; sends nothing
         return event.senderFrame?.url ?? event.sender?.getURL?.() ?? '<unknown>';
     } catch {
         return '<unknown>';
@@ -104,7 +107,7 @@ const logsWindowSettings = (payload: unknown): Record<string, unknown> =>
  * Limits every call from this window to the Logs channel set, whatever its preload exposes, and cuts what is sent to
  * it down to what it may know: its settings-changed events carry only the logsWindowSettingKeys. Only
  * `webContents.send` is filtered: `postMessage` and `mainFrame.send` are not, so nothing may use them toward this window
- * (the frame-guard lint rule enforces it over src/ts; this file and preloadApi.ts are its only exemptions).
+ * (the frame-guard lint rule enforces it over src/ts; the line-level exemptions are pinned in tests/ci-validation.test.ts).
  * @param webContents - the Logs window's, registered before its page loads
  */
 const restrictToLogsChannels = (webContents: WebContents): void => {
