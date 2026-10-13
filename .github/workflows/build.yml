@@ -38,7 +38,8 @@ jobs:
     # ONLY thing standing between a red test suite and version-bump →
     # build → create-release. Do not remove it as "redundant".
     test:
-        runs-on: ubuntu-slim
+        # The suite runs Oxlint with its JS plugins, whose fixed-size allocator pool the slim runner cannot satisfy.
+        runs-on: ubuntu-latest
         timeout-minutes: 20
         steps:
             - name: Checkout code
