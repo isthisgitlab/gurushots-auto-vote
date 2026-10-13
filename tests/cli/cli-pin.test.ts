@@ -41,6 +41,7 @@ jest.mock('../../src/ts/ipc/settings.handlers', () => {
 });
 
 import { invalid } from '../helpers/invalid';
+import { sentenceCaseLogMessage } from '../../src/ts/format/logSafe';
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __calls: { level: string; msg: unknown }[] }>(loggerModule));
 import apiFactoryModule = require('../../src/ts/apiFactory');
@@ -56,7 +57,7 @@ const apiFactory = jest.mocked(
 import type * as pinModule from '../../src/ts/cli/commands/pin';
 type HandlerTable = Record<string, jest.Mock<Promise<unknown>, unknown[]>>;
 const handlers = invalid<{ __handlers: HandlerTable }>(require('../../src/ts/ipc/settings.handlers')).__handlers;
-const { pinCmd, PIN_USAGE } = require('../../src/ts/cli/commands/pin') as typeof pinModule;
+const { pinCmd, printableChallengeId, PIN_USAGE } = require('../../src/ts/cli/commands/pin') as typeof pinModule;
 
 const msgsAt = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 
@@ -112,9 +113,36 @@ describe('pin', () => {
         expect(msgsAt('error')).toEqual(['The pins on challenge 111 could not be read. Try again.']);
     });
 
-    test('a long challenge id is cut to 64 characters after it is cleaned', async () => {
-        expect(await pinCmd(`${'7'.repeat(70)}`)).toBe(true);
+    test('a challenge id of exactly 64 characters is accepted and printed whole', async () => {
+        expect(await pinCmd('7'.repeat(64))).toBe(true);
         expect(msgsAt('info')[0]).toBe(`Pins on challenge ${'7'.repeat(64)}:`);
+    });
+
+    test.each([
+        ['an over-long', '7'.repeat(65)],
+        ['a blank', '   '],
+    ])('%s challenge id is refused up front, before any handler or lookup', async (_name, id) => {
+        expect(await pinCmd(id)).toBe(false);
+        expect(await pinCmd(id, { boost: 'imgA' })).toBe(false);
+        expect(handlers['get-entry-pins']).not.toHaveBeenCalled();
+        expect(handlers['set-entry-pin']).not.toHaveBeenCalled();
+        expect(apiFactory.__getActiveChallenges).not.toHaveBeenCalled();
+        expect(msgsAt('error')).toEqual([
+            `--challenge takes a challenge id of at most 64 characters. ${PIN_USAGE}`,
+            `--challenge takes a challenge id of at most 64 characters. ${PIN_USAGE}`,
+        ]);
+    });
+
+    describe('printableChallengeId', () => {
+        test('cuts by code points, so a character straddling the limit is not split', () => {
+            const id = `${'7'.repeat(63)}😀${'7'.repeat(5)}`;
+            expect(printableChallengeId(id)).toBe(`${'7'.repeat(63)}😀`);
+            expect(Array.from(printableChallengeId(`${'😀'.repeat(70)}`))).toHaveLength(64);
+        });
+
+        test('strips terminal control characters', () => {
+            expect(printableChallengeId('7\u0007\u001b[2J')).toBe('7');
+        });
     });
 
     test('clearing works offline: no lookup, named by id', async () => {
@@ -141,6 +169,32 @@ describe('pin', () => {
         expect(msgsAt('success')).toEqual(['Cleared the turbo pin on challenge 111']);
     });
 
+    test.each([
+        ['an id', 'd41d8cd98f00b204e9800998ecf8427e'],
+        ['an id with a letter first', 'abcdef0123'],
+    ])('the warnings print %s unchanged through the logger’s sentence-casing', async (_name, imageId) => {
+        apiFactory.__getActiveChallenges.mockResolvedValue(
+            invalid({
+                challenges: [
+                    {
+                        id: 111,
+                        title: 'Sunset',
+                        member: {
+                            ranking: { entries: [{ id: 'imgA' }, { id: 'imgB' }, { id: imageId, turbo: true }] },
+                        },
+                    },
+                ],
+            }),
+        );
+        expect(await pinCmd('111', { boost: imageId })).toBe(true);
+        expect(await pinCmd('111', { boost: 'ff00' })).toBe(true);
+        const warnings = msgsAt('warning').map(sentenceCaseLogMessage);
+        expect(warnings).toEqual([
+            `Photo ${imageId} already carries turbo on "Sunset", so it cannot take boost — pinning it anyway.`,
+            `Photo ff00 is not one of the entries in "Sunset" (imgA, imgB, ${imageId}) — pinning it anyway.`,
+        ]);
+    });
+
     test('pins one entry for one feature through the shared handler', async () => {
         expect(await pinCmd('111', { boost: 'imgB' })).toBe(true);
         expect(handlers['set-entry-pin']).toHaveBeenCalledTimes(1);
@@ -164,7 +218,7 @@ describe('pin', () => {
         expect(await pinCmd('111', { boost: 'zzz' })).toBe(true);
         expect(msgsAt('success')).toEqual(['Pinned zzz for boost on challenge 111']);
         expect(msgsAt('warning')).toEqual([
-            'zzz is not one of the entries in challenge 111 (none) — pinning it anyway.',
+            'Photo zzz is not one of the entries in challenge 111 (none) — pinning it anyway.',
         ]);
     });
 
@@ -172,14 +226,16 @@ describe('pin', () => {
         expect(await pinCmd('111', { turbo: 'zzz' })).toBe(true);
         expect(handlers['set-entry-pin']).toHaveBeenCalledWith(null, 'turbo', '111', 'zzz');
         expect(msgsAt('warning')).toEqual([
-            'zzz is not one of the entries in "Sunset" (imgA, imgB) — pinning it anyway.',
+            'Photo zzz is not one of the entries in "Sunset" (imgA, imgB) — pinning it anyway.',
         ]);
     });
 
     test('a challenge without entries lists none in the warning', async () => {
         apiFactory.__getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 111, title: 'Sunset' }] }));
         expect(await pinCmd('111', { boost: 'zzz' })).toBe(true);
-        expect(msgsAt('warning')).toEqual(['zzz is not one of the entries in "Sunset" (none) — pinning it anyway.']);
+        expect(msgsAt('warning')).toEqual([
+            'Photo zzz is not one of the entries in "Sunset" (none) — pinning it anyway.',
+        ]);
     });
 
     describe('a pin that cannot take effect is saved with a warning', () => {
@@ -225,14 +281,14 @@ describe('pin', () => {
             expect(msgsAt('success')).toEqual([`Pinned imgB for ${kind} on "Sunset"`]);
         });
 
-        test('a feature that is already used or spent cannot fire any more', async () => {
+        test('a feature that is already used, spent or unavailable cannot fire any more', async () => {
             withChallenge({}, [], { boost: { state: 'USED' } });
             expect(await pinCmd('111', { boost: 'imgB' })).toBe(true);
             withChallenge({}, [{ id: 'imgC', turbo: true }]);
             expect(await pinCmd('111', { turbo: 'imgB' })).toBe(true);
             expect(msgsAt('warning')).toEqual([
-                'boost can no longer fire on "Sunset": it is already used or spent — pinning it anyway.',
-                'turbo can no longer fire on "Sunset": it is already used or spent — pinning it anyway.',
+                'boost can no longer fire on "Sunset": it is already used, spent or unavailable — pinning it anyway.',
+                'turbo can no longer fire on "Sunset": it is already used, spent or unavailable — pinning it anyway.',
             ]);
             expect(handlers['set-entry-pin']).toHaveBeenCalledTimes(2);
         });
@@ -244,11 +300,11 @@ describe('pin', () => {
             withChallenge({}, [{ id: 'imgC', ...flag }]);
             expect(await pinCmd('111', { [kind]: 'imgC' })).toBe(true);
             expect(msgsAt('warning')).toEqual([
-                `imgC already carries ${other} on "Sunset", so it cannot take ${kind} — pinning it anyway.`,
+                `Photo imgC already carries ${other} on "Sunset", so it cannot take ${kind} — pinning it anyway.`,
             ]);
         });
 
-        test('clearing a pin warns about nothing', async () => {
+        test('a clear adds no warning; a pin in the same command still warns', async () => {
             withChallenge({ type: 'flash' });
             expect(await pinCmd('111', { boost: null, turbo: 'imgB' })).toBe(true);
             expect(msgsAt('warning')).toEqual([

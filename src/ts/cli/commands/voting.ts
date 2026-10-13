@@ -14,7 +14,7 @@ import { getMiddleware } from '../../apiFactory';
 import { createScheduler } from '../../scheduling/runScheduler';
 import { formatDateTime } from '../../dateFormat';
 import { formatDuration } from '../../format/duration';
-import { stripTerminalControl } from '../../format/logSafe';
+import { printableChallengeId } from './pin';
 import { openBoostWindows } from '../../voting/boostWindow';
 import { findActiveChallenge } from '../../services/findActiveChallenge';
 import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
@@ -227,9 +227,6 @@ const startContinuousVoting = async () => {
     process.stdin.resume();
 };
 
-// A stored challenge id is printed at most this long: a hand-edited key can be any length.
-const MAX_PRINTED_ID = 64;
-
 /**
  * The photos pinned for Boost / Turbo, not a challenge's settings: labelled on their own. Only ids that hold a
  * valid pin are listed, and an id is printed as text: a raw settings write or a hand edit can put anything in a key.
@@ -245,7 +242,7 @@ const logPinnedEntries = (userSettings: ReturnType<typeof settings.loadSettings>
         logger
             .withCategory('settings')
             .info(
-                `  Challenge ${stripTerminalControl(challengeId).slice(0, MAX_PRINTED_ID)}: Boost ${boost ?? 'none'}, Turbo ${turbo ?? 'none'}`,
+                `  Challenge ${printableChallengeId(challengeId)}: Boost ${boost ?? 'none'}, Turbo ${turbo ?? 'none'}`,
             );
     }
 };

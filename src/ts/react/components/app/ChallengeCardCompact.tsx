@@ -98,10 +98,15 @@ export function ChallengeCardCompact({
     // One muted mark for the pins that are stored but not taking effect: it names the feature(s) once, the card says why.
     const notApplying = unusablePins(challenge, pins).map(({ kind }) => kind);
     const names = { boost: t('app.boost'), turbo: t('app.turbo') };
-    const nameVars = { ...names, kind: names[notApplying[0]] };
-    const both = notApplying.length > 1;
-    const notApplyingShort = interp(t(both ? 'app.pinNotApplyingShortBoth' : 'app.pinNotApplyingShort'), nameVars);
-    const notApplyingText = interp(t(both ? 'app.pinNotApplyingBoth' : 'app.pinNotApplying'), nameVars);
+    let notApplyingNote: { short: string; long: string } | null = null;
+    if (notApplying.length > 0) {
+        const nameVars = { ...names, kind: names[notApplying[0]] };
+        const both = notApplying.length > 1;
+        notApplyingNote = {
+            short: interp(t(both ? 'app.pinNotApplyingShortBoth' : 'app.pinNotApplyingShort'), nameVars),
+            long: interp(t(both ? 'app.pinNotApplyingBoth' : 'app.pinNotApplying'), nameVars),
+        };
+    }
 
     return (
         <div className="space-y-2">
@@ -168,12 +173,12 @@ export function ChallengeCardCompact({
                 </div>
             )}
 
-            {notApplying.length > 0 && (
+            {notApplyingNote && (
                 // Visible short text, not just a glyph: a title is invisible on touch, and a dimmed pin alone reads
                 // like the live-pin mark. The full sentence is for screen readers and the title.
-                <div className="text-xs text-base-content/60" title={notApplyingText}>
-                    <span aria-hidden="true">📌 {notApplyingShort}</span>
-                    <span className="sr-only">{notApplyingText}</span>
+                <div className="text-xs text-base-content/60" title={notApplyingNote.long}>
+                    <span aria-hidden="true">📌 {notApplyingNote.short}</span>
+                    <span className="sr-only">{notApplyingNote.long}</span>
                 </div>
             )}
 

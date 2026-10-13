@@ -6,6 +6,7 @@
 
 import * as logger from '../../logger';
 import { stripTerminalControl } from '../../format/logSafe';
+import { isIdArg, MAX_IPC_ID_LENGTH } from '../../ipc/isIdArg';
 import { errorMessage } from '../../errorMessage';
 import { canStillFire, featureNeverFires, findPinnedEntry } from '../../voting/entryPins';
 import { actionError, resolveChallenge } from './actions';
@@ -40,8 +41,12 @@ const NEVER_FIRES_TEXT: Record<NeverFiresReason, string> = {
     exhibition: 'an exhibition challenge',
 };
 
-// A challenge id is printed at most this long, like `status` does: the argument can be any length.
-const MAX_PRINTED_ID = 64;
+/**
+ * A challenge id as printable text: control characters stripped and cut to the longest id a handler accepts,
+ * by code points so a character at the boundary is never split. The argument or a stored key can be any length.
+ */
+const printableChallengeId = (id: string): string =>
+    Array.from(stripTerminalControl(id)).slice(0, MAX_IPC_ID_LENGTH).join('');
 
 /**
  * A line saying why pinning `imageId` for `kind` cannot take effect on the challenge, or null when it can. The
@@ -60,11 +65,11 @@ const pinProblem = (
         return `${kind} never fires on ${label}: it is ${NEVER_FIRES_TEXT[neverFires]} — pinning it anyway.`;
     }
     if (!canStillFire(challenge, kind)) {
-        return `${kind} can no longer fire on ${label}: it is already used or spent — pinning it anyway.`;
+        return `${kind} can no longer fire on ${label}: it is already used, spent or unavailable — pinning it anyway.`;
     }
     const other = kind === 'boost' ? 'turbo' : 'boost';
     return findPinnedEntry(challenge, kind, imageId).state === 'conflict'
-        ? `${imageId} already carries ${other} on ${label}, so it cannot take ${kind} — pinning it anyway.`
+        ? `Photo ${imageId} already carries ${other} on ${label}, so it cannot take ${kind} — pinning it anyway.`
         : null;
 };
 
@@ -89,8 +94,14 @@ const pinCmd = async (
     challengeId: string,
     pins: Partial<Record<EntryPinKind, string | null>> = {},
 ): Promise<boolean> => {
+    if (!isIdArg(challengeId)) {
+        logger
+            .withCategory('settings')
+            .error(`--challenge takes a challenge id of at most ${MAX_IPC_ID_LENGTH} characters. ${PIN_USAGE}`);
+        return false;
+    }
     const kinds = (['boost', 'turbo'] as const).filter((kind) => pins[kind] !== undefined);
-    const idLabel = `challenge ${stripTerminalControl(challengeId).slice(0, MAX_PRINTED_ID)}`;
+    const idLabel = `challenge ${printableChallengeId(challengeId)}`;
     try {
         if (kinds.length === 0) {
             const current = await settingsHandlers()['get-entry-pins'](null, challengeId);
@@ -126,7 +137,7 @@ const pinCmd = async (
                 logger
                     .withCategory('settings')
                     .warning(
-                        `${imageId} is not one of the entries in ${label} (${entryIds.join(', ') || 'none'}) — pinning it anyway.`,
+                        `Photo ${imageId} is not one of the entries in ${label} (${entryIds.join(', ') || 'none'}) — pinning it anyway.`,
                     );
             }
             const problem = pinProblem(challenge, kind, imageId, label);
@@ -164,4 +175,4 @@ const pinCmd = async (
     }
 };
 
-export { pinCmd, PIN_USAGE };
+export { pinCmd, printableChallengeId, PIN_USAGE };

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getLevelStatus, isBoostAvailable, statusText } from '@/utils/formatters';
 import { getNextLevelInfo } from '@/utils/challengeCardView';
@@ -227,7 +227,7 @@ function DanglingPinNote({
     kind: EntryPinKind;
     state: 'gone' | 'conflict';
     busy: boolean;
-    onClear: () => void | Promise<void>;
+    onClear: (button: HTMLButtonElement) => void | Promise<void>;
 }) {
     const { t } = useTranslation();
     const text = interp(t(state === 'gone' ? 'app.pinGoneNote' : 'app.pinConflictNote'), {
@@ -242,8 +242,8 @@ function DanglingPinNote({
                 className={`btn btn-ghost btn-sm${busy ? ' btn-disabled' : ''}`}
                 aria-disabled={busy}
                 aria-busy={busy}
-                onClick={() => {
-                    if (!busy) void onClear();
+                onClick={(event) => {
+                    if (!busy) void onClear(event.currentTarget);
                 }}
             >
                 {t('app.pinClear')}
@@ -276,9 +276,17 @@ function EntryDetails({
     const { t } = useTranslation();
     const { pins, togglePin, setPin, loading: pinBusy, error: pinError, clearError: clearPinError } = entryPins;
     const canPin = { boost: canStillFire(challenge, 'boost'), turbo: canStillFire(challenge, 'turbo') };
+    const detailsRef = useRef<HTMLDivElement>(null);
+
+    // A cleared pin's note unmounts with the focused button inside it: focus would drop to <body>, so it moves to
+    // the section instead. A failed clear leaves the note, and focus, where they are.
+    const clearPin = async (kind: EntryPinKind, button: HTMLButtonElement) => {
+        await setPin(kind, null);
+        if (!button.isConnected) detailsRef.current?.focus();
+    };
 
     return (
-        <div>
+        <div ref={detailsRef} tabIndex={-1}>
             <div className="text-xs text-base-content/60 mb-1">{t('app.entryDetails')}:</div>
             <div className="flex flex-col items-start gap-1">
                 {view.entries.map((entry) => (
@@ -310,7 +318,7 @@ function EntryDetails({
                     kind={kind}
                     state={state}
                     busy={pinBusy}
-                    onClear={() => setPin(kind, null)}
+                    onClear={(button) => clearPin(kind, button)}
                 />
             ))}
             {pinError && (

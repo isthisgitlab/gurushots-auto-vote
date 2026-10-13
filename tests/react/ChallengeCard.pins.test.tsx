@@ -264,6 +264,32 @@ describe('a stored pin that no longer applies', () => {
         await waitFor(() => expect(clear.getAttribute('aria-busy')).toBe('false'));
     });
 
+    test('a clear that removes the note moves focus to the entry details; a failed clear leaves it on the button', async () => {
+        window.api.getEntryPins = jest
+            .fn()
+            .mockResolvedValueOnce({ boost: 'gone', turbo: null })
+            .mockResolvedValue({ boost: null, turbo: null });
+        window.api.setEntryPin = jest
+            .fn()
+            .mockResolvedValueOnce({ success: false, error: 'pin-write-failed' })
+            .mockResolvedValue({ success: true });
+        renderCard(makeChallenge());
+        const clear = await screen.findByRole('button', { name: 'app.pinClear' });
+        const details = screen.getByText('app.entryDetails:').parentElement!;
+        expect(details.getAttribute('tabindex')).toBe('-1');
+
+        clear.focus();
+        fireEvent.click(clear);
+        await waitFor(() => expect(window.api.setEntryPin).toHaveBeenCalledTimes(1));
+        await screen.findByText('errors.pinFailed');
+        expect(clear.isConnected).toBe(true);
+        expect(document.activeElement).toBe(clear);
+
+        fireEvent.click(clear);
+        await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
+        await waitFor(() => expect(document.activeElement).toBe(details));
+    });
+
     test('a photo that carries the other feature gets the conflict note', async () => {
         window.api.getEntryPins = jest.fn().mockResolvedValue({ boost: null, turbo: 'e1' });
         renderCard(
