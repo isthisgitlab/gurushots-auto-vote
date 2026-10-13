@@ -38,10 +38,12 @@ if [ "${1:-}" = "--check-versions" ]; then
         echo "usage: $0 --check-versions <artifacts-file> <versions-file>" >&2
         exit 2
     fi
-    if [ ! -r "$2" ] || [ ! -r "$3" ]; then
-        echo "usage: $0 --check-versions <artifacts-file> <versions-file> (both files must be readable)" >&2
-        exit 2
-    fi
+    for list in "$2" "$3"; do
+        if [ ! -f "$list" ] || [ ! -r "$list" ]; then
+            echo "$0: cannot read $list" >&2
+            exit 2
+        fi
+    done
     check_versions "$2" "$3"
     exit
 fi

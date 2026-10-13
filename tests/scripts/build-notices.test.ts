@@ -14,7 +14,7 @@ jest.unmock('node:fs');
 jest.unmock('path');
 jest.unmock('node:path');
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import os = require('node:os');
@@ -592,41 +592,27 @@ describe('the Android component list', () => {
         });
 
         test('refuses the wrong number of arguments with a usage message and exit 2', () => {
-            try {
-                execFileSync('bash', [script, '--check-versions', 'only-one'], { stdio: 'pipe' });
-                throw new Error('expected the script to fail');
-            } catch (error) {
-                const failure = invalid<{ status: number; stderr: Buffer }>(error);
-                expect(failure.status).toBe(2);
-                expect(failure.stderr.toString()).toContain(
-                    'usage: ' + script + ' --check-versions <artifacts-file> <versions-file>',
-                );
-            }
+            const result = spawnSync('bash', [script, '--check-versions', 'only-one'], { encoding: 'utf8' });
+            expect(result.status).toBe(2);
+            expect(result.stderr).toContain(`usage: ${script} --check-versions <artifacts-file> <versions-file>`);
         });
 
         test.each([
-            ['artifacts', 'missing-artifacts.txt', 'versions.txt'],
-            ['versions', 'artifacts.txt', 'missing-versions.txt'],
-        ])('refuses an unreadable %s file with a usage message and exit 2', (_name, artifactsName, versionsName) => {
+            ['a missing artifacts file', 'missing-artifacts.txt', 'versions.txt'],
+            ['a missing versions file', 'artifacts.txt', 'missing-versions.txt'],
+            ['a directory for the artifacts file', '.', 'versions.txt'],
+            ['a directory for the versions file', 'artifacts.txt', '.'],
+        ])('refuses %s with exit 2, naming the path it cannot read', (_name, artifactsName, versionsName) => {
             fs.writeFileSync(path.join(directory, 'artifacts.txt'), 'g:a\n');
             fs.writeFileSync(path.join(directory, 'versions.txt'), 'g:a:1\n');
-            try {
-                execFileSync(
-                    'bash',
-                    [
-                        script,
-                        '--check-versions',
-                        path.join(directory, artifactsName),
-                        path.join(directory, versionsName),
-                    ],
-                    { stdio: 'pipe' },
-                );
-                throw new Error('expected the script to fail');
-            } catch (error) {
-                const failure = invalid<{ status: number; stderr: Buffer }>(error);
-                expect(failure.status).toBe(2);
-                expect(failure.stderr.toString()).toContain('both files must be readable');
-            }
+            const artifactsPath = path.join(directory, artifactsName);
+            const versionsPath = path.join(directory, versionsName);
+            const result = spawnSync('bash', [script, '--check-versions', artifactsPath, versionsPath], {
+                encoding: 'utf8',
+            });
+            expect(result.status).toBe(2);
+            const unreadable = artifactsName === 'artifacts.txt' ? versionsPath : artifactsPath;
+            expect(result.stderr).toBe(`${script}: cannot read ${unreadable}\n`);
         });
 
         test('the generating flow calls the same check and writes nothing when it fails', () => {
