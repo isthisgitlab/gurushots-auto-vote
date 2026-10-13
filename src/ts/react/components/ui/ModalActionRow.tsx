@@ -10,9 +10,9 @@ const ROW_ICON_CLASS = 'w-4 h-4 mr-1';
 // scroll padding keeps a focused control scrolled above it. On phones the
 // footer is at its tallest, about 13.2rem (buttons wrapped onto two rows and a
 // multi-line Latvian save-error alert at 320px), so 15rem; from `md` up the
-// buttons fit one row and it is about 7rem, so 8rem. Each includes room for the
-// focus ring. A larger Android system font scale can still outgrow the phone
-// value.
+// hosts' `size="2xl"` box is at least ~704px, the buttons fit one row and it is
+// about 7rem, so 8rem. Each includes room for the focus ring. A larger Android
+// system font scale can still outgrow the phone value.
 export const MODAL_ACTION_ROW_SCROLL_PADDING = 'scroll-pb-60 md:scroll-pb-32';
 
 /**
