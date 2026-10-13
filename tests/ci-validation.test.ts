@@ -151,11 +151,90 @@ describe('sends toward the Logs window', () => {
 
     // A second config would apply to the files under its directory instead of the root one.
     test('the root .oxlintrc.json is the only Oxlint config in the repository', () => {
-        const configs = fs.globSync('**/{.oxlintrc.json,oxlintrc.json}', {
-            cwd: root,
-            exclude: (entry) => /(^|[\\/])(node_modules|\.git)([\\/]|$)/.test(String(entry)),
-        });
+        const configs = fs.globSync(
+            '**/{.oxlintrc.json,.oxlintrc.jsonc,oxlintrc.json,oxlint.config.{ts,mts,cts,js,mjs,cjs}}',
+            {
+                cwd: root,
+                exclude: (entry) => /(^|[\\/])(node_modules|\.git)([\\/]|$)/.test(String(entry)),
+            },
+        );
         expect(configs).toEqual(['.oxlintrc.json']);
+    });
+
+    // An ignore file at the root would drop files from the lint run.
+    test('no .eslintignore exists and the lint script is the pinned command', () => {
+        expect(fs.existsSync(path.join(root, '.eslintignore'))).toBe(false);
+        const manifest: unknown = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+        const scripts = isPlainObject(manifest) && isPlainObject(manifest.scripts) ? manifest.scripts : {};
+        expect(scripts.lint).toBe('oxlint src scripts tests');
+    });
+
+    // Oxlint ignores src/ts/types, so nothing there may run: every top-level statement is a type declaration.
+    test('src/ts/types holds only type declarations', () => {
+        const TYPE_ONLY = new Set(['TSInterfaceDeclaration', 'TSTypeAliasDeclaration']);
+        const isTypeOnly = (statement: unknown): boolean => {
+            const node = invalid<{
+                type: string;
+                declare?: boolean;
+                exportKind?: string;
+                importKind?: string;
+                declaration?: unknown;
+                specifiers?: unknown[];
+                source?: unknown;
+            }>(statement);
+            if (node.declare === true || TYPE_ONLY.has(node.type)) return true;
+            if (node.type === 'ImportDeclaration') return node.importKind === 'type';
+            if (node.type !== 'ExportNamedDeclaration') return false;
+            if (node.exportKind === 'type') return true;
+            if (node.declaration !== undefined && node.declaration !== null) return isTypeOnly(node.declaration);
+            return node.specifiers?.length === 0 && node.source == null;
+        };
+        // The 1-based line of each top-level statement that is not a type declaration.
+        const runtimeLines = (code: string): number[] => {
+            const ast: unknown = typescript.parsers.typescript.parse(code, invalid({}));
+            const body: unknown[] = isPlainObject(ast) && Array.isArray(ast.body) ? ast.body : [];
+            return body
+                .filter((statement) => !isTypeOnly(statement))
+                .map((statement) => invalid<{ loc: { start: { line: number } } }>(statement).loc.start.line);
+        };
+        expect(
+            runtimeLines(
+                [
+                    "import type { A } from './a';",
+                    'export interface B { a: A }',
+                    'type C = B;',
+                    'export type D = C;',
+                    'export type { D as E };',
+                    'declare global { interface W { x: number } }',
+                    'declare const g: number;',
+                    'export declare function f(): void;',
+                    'export {};',
+                ].join('\n'),
+            ),
+        ).toEqual([]);
+        expect(
+            runtimeLines(
+                [
+                    "import { a } from './a';",
+                    'export const x = 1;',
+                    'export function f() {}',
+                    'const y = 2;',
+                    'enum E { A }',
+                    'export { y };',
+                    "export * from './a';",
+                    'f();',
+                ].join('\n'),
+            ),
+        ).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+        const offenders: string[] = [];
+        const files = fs.globSync('src/ts/types/**/*.{ts,tsx}', { cwd: root });
+        expect(files.length).toBeGreaterThan(0);
+        for (const file of files) {
+            for (const line of runtimeLines(fs.readFileSync(path.join(root, file), 'utf8'))) {
+                offenders.push(`${file}:${line}`);
+            }
+        }
+        expect(offenders).toEqual([]);
     });
 
     // The only legitimate frame reads and off-window sends, each a line-level disable with a reason.

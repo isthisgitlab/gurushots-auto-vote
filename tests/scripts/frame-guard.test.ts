@@ -62,6 +62,8 @@ const messagesFor = (code: string): string[] => [...new Set(reportsFor(code).map
 
 const read = (name: string) => `Reading \`${name}\` hands out a frame handle.`;
 const destructure = (name: string) => `Destructuring \`${name}\` binds a frame handle.`;
+const bindsSend = (name: string) =>
+    `Destructuring \`${name}\` binds a send method that bypasses the Logs-window filter.`;
 const send = (method: string) => `\`${method}\` off anything but webContents reaches a window unfiltered.`;
 const unfiltered = (method: string) =>
     `\`${method}\` on webContents is not filtered: only \`send\` is, and only called on that webContents.`;
@@ -118,6 +120,15 @@ const VALID: readonly string[] = [
     "Object.defineProperty(win.webContents, 'other', { value: 1 });",
     "Object.defineProperty(win.other, 'send', { value: 1 });",
     'Object.defineProperty(win.webContents);',
+    'Object.assign(win.other, { send: 1 });',
+    'Object.assign(win.webContents);',
+    'Object.assign(win.webContents, source);',
+    'Object.assign(win.webContents, { other: 1 }, { ...rest });',
+    'Object.assign(win.webContents, { [key]: 1 });',
+    'Object.defineProperties(win.other, { send: { value: 1 } });',
+    'Object.defineProperties(win.webContents, { other: { value: 1 } });',
+    'Object.defineProperties(win.webContents, descriptors);',
+    'const { a: mainFrame2, b: senderFrameCount } = x;',
     "Reflect.has(win.webContents, 'send');",
     "Other.defineProperty(win.webContents, 'send', x);",
     "obj[name](win.webContents, 'send');",
@@ -163,7 +174,7 @@ const INVALID: ReadonlyArray<readonly [string, ...string[]]> = [
     ['const { initiator, ...rest } = details;', destructure('initiator')],
     ["const { 'frame': f } = details;", destructure('frame')],
     ["const { ['frame']: f } = details;", destructure('frame')],
-    ['const { send } = frame;', destructure('send')],
+    ['const { send } = frame;', bindsSend('send')],
     ['const {\n    a,\n    frame = null,\n} = d;', destructure('frame')],
     ['const {\n    a,\n    initiator,\n}: D = d;', destructure('initiator')],
     ['const { a: { frame } } = x;', destructure('frame')],
@@ -179,6 +190,20 @@ const INVALID: ReadonlyArray<readonly [string, ...string[]]> = [
     ['function f(a, { frame }, b) {}', destructure('frame')],
     ['function f(a, [{ frame }]) {}', destructure('frame')],
     ['const g = async ({ frame }: D = {}) => 1;', destructure('frame')],
+    // Every frame property, renamed on the way out of its object.
+    ['const { mainFrame: webContents } = w.webContents;', destructure('mainFrame')],
+    ['const { senderFrame: webContents } = event;', destructure('senderFrame')],
+    ['const { focusedFrame: wc } = w.webContents;', destructure('focusedFrame')],
+    ['const { framesInSubtree: all } = frame;', destructure('framesInSubtree')],
+    ['const { opener: parent } = window;', destructure('opener')],
+    ['const { frame: webContents } = details;', destructure('frame')],
+    ['const { initiator: webContents } = details;', destructure('initiator')],
+    ['const { mainFrame } = w.webContents;', destructure('mainFrame')],
+    ["const { 'senderFrame': wc } = event;", destructure('senderFrame')],
+    ['const { opener = null, ...rest } = window;', destructure('opener')],
+    ['({ senderFrame: webContents }) => webContents.send("c", x);', destructure('senderFrame')],
+    ['function f({ mainFrame: wc }) {}', destructure('mainFrame')],
+    ['({ focusedFrame: wc } = w.webContents);', destructure('focusedFrame')],
     // webFrameMain, however it is brought in.
     ["import { webFrameMain } from 'electron';", WEB_FRAME_MAIN],
     ["const { webFrameMain: wfm } = require('electron');", WEB_FRAME_MAIN],
@@ -243,10 +268,18 @@ const INVALID: ReadonlyArray<readonly [string, ...string[]]> = [
     ["Object.defineProperty(win.webContents, 'send', { value: other });", REWRITES_SEND],
     ["Reflect.deleteProperty(win.webContents, 'send');", REWRITES_SEND],
     ["Reflect.set(win.webContents, 'send', other);", REWRITES_SEND],
+    ['Object.assign(win.webContents, { send: other });', REWRITES_SEND],
+    ['Object.assign(win.webContents, { send });', REWRITES_SEND],
+    ["Object.assign(win.webContents, extra, { 'send': other });", REWRITES_SEND],
+    ["Object.assign(win.webContents, { ['send']: other });", REWRITES_SEND],
+    ['Object.assign(win.webContents, { send() {} });', REWRITES_SEND],
+    ['Object.assign(webContents, { ...rest, send: other } as Partial<WC>);', REWRITES_SEND],
+    ['Object.defineProperties(win.webContents, { send: { value: other } });', REWRITES_SEND],
+    ['Object.defineProperties(webContents, { send: desc } as const);', REWRITES_SEND],
     // Binding or aliasing a send method, by destructuring or a member read.
-    ["ipcMain.on('x', ({ reply }) => reply('c', s));", destructure('reply')],
-    ['const { postMessage: post } = port;', destructure('postMessage')],
-    ['const { sendToFrame } = target;', destructure('sendToFrame')],
+    ["ipcMain.on('x', ({ reply }) => reply('c', s));", bindsSend('reply')],
+    ['const { postMessage: post } = port;', bindsSend('postMessage')],
+    ['const { sendToFrame } = target;', bindsSend('sendToFrame')],
     ['const r = event.reply;', send('reply')],
     ['const s = window.postMessage;', send('postMessage')],
     ['const s = frame.send;', send('send')],

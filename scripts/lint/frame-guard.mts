@@ -8,6 +8,11 @@
  * form (a destructuring default, a `for…of` pattern, `frame.send.call(…)`) is caught
  * and a string or comment that merely holds the word is not.
  *
+ * Scope: the rule catches accidental frame-handle use and unfiltered sends. Deliberate obfuscation is out of
+ * scope — reflection (`Reflect.apply`, `Function.prototype.call.call`), aliasing `webContents.send` and rebinding
+ * it, computed keys taken from variables. The runtime guarantee is the Logs window's reduced preload, which exposes
+ * no listener for any other channel, plus the per-sender channel check in the main process.
+ *
  * Loaded through `jsPlugins` in .oxlintrc.json; the rule API is ESLint's.
  */
 
@@ -49,8 +54,6 @@ const FRAME_HANDLE_PROPERTIES: ReadonlySet<string | null> = new Set([
     'opener',
 ]);
 const SEND_METHODS: ReadonlySet<string | null> = new Set(['send', 'postMessage', 'sendToFrame', 'reply']);
-// Names that must not be pulled out of an object by destructuring.
-const FRAME_HANDLE_BINDINGS: ReadonlySet<string | null> = new Set(['frame', 'initiator', ...SEND_METHODS]);
 // Global functions that post to a window without a receiver.
 const BARE_SEND_FUNCTIONS: ReadonlySet<string | null> = new Set(['postMessage', 'sendToFrame']);
 // `fn.call(…)`, `fn.apply(…)`, `fn.bind(…)` invoke or capture `fn` with another receiver.
@@ -144,16 +147,30 @@ const isWritten = (member: Node): boolean => {
 };
 
 // `Object.defineProperty(wc, 'send', …)`, `Reflect.deleteProperty(wc, 'send')`: the call forms of the same write.
+// `Object.assign(wc, { send })`, `Object.defineProperties(wc, { send: … })` write it through an object of keys.
 const REFLECTION_WRITERS: ReadonlySet<string | null> = new Set(['defineProperty', 'deleteProperty', 'set']);
+const BULK_WRITERS: ReadonlySet<string | null> = new Set(['assign', 'defineProperties']);
 const REFLECTION_OBJECTS: ReadonlySet<string> = new Set(['Object', 'Reflect']);
+
+// Whether an object literal has a `send` key (a spread or a computed key from a variable has no name to read).
+const definesSend = (value: Node): boolean => {
+    const object = unwrap(value);
+    return (
+        object.type === 'ObjectExpression' &&
+        (object.properties as Node[]).some((property) => staticName(property.key, property.computed) === 'send')
+    );
+};
 
 const rewritesSend = (call: Node): boolean => {
     const callee = unwrap(call.callee as Node);
-    if (callee.type !== 'MemberExpression' || !REFLECTION_WRITERS.has(memberName(callee))) return false;
+    if (callee.type !== 'MemberExpression') return false;
+    const method = memberName(callee);
+    if (!REFLECTION_WRITERS.has(method) && !BULK_WRITERS.has(method)) return false;
     const owner = unwrap(callee.object as Node);
     if (owner.type !== 'Identifier' || !REFLECTION_OBJECTS.has(owner.name as string)) return false;
-    const [target, key] = call.arguments as Node[];
-    return target !== undefined && isWebContents(target) && staticName(key) === 'send';
+    const [target, ...rest] = call.arguments as Node[];
+    if (target === undefined || !isWebContents(target)) return false;
+    return BULK_WRITERS.has(method) ? rest.some(definesSend) : staticName(rest[0]) === 'send';
 };
 
 const REWRITES_SEND = '`send` on webContents is replaced or removed: that undoes the Logs-channel filter.';
@@ -190,8 +207,13 @@ const noUnfilteredFrameSend = {
             ObjectPattern(node: Node) {
                 for (const property of node.properties as Node[]) {
                     const name = staticName(property.key, property.computed);
-                    if (FRAME_HANDLE_BINDINGS.has(name)) {
+                    if (FRAME_HANDLE_PROPERTIES.has(name)) {
                         context.report({ node: property, message: `Destructuring \`${name}\` binds a frame handle.` });
+                    } else if (SEND_METHODS.has(name)) {
+                        context.report({
+                            node: property,
+                            message: `Destructuring \`${name}\` binds a send method that bypasses the Logs-window filter.`,
+                        });
                     }
                 }
             },

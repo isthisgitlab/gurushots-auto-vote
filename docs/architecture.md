@@ -729,6 +729,10 @@ repeated six times is one that gets forgotten at one of them.
   it are cut down to the same keys, so the window learns the language and nothing else about the settings.
   `restrictToLogsChannels` filters only `webContents.send`, so the `frame-guard/no-unfiltered-frame-send` lint rule
   (`scripts/lint/frame-guard.mts`) keeps frame handles and every other send out of `src/ts`.
+  The rule catches accidental frame-handle use and unfiltered sends; deliberate obfuscation (reflection such as
+  `Reflect.apply` or `Function.prototype.call.call`, aliasing `webContents.send` and rebinding it, computed keys
+  from variables) is out of its scope. The runtime guarantee is the Logs window's reduced preload, which exposes
+  no listener for any other channel, plus the per-sender channel check in the main process.
 - **Navigation guard** (`index/navigationGuard.ts`, registered in `index.ts` on `web-contents-created`
   so it covers every window): no window opens another — `setWindowOpenHandler` always denies, and hands
   the URL to the system (`shell.openExternal`) only when `isOpenableLinkUrl` (`format/urlSafe.ts`)
