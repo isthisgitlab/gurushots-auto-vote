@@ -4,6 +4,7 @@
  * These tests verify that the CI environment and configurations are working correctly.
  */
 import { isPlainObject } from '../src/ts/plainObject';
+import { invalid } from './helpers/invalid';
 
 describe('CI Environment Validation', () => {
     test('Node.js version satisfies the engines requirement (>=26)', () => {
@@ -112,14 +113,16 @@ describe('test typing', () => {
 
 describe('sends toward the Logs window', () => {
     const RULE = 'frame-guard/no-unfiltered-frame-send';
+    const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+    const path = jest.requireActual<typeof import('node:path')>('node:path');
+    const typescript = require('prettier/plugins/typescript') as typeof import('prettier/plugins/typescript');
+    const root = path.join(__dirname, '..');
+    const srcFiles = (): string[] => fs.globSync('src/ts/**/*.{ts,tsx}', { cwd: root });
     // restrictToLogsChannels (ipc/registerHandlers.ts) filters only `webContents.send`; the frame-guard Oxlint rule
     // (scripts/lint/frame-guard.mts) keeps every other route to a window out of src/ts. Switching it off, or widening
     // its exemptions, has to show up here.
     test('Oxlint runs the frame-guard rule over all of src/ts with no file exempt', () => {
-        const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
-        const path = jest.requireActual<typeof import('node:path')>('node:path');
         const { execFileSync } = jest.requireActual<typeof import('node:child_process')>('node:child_process');
-        const root = path.join(__dirname, '..');
         const printed: unknown = JSON.parse(
             execFileSync(process.execPath, [path.join(root, 'node_modules/oxlint/bin/oxlint'), '--print-config'], {
                 cwd: root,
@@ -142,6 +145,17 @@ describe('sends toward the Logs window', () => {
         });
         // A file exemption would let a new send through in the file that implements the filter.
         expect(enabling[0]).not.toHaveProperty('excludeFiles');
+        // Nothing under src/ts besides the type-only declarations is skipped by Oxlint.
+        expect(config.ignorePatterns).toEqual(['src/ts/types/**']);
+    });
+
+    // A second config would apply to the files under its directory instead of the root one.
+    test('the root .oxlintrc.json is the only Oxlint config in the repository', () => {
+        const configs = fs.globSync('**/{.oxlintrc.json,oxlintrc.json}', {
+            cwd: root,
+            exclude: (entry) => /(^|[\\/])(node_modules|\.git)([\\/]|$)/.test(String(entry)),
+        });
+        expect(configs).toEqual(['.oxlintrc.json']);
     });
 
     // The only legitimate frame reads and off-window sends, each a line-level disable with a reason.
@@ -155,46 +169,43 @@ describe('sends toward the Logs window', () => {
         ['src/ts/preloadApi.ts', 'api[method] = () => ipcRenderer.send(channel);'],
     ];
 
-    test('the frame-guard disable comments in src/ts are exactly the pinned set, each with a reason', () => {
-        const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
-        const path = jest.requireActual<typeof import('node:path')>('node:path');
-        const root = path.join(__dirname, '..');
-        const found: Array<readonly [string, string]> = [];
-        const walk = (dir: string): void => {
-            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-                const full = path.join(dir, entry.name);
-                if (entry.isDirectory()) {
-                    walk(full);
-                    continue;
-                }
-                if (!/\.tsx?$/.test(entry.name)) continue;
-                const lines = fs.readFileSync(full, 'utf8').split('\n');
-                lines.forEach((line, index) => {
-                    // Anything on a line that names the rule next to a disable directive counts.
-                    if (!/(?:oxlint|eslint)-disable/.test(line) || !line.includes('frame-guard')) return;
-                    const directive =
-                        /^\s*\/\/ oxlint-disable-next-line frame-guard\/no-unfiltered-frame-send -- \S.*$/;
-                    expect(line).toMatch(directive);
-                    found.push([path.relative(root, full), lines[index + 1].trim()]);
-                });
-            }
-        };
-        walk(path.join(root, 'src/ts'));
-        expect(found.sort()).toEqual([...EXEMPTIONS].sort());
-    });
+    interface Directive {
+        // 1-based line of the comment's end (the line a `-line` directive sits on, the one before a `-next-line` target).
+        line: number;
+        // The comment as written in the source.
+        raw: string;
+        // What follows the directive keyword: the rule list, minus a `-- reason`.
+        rules: string;
+    }
+
+    // Every oxlint/eslint disable directive in `code`, read from its real comments: a string that holds the words is
+    // not one, and a block comment's directive may sit on any of its lines.
+    const directivesIn = (code: string): Directive[] => {
+        const ast: unknown = typescript.parsers.typescript.parse(code, invalid({}));
+        const comments: unknown[] = isPlainObject(ast) && Array.isArray(ast.comments) ? ast.comments : [];
+        const found: Directive[] = [];
+        for (const comment of comments) {
+            const { value, range, loc } = invalid<{
+                value: string;
+                range: [number, number];
+                loc: { end: { line: number } };
+            }>(comment);
+            const match = /^(?:oxlint|eslint)-disable(?:-next-line|-line)?(?:\s|$)(.*)$/s.exec(value.trim());
+            if (!match) continue;
+            found.push({
+                line: loc.end.line,
+                raw: code.slice(range[0], range[1]),
+                rules: match[1].split(/(?:^|\s)--(?:\s|$)/)[0].trim(),
+            });
+        }
+        return found;
+    };
 
     // A directive that names no rule switches off every rule, frame-guard included.
-    const bareDisableLines = (text: string): number[] => {
-        const bare: number[] = [];
-        text.split('\n').forEach((line, index) => {
-            const match = /(?:\/\/|\/\*)\s*(?:oxlint|eslint)-disable(?:-next-line|-line)?(?![\w-])(.*)$/.exec(line);
-            if (!match) return;
-            // What follows the directive, minus a block comment's close and a `-- reason`.
-            const rules = match[1].split('*/')[0].split(/\s--(?:\s|$)/)[0];
-            if (rules.trim() === '') bare.push(index + 1);
-        });
-        return bare;
-    };
+    const bareDisableLines = (code: string): number[] =>
+        directivesIn(code)
+            .filter(({ rules }) => rules === '')
+            .map(({ line }) => line);
 
     test('a disable directive that names no rule is reported, one that names a rule is not', () => {
         const sample = [
@@ -207,28 +218,37 @@ describe('sends toward the Logs window', () => {
             '/* oxlint-disable no-console */',
             '// oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- reason',
             'const text = "oxlint-disable";',
+            'const t = `// oxlint-disable`;',
         ].join('\n');
         expect(bareDisableLines(sample)).toEqual([1, 2, 3, 4]);
+        expect(bareDisableLines('/*\n oxlint-disable\n*/')).toEqual([3]);
+        expect(bareDisableLines('frame.send("c"); /*\noxlint-disable-line */')).toEqual([2]);
+        expect(bareDisableLines('// oxlint-disable-nextline')).toEqual([]);
     });
 
     test('every disable directive in src/ts names the rule it silences', () => {
-        const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
-        const path = jest.requireActual<typeof import('node:path')>('node:path');
-        const root = path.join(__dirname, '..');
         const offenders: string[] = [];
-        const walk = (dir: string): void => {
-            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-                const full = path.join(dir, entry.name);
-                if (entry.isDirectory()) walk(full);
-                else if (/\.tsx?$/.test(entry.name)) {
-                    for (const line of bareDisableLines(fs.readFileSync(full, 'utf8'))) {
-                        offenders.push(`${path.relative(root, full)}:${line}`);
-                    }
-                }
+        for (const file of srcFiles()) {
+            for (const line of bareDisableLines(fs.readFileSync(path.join(root, file), 'utf8'))) {
+                offenders.push(`${file}:${line}`);
             }
-        };
-        walk(path.join(root, 'src/ts'));
+        }
         expect(offenders).toEqual([]);
+    });
+
+    test('the frame-guard disable comments in src/ts are exactly the pinned set, each with a reason', () => {
+        const found: Array<readonly [string, string]> = [];
+        for (const file of srcFiles()) {
+            const code = fs.readFileSync(path.join(root, file), 'utf8');
+            const lines = code.split('\n');
+            for (const { raw, rules, line } of directivesIn(code)) {
+                // Any directive that lists the rule, or a rule of the same plugin, counts.
+                if (!rules.includes('frame-guard')) continue;
+                expect(raw).toMatch(/^\/\/ oxlint-disable-next-line frame-guard\/no-unfiltered-frame-send -- \S.*$/);
+                found.push([file, lines[line].trim()]);
+            }
+        }
+        expect(found.sort()).toEqual([...EXEMPTIONS].sort());
     });
 });
 

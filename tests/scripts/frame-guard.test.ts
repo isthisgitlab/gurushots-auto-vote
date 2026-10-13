@@ -23,16 +23,25 @@ interface Report {
 
 const parse = (code: string): unknown => typescript.parsers.typescript.parse(code, invalid({}));
 
-// Every node of the tree, in document order, under the visitor that matches its type.
-const walk = (value: unknown, visitors: Readonly<Record<string, ((node: Node) => void) | undefined>>): void => {
+// Every node of the tree, in document order, under the visitor that matches its type. Each node gets a `parent`
+// link, as the AST Oxlint hands the rule has.
+const walk = (
+    value: unknown,
+    visitors: Readonly<Record<string, ((node: Node) => void) | undefined>>,
+    parent?: unknown,
+): void => {
     if (Array.isArray(value)) {
-        for (const child of value) walk(child, visitors);
+        for (const child of value) walk(child, visitors, parent);
         return;
     }
     if (!isPlainObject(value)) return;
-    if (typeof value.type === 'string') visitors[value.type]?.(invalid<Node>(value));
+    const isNode = typeof value.type === 'string';
+    if (isNode) {
+        Object.defineProperty(value, 'parent', { value: parent, enumerable: false });
+        visitors[value.type as string]?.(invalid<Node>(value));
+    }
     for (const [key, child] of Object.entries(value)) {
-        if (key !== 'loc' && key !== 'range') walk(child, visitors);
+        if (key !== 'loc' && key !== 'range') walk(child, visitors, isNode ? value : parent);
     }
 };
 
@@ -54,6 +63,8 @@ const messagesFor = (code: string): string[] => [...new Set(reportsFor(code).map
 const read = (name: string) => `Reading \`${name}\` hands out a frame handle.`;
 const destructure = (name: string) => `Destructuring \`${name}\` binds a frame handle.`;
 const send = (method: string) => `\`${method}\` off anything but webContents reaches a window unfiltered.`;
+const unfiltered = (method: string) =>
+    `\`${method}\` on webContents is not filtered: only \`send\` is, and only called on that webContents.`;
 const bare = (name: string) => `\`${name}\` reaches a window unfiltered.`;
 const WEB_FRAME_MAIN = '`webFrameMain` hands out a frame handle.';
 const FRAME_CREATED = 'The `frame-created` event hands out frame handles.';
@@ -89,6 +100,20 @@ const VALID: readonly string[] = [
     'win["webContents"].send("c", x);',
     'win.webContents.send.call(win.webContents, "c", x);',
     'win.webContents.send.bind(win.webContents);',
+    'a.webContents.send.call(a.webContents, "c", x);',
+    'a.webContents.send.apply(a.webContents, ["c"]);',
+    'a.webContents?.send?.call(a.webContents, "c");',
+    'a["webContents"].send.call(a.webContents, "c");',
+    'this.webContents.send.call(this.webContents, "c");',
+    '(win.webContents.send as Send)("c", x);',
+    '(0, win.webContents.send)("c", x);',
+    '(win.webContents as WC).send("c", x);',
+    'const send = win.webContents.send;',
+    'win.webContents.send = (channel, ...args) => 1;',
+    'a.webContents.send.name;',
+    'a.webContents.send.call;',
+    'const o = { send: 1, reply: 2, postMessage: 3 };',
+    'const sendCount = x.sendCount; const replyTo = x.replyTo;',
     '(wc?.webContents)?.send("c", x);',
     'list.push(x);',
     'fn.call(this, x);',
@@ -165,7 +190,6 @@ const INVALID: ReadonlyArray<readonly [string, ...string[]]> = [
     ['(x as WebContents).send("c");', send('send')],
     ['postMessage(data);', bare('postMessage')],
     ['sendToFrame(frameId, "c", x);', bare('sendToFrame')],
-    // `.send` reached through call/apply/bind keeps its original receiver.
     // A snippet shaped like ipc/registerHandlers.ts, with no disable comment: the file is not exempt.
     [
         'const restrict = (event, webContents) => {\n    event.sender.mainFrame.send("c", x);\n    event.senderFrame.postMessage("c", x);\n    webContents.send("c", x);\n};',
@@ -174,11 +198,47 @@ const INVALID: ReadonlyArray<readonly [string, ...string[]]> = [
         send('postMessage'),
         read('senderFrame'),
     ],
+    // `.send` reached through call/apply/bind keeps its original receiver, and on a webContents it is accepted
+    // only when called on that same webContents.
     ['frame.send.call(frame, "c", x);', send('send')],
     ['port.send.apply(port, ["c"]);', send('send')],
     ['const s = ports[0].send.bind(ports[0]);', send('send')],
     ['frame?.send?.call(frame, "c");', send('send')],
     ['win.postMessage.call(win, x);', send('postMessage')],
+    ['other.webContents.send.call(logsWin.webContents, "c", x);', unfiltered('send')],
+    ['a.webContents.send.apply(b.webContents, ["c"]);', unfiltered('send')],
+    ['const s = a.webContents.send.bind(b.webContents);', unfiltered('send')],
+    ['a.webContents.send.call(x, "c");', unfiltered('send')],
+    ['a.webContents.send.call();', unfiltered('send')],
+    ['a.webContents.send.call(f(), "c");', unfiltered('send')],
+    ['a.webContents.send.call(a.webContents.foo, "c");', unfiltered('send')],
+    ['a.webContents.send.call(a[b], "c");', unfiltered('send')],
+    ['f().webContents.send.call(f().webContents, "c");', unfiltered('send')],
+    ['a[k].webContents.send.call(a[k].webContents, "c");', unfiltered('send')],
+    ['(win.webContents as WC).send.call(other, "c");', unfiltered('send')],
+    // The instance filter replaces only `send`: every other send on a webContents is unfiltered.
+    ['win.webContents.postMessage("c", x);', unfiltered('postMessage')],
+    ['webContents.sendToFrame(id, "c", x);', unfiltered('sendToFrame')],
+    ['win.webContents.reply("c", x);', unfiltered('reply')],
+    ['win.webContents?.postMessage("c", x);', unfiltered('postMessage')],
+    // Binding or aliasing a send method, by destructuring or a member read.
+    ["ipcMain.on('x', ({ reply }) => reply('c', s));", destructure('reply')],
+    ['const { postMessage: post } = port;', destructure('postMessage')],
+    ['const { sendToFrame } = target;', destructure('sendToFrame')],
+    ['const r = event.reply;', send('reply')],
+    ['const s = window.postMessage;', send('postMessage')],
+    ['const s = frame.send;', send('send')],
+    ['const t = target["sendToFrame"];', send('sendToFrame')],
+    ['register(event.reply);', send('reply')],
+    // A cast, a parenthesis or a sequence around the callee does not hide the send.
+    ['(window.postMessage as F)(x);', send('postMessage')],
+    ['(frame.send satisfies F)("c");', send('send')],
+    ['(<F>frame.send)("c");', send('send')],
+    ['(0, frame.send)("c");', send('send')],
+    ['(frame.send)("c");', send('send')],
+    ['(postMessage as F)(x);', bare('postMessage')],
+    ['(0, postMessage)(x);', bare('postMessage')],
+    ['(sendToFrame!)(id);', bare('sendToFrame')],
     // The frame-created event, `.on` or `.once`, however the name is spelled.
     ["win.webContents.on('frame-created', cb);", FRAME_CREATED],
     ['win.webContents.once("frame-created", cb);', FRAME_CREATED],
@@ -234,9 +294,16 @@ describe('under Oxlint', () => {
             const result = spawnSync(
                 process.execPath,
                 [path.join(root, 'node_modules/oxlint/bin/oxlint'), '-c', config, '--format=json', dir],
-                { encoding: 'utf8', cwd: dir },
+                { encoding: 'utf8', cwd: dir, timeout: 30_000 },
             );
-            const output: unknown = JSON.parse(result.stdout);
+            let output: unknown;
+            try {
+                output = JSON.parse(result.stdout);
+            } catch {
+                throw new Error(
+                    `oxlint printed no JSON: status ${result.status}, signal ${result.signal}, stderr: ${result.stderr}`,
+                );
+            }
             const found = new Map<string, Set<string>>();
             const diagnostics = isPlainObject(output) && Array.isArray(output.diagnostics) ? output.diagnostics : [];
             for (const diagnostic of diagnostics) {

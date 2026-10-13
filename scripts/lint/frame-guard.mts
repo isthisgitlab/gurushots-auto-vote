@@ -14,6 +14,7 @@
 // The slice of the ESTree AST this rule reads.
 interface Node {
     type: string;
+    parent?: Node;
     name?: string;
     value?: unknown;
     computed?: boolean;
@@ -44,9 +45,9 @@ const FRAME_HANDLE_PROPERTIES: ReadonlySet<string | null> = new Set([
     'focusedFrame',
     'opener',
 ]);
-// Names that must not be pulled out of an object by destructuring.
-const FRAME_HANDLE_BINDINGS: ReadonlySet<string | null> = new Set(['frame', 'initiator', 'send']);
 const SEND_METHODS: ReadonlySet<string | null> = new Set(['send', 'postMessage', 'sendToFrame', 'reply']);
+// Names that must not be pulled out of an object by destructuring.
+const FRAME_HANDLE_BINDINGS: ReadonlySet<string | null> = new Set(['frame', 'initiator', ...SEND_METHODS]);
 // Global functions that post to a window without a receiver.
 const BARE_SEND_FUNCTIONS: ReadonlySet<string | null> = new Set(['postMessage', 'sendToFrame']);
 // `fn.call(…)`, `fn.apply(…)`, `fn.bind(…)` invoke or capture `fn` with another receiver.
@@ -66,13 +67,38 @@ const staticName = (node: Node | undefined, computed = false): string | null => 
     return null;
 };
 
-// `a!` and the `?.` chain around a call or member evaluate to what they wrap.
+const memberName = (node: Node): string | null => staticName(node.property, node.computed);
+
+// Wrappers that evaluate to the expression inside: `a!`, `a as T`, `a satisfies T`, `<T>a`, `(a)`, a `?.` chain.
+const TRANSPARENT_WRAPPERS: ReadonlySet<string> = new Set([
+    'ChainExpression',
+    'TSNonNullExpression',
+    'TSAsExpression',
+    'TSSatisfiesExpression',
+    'TSTypeAssertion',
+    'ParenthesizedExpression',
+]);
+
+// The expression a node evaluates to: wrappers stripped, a sequence reduced to its last expression.
 const unwrap = (node: Node): Node => {
     let current = node;
-    while (current.type === 'ChainExpression' || current.type === 'TSNonNullExpression') {
-        current = current.expression as Node;
+    for (;;) {
+        if (TRANSPARENT_WRAPPERS.has(current.type)) current = current.expression as Node;
+        else if (current.type === 'SequenceExpression') current = (current.expressions as Node[]).at(-1) as Node;
+        else return current;
     }
-    return current;
+};
+
+// Whether `parent` passes `child`'s value through unchanged (the mirror of `unwrap`).
+const passesThrough = (parent: Node, child: Node): boolean =>
+    TRANSPARENT_WRAPPERS.has(parent.type) ||
+    (parent.type === 'SequenceExpression' && (parent.expressions as Node[]).at(-1) === child);
+
+// The outermost wrapper around `node` and the first real parent above it.
+const enclosing = (node: Node): { top: Node; parent: Node | undefined } => {
+    let top = node;
+    while (top.parent !== undefined && passesThrough(top.parent, top)) top = top.parent;
+    return { top, parent: top.parent };
 };
 
 const isWebContents = (receiver: Node): boolean => {
@@ -81,7 +107,30 @@ const isWebContents = (receiver: Node): boolean => {
     return node.type === 'MemberExpression' && staticName(node.property, node.computed) === 'webContents';
 };
 
-const memberName = (node: Node): string | null => staticName(node.property, node.computed);
+// Whether two expressions are the same name or property path (`a.webContents` and `a['webContents']`).
+const sameReference = (left: Node, right: Node): boolean => {
+    const a = unwrap(left);
+    const b = unwrap(right);
+    if (a.type !== b.type) return false;
+    if (a.type === 'Identifier') return a.name === b.name;
+    if (a.type === 'ThisExpression') return true;
+    if (a.type !== 'MemberExpression') return false;
+    const name = memberName(a);
+    return name !== null && name === memberName(b) && sameReference(a.object as Node, b.object as Node);
+};
+
+// Whether a `send` on a webContents stays on that webContents: `.call/.apply/.bind` on it must name the same
+// webContents as the receiver (`a.webContents.send.call(a.webContents, …)`), or the filter on one window's `send`
+// would carry a message to another window.
+const keepsReceiver = (send: Node): boolean => {
+    const first = enclosing(send);
+    if (first.parent?.type !== 'MemberExpression' || first.parent.object !== first.top) return true;
+    if (!FUNCTION_METHODS.has(memberName(first.parent))) return true;
+    const second = enclosing(first.parent);
+    if (second.parent?.type !== 'CallExpression' || second.parent.callee !== second.top) return true;
+    const [receiver] = second.parent.arguments as Node[];
+    return receiver !== undefined && sameReference(receiver, send.object as Node);
+};
 
 const noUnfilteredFrameSend = {
     meta: {
@@ -96,6 +145,15 @@ const noUnfilteredFrameSend = {
                 if (FRAME_HANDLE_PROPERTIES.has(name) || (node.computed && name === 'webFrameMain')) {
                     context.report({ node, message: `Reading \`${name}\` hands out a frame handle.` });
                 }
+                if (!SEND_METHODS.has(name)) return;
+                // The one send the filter covers is `send` on a webContents, invoked on that same webContents.
+                if (name === 'send' && isWebContents(node.object as Node) && keepsReceiver(node)) return;
+                context.report({
+                    node,
+                    message: isWebContents(node.object as Node)
+                        ? `\`${name}\` on webContents is not filtered: only \`send\` is, and only called on that webContents.`
+                        : `\`${name}\` off anything but webContents reaches a window unfiltered.`,
+                });
             },
             ObjectPattern(node: Node) {
                 for (const property of node.properties as Node[]) {
@@ -119,17 +177,6 @@ const noUnfilteredFrameSend = {
                     return;
                 }
                 if (callee.type !== 'MemberExpression') return;
-                let sender = callee;
-                // `x.send.call(y, …)` sends on `y`, but is still a send off `x`.
-                const inner = unwrap(callee.object as Node);
-                if (FUNCTION_METHODS.has(memberName(callee)) && inner.type === 'MemberExpression') sender = inner;
-                const method = memberName(sender);
-                if (SEND_METHODS.has(method) && !isWebContents(sender.object as Node)) {
-                    context.report({
-                        node,
-                        message: `\`${method}\` off anything but webContents reaches a window unfiltered.`,
-                    });
-                }
                 const [event] = node.arguments as Node[];
                 if (LISTENER_METHODS.has(memberName(callee)) && staticName(event) === 'frame-created') {
                     context.report({ node, message: 'The `frame-created` event hands out frame handles.' });
