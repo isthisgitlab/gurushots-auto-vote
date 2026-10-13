@@ -363,7 +363,7 @@ describe('the Android delete failure text', () => {
     // The restart is announced once, by about.deleteRestartsOnClose; the failure text itself says nothing about it.
     const ENGLISH_RESTART = /restart|relaunch|reopen|\b(?:start|launch|open)\b[^.;]*\bagain\b/i;
     const LATVIAN_RESTART =
-        /palai|restart|pārstart|atsāknē|startē|no jauna|(?:sā[kc]|atv[eē]r|ieslē)\S*\s+(?:\S+\s+){0,3}(?:vēlreiz|atkal|no jauna)|(?:vēlreiz|atkal)\s+(?:\S+\s+){0,3}(?:sā[kc]|atv[eē]r|ieslē)/i;
+        /palai|restart|pārstart|atsāk|startē|no jauna|(?:sā[kc]|atv[eē]r|ieslē)\S*\s+(?:\S+\s+){0,3}(?:vēlreiz|atkal|no jauna)|(?:vēlreiz|atkal)\s+(?:\S+\s+){0,3}(?:sā[kc]|atv[eē]r|ieslē)/i;
 
     test('does not mention a restart in either language', () => {
         expect(englishAbout.deleteFailedAndroid).not.toMatch(ENGLISH_RESTART);
@@ -400,6 +400,7 @@ describe('the Android delete failure text', () => {
             'Lietotne atkal sāksies.',
             'Pēc tam atkal atver lietotni.',
             'Lietotne vēlreiz atvērsies.',
+            'Lietotne atsāksies.',
         ]) {
             expect(example).toMatch(LATVIAN_RESTART);
         }
