@@ -7,9 +7,11 @@ const ROW_ICON_CLASS = 'w-4 h-4 mr-1';
 
 // The modal hosting the row must put this on its `.modal-box` (via Modal's
 // `className`): the opaque footer covers the bottom of the scroll area, and the
-// scroll padding keeps a focused control scrolled above it. 8rem covers the
-// footer including the save-error alert.
-export const MODAL_ACTION_ROW_SCROLL_PADDING = 'scroll-pb-32';
+// scroll padding keeps a focused control scrolled above it. 13rem covers the
+// footer at its tallest (about 12rem: buttons wrapped onto two rows and a
+// three-line save-error alert on a 360px phone in Latvian) plus room for the
+// focus ring.
+export const MODAL_ACTION_ROW_SCROLL_PADDING = 'scroll-pb-52';
 
 /**
  * Shared Save / secondary / Cancel action row used by the settings modals

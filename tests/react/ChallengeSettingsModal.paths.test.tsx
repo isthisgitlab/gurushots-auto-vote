@@ -235,7 +235,7 @@ describe('editing and saving', () => {
     test('the modal box keeps focus above the footer, which is the last child of the content', async () => {
         renderModal();
         await loaded();
-        expect(document.querySelector('.modal-box')!.classList.contains('scroll-pb-32')).toBe(true);
+        expect(document.querySelector('.modal-box')!.classList.contains('scroll-pb-52')).toBe(true);
         const footer = screen.getByRole('button', { name: 'app.save' }).closest('.sticky')!;
         expect(footer.parentElement!.lastElementChild).toBe(footer);
     });

@@ -301,7 +301,7 @@ describe('SettingsModal — reliability (API retry/backoff) controls', () => {
 describe('SettingsModal — sticky action footer', () => {
     test('the modal box keeps focus above the footer, which is the last child of the content', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-        expect(document.querySelector('.modal-box')!.classList.contains('scroll-pb-32')).toBe(true);
+        expect(document.querySelector('.modal-box')!.classList.contains('scroll-pb-52')).toBe(true);
         const save = Array.from(document.querySelectorAll('button')).find((b) => b.textContent.trim() === 'app.save')!;
         const footer = save.closest('.sticky')!;
         expect(footer.parentElement!.lastElementChild).toBe(footer);
