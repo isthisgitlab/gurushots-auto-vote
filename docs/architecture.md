@@ -727,6 +727,8 @@ repeated six times is one that gets forgotten at one of them.
   Its settings read is language-only: `get-setting` from that window answers only the `logsWindowSettingKeys`
   (`isSettingKeyAllowedForSender` refuses any other key), and the `settings-changed` events the main process sends
   it are cut down to the same keys, so the window learns the language and nothing else about the settings.
+  `restrictToLogsChannels` filters only `webContents.send`, so the `frame-guard/no-unfiltered-frame-send` lint rule
+  (`scripts/lint/frame-guard.mts`) keeps frame handles and every other send out of `src/ts`.
 - **Navigation guard** (`index/navigationGuard.ts`, registered in `index.ts` on `web-contents-created`
   so it covers every window): no window opens another — `setWindowOpenHandler` always denies, and hands
   the URL to the system (`shell.openExternal`) only when `isOpenableLinkUrl` (`format/urlSafe.ts`)

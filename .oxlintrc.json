@@ -1,7 +1,7 @@
 {
     "$schema": "./node_modules/oxlint/configuration_schema.json",
     "plugins": ["eslint", "typescript", "react", "jsx-a11y", "unicorn"],
-    "jsPlugins": ["./scripts/lint/a11y-local.mts"],
+    "jsPlugins": ["./scripts/lint/a11y-local.mts", "./scripts/lint/frame-guard.mts"],
     // Every category off: the rules below are listed explicitly, mirroring
     // eslint:recommended plus this project's rules, so an Oxlint upgrade never
     // enables new rules on its own.
@@ -225,6 +225,23 @@
                 "typescript/no-unsafe-call": "error",
                 "typescript/no-unsafe-member-access": "error",
                 "typescript/no-unsafe-return": "error"
+            }
+        },
+        // Sends toward a window: restrictToLogsChannels filters only webContents.send,
+        // so no source touches a frame handle or sends on anything else
+        // (scripts/lint/frame-guard.mts).
+        {
+            "files": ["src/ts/**/*.ts", "src/ts/**/*.tsx"],
+            "excludeFiles": [
+                // isTrustedSender and the refusal log read the sender's frame (its url, and
+                // whether it is the window's main frame); they send nothing.
+                "src/ts/ipc/registerHandlers.ts",
+                // The preload's one-way ipcRenderer.send to the main process (the renderer
+                // side of a channel, not a window).
+                "src/ts/preloadApi.ts"
+            ],
+            "rules": {
+                "frame-guard/no-unfiltered-frame-send": "error"
             }
         },
         // Renderer (Preact via preact/compat).

@@ -103,7 +103,8 @@ const logsWindowSettings = (payload: unknown): Record<string, unknown> =>
 /**
  * Limits every call from this window to the Logs channel set, whatever its preload exposes, and cuts what is sent to
  * it down to what it may know: its settings-changed events carry only the logsWindowSettingKeys. Only
- * `webContents.send` is filtered: `postMessage` and `mainFrame.send` are not, so nothing may use them toward this window.
+ * `webContents.send` is filtered: `postMessage` and `mainFrame.send` are not, so nothing may use them toward this window
+ * (the frame-guard lint rule enforces it over src/ts; this file and preloadApi.ts are its only exemptions).
  * @param webContents - the Logs window's, registered before its page loads
  */
 const restrictToLogsChannels = (webContents: WebContents): void => {
