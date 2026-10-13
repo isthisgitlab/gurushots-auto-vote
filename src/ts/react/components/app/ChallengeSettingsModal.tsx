@@ -132,11 +132,6 @@ export function ChallengeSettingsModal({
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {form.saveError && (
-                        <div className="alert alert-error py-2 text-sm" role="alert">
-                            <span>{t('app.settingsSaveError')}</span>
-                        </div>
-                    )}
                     <OverridesSummary overrideCount={Object.keys(form.overrides).length} titleRules={form.titleRules} />
 
                     {/* Named profiles: apply loads a saved tactic into the form
@@ -170,13 +165,13 @@ export function ChallengeSettingsModal({
                     </SettingsChallengeProvider>
 
                     <ModalActionRow
-                        bordered
                         onSave={form.save}
                         saving={form.saving}
                         onSecondary={form.clearAll}
                         secondaryLabel={t('app.clearAll')}
                         secondaryIcon="trash"
                         onCancel={onClose}
+                        saveError={form.saveError}
                     />
                 </div>
             )}

@@ -6,14 +6,17 @@ import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 const ROW_ICON_CLASS = 'w-4 h-4 mr-1';
 
 /**
- * Shared Save / secondary / Cancel action row used by the settings
- * modals (SettingsModal renders it twice — top and bordered bottom —
- * and ChallengeSettingsModal once).
+ * Shared Save / secondary / Cancel action row used by the settings modals
+ * (SettingsModal and ChallengeSettingsModal). It is a footer pinned to the
+ * bottom of the modal's scroll area: render it as the last child of the modal
+ * content. The negative margins cancel the modal box's padding so the bar sits
+ * flush with the box edges and the opaque background hides the content
+ * scrolling underneath.
  *
  * @param props.saving        - disables Save and shows the spinner
  * @param props.onSecondary - warning button handler (Reset All / Clear All)
  * @param props.secondaryLabel - already-translated warning button label
- * @param props.bordered    - adds the top border + padding variant
+ * @param props.saveError   - shows the save-failed alert above the buttons
  */
 export function ModalActionRow({
     onSave,
@@ -22,7 +25,7 @@ export function ModalActionRow({
     secondaryLabel,
     secondaryIcon = 'reset',
     onCancel,
-    bordered = false,
+    saveError = false,
 }: {
     onSave: () => void | Promise<void>;
     saving: boolean;
@@ -30,33 +33,40 @@ export function ModalActionRow({
     secondaryLabel: string;
     secondaryIcon?: 'reset' | 'trash';
     onCancel: () => void;
-    bordered?: boolean;
+    saveError?: boolean;
 }) {
     const { t } = useTranslation();
 
     return (
-        <div className={bordered ? 'flex justify-end gap-2 pt-4 border-t border-base-300' : 'flex justify-end gap-2'}>
-            <button
-                className="btn btn-latvian btn-sm"
-                onClick={() => void onSave()}
-                disabled={saving}
-                aria-busy={saving}
-            >
-                {saving && <LoadingSpinner size="xs" decorative />}
-                <StrokeIcon d={ICON_PATHS.save} className={ROW_ICON_CLASS} />
-                {t('app.save')}
-            </button>
-            <button className="btn btn-warning btn-sm" onClick={() => void onSecondary()}>
-                {secondaryIcon === 'trash' ? (
-                    <StrokeIcon d={ICON_PATHS.trash} className={ROW_ICON_CLASS} />
-                ) : (
-                    <ResetIcon className={ROW_ICON_CLASS} />
-                )}
-                {secondaryLabel}
-            </button>
-            <button className="btn btn-outline btn-sm" onClick={onCancel}>
-                {t('app.cancel')}
-            </button>
+        <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 px-6 py-4 bg-base-100 border-t border-base-300">
+            {saveError && (
+                <div className="alert alert-error py-2 text-sm mb-2" role="alert">
+                    <span>{t('app.settingsSaveError')}</span>
+                </div>
+            )}
+            <div className="flex justify-end gap-2">
+                <button
+                    className="btn btn-latvian btn-sm"
+                    onClick={() => void onSave()}
+                    disabled={saving}
+                    aria-busy={saving}
+                >
+                    {saving && <LoadingSpinner size="xs" decorative />}
+                    <StrokeIcon d={ICON_PATHS.save} className={ROW_ICON_CLASS} />
+                    {t('app.save')}
+                </button>
+                <button className="btn btn-warning btn-sm" onClick={() => void onSecondary()}>
+                    {secondaryIcon === 'trash' ? (
+                        <StrokeIcon d={ICON_PATHS.trash} className={ROW_ICON_CLASS} />
+                    ) : (
+                        <ResetIcon className={ROW_ICON_CLASS} />
+                    )}
+                    {secondaryLabel}
+                </button>
+                <button className="btn btn-outline btn-sm" onClick={onCancel}>
+                    {t('app.cancel')}
+                </button>
+            </div>
         </div>
     );
 }

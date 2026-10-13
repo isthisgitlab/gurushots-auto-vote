@@ -1,7 +1,8 @@
 /**
  * Tests for the shared ModalActionRow (components/ui/ModalActionRow) —
- * the Save / secondary / Cancel row used twice by SettingsModal and once
- * by ChallengeSettingsModal. Asserts the button styles and handler wiring.
+ * the sticky Save / secondary / Cancel footer used by SettingsModal and
+ * ChallengeSettingsModal. Asserts the footer classes, the optional save-error
+ * alert, the button styles and handler wiring.
  */
 
 import { render, fireEvent } from './helpers/test-utils';
@@ -49,16 +50,24 @@ describe('ModalActionRow', () => {
         expect(save.querySelector('.loading.loading-spinner')).not.toBeNull();
     });
 
-    test('bordered variant adds the top border classes to the row', () => {
-        const { container } = renderRow({ bordered: true });
+    test('renders as a sticky footer flush with the modal box', () => {
+        const { container } = renderRow();
         expect((container.firstChild as HTMLElement).className).toBe(
-            'flex justify-end gap-2 pt-4 border-t border-base-300',
+            'sticky -bottom-6 z-10 -mx-6 -mb-6 px-6 py-4 bg-base-100 border-t border-base-300',
         );
     });
 
-    test('default (top) variant has no border classes', () => {
-        const { container } = renderRow();
-        expect((container.firstChild as HTMLElement).className).toBe('flex justify-end gap-2');
+    test('saveError renders the alert above the buttons; omitted by default', () => {
+        const off = renderRow();
+        expect(off.container.querySelector('[role="alert"]')).toBeNull();
+        off.unmount();
+
+        const { container } = renderRow({ saveError: true });
+        const alert = container.querySelector('[role="alert"]')!;
+        expect(alert.textContent).toBe('app.settingsSaveError');
+        expect(alert.compareDocumentPosition(container.querySelector('button')!)).toBe(
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        );
     });
 
     test('secondaryIcon="trash" swaps the warning-button glyph', () => {

@@ -233,13 +233,6 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     const schemaForm = { formValues, handleFormChange, handleResetGlobal, hintsFor };
     const bands = tierSchemaEntries(schema, groups, tiers);
     const appGroups = bands.filter((band) => band.id === APP_TIER).flatMap((band) => band.groups);
-    const actionRowProps = {
-        onSave: handleSave,
-        saving,
-        onSecondary: handleResetAll,
-        secondaryLabel: t('app.resetAll'),
-        onCancel: handleCancel,
-    };
 
     return (
         <Modal isOpen={isOpen} onClose={handleCancel} title={t('app.globalSettings')} size="2xl">
@@ -250,12 +243,6 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 <InlineLoader text={t('common.loading')} />
             ) : (
                 <div className="space-y-6">
-                    {saveError && (
-                        <div className="alert alert-error py-2 text-sm" role="alert">
-                            <span>{t('app.settingsSaveError')}</span>
-                        </div>
-                    )}
-                    <ModalActionRow {...actionRowProps} />
                     <ApplicationSettingsSection
                         uiValues={uiValues}
                         handleUiChange={handleUiChange}
@@ -270,7 +257,14 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                     <TitleRulesSection titleRules={titleRules} />
                     <ScenariosSection isOpen={isOpen} />
                     <AboutDataSection />
-                    <ModalActionRow bordered {...actionRowProps} />
+                    <ModalActionRow
+                        onSave={handleSave}
+                        saving={saving}
+                        onSecondary={handleResetAll}
+                        secondaryLabel={t('app.resetAll')}
+                        onCancel={handleCancel}
+                        saveError={saveError}
+                    />
                 </div>
             )}
         </Modal>
