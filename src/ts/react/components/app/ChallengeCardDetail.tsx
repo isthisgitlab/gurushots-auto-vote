@@ -283,32 +283,39 @@ function EntryDetails({
     // A cleared pin's note unmounts with the focused button inside it: focus would drop to <body>, so it moves to
     // the section instead. The note can unmount well after the write resolves (a settings-changed read supersedes
     // the write's own), hence the check runs after every render rather than after the write. Focus the user moved
-    // elsewhere is never stolen: any focus landing off the recorded button forgets it, so a failed clear (the
-    // note, and focus, stay where they are) followed by the user moving on never acts later.
+    // elsewhere (another element, or <body>) is never stolen: the button is forgotten once it loses focus while
+    // still in the page, so a failed clear (the note, and focus, stay where they are) followed by the user moving
+    // on never acts later. A focusout from the button's own removal (some engines fire one) is left to the layout
+    // effect, which has already run by the time the deferred check sees the button gone.
     useEffect(() => {
-        const forgetOnRefocus = (event: FocusEvent) => {
-            if (event.target !== clearedButtonRef.current) clearedButtonRef.current = null;
+        const forgetOnBlur = (event: FocusEvent) => {
+            const button = clearedButtonRef.current;
+            if (!button || event.target !== button) return;
+            queueMicrotask(() => {
+                if (button.isConnected) clearedButtonRef.current = null;
+            });
         };
-        document.addEventListener('focusin', forgetOnRefocus);
-        return () => document.removeEventListener('focusin', forgetOnRefocus);
+        document.addEventListener('focusout', forgetOnBlur);
+        return () => document.removeEventListener('focusout', forgetOnBlur);
     }, []);
 
     useLayoutEffect(() => {
         const button = clearedButtonRef.current;
         if (!button || button.isConnected) return;
         clearedButtonRef.current = null;
-        detailsRef.current?.focus();
+        detailsRef.current?.focus({ preventScroll: true });
     });
 
+    // WebKit does not focus a button on a mouse click: nothing was focused there, so there is nothing to restore.
     const clearPin = async (kind: EntryPinKind, button: HTMLButtonElement) => {
-        clearedButtonRef.current = button;
+        clearedButtonRef.current = document.activeElement === button ? button : null;
         await setPin(kind, null);
     };
 
     return (
         <div ref={detailsRef} tabIndex={-1} role="group" aria-labelledby={labelId}>
-            <div id={labelId} className="text-xs text-base-content/60 mb-1">
-                {t('app.entryDetails')}:
+            <div className="text-xs text-base-content/60 mb-1">
+                <span id={labelId}>{t('app.entryDetails')}</span>:
             </div>
             <div className="flex flex-col items-start gap-1">
                 {view.entries.map((entry) => (
