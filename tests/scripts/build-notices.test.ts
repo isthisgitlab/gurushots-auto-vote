@@ -615,6 +615,23 @@ describe('the Android component list', () => {
             expect(result.stderr).toBe(`${script}: cannot read ${unreadable}\n`);
         });
 
+        // A file mode cannot lock out the superuser, so the case only exists for everyone else.
+        (process.getuid?.() === 0 ? test.skip : test)(
+            'refuses an existing file it has no permission to read with exit 2, naming the path',
+            () => {
+                const artifactsPath = path.join(directory, 'artifacts.txt');
+                const versionsPath = path.join(directory, 'versions.txt');
+                fs.writeFileSync(artifactsPath, 'g:a\n');
+                fs.writeFileSync(versionsPath, 'g:a:1\n');
+                fs.chmodSync(versionsPath, 0o000);
+                const result = spawnSync('bash', [script, '--check-versions', artifactsPath, versionsPath], {
+                    encoding: 'utf8',
+                });
+                expect(result.status).toBe(2);
+                expect(result.stderr).toBe(`${script}: cannot read ${versionsPath}\n`);
+            },
+        );
+
         test('the generating flow calls the same check and writes nothing when it fails', () => {
             const text = read('scripts', 'android-runtime-artifacts.sh');
             expect(text).toContain('if ! check_versions "$new_artifacts" "$new_versions"; then');
