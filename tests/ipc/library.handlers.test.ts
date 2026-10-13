@@ -19,10 +19,11 @@ const auth = jest.mocked(authModule);
 import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
 import type * as libraryModule from '../../src/ts/ipc/actions/library';
+import type { LibraryPhoto } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 import { logCategories } from '../helpers/logCategories';
 
-const { handleGetLibraryPhotos, __resetLibraryThrottle, MIN_WALK_INTERVAL_MS } =
+const { handleGetLibraryPhotos, hasWonChallenge, __resetLibraryThrottle, MIN_WALK_INTERVAL_MS } =
     require('../../src/ts/ipc/actions/library') as typeof libraryModule;
 
 // The handler is invoked the way ipcMain does: the event first.
@@ -39,10 +40,11 @@ const rawPhoto = {
     member_id: 'm9',
 };
 
-type WalkResult = { items: unknown[]; truncated: boolean };
-type Walk = jest.Mock<Promise<WalkResult>, [string | number, string, { search?: string; logLabel?: string }]>;
+type WalkResult = { items: unknown[]; truncated: boolean; skipped?: string[] };
+type WalkOptions = { search?: string; logLabel?: string; skip?: (photo: LibraryPhoto) => boolean };
+type Walk = jest.Mock<Promise<WalkResult>, [string | number, string, WalkOptions]>;
 const newWalk = (result: WalkResult = { items: [rawPhoto], truncated: false }): Walk =>
-    jest.fn<Promise<WalkResult>, [string | number, string, { search?: string; logLabel?: string }]>(async () => result);
+    jest.fn<Promise<WalkResult>, [string | number, string, WalkOptions]>(async () => result);
 
 const stubStrategy = (
     over: {
@@ -114,7 +116,11 @@ describe('the listing', () => {
                 .mockResolvedValue({ items: [rawPhoto, invalid({ id: 5 })], truncated: true }),
         });
         const result = await call(5, 'pink');
-        expect(strategy.getEligiblePhotosWalk).toHaveBeenCalledWith(5, 'tok', { search: 'pink', logLabel: 'library' });
+        expect(strategy.getEligiblePhotosWalk).toHaveBeenCalledWith(5, 'tok', {
+            search: 'pink',
+            logLabel: 'library',
+            skip: hasWonChallenge,
+        });
         expect(result).toEqual({
             success: true,
             photos: [
@@ -128,6 +134,7 @@ describe('the listing', () => {
                 { id: '5', labels: [], allowed: false, message: null, uploadDate: null },
             ],
             memberId: 'member-1',
+            wonIds: [],
             truncated: true,
             allowedKnown: true,
         });
@@ -136,6 +143,49 @@ describe('the listing', () => {
             strategy.getCurrentMemberProfile,
             expect.anything(),
             'library',
+        );
+    });
+
+    test('the reason a photo cannot enter comes as plain text, whatever HTML the server sent, and is capped after that', async () => {
+        stubStrategy({
+            getEligiblePhotosWalk: newWalk({
+                items: [
+                    {
+                        id: 'b1',
+                        permission: {
+                            allowed: false,
+                            message: 'Used <b>in</b> another<br/>challenge &amp; <i>more</i> &lt;b&gt;',
+                        },
+                    },
+                    { id: 'b2', permission: { allowed: false, message: `<span>${'x'.repeat(300)}</span>` } },
+                ],
+                truncated: false,
+            }),
+        });
+        const result = (await call(5)) as { photos: Array<{ message: string }> };
+        expect(result.photos[0].message).toBe('Used in another — challenge & more <b>');
+        expect(result.photos[1].message).toBe('x'.repeat(200));
+    });
+
+    test('the photos the walk left out for having won a challenge are reported by id, safe ids only, at most 1000', async () => {
+        const skipped = [...Array.from({ length: 1005 }, (_, i) => `w${i}`), 'has space', 'a/b'];
+        stubStrategy({ getEligiblePhotosWalk: newWalk({ items: [rawPhoto], truncated: false, skipped }) });
+        const result = (await call(5)) as { wonIds: string[] };
+        expect(result.wonIds).toHaveLength(1000);
+        expect(result.wonIds[0]).toBe('w0');
+        expect(result.wonIds).not.toContain('has space');
+        stubStrategy({ getEligiblePhotosWalk: newWalk({ items: [rawPhoto], truncated: false, skipped: ['a/b'] }) });
+        __resetLibraryThrottle();
+        expect(((await call(5)) as { wonIds: string[] }).wonIds).toEqual([]);
+    });
+
+    test('a library read through a borrowed challenge leaves won photos out too: a won photo is barred from every challenge', async () => {
+        const strategy = stubStrategy();
+        await call(undefined, null);
+        expect(strategy.getEligiblePhotosWalk).toHaveBeenCalledWith(
+            'active-1',
+            'tok',
+            expect.objectContaining({ skip: hasWonChallenge }),
         );
     });
 
@@ -273,5 +323,28 @@ describe('the throttle', () => {
         await jest.advanceTimersByTimeAsync(MIN_WALK_INTERVAL_MS * 4);
         await call(4);
         expect(walk).toHaveBeenCalledTimes(3);
+    });
+});
+
+describe('hasWonChallenge', () => {
+    const photoWith = (permission: LibraryPhoto['permission']): LibraryPhoto =>
+        invalid<LibraryPhoto>({ id: 'p', permission });
+
+    test.each([
+        "This image <b>has won a challenge</b><br/><span>it can't participate in another</span>",
+        'THIS IMAGE HAS WON A CHALLENGE',
+        'This image has <b>won</b> a challenge',
+    ])('a photo the server says has won a challenge is one: %s', (message) => {
+        expect(hasWonChallenge(photoWith({ allowed: false, message }))).toBe(true);
+    });
+
+    test.each([
+        ['another blocked reason', { allowed: false, message: 'Already used in another challenge' }],
+        ['a reason that only mentions winning', { allowed: false, message: 'Won a prize in the contest' }],
+        ['an allowed photo, whatever it says', { allowed: true, message: 'has won a challenge' }],
+        ['no message', { allowed: false, message: null }],
+        ['no permission', undefined],
+    ])('%s is not', (_name, permission) => {
+        expect(hasWonChallenge(photoWith(permission))).toBe(false);
     });
 });

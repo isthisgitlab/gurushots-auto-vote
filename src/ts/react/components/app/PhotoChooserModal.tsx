@@ -184,6 +184,7 @@ function MissingTile({
     count,
     hasChallenge,
     truncated,
+    won,
     onToggle,
 }: {
     id: string;
@@ -191,10 +192,12 @@ function MissingTile({
     count: number;
     hasChallenge: boolean;
     truncated: boolean;
+    /** The listing left the photo out because it has won a challenge, which says why it is missing. */
+    won: boolean;
     onToggle: (id: string) => void;
 }) {
     const { t } = useTranslation();
-    const text = interp(t(missingKey(hasChallenge, truncated)), { count });
+    const text = won ? t('app.photoChooserWonInList') : interp(t(missingKey(hasChallenge, truncated)), { count });
     return (
         <button
             type="button"
@@ -271,6 +274,7 @@ export function PhotoGrid({
     }
     const { listing } = state;
     const chosen = new Set(selected);
+    const won = new Set(listing.wonIds);
     const atCap = selected.length >= max;
     let position = 0;
     const blockedReasonOf = (photo: LibraryPhoto): string | null =>
@@ -296,6 +300,11 @@ export function PhotoGrid({
             {!listing.allowedKnown && (
                 <p className="text-base-content/70 text-xs">{t('app.photoChooserEligibilityLater')}</p>
             )}
+            {listing.wonIds.length > 0 && (
+                <p className="text-base-content/70 text-xs">
+                    {interp(t('app.photoChooserWonHidden'), { count: listing.wonIds.length })}
+                </p>
+            )}
             {listing.truncated && (
                 <p className="text-warning text-xs">
                     {interp(t('app.photoChooserTruncated'), { count: listing.photos.length })}
@@ -317,6 +326,7 @@ export function PhotoGrid({
                             count={listing.photos.length}
                             hasChallenge={listing.allowedKnown}
                             truncated={listing.truncated}
+                            won={won.has(id)}
                             onToggle={onToggle}
                         />
                     );

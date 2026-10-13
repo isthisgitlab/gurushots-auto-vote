@@ -42,6 +42,13 @@ const parseSearchFlag = (argv: string[]): string | null => {
 
 type Listing = Extract<Awaited<ReturnType<ActionHandlers['get-library-photos']>>, { success: true }>;
 
+/** The note of the photos the listing left out for having won a challenge, when there are any. */
+const printWonHidden = (listing: Listing): void => {
+    if (listing.wonIds.length > 0) {
+        ui().info(`${listing.wonIds.length} photo(s) that have won a challenge are hidden.`);
+    }
+};
+
 /**
  * Print each photo as `id  allowed|not allowed  [labels]` on the terminal only —
  * the log files never get a photo.
@@ -75,10 +82,12 @@ const listPhotosCmd = async (challengeId: string | null, search: string | null):
     }
     if (result.photos.length === 0) {
         ui().info(`No photos found${search ? ` for "${stripTerminalControl(search)}"` : ' in your library'}.`);
+        printWonHidden(result);
         return 0;
     }
     ui().info(`=== Your photos (${result.photos.length}${result.truncated ? ', list cut short' : ''}) ===`);
     printPhotos(result);
+    printWonHidden(result);
     if (result.truncated) ui().warning('The list was cut short; narrow it with --search=<tag> to find the rest.');
     if (!result.allowedKnown) {
         ui().info(

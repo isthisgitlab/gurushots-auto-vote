@@ -764,6 +764,9 @@ export const app = {
     photoChooserEligibilityLater:
         'Eligibility is not checked here for any challenge; it is checked when the app submits.',
     photoChooserTruncated: 'Showing the first {count} photos. Search by tag to find others.',
+    photoChooserWonHidden:
+        "Hidden: {count} photo(s) that have won a challenge. A winning photo can't be entered again.",
+    photoChooserWonInList: "Has won a challenge, so it can't be entered again.",
     photoChooserEmpty: 'No photos found. Try another tag, or upload photos to your GuruShots library.',
     photoChooserMissing: 'Not available for this challenge (in another challenge, or deleted)',
     photoChooserMissingTruncated:

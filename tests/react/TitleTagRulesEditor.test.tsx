@@ -184,6 +184,7 @@ describe('TitleTagRulesEditor', () => {
                     photos: [{ id: ID, labels: [], allowed: true, message: null, uploadDate: null }],
                     memberId: null,
                     truncated: false,
+                    wonIds: [],
                     allowedKnown: false,
                 });
             });

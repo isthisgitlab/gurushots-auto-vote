@@ -493,6 +493,7 @@ describe('pick', () => {
         })),
         memberId: 'c'.repeat(32),
         truncated: false,
+        wonIds: [],
         allowedKnown: true,
     });
     const english = (key: string) =>

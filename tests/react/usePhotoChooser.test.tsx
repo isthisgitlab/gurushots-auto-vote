@@ -16,7 +16,14 @@ const OWNER = 'c'.repeat(32);
 type Listing = Extract<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>, { success: true }>;
 const ready = (memberId: string | null): ListState => ({
     status: 'ready',
-    listing: invalid<Listing>({ success: true, photos: [], memberId, truncated: false, allowedKnown: true }),
+    listing: invalid<Listing>({
+        success: true,
+        photos: [],
+        memberId,
+        truncated: false,
+        wonIds: [],
+        allowedKnown: true,
+    }),
 });
 
 const render = (reloadSaved: () => Promise<string[] | null>, state: ListState = ready(OWNER)) => {
@@ -201,7 +208,14 @@ test('with no way to read the list, a ready listing of the owner is unconfirmed 
 
 describe('useLibraryListing.setMember — a member the listing could not name, found by a later check', () => {
     const listingOf = (memberId: string | null) =>
-        invalid<Promise<Listing>>({ success: true, photos: [], memberId, truncated: false, allowedKnown: true });
+        invalid<Promise<Listing>>({
+            success: true,
+            photos: [],
+            memberId,
+            truncated: false,
+            wonIds: [],
+            allowedKnown: true,
+        });
 
     test('goes into the listing on screen, without reading the library again', async () => {
         mockApi.getLibraryPhotos.mockReset().mockResolvedValue(listingOf(null));

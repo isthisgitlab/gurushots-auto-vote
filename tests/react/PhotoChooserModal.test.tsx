@@ -38,6 +38,7 @@ const listing = (photos: LibraryPhoto[], over: Partial<Listing> = {}): Listing =
     photos,
     memberId: MEMBER,
     truncated: false,
+    wonIds: [],
     allowedKnown: true,
     ...over,
 });
@@ -402,6 +403,33 @@ describe('selection', () => {
         getLibrary().mockResolvedValue(listing([photo(1), photo(2)], over));
         setup({ value: [idOf(9)], challengeId });
         expect((await missingTile()).textContent).toContain(text);
+    });
+
+    test('says how many winning photos the listing left out, and only when it left some out', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1)], { wonIds: [idOf(7), idOf(8)] }));
+        setup();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(
+            screen.getByText("Hidden: 2 photo(s) that have won a challenge. A winning photo can't be entered again."),
+        ).toBeTruthy();
+    });
+
+    test('shows no winning-photo line when none were left out', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1)]));
+        setup();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(screen.queryByText(/have won a challenge/)).toBeNull();
+    });
+
+    test('a chosen photo that has won gets its own tile text and can still be removed', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1)], { wonIds: [idOf(9)] }));
+        setup({ value: [idOf(9)] });
+        const won = await missingTile();
+        expect(won.textContent).toContain("Has won a challenge, so it can't be entered again.");
+        expect(won.textContent).not.toContain('Not available for this challenge');
+        expect(won.getAttribute('aria-pressed')).toBe('true');
+        fireEvent.click(won);
+        expect(screen.queryByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) })).toBeNull();
     });
 
     test('stops at the cap: other photos cannot be added and a line says so, selected ones can still be removed', async () => {

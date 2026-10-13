@@ -281,6 +281,101 @@ describe('submissions', () => {
             }
         });
 
+        test('passes over a photo with no id, with or without a skip', async () => {
+            const withoutIds = { items: [{ id: 'p1' }, null, {}, { id: null }, { id: 'p2' }] };
+            makePostRequest.mockResolvedValueOnce(invalid(withoutIds));
+            expect(ids(await getEligiblePhotosWalk('c1', token, { limit: 10 }))).toEqual(['p1', 'p2']);
+            makePostRequest.mockResolvedValueOnce(invalid(withoutIds));
+            const walk = await getEligiblePhotosWalk('c1', token, { limit: 10, skip: () => false });
+            expect(ids(walk)).toEqual(['p1', 'p2']);
+            expect(walk.skipped).toEqual([]);
+        });
+
+        describe('with a skip predicate', () => {
+            const isWinner = (photo: { id: string }) => photo.id.startsWith('w');
+            const warnings = () => {
+                const { __level: log }: { __level: { warning: jest.Mock<void, [string, unknown]> } } = invalid(
+                    require('../../src/ts/logger'),
+                );
+                return log.warning.mock.calls.map((call) => call[0]);
+            };
+
+            test('leaves skipped photos out, reports their ids and keeps paging past them', async () => {
+                makePostRequest
+                    .mockResolvedValueOnce(page('w1', 'p1'))
+                    .mockResolvedValueOnce(page('w2', 'w3'))
+                    .mockResolvedValueOnce(page('p2'));
+                const walk = await getEligiblePhotosWalk('c1', token, { limit: 2, skip: isWinner });
+                expect(ids(walk)).toEqual(['p1', 'p2']);
+                expect(walk.skipped).toEqual(['w1', 'w2', 'w3']);
+                expect(walk.truncated).toBe(false);
+                expect(makePostRequest).toHaveBeenCalledTimes(3);
+            });
+
+            test('does not read a skipped photo twice when a page overlaps', async () => {
+                makePostRequest.mockResolvedValueOnce(page('w1', 'p1')).mockResolvedValueOnce(page('w1'));
+                const walk = await getEligiblePhotosWalk('c1', token, { limit: 2, skip: isWinner });
+                expect(ids(walk)).toEqual(['p1']);
+                expect(walk.skipped).toEqual(['w1']);
+            });
+
+            test('stops once it has kept as many photos as the cap and says so', async () => {
+                let next = 0;
+                makePostRequest.mockImplementation(async () => page(`p${next++}`, `p${next++}`));
+                const walk = await getEligiblePhotosWalk('c1', token, { limit: 2, skip: isWinner });
+                expect(walk.items).toHaveLength(MAX_LIBRARY_PAGES * 2);
+                expect(walk.truncated).toBe(true);
+                expect(walk.skipped).toEqual([]);
+                expect(makePostRequest).toHaveBeenCalledTimes(MAX_LIBRARY_PAGES);
+                expect(warnings()).toContainEqual(
+                    expect.stringContaining(`stopped reading your photo library at ${MAX_LIBRARY_PAGES * 2} photo(s)`),
+                );
+            });
+
+            test('skipped photos do not use up the cap, up to twice the page limit', async () => {
+                let next = 0;
+                makePostRequest.mockImplementation(async () =>
+                    page(`w${next++}`, `w${next++}`, `w${next++}`, `p${next++}`),
+                );
+                const walk = await getEligiblePhotosWalk('c1', token, { limit: 4, skip: isWinner });
+                // One kept photo per page, far below the keep cap: only the 20-page ceiling ends the walk.
+                expect(makePostRequest).toHaveBeenCalledTimes(2 * MAX_LIBRARY_PAGES);
+                expect(walk.items).toHaveLength(2 * MAX_LIBRARY_PAGES);
+                expect(walk.skipped).toHaveLength(6 * MAX_LIBRARY_PAGES);
+                expect(walk.truncated).toBe(true);
+                expect(warnings()).toContainEqual(expect.stringContaining(`${2 * MAX_LIBRARY_PAGES}-page limit`));
+            });
+
+            test('the wall-clock budget still ends it, with the skipped ids so far', async () => {
+                const realNow = Date.now;
+                let clock = 1_000_000;
+                Date.now = () => clock;
+                try {
+                    makePostRequest.mockImplementation(async () => {
+                        clock += 5_000;
+                        return page('wa', 'pa');
+                    });
+                    const walk = await getEligiblePhotosWalk('c1', token, {
+                        limit: 2,
+                        budgetMs: 12_000,
+                        skip: isWinner,
+                    });
+                    expect(makePostRequest).toHaveBeenCalledTimes(3);
+                    expect(walk).toEqual({ items: [{ id: 'pa' }], truncated: true, skipped: ['wa'] });
+                } finally {
+                    Date.now = realNow;
+                }
+            });
+
+            test('without a skip the result has no skipped list and the cap is the page limit', async () => {
+                makePostRequest.mockResolvedValue(page('a', 'b'));
+                const walk = await getEligiblePhotosWalk('c1', token, { limit: 2 });
+                expect(walk).not.toHaveProperty('skipped');
+                expect(makePostRequest).toHaveBeenCalledTimes(MAX_LIBRARY_PAGES);
+                expect(warnings()).toContainEqual(expect.stringContaining(`${MAX_LIBRARY_PAGES}-page limit`));
+            });
+        });
+
         test('still refuses a missing challenge id or token', async () => {
             await expect(getEligiblePhotosWalk('', token)).rejects.toThrow();
             await expect(getEligiblePhotosWalk('c1', '')).rejects.toThrow();

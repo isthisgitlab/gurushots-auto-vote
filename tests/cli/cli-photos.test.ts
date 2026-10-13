@@ -55,6 +55,7 @@ describe('list-photos', () => {
             success: true,
             photos,
             truncated: true,
+            wonIds: [],
             allowedKnown: true,
             memberId: 'm',
         });
@@ -80,6 +81,7 @@ describe('list-photos', () => {
             success: true,
             photos: [photos[0]],
             truncated: false,
+            wonIds: [],
             allowedKnown: false,
             memberId: null,
         });
@@ -93,6 +95,7 @@ describe('list-photos', () => {
             success: true,
             photos: [{ ...photos[0], labels: [] }],
             truncated: false,
+            wonIds: [],
             allowedKnown: true,
             memberId: null,
         });
@@ -104,6 +107,7 @@ describe('list-photos', () => {
             success: true,
             photos: [],
             truncated: false,
+            wonIds: [],
             allowedKnown: false,
             memberId: null,
         });
@@ -115,11 +119,73 @@ describe('list-photos', () => {
         expect(text('stdout')).toEqual([]);
     });
 
+    test('says how many photos were left out for having won a challenge, with the photos or without any', async () => {
+        handlers['get-library-photos'].mockResolvedValue({
+            success: true,
+            photos: [photos[0]],
+            wonIds: ['w1', 'w2'],
+            truncated: false,
+            allowedKnown: true,
+            memberId: 'm',
+        });
+        await expect(listPhotosCmd('5', null)).resolves.toBe(0);
+        expect(text('info')).toContain('2 photo(s) that have won a challenge are hidden.');
+        expect(text('stdout')).toEqual(['  \u2022 p1  allowed  [Pink, Flower]']);
+        calls.length = 0;
+        handlers['get-library-photos'].mockResolvedValue({
+            success: true,
+            photos: [],
+            wonIds: ['w1'],
+            truncated: false,
+            allowedKnown: true,
+            memberId: 'm',
+        });
+        await expect(listPhotosCmd('5', null)).resolves.toBe(0);
+        expect(text('info')).toEqual([
+            'No photos found in your library.',
+            '1 photo(s) that have won a challenge are hidden.',
+        ]);
+        // Nothing hidden, nothing said.
+        calls.length = 0;
+        handlers['get-library-photos'].mockResolvedValue({
+            success: true,
+            photos: [photos[0]],
+            wonIds: [],
+            truncated: false,
+            allowedKnown: true,
+            memberId: 'm',
+        });
+        await listPhotosCmd('5', null);
+        expect(text('info').some((line) => line.includes('have won a challenge'))).toBe(false);
+    });
+
+    test('a blocked photo is printed with its reason as the handler gives it: plain text, no HTML', async () => {
+        handlers['get-library-photos'].mockResolvedValue({
+            success: true,
+            photos: [
+                {
+                    id: 'p3',
+                    labels: [],
+                    allowed: false,
+                    message: "Already in another challenge — it can't take part twice",
+                    uploadDate: null,
+                },
+            ],
+            wonIds: [],
+            truncated: false,
+            allowedKnown: true,
+            memberId: 'm',
+        });
+        await listPhotosCmd('5', null);
+        expect(text('stdout').join('\n')).not.toMatch(/<|&lt;|&amp;/);
+    });
+
     test('a not-allowed photo without a message prints no second line', async () => {
         handlers['get-library-photos'].mockResolvedValue({
             success: true,
             photos: [{ id: 'p3', labels: [], allowed: false, message: null, uploadDate: null }],
             truncated: false,
+            wonIds: [],
             allowedKnown: true,
             memberId: null,
         });

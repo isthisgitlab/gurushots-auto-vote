@@ -17,6 +17,7 @@ import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import { resolveMemberId } from '../../services/autoFill';
 import { CHOSEN_PHOTO_ID_RE, MAX_TAG_LENGTH } from '../../settings/limits';
+import { htmlToText } from '../../format/htmlToText';
 import { errorResult } from '../errorResult';
 import { isIdArg } from '../isIdArg';
 import { refuseInvalidArgs } from './shared';
@@ -34,6 +35,8 @@ const MIN_WALK_INTERVAL_MS = 1500;
 const MAX_LABELS_PER_PHOTO = 32;
 const MAX_LABEL_LENGTH = 80;
 const MAX_MESSAGE_LENGTH = 200;
+// How many ids of photos left out of the listing (they have won a challenge) are reported with it.
+const MAX_WON_IDS = 1000;
 
 /** What a throttled request resolves to when a newer request took its place in the queue. */
 const SUPERSEDED = Symbol('superseded');
@@ -101,10 +104,23 @@ const mapPhoto = (photo: LibraryPhoto) => ({
         .slice(0, MAX_LABELS_PER_PHOTO)
         .map((label) => label.slice(0, MAX_LABEL_LENGTH)),
     allowed: photo.permission?.allowed === true,
+    // The server words the reason as HTML; it goes on as text.
     message:
-        typeof photo.permission?.message === 'string' ? photo.permission.message.slice(0, MAX_MESSAGE_LENGTH) : null,
+        typeof photo.permission?.message === 'string'
+            ? htmlToText(photo.permission.message).slice(0, MAX_MESSAGE_LENGTH)
+            : null,
     uploadDate: typeof photo.upload_date === 'number' && Number.isFinite(photo.upload_date) ? photo.upload_date : null,
 });
+
+/**
+ * Whether the server says the photo has won a challenge: such a photo can never be entered again, so the listing
+ * leaves it out. The message is the only signal (the API has no field for it); if the server rewords it, a won photo
+ * shows as blocked again, as any other.
+ */
+const hasWonChallenge = (photo: LibraryPhoto): boolean =>
+    photo.permission?.allowed === false &&
+    typeof photo.permission.message === 'string' &&
+    /has won a challenge/i.test(htmlToText(photo.permission.message));
 
 /**
  * The challenge id the library is read through when the caller named none: any
@@ -146,7 +162,11 @@ const handleGetLibraryPhotos = (async (
             const contextId = challengeId ?? (await borrowChallengeId(strategy, token));
             // Nothing to read the library through: no active challenge and no open one seen yet.
             if (contextId === null) return null;
-            const walk = await strategy.getEligiblePhotosWalk(contextId, token, { search: term, logLabel: 'library' });
+            const walk = await strategy.getEligiblePhotosWalk(contextId, token, {
+                search: term,
+                logLabel: 'library',
+                skip: hasWonChallenge,
+            });
             const memberId = await resolveMemberId(token, strategy.getCurrentMemberProfile, logger, 'library');
             return { walk, memberId };
         });
@@ -157,6 +177,8 @@ const handleGetLibraryPhotos = (async (
             // An id that is not a safe token could never be stored in a list, so it is not offered.
             photos: outcome.walk.items.filter((photo) => CHOSEN_PHOTO_ID_RE.test(String(photo.id))).map(mapPhoto),
             memberId: outcome.memberId,
+            // The photos left out for having won a challenge, by id (kept in memory only).
+            wonIds: (outcome.walk.skipped ?? []).filter((id) => CHOSEN_PHOTO_ID_RE.test(id)).slice(0, MAX_WON_IDS),
             truncated: outcome.walk.truncated,
             allowedKnown: hasChallenge,
         };
@@ -175,4 +197,4 @@ const __resetLibraryThrottle = (): void => {
     lastEndedAt = 0;
 };
 
-export { handleGetLibraryPhotos, __resetLibraryThrottle, MIN_WALK_INTERVAL_MS };
+export { handleGetLibraryPhotos, hasWonChallenge, __resetLibraryThrottle, MIN_WALK_INTERVAL_MS };

@@ -64,9 +64,15 @@ const getEligiblePhotosWalk: typeof submissionsModule.getEligiblePhotosWalk = mo
         await simulateApiResponse({}, 400);
         const search = typeof options.search === 'string' ? options.search.trim().toLowerCase() : '';
         // The same exact-tag filter as the mock getEligiblePhotos search.
+        const found =
+            search === '' ? items : items.filter((item) => item.labels.some((l) => l.toLowerCase() === search));
+        const { skip } = options;
+        if (!skip) return { items: found, truncated: false };
+        // The photos the caller leaves out are reported, as the real walk does.
         return {
-            items: search === '' ? items : items.filter((item) => item.labels.some((l) => l.toLowerCase() === search)),
+            items: found.filter((item) => !skip(item)),
             truncated: false,
+            skipped: found.filter((item) => skip(item)).map((item) => String(item.id)),
         };
     },
 );

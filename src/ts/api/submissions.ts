@@ -98,10 +98,19 @@ type LibraryOptions = {
      * unreadable payload), which the empty list returned for it cannot tell from a library with nothing in it.
      */
     readState?: { firstPageFailed: boolean };
+    /**
+     * A walk only (getEligiblePhotosWalk): photos this answers true for are left out of `items` and do not count
+     * toward the walk's cap (their ids are reported as `skipped`). The walk then ends at MAX_LIBRARY_PAGES * limit
+     * kept photos, or at twice MAX_LIBRARY_PAGES pages, whichever comes first, besides the budget.
+     */
+    skip?: (photo: LibraryPhoto) => boolean;
 };
 
-/** A walk's photos, and whether it stopped before the library was exhausted. */
-type LibraryWalk = { items: LibraryPhoto[]; truncated: boolean };
+/**
+ * A walk's photos, and whether it stopped before the library was exhausted. `skipped` (only when the walk was given a
+ * `skip`) are the ids of the photos it left out.
+ */
+type LibraryWalk = { items: LibraryPhoto[]; truncated: boolean; skipped?: string[] };
 
 /**
  * The request shape every library read shares, normalized from caller options.
@@ -154,9 +163,19 @@ const walkLibrary = async (
     const logLabel =
         typeof options.logLabel === 'string' && options.logLabel.trim() ? options.logLabel.trim() : 'autoFill';
     const warn = (message: string) => logger.withCategory('api').warning(`${logLabel}: ${message}`, null);
+    // With a `skip`, the photos left out do not use up the cap, so the walk may need more pages to keep as many.
+    const { skip } = options;
+    const maxPages = skip ? 2 * MAX_LIBRARY_PAGES : MAX_LIBRARY_PAGES;
+    const keepCap = MAX_LIBRARY_PAGES * limit;
+    const skipped = new Set<string>();
+    const result = (truncated: boolean): LibraryWalk => ({
+        items: Array.from(byId.values()),
+        truncated,
+        ...(skip ? { skipped: Array.from(skipped) } : {}),
+    });
     let page = 0;
     let stoppedEarly = false;
-    for (; page < MAX_LIBRARY_PAGES; page++) {
+    for (; page < maxPages; page++) {
         if (page > 0 && Date.now() - startedAt >= budgetMs) {
             warn(
                 `reading your photo library took longer than ${Math.round(budgetMs / 1000)}s, so it stopped after ${page} page(s) with ${byId.size} photo(s); less-voted photos were not considered this time`,
@@ -195,22 +214,29 @@ const walkLibrary = async (
             break;
         }
         for (const item of items) {
-            if (item && item.id !== undefined && item.id !== null && !byId.has(item.id)) {
+            if (!item || item.id === undefined || item.id === null) continue;
+            if (skip?.(item)) {
+                skipped.add(String(item.id));
+            } else if (!byId.has(item.id)) {
                 byId.set(item.id, item);
             }
         }
         if (items.length < limit) {
             // Short page — the library is exhausted.
-            return { items: Array.from(byId.values()), truncated: false };
+            return result(false);
+        }
+        if (skip && byId.size >= keepCap) {
+            warn(`stopped reading your photo library at ${byId.size} photo(s); less-voted photos were not considered`);
+            return result(true);
         }
     }
 
-    if (!stoppedEarly && page === MAX_LIBRARY_PAGES) {
+    if (!stoppedEarly && page === maxPages) {
         warn(
-            `stopped reading your photo library at the ${MAX_LIBRARY_PAGES}-page limit with ${byId.size} photo(s); less-voted photos were not considered`,
+            `stopped reading your photo library at the ${maxPages}-page limit with ${byId.size} photo(s); less-voted photos were not considered`,
         );
     }
-    return { items: Array.from(byId.values()), truncated: true };
+    return result(true);
 };
 
 /**

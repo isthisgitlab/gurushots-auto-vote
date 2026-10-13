@@ -24,6 +24,7 @@ const libraryOf = (...numbers: number[]) => ({
     photos: numbers.map((n) => ({ id: idOf(n), labels: [`tag${n}`], allowed: true, message: null, uploadDate: 1 })),
     memberId: MEMBER,
     truncated: false,
+    wonIds: [],
     allowedKnown: true,
 });
 

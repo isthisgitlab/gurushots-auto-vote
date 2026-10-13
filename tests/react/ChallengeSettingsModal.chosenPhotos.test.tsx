@@ -44,6 +44,7 @@ beforeEach(() => {
             photos: [{ id: PHOTO, labels: [], allowed: true, message: null, uploadDate: 1 }],
             memberId: 'c'.repeat(32),
             truncated: false,
+            wonIds: [],
             allowedKnown: true,
         }),
     );

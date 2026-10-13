@@ -34,6 +34,7 @@ const listing = (photos: LibraryPhoto[], over: Partial<Listing> = {}): Listing =
     photos,
     memberId: MEMBER,
     truncated: false,
+    wonIds: [],
     allowedKnown: true,
     ...over,
 });

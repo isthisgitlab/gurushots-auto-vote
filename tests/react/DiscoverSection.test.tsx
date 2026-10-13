@@ -1251,6 +1251,7 @@ describe('chosen photos', () => {
                     photos: [{ id: PHOTO, labels: ['sea'], allowed: true, message: null, uploadDate: 1 }],
                     memberId: 'c'.repeat(32),
                     truncated: false,
+                    wonIds: [],
                     allowedKnown: true,
                 }),
         });
@@ -1331,6 +1332,7 @@ describe('chosen photos', () => {
                     photos: [{ id: PHOTO, labels: ['sea'], allowed: true, message: null, uploadDate: 1 }],
                     memberId: OWNER,
                     truncated: false,
+                    wonIds: [],
                     allowedKnown: true,
                 };
             });

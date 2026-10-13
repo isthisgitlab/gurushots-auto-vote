@@ -147,7 +147,7 @@ describe('turbo', () => {
 describe('getEligiblePhotos', () => {
     test('with no options returns the whole library', async () => {
         const items = await settle(mockApiClient.getEligiblePhotos(1, 'tok'));
-        expect(items).toHaveLength(8);
+        expect(items).toHaveLength(9);
     });
 
     test('a search is an EXACT tag match, like the live endpoint', async () => {
@@ -158,22 +158,41 @@ describe('getEligiblePhotos', () => {
     });
 
     test('a non-string search is ignored', async () => {
-        expect(await settle(mockApiClient.getEligiblePhotos(1, 'tok', invalid({ search: 42 })))).toHaveLength(8);
+        expect(await settle(mockApiClient.getEligiblePhotos(1, 'tok', invalid({ search: 42 })))).toHaveLength(9);
     });
 });
 
 describe('getEligiblePhotosWalk', () => {
     test('reads the whole mock library in one complete walk', async () => {
         const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok'));
-        expect(walk.items).toHaveLength(8);
+        expect(walk.items).toHaveLength(9);
         expect(walk.truncated).toBe(false);
+        // Without a `skip` nothing is reported as left out.
+        expect(walk).not.toHaveProperty('skipped');
+    });
+
+    test('with a skip the photos it names are left out of the items and reported by id', async () => {
+        const walk = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', {
+                skip: (photo) =>
+                    photo.permission?.allowed === false && /won a challenge/.test(String(photo.permission.message)),
+            }),
+        );
+        expect(walk.items.map((p) => p.id)).not.toContain('photo_won_009');
+        expect(walk.items).toHaveLength(8);
+        expect(walk.skipped).toEqual(['photo_won_009']);
+        expect(walk.truncated).toBe(false);
+        const searched = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', { search: 'Trophy', skip: () => true }),
+        );
+        expect(searched).toEqual({ items: [], truncated: false, skipped: ['photo_won_009'] });
     });
 
     test('a search is the same exact tag match as the paged read; a non-string search is ignored', async () => {
         const exact = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { search: ' Flower ' }));
         expect(exact.items.map((p) => p.id)).toEqual(['photo_pink_flower_001', 'photo_blocked_007']);
         const ignored = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', invalid({ search: 42 })));
-        expect(ignored.items).toHaveLength(8);
+        expect(ignored.items).toHaveLength(9);
     });
 });
 
