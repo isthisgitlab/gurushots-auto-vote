@@ -395,6 +395,9 @@ describe('a stored pin that no longer applies', () => {
         let removeRan = false;
         note.remove = () => {
             removeRan = true;
+            // Focus leaves the button first (its own focusout, <body> active), so a forget that ran synchronously
+            // here — the button still connected — would wipe the record and lose the hand-off.
+            clear.blur();
             clear.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
             removeNote();
         };
@@ -415,6 +418,26 @@ describe('a stored pin that no longer applies', () => {
         expect(document.activeElement).toBe(details);
     });
 
+    test('focus that moved without a focusout from the button (a dialog focusing while the window is unfocused) is not pulled back', async () => {
+        const { details, unmountNote } = await clearThenUnmountOnLaterRead();
+        const clear = screen.getByRole('button', { name: 'app.pinClear' });
+        const focus = jest.spyOn(details, 'focus');
+        // The window loses focus: the focusout reaches the listener, the button keeps its record.
+        clear.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+        await Promise.resolve();
+        // Focus then moves with no focusout reaching the listener: the move's own event is swallowed.
+        const elsewhere = pinButtons('Turbo')[0];
+        const swallow = (event: Event) => event.stopPropagation();
+        window.addEventListener('focusout', swallow, true);
+        elsewhere.focus();
+        window.removeEventListener('focusout', swallow, true);
+        expect(document.activeElement).toBe(elsewhere);
+        unmountNote();
+        await waitFor(() => expect(screen.queryByText('app.pinGoneNote')).toBeNull());
+        expect(document.activeElement).toBe(elsewhere);
+        expect(focus).not.toHaveBeenCalled();
+    });
+
     test('a blur microtask left over from one clear does not forget a newer clear', async () => {
         window.api.getEntryPins = jest
             .fn()
@@ -432,7 +455,9 @@ describe('a stored pin that no longer applies', () => {
         await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalledTimes(2));
         await waitFor(() => expect(clears[0].getAttribute('aria-busy')).toBe('false'));
         // Moving focus fires the first button's focusout (its forget-microtask is queued while it is still the
-        // recorded one), and the second click records the second button before that microtask runs.
+        // recorded one), and the second click records the second button before that microtask runs. That is a
+        // race only script can produce (focus() and click() in one task); in a browser they are separate tasks,
+        // so the microtask has already run.
         clears[1].focus();
         fireEvent.click(clears[1]);
         await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalledTimes(3));

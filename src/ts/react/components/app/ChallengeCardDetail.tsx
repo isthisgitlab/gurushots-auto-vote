@@ -252,6 +252,12 @@ function DanglingPinNote({
     );
 }
 
+/** Focus is nowhere: on the page itself, or on an element that has just been removed. */
+const focusIsLost = (): boolean => {
+    const active = document.activeElement;
+    return active === null || active === document.body || !active.isConnected;
+};
+
 /**
  * Entry details — entry-level boost / turbo badges and actions, the pin toggles and the notes for pins that no
  * longer apply.
@@ -286,14 +292,18 @@ function EntryDetails({
     // elsewhere (another element, or <body>) is never stolen: the button is forgotten once it loses focus while
     // still in the page, so a failed clear (the note, and focus, stay where they are) followed by the user moving
     // on never acts later. A focusout from the button's own removal (some engines fire one) is left to the layout
-    // effect, which has already run by the time the deferred check sees the button gone.
+    // effect, which has already run by the time the deferred check sees the button gone. The record survives the
+    // window losing focus, so focus can also have moved without a focusout from the button (a dialog focusing its
+    // first button while the window is unfocused): the layout effect moves focus only if it is actually lost.
     useEffect(() => {
         const forgetOnBlur = (event: FocusEvent) => {
             const button = clearedButtonRef.current;
             if (!button || event.target !== button) return;
             queueMicrotask(() => {
                 // Still focused and in the page: the whole window lost focus, not just the button. A newer record
-                // (another button) is not this microtask's to wipe.
+                // (another button) is not this microtask's to wipe — a race only script can produce (focus() and
+                // click() in one task, as tests do); in a browser the focus move and the click are separate tasks,
+                // so this microtask has already run by the time the next clear records.
                 if (clearedButtonRef.current === button && button.isConnected && document.activeElement !== button) {
                     clearedButtonRef.current = null;
                 }
@@ -307,7 +317,7 @@ function EntryDetails({
         const button = clearedButtonRef.current;
         if (!button || button.isConnected) return;
         clearedButtonRef.current = null;
-        detailsRef.current?.focus({ preventScroll: true });
+        if (focusIsLost()) detailsRef.current?.focus({ preventScroll: true });
     });
 
     // Some engines (WebKit, Firefox on macOS) do not focus a button on a mouse click: nothing to restore is
