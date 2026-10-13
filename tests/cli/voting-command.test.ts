@@ -23,6 +23,7 @@ jest.mock('../../src/ts/logger', () => {
 jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(() => ({ mock: true })),
     getEffectiveSetting: jest.fn(),
+    getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     SETTINGS_SCHEMA: { chosenPhotos: { type: 'photos', perChallenge: true, default: [] } },
 }));
 
@@ -368,6 +369,30 @@ describe('showStatus', () => {
         expect(printed).toContain('    lastUsername: [REDACTED]');
         expect(printed).toContain('    apiHeaders: [REDACTED]');
         expect(printed).not.toMatch(/p1|me@example\.com|abc/);
+    });
+
+    test('pins are listed under their own label, not as a challenge’s settings', async () => {
+        settings.loadSettings.mockReturnValue(
+            invalid({ mock: true, challengeSettings: { entryPins: { 42: { boost: 'imgA' }, 43: { turbo: 'imgB' } } } }),
+        );
+        settings.getEntryPins.mockImplementation((id) =>
+            String(id) === '42' ? { boost: 'imgA', turbo: null } : { boost: null, turbo: 'imgB' },
+        );
+        await showStatus();
+        const info = msgs('info');
+        expect(info).toContain('\nPinned entries:');
+        expect(info).toContain('  Challenge 42: Boost imgA, Turbo none');
+        expect(info).toContain('  Challenge 43: Boost none, Turbo imgB');
+        expect(info).not.toContain('  Challenge entryPins:');
+    });
+
+    test('no pins prints no pinned-entries section', async () => {
+        settings.loadSettings.mockReturnValue(invalid({ mock: true, challengeSettings: { entryPins: {} } }));
+        await showStatus();
+        expect(msgs('info')).not.toContain('\nPinned entries:');
+        settings.loadSettings.mockReturnValue(invalid({ mock: true }));
+        await showStatus();
+        expect(msgs('info')).not.toContain('\nPinned entries:');
     });
 
     test('an empty challengeSettings map prints no section', async () => {

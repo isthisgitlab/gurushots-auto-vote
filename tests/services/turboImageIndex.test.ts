@@ -28,6 +28,7 @@ const buildChallenge = (entries: RankingEntry[]) =>
     });
 
 const mockSettings = (turboImageIndex: number) => {
+    settings.getEntryPins.mockReturnValue({ boost: null, turbo: null });
     settings.getEffectiveSetting = invalid(
         jest.fn((key: string) => {
             switch (key) {

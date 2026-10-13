@@ -22,6 +22,7 @@
 import * as logger from '../logger';
 import * as settings from '../settings';
 import * as currencyActions from './currencyActions';
+import * as votingLogic from './VotingLogic';
 import { CURRENCY_FIELD, CURRENCY_OUTCOME, challengeAllows } from '../voting/currencyActions';
 import { isRuleOpen, pickSwapTarget, votePoolReach, fillBeatsVoting } from '../voting/currencyAuto';
 
@@ -192,7 +193,8 @@ const runAutoKey = guarded('key', async (ctx) => {
  * challenge's swap history reaches autoSwapMax. The target follows
  * autoSwapImageIndex (0 = last, 1-4 = slot) or, with autoSwapLowestVotes, the
  * entry with the fewest votes; boosted/turbo'd entries are skipped unless
- * autoSwapAllowBoosted (the swap-back ledger then records them).
+ * autoSwapAllowBoosted (the swap-back ledger then records them). A photo pinned
+ * for a Boost or Turbo that can still fire is protected the same way.
  *
  * @returns true when a swap was spent
  */
@@ -212,6 +214,7 @@ const runAutoSwap = guarded('swap', async (ctx) => {
         lowestVotes: settings.getEffectiveSetting('autoSwapLowestVotes', id) === true,
         allowProtected: settings.getEffectiveSetting('autoSwapAllowBoosted', id) === true,
         maxVotes: settings.getEffectiveSetting('autoSwapMaxVotes', id),
+        protectedIds: votingLogic.livePinnedIds(challenge, id),
     });
     if (!target) {
         log().debug(`${logger.challengeTag(challenge)} auto swap: no entry qualifies`, null);

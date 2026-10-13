@@ -38,6 +38,7 @@ const { buildChallenge: buildBaseChallenge } =
 
 jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(),
+    getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
 }));
 
 jest.mock('../../src/ts/api/api-client', () => ({

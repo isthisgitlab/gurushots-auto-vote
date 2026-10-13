@@ -261,14 +261,26 @@ const showStatus = async () => {
 
     if (userSettings.challengeSettings && Object.keys(userSettings.challengeSettings).length > 0) {
         logger.withCategory('settings').info('\nChallenge Settings:');
-        Object.entries(userSettings.challengeSettings).forEach(
-            ([challengeId, challengeSettings]: [string, unknown]) => {
+        Object.entries(userSettings.challengeSettings)
+            .filter(([key]) => key !== 'entryPins')
+            .forEach(([challengeId, challengeSettings]: [string, unknown]) => {
                 logger.withCategory('settings').info(`  Challenge ${challengeId}:`);
                 Object.entries(challengeSettings as object).forEach(([key, value]: [string, unknown]) => {
                     logger.withCategory('settings').info(`    ${key}: ${formatSettingForLog(key, value)}`);
                 });
-            },
-        );
+            });
+    }
+
+    // The photos pinned for Boost / Turbo, not a challenge's settings: labelled on their own.
+    const pinnedIds = Object.keys(userSettings.challengeSettings?.entryPins ?? {});
+    if (pinnedIds.length > 0) {
+        logger.withCategory('settings').info('\nPinned entries:');
+        for (const challengeId of pinnedIds) {
+            const { boost, turbo } = settings.getEntryPins(challengeId);
+            logger
+                .withCategory('settings')
+                .info(`  Challenge ${challengeId}: Boost ${boost ?? 'none'}, Turbo ${turbo ?? 'none'}`);
+        }
     }
 
     // Boost-window status: the CLI parity of the GUI banner (no anchors —

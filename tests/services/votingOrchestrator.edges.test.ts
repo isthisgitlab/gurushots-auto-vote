@@ -8,9 +8,13 @@
 
 jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
+    getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
 }));
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({
+    resolvePin: jest.fn(() => ({ state: 'none' })),
+    pinFallbackOf: jest.fn(() => null),
+    describePinFallback: jest.fn(() => ''),
     shouldPlayAutoTurbo: jest.fn(() => false),
     isTurboEarnSaved: jest.fn(() => false),
     orderDeadlineActions: jest.fn(() => []),
@@ -112,6 +116,9 @@ beforeEach(() => {
     votingLogic.isBoostDueForMission.mockReturnValue(false);
     votingLogic.resolveBoostFillNewMode.mockReturnValue('no');
     votingLogic.pickBoostEntry.mockReturnValue(null);
+    votingLogic.resolvePin.mockReturnValue({ state: 'none' });
+    votingLogic.pinFallbackOf.mockReturnValue(null);
+    votingLogic.describePinFallback.mockReturnValue('');
     votingLogic.getBoostHoldUntil.mockReturnValue(null);
     votingLogic.shouldApplyTurbo.mockReturnValue(invalid({ apply: false }));
     votingLogic.shouldPlayAutoTurbo.mockReturnValue(false);
@@ -820,6 +827,103 @@ describe('vote mission', () => {
             const { tracker, challenge } = withNewEntry();
             await run(makeApi([challenge]), { entryTracker: tracker });
             expect(messages('info')).toContain('[Challenge 1: Mission 1] New entry detected — not voting this cycle');
+        });
+    });
+});
+
+describe('pinned photo', () => {
+    const keyedWith = (ids: string[]) =>
+        withBoost(
+            { state: 'AVAILABLE_KEY' },
+            { member: { boost: { state: 'AVAILABLE_KEY' }, ranking: { entries: ids.map((id) => ({ id })) } } },
+        );
+    const uncertainLedger = () => {
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.markUncertain(keyedWith(['e1']), 'e1', NOW);
+        return ledger;
+    };
+
+    describe('Boost', () => {
+        beforeEach(() => {
+            votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'boost' }]));
+            votingLogic.shouldApplyBoost.mockReturnValue(true);
+        });
+
+        test('the pin beats a pending fill-new photo and boosts the existing entry', async () => {
+            const entryAges = createMemoryEntryAgeLedger();
+            entryAges.markPending(keyedWith(['e1']), 'new1', NOW);
+            votingLogic.resolvePin.mockReturnValue(invalid({ state: 'hit', entry: { id: 'e1' } }));
+            const api = makeApi([keyedWith(['e1', 'new1'])]);
+            await run(api, { entryAges });
+            expect(api.applyBoost).toHaveBeenCalledTimes(1);
+            expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+            expect(autoFill.submitNewEntryForAction).not.toHaveBeenCalled();
+        });
+
+        test('a pinned photo is not skipped as uncertain: the pin is the confirmation', async () => {
+            settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoFills');
+            votingLogic.resolvePin.mockReturnValue(invalid({ state: 'hit', entry: { id: 'e1' } }));
+            const api = makeApi([keyedWith(['e1'])]);
+            await run(api, { entryAges: uncertainLedger() });
+            expect(api.applyBoost).toHaveBeenCalledTimes(1);
+        });
+
+        test('the fresh-entry hold still applies to a pinned photo', async () => {
+            votingLogic.resolvePin.mockReturnValue(invalid({ state: 'hit', entry: { id: 'e1' } }));
+            votingLogic.getBoostHoldUntil.mockReturnValue(NOW + 150);
+            const api = makeApi([keyedWith(['e1'])]);
+            const result = await run(api, { entryAges: createMemoryEntryAgeLedger() });
+            expect(api.applyBoost).not.toHaveBeenCalled();
+            expect(result.challenges![0].boostHoldUntil).toBe(NOW + 150);
+        });
+
+        test('an unusable pin names its reason on the apply line, once, on the pass that spends', async () => {
+            votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1' }));
+            votingLogic.pinFallbackOf.mockReturnValue('gone');
+            votingLogic.describePinFallback.mockReturnValue('PIN-REASON');
+            // Held first: no apply line, so no reason.
+            votingLogic.getBoostHoldUntil.mockReturnValue(NOW + 150);
+            const held = makeApi([keyedWith(['e1'])]);
+            await run(held, { entryAges: createMemoryEntryAgeLedger() });
+            expect(messages('startOperation').join()).not.toContain('PIN-REASON');
+
+            votingLogic.getBoostHoldUntil.mockReturnValue(null);
+            await run(makeApi([keyedWith(['e1'])]));
+            expect(votingLogic.describePinFallback).toHaveBeenCalledWith('boost', 'gone');
+            expect(messages('startOperation').filter((m) => m.includes('PIN-REASON'))).toHaveLength(1);
+        });
+
+        test('a pinned target carries no fallback note', async () => {
+            votingLogic.resolvePin.mockReturnValue(invalid({ state: 'hit', entry: { id: 'e1' } }));
+            votingLogic.pinFallbackOf.mockReturnValue('gone');
+            await run(makeApi([keyedWith(['e1'])]));
+            expect(votingLogic.pinFallbackOf).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Turbo', () => {
+        beforeEach(() => votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'turbo' }])));
+        const turboChallenge = () =>
+            withBoost({ state: 'LOCKED' }, { member: { ranking: { entries: [{ id: 'e1' }] } } });
+
+        test('a pinned photo is not skipped as uncertain', async () => {
+            settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoFills');
+            votingLogic.shouldApplyTurbo.mockReturnValue(
+                invalid({ apply: true, fillNew: false, imageId: 'e1', pinned: true }),
+            );
+            const api = makeApi([turboChallenge()]);
+            await run(api, { entryAges: uncertainLedger() });
+            expect(api.applyTurbo).toHaveBeenCalledWith(101, 'e1', 'tok');
+        });
+
+        test('the apply line carries the fallback reason', async () => {
+            votingLogic.shouldApplyTurbo.mockReturnValue(
+                invalid({ apply: true, fillNew: false, imageId: 'e1', pinFallback: 'conflict' }),
+            );
+            votingLogic.describePinFallback.mockReturnValue('PIN-REASON');
+            await run(makeApi([turboChallenge()]));
+            expect(votingLogic.describePinFallback).toHaveBeenCalledWith('turbo', 'conflict');
+            expect(messages('startOperation').join()).toContain('PIN-REASON');
         });
     });
 });

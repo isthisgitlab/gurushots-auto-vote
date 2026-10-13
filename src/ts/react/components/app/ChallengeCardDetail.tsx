@@ -13,6 +13,9 @@ import { CardDensityToggle } from './CardDensityToggle';
 import { FillButtons } from './ChallengeCardActions';
 import { InlineError } from '@/components/ui/InlineError';
 import * as ipc from '@/api/ipc';
+import { ipcErrorText } from '@/api/ipcErrorText';
+import { interp } from '@/utils/interp';
+import { canStillFire, findPinnedEntry, livePinKindOf } from '../../../voting/entryPins';
 import { challengePageUrl } from '@/utils/challengePageUrl';
 
 import type { ComponentChildren } from 'preact';
@@ -22,9 +25,14 @@ import type { ChallengeCardActionSet } from './ChallengeCardActions';
 import type { ChallengeBadgeRowProps } from './ChallengeBadgeRow';
 import type { DeadlineAction } from './DeadlineTimeline';
 import type * as useSwapBacksModule from '@/api/useSwapBacks';
+import type * as useEntryPinsModule from '@/api/useEntryPins';
+import type { EntryPinKind } from '../../../types/settings';
 import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 
 export type SwapBackOffers = ReturnType<typeof useSwapBacksModule.useSwapBacks>;
+export type EntryPinsState = ReturnType<typeof useEntryPinsModule.useEntryPins>;
+
+const PIN_KINDS: readonly EntryPinKind[] = ['boost', 'turbo'];
 
 /**
  * One labelled cell of the detailed card's stat grids.
@@ -208,12 +216,42 @@ function StatusCells({
 }
 
 /**
- * Entry details — entry-level boost / turbo badges and actions.
+ * A stored pin that cannot take its feature right now (its photo left the challenge, or carries the other
+ * feature), with a way to clear it. Only while the feature can still fire: a spent feature's pin is inert.
+ */
+function DanglingPinNote({
+    kind,
+    state,
+    onClear,
+}: {
+    kind: EntryPinKind;
+    state: 'gone' | 'conflict';
+    onClear: () => void | Promise<void>;
+}) {
+    const { t } = useTranslation();
+    const text = interp(t(state === 'gone' ? 'app.pinGoneNote' : 'app.pinConflictNote'), {
+        kind: t(kind === 'boost' ? 'app.boost' : 'app.turbo'),
+        other: t(kind === 'boost' ? 'app.turbo' : 'app.boost'),
+    });
+    return (
+        <div className="alert alert-info py-2 text-xs" role="status">
+            <span>{text}</span>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => void onClear()}>
+                {t('app.pinClear')}
+            </button>
+        </div>
+    );
+}
+
+/**
+ * Entry details — entry-level boost / turbo badges and actions, the pin toggles and the notes for pins that no
+ * longer apply.
  */
 function EntryDetails({
     challenge,
     view,
     swapBacks,
+    entryPins,
     bankroll,
     onVoteComplete,
     onCurrencySpent,
@@ -221,11 +259,14 @@ function EntryDetails({
     challenge: Challenge;
     view: ChallengeCardView;
     swapBacks: SwapBackOffers;
+    entryPins: EntryPinsState;
     bankroll: Bankroll | null;
     onVoteComplete: () => void;
     onCurrencySpent: () => void;
 }) {
     const { t } = useTranslation();
+    const { pins, togglePin, setPin, error: pinError, clearError: clearPinError } = entryPins;
+    const canPin = { boost: canStillFire(challenge, 'boost'), turbo: canStillFire(challenge, 'turbo') };
 
     return (
         <div>
@@ -244,9 +285,21 @@ function EntryDetails({
                         bankroll={bankroll}
                         onSwapped={onCurrencySpent}
                         swapBack={swapBacks.find((r) => r.currentId === String(entry.id)) ?? null}
+                        pin={{ pins, canPin, livePin: livePinKindOf(challenge, entry, pins), onToggle: togglePin }}
                     />
                 ))}
             </div>
+            {PIN_KINDS.map((kind) => {
+                const { state } = findPinnedEntry(challenge, kind, pins[kind]);
+                return (state === 'gone' || state === 'conflict') && canPin[kind] ? (
+                    <DanglingPinNote key={kind} kind={kind} state={state} onClear={() => setPin(kind, null)} />
+                ) : null;
+            })}
+            {pinError && (
+                <InlineError className="mt-1" onDismiss={clearPinError}>
+                    {ipcErrorText(pinError, t, 'errors.pinFailed')}
+                </InlineError>
+            )}
         </div>
     );
 }
@@ -269,6 +322,7 @@ export function ChallengeCardDetail({
     deadlineActions,
     scenarioStatus,
     swapBacks,
+    entryPins,
     bankroll,
     onVoteComplete,
     onCurrencySpent,
@@ -285,6 +339,7 @@ export function ChallengeCardDetail({
     deadlineActions: DeadlineAction[];
     scenarioStatus: ReturnType<typeof useScenarioStatusModule.useScenarioStatus>;
     swapBacks: SwapBackOffers;
+    entryPins: EntryPinsState;
     bankroll: Bankroll | null;
     onVoteComplete: () => void;
     onCurrencySpent: () => void;
@@ -346,6 +401,7 @@ export function ChallengeCardDetail({
                     challenge={challenge}
                     view={view}
                     swapBacks={swapBacks}
+                    entryPins={entryPins}
                     bankroll={bankroll}
                     onVoteComplete={onVoteComplete}
                     onCurrencySpent={onCurrencySpent}

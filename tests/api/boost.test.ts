@@ -18,6 +18,7 @@ const { applyBoost } = require('../../src/ts/strategies/real/applyBoost') as typ
 // boost.ts will surface as `undefined` consistently rather than throwing.
 jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn((key) => (key === 'boostImageIndex' ? 1 : undefined)),
+    getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     getSetting: jest.fn(() => undefined),
     setSetting: jest.fn(),
 }));

@@ -44,6 +44,7 @@ export const errors = {
     challengeNoLongerActive:
         'Šis izaicinājums vairs nav atvērts, tāpēc darbība netika veikta. Atsvaidzini sarakstu, lai redzētu pašreizējos izaicinājumus.',
     boostFailed: 'Boost netika piemērots. GuruShots to noraidīja vai neatbildēja. Mēģini vēlreiz pēc brīža.',
+    pinFailed: 'Piespraudi neizdevās saglabāt. Uzstādījumu failu neizdevās ierakstīt. Mēģini vēlreiz.',
     pickNotEnoughSlots:
         'Foto netika iesniegti. Izaicinājumā ir mazāk brīvo vietu nekā izvēlēto foto, jo tā iesniegumi ir mainījušies. Noņem foto, līdz skaits ietilpst brīvajās vietās, un iesniedz vēlreiz.',
     pickAlreadyEntered:
@@ -179,6 +180,17 @@ export const app = {
     deadlineActionEmergencyFill: 'Ārkārtas iesniegšana',
     boostConflictWarning:
         'Boost nevar izmantot: tavam vienīgajam foto jau ir Turbo, bet abi nevar būt vienam foto. Pievieno otru foto, lai izmantotu abus.',
+    pinForBoost: 'Piespraust Boost',
+    pinForTurbo: 'Piespraust Turbo',
+    pinnedForBoost: 'Piesprausts Boost',
+    pinnedForTurbo: 'Piesprausts Turbo',
+    pinClear: 'Noņemt piespraudi',
+    pinGoneNote:
+        'Piespraustā {kind} foto šajā izaicinājumā vairs nav, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus. Piespraud citu foto vai noņem piespraudi.',
+    pinConflictNote:
+        'Piespraustajam {kind} foto jau ir {other}, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus. Piespraud citu foto vai noņem piespraudi.',
+    pinSwapWarning:
+        'Šis foto ir piesprausts {kind}. Ja to apmainīsi, piespraudei nebūs foto, kam piemērot {kind}, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus.',
     statusHeaderActive: 'aktīvi',
     statusHeaderBoosts: 'Boost gatavi',
     statusHeaderTurbos: 'Turbo gatavi',
@@ -248,10 +260,10 @@ export const app = {
         'Laiks līdz beigām, kad lietotne izmanto iegūto Turbo. Uzstādi 0, lai izslēgtu Turbo izmantošanu pēc laika. Tāpat kā citos laika uzstādījumos, 0 šeit nozīmē „izslēgts”, nevis „sekot slieksnim”.',
     turboImageIndex: 'Turbo foto',
     turboImageIndexDesc:
-        'Kuram foto izmantot Turbo: 1 = pirmajam, 2 = otrajam utt. 0 = pēdējam foto. Ja šim foto jau ir Boost, Turbo pāriet uz iepriekšējo foto (no 1. pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusējuma vērtība ir 1, tāpēc, ja abi automātiskie režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto.',
+        'Kuram foto izmantot Turbo: 1 = pirmajam, 2 = otrajam utt. 0 = pēdējam foto. Ja šim foto jau ir Boost, Turbo pāriet uz iepriekšējo foto (no 1. pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusējuma vērtība ir 1, tāpēc, ja abi automātiskie režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto. Foto, kas piesprausts izaicinājuma kartītē, ir svarīgāks par šo uzstādījumu un par otras darbības foto izvēli.',
     boostImageIndex: 'Boost foto',
     boostImageIndexDesc:
-        'Kuram foto izmantot Boost: 1 = pirmajam, 2 = otrajam utt. 0 = pēdējam foto. Ja šim foto jau ir Turbo, Boost pāriet uz iepriekšējo foto (no 1. pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusējuma vērtība ir 1, tāpēc, ja abi automātiskie režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto.',
+        'Kuram foto izmantot Boost: 1 = pirmajam, 2 = otrajam utt. 0 = pēdējam foto. Ja šim foto jau ir Turbo, Boost pāriet uz iepriekšējo foto (no 1. pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusējuma vērtība ir 1, tāpēc, ja abi automātiskie režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto. Foto, kas piesprausts izaicinājuma kartītē, ir svarīgāks par šo uzstādījumu un par otras darbības foto izvēli.',
     boostFillNew: 'Boost jaunam iesniegtam foto',
     boostFillNewDesc:
         'Ja ieslēgts, lietotne tieši pirms Boost iesniedz jaunu foto (pēc taviem automātiskās iesniegšanas tagu noteikumiem) un izmanto Boost šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai piemērota foto, Boost saņem tavs norādītais Boost foto.',

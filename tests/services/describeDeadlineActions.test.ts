@@ -37,6 +37,7 @@ const mockSettings = (overrides = {}) => {
         mustIncludeTags: [], // mirrors the schema default
     };
     const merged: Record<string, unknown> = { ...defaults, ...overrides };
+    settings.getEntryPins.mockReturnValue({ boost: null, turbo: null });
     settings.getEffectiveSetting = invalid(jest.fn((key: string) => merged[key]));
     // Tag lists go through the title-aware reader; the title-rule union is not
     // under test here, so resolve it off the same map.

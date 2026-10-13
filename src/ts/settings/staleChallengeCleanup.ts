@@ -46,14 +46,15 @@ const cleanupStaleChallengeSetting = (activeChallengeIds: Iterable<string>): boo
     if (known === null) return true; // The main process has no list of its own to judge by
     const settings = loadSettings();
     const activeIds = new Set([...activeChallengeIds, ...known]);
-    const { perChallenge, titleProfileSuppressions: suppressions } = settings.challengeSettings;
+    const { perChallenge, titleProfileSuppressions: suppressions, entryPins } = settings.challengeSettings;
     const keptForJoin = new Set(
         Object.keys(perChallenge).filter((id) => !activeIds.has(id) && isKeptForJoin(id, perChallenge[id])),
     );
     const staleChallengeIds = Object.keys(perChallenge).filter((id) => !activeIds.has(id) && !keptForJoin.has(id));
     const staleSuppressionIds = Object.keys(suppressions).filter((id) => !activeIds.has(id) && !keptForJoin.has(id));
+    const stalePinIds = Object.keys(entryPins).filter((id) => !activeIds.has(id) && !keptForJoin.has(id));
 
-    if (staleChallengeIds.length === 0 && staleSuppressionIds.length === 0) {
+    if (staleChallengeIds.length === 0 && staleSuppressionIds.length === 0 && stalePinIds.length === 0) {
         return true; // Nothing to cleanup
     }
 
@@ -66,6 +67,9 @@ const cleanupStaleChallengeSetting = (activeChallengeIds: Iterable<string>): boo
     });
     staleSuppressionIds.forEach((challengeId) => {
         delete suppressions[challengeId];
+    });
+    stalePinIds.forEach((challengeId) => {
+        delete entryPins[challengeId];
     });
 
     return saveSettings(settings);

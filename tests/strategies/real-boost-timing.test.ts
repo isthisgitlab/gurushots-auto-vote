@@ -17,6 +17,7 @@ type LoggerMock = typeof loggerModule & {
 // Mock the settings module
 const mockSettings = {
     getEffectiveSetting: jest.fn(),
+    getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     SETTINGS_SCHEMA: {
         boostTime: {
             default: 3600, // 1 hour default
@@ -61,6 +62,9 @@ jest.mock('../../src/ts/timing', () => mockUtils);
 
 // Mock the voting logic service
 const mockVotingLogic = {
+    resolvePin: jest.fn(() => ({ state: 'none' })),
+    pinFallbackOf: jest.fn(() => null),
+    describePinFallback: jest.fn(() => ''),
     shouldApplyBoost: jest.fn(),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
     getEffectiveBoostTime: jest.fn(),

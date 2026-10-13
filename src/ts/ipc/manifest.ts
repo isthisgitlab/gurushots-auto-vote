@@ -64,6 +64,8 @@ const invokeChannels = [
     'get-title-rules',
     'set-title-rules',
     'get-title-profile',
+    'get-entry-pins',
+    'set-entry-pin',
     'get-challenge-overrides',
     'replace-challenge-overrides',
     'get-challenge-profiles',

@@ -44,6 +44,7 @@ export const errors = {
     challengeNoLongerActive:
         'This challenge is no longer open, so the action was not made. Refresh the list to see the current challenges.',
     boostFailed: 'The boost was not applied. GuruShots refused it or did not answer. Try again in a moment.',
+    pinFailed: "Couldn't save the pin. The settings file could not be written. Try again.",
     pickNotEnoughSlots:
         'The photos were not submitted. The challenge has fewer open slots than photos picked, because its entries changed. Remove photos until the count fits the open slots, then submit again.',
     pickAlreadyEntered:
@@ -178,6 +179,17 @@ export const app = {
     deadlineActionEmergencyFill: 'Emergency submit',
     boostConflictWarning:
         "Boost can't apply: your only entry already has Turbo (they can't share an entry). Add a second entry to use both.",
+    pinForBoost: 'Pin for Boost',
+    pinForTurbo: 'Pin for Turbo',
+    pinnedForBoost: 'Pinned for Boost',
+    pinnedForTurbo: 'Pinned for Turbo',
+    pinClear: 'Clear pin',
+    pinGoneNote:
+        'The photo pinned for {kind} is no longer in this challenge, so {kind} will use your usual {kind} settings. Pin another photo or clear the pin.',
+    pinConflictNote:
+        'The photo pinned for {kind} already has {other}, so {kind} will use your usual {kind} settings. Pin another photo or clear the pin.',
+    pinSwapWarning:
+        'This photo is pinned for {kind}. Swapping it out leaves the pin with nothing to apply {kind} to, so {kind} falls back to your usual {kind} settings.',
     statusHeaderActive: 'active',
     statusHeaderBoosts: 'Boosts ready',
     statusHeaderTurbos: 'Turbos ready',
@@ -245,10 +257,10 @@ export const app = {
         'Time-before-close at which an earned Turbo is applied. Set to 0 to turn timed Turbo apply off. Like the other time settings, 0 here means "off" — not "follow a trigger".',
     turboImageIndex: 'Turbo Entry',
     turboImageIndexDesc:
-        'Which entry gets Turbo: 1 = first, 2 = second, etc. Use 0 for the last entry. If Boost is already on that entry, Turbo moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry.',
+        "Which entry gets Turbo: 1 = first, 2 = second, etc. Use 0 for the last entry. If Boost is already on that entry, Turbo moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry. A photo pinned on the challenge card takes precedence over this setting and over the other feature's entry slot.",
     boostImageIndex: 'Boost Entry',
     boostImageIndexDesc:
-        'Which entry gets Boost: 1 = first, 2 = second, etc. Use 0 for the last entry. If Turbo is already on that entry, Boost moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry.',
+        "Which entry gets Boost: 1 = first, 2 = second, etc. Use 0 for the last entry. If Turbo is already on that entry, Boost moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry. A photo pinned on the challenge card takes precedence over this setting and over the other feature's entry slot.",
     boostFillNew: 'Boost a Freshly Submitted Photo',
     boostFillNewDesc:
         'When on, this submits a new photo (using your Auto-Submit tag rules) just before boosting and boosts that new entry instead of an existing one. If there is no free slot or no eligible photo, it falls back to boosting your configured Boost Entry.',

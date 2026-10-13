@@ -1,4 +1,5 @@
 import type { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots';
+import type { EntryPinKind, EntryPins } from '../../../types/settings';
 import type { SwapBackOffer } from '@/api/useSwapBacks';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useBoost } from '@/api/useBoost';
@@ -13,6 +14,85 @@ import { EntryPhoto } from './EntryPhoto';
 import { SwapEntryButton, SwapBackButton } from './SwapEntryButton';
 
 /**
+ * What an entry badge needs to pin its photo for Boost or Turbo.
+ *
+ * @property pins - the challenge's stored pins
+ * @property canPin - per feature, whether it can still fire (a toggle for a spent feature stays hidden)
+ * @property livePin - the feature this entry is live-pinned for (the Swap warning names it)
+ * @property onToggle - pin this entry, or clear the pin when it already holds it
+ */
+export type EntryPinControls = {
+    pins: EntryPins;
+    canPin: Record<EntryPinKind, boolean>;
+    livePin: EntryPinKind | null;
+    onToggle: (kind: EntryPinKind, imageId: string) => void | Promise<void>;
+};
+
+/**
+ * One "Pin for Boost / Turbo" toggle: a fixed name, with `aria-pressed` carrying the state.
+ */
+function PinToggle({
+    kind,
+    pressed,
+    onToggle,
+}: {
+    kind: EntryPinKind;
+    pressed: boolean;
+    onToggle: () => void | Promise<void>;
+}) {
+    const { t } = useTranslation();
+    return (
+        <ActionButton
+            variant={kind === 'boost' ? 'success' : 'warning'}
+            className={pressed ? '' : 'btn-outline'}
+            aria-pressed={pressed}
+            onClick={() => void onToggle()}
+        >
+            <span aria-hidden="true">📌</span> {t(kind === 'boost' ? 'app.pinForBoost' : 'app.pinForTurbo')}
+        </ActionButton>
+    );
+}
+
+/**
+ * The pin toggles of one entry, grouped apart from the spend buttons by the same 8px step as Swap. A toggle shows
+ * while its feature can still fire, and not on a photo that carries the other feature.
+ */
+function PinToggles({
+    entry,
+    pin,
+    carriesBoost,
+    carriesTurbo,
+}: {
+    entry: RankingEntry;
+    pin: EntryPinControls;
+    carriesBoost: boolean;
+    carriesTurbo: boolean;
+}) {
+    const imageId = String(entry.id);
+    const showBoost = pin.canPin.boost && !carriesTurbo;
+    const showTurbo = pin.canPin.turbo && !carriesBoost;
+    if (!showBoost && !showTurbo) return null;
+    return (
+        <span className="ml-2 inline-flex flex-wrap items-center gap-2">
+            {showBoost && (
+                <PinToggle
+                    kind="boost"
+                    pressed={pin.pins.boost === imageId}
+                    onToggle={() => pin.onToggle('boost', imageId)}
+                />
+            )}
+            {showTurbo && (
+                <PinToggle
+                    kind="turbo"
+                    pressed={pin.pins.turbo === imageId}
+                    onToggle={() => pin.onToggle('turbo', imageId)}
+                />
+            )}
+        </span>
+    );
+}
+
+/**
  * Entry badge component showing entry details and per-entry action buttons.
  *
  * @param props.entry     - Entry record from challenge.member.ranking.entries
@@ -24,6 +104,7 @@ import { SwapEntryButton, SwapBackButton } from './SwapEntryButton';
  * @param props.bankroll - For the swap confirm modal's balance line
  * @param props.onSwapped - called after a swap / swap back spent
  * @param props.swapBack - Swap-back offer for this slot (the original was swapped out while boosted/turbo'd)
+ * @param props.pin - the pin toggles (absent = none shown)
  */
 export function EntryBadge({
     entry,
@@ -36,6 +117,7 @@ export function EntryBadge({
     bankroll = null,
     onSwapped,
     swapBack = null,
+    pin,
 }: {
     entry: RankingEntry;
     challengeId: Challenge['id'];
@@ -47,6 +129,7 @@ export function EntryBadge({
     bankroll?: Bankroll | null;
     onSwapped: () => void;
     swapBack?: SwapBackOffer | null;
+    pin?: EntryPinControls;
 }) {
     const { t } = useTranslation();
     const { applyBoost, loading: boosting, error: boostError, clearError: clearBoostError } = useBoost();
@@ -121,6 +204,7 @@ export function EntryBadge({
                     </BusyContent>
                 </ActionButton>
             )}
+            {pin && <PinToggles entry={entry} pin={pin} carriesBoost={isEntryBoosted} carriesTurbo={isEntryTurboed} />}
             {swapAvailable && (
                 // ml-2 + gap: keep Swap an 8px step away from Boost/Turbo so
                 // adjacent touch targets aren't flush on Android.
@@ -130,6 +214,7 @@ export function EntryBadge({
                         challengeId={challengeId}
                         bankroll={bankroll}
                         warnActioned={isEntryActioned}
+                        warnPinned={pin?.livePin ?? null}
                         onSpent={onSwapped}
                     />
                     {swapBack && (

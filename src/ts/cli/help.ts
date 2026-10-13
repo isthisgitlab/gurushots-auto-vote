@@ -20,6 +20,8 @@ Commands:
   run      - Run one full auto-strategy cycle (boost / turbo / auto-submit / threshold-aware vote).
              Add --challenge=<id> to scope to a single challenge.
   boost    - Apply a boost to a challenge: boost --challenge=<id> [--image=<id>]
+  pin      - Pin the photo Boost and Turbo land on (timing is unchanged; none clears a pin; no flags lists them):
+             pin --challenge=<id> [--boost=<imageId|none>] [--turbo=<imageId|none>]
   turbo    - Play the turbo mini-game on a challenge: turbo --challenge=<id>
   submit   - Submit photo(s) to a challenge's empty slots: submit --challenge=<id> [--all]
   unlock-boost  - Spend a key to unlock a locked boost (does not apply it):
@@ -96,6 +98,7 @@ Examples:
   run
   run --challenge=12345
   boost --challenge=12345
+  pin --challenge=12345 --boost=abc123 --turbo=none
   turbo --challenge=12345
   submit --challenge=12345 --all
   unlock-boost --challenge=12345 --yes

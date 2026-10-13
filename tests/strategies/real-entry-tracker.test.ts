@@ -30,6 +30,9 @@ jest.mock('../../src/ts/metadata', () => ({
     MAX_ENTRY_ID_LENGTH: 64,
 }));
 jest.mock('../../src/ts/services/VotingLogic', () => ({
+    resolvePin: jest.fn(() => ({ state: 'none' })),
+    pinFallbackOf: jest.fn(() => null),
+    describePinFallback: jest.fn(() => ''),
     shouldApplyBoost: jest.fn(() => false),
     getEffectiveBoostTime: jest.fn(() => 3600),
     shouldPlayAutoTurbo: jest.fn(() => false),

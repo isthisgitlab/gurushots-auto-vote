@@ -31,6 +31,9 @@ const ALL_ACTIONS: ReturnType<typeof votingLogicModule.orderDeadlineActions> = [
     { action: 'emergencyFill', thresholdSec: 0 },
 ];
 jest.mock('../../src/ts/services/VotingLogic', () => ({
+    resolvePin: jest.fn(() => ({ state: 'none' })),
+    pinFallbackOf: jest.fn(() => null),
+    describePinFallback: jest.fn(() => ''),
     isWithinEmergencyWindow: jest.fn(() => false),
     shouldApplyBoost: jest.fn(() => false),
     getEffectiveBoostTime: jest.fn(() => 3600),
@@ -53,7 +56,10 @@ jest.mock('../../src/ts/services/autoFill', () => ({
     maybeAutoFillChallenge: jest.fn(() => 'disabled'),
     maybeEmergencyFillChallenge: jest.fn(() => 'disabled'),
 }));
-jest.mock('../../src/ts/settings', () => ({ getEffectiveSetting: jest.fn(() => undefined) }));
+jest.mock('../../src/ts/settings', () => ({
+    getEffectiveSetting: jest.fn(() => undefined),
+    getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
+}));
 jest.mock('../../src/ts/logger', () => {
     const scoped = {
         startOperation: jest.fn(),

@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import type { Challenge } from '../../../types/gurushots';
 import type { RankedChallenge } from '../../../types/rendererUtils';
+import type { EntryPins } from '../../../types/settings';
 import type { ChallengeCardView } from './ChallengeCard';
 import type { ChallengeBadgeRowProps } from './ChallengeBadgeRow';
 import type { DeadlineAction } from './DeadlineTimeline';
@@ -12,6 +13,7 @@ import { Countdown } from './Countdown';
 import type { TimeRemaining } from './Countdown';
 import { DeadlineTimeline } from './DeadlineTimeline';
 import { ScenarioStatusLine } from './ScenarioStatusLine';
+import { livePinKindOf } from '../../../voting/entryPins';
 import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 
 /**
@@ -52,6 +54,7 @@ function Stat({
  * All values are derived by the parent ChallengeCard and passed in, so the
  * tile and the detailed card can never disagree about what a state means.
  *
+ * @param props.pins - the photos pinned for Boost and Turbo, marked in the entry glyph row
  * @param props.actions - the optional footer action row
  */
 export function ChallengeCardCompact({
@@ -63,6 +66,7 @@ export function ChallengeCardCompact({
     boostStatus,
     turboStatus,
     entries,
+    pins,
     hasCompactOverride,
     onToggleCompact,
     boostBlocked,
@@ -78,6 +82,7 @@ export function ChallengeCardCompact({
     boostStatus: ChallengeCardView['boostStatus'];
     turboStatus: ChallengeCardView['turboStatus'];
     entries: ChallengeCardView['entries'];
+    pins: EntryPins;
     hasCompactOverride: boolean;
     onToggleCompact: () => void | Promise<void>;
     boostBlocked: boolean;
@@ -133,6 +138,7 @@ export function ChallengeCardCompact({
                 >
                     {entries.map((entry) => {
                         const { icon, textClass } = getEntryStatus(entry);
+                        const pinned = livePinKindOf(challenge, entry, pins);
                         return (
                             <span
                                 key={entry.id}
@@ -140,6 +146,14 @@ export function ChallengeCardCompact({
                                 title={`${t('app.rank')} ${entry.rank} (${entry.votes} ${t('app.votes')})`}
                             >
                                 {icon} #{entry.rank}
+                                {pinned && (
+                                    <>
+                                        <span aria-hidden="true">{pinned === 'boost' ? '🚀📌' : '⚡📌'}</span>
+                                        <span className="sr-only">
+                                            {t(pinned === 'boost' ? 'app.pinnedForBoost' : 'app.pinnedForTurbo')}
+                                        </span>
+                                    </>
+                                )}
                             </span>
                         );
                     })}

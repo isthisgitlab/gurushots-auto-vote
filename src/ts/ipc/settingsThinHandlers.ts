@@ -28,6 +28,7 @@ const CHALLENGE_ID_ARGS: Record<string, { index: number; optional?: boolean }> =
     'get-challenge-overrides': { index: 0 },
     'replace-challenge-overrides': { index: 0 },
     'apply-challenge-profile': { index: 1 },
+    'get-entry-pins': { index: 0 },
 };
 
 // The channels that take one setting key: a key the renderer may not touch (the token, the derived hasToken, the API
@@ -51,6 +52,7 @@ const thinRows = () =>
         ['get-title-rules', () => settings.getTitleRules, null, 'getting title rules'],
         ['set-title-rules', () => settings.setTitleRules, false, 'setting title rules'],
         ['get-title-profile', () => settings.getTitleProfile, null, 'getting title profile'],
+        ['get-entry-pins', () => settings.getEntryPins, null, 'getting entry pins'],
         ['get-challenge-overrides', () => settings.getChallengeOverrides, null, 'getting challenge overrides'],
         [
             'replace-challenge-overrides',

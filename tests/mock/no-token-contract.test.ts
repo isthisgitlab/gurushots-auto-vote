@@ -21,6 +21,7 @@ jest.mock('../../src/ts/api/api-client', () => ({
 jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(() => null),
     getEffectiveSetting: jest.fn(() => 1),
+    getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     loadSettings: jest.fn(() => ({ mock: true })),
     SETTINGS_SCHEMA: { exposure: { default: 100 } },
 }));

@@ -7,13 +7,17 @@ import type { Challenge } from '../../types/gurushots';
 import * as settings from '../../settings';
 import { isBoostWindowOpen as boostWindowOpen } from '../../voting/boostWindow';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
-import { pickEntryAvoidingConflict } from './entryPick';
+import { livePinnedId, pickEntryAvoidingConflict, resolvePin } from './entryPick';
 
 interface TurboDecision {
     apply: boolean;
     imageId: string | null;
     fillNew: boolean;
     reason: string;
+    /** The target is the photo pinned for Turbo (the user's explicit choice). */
+    pinned?: true;
+    /** A pin exists but is unusable, so the pick fell back to the slot rules. */
+    pinFallback?: 'gone' | 'conflict';
 }
 
 /**
@@ -209,6 +213,10 @@ const isTurboEarnSaved = (challenge: Challenge, now: number): boolean => {
 /**
  * Decides whether to apply a won Turbo to one of the user's entries.
  *
+ * A usable pinned photo is the target and beats both fill-new modes; an unusable
+ * pin (gone, or already boosted) falls back to the rules below and is reported
+ * as `pinFallback`. The slot pick prefers an entry other than the photo pinned for Boost.
+ *
  * When `turboFillNew` is on the caller will submit a fresh photo and Turbo
  * that instead of an existing entry, so the "no entries" guard is relaxed
  * (fill-new can create the first entry) and `imageId` is returned only as a
@@ -250,6 +258,20 @@ const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergenc
         }
     }
 
+    const pin = resolvePin(challenge, challengeId, 'turbo');
+    if (pin.state === 'hit') {
+        return {
+            apply: true,
+            imageId: String(pin.entry.id),
+            fillNew: false,
+            pinned: true,
+            reason: 'eligible (pinned)',
+        };
+    }
+    const pinFallback = pin.state === 'gone' || pin.state === 'conflict' ? pin.state : undefined;
+    const applyWith = (decision: TurboDecision): TurboDecision =>
+        pinFallback ? { ...decision, pinFallback } : decision;
+
     const fillNew = settings.getEffectiveSetting('turboFillNew', challengeId) === true;
     // Narrower opt-in: fill a fresh photo ONLY to break a boost/turbo conflict
     // (the single existing entry already has Boost, so Turbo cannot go there).
@@ -262,11 +284,13 @@ const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergenc
     const entries = challenge.member?.ranking?.entries;
     const hasEntries = Array.isArray(entries) && entries.length > 0;
     const requestedIndex = settings.getEffectiveSetting('turboImageIndex', challengeId);
-    const picked = hasEntries ? pickEntryAvoidingConflict(entries, requestedIndex, 'boosted') : null;
+    const picked = hasEntries
+        ? pickEntryAvoidingConflict(entries, requestedIndex, 'boosted', livePinnedId(challenge, challengeId, 'boost'))
+        : null;
     const existingImageId = picked?.id || null;
 
     if (fillNew) {
-        return { apply: true, imageId: existingImageId, fillNew: true, reason: 'eligible (fill-new)' };
+        return applyWith({ apply: true, imageId: existingImageId, fillNew: true, reason: 'eligible (fill-new)' });
     }
 
     if (!hasEntries) {
@@ -280,12 +304,12 @@ const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergenc
             // is no safe fallback target (the only existing entry is boosted), so
             // if the fresh submit can't happen the turbo runner skips this cycle
             // rather than turboing the boosted entry.
-            return { apply: true, imageId: null, fillNew: true, reason: 'eligible (fill-new on conflict)' };
+            return applyWith({ apply: true, imageId: null, fillNew: true, reason: 'eligible (fill-new on conflict)' });
         }
         return noop('only entry already has Boost applied');
     }
     if (!existingImageId) return noop('selected entry has no id');
-    return { apply: true, imageId: existingImageId, fillNew: false, reason: 'eligible' };
+    return applyWith({ apply: true, imageId: existingImageId, fillNew: false, reason: 'eligible' });
 };
 
 export {

@@ -1,6 +1,7 @@
 import { deriveChallengeCardView, needsSecondTick, nextBoundaryFlip } from '@/utils/challengeCardView';
 import { useDeadlineActions } from '@/api/useDeadlineActions';
 import { useSwapBacks } from '@/api/useSwapBacks';
+import { useEntryPins } from '@/api/useEntryPins';
 import { useScenarioStatus } from '@/api/useScenarioStatus';
 import { useChallengeSettings } from '@/hooks/useChallengeSettings';
 import { useTick, useRerenderAt } from '@/hooks/useTick';
@@ -66,6 +67,8 @@ export function ChallengeCard({
     // renders without them, never an error surface.
     const { actions: deadlineActions, boostBlocked } = useDeadlineActions(challenge, settingsVersion);
     const swapBacks = useSwapBacks(challenge);
+    // Read once per card: the detailed layout toggles pins, the compact tile shows them.
+    const entryPins = useEntryPins(challenge.id, settingsVersion);
     const scenarioStatus = useScenarioStatus(challenge, settingsVersion, passVersion);
 
     // The card re-renders once a second only while something on it counts down — a turbo cooldown (so
@@ -117,6 +120,7 @@ export function ChallengeCard({
                 boostStatus={view.boostStatus}
                 turboStatus={view.turboStatus}
                 entries={view.entries}
+                pins={entryPins.pins}
                 hasCompactOverride={hasCompactOverride}
                 onToggleCompact={toggleCompact}
                 boostBlocked={boostBlocked}
@@ -141,6 +145,7 @@ export function ChallengeCard({
                 deadlineActions={deadlineActions}
                 scenarioStatus={scenarioStatus}
                 swapBacks={swapBacks}
+                entryPins={entryPins}
                 bankroll={bankroll}
                 onVoteComplete={onVoteComplete}
                 onCurrencySpent={onCurrencySpent}

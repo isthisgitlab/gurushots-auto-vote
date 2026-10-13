@@ -38,6 +38,7 @@ const mockSettings = (overrides = {}) => {
         mustIncludeTags: [],
     };
     const merged: Record<string, unknown> = { ...defaults, ...overrides };
+    settings.getEntryPins.mockReturnValue({ boost: null, turbo: null });
     settings.getEffectiveSetting = invalid(jest.fn((key: string) => merged[key]));
     settings.getEffectiveTagSetting = invalid(jest.fn((key: string) => merged[key]));
 };

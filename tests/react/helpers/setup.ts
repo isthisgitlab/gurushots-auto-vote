@@ -142,6 +142,10 @@ Object.assign(mockApi, {
     setTitleRules: jest.fn().mockResolvedValue(true),
     getTitleProfile: jest.fn().mockResolvedValue(null),
 
+    // Photos pinned for Boost / Turbo — none by default
+    getEntryPins: jest.fn().mockResolvedValue({ boost: null, turbo: null }),
+    setEntryPin: jest.fn().mockResolvedValue({ success: true }),
+
     // Challenge profiles
     getChallengeProfiles: jest.fn().mockResolvedValue({}),
     saveChallengeProfile: jest.fn().mockResolvedValue(true),

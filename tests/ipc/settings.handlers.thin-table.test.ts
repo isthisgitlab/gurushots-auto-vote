@@ -45,6 +45,7 @@ const EXPECTED_THIN_HANDLERS: [string, string, string | boolean | null][] = [
     ['get-title-rules', 'getTitleRules', null],
     ['set-title-rules', 'setTitleRules', false],
     ['get-title-profile', 'getTitleProfile', null],
+    ['get-entry-pins', 'getEntryPins', null],
     ['get-challenge-overrides', 'getChallengeOverrides', null],
     ['replace-challenge-overrides', 'replaceChallengeOverrides', false],
     ['get-challenge-profiles', 'getChallengeProfiles', null],
@@ -180,6 +181,7 @@ const CHALLENGE_ID_CHANNELS: [string, string, number][] = [
     ['get-challenge-overrides', 'getChallengeOverrides', 0],
     ['replace-challenge-overrides', 'replaceChallengeOverrides', 0],
     ['apply-challenge-profile', 'applyChallengeProfile', 1],
+    ['get-entry-pins', 'getEntryPins', 0],
 ];
 
 describe('settings.handlers challenge id arguments', () => {

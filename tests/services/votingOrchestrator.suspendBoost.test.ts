@@ -6,9 +6,13 @@
 
 jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
+    getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
 }));
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({
+    resolvePin: jest.fn(() => ({ state: 'none' })),
+    pinFallbackOf: jest.fn(() => null),
+    describePinFallback: jest.fn(() => ''),
     isWithinEmergencyWindow: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
     pickBoostEntry: jest.fn(() => null),
@@ -90,6 +94,8 @@ beforeEach(() => {
     votingLogic.isWithinEmergencyWindow.mockReturnValue(false);
     votingLogic.resolveBoostFillNewMode.mockReturnValue('no');
     votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1' }));
+    votingLogic.resolvePin.mockReturnValue({ state: 'none' });
+    votingLogic.pinFallbackOf.mockReturnValue(null);
     votingLogic.getBoostHoldUntil.mockReturnValue(null);
     autoFill.submitNewEntryForAction.mockResolvedValue(invalid({ ok: false, reason: 'none' }));
 });
@@ -110,6 +116,21 @@ describe('runSuspendBoosts — target rule', () => {
         const api = makeApi();
         expect(await run([keyed()], api)).toEqual([{ status: 'fulfilled', value: 'applied' }]);
         expect(messages('startOperation')[0]).toContain('(key-unlocked)');
+    });
+
+    test('the photo pinned for Boost beats a pending fill-new photo and is not skipped as uncertain', async () => {
+        const api = makeApi();
+        const challenge = keyed();
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.markPending(challenge, 'fresh1', NOW);
+        ledger.markUncertain(challenge, 'e1', NOW);
+        settings.getEffectiveSetting.mockImplementation(
+            (key) => key === 'autoBoost' || key === 'protectUncertainAutoFills',
+        );
+        votingLogic.resolvePin.mockReturnValue(invalid({ state: 'hit', entry: { id: 'e1' } }));
+        expect(await run([challenge], api, ledger)).toEqual([{ status: 'fulfilled', value: 'applied' }]);
+        expect(api.applyBoost).toHaveBeenCalledWith(challenge, 'tok');
+        expect(api.applyBoostToEntry).not.toHaveBeenCalled();
     });
 
     test('a challenge without an open boost is skipped untouched', async () => {

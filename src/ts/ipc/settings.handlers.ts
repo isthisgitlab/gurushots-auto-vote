@@ -37,7 +37,7 @@ import { loadThirdPartyNotices } from '../thirdPartyNotices';
 
 import type { IpcMain } from 'electron';
 import type { SettingsSchemaEntry } from '../settings/schema';
-import type { AppSettings } from '../types/settings';
+import type { AppSettings, EntryPinKind } from '../types/settings';
 import type * as electronModule from 'electron';
 
 /**
@@ -108,6 +108,31 @@ const handleClearChosenPhotos = async (broadcastSettingsChange: BroadcastSetting
     }
 };
 
+// Pins a photo for a challenge's Boost or Turbo, or clears the pin (imageId null). The renderer, the CLI and a
+// web-shell client all send anything, so every argument is checked before the facade (which validates again).
+const handleSetEntryPin = async (
+    broadcastSettingsChange: BroadcastSettingsChange | undefined,
+    kind: EntryPinKind,
+    challengeId: string | number,
+    imageId: string | null,
+) => {
+    if ((kind !== 'boost' && kind !== 'turbo') || !isIdArg(challengeId) || (imageId !== null && !isIdArg(imageId))) {
+        return refuseInvalidArgs('settings', 'set-entry-pin');
+    }
+    try {
+        if (!settings.setEntryPin(kind, challengeId, imageId === null ? null : String(imageId))) {
+            return { success: false as const, error: 'The pin could not be saved' };
+        }
+        if (typeof broadcastSettingsChange === 'function') {
+            broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
+        }
+        return { success: true as const };
+    } catch (error) {
+        logger.withCategory('settings').error('Error handling set-entry-pin request:', error);
+        return errorResult(error, 'Failed to save the pin');
+    }
+};
+
 const buildSettingsHandlers = ({ broadcastSettingsChange }: SettingsHandlerOptions) => ({
     'get-settings': async () => {
         try {
@@ -126,6 +151,9 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: SettingsHandlerOptio
     'cleanup-stale-challenge-setting': handleCleanupStaleChallengeSetting,
 
     'clear-chosen-photos': async () => handleClearChosenPhotos(broadcastSettingsChange),
+
+    'set-entry-pin': (event: unknown, kind: EntryPinKind, challengeId: string | number, imageId: string | null) =>
+        handleSetEntryPin(broadcastSettingsChange, kind, challengeId, imageId),
 
     'save-settings': async (event: unknown, newSettings: Partial<AppSettings>) => {
         try {

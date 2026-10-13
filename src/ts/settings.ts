@@ -16,6 +16,7 @@
  *   profileStore.ts       profile names and value sanitization
  *   profiles.ts           named challenge-settings profiles
  *   titlePins.ts          persisted first-seen challenge-title pins
+ *   entryPins.ts          the photo a challenge's Boost and Turbo are pinned to
  *   scenarioSchema.ts     validation of user-defined scenario documents (scenarioSchema/)
  *   scenarios.ts          stored scenarios, JSON import/export
  *   scenarioOverlay.ts    the active scenario phase's settings layer
@@ -48,6 +49,7 @@ import { TITLE_RULE_INLINE_KEYS, MAX_TITLE_LENGTH } from './settings/titleRuleSa
 import * as titleRules from './settings/titleRules';
 import * as profiles from './settings/profiles';
 import * as titlePins from './settings/titlePins';
+import * as entryPins from './settings/entryPins';
 import * as scenarios from './settings/scenarios';
 import * as reset from './settings/reset';
 
@@ -109,6 +111,9 @@ export const MAX_SCENARIOS = scenarios.MAX_SCENARIOS;
 // titles with the same cap mergeTitlePins accepts.
 export const getTitlePins = titlePins.getTitlePins;
 export const mergeTitlePins = titlePins.mergeTitlePins;
+// The photo a challenge's Boost and Turbo are pinned to (IPC: get-entry-pins / set-entry-pin).
+export const getEntryPins = entryPins.getEntryPins;
+export const setEntryPin = entryPins.setEntryPin;
 // Cleanup functions
 export const cleanupStaleChallengeSetting = staleChallengeCleanup.cleanupStaleChallengeSetting;
 // The open (joinable) challenge ids cleanupStaleChallengeSetting spares chosen-photo entries for

@@ -49,6 +49,7 @@ const mockSettings = (overrides = {}) => {
         turboFillNewOnConflict: false,
         emergencyFill: 300,
     };
+    settings.getEntryPins.mockReturnValue({ boost: null, turbo: null });
     settings.getEffectiveSetting = invalid(jest.fn((key: string) => ({ ...defaults, ...overrides })[key]));
 };
 

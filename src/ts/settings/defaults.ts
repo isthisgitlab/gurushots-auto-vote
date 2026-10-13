@@ -52,6 +52,8 @@ const getDefaultSettings = (): AppSettings => {
             // Challenge ids where a manually applied named profile replaces,
             // rather than layers over, an automatic title profile.
             titleProfileSuppressions: {},
+            // Challenge id -> the entry pinned for Boost and/or Turbo (see settings/entryPins.ts).
+            entryPins: {},
         },
         // API headers for randomization (random per user installation)
         apiHeaders: {},

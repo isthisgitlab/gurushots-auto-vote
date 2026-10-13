@@ -63,10 +63,19 @@ const logTurboWithoutTarget = (challenge: Challenge) => {
     logger.withCategory('turbo').info(`${logger.challengeTag(challenge)} turbo fill-new ${skipReason}`, null);
 };
 
-const applyTurboToEntry = async ({ challenge, token, api }: ActionContext, imageId: string) => {
+const applyTurboToEntry = async (
+    { challenge, token, api }: ActionContext,
+    imageId: string,
+    pinFallback?: 'gone' | 'conflict',
+) => {
+    // The pin's fallback reason is logged on the pass that spends.
+    const fallbackNote = pinFallback ? ` — ${votingLogic.describePinFallback('turbo', pinFallback)}` : '';
     logger
         .withCategory('turbo')
-        .startOperation(`turbo-apply-${challenge.id}`, `Applying turbo to entry ${imageId} on ${challenge.title}`);
+        .startOperation(
+            `turbo-apply-${challenge.id}`,
+            `Applying turbo to entry ${imageId} on ${challenge.title}${fallbackNote}`,
+        );
     try {
         const result = await api.applyTurbo(challenge.id, imageId, token);
         if (result.ok) {
@@ -115,6 +124,7 @@ export const runTurboApply = async (ctx: ActionContext) => {
         return;
     }
     if (
+        !turboApply.pinned &&
         !votingLogic.isWithinEmergencyWindow(challenge, now) &&
         settings.getEffectiveSetting('protectUncertainAutoFills', challenge.id.toString()) &&
         ctx.entryAges?.isUncertain(challenge.id, target.imageId)
@@ -127,7 +137,7 @@ export const runTurboApply = async (ctx: ActionContext) => {
             );
         return;
     }
-    await applyTurboToEntry(ctx, target.imageId);
+    await applyTurboToEntry(ctx, target.imageId, turboApply.pinFallback);
 };
 
 /**

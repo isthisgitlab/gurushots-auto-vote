@@ -8,6 +8,8 @@ import {
 } from './commands/voting';
 import {
     boostChallenge,
+    pinCmd,
+    PIN_USAGE,
     turboChallenge,
     fillChallenge,
     unlockBoostCmd,
@@ -160,6 +162,19 @@ const runBoost = async (challengeId: string, rest: string[]) => {
     return 0;
 };
 
+// --boost= / --turbo= take an image id, or `none` to clear; a flag with no value is a usage error.
+const runPin = async (challengeId: string, rest: string[]) => {
+    const pins: Parameters<typeof pinCmd>[1] = {};
+    for (const kind of ['boost', 'turbo'] as const) {
+        const arg = rest.find((a) => a.startsWith(`--${kind}=`));
+        if (arg === undefined) continue;
+        const value = arg.slice(`--${kind}=`.length);
+        if (value === '') return usageError(`--${kind} needs an image id, or none to clear the pin`, PIN_USAGE);
+        pins[kind] = value.toLowerCase() === 'none' ? null : value;
+    }
+    return exitCodeOf(await pinCmd(challengeId, pins));
+};
+
 const runSwapBack = async (challengeId: string, rest: string[]) => {
     const { imageId, yes } = parseSwapFlags(rest);
     return exitCodeOf(await swapBackCmd(challengeId, { imageId, yes }));
@@ -227,6 +242,7 @@ const COMMANDS: Record<string, CommandHandler> = {
     vote: runVote,
     run: runRun,
     boost: challengeCommand('Usage: boost --challenge=<id> [--image=<id>]', runBoost),
+    pin: challengeCommand(PIN_USAGE, runPin),
     turbo: challengeCommand('Usage: turbo --challenge=<id>', async (challengeId) => {
         await turboChallenge(challengeId);
         return 0;

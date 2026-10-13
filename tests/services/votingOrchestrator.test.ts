@@ -14,9 +14,13 @@
 
 jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
+    getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
 }));
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({
+    resolvePin: jest.fn(() => ({ state: 'none' })),
+    pinFallbackOf: jest.fn(() => null),
+    describePinFallback: jest.fn(() => ''),
     isWithinEmergencyWindow: jest.fn(() => false),
     shouldPlayAutoTurbo: jest.fn(() => false),
     isTurboEarnSaved: jest.fn(() => false),

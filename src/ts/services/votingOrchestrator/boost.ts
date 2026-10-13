@@ -13,8 +13,9 @@ import type { ActionContext } from './context';
 import type { VotingPassApi } from '../../types/votingPass';
 import type { EntryAgeLedger } from '../../types/stores';
 
-type BoostTarget = { imageId: string | null; fresh: boolean };
-type SuspendBoostTarget = { imageId: string; fresh: boolean };
+// `pinned`: the photo the user pinned for Boost, which counts as their confirmation of it.
+type BoostTarget = { imageId: string | null; fresh: boolean; pinned?: boolean };
+type SuspendBoostTarget = { imageId: string; fresh: boolean; pinned?: boolean };
 type BoostAvailability = ReturnType<typeof readBoostAvailability>;
 
 /** What a boost sent on device sleep came to. */
@@ -75,6 +76,15 @@ const logBoostTarget = (challenge: Challenge, message: string) => {
 };
 
 /**
+ * The photo pinned for Boost when it is usable. It beats a pending fill-new
+ * photo and both fill-new modes, so it is the first thing a target resolves to.
+ */
+const pinnedBoostTarget = (challenge: Challenge): (BoostTarget & { imageId: string }) | null => {
+    const pin = votingLogic.resolvePin(challenge, challenge.id.toString(), 'boost');
+    return pin.state === 'hit' ? { imageId: String(pin.entry.id), fresh: false, pinned: true } : null;
+};
+
+/**
  * The photo an earlier fill-new submitted that its boost is still waiting on.
  */
 const pendingBoostTarget = ({ challenge, entryAges }: ActionContext): BoostTarget | null => {
@@ -91,9 +101,9 @@ const existingBoostTarget = (challenge: Challenge): BoostTarget => ({
 });
 
 /**
- * The entry a due boost lands on: the photo an earlier fill-new submitted and the
- * boost is still waiting on; else, with fill-new on, a fresh photo submitted now
- * (remembered as pending, so a held boost reuses it instead of submitting
+ * The entry a due boost lands on: the photo pinned for Boost; else the photo an earlier
+ * fill-new submitted and the boost is still waiting on; else, with fill-new on, a fresh photo
+ * submitted now (remembered as pending, so a held boost reuses it instead of submitting
  * another); else the configured Boost Entry.
  *
  * @returns null when
@@ -102,8 +112,8 @@ const existingBoostTarget = (challenge: Challenge): BoostTarget => ({
 const resolveBoostTarget = async (ctx: ActionContext): Promise<BoostTarget | null> => {
     const { challenge, token, now, fillDeps, entryAges } = ctx;
     const cid = challenge.id.toString();
-    const pending = pendingBoostTarget(ctx);
-    if (pending) return pending;
+    const named = pinnedBoostTarget(challenge) ?? pendingBoostTarget(ctx);
+    if (named) return named;
     const existing = () => existingBoostTarget(challenge);
     // 'always' = boostFillNew; 'conflict' = boostFillNewOnConflict when
     // the only existing entry is turboed; 'no' = boost an existing entry.
@@ -163,9 +173,13 @@ const applyAvailableBoost = async (
     }
     const timeDisplay = formatDuration(timeUntilDisplayBase);
 
-    const applyingMsg = isTimerBasedAvailable
-        ? `Applying boost to challenge ${logger.challengeTag(challenge)}`
-        : `Applying boost to challenge ${logger.challengeTag(challenge)} (key-unlocked)`;
+    // The pin's fallback reason is logged here, on the pass that spends, so a held boost doesn't repeat it.
+    const pinFallback = target.pinned ? null : votingLogic.pinFallbackOf(challenge, challenge.id.toString(), 'boost');
+    const applyingMsg =
+        (isTimerBasedAvailable
+            ? `Applying boost to challenge ${logger.challengeTag(challenge)}`
+            : `Applying boost to challenge ${logger.challengeTag(challenge)} (key-unlocked)`) +
+        (pinFallback ? ` — ${votingLogic.describePinFallback('boost', pinFallback)}` : '');
     logger.withCategory('boost').startOperation(`boost-${challenge.id}`, applyingMsg);
 
     try {
@@ -244,7 +258,8 @@ const holdBoostForFreshEntry = (ctx: ActionContext, imageId: string | null): boo
 
 /**
  * Skip a key-unlocked boost (outside the emergency window) that would land on an
- * auto-submitted photo whose standing is still uncertain.
+ * auto-submitted photo whose standing is still uncertain. A pinned photo is never
+ * skipped: pinning it is the user's confirmation.
  *
  * @returns true when the boost is skipped (already logged)
  */
@@ -252,6 +267,7 @@ const skipForUncertainPhoto = (ctx: ActionContext, target: BoostTarget, isTimerB
     const { challenge, now } = ctx;
     if (
         !target.imageId ||
+        target.pinned ||
         isTimerBasedAvailable ||
         votingLogic.isWithinEmergencyWindow(challenge, now) ||
         !settings.getEffectiveSetting('protectUncertainAutoFills', challenge.id.toString()) ||
@@ -320,6 +336,8 @@ export const runBoost = async (ctx: ActionContext) => {
  */
 const resolveSuspendBoostTarget = (ctx: ActionContext): SuspendBoostTarget | null => {
     const { challenge } = ctx;
+    const pinned = pinnedBoostTarget(challenge);
+    if (pinned) return pinned;
     const pending = pendingBoostTarget(ctx);
     if (pending?.imageId) return { imageId: pending.imageId, fresh: true };
     const { imageId, fresh } = existingBoostTarget(challenge);

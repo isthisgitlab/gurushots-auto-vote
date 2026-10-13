@@ -113,6 +113,15 @@ export interface ChallengeFacts {
     close_time?: number | null;
 }
 
+/** Which Boost or Turbo a pinned photo is for. */
+export type EntryPinKind = 'boost' | 'turbo';
+
+/** The photos one challenge pins for Boost and Turbo (entry ids); a missing key is no pin. */
+export type EntryPinRecord = { [K in EntryPinKind]?: string };
+
+/** A challenge's pins as read back: the pinned entry id per feature, null = no pin. */
+export type EntryPins = Record<EntryPinKind, string | null>;
+
 /** The `challengeSettings` container of the blob. */
 export interface ChallengeSettings {
     globalDefaults: ChallengeValues;
@@ -121,6 +130,8 @@ export interface ChallengeSettings {
     titleRules: TitleRule[];
     /** Challenge id -> true while a manually applied profile stands in for the title rule's profile. */
     titleProfileSuppressions: Record<string, boolean>;
+    /** Challenge id -> the photos pinned for Boost and Turbo (not a schema setting: an image id means nothing in a profile or scenario). */
+    entryPins: Record<string, EntryPinRecord>;
     /** Profile display name -> sparse values. */
     profiles?: Record<string, ChallengeValues>;
     /** Normalized names of the intent profiles already seeded once. */

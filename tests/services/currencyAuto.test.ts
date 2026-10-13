@@ -131,6 +131,7 @@ beforeEach(() => {
         currencyReserveSwaps: 0,
         currencyReserveFills: 0,
     };
+    settings.getEntryPins.mockReturnValue({ boost: null, turbo: null });
     settings.getEffectiveSetting = invalid(jest.fn((key: string) => values[key]));
     currencyActions.unlockBoostWithKey.mockResolvedValue(OK);
     currencyActions.previewSwap.mockResolvedValue({ ...OK, candidate: { id: 'new1', member_id: 'm' } });
@@ -296,6 +297,50 @@ describe('runAutoSwap', () => {
         expect(await runAutoSwap(makeCtx({ challenge }))).toBe(false);
         set({ autoSwapAllowBoosted: true });
         expect(await runAutoSwap(makeCtx({ challenge }))).toBe(true);
+    });
+
+    test('never swaps out a photo pinned for a Boost or Turbo that can still fire, unless allowed', async () => {
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries = [
+            { id: 'e1', member_id: 'm', votes: 50 },
+            { id: 'e2', member_id: 'm', votes: 5 },
+        ];
+        // The configured slot (the last entry) holds the pin, so the swap steps back to the first one.
+        settings.getEntryPins.mockReturnValue({ boost: 'e2', turbo: null });
+        expect(await runAutoSwap(makeCtx({ challenge }))).toBe(true);
+        expect(currencyActions.previewSwap).toHaveBeenCalledWith(
+            555,
+            'e1',
+            'tok',
+            expect.anything(),
+            expect.anything(),
+        );
+
+        // Both entries protected (one pinned, one turbo'd): nothing qualifies.
+        jest.clearAllMocks();
+        const protectedOnly = makeChallenge();
+        protectedOnly.member.ranking.entries = [
+            { id: 'e1', member_id: 'm', votes: 50, turbo: true },
+            { id: 'e2', member_id: 'm', votes: 5 },
+        ];
+        expect(await runAutoSwap(makeCtx({ challenge: protectedOnly }))).toBe(false);
+        expect(currencyActions.swapEntry).not.toHaveBeenCalled();
+        set({ autoSwapAllowBoosted: true });
+        expect(await runAutoSwap(makeCtx({ challenge: protectedOnly }))).toBe(true);
+    });
+
+    test('a pin whose feature is spent protects nothing', async () => {
+        const challenge = makeChallenge();
+        challenge.member.boost = { state: 'USED', timeout: null };
+        settings.getEntryPins.mockReturnValue({ boost: 'e2', turbo: null });
+        expect(await runAutoSwap(makeCtx({ challenge }))).toBe(true);
+        expect(currencyActions.previewSwap).toHaveBeenCalledWith(
+            555,
+            'e2',
+            'tok',
+            expect.anything(),
+            expect.anything(),
+        );
     });
 
     test('nothing when the challenge has no entries', async () => {

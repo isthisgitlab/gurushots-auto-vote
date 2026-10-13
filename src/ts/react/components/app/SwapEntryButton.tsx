@@ -12,6 +12,7 @@ import { CurrencyConfirmModal, currencyOutcomeText } from './CurrencyConfirmModa
 
 import type { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots';
 import type { SwapCandidate } from '../../../services/currencyActions';
+import type { EntryPinKind } from '../../../types/settings';
 import type { SwapBackOffer } from '@/api/useSwapBacks';
 import type { ActionButtonVariant } from '@/components/ui/ActionButton';
 import type { CurrencyConfirmModalProps } from './CurrencyConfirmModal';
@@ -112,6 +113,7 @@ function SwapConfirmModal({
  *
  * @param props.entry - entry record (id, member_id)
  * @param props.warnActioned - the entry is boosted or turbo'd (its boost/turbo stays with the photo, so the replacement won't get it)
+ * @param props.warnPinned - the feature the entry is live-pinned for (the pin would be left with no photo)
  * @param props.onSpent - called after a successful swap
  */
 export function SwapEntryButton({
@@ -119,10 +121,12 @@ export function SwapEntryButton({
     challengeId,
     bankroll,
     warnActioned,
+    warnPinned = null,
     onSpent,
 }: {
     entry: RankingEntry;
     warnActioned: boolean;
+    warnPinned?: EntryPinKind | null;
     challengeId: Challenge['id'];
     bankroll: Bankroll | null;
     onSpent: () => void;
@@ -173,6 +177,13 @@ export function SwapEntryButton({
             >
                 <p>{t('app.currencySwapBody')}</p>
                 {warnActioned && <p className="text-warning">{t('app.currencySwapBoostedWarning')}</p>}
+                {warnPinned && (
+                    <p className="text-warning">
+                        {interp(t('app.pinSwapWarning'), {
+                            kind: t(warnPinned === 'boost' ? 'app.boost' : 'app.turbo'),
+                        })}
+                    </p>
+                )}
             </SwapConfirmModal>
         </>
     );

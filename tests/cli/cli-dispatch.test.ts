@@ -96,13 +96,15 @@ jest.mock('../../src/ts/cli/commands/voting', () => {
 });
 
 jest.mock('../../src/ts/cli/commands/actions', () => {
-    const { parseSwapFlags, SWAP_USAGE, SWAP_BACK_USAGE } = jest.requireActual<
+    const { parseSwapFlags, SWAP_USAGE, SWAP_BACK_USAGE, PIN_USAGE } = jest.requireActual<
         typeof import('../../src/ts/cli/commands/actions')
     >('../../src/ts/cli/commands/actions');
     return {
         parseSwapFlags,
         SWAP_USAGE,
         SWAP_BACK_USAGE,
+        PIN_USAGE,
+        pinCmd: jest.fn(),
         boostChallenge: jest.fn(),
         turboChallenge: jest.fn(),
         fillChallenge: jest.fn(),
@@ -432,6 +434,33 @@ describe('challenge-scoped actions', () => {
         );
         expect(m.actions.boostChallenge).toHaveBeenCalledWith('5', { imageId });
         expect(m.exitCodes).toEqual([0]);
+    });
+
+    test.each([
+        [['--challenge=5'], {}],
+        [['--challenge=5', '--boost=abc'], { boost: 'abc' }],
+        [['--challenge=5', '--turbo=none'], { turbo: null }],
+        [['--turbo=NONE', '--challenge', '5', '--boost=x'], { boost: 'x', turbo: null }],
+    ])('pin %p', async (tail, pins) => {
+        const m = await run(['pin', ...tail], (mods) => mods.actions.pinCmd.mockResolvedValue(true));
+        expect(m.guards.requireChallenge).toHaveBeenCalledWith({ challengeId: '5' }, m.actions.PIN_USAGE);
+        expect(m.actions.pinCmd).toHaveBeenCalledWith('5', pins);
+        expect(m.exitCodes).toEqual([0]);
+    });
+
+    test('pin exits 1 when the pin could not be read or saved', async () => {
+        const m = await run(['pin', '--challenge=5', '--boost=abc'], (mods) =>
+            mods.actions.pinCmd.mockResolvedValue(false),
+        );
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test.each([['--boost='], ['--turbo=']])('pin %s with no value is a usage error', async (flag) => {
+        const m = await run(['pin', '--challenge=5', flag]);
+        expect(m.actions.pinCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual([`${flag.slice(0, -1)} needs an image id, or none to clear the pin`]);
+        expect(m.msgs('info')).toEqual([m.actions.PIN_USAGE]);
+        expect(m.exitCodes).toEqual([1]);
     });
 
     test('turbo', async () => {
