@@ -57,6 +57,11 @@ describe('ModalActionRow', () => {
         );
     });
 
+    test('the buttons wrap instead of overflowing a narrow modal', () => {
+        const { container } = renderRow();
+        expect(container.querySelector('button')!.parentElement!.className).toBe('flex flex-wrap justify-end gap-2');
+    });
+
     test('saveError renders the alert above the buttons; omitted by default', () => {
         const off = renderRow();
         expect(off.container.querySelector('[role="alert"]')).toBeNull();

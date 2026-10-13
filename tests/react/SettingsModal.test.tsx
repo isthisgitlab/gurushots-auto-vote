@@ -298,6 +298,16 @@ describe('SettingsModal — reliability (API retry/backoff) controls', () => {
     });
 });
 
+describe('SettingsModal — sticky action footer', () => {
+    test('the modal box keeps focus above the footer, which is the last child of the content', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(document.querySelector('.modal-box')!.classList.contains('scroll-pb-32')).toBe(true);
+        const save = Array.from(document.querySelectorAll('button')).find((b) => b.textContent.trim() === 'app.save')!;
+        const footer = save.closest('.sticky')!;
+        expect(footer.parentElement!.lastElementChild).toBe(footer);
+    });
+});
+
 describe('SettingsModal — schema save rejection (commit reports rejected keys)', () => {
     const clickSave = () => {
         const saveBtn = Array.from(document.querySelectorAll('button')).find(
@@ -318,6 +328,8 @@ describe('SettingsModal — schema save rejection (commit reports rejected keys)
 
         const alert = await screen.findByText('app.settingsSaveError');
         expect(alert).toBeTruthy();
+        // The alert sits in the sticky footer next to the buttons.
+        expect(alert.closest('.sticky')!.querySelector('button')).not.toBeNull();
         expect(onClose).not.toHaveBeenCalled();
         // The save aborts before the title-rules write — the rejected edit
         // must not be partially persisted beyond what commit already did.
