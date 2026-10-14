@@ -886,6 +886,7 @@ export const app = {
     swapPickCount: 'Picked: {count}/1',
     swapPickSubmit: 'Use this photo',
     swapPickBlocked: 'Already in this challenge',
+    swapPickNoSuggestion: 'The app found no photo to suggest for this swap. Pick one from your library.',
     discoverChosenChip: 'Chosen',
     discoverChosenChipHint: 'This challenge has chosen photos. Click to change them.',
     discoverChosenChipLabel: 'Chosen photos for {title}: change them',

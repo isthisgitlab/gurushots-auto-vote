@@ -98,11 +98,11 @@ describe('numeric image ids', () => {
         expect(strategy.swapPhoto).not.toHaveBeenCalled();
     });
 
-    test('a candidate that became an entry after the preview is stale, nothing spent', async () => {
+    test('a candidate that became an entry after the preview is already entered, nothing spent', async () => {
         await handlers['preview-swap-photo'](null, 555, 111);
         live = makeChallenge([OLD, OTHER, { id: 333, member_id: 'mem1' }]);
         const result = await handlers['swap-entry-photo'](null, 555, 111, 333, true);
-        expect(result).toEqual({ success: false, outcome: 'stale-candidate', error: 'stale-candidate' });
+        expect(result).toEqual({ success: false, outcome: 'already-entered', error: 'already-entered' });
         expect(strategy.swapPhoto).not.toHaveBeenCalled();
     });
 
@@ -130,11 +130,11 @@ describe('a chosen photo through the real service', () => {
         expect(strategy.swapPhoto).not.toHaveBeenCalled();
     });
 
-    test('a chosen photo that became an entry after the preview is stale at the commit', async () => {
+    test('a chosen photo that became an entry after the preview is already entered at the commit', async () => {
         await handlers['preview-swap-photo'](null, 555, 111, 444);
         live = makeChallenge([OLD, OTHER, { id: 444, member_id: 'mem1' }]);
         const result = await handlers['swap-entry-photo'](null, 555, 111, 444, true);
-        expect(result).toEqual({ success: false, outcome: 'stale-candidate', error: 'stale-candidate' });
+        expect(result).toEqual({ success: false, outcome: 'already-entered', error: 'already-entered' });
         expect(strategy.swapPhoto).not.toHaveBeenCalled();
     });
 });

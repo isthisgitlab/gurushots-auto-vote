@@ -272,11 +272,11 @@ describe('swapEntry', () => {
 
     test.each(['old', 'entered'])('refuses %s as the replacement', async (newId) => {
         const strategy = stubStrategy();
-        expect((await swapEntry(555, 'old', newId, 'tok', { strategy, logger })).outcome).toBe('stale-candidate');
+        expect((await swapEntry(555, 'old', newId, 'tok', { strategy, logger })).outcome).toBe('already-entered');
         expect(strategy.swapPhoto).not.toHaveBeenCalled();
     });
 
-    test('a replacement with the same id as the replaced entry is stale, nothing spent', async () => {
+    test('a replacement with the same id as the replaced entry is already entered, nothing spent', async () => {
         const strategy = stubStrategy({
             challenge: makeChallenge({
                 member: {
@@ -287,7 +287,7 @@ describe('swapEntry', () => {
         });
         expect(await swapEntry(555, '7', '7', 'tok', { strategy, logger })).toEqual({
             ok: false,
-            outcome: 'stale-candidate',
+            outcome: 'already-entered',
         });
         expect(strategy.swapPhoto).not.toHaveBeenCalled();
     });

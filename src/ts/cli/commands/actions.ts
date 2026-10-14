@@ -14,6 +14,7 @@ import * as logger from '../../logger';
 import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
 import { getMiddleware } from '../../apiFactory';
 import { findActiveChallenge } from '../../services/findActiveChallenge';
+import { CHOSEN_PHOTO_ID_RE } from '../../settings/limits';
 
 import type { Challenge } from '../../types/gurushots';
 import type { NullEventHandlers } from '../../types/cli';
@@ -282,6 +283,10 @@ const swapCmd = async (
         logger.withCategory('ui').error('Please specify the entered photo to replace with --image=<id>');
         logger.withCategory('ui').info(SWAP_USAGE);
         return false;
+    }
+    if (to && !CHOSEN_PHOTO_ID_RE.test(to)) {
+        logger.withCategory('ui').error('Invalid --to photo id: use the id list-photos --challenge=<id> shows.');
+        return true;
     }
     const challenge = await resolveChallenge(challengeId);
     if (!challenge) return true;

@@ -898,6 +898,7 @@ export const app = {
     swapPickCount: 'Izvēlēts: {count}/1',
     swapPickSubmit: 'Izmantot šo foto',
     swapPickBlocked: 'Jau iesniegts šajā izaicinājumā',
+    swapPickNoSuggestion: 'Lietotne neatrada foto, ko ieteikt šai apmaiņai. Izvēlies foto no savas bibliotēkas.',
     discoverChosenChip: 'Izvēlētie foto',
     discoverChosenChipHint: 'Šim izaicinājumam ir izvēlēti foto. Spied, lai tos mainītu.',
     discoverChosenChipLabel: 'Izvēlētie foto izaicinājumam „{title}”: mainīt',

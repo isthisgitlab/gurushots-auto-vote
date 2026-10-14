@@ -45,6 +45,8 @@ export interface CurrencyConfirmModalProps {
     field: keyof typeof CURRENCY_LABELS;
     bankroll: Bankroll | null;
     spending: boolean;
+    /** the spend already went out and its answer is unclear or refused for good: Spend stays off, Cancel still closes */
+    spendHeld?: boolean;
     /** action-specific body */
     children: ComponentChildren;
 }
@@ -52,7 +54,8 @@ export interface CurrencyConfirmModalProps {
 /**
  * Confirmation before spending one unit of a bankroll currency. Shows the cost
  * and the current → resulting balance; Spend stays disabled with a spinner from
- * the first click until the spend settles, so a double click can't spend twice.
+ * the first click until the spend settles, so a double click can't spend twice;
+ * `spendHeld` keeps it disabled after that, for a spend that must not be sent again.
  */
 export function CurrencyConfirmModal({
     isOpen,
@@ -62,6 +65,7 @@ export function CurrencyConfirmModal({
     field,
     bankroll,
     spending,
+    spendHeld = false,
     children,
 }: CurrencyConfirmModalProps) {
     const { t } = useTranslation();
@@ -89,7 +93,7 @@ export function CurrencyConfirmModal({
                 <button
                     className="btn btn-latvian btn-sm"
                     onClick={() => void onConfirm()}
-                    disabled={spending}
+                    disabled={spending || spendHeld}
                     aria-busy={spending}
                 >
                     <BusyContent busy={spending} label={interp(t('app.currencySpend'), { unit })} />

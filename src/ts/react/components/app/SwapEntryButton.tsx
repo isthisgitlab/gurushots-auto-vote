@@ -197,7 +197,7 @@ export function SwapEntryButton({
         else if (!result?.success && result?.error === CURRENCY_OUTCOME.noAlternative) {
             // No suggestion to offer: the picker opens and says why, instead of an error under the button.
             preview.clearError();
-            onChoose(entry, warnings, triggerRef.current, currencyOutcomeText(t, CURRENCY_OUTCOME.noAlternative));
+            onChoose(entry, warnings, triggerRef.current, t('app.swapPickNoSuggestion'));
         }
     };
 

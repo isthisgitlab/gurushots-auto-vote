@@ -177,6 +177,18 @@ describe('swap', () => {
         expect(contains(msgsAt('error'), 'new suggestion')).toBe(false);
     });
 
+    test.each(['bad id', 'x'.repeat(65), 'a/b'])(
+        'a malformed --to (%s) names the flag; nothing is previewed or spent',
+        async (to) => {
+            await swapCmd('111', { imageId: 'old1', to, yes: true });
+            expect(handlers['preview-swap-photo']).not.toHaveBeenCalled();
+            expect(handlers['swap-entry-photo']).not.toHaveBeenCalled();
+            expect(
+                contains(msgsAt('error'), 'Invalid --to photo id: use the id list-photos --challenge=<id> shows.'),
+            ).toBe(true);
+        },
+    );
+
     test('--yes without --to: refuses and names the flag to add', async () => {
         await swapCmd('111', { imageId: 'old1', yes: true });
         expect(handlers['swap-entry-photo']).not.toHaveBeenCalled();

@@ -85,7 +85,7 @@ test('no alternative: the card swap picker opens with the reason; no modal, no i
         ENTRY,
         { actioned: true, pinned: 'turbo' },
         swapButton(),
-        'app.currencyOutcomeNoAlternative',
+        'app.swapPickNoSuggestion',
     );
     expect(screen.queryByText('app.currencySwapTitle')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();

@@ -296,8 +296,8 @@ const previewSwap = async (
 
 /**
  * Spends a SWAP to replace entered photo `imageId` with `newImageId`. Refuses
- * (spending nothing) when `imageId` is no longer entered, or when `newImageId`
- * is already entered / equals `imageId`.
+ * (spending nothing) with `not-available` when `imageId` is no longer entered,
+ * or with `already-entered` when `newImageId` is already entered / equals `imageId`.
  *
  * @param deps - ledger: the swap-back
  *   ledger (swapBackStore.ts), told about every successful swap so a swapped-out
@@ -326,7 +326,7 @@ const swapEntry = async (
         return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
     }
     if (newImageId === imageId || swapExcludedIds(challenge).has(newImageId)) {
-        return { ok: false, outcome: CURRENCY_OUTCOME.staleCandidate };
+        return { ok: false, outcome: CURRENCY_OUTCOME.alreadyEntered };
     }
     const oldEntry = findEntry(challenge, imageId);
     const result = await settleUnclearSwap(
