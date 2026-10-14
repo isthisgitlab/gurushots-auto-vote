@@ -5,7 +5,9 @@
  * behind the Pick… "Auto" button. Everything the
  * server sent is stripped of terminal control characters before it is printed,
  * and the per-photo listing goes to the terminal only — the log files get a
- * count and whether the list was cut short, never the photos.
+ * count and whether the list was cut short, never the photos. `--suggest` prints
+ * the ranked ids to the terminal only too, and its own log lines carry counts (the
+ * shared visual check logs its shortlist of photo ids as it does for every fill).
  */
 
 import * as logger from '../../logger';
@@ -152,11 +154,11 @@ const suggestPhotosCmd = async (challengeId: string): Promise<number> => {
         ui().warning('Popularity stats were only partly read, so this ranking leans on tags and the image check.');
     }
     ui().info('This is a ranking under your auto-submit rules, not a replay of the next fill. Nothing was submitted.');
-    // The ids go to the terminal only, like the listing: the log files never get a photo.
+    // This command prints the ids to the terminal only; its own log lines carry counts.
     const ids = JSON.stringify(result.photos.map((photo) => stripTerminalControl(photo.id)));
     logger.printLine(`Make them your chosen photos with: set-setting chosenPhotos '${ids}' --challenge=${id}`);
     ui().info(
-        `submit --challenge=${id} ranks again on its own (1 photo, ignoring Submit Only); it does not submit these exact photos.`,
+        `submit --challenge=${id} ranks again on its own (one photo, or every empty slot with --all) and ignores Submit Only; it does not submit these exact photos.`,
     );
     return 0;
 };

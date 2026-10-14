@@ -701,7 +701,7 @@ describe('Auto suggestions', () => {
                 'Auto ranks your photos by your auto-submit rules, including the local image check. Nothing is submitted.',
             ),
         ).toBeTruthy();
-        expect(autoButton().hasAttribute('disabled')).toBe(false);
+        expect(autoButton().getAttribute('aria-disabled')).toBe('false');
         unmount();
         setup({ max: 1, suggest: false });
         await opened();
@@ -709,19 +709,53 @@ describe('Auto suggestions', () => {
         expect(screen.queryByText(/Auto ranks your photos/)).toBeNull();
     });
 
-    test('while it runs Auto is disabled and busy, and a status line says nothing is submitted', async () => {
+    test('while it runs Auto is aria-disabled and busy, keeps focus and ignores a press, and a status line says nothing is submitted', async () => {
         const answer = deferred<Suggestion>();
         suggestPhotos().mockReturnValueOnce(answer.promise);
         setup({ suggest: true });
         await opened();
+        autoButton().focus();
         fireEvent.click(autoButton());
         await waitFor(() => expect(autoButton().getAttribute('aria-busy')).toBe('true'));
-        expect(autoButton().hasAttribute('disabled')).toBe(true);
+        expect(autoButton().getAttribute('aria-disabled')).toBe('true');
+        // Not `disabled`: that would drop the keyboard focus to <body>.
+        expect(autoButton().hasAttribute('disabled')).toBe(false);
+        expect(document.activeElement).toBe(autoButton());
         expect(screen.getByText('Ranking your photos… this can take a minute. Nothing is submitted.')).toBeTruthy();
         expect(suggestPhotos()).toHaveBeenCalledWith(7);
+        fireEvent.click(autoButton());
+        expect(suggestPhotos()).toHaveBeenCalledTimes(1);
         await act(async () => answer.resolve(suggestion([photo(2)])));
-        expect(autoButton().hasAttribute('disabled')).toBe(false);
+        expect(autoButton().getAttribute('aria-disabled')).toBe('false');
         expect(screen.queryByText(/Ranking your photos/)).toBeNull();
+    });
+
+    test('one status region is always mounted: empty at first, the running text, then the count read out only', async () => {
+        const answer = deferred<Suggestion>();
+        suggestPhotos().mockReturnValueOnce(answer.promise);
+        setup({ suggest: true });
+        await opened();
+        const region = screen.getAllByRole('status').find((el) => el.getAttribute('aria-live') === 'polite');
+        expect(region?.textContent).toBe('');
+        fireEvent.click(autoButton());
+        await waitFor(() =>
+            expect(region?.textContent).toBe('Ranking your photos… this can take a minute. Nothing is submitted.'),
+        );
+        await act(async () => answer.resolve(suggestion([photo(2), photo(3)])));
+        await screen.findByRole('region', { name: 'Suggestions' });
+        // The same element, now holding the count; the strip shows the count as plain text.
+        expect(region?.isConnected).toBe(true);
+        expect(region?.textContent).toBe('Suggestions: 2');
+        expect(region?.className).toContain('sr-only');
+        expect(within(strip()).getByText('Suggestions: 2').getAttribute('aria-live')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
+        await waitFor(() => expect(region?.textContent).toBe(''));
+    });
+
+    test('a swap picker (no Auto) has no such status region', async () => {
+        setup({ max: 1, suggest: false });
+        await opened();
+        expect(screen.getAllByRole('status').filter((el) => el.getAttribute('aria-live') === 'polite')).toEqual([]);
     });
 
     test('the strip lists the suggestions in the returned order with fixed rank badges, and keeps it after a tap', async () => {
@@ -732,7 +766,7 @@ describe('Auto suggestions', () => {
         expect(within(strip()).getByRole('img', { name: 'Suggestion #1' }).textContent).toBe('#1');
         expect(within(strip()).getByRole('img', { name: 'Suggestion #3' })).toBeTruthy();
         expect(stripTile(1).getAttribute('aria-label')).toMatch(/Suggestion #2\.$/);
-        expect(within(strip()).getByText('Suggestions: 3').getAttribute('aria-live')).toBe('polite');
+        expect(within(strip()).getByText('Suggestions: 3')).toBeTruthy();
         fireEvent.click(stripTile(1));
         expect(stripOrder()).toEqual([shortOf(3), shortOf(1), shortOf(2)]);
         expect(stripTile(1).getAttribute('aria-pressed')).toBe('true');
@@ -815,14 +849,18 @@ describe('Auto suggestions', () => {
         await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith([idOf(4), idOf(3), idOf(1)]));
     });
 
-    test('Add suggestions with nothing new to add changes nothing', async () => {
+    test('Add suggestions is disabled once every suggestion is picked, and enabled again when one is un-picked', async () => {
         setup({ suggest: true, max: 3 });
         await opened();
         await press([photo(1), photo(2)]);
+        expect(addButton().hasAttribute('disabled')).toBe(false);
         fireEvent.click(addButton());
         expect(countLine().textContent).toBe('Picked: 2/3 open slots');
-        fireEvent.click(addButton());
-        expect(countLine().textContent).toBe('Picked: 2/3 open slots');
+        // A free slot is left, but nothing is left to add.
+        expect(addButton().textContent).toBe('Add suggestions');
+        expect(addButton().hasAttribute('disabled')).toBe(true);
+        fireEvent.click(stripTile(2));
+        expect(addButton().hasAttribute('disabled')).toBe(false);
     });
 
     test('with one open slot Add suggestions picks the best suggestion, swapping a hand pick, and is never "full"', async () => {
@@ -836,8 +874,9 @@ describe('Auto suggestions', () => {
         expect(stripTile(3).getAttribute('aria-pressed')).toBe('true');
         expect(gridTile(2).getAttribute('aria-pressed')).toBe('false');
         expect(countLine().textContent).toBe('Picked: 1/1 open slots');
-        fireEvent.click(addButton());
-        expect(stripTile(3).getAttribute('aria-pressed')).toBe('true');
+        // With one slot it swaps in #1, so it has nothing to do only when #1 is the pick.
+        expect(addButton().hasAttribute('disabled')).toBe(true);
+        fireEvent.click(stripTile(1));
         expect(addButton().hasAttribute('disabled')).toBe(false);
     });
 
@@ -857,7 +896,7 @@ describe('Auto suggestions', () => {
         setup({ suggest: true });
         await opened();
         fireEvent.click(autoButton());
-        await waitFor(() => expect(autoButton().hasAttribute('disabled')).toBe(true));
+        await waitFor(() => expect(autoButton().getAttribute('aria-disabled')).toBe('true'));
         fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
         await act(async () => answer.resolve(suggestion([photo(2)])));
         expect(screen.queryByRole('region', { name: 'Suggestions' })).toBeNull();
@@ -872,10 +911,43 @@ describe('Auto suggestions', () => {
         setup({ suggest: true });
         await opened();
         fireEvent.click(autoButton());
-        await waitFor(() => expect(autoButton().hasAttribute('disabled')).toBe(true));
+        await waitFor(() => expect(autoButton().getAttribute('aria-disabled')).toBe('true'));
         fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
         await act(async () => answer.resolve(failure('no-match')));
         expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    test('a failed press after a success leaves no strip and shows the alert, keeping the picked suggestions’ tiles', async () => {
+        setup({ suggest: true });
+        await opened();
+        await press([photo(9, { labels: ['sunset'] }), photo(1)]);
+        fireEvent.click(stripTile(9));
+        suggestPhotos().mockResolvedValueOnce(failure('no-match'));
+        fireEvent.click(autoButton());
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toMatch(/^Nothing to suggest\. No photo matches your Must Include Tags/);
+        expect(screen.queryByRole('region', { name: 'Suggestions' })).toBeNull();
+        // The picked suggestion keeps its tile in the grid.
+        const kept = screen.getAllByRole('button', { name: /^Photo 00000009:/ });
+        expect(kept).toHaveLength(1);
+        expect(kept[0].getAttribute('aria-pressed')).toBe('true');
+    });
+
+    test('after a refreshed submit a picked suggestion the re-read listing does not return leaves the pick', async () => {
+        const onSubmit = jest.fn<Promise<PickOutcome>, [string[]]>().mockResolvedValue('refreshed');
+        setup({ suggest: true, onSubmit });
+        await opened();
+        await press([photo(9), photo(1)]);
+        fireEvent.click(stripTile(9));
+        fireEvent.click(stripTile(1));
+        expect(countLine().textContent).toBe('Picked: 2/3 open slots');
+        // The re-read no longer has 9 (it was entered meanwhile) and still has 1.
+        getLibrary().mockResolvedValue(listing([photo(1), photo(2), photo(3), photo(4)]));
+        fireEvent.click(submitButton());
+        await waitFor(() => expect(countLine().textContent).toBe('Picked: 1/3 open slots'));
+        expect(screen.queryByRole('region', { name: 'Suggestions' })).toBeNull();
+        expect(tile(1).getAttribute('aria-pressed')).toBe('true');
+        expect(screen.queryByRole('button', { name: /^Photo 00000009:/ })).toBeNull();
     });
 
     test('a submit that comes back refreshed clears the strip, and one that failed leaves it', async () => {
@@ -898,7 +970,7 @@ describe('Auto suggestions', () => {
         const { unmount } = setup({ suggest: true });
         await opened();
         fireEvent.click(autoButton());
-        await waitFor(() => expect(autoButton().hasAttribute('disabled')).toBe(true));
+        await waitFor(() => expect(autoButton().getAttribute('aria-disabled')).toBe('true'));
         unmount();
         await act(async () => answer.resolve(suggestion([photo(2)])));
         expect(document.querySelector('[role="dialog"]')).toBeNull();

@@ -118,7 +118,7 @@ const mockChosenSettings = ({
 const { buildHandlers } = require('../../src/ts/ipc/actions.handlers') as typeof actions_handlersModule;
 const { clearUpcomingCache } = require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
 const { bumpAccountGeneration } = require('../../src/ts/services/accountScope') as typeof accountScopeModule;
-const { writeListing, readFresh, clearLibraryCache, dropContext } =
+const { writeListing, readFresh, clearLibraryCache } =
     require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
 
 type Handlers = ReturnType<typeof buildHandlers>;
@@ -901,7 +901,6 @@ describe('suggest-photos', () => {
 
     beforeEach(() => {
         autoFill.suggestFillPhotos.mockReset().mockResolvedValue(suggested());
-        autoFill.enteredIds.mockReset().mockReturnValue(new Set());
         autoFill.resolveMemberId.mockReset().mockResolvedValue('member-9');
         stubAuthGuardOk();
         stubLive();
@@ -971,7 +970,7 @@ describe('suggest-photos', () => {
         await expect(suggest()).resolves.toEqual({ success: false, error: code });
     });
 
-    test('a failed ranking is never cached: the next call ranks again', async () => {
+    test('a failed ranking leaves nothing behind: the next call ranks again', async () => {
         autoFill.suggestFillPhotos.mockResolvedValueOnce({ status: 'no-match' });
         await suggest();
         await expect(suggest()).resolves.toMatchObject({ success: true });
@@ -1014,72 +1013,8 @@ describe('suggest-photos', () => {
         expect(logCategories('info', '📝 Photo suggestions request: Challenge=123', null)).toEqual(['autoFill']);
     });
 
-    describe('the result cache', () => {
-        test('answers a repeat call from memory, without ranking or resolving the member again', async () => {
-            const first = await suggest();
-            const second = await suggest();
-            expect(second).toEqual(first);
-            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(1);
-            expect(autoFill.resolveMemberId).toHaveBeenCalledTimes(1);
-        });
-
-        test('is kept per account and challenge', async () => {
-            await suggest('123');
-            stubLive([{ id: 124 }]);
-            await suggest('124');
-            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
-            auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'other', settings: {} });
-            stubLive();
-            await suggest('123');
-            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(3);
-        });
-
-        test('re-filters the cached photos against the entries the live challenge has now', async () => {
-            await suggest();
-            autoFill.enteredIds.mockReturnValue(new Set(['a1']));
-            await expect(suggest()).resolves.toMatchObject({ success: true, photos: [mapped('b2')] });
-            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(1);
-            expect(autoFill.enteredIds).toHaveBeenLastCalledWith(liveChallenge);
-        });
-
-        test('ranks again when every cached photo has been entered meanwhile', async () => {
-            await suggest();
-            autoFill.enteredIds.mockReturnValue(new Set(['a1', 'b2']));
-            autoFill.suggestFillPhotos.mockResolvedValue(suggested(['c3']));
-            await expect(suggest()).resolves.toMatchObject({ success: true, photos: [mapped('c3')] });
-            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
-        });
-
-        test('dropContext for the challenge clears it, and another challenge’s drop does not', async () => {
-            await suggest();
-            dropContext('tok', '999');
-            await suggest();
-            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(1);
-            dropContext('tok', 123);
-            await suggest();
-            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
-        });
-
-        test('an account switch (clearLibraryCache) clears it', async () => {
-            await suggest();
-            clearLibraryCache();
-            await suggest();
-            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
-        });
-
-        test('is not written by a ranking that an action of this window outdated while it ran', async () => {
-            autoFill.suggestFillPhotos.mockImplementationOnce(async () => {
-                dropContext('tok', '999');
-                return suggested();
-            });
-            await expect(suggest()).resolves.toMatchObject({ success: true });
-            await suggest();
-            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
-        });
-    });
-
     describe('when the account changes meanwhile', () => {
-        test('answers account-changed and keeps nothing from a ranking that began under the old one', async () => {
+        test('answers account-changed for a ranking that began under the old account, and ranks again next time', async () => {
             autoFill.suggestFillPhotos.mockImplementationOnce(async () => {
                 bumpAccountGeneration();
                 return suggested();
@@ -1087,17 +1022,6 @@ describe('suggest-photos', () => {
             await expect(suggest()).resolves.toEqual({ success: false, error: 'account-changed' });
             await expect(suggest()).resolves.toMatchObject({ success: true });
             expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
-        });
-
-        test('answers account-changed from a cached answer too', async () => {
-            await suggest();
-            stubStrategy({
-                getActiveChallenges: jest.fn().mockImplementation(async () => {
-                    bumpAccountGeneration();
-                    return { challenges: [liveChallenge] };
-                }),
-            });
-            await expect(suggest()).resolves.toEqual({ success: false, error: 'account-changed' });
         });
     });
 });

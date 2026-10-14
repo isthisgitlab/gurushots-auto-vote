@@ -360,7 +360,7 @@ describe('list-photos --suggest', () => {
             'This is a ranking under your auto-submit rules, not a replay of the next fill. Nothing was submitted.',
         );
         expect(info).toContain(
-            'submit --challenge=5 ranks again on its own (1 photo, ignoring Submit Only); it does not submit these exact photos.',
+            'submit --challenge=5 ranks again on its own (one photo, or every empty slot with --all) and ignores Submit Only; it does not submit these exact photos.',
         );
         expect((info.join('') + text('stdout').join('')).match(/\p{Cc}/u)).toBeNull();
         expect(text('warning')).toEqual([]);

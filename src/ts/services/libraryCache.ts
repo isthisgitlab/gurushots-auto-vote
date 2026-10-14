@@ -12,9 +12,6 @@
  * The account's own actions in this window (a submit, a fill, a join, a swap) drop a challenge's entry
  * (`dropContext`), and a read that was running meanwhile writes nothing, whichever challenge was dropped
  * (`dropEpoch`). A logout or account switch empties everything (`clearLibraryCache`).
- *
- * The photo suggestions of a challenge (the ranking Pick… shows) are kept the same way, per account and
- * challenge, for SUGGEST_FRESH_MS: the same drops and the same forgetting clear them.
  */
 
 import * as logger from '../logger';
@@ -50,14 +47,7 @@ const LIBRARY_FRESH_MS = 5 * 60_000;
 /** Most challenges kept at once. */
 const MAX_LIBRARY_ENTRIES = 6;
 
-/** One challenge's photo suggestions as the handler answered them, and when. */
-type SuggestionEntry = { at: number; photos: ListedPhoto[]; memberId: string | null; statsLimited: boolean };
-
-/** How long a challenge's photo suggestions answer a repeated request, which would otherwise rank again. */
-const SUGGEST_FRESH_MS = 2 * 60_000;
-
 const entries = new Map<string, Entry>();
-const suggestions = new Map<string, SuggestionEntry>();
 let latest: { account: string; listing: Readonly<TimedListing> } | null = null;
 // Counts every drop: a read compares it before and after its walk.
 let dropCount = 0;
@@ -118,42 +108,6 @@ const oldestKey = (): string => {
     return oldest;
 };
 
-const copySuggestion = (entry: SuggestionEntry): SuggestionEntry => ({ ...entry, photos: entry.photos.map(copyPhoto) });
-
-/** The challenge's photo suggestions when they were kept less than SUGGEST_FRESH_MS ago, as a copy; else null. */
-const readSuggestion = (
-    token: string,
-    contextId: string | number,
-    now: number = Date.now(),
-): SuggestionEntry | null => {
-    const key = keyOf(token, contextId);
-    const entry = suggestions.get(key);
-    if (!entry) return null;
-    if (now - entry.at >= SUGGEST_FRESH_MS) {
-        suggestions.delete(key);
-        return null;
-    }
-    return copySuggestion(entry);
-};
-
-/** Keeps a challenge's photo suggestions, evicting the oldest of them over MAX_LIBRARY_ENTRIES. */
-const writeSuggestion = (
-    token: string,
-    contextId: string | number,
-    entry: Omit<SuggestionEntry, 'at'>,
-    now: number = Date.now(),
-): void => {
-    const key = keyOf(token, contextId);
-    suggestions.delete(key);
-    suggestions.set(key, copySuggestion({ ...entry, at: now }));
-    // Insertion order is age order: a rewrite above moved its key to the end.
-    for (const oldest of suggestions.keys()) {
-        if (suggestions.size <= MAX_LIBRARY_ENTRIES) break;
-        suggestions.delete(oldest);
-    }
-    log('suggestions stored');
-};
-
 /** Keeps a challenge's listing (and as the newest, when it is), evicting what has expired and what is over the cap. */
 const writeListing = (
     token: string,
@@ -182,7 +136,6 @@ const writeListing = (
 const dropContext = (token: string, contextId: string | number | null): void => {
     const key = keyOf(token, contextId);
     entries.delete(key);
-    suggestions.delete(key);
     dropCount += 1;
     log('dropped');
 };
@@ -193,7 +146,6 @@ const dropEpoch = (): number => dropCount;
 /** Forget everything (an account left, and tests start clean). */
 const clearLibraryCache = (): void => {
     entries.clear();
-    suggestions.clear();
     latest = null;
 };
 
@@ -201,13 +153,10 @@ export {
     readFresh,
     readLatest,
     writeListing,
-    readSuggestion,
-    writeSuggestion,
     dropContext,
     dropEpoch,
     clearLibraryCache,
     LIBRARY_FRESH_MS,
-    SUGGEST_FRESH_MS,
     MAX_LIBRARY_ENTRIES,
 };
 export type { TimedListing };

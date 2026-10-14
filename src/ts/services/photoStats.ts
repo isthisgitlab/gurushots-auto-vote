@@ -109,8 +109,7 @@ let cacheDirty = false;
 
 /**
  * The request allowance of one run of enrichment: how many lookups it may start,
- * how many failed in a row, whether its limits were already reported, and
- * whether its cap stopped a lookup that was still needed. The
+ * how many failed in a row, and whether its limits were already reported. The
  * voting pass shares one (reset by resetPassState); a run outside any pass — the
  * photo suggestions — takes its own, so it neither spends nor trips the pass's.
  * A `quiet` budget logs no limit warnings: they speak of "this pass".
@@ -122,8 +121,6 @@ export type StatsBudget = {
     breakerLogged: boolean;
     fetched: number;
     capLogged: boolean;
-    /** The cap stopped a lookup that was still needed. */
-    capCut: boolean;
 };
 
 const newBudget = (cap: number, quiet: boolean): StatsBudget => ({
@@ -133,17 +130,16 @@ const newBudget = (cap: number, quiet: boolean): StatsBudget => ({
     breakerLogged: false,
     fetched: 0,
     capLogged: false,
-    capCut: false,
 });
 
 // Reset per voting pass by resetPassState().
 const passBudget = newBudget(MAX_ENRICH_PER_PASS, false);
 
 /**
- * A fresh, quiet budget for a run that is not part of a voting pass: twice a fill's lookups, as the two
- * enrichment calls of one ranking (the chosen block and the rest) each take up to one fill's worth.
+ * A fresh, quiet budget for a run that is not part of a voting pass: one fill's lookups, as a ranking makes
+ * a single enrichment call, which is already limited to MAX_ENRICH_PER_FILL.
  */
-const createStatsBudget = (): StatsBudget => newBudget(2 * MAX_ENRICH_PER_FILL, true);
+const createStatsBudget = (): StatsBudget => newBudget(MAX_ENRICH_PER_FILL, true);
 
 // Only ids short enough to be safe cache keys are persisted; see
 // MAX_PHOTO_ID_LENGTH. Both callers pass an already-stringified id (a persisted
@@ -248,7 +244,6 @@ const resetPassState = () => {
     passBudget.breakerLogged = false;
     passBudget.fetched = 0;
     passBudget.capLogged = false;
-    passBudget.capCut = false;
 };
 
 // Enrichment stops for the budget either because the endpoint is failing or
@@ -256,14 +251,8 @@ const resetPassState = () => {
 const breakerOpen = (budget: StatsBudget) =>
     budget.consecutiveFailures >= FAILURE_BREAKER_THRESHOLD || budget.fetched >= budget.cap;
 
-/** Records that the budget's cap, not a failure, stopped lookups that were still needed. */
-const noteCapCut = (budget: StatsBudget) => {
-    if (budget.fetched >= budget.cap) budget.capCut = true;
-};
-
-/** Whether the budget's lookups were cut short: they kept failing in a row, or its cap stopped one still needed. */
-const statsBudgetLimited = (budget: StatsBudget) =>
-    budget.consecutiveFailures >= FAILURE_BREAKER_THRESHOLD || budget.capCut;
+/** Whether the budget's failure breaker tripped: its lookups failed in a row, so the rest were skipped. */
+const statsBudgetTripped = (budget: StatsBudget) => budget.consecutiveFailures >= FAILURE_BREAKER_THRESHOLD;
 
 /**
  * Run `worker` over `items` at most ENRICH_CONCURRENCY at a time, for its side
@@ -274,10 +263,7 @@ const forEachChunked = async <T>(items: T[], budget: StatsBudget, worker: (item:
     for (let i = 0; i < items.length; i += ENRICH_CONCURRENCY) {
         const chunk = items.slice(i, i + ENRICH_CONCURRENCY);
         await Promise.allSettled(chunk.map(worker));
-        if (breakerOpen(budget)) {
-            if (i + ENRICH_CONCURRENCY < items.length) noteCapCut(budget);
-            break;
-        }
+        if (breakerOpen(budget)) break;
     }
 };
 
@@ -348,9 +334,7 @@ const enrichCandidates = async (
     }
 
     let fetchList: PickerPhoto[] = [];
-    if (breakerOpen(budget)) {
-        if (needFetch.length > 0) noteCapCut(budget);
-    } else {
+    if (!breakerOpen(budget)) {
         fetchList = needFetch
             .slice()
             .sort((a, b) => {
@@ -363,10 +347,7 @@ const enrichCandidates = async (
 
     if (fetchList.length > 0) {
         await forEachChunked(fetchList, budget, async (photo) => {
-            if (breakerOpen(budget)) {
-                noteCapCut(budget);
-                return null;
-            }
+            if (breakerOpen(budget)) return null;
             const id = String(photo.id);
             budget.fetched++;
             if (budget.fetched >= budget.cap && !budget.capLogged) {
@@ -432,12 +413,11 @@ const enrichCandidates = async (
     });
 };
 
-/** Test-only: drop the in-memory cache and per-pass breaker state. */
+/** Test-only: drop the in-memory cache and per-pass budget state. */
 const __resetForTests = () => {
     cache = null;
     cacheDirty = false;
-    passBudget.consecutiveFailures = 0;
-    passBudget.breakerLogged = false;
+    resetPassState();
 };
 
 export const initializePhotoStatsAsync = statsStore.initializeAsync;
@@ -447,7 +427,7 @@ export {
     enrichCandidates,
     resetPassState,
     createStatsBudget,
-    statsBudgetLimited,
+    statsBudgetTripped,
     MAX_ENRICH_PER_FILL,
     MAX_ENRICH_PER_PASS,
     MAX_CACHE_ENTRIES,

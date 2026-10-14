@@ -3,7 +3,7 @@
  */
 
 import { finalizePick } from '../../photoPicker';
-import { createStatsBudget, statsBudgetLimited } from '../../photoStats';
+import { createStatsBudget, statsBudgetTripped } from '../../photoStats';
 import { enteredIds } from '../chosenPhotos';
 import type { Challenge } from '../../../types/gurushots';
 import type { PickerPhoto } from '../../../types/photoPicker';
@@ -18,7 +18,7 @@ const SUGGEST_COUNT = 5;
 /** What a suggestion run came to. */
 type SuggestResult =
     | FetchErrorResult
-    /** `photos` best first; `statsLimited`: the run's photo-stat lookups kept failing, or its budget stopped one it still needed (it ranked on what was known). */
+    /** `photos` best first; `statsLimited`: the run's photo-stat lookups kept failing in a row, so the rest were skipped (it ranked on what was known). */
     | { status: 'suggested'; photos: PickerPhoto[]; statsLimited: boolean }
     /** Submit Only Chosen Photos is on and every chosen photo is already entered. */
     | { status: 'no-chosen-entered' }
@@ -34,7 +34,8 @@ type SuggestResult =
  * is submitted, and the dependencies carry no submitter.
  *
  * Side effects, by design: the chosen-photo walk memo and its retry timer (resolveMissingChosen), the
- * photo-stats cache, and `suggest:` log lines that name the challenge and counts, never a photo. It
+ * photo-stats cache, and `suggest:` log lines that name the challenge and counts, never a photo (the shared
+ * visual check, verifyFillPick, logs its shortlist of photo ids and scores as it does for every fill). It
  * never writes the entry ledger or the chosen-photo skip and refusal memory, and it spends its own
  * photo-stats budget, so a voting pass running meanwhile keeps its own.
  *
@@ -133,7 +134,7 @@ const suggestFillPhotos = async (
     const photos = verified.picked
         .map((id) => byId.get(String(id)))
         .filter((photo): photo is PickerPhoto => photo !== undefined);
-    const statsLimited = statsBudgetLimited(statsBudget);
+    const statsLimited = statsBudgetTripped(statsBudget);
     log.info(
         `${label}: ranked ${photos.length} photos for ${tag}${statsLimited ? ' (photo-stat lookups were cut short)' : ''}`,
         null,

@@ -174,10 +174,16 @@ function PhotoSubmitBody({
         // A photo that has won since the last read is left out of the listing, so `known` still has it as allowed.
         const won = new Set(state.listing.wonIds);
         setSelected((prev) => {
-            const kept = prev.filter((id) => known.get(id)?.allowed !== false && !won.has(id));
+            // A suggestion the fresh listing does not return is one the challenge no longer takes (it was just
+            // entered): it lives only in `suggestedKnown`, so it is dropped here rather than kept for want of a record.
+            const kept = prev.filter((id) => {
+                const record = known.get(id);
+                if (record === undefined && suggestedKnown.has(id)) return false;
+                return record?.allowed !== false && !won.has(id);
+            });
             return kept.length === prev.length ? prev : kept;
         });
-    }, [state, known, generation, checking, revalidating, submitting]);
+    }, [state, known, suggestedKnown, generation, checking, revalidating, submitting]);
 
     // The suggestions are of the listing they were ranked beside: a new read drops them, and an answer still on
     // its way.
@@ -208,6 +214,7 @@ function PhotoSubmitBody({
         const result = await runSuggest(challengeId);
         if (epoch !== suggestEpoch.current) return;
         if (!result.success) {
+            setSuggested(null);
             setSuggestFailure(result.error);
             return;
         }
@@ -224,7 +231,7 @@ function PhotoSubmitBody({
         setSelected((prev) => {
             if (max === 1) return ranked.slice(0, 1);
             const added = ranked.filter((id) => !prev.includes(id)).slice(0, Math.max(0, max - prev.length));
-            return added.length > 0 ? [...prev, ...added] : prev;
+            return [...prev, ...added];
         });
     };
 
@@ -250,8 +257,18 @@ function PhotoSubmitBody({
     }
 
     const over = selected.length > max;
+    // Add suggestions has nothing to do when every suggestion is picked already; with one slot it swaps in #1,
+    // so it has nothing to do only when #1 is the whole pick.
+    const nothingToAdd =
+        suggested !== null &&
+        (max === 1
+            ? selected.length === 1 && selected[0] === suggested.photos[0]?.id
+            : suggested.photos.every((photo) => selected.includes(photo.id)));
     // With one slot the modal swaps the pick, so nothing is ever "full".
     const full = max !== 1 && selected.length >= max;
+    let autoStatus = '';
+    if (suggesting) autoStatus = t('app.pickAutoRunning');
+    else if (suggested) autoStatus = interp(t('app.pickSuggestedCount'), { count: suggested.photos.length });
     const search = <SearchForm onSearch={(term) => void load(term)} />;
     return (
         <div className="space-y-3">
@@ -267,10 +284,13 @@ function PhotoSubmitBody({
                         <div className="min-w-48 flex-1">{search}</div>
                         <button
                             type="button"
-                            className="btn btn-sm"
-                            disabled={suggesting}
+                            className={`btn btn-sm ${suggesting ? 'btn-disabled' : ''}`}
+                            // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body>.
+                            aria-disabled={suggesting}
                             aria-busy={suggesting}
-                            onClick={() => void autoSuggest()}
+                            onClick={() => {
+                                if (!suggesting) void autoSuggest();
+                            }}
                         >
                             <BusyContent busy={suggesting} label={t('app.pickAuto')}>
                                 {t('app.pickAuto')}
@@ -285,9 +305,11 @@ function PhotoSubmitBody({
             <p className="text-xs" role="status">
                 {interp(t(over ? texts.overCap : texts.count), { count: selected.length, max })}
             </p>
-            {suggesting && (
-                <p className="text-xs" role="status">
-                    {t('app.pickAutoRunning')}
+            {suggest && (
+                // Always mounted, so a screen reader announces the text that arrives in it. The count of a
+                // finished ranking is read out only: the strip shows it.
+                <p role="status" aria-live="polite" className={suggesting || !suggested ? 'text-xs' : 'sr-only'}>
+                    {autoStatus}
                 </p>
             )}
             {suggestFailure && (
@@ -304,7 +326,7 @@ function PhotoSubmitBody({
                     atCap={full}
                     fullKey={texts.full}
                     locked={checking}
-                    addDisabled={submitting || checking || full}
+                    addDisabled={submitting || checking || full || nothingToAdd}
                     onToggle={toggle}
                     onAdd={() => addSuggestions(suggested.photos)}
                 />

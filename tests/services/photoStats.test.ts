@@ -40,7 +40,7 @@ const {
     enrichCandidates,
     resetPassState,
     createStatsBudget,
-    statsBudgetLimited,
+    statsBudgetTripped,
     MAX_ENRICH_PER_FILL,
     MAX_ENRICH_PER_PASS,
     MAX_CACHE_ENTRIES,
@@ -301,8 +301,8 @@ describe('photoStats.enrichCandidates', () => {
     describe('a budget of its own (a run outside any voting pass)', () => {
         test('starts untripped, and each one is separate', () => {
             const budget = createStatsBudget();
-            expect(statsBudgetLimited(budget)).toBe(false);
-            expect(statsBudgetLimited(createStatsBudget())).toBe(false);
+            expect(statsBudgetTripped(budget)).toBe(false);
+            expect(statsBudgetTripped(createStatsBudget())).toBe(false);
         });
 
         test('its failure breaker opens without a warning and leaves the pass’s lookups alone', async () => {
@@ -310,7 +310,7 @@ describe('photoStats.enrichCandidates', () => {
             const failing = jest.fn().mockResolvedValue(null);
             const many = Array.from({ length: MAX_ENRICH_PER_FILL }, (_, i) => photo(`p${i}`));
             await enrichCandidates(many, 'tok', { getImageData: failing, statsBudget: budget });
-            expect(statsBudgetLimited(budget)).toBe(true);
+            expect(statsBudgetTripped(budget)).toBe(true);
             expect(failing.mock.calls.length).toBeLessThan(MAX_ENRICH_PER_FILL);
             expect(log.warning).not.toHaveBeenCalled();
 
@@ -331,71 +331,26 @@ describe('photoStats.enrichCandidates', () => {
             const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
             await enrichCandidates(batch('a'), 'tok', { getImageData, statsBudget: budget });
             expect(getImageData).toHaveBeenCalledTimes(MAX_ENRICH_PER_FILL);
-            expect(statsBudgetLimited(budget)).toBe(false);
+            expect(statsBudgetTripped(budget)).toBe(false);
             expect(log.warning).not.toHaveBeenCalled();
         });
 
-        test('two enrichment calls within twice a fill’s lookups are not limited, and the pass’s ceiling is not spent', async () => {
+        test('a fill’s worth spends the cap: a further call starts no lookup and is not tripped, and the pass’s ceiling is not spent', async () => {
             const budget = createStatsBudget();
             const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
             await enrichCandidates(batch('a'), 'tok', { getImageData, statsBudget: budget });
-            await enrichCandidates(batch('b'), 'tok', { getImageData, statsBudget: budget });
-            expect(getImageData).toHaveBeenCalledTimes(2 * MAX_ENRICH_PER_FILL);
-            expect(statsBudgetLimited(budget)).toBe(false);
+            getImageData.mockClear();
+            await enrichCandidates(batch('b', 3), 'tok', { getImageData, statsBudget: budget });
+            expect(getImageData).not.toHaveBeenCalled();
+            expect(statsBudgetTripped(budget)).toBe(false);
             expect(log.warning).not.toHaveBeenCalled();
 
             // Cached photos are still answered free from it, and the pass's own budget is whole.
-            getImageData.mockClear();
             const [cached] = await enrichCandidates([photo('a0')], 'tok', { getImageData, statsBudget: budget });
             expect(cached.statsKnown).toBe(true);
             expect(getImageData).not.toHaveBeenCalled();
             for (let i = 0; i < 7; i++) await enrichCandidates(batch(`c${i}-`), 'tok', { getImageData });
             expect(getImageData).toHaveBeenCalledTimes(7 * MAX_ENRICH_PER_FILL);
-            expect(statsBudgetLimited(budget)).toBe(false);
-        });
-
-        test('a needed lookup the cap stops, before any is started, is limited', async () => {
-            const budget = createStatsBudget();
-            const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
-            await enrichCandidates(batch('a'), 'tok', { getImageData, statsBudget: budget });
-            await enrichCandidates(batch('b'), 'tok', { getImageData, statsBudget: budget });
-            getImageData.mockClear();
-            await enrichCandidates(batch('c', 3), 'tok', { getImageData, statsBudget: budget });
-            expect(getImageData).not.toHaveBeenCalled();
-            expect(statsBudgetLimited(budget)).toBe(true);
-            expect(log.warning).not.toHaveBeenCalled();
-        });
-
-        test('a needed lookup the cap stops between chunks is limited', async () => {
-            const budget = createStatsBudget();
-            const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
-            await enrichCandidates(batch('a'), 'tok', { getImageData, statsBudget: budget });
-            await enrichCandidates(batch('b', 20), 'tok', { getImageData, statsBudget: budget });
-            // The cap is reached at the end of this call's first chunk of five; the rest are never started.
-            await enrichCandidates(batch('c', 10), 'tok', { getImageData, statsBudget: budget });
-            expect(getImageData).toHaveBeenCalledTimes(2 * MAX_ENRICH_PER_FILL);
-            expect(statsBudgetLimited(budget)).toBe(true);
-        });
-
-        test('a needed lookup the cap stops inside a chunk is limited', async () => {
-            const budget = createStatsBudget();
-            const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
-            await enrichCandidates(batch('a'), 'tok', { getImageData, statsBudget: budget });
-            await enrichCandidates(batch('b', 23), 'tok', { getImageData, statsBudget: budget });
-            // Two lookups are left in the cap; the last three photos of this chunk issue none.
-            await enrichCandidates(batch('c', 5), 'tok', { getImageData, statsBudget: budget });
-            expect(getImageData).toHaveBeenCalledTimes(2 * MAX_ENRICH_PER_FILL);
-            expect(statsBudgetLimited(budget)).toBe(true);
-        });
-
-        test('a cap reached by the very last lookup needed is not limited', async () => {
-            const budget = createStatsBudget();
-            const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
-            await enrichCandidates(batch('a'), 'tok', { getImageData, statsBudget: budget });
-            await enrichCandidates(batch('b', 20), 'tok', { getImageData, statsBudget: budget });
-            await enrichCandidates(batch('c', 5), 'tok', { getImageData, statsBudget: budget });
-            expect(getImageData).toHaveBeenCalledTimes(2 * MAX_ENRICH_PER_FILL);
-            expect(statsBudgetLimited(budget)).toBe(false);
         });
     });
 

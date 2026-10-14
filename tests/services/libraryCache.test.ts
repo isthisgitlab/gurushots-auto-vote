@@ -16,13 +16,10 @@ const {
     readFresh,
     readLatest,
     writeListing,
-    readSuggestion,
-    writeSuggestion,
     dropContext,
     dropEpoch,
     clearLibraryCache,
     LIBRARY_FRESH_MS,
-    SUGGEST_FRESH_MS,
     MAX_LIBRARY_ENTRIES,
 } = require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
 const { __level: log } = require('../../src/ts/logger') as { __level: { debug: Debug } };
@@ -213,75 +210,5 @@ describe('logging', () => {
             ['Library cache: stored', null],
             ['Library cache: dropped', null],
         ]);
-    });
-});
-
-describe('photo suggestions', () => {
-    const suggestion = (id = 'a') => ({
-        photos: [{ id, labels: ['Pink'], allowed: true, message: null, uploadDate: null }],
-        memberId: 'm',
-        statsLimited: true,
-    });
-
-    test('are answered for the same account and challenge until SUGGEST_FRESH_MS has passed, then forgotten', () => {
-        writeSuggestion('t', '5', suggestion('one'), T0);
-        expect(readSuggestion('t', '5', T0 + SUGGEST_FRESH_MS - 1)?.photos.map((photo) => photo.id)).toEqual(['one']);
-        expect(readSuggestion('t', '5', T0 + SUGGEST_FRESH_MS - 1)).toMatchObject({
-            memberId: 'm',
-            statsLimited: true,
-        });
-        expect(readSuggestion('t', '5', T0 + SUGGEST_FRESH_MS)).toBeNull();
-        expect(readSuggestion('t', '5', T0)).toBeNull();
-    });
-
-    test('are kept apart by account and by challenge, a number being the same challenge as its string', () => {
-        writeSuggestion('token-1', 5, suggestion('one'), T0);
-        writeSuggestion('token-2', 5, suggestion('two'), T0);
-        expect(readSuggestion('token-1', '5', T0)?.photos[0].id).toBe('one');
-        expect(readSuggestion('token-2', '5', T0)?.photos[0].id).toBe('two');
-        expect(readSuggestion('token-1', '6', T0)).toBeNull();
-        expect(readSuggestion('token-3', '5', T0)).toBeNull();
-    });
-
-    test('a rewrite replaces the entry and restarts its age', () => {
-        writeSuggestion('t', '5', suggestion('old'), T0);
-        writeSuggestion('t', '5', suggestion('new'), T0 + SUGGEST_FRESH_MS - 1);
-        expect(readSuggestion('t', '5', T0 + SUGGEST_FRESH_MS + 1)?.photos[0].id).toBe('new');
-    });
-
-    test('what a caller does to what it wrote or was answered never reaches what is kept', () => {
-        const written = suggestion();
-        writeSuggestion('t', '5', written, T0);
-        written.photos[0].labels.push('mutated');
-        written.photos.pop();
-        const first = readSuggestion('t', '5', T0);
-        first?.photos[0].labels.push('mutated');
-        first?.photos.pop();
-        expect(readSuggestion('t', '5', T0)?.photos).toEqual([
-            { id: 'a', labels: ['Pink'], allowed: true, message: null, uploadDate: null },
-        ]);
-    });
-
-    test('over MAX_LIBRARY_ENTRIES the oldest written goes', () => {
-        for (let i = 0; i <= MAX_LIBRARY_ENTRIES; i += 1) writeSuggestion('t', String(i), suggestion(), T0 + i);
-        expect(readSuggestion('t', '0', T0 + MAX_LIBRARY_ENTRIES)).toBeNull();
-        for (let i = 1; i <= MAX_LIBRARY_ENTRIES; i += 1) {
-            expect(readSuggestion('t', String(i), T0 + MAX_LIBRARY_ENTRIES)).not.toBeNull();
-        }
-    });
-
-    test('dropContext forgets that challenge’s only, and clearLibraryCache forgets all', () => {
-        writeSuggestion('t', '5', suggestion(), T0);
-        writeSuggestion('t', '6', suggestion(), T0);
-        dropContext('t', '5');
-        expect(readSuggestion('t', '5', T0)).toBeNull();
-        expect(readSuggestion('t', '6', T0)).not.toBeNull();
-        clearLibraryCache();
-        expect(readSuggestion('t', '6', T0)).toBeNull();
-    });
-
-    test('says only that they were stored, never an id', () => {
-        writeSuggestion('t', 'challenge-5', suggestion('photo-id-1'), T0);
-        expect(log.debug.mock.calls).toEqual([['Library cache: suggestions stored', null]]);
     });
 });
