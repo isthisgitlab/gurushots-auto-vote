@@ -239,7 +239,8 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
             {},
             { getEligiblePhotos: makeGetEligiblePhotos(), logger },
         );
-        expect(Date.now() - started).toBeLessThan(1000);
+        // A quadratic scan of 100k characters takes minutes; the bound only has to survive a loaded CI run.
+        expect(Date.now() - started).toBeLessThan(10_000);
         const line = category.info.mock.calls
             .map(([message]) => String(message))
             .find((m) => m.includes('Description: "'));
