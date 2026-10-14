@@ -10,7 +10,7 @@ import { signal } from '@preact/signals';
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
-import { LEVEL_BADGE_CLASS } from '@/utils/levelBadge';
+import { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } from '@/utils/levelBadge';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import type { EntryBadge as RealEntryBadge } from '@/components/app/EntryBadge';
 import type { Challenge, MemberTurbo, RankingTotal } from '../../src/ts/types/gurushots';
@@ -304,6 +304,18 @@ describe('progress', () => {
         expect(screen.getByText('Keep going')).toBeTruthy();
         expect(screen.getByText(/SKILLED \(380/)).toBeTruthy();
         expect(screen.getByText('POPULAR 1').className).toContain(LEVEL_BADGE_CLASS.popular);
+    });
+
+    test('the progress bar carries the level colour, and the Latvian look for an unknown level', () => {
+        const { container, unmount } = renderCard(
+            withTotal({ votes: 5, rank: 1, level: 2, level_name: 'SKILLED', percent: 1, next_message: '' }),
+        );
+        const bar = container.querySelector('progress');
+        expect(bar?.className).toContain(LEVEL_PROGRESS_CLASS.skilled);
+        expect(bar?.className).not.toContain('progress-latvian');
+        unmount();
+        const unknown = renderCard(withTotal({ votes: 5, rank: 1, percent: 1, next_message: '' }));
+        expect(unknown.container.querySelector('progress')?.className).toContain('progress-latvian');
     });
 
     test('levels past the named table fall back to LEVEL n', () => {

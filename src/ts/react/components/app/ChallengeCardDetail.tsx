@@ -114,14 +114,16 @@ function DetailHeader({
 function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; userProgress: RankingTotal }) {
     const { t } = useTranslation();
     const nextLevelInfo = getNextLevelInfo(challenge);
+    const { colorClass, progressClass } = getLevelStatus(
+        userProgress.level as number,
+        userProgress.level_name as string,
+    );
 
     return (
         <div className="bg-base-200 rounded p-2">
             <div className="flex justify-between items-center mb-1">
                 <span className="text-xs font-medium">{t('app.yourProgress')}</span>
-                <span
-                    className={`badge badge-sm ${getLevelStatus(userProgress.level as number, userProgress.level_name as string).colorClass}`}
-                >
+                <span className={`badge badge-sm ${colorClass}`}>
                     {userProgress.level_name} {userProgress.level}
                 </span>
             </div>
@@ -133,7 +135,7 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
                     {userProgress.votes} {t('app.votes')}
                 </span>
             </div>
-            <progress className="progress progress-latvian w-full" value={userProgress.percent} max="100" />
+            <progress className={`progress ${progressClass} w-full`} value={userProgress.percent} max="100" />
             {challenge.type !== 'flash' && (
                 <div className="text-xs text-base-content/60 mt-1">{userProgress.next_message}</div>
             )}

@@ -19,7 +19,8 @@ const {
 const { timeOfDayIn } = require('../../src/ts/scheduling/wallClock') as typeof wallClockModule;
 const { interp } = require('../../src/ts/react/utils/interp') as typeof interpModule;
 const { rendererTranslator } = require('../../src/ts/translations/renderer') as typeof rendererModule;
-const { LEVEL_BADGE_CLASS } = require('../../src/ts/react/utils/levelBadge') as typeof levelBadgeModule;
+const { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } =
+    require('../../src/ts/react/utils/levelBadge') as typeof levelBadgeModule;
 
 const t = (key: string) =>
     (({ 'app.none': '(none)', 'app.hours': 'h', 'app.minutes': 'm' }) as Record<string, string>)[key] ?? key;
@@ -209,19 +210,20 @@ describe('getTurboStatus', () => {
 
 describe('getLevelStatus', () => {
     test('missing level or name is Unknown', () => {
-        expect(getLevelStatus(0, 'POPULAR')).toEqual({ text: 'Unknown', colorClass: 'badge-success' });
-        expect(getLevelStatus(3, '')).toEqual({ text: 'Unknown', colorClass: 'badge-success' });
+        const unknown = { text: 'Unknown', colorClass: 'badge-success', progressClass: 'progress-latvian' };
+        expect(getLevelStatus(0, 'POPULAR')).toEqual(unknown);
+        expect(getLevelStatus(3, '')).toEqual(unknown);
     });
 
     test.each([
-        ['Popular', LEVEL_BADGE_CLASS.popular],
-        ['SKILLED', LEVEL_BADGE_CLASS.skilled],
-        ['premier', LEVEL_BADGE_CLASS.premier],
-        ['ELITE', LEVEL_BADGE_CLASS.elite],
-        ['All Star', LEVEL_BADGE_CLASS.allstar],
-        ['Newbie', 'badge-warning'],
-    ])('%s → %s (case-insensitive)', (name, colorClass) => {
-        expect(getLevelStatus(2, name)).toEqual({ text: `${name} 2`, colorClass });
+        ['Popular', LEVEL_BADGE_CLASS.popular, LEVEL_PROGRESS_CLASS.popular],
+        ['SKILLED', LEVEL_BADGE_CLASS.skilled, LEVEL_PROGRESS_CLASS.skilled],
+        ['premier', LEVEL_BADGE_CLASS.premier, LEVEL_PROGRESS_CLASS.premier],
+        ['ELITE', LEVEL_BADGE_CLASS.elite, LEVEL_PROGRESS_CLASS.elite],
+        ['All Star', LEVEL_BADGE_CLASS.allstar, LEVEL_PROGRESS_CLASS.allstar],
+        ['Newbie', 'badge-warning', 'progress-latvian'],
+    ])('%s → %s / %s (case-insensitive)', (name, colorClass, progressClass) => {
+        expect(getLevelStatus(2, name)).toEqual({ text: `${name} 2`, colorClass, progressClass });
     });
 });
 

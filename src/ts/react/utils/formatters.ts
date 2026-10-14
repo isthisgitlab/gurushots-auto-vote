@@ -10,7 +10,7 @@ import { rendererTranslator } from '../../translations/renderer';
 import { buildPhotoUrl, entryPhotoUrl } from '../../format/photoUrl';
 import { finiteOr } from '../../numbers';
 import { interp } from './interp';
-import { LEVEL_BADGE_CLASS } from './levelBadge';
+import { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } from './levelBadge';
 
 // The shared core's formatter, so the renderer, the CLI, and the voting pass
 // (services/votingOrchestrator/boost.ts) all format durations identically — see src/ts/format/duration.ts —
@@ -295,27 +295,50 @@ export const getTurboStatus = (turbo: MemberTurbo | null | undefined): ResourceS
 };
 
 /**
- * Get level status with display text and badge color class
+ * Get level status with display text and badge color class and progress-bar class
  * @param level - Level number
  * @param levelName - Level name (e.g., 'POPULAR', 'SKILLED')
  */
-export const getLevelStatus = (level: number, levelName: string): { text: string; colorClass: string } => {
+export const getLevelStatus = (
+    level: number,
+    levelName: string,
+): { text: string; colorClass: string; progressClass: string } => {
     if (!level || !levelName) {
-        return { text: 'Unknown', colorClass: 'badge-success' };
+        return { text: 'Unknown', colorClass: 'badge-success', progressClass: 'progress-latvian' };
     }
 
     switch (levelName.toUpperCase()) {
         case 'POPULAR':
-            return { text: `${levelName} ${level}`, colorClass: LEVEL_BADGE_CLASS.popular };
+            return {
+                text: `${levelName} ${level}`,
+                colorClass: LEVEL_BADGE_CLASS.popular,
+                progressClass: LEVEL_PROGRESS_CLASS.popular,
+            };
         case 'SKILLED':
-            return { text: `${levelName} ${level}`, colorClass: LEVEL_BADGE_CLASS.skilled };
+            return {
+                text: `${levelName} ${level}`,
+                colorClass: LEVEL_BADGE_CLASS.skilled,
+                progressClass: LEVEL_PROGRESS_CLASS.skilled,
+            };
         case 'PREMIER':
-            return { text: `${levelName} ${level}`, colorClass: LEVEL_BADGE_CLASS.premier };
+            return {
+                text: `${levelName} ${level}`,
+                colorClass: LEVEL_BADGE_CLASS.premier,
+                progressClass: LEVEL_PROGRESS_CLASS.premier,
+            };
         case 'ELITE':
-            return { text: `${levelName} ${level}`, colorClass: LEVEL_BADGE_CLASS.elite };
+            return {
+                text: `${levelName} ${level}`,
+                colorClass: LEVEL_BADGE_CLASS.elite,
+                progressClass: LEVEL_PROGRESS_CLASS.elite,
+            };
         case 'ALL STAR':
-            return { text: `${levelName} ${level}`, colorClass: LEVEL_BADGE_CLASS.allstar };
+            return {
+                text: `${levelName} ${level}`,
+                colorClass: LEVEL_BADGE_CLASS.allstar,
+                progressClass: LEVEL_PROGRESS_CLASS.allstar,
+            };
         default:
-            return { text: `${levelName} ${level}`, colorClass: 'badge-warning' };
+            return { text: `${levelName} ${level}`, colorClass: 'badge-warning', progressClass: 'progress-latvian' };
     }
 };
