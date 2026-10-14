@@ -342,7 +342,7 @@ describe('chosen photos rank first', () => {
         );
         const ledger = createMemoryEntryAgeLedger();
         const { logger, lines } = makeLog();
-        const deps = invalid<RankDeps>({ logger, rankVisually, entryAges: ledger });
+        const deps = invalid<RankDeps & FillDeps>({ logger, rankVisually, entryAges: ledger });
         const picked = ['c1', 'r1', 'r2'];
         const verified = await verifyFillPick(challenge, scored, [], picked, null, deps, chosenIds);
         expect(rankVisually).toHaveBeenCalledTimes(2);
