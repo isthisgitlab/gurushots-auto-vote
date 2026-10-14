@@ -21,7 +21,7 @@ import {
 import { pinCmd, PIN_USAGE } from './commands/pin';
 import { showBankroll } from './commands/bankroll';
 import { showDiscover, joinChallengeCmd, forgetPaymentCmd } from './commands/join';
-import { listPhotosCmd, parseSearchFlag } from './commands/photos';
+import { listPhotosCmd, suggestPhotosCmd, parseSearchFlag } from './commands/photos';
 import { checkUpdates } from './commands/update';
 import { isPinnableImageId } from '../settings';
 import {
@@ -142,15 +142,27 @@ const runForgetPayment: CommandHandler = async (argv) => {
     return forgetPaymentCmd(argv[0]);
 };
 
+const LIST_PHOTOS_USAGE =
+    'Usage: list-photos [--challenge=<id>] [--search=<tag>]  or  list-photos --challenge=<id> --suggest';
+
 const runListPhotos: CommandHandler = async (argv) => {
     const { challengeId, rest } = extractChallenge(argv);
-    const search = parseSearchFlag(rest);
+    const suggestFlags = rest.filter((arg) => arg === '--suggest');
+    const listRest = rest.filter((arg) => arg !== '--suggest');
+    const search = parseSearchFlag(listRest);
     // Anything that is neither a --search flag nor its value is a typo.
-    const unexpected = rest.filter(
-        (arg, i) => arg !== '--search' && !arg.startsWith('--search=') && rest[i - 1] !== '--search',
+    const unexpected = listRest.filter(
+        (arg, i) => arg !== '--search' && !arg.startsWith('--search=') && listRest[i - 1] !== '--search',
     );
-    if (unexpected.length > 0 || (rest.some((arg) => arg === '--search') && search === null)) {
-        return usageError('Wrong arguments', 'Usage: list-photos [--challenge=<id>] [--search=<tag>]');
+    if (unexpected.length > 0 || (listRest.some((arg) => arg === '--search') && search === null)) {
+        return usageError('Wrong arguments', LIST_PHOTOS_USAGE);
+    }
+    if (suggestFlags.length > 0) {
+        // The suggestions rank for one challenge and are not a search.
+        if (suggestFlags.length > 1 || challengeId === null || listRest.length > 0) {
+            return usageError('Wrong arguments', LIST_PHOTOS_USAGE);
+        }
+        return suggestPhotosCmd(challengeId);
     }
     return listPhotosCmd(challengeId, search);
 };

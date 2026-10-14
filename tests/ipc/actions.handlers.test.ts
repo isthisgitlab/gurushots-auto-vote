@@ -118,7 +118,7 @@ const mockChosenSettings = ({
 const { buildHandlers } = require('../../src/ts/ipc/actions.handlers') as typeof actions_handlersModule;
 const { clearUpcomingCache } = require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
 const { bumpAccountGeneration } = require('../../src/ts/services/accountScope') as typeof accountScopeModule;
-const { writeListing, readFresh, clearLibraryCache } =
+const { writeListing, readFresh, clearLibraryCache, dropContext } =
     require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
 
 type Handlers = ReturnType<typeof buildHandlers>;
@@ -527,6 +527,12 @@ describe('id-taking action handlers — invalid args', () => {
             (h: Handlers, id: unknown) => h['submit-picked-photos']({}, invalid<string>(id), ['abc']),
         ],
         [
+            'suggest-photos',
+            'suggest-photos',
+            'autoFill',
+            (h: Handlers, id: unknown) => h['suggest-photos']({}, invalid<string>(id)),
+        ],
+        [
             'apply-boost-to-entry',
             'apply-boost-to-entry',
             'voting',
@@ -569,6 +575,7 @@ describe('id-taking action handlers — invalid args', () => {
                 }
                 expect(autoFill.fillChallengeNow).not.toHaveBeenCalled();
                 expect(autoFill.submitPickedPhotos).not.toHaveBeenCalled();
+                expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
             },
         );
     });
@@ -864,6 +871,233 @@ describe('submit-picked-photos', () => {
                 success: true,
                 submitted: 1,
             });
+        });
+    });
+});
+
+describe('suggest-photos', () => {
+    const liveChallenge = { id: 123, title: 'C' };
+    const photo = (id: string, extra: object = {}) => ({
+        id,
+        labels: ['Pink'],
+        permission: { allowed: true },
+        ...extra,
+    });
+    const suggested = (ids: string[] = ['a1', 'b2'], statsLimited = false) => ({
+        status: 'suggested' as const,
+        photos: ids.map((id) => photo(id)),
+        statsLimited,
+    });
+    const mapped = (id: string) => ({
+        id,
+        labels: ['Pink'],
+        allowed: true,
+        message: null,
+        uploadDate: null,
+    });
+    const stubLive = (challenges: object[] = [liveChallenge]) =>
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges }) });
+    const suggest = (id: string | number = '123') => buildHandlers()['suggest-photos']({}, id);
+
+    beforeEach(() => {
+        autoFill.suggestFillPhotos.mockReset().mockResolvedValue(suggested());
+        autoFill.enteredIds.mockReset().mockReturnValue(new Set());
+        autoFill.resolveMemberId.mockReset().mockResolvedValue('member-9');
+        stubAuthGuardOk();
+        stubLive();
+    });
+
+    test('rejects when the auth guard fails, without ranking', async () => {
+        stubAuthGuardFail();
+        await expect(suggest()).resolves.toEqual({ success: false, error: 'No authentication token found' });
+        expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+    });
+
+    test('answers challenge-ended when the live challenge is gone or could not be read', async () => {
+        stubLive([{ id: 999 }]);
+        await expect(suggest()).resolves.toEqual({ success: false, error: 'challenge-ended' });
+        expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+    });
+
+    test('ranks the live challenge with settings and the strategy, no submitter, and answers the mapped photos with the member id', async () => {
+        const strategy = stubLive();
+        const result = await suggest();
+        expect(result).toEqual({
+            success: true,
+            memberId: 'member-9',
+            photos: [mapped('a1'), mapped('b2')],
+            statsLimited: false,
+        });
+        expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(1);
+        const [challenge, token, deps] = autoFill.suggestFillPhotos.mock.calls[0];
+        expect(challenge).toBe(liveChallenge);
+        expect(token).toBe('tok');
+        expect(deps.settings).toBe(settings);
+        expect(deps.getEligiblePhotos).toBe(strategy.getEligiblePhotos);
+        expect(deps).not.toHaveProperty('submitToChallenge');
+        expect(autoFill.resolveMemberId).toHaveBeenCalledWith(
+            'tok',
+            strategy.getCurrentMemberProfile,
+            expect.anything(),
+            'suggest',
+        );
+    });
+
+    test('reports statsLimited', async () => {
+        autoFill.suggestFillPhotos.mockResolvedValue(suggested(['a1'], true));
+        await expect(suggest()).resolves.toMatchObject({ success: true, statsLimited: true });
+    });
+
+    test('offers only photos whose id is a safe token, best first', async () => {
+        autoFill.suggestFillPhotos.mockResolvedValue(suggested(['b2', 'not ok!', 'a1']));
+        const result = await suggest();
+        expect(result).toMatchObject({ success: true, photos: [mapped('b2'), mapped('a1')] });
+    });
+
+    test('answers no-eligible when no suggested photo has a safe id', async () => {
+        autoFill.suggestFillPhotos.mockResolvedValue(suggested(['not ok!']));
+        await expect(suggest()).resolves.toEqual({ success: false, error: 'no-eligible' });
+        expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        [{ status: 'fetch-error' as const, error: new Error('secret network text') }, 'fetch-failed'],
+        [{ status: 'no-chosen-entered' as const }, 'no-chosen-entered'],
+        [{ status: 'no-chosen-unusable' as const }, 'no-chosen-unusable'],
+        [{ status: 'no-match' as const }, 'no-match'],
+        [{ status: 'no-eligible' as const }, 'no-eligible'],
+    ])('maps the service answer %j to the code %s', async (answer, code) => {
+        autoFill.suggestFillPhotos.mockResolvedValue(answer);
+        await expect(suggest()).resolves.toEqual({ success: false, error: code });
+    });
+
+    test('a failed ranking is never cached: the next call ranks again', async () => {
+        autoFill.suggestFillPhotos.mockResolvedValueOnce({ status: 'no-match' });
+        await suggest();
+        await expect(suggest()).resolves.toMatchObject({ success: true });
+        expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
+    });
+
+    test('answers suggest-busy while a ranking runs (for any challenge), and again after it ends', async () => {
+        let finish: (value: ReturnType<typeof suggested>) => void = () => undefined;
+        autoFill.suggestFillPhotos.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+        const first = suggest('123');
+        await expect(suggest('124')).resolves.toEqual({ success: false, error: 'suggest-busy' });
+        expect(logCategories('info', '📝 Photo suggestions refused: a ranking is already running', null)).toEqual([
+            'autoFill',
+        ]);
+        finish(suggested());
+        await expect(first).resolves.toMatchObject({ success: true });
+        expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(1);
+        // The flag was released: this one reaches the live-challenge read, which no longer has 124.
+        await expect(suggest('124')).resolves.toEqual({ success: false, error: 'challenge-ended' });
+    });
+
+    test('a ranking that throws answers suggest-failed with no raw text, logs it, and releases the flag', async () => {
+        const err = new Error('secret token abc');
+        autoFill.suggestFillPhotos.mockRejectedValueOnce(err);
+        const result = await suggest();
+        expect(result).toEqual({ success: false, error: 'suggest-failed' });
+        expect(JSON.stringify(result)).not.toContain('secret');
+        expect(logCategories('error', 'Error handling suggest-photos request:', err)).toEqual(['autoFill']);
+        await expect(suggest()).resolves.toMatchObject({ success: true });
+    });
+
+    test('logs the challenge, never a photo id', async () => {
+        await suggest();
+        const logged = logger.withCategory.mock.results.flatMap((result) =>
+            Object.values(result.value as Record<string, jest.Mock<unknown, unknown[]>>).flatMap(
+                (fn): unknown[][] => fn.mock.calls,
+            ),
+        );
+        expect(JSON.stringify(logged)).not.toContain('a1');
+        expect(logCategories('info', '📝 Photo suggestions request: Challenge=123', null)).toEqual(['autoFill']);
+    });
+
+    describe('the result cache', () => {
+        test('answers a repeat call from memory, without ranking or resolving the member again', async () => {
+            const first = await suggest();
+            const second = await suggest();
+            expect(second).toEqual(first);
+            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(1);
+            expect(autoFill.resolveMemberId).toHaveBeenCalledTimes(1);
+        });
+
+        test('is kept per account and challenge', async () => {
+            await suggest('123');
+            stubLive([{ id: 124 }]);
+            await suggest('124');
+            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
+            auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'other', settings: {} });
+            stubLive();
+            await suggest('123');
+            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(3);
+        });
+
+        test('re-filters the cached photos against the entries the live challenge has now', async () => {
+            await suggest();
+            autoFill.enteredIds.mockReturnValue(new Set(['a1']));
+            await expect(suggest()).resolves.toMatchObject({ success: true, photos: [mapped('b2')] });
+            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(1);
+            expect(autoFill.enteredIds).toHaveBeenLastCalledWith(liveChallenge);
+        });
+
+        test('ranks again when every cached photo has been entered meanwhile', async () => {
+            await suggest();
+            autoFill.enteredIds.mockReturnValue(new Set(['a1', 'b2']));
+            autoFill.suggestFillPhotos.mockResolvedValue(suggested(['c3']));
+            await expect(suggest()).resolves.toMatchObject({ success: true, photos: [mapped('c3')] });
+            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
+        });
+
+        test('dropContext for the challenge clears it, and another challenge’s drop does not', async () => {
+            await suggest();
+            dropContext('tok', '999');
+            await suggest();
+            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(1);
+            dropContext('tok', 123);
+            await suggest();
+            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
+        });
+
+        test('an account switch (clearLibraryCache) clears it', async () => {
+            await suggest();
+            clearLibraryCache();
+            await suggest();
+            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
+        });
+
+        test('is not written by a ranking that an action of this window outdated while it ran', async () => {
+            autoFill.suggestFillPhotos.mockImplementationOnce(async () => {
+                dropContext('tok', '999');
+                return suggested();
+            });
+            await expect(suggest()).resolves.toMatchObject({ success: true });
+            await suggest();
+            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('when the account changes meanwhile', () => {
+        test('answers account-changed and keeps nothing from a ranking that began under the old one', async () => {
+            autoFill.suggestFillPhotos.mockImplementationOnce(async () => {
+                bumpAccountGeneration();
+                return suggested();
+            });
+            await expect(suggest()).resolves.toEqual({ success: false, error: 'account-changed' });
+            await expect(suggest()).resolves.toMatchObject({ success: true });
+            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
+        });
+
+        test('answers account-changed from a cached answer too', async () => {
+            await suggest();
+            stubStrategy({
+                getActiveChallenges: jest.fn().mockImplementation(async () => {
+                    bumpAccountGeneration();
+                    return { challenges: [liveChallenge] };
+                }),
+            });
+            await expect(suggest()).resolves.toEqual({ success: false, error: 'account-changed' });
         });
     });
 });

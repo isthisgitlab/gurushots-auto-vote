@@ -15,7 +15,7 @@ jest.mock('../../src/ts/cli/guards', () => ({
     INVALID_ID_TEXT: 'Invalid challenge or image id.',
 }));
 jest.mock('../../src/ts/ipc/actions.handlers', () => {
-    const handlers = { 'get-library-photos': jest.fn() };
+    const handlers = { 'get-library-photos': jest.fn(), 'suggest-photos': jest.fn() };
     return { __handlers: handlers, buildHandlers: jest.fn(() => handlers) };
 });
 
@@ -25,11 +25,15 @@ const calls = invalid<{ __calls: { level: string; msg: string }[] }>(loggerModul
 import guardsModule = require('../../src/ts/cli/guards');
 const guards = jest.mocked(guardsModule);
 import handlersModule = require('../../src/ts/ipc/actions.handlers');
-const handlers = invalid<{ __handlers: { 'get-library-photos': jest.Mock<Promise<unknown>, unknown[]> } }>(
-    handlersModule,
-).__handlers;
+const handlers = invalid<{
+    __handlers: {
+        'get-library-photos': jest.Mock<Promise<unknown>, unknown[]>;
+        'suggest-photos': jest.Mock<Promise<unknown>, unknown[]>;
+    };
+}>(handlersModule).__handlers;
 import type * as photosModule from '../../src/ts/cli/commands/photos';
-const { listPhotosCmd, parseSearchFlag } = require('../../src/ts/cli/commands/photos') as typeof photosModule;
+const { listPhotosCmd, suggestPhotosCmd, parseSearchFlag } =
+    require('../../src/ts/cli/commands/photos') as typeof photosModule;
 
 const text = (level: string) => calls.filter((c) => c.level === level).map((c) => c.msg);
 const photos = [
@@ -47,6 +51,7 @@ beforeEach(() => {
     calls.length = 0;
     guards.ensureAuthenticated.mockReturnValue(true);
     handlers['get-library-photos'].mockReset();
+    handlers['suggest-photos'].mockReset();
 });
 
 describe('list-photos', () => {
@@ -318,5 +323,101 @@ describe('list-photos', () => {
         expect(parseSearchFlag(['--search', 'a'])).toBe('a');
         expect(parseSearchFlag(['--search'])).toBeNull();
         expect(parseSearchFlag(['x'])).toBeNull();
+    });
+});
+
+describe('list-photos --suggest', () => {
+    const suggested = (extra: object = {}) => ({
+        success: true,
+        memberId: 'm',
+        photos: [
+            { id: 'p1', labels: ['Pink', 'Flower'], allowed: true, message: null, uploadDate: 1 },
+            { id: 'p2\u001b[31m', labels: ['Car\u0007'], allowed: true, message: null, uploadDate: null },
+            { id: 'p3', labels: [], allowed: true, message: null, uploadDate: null },
+        ],
+        statsLimited: false,
+        ...extra,
+    });
+
+    test('prints the ranked photos on the terminal only, says nothing was submitted and names the next steps', async () => {
+        handlers['suggest-photos'].mockResolvedValue(suggested());
+        await expect(suggestPhotosCmd('5')).resolves.toBe(0);
+        expect(handlers['suggest-photos']).toHaveBeenCalledWith(null, '5');
+        expect(text('stdout')).toEqual([
+            '  1. p1  [Pink, Flower]',
+            '  2. p2  [Car]',
+            '  3. p3',
+            'Make them your chosen photos with: set-setting chosenPhotos \'["p1","p2","p3"]\' --challenge=5',
+        ]);
+        const info = text('info');
+        expect(info[0]).toBe(
+            'Ranking your photos by your auto-submit rules; this can take a minute. Nothing is submitted.',
+        );
+        expect(info[1]).toBe('=== Suggested photos for challenge 5 (3, best first) ===');
+        // Never a photo in the persisted log.
+        expect(info.join('')).not.toMatch(/\bp[123]\b|Pink|Car\b/);
+        expect(info).toContain(
+            'This is a ranking under your auto-submit rules, not a replay of the next fill. Nothing was submitted.',
+        );
+        expect(info).toContain(
+            'submit --challenge=5 ranks again on its own (1 photo, ignoring Submit Only); it does not submit these exact photos.',
+        );
+        expect((info.join('') + text('stdout').join('')).match(/\p{Cc}/u)).toBeNull();
+        expect(text('warning')).toEqual([]);
+    });
+
+    test('says when the popularity stats were only partly read', async () => {
+        handlers['suggest-photos'].mockResolvedValue(suggested({ statsLimited: true }));
+        await suggestPhotosCmd('5');
+        expect(text('warning')).toEqual([
+            'Popularity stats were only partly read, so this ranking leans on tags and the image check.',
+        ]);
+    });
+
+    test('strips terminal control characters from the challenge id it echoes', async () => {
+        handlers['suggest-photos'].mockResolvedValue(suggested());
+        await suggestPhotosCmd('5\u001b[2J');
+        expect(
+            text('info')
+                .join('')
+                .match(/\p{Cc}/u),
+        ).toBeNull();
+        expect(text('info')[1]).toBe('=== Suggested photos for challenge 5 (3, best first) ===');
+    });
+
+    test('is not run when you are not logged in', async () => {
+        guards.ensureAuthenticated.mockReturnValue(false);
+        await expect(suggestPhotosCmd('5')).resolves.toBe(1);
+        expect(handlers['suggest-photos']).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['invalid-args', 'Invalid challenge or image id. Use --challenge=<id>.'],
+        ['no-chosen-entered', 'Submit Only Chosen Photos is on and every chosen photo is already entered.'],
+        ['no-chosen-unusable', 'Submit Only Chosen Photos is on and none of your chosen photos can go in.'],
+        ['no-match', 'Nothing matches your Must Include tags.'],
+        ['no-eligible', 'Your library has no photo this challenge accepts right now.'],
+        ['suggest-busy', 'Another ranking is still running.'],
+        ['account-changed', 'You switched accounts while it ran.'],
+        ['challenge-ended', "This challenge has ended or couldn't be read."],
+        ['fetch-failed', 'Ranking failed. Try again in a moment.'],
+        ['suggest-failed', 'Ranking failed. Try again in a moment.'],
+    ])('explains the refusal %s and exits 1', async (code, reason) => {
+        handlers['suggest-photos'].mockResolvedValue({ success: false, error: code });
+        await expect(suggestPhotosCmd('5')).resolves.toBe(1);
+        const [message] = text('error');
+        expect(message.startsWith('Could not suggest photos: ')).toBe(true);
+        expect(message).toContain(reason);
+        expect(text('stdout')).toEqual([]);
+    });
+
+    test('prints an unknown refusal stripped of control characters, and a missing answer as such', async () => {
+        handlers['suggest-photos'].mockResolvedValue({ success: false, error: 'No authentication\u001b[31m token' });
+        await expect(suggestPhotosCmd('5')).resolves.toBe(1);
+        expect(text('error')).toEqual(['Could not suggest photos: No authentication token']);
+        calls.length = 0;
+        handlers['suggest-photos'].mockResolvedValue(undefined);
+        await expect(suggestPhotosCmd('5')).resolves.toBe(1);
+        expect(text('error')).toEqual(['Could not suggest photos: undefined']);
     });
 });

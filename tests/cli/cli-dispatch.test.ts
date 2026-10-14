@@ -131,6 +131,7 @@ jest.mock('../../src/ts/cli/commands/join', () => ({
 jest.mock('../../src/ts/cli/commands/photos', () => ({
     ...jest.requireActual<typeof import('../../src/ts/cli/commands/photos')>('../../src/ts/cli/commands/photos'),
     listPhotosCmd: jest.fn(async () => 0),
+    suggestPhotosCmd: jest.fn(async () => 0),
 }));
 jest.mock('../../src/ts/cli/commands/update', () => ({ checkUpdates: jest.fn() }));
 jest.mock('../../src/ts/cli/commands/logs', () => ({ showLogs: jest.fn() }));
@@ -669,11 +670,38 @@ describe('list-photos', () => {
         [['list-photos', '--search=a', 'stray']],
         [['list-photos', '--searchx']],
         [['list-photos', '--search-term=a']],
+        // --suggest ranks for one challenge and is not a search.
+        [['list-photos', '--suggest']],
+        [['list-photos', '--search=a', '--suggest']],
+        [['list-photos', '--challenge=5', '--suggest', '--search=a']],
+        [['list-photos', '--challenge=5', '--suggest', '--search', 'a']],
+        [['list-photos', '--challenge=5', '--suggest', '--suggest']],
+        [['list-photos', '--challenge=5', '--suggest', 'stray']],
     ])('%j is a usage error', async (argv) => {
         const m = await run(argv);
         expect(m.photos.listPhotosCmd).not.toHaveBeenCalled();
+        expect(m.photos.suggestPhotosCmd).not.toHaveBeenCalled();
         expect(m.msgs('error')).toEqual(['Wrong arguments']);
-        expect(m.msgs('info')).toEqual(['Usage: list-photos [--challenge=<id>] [--search=<tag>]']);
+        expect(m.msgs('info')).toEqual([
+            'Usage: list-photos [--challenge=<id>] [--search=<tag>]  or  list-photos --challenge=<id> --suggest',
+        ]);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test.each([[['list-photos', '--challenge=5', '--suggest']], [['list-photos', '--suggest', '--challenge', '5']]])(
+        '%j ranks the challenge’s photos without reading the library',
+        async (argv) => {
+            const m = await run(argv);
+            expect(m.photos.suggestPhotosCmd).toHaveBeenCalledWith('5');
+            expect(m.photos.listPhotosCmd).not.toHaveBeenCalled();
+            expect(m.exitCodes).toEqual([0]);
+        },
+    );
+
+    test("the suggestions' exit code is the command's", async () => {
+        const m = await run(['list-photos', '--challenge=5', '--suggest'], (mods) =>
+            mods.photos.suggestPhotosCmd.mockResolvedValue(1),
+        );
         expect(m.exitCodes).toEqual([1]);
     });
 });

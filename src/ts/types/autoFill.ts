@@ -25,6 +25,7 @@ import type {
 import type { getActiveChallenges as GetActiveChallenges } from '../strategies/real/activeChallenges';
 import type { rankVisually as RankVisually } from '../services/visionVerifier';
 import type { getSemanticScores as GetSemanticScores } from '../services/semantic';
+import type { StatsBudget } from '../services/photoStats';
 
 /** The logger surface the fill paths use: the facade module, or a stand-in with the same two members. */
 export type FillLogger = Pick<typeof LoggerModule, 'withCategory' | 'challengeTag'>;
@@ -50,6 +51,8 @@ export interface RankDeps {
     getCurrentMemberProfile?(
         ...args: Parameters<typeof GetCurrentMemberProfile>
     ): ReturnType<typeof GetCurrentMemberProfile>;
+    /** Stat enrichment spends this budget instead of the voting pass's (a run outside any pass: photo suggestions). */
+    statsBudget?: StatsBudget;
     /** Test seams; default to the real modules. */
     rankVisually?: typeof RankVisually;
     getSemanticScores?: typeof GetSemanticScores;
@@ -72,7 +75,7 @@ export type AdoptableMember = ChallengeMember & {
 };
 
 /** The log prefix of a submitting fill path. */
-type FillLabel = 'autoFill' | 'emergencyFill' | 'manualFill' | 'fillNew';
+export type FillLabel = 'autoFill' | 'emergencyFill' | 'manualFill' | 'fillNew';
 
 /** What onRefreshed may answer after the live re-check. */
 interface RefreshVerdict {

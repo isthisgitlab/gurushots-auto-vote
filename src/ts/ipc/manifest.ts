@@ -93,6 +93,7 @@ const invokeChannels = [
     'play-auto-turbo',
     'fill-challenge-now',
     'submit-picked-photos',
+    'suggest-photos',
     'get-bankroll',
     'get-member-challenges',
     'get-open-chosen-annotations',

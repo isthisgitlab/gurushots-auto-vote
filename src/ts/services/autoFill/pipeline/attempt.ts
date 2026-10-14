@@ -14,7 +14,8 @@ import {
     resolveMissingChosen,
 } from '../chosenPhotos';
 import { describeSubmitFailure, logPopularityPicks, logSelectionDetails } from '../fillLogging';
-import type { FillAttemptParams, FillAttemptResult } from '../../../types/autoFill';
+import type { FillAttemptParams, FillAttemptResult, FillLabel, RankDeps } from '../../../types/autoFill';
+import type { Challenge } from '../../../types/gurushots';
 import type { ChosenPick, IgnoreWords, PickerPhoto, ScoredCandidate } from '../../../types/photoPicker';
 import { errorMessage } from '../../../errorMessage';
 import { loadFillCandidates, scoreFillCandidates } from './scoring';
@@ -22,20 +23,25 @@ import { recordUncertainSubmission, verifyFillPick } from './verify';
 
 // The paths that honour Submit Only Chosen Photos. Emergency fill exists so no
 // slot is left empty at the buzzer and manual fill is explicit user intent, so
-// neither does; both still rank the chosen photos first.
-const ONLY_LABELS: ReadonlySet<string> = new Set(['autoFill', 'fillNew']);
+// neither does; both still rank the chosen photos first. The photo suggestions
+// rank the way the scheduled fill picks, so they honour it too.
+const ONLY_LABELS: ReadonlySet<string> = new Set(['autoFill', 'fillNew', 'suggest']);
+
+/**
+ * The log prefix of a ranking that reads the Chosen Photos settings: a fill path, or the
+ * submit-free photo suggestions (which is not a FillLabel, so runFillAttempt never takes it).
+ */
+type ChosenLabel = FillLabel | 'suggest';
+
+/** What the chosen-photo steps read: no submitter, so the suggestions cannot reach one. */
+type ChosenParams = { label: ChosenLabel; challenge: Challenge; token: string; deps: RankDeps };
 
 /**
  * What the Chosen Photos settings mean for this attempt: the resolved settings,
  * whether Submit Only applies on this path, the chosen photos not yet entered,
  * and the pick options the scorer takes (null when no list is set).
  */
-const planChosen = async ({
-    label,
-    challenge,
-    token,
-    deps,
-}: Pick<FillAttemptParams, 'label' | 'challenge' | 'token' | 'deps'>) => {
+const planChosen = async ({ label, challenge, token, deps }: ChosenParams) => {
     const settings = await resolveChosenPhotos({
         read: (key) =>
             key === 'chosenPhotosMemberId'
@@ -69,7 +75,8 @@ const addMissedChosen = async ({
     unentered,
     inOrder,
     loaded,
-}: Pick<FillAttemptParams, 'label' | 'challenge' | 'token' | 'deps' | 'wantCount'> & {
+}: ChosenParams & {
+    wantCount: number;
     unentered: string[];
     inOrder: boolean;
     loaded: Extract<Awaited<ReturnType<typeof loadFillCandidates>>, { status: 'loaded' }>;
@@ -338,4 +345,4 @@ const runFillAttempt = async ({
     }
 };
 
-export { runFillAttempt };
+export { runFillAttempt, planChosen, addMissedChosen };

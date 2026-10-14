@@ -1,6 +1,8 @@
 /**
  * CLI `list-photos`: the photo ids the Chosen Photos settings take, read from
- * your own library through the same handler the chooser uses. Everything the
+ * your own library through the same handler the chooser uses; with `--suggest`, the
+ * top photos the auto-submit rules favour for one challenge, through the handler
+ * behind the Pick… "Auto" button. Everything the
  * server sent is stripped of terminal control characters before it is printed,
  * and the per-photo listing goes to the terminal only — the log files get a
  * count and whether the list was cut short, never the photos.
@@ -27,6 +29,22 @@ const REFUSALS: Record<string, string> = {
     'no-challenge-context':
         'Reading your library needs a challenge to look through, and you have no active or open challenge yet. Join one first (see: discover), or pass --challenge=<id>.',
     superseded: 'A newer request replaced this one. Run the command again.',
+};
+
+// What each refusal of the suggestions handler means for the person at the terminal.
+const SUGGEST_REFUSALS: Record<string, string> = {
+    'invalid-args': `${INVALID_ID_TEXT} Use --challenge=<id>.`,
+    'no-chosen-entered':
+        'Submit Only Chosen Photos is on and every chosen photo is already entered. Update your Chosen Photos, or turn Submit Only off.',
+    'no-chosen-unusable':
+        'Submit Only Chosen Photos is on and none of your chosen photos can go in. Update your Chosen Photos, or turn Submit Only off.',
+    'no-match': 'Nothing matches your Must Include tags. Loosen them, or choose photos by hand (list-photos).',
+    'no-eligible': 'Your library has no photo this challenge accepts right now. Upload one, then try again.',
+    'suggest-busy': 'Another ranking is still running. Wait for it, then run the command again.',
+    'account-changed': 'You switched accounts while it ran. Run the command again.',
+    'challenge-ended': "This challenge has ended or couldn't be read. Check it with: status",
+    'fetch-failed': 'Ranking failed. Try again in a moment.',
+    'suggest-failed': 'Ranking failed. Try again in a moment.',
 };
 
 /**
@@ -107,4 +125,40 @@ const listPhotosCmd = async (challengeId: string | null, search: string | null):
     return 0;
 };
 
-export { listPhotosCmd, parseSearchFlag };
+/**
+ * Print the photos the auto-submit rules favour for one challenge, best first, through the handler behind the
+ * Pick… "Auto" button. Nothing is submitted, and the output says so and names the next steps.
+ *
+ * @param challengeId - the challenge to rank for
+ * @returns the exit code
+ */
+const suggestPhotosCmd = async (challengeId: string): Promise<number> => {
+    if (!ensureAuthenticated()) return 1;
+    ui().info('Ranking your photos by your auto-submit rules; this can take a minute. Nothing is submitted.');
+    const result = await handlers()['suggest-photos'](null, challengeId);
+    if (!result?.success) {
+        const code = String(result?.error);
+        const reason = Object.hasOwn(SUGGEST_REFUSALS, code) ? SUGGEST_REFUSALS[code] : stripTerminalControl(code);
+        ui().error(`Could not suggest photos: ${reason}`);
+        return 1;
+    }
+    const id = stripTerminalControl(challengeId);
+    ui().info(`=== Suggested photos for challenge ${id} (${result.photos.length}, best first) ===`);
+    result.photos.forEach((photo, i) => {
+        const labels = photo.labels.map((label) => stripTerminalControl(label)).join(', ');
+        logger.printLine(`  ${i + 1}. ${stripTerminalControl(photo.id)}${labels ? `  [${labels}]` : ''}`);
+    });
+    if (result.statsLimited) {
+        ui().warning('Popularity stats were only partly read, so this ranking leans on tags and the image check.');
+    }
+    ui().info('This is a ranking under your auto-submit rules, not a replay of the next fill. Nothing was submitted.');
+    // The ids go to the terminal only, like the listing: the log files never get a photo.
+    const ids = JSON.stringify(result.photos.map((photo) => stripTerminalControl(photo.id)));
+    logger.printLine(`Make them your chosen photos with: set-setting chosenPhotos '${ids}' --challenge=${id}`);
+    ui().info(
+        `submit --challenge=${id} ranks again on its own (1 photo, ignoring Submit Only); it does not submit these exact photos.`,
+    );
+    return 0;
+};
+
+export { listPhotosCmd, suggestPhotosCmd, parseSearchFlag };

@@ -28,7 +28,7 @@
  *   emergencyFill.ts   maybeEmergencyFillChallenge + its shared stand-down check
  *   manualFill.ts      fillChallengeNow (GUI "Fill Now"), submitPickedPhotos (GUI "Pick…")
  *   fillNew.ts         submitNewEntryForAction (boost/turbo "fill new")
- *   pipeline.ts        the shared fill pipeline and the submit-free ranking
+ *   pipeline.ts        the shared fill pipeline and the submit-free rankings (swap, photo suggestions)
  *   candidates.ts      on-theme candidate fetch, ignore words, semantic scores
  *   memberIdentity.ts  per-token member id cache for tag resolution
  *   chosenPhotos.ts    the Chosen Photos settings, the lookup of a missed chosen photo, the skip log
@@ -41,10 +41,16 @@ import { maybeAutoFillChallenge } from './autoFill/staggeredFill';
 import { evaluateEmergencyFill, maybeEmergencyFillChallenge } from './autoFill/emergencyFill';
 import { fillChallengeNow, submitPickedPhotos } from './autoFill/manualFill';
 import { submitNewEntryForAction } from './autoFill/fillNew';
-import { rankCandidatesForChallenge } from './autoFill/pipeline';
+import { rankCandidatesForChallenge, suggestFillPhotos } from './autoFill/pipeline';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './autoFill/candidates';
 import { resolveMemberId, peekMemberId, forgetFailedMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
-import { resolveChosenPhotos, resolveMissingChosen, logChosenSkipOnce, clearChosenSkip } from './autoFill/chosenPhotos';
+import {
+    resolveChosenPhotos,
+    resolveMissingChosen,
+    logChosenSkipOnce,
+    clearChosenSkip,
+    enteredIds,
+} from './autoFill/chosenPhotos';
 import { describeSubmitFailure } from './autoFill/fillLogging';
 import { getSlotsRemaining, reflectNewEntry, reflectEntryFlag, refreshChallengeState } from './autoFill/challengeState';
 import { resolveScheduleTarget, getNextScheduleThresholdSec } from './autoFill/schedule';
@@ -66,6 +72,7 @@ export {
     getSlotsRemaining,
     fetchCandidatesForChallenge,
     rankCandidatesForChallenge,
+    suggestFillPhotos,
     resolveMemberId,
     peekMemberId,
     forgetFailedMemberId,
@@ -77,6 +84,7 @@ export {
     resolveMissingChosen,
     logChosenSkipOnce,
     clearChosenSkip,
+    enteredIds,
     describeSubmitFailure,
     refreshChallengeState,
 };

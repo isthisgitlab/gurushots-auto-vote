@@ -5,9 +5,11 @@ import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import * as autoFill from '../../services/autoFill';
-import { dropContext } from '../../services/libraryCache';
+import { accountGeneration } from '../../services/accountScope';
+import { dropContext, dropEpoch, readSuggestion, writeSuggestion } from '../../services/libraryCache';
 import { CHOSEN_PHOTO_ID_RE, MAX_CHOSEN_PHOTOS } from '../../settings/limits';
 import { sanitizeForLog, refuseInvalidArgs, fetchLiveChallenge } from './shared';
+import { mapPhoto } from './library';
 
 import type { IpcReplyFn } from '../registerHandlers';
 
@@ -130,6 +132,80 @@ const handleSubmitPickedPhotos = (async (event: unknown, challengeId: string | n
     }
 }) satisfies IpcReplyFn;
 
+// A photo-suggestions ranking is running (one per process: the CLI, the web shell and every window share it).
+let suggestRunning = false;
+
+/**
+ * The top photos the scheduled auto-fill's rules favour for a challenge, best first, submitting nothing (the
+ * Pick… "Auto" button and `list-photos --suggest`). It is a ranking under those rules, not a replay of the
+ * next fill. One ranking at a time answers `suggest-busy` to the rest, and a repeat for the same challenge
+ * within the cache window answers from memory, re-filtered against the entries the live challenge now has.
+ *
+ * Failures are `{ success: false, error: <fixed code> }` and never carry raw text.
+ */
+const handleSuggestPhotos = (async (event: unknown, challengeId: string | number) => {
+    if (!isIdArg(challengeId)) return refuseInvalidArgs('autoFill', 'suggest-photos');
+    const log = logger.withCategory('autoFill');
+    if (suggestRunning) {
+        log.info('📝 Photo suggestions refused: a ranking is already running', null);
+        return { success: false as const, error: 'suggest-busy' as const };
+    }
+    suggestRunning = true;
+    try {
+        log.info(`📝 Photo suggestions request: Challenge=${sanitizeForLog(challengeId)}`, null);
+        const guard = auth.requireAuthToken('photo suggestions');
+        if (!guard.ok) return guard.response;
+
+        // Compared after the work: an account that left, or an action of this window outdating the answer, meanwhile.
+        const generation = accountGeneration();
+        const epoch = dropEpoch();
+        const strategy = apiFactory.getApiStrategy();
+        const liveChallenge = await fetchLiveChallenge(strategy, guard.token, challengeId);
+        if (!liveChallenge) return { success: false as const, error: 'challenge-ended' as const };
+
+        const entered = autoFill.enteredIds(liveChallenge);
+        const cached = readSuggestion(guard.token, challengeId);
+        const cachedPhotos = cached ? cached.photos.filter((photo) => !entered.has(photo.id)) : [];
+        let answer: { memberId: string | null; photos: ReturnType<typeof mapPhoto>[]; statsLimited: boolean };
+        if (cached && cachedPhotos.length > 0) {
+            answer = { memberId: cached.memberId, photos: cachedPhotos, statsLimited: cached.statsLimited };
+        } else {
+            const result = await autoFill.suggestFillPhotos(liveChallenge, guard.token, {
+                settings,
+                logger,
+                getEligiblePhotos: strategy.getEligiblePhotos,
+                getEligiblePhotosWalk: strategy.getEligiblePhotosWalk,
+                getImageData: strategy.getImageData,
+                searchTagAutocomplete: strategy.searchTagAutocomplete,
+                getCurrentMemberProfile: strategy.getCurrentMemberProfile,
+            });
+            if (result.status === 'fetch-error') return { success: false as const, error: 'fetch-failed' as const };
+            if (result.status !== 'suggested') return { success: false as const, error: result.status };
+            // An id that is not a safe token could never be stored in a list, so it is not offered.
+            const photos = result.photos.filter((photo) => CHOSEN_PHOTO_ID_RE.test(String(photo.id))).map(mapPhoto);
+            if (photos.length === 0) return { success: false as const, error: 'no-eligible' as const };
+            const memberId = await autoFill.resolveMemberId(
+                guard.token,
+                strategy.getCurrentMemberProfile,
+                logger,
+                'suggest',
+            );
+            answer = { memberId, photos, statsLimited: result.statsLimited };
+            if (generation === accountGeneration() && epoch === dropEpoch()) {
+                writeSuggestion(guard.token, challengeId, answer);
+            }
+        }
+        if (generation !== accountGeneration()) return { success: false as const, error: 'account-changed' as const };
+        return { success: true as const, ...answer };
+    } catch (error) {
+        // The reply is a fixed code: what went wrong goes to the log only.
+        log.error('Error handling suggest-photos request:', error);
+        return { success: false as const, error: 'suggest-failed' as const };
+    } finally {
+        suggestRunning = false;
+    }
+}) satisfies IpcReplyFn;
+
 const logBoostRequest = (message: string) => logger.withCategory(logger.CATEGORIES.VOTING).info(message, null);
 
 const handleApplyBoostToEntry = (async (event: unknown, challengeId: string | number, imageId: string) => {
@@ -161,4 +237,4 @@ const handleApplyBoostToEntry = (async (event: unknown, challengeId: string | nu
     }
 }) satisfies IpcReplyFn;
 
-export { handleFillChallengeNow, handleSubmitPickedPhotos, handleApplyBoostToEntry };
+export { handleFillChallengeNow, handleSubmitPickedPhotos, handleSuggestPhotos, handleApplyBoostToEntry };

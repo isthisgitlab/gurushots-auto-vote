@@ -50,6 +50,9 @@ Commands:
              coin budget. A record from an older version cannot be forgotten: it clears by itself, at the next check after 30 days.
   list-photos [--challenge=<id>] [--search=<tag>] - List your photo ids, to choose them for auto-join / auto-submit.
              With --challenge each photo shows whether that challenge accepts it.
+  list-photos --challenge=<id> --suggest - Rank your photos for that challenge by your auto-submit rules and list
+             the top 5, best first. It is a ranking under those rules, not a replay of the next fill, and
+             nothing is submitted. It cannot be combined with --search.
   check-updates - Check GitHub for a newer release
   get-setting <key> [--challenge=<id>] - Get a setting value (effective value for a challenge with --challenge)
   set-setting <key> <value> [--challenge=<id>] - Set a setting value (per-challenge override with --challenge)
@@ -113,6 +116,7 @@ Examples:
   forget-payment 12345
   check-updates
   list-photos --challenge=12345
+  list-photos --challenge=12345 --suggest
   set-setting chosenPhotos '["<id>"]' --challenge=12345
   set-setting exposure 80 --challenge=12345
   list-settings --challenge=12345

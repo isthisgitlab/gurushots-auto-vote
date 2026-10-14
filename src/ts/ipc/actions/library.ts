@@ -245,4 +245,4 @@ const __resetLibraryThrottle = (): void => {
     lastEndedAt = 0;
 };
 
-export { handleGetLibraryPhotos, hasWonChallenge, __resetLibraryThrottle, MIN_WALK_INTERVAL_MS };
+export { handleGetLibraryPhotos, mapPhoto, hasWonChallenge, __resetLibraryThrottle, MIN_WALK_INTERVAL_MS };
