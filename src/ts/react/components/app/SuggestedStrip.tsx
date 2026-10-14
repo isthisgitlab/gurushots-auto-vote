@@ -50,7 +50,9 @@ export function SuggestedStrip({
                     {t(atCap ? 'app.pickAddSuggestionsFull' : 'app.pickAddSuggestions')}
                 </button>
             </div>
-            <p className="text-xs">{interp(t('app.pickSuggestedCount'), { count: photos.length })}</p>
+            <p className="text-xs" aria-hidden="true">
+                {interp(t('app.pickSuggestedCount'), { count: photos.length })}
+            </p>
             {statsLimited && <p className="text-warning text-xs">{t('app.pickSuggestedStatsLimited')}</p>}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
                 {photos.map((photo, index) => (

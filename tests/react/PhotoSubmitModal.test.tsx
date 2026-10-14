@@ -747,7 +747,8 @@ describe('Auto suggestions', () => {
         expect(region?.isConnected).toBe(true);
         expect(region?.textContent).toBe('Suggestions: 2');
         expect(region?.className).toContain('sr-only');
-        expect(within(strip()).getByText('Suggestions: 2').getAttribute('aria-live')).toBeNull();
+        // The strip's own count is hidden from assistive tech: the region above already announces it.
+        expect(within(strip()).getByText('Suggestions: 2').getAttribute('aria-hidden')).toBe('true');
         fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
         await waitFor(() => expect(region?.textContent).toBe(''));
     });
@@ -933,7 +934,7 @@ describe('Auto suggestions', () => {
         expect(kept[0].getAttribute('aria-pressed')).toBe('true');
     });
 
-    test('after a refreshed submit a picked suggestion the re-read listing does not return leaves the pick', async () => {
+    test('after a refreshed submit a picked suggestion the re-read listing does not return stays picked', async () => {
         const onSubmit = jest.fn<Promise<PickOutcome>, [string[]]>().mockResolvedValue('refreshed');
         setup({ suggest: true, onSubmit });
         await opened();
@@ -941,13 +942,15 @@ describe('Auto suggestions', () => {
         fireEvent.click(stripTile(9));
         fireEvent.click(stripTile(1));
         expect(countLine().textContent).toBe('Picked: 2/3 open slots');
-        // The re-read no longer has 9 (it was entered meanwhile) and still has 1.
+        // The re-read does not return 9 (an active search, say): with no record saying it is blocked, it stays.
         getLibrary().mockResolvedValue(listing([photo(1), photo(2), photo(3), photo(4)]));
         fireEvent.click(submitButton());
-        await waitFor(() => expect(countLine().textContent).toBe('Picked: 1/3 open slots'));
-        expect(screen.queryByRole('region', { name: 'Suggestions' })).toBeNull();
+        await waitFor(() => expect(screen.queryByRole('region', { name: 'Suggestions' })).toBeNull());
+        // Photo 4 only exists in the re-read, so the pick is checked against the listing it brought.
+        await screen.findByRole('button', { name: /^Photo 00000004:/ });
+        expect(countLine().textContent).toBe('Picked: 2/3 open slots');
         expect(tile(1).getAttribute('aria-pressed')).toBe('true');
-        expect(screen.queryByRole('button', { name: /^Photo 00000009:/ })).toBeNull();
+        expect(screen.getByRole('button', { name: /^Photo 00000009:/ }).getAttribute('aria-pressed')).toBe('true');
     });
 
     test('a submit that comes back refreshed clears the strip, and one that failed leaves it', async () => {

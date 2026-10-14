@@ -174,16 +174,10 @@ function PhotoSubmitBody({
         // A photo that has won since the last read is left out of the listing, so `known` still has it as allowed.
         const won = new Set(state.listing.wonIds);
         setSelected((prev) => {
-            // A suggestion the fresh listing does not return is one the challenge no longer takes (it was just
-            // entered): it lives only in `suggestedKnown`, so it is dropped here rather than kept for want of a record.
-            const kept = prev.filter((id) => {
-                const record = known.get(id);
-                if (record === undefined && suggestedKnown.has(id)) return false;
-                return record?.allowed !== false && !won.has(id);
-            });
+            const kept = prev.filter((id) => known.get(id)?.allowed !== false && !won.has(id));
             return kept.length === prev.length ? prev : kept;
         });
-    }, [state, known, suggestedKnown, generation, checking, revalidating, submitting]);
+    }, [state, known, generation, checking, revalidating, submitting]);
 
     // The suggestions are of the listing they were ranked beside: a new read drops them, and an answer still on
     // its way.
