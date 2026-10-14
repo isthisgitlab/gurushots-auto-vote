@@ -1,15 +1,28 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { useSettings } from '@/api/useSettings';
 import { dateLocale } from '@/utils/formatters';
 import { interp } from '@/utils/interp';
+import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 
-/** When the listing was read, as the line above the photos words it: the time, with the date when it is not today. */
-const readAtText = (readAtMs: number, t: (key: string) => string): string => {
+/**
+ * When the listing was read, as the line above the photos words it: the time, with the date when it is not
+ * today, in the timezone the settings name ('local' for the device's; one that is not valid falls back to it).
+ */
+const readAtText = (readAtMs: number, timezone: string, t: (key: string) => string): string => {
     const at = new Date(readAtMs);
     const locale = dateLocale();
-    const time = at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false });
-    if (at.toDateString() === new Date().toDateString()) return interp(t('app.photoChooserAsOf'), { time });
-    return interp(t('app.photoChooserAsOfDate'), { date: at.toLocaleDateString(locale), time });
+    const inZone = (zone: Intl.DateTimeFormatOptions): string => {
+        const time = at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false, ...zone });
+        const date = at.toLocaleDateString(locale, zone);
+        if (date === new Date().toLocaleDateString(locale, zone)) return interp(t('app.photoChooserAsOf'), { time });
+        return interp(t('app.photoChooserAsOfDate'), { date, time });
+    };
+    try {
+        return inZone(timezone === 'local' ? {} : { timeZone: timezone });
+    } catch {
+        return inZone({});
+    }
 };
 
 /**
@@ -56,11 +69,13 @@ export function ListingHeader({
     onRefresh: () => void;
 }) {
     const { t } = useTranslation();
+    const { settings } = useSettings();
+    const timezone = settings?.timezone || DEFAULT_TIMEZONE;
     return (
         <>
             <div className="flex items-center justify-between gap-2">
                 <p className="text-base-content/70 text-xs" role="status">
-                    {readAtText(readAtMs, t)}
+                    {readAtText(readAtMs, timezone, t)}
                 </p>
                 <button
                     type="button"

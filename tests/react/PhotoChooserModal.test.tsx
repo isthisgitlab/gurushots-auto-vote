@@ -1742,6 +1742,61 @@ describe('the cached listing, its preview and Refresh', () => {
         },
     );
 
+    test('once the re-check has failed the waiting tile says to press Refresh and can be removed', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(previewOf([photo(1)]))
+            .mockResolvedValueOnce(failure);
+        setup({ value: [idOf(9)] });
+        await waitFor(() =>
+            expect(pendingTile(9).textContent).toContain(
+                'Not among your photos as last loaded. Press Refresh to check again.',
+            ),
+        );
+        expect(pendingTile(9).getAttribute('aria-disabled')).toBe('false');
+        fireEvent.click(pendingTile(9));
+        expect(screen.queryByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) })).toBeNull();
+        expect(countLine().textContent).toContain('0 of');
+    });
+
+    test('a chosen photo that has won shows the won tile during a preview, not the waiting one', async () => {
+        const fresh = deferred<Listing>();
+        getLibrary()
+            .mockResolvedValueOnce(previewOf([photo(1)], { wonIds: [idOf(9)], wonCount: 1 }))
+            .mockReturnValueOnce(fresh.promise);
+        setup({ value: [idOf(9)] });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(pendingTile(9).textContent).toContain("Has won a challenge, so it can't be entered again.");
+        expect(pendingTile(9).textContent).not.toContain('as last loaded');
+        // The ordinary missing tile: it is a toggle that can be removed.
+        expect(pendingTile(9).hasAttribute('aria-disabled')).toBe(false);
+        await act(async () => fresh.resolve(listing([photo(1)], { wonIds: [idOf(9)], wonCount: 1 })));
+    });
+
+    test.each([
+        ['Asia/Tokyo', /^Photos as of 15\/11\/2023, 07:13$/],
+        ['Europe/Riga', /^Photos as of 15\/11\/2023, 00:13$/],
+        ['America/New_York', /^Photos as of 14\/11\/2023, 17:13$/],
+    ])('the “as of” line is written in the timezone the settings name (%s)', async (timezone, line) => {
+        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ timezone }));
+        getLibrary().mockResolvedValue(listing([photo(1)], { readAtMs: 1_700_000_000_000 }));
+        setup();
+        expect(await screen.findByText(line)).toBeTruthy();
+    });
+
+    test('the “as of” line falls back to the device’s time for “local” and for a timezone that is not valid, and to Riga when none is set', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1)], { readAtMs: 1_700_000_000_000 }));
+        const pattern = /^Photos as of \d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}$/;
+        for (const settings of [{ timezone: 'local' }, { timezone: 'Not/AZone' }]) {
+            jest.mocked(window.api.getSettings).mockResolvedValue(invalid(settings));
+            const { unmount } = setup();
+            expect(await screen.findByText(pattern)).toBeTruthy();
+            unmount();
+        }
+        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({}));
+        setup();
+        expect(await screen.findByText(/^Photos as of 15\/11\/2023, 00:13$/)).toBeTruthy();
+    });
+
     test.each([
         [
             'an empty listing',

@@ -799,6 +799,8 @@ export const app = {
     photoChooserRecheckFailedSubmit:
         'Neizdevās pārbaudīt, kuri no šiem foto der šim izaicinājumam, tāpēc izvēle ir aizturēta. Spied „Atsvaidzināt”.',
     photoChooserNotAsLoaded: 'Nav starp taviem foto, kā tie ielādēti iepriekš. Pārbauda vēlreiz…',
+    photoChooserNotAsLoadedFailed:
+        'Nav starp taviem foto, kā tie ielādēti iepriekš. Lai pārbaudītu vēlreiz, spied „Atsvaidzināt”.',
     photoChooserMissing: 'Nav pieejams šim izaicinājumam (atrodas citā izaicinājumā vai ir dzēsts)',
     photoChooserMissingTruncated:
         'Nav pieejams šim izaicinājumam (atrodas citā izaicinājumā, ir dzēsts vai ir tālāk par pirmajiem {count} foto)',
@@ -856,7 +858,7 @@ export const app = {
     pickCount: 'Izvēlēti: {count}, brīvās vietas: {max}',
     pickOverCap: 'Izvēlēti: {count}, brīvās vietas: {max}. Noņem dažus, lai iesniegtu.',
     pickFull: 'Visām brīvajām vietām foto izvēlēti',
-    pickTileLocked: 'Bloķēts, kamēr lietotne pārbauda, vai tas der šim izaicinājumam.',
+    pickTileLocked: 'Aizslēgts, kamēr lietotne pārbauda, vai tas der šim izaicinājumam.',
     pickNoSlots: 'Brīvu vietu vairs nav: katrā vietā jau ir foto. Aizver šo logu.',
     pickSubmit: 'Iesniegt',
     pickSubmitCount: 'Iesniegt {count} foto',

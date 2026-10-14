@@ -788,6 +788,7 @@ export const app = {
     photoChooserRecheckFailedSubmit:
         "Couldn't check which of these photos this challenge accepts, so picking is held. Press Refresh.",
     photoChooserNotAsLoaded: 'Not among your photos as last loaded. Checking again…',
+    photoChooserNotAsLoadedFailed: 'Not among your photos as last loaded. Press Refresh to check again.',
     photoChooserMissing: 'Not available for this challenge (in another challenge, or deleted)',
     photoChooserMissingTruncated:
         'Not available for this challenge (in another challenge, deleted, or beyond the first {count} photos)',

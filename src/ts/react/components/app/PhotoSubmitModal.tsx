@@ -103,8 +103,10 @@ function PhotoSubmitBody({
     useEffect(() => {
         const from = pruneFromRef.current;
         // `generation < from`: a guard for a read that has not landed yet (defence in depth). A preview, or a
-        // listing still being read again, says nothing about what the challenge accepts yet.
+        // listing still being read again, says nothing about what the challenge accepts yet, and the pick is what
+        // is being sent while a submit is in flight.
         if (from === null || state.status !== 'ready' || generation < from || checking || revalidating) return;
+        if (submitting) return;
         pruneFromRef.current = null;
         if (!state.listing.allowedKnown) return;
         // A photo that has won since the last read is left out of the listing, so `known` still has it as allowed.
@@ -113,7 +115,7 @@ function PhotoSubmitBody({
             const kept = prev.filter((id) => known.get(id)?.allowed !== false && !won.has(id));
             return kept.length === prev.length ? prev : kept;
         });
-    }, [state, known, generation, checking, revalidating]);
+    }, [state, known, generation, checking, revalidating, submitting]);
 
     // After a Refresh answers, the pick is checked against the listing it brought, as after a refused submit.
     const refreshListing = () => {

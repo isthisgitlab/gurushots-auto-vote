@@ -10,8 +10,8 @@
  * does to an answer reaches the cache.
  *
  * The account's own actions in this window (a submit, a fill, a join, a swap) drop a challenge's entry
- * (`dropContext`), and a read that was running meanwhile writes nothing (`contextEpoch`). A logout or
- * account switch empties everything (`clearLibraryCache`).
+ * (`dropContext`), and a read that was running meanwhile writes nothing, whichever challenge was dropped
+ * (`dropEpoch`). A logout or account switch empties everything (`clearLibraryCache`).
  */
 
 import * as logger from '../logger';
@@ -47,13 +47,9 @@ const LIBRARY_FRESH_MS = 5 * 60_000;
 /** Most challenges kept at once. */
 const MAX_LIBRARY_ENTRIES = 6;
 
-/** Most drops remembered for the read-in-flight check. */
-const MAX_REMEMBERED_DROPS = 256;
-
 const entries = new Map<string, Entry>();
 let latest: { account: string; listing: Readonly<TimedListing> } | null = null;
-// The order of the latest drop of each challenge's entry: a read compares it before and after its walk.
-const drops = new Map<string, number>();
+// Counts every drop: a read compares it before and after its walk.
 let dropCount = 0;
 
 const log = (kind: string): void => logger.withCategory('autoFill').debug(`Library cache: ${kind}`, null);
@@ -140,20 +136,16 @@ const writeListing = (
 const dropContext = (token: string, contextId: string | number | null): void => {
     const key = keyOf(token, contextId);
     entries.delete(key);
-    drops.delete(key);
-    drops.set(key, ++dropCount);
-    if (drops.size > MAX_REMEMBERED_DROPS) drops.delete(drops.keys().next().value as string);
+    dropCount += 1;
     log('dropped');
 };
 
-/** Where the challenge's drops stand: a read compares it before and after its walk, and writes only if it held. */
-const contextEpoch = (token: string, contextId: string | number | null): number =>
-    drops.get(keyOf(token, contextId)) ?? 0;
+/** How many drops there have been: a read compares it before and after its walk, and writes only if it held. */
+const dropEpoch = (): number => dropCount;
 
 /** Forget everything (an account left, and tests start clean). */
 const clearLibraryCache = (): void => {
     entries.clear();
-    drops.clear();
     latest = null;
 };
 
@@ -162,7 +154,7 @@ export {
     readLatest,
     writeListing,
     dropContext,
-    contextEpoch,
+    dropEpoch,
     clearLibraryCache,
     LIBRARY_FRESH_MS,
     MAX_LIBRARY_ENTRIES,

@@ -404,6 +404,63 @@ describe('a listing as last loaded, and Refresh', () => {
     });
 });
 
+describe('the check of the pick against a listing', () => {
+    const deferred = <T,>() => {
+        let resolve!: (value: T) => void;
+        const promise = new Promise<T>((r) => (resolve = r));
+        return { promise, resolve };
+    };
+    const failure = invalid<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>>({
+        success: false,
+        error: 'Failed to read your photo library',
+    });
+    const refreshButton = () => screen.getByRole('button', { name: 'Refresh photos' });
+
+    test('a check waiting for a Refresh is not spent on a preview whose re-check failed: it runs on the fresh listing a tag search brings', async () => {
+        setup();
+        await opened();
+        fireEvent.click(tile(1));
+        fireEvent.click(tile(2));
+        // A Refresh that never answers leaves the check waiting.
+        getLibrary().mockReturnValueOnce(new Promise(() => undefined));
+        fireEvent.click(refreshButton());
+        // An empty search comes back as a preview, and its background read fails.
+        getLibrary()
+            .mockResolvedValueOnce(listing([photo(1), photo(2), photo(3)]))
+            .mockResolvedValueOnce(failure);
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+        await screen.findByText(
+            "Couldn't check which of these photos this challenge accepts, so picking is held. Press Refresh.",
+        );
+        await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+        expect(tile(2).getAttribute('aria-pressed')).toBe('true');
+        // A tag search brings a fresh listing that does not allow photo 2.
+        getLibrary().mockResolvedValueOnce(listing([photo(1), photo(2, { allowed: false }), photo(3)]));
+        fireEvent.change(screen.getByLabelText('Search your photos by tag'), { target: { value: 'tag' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+        await waitFor(() => expect(tile(2).getAttribute('aria-pressed')).toBe('false'));
+        expect(tile(1).getAttribute('aria-pressed')).toBe('true');
+    });
+
+    test('a Refresh that lands while a submit is in flight leaves the pick alone, and the check runs once the submit has ended', async () => {
+        const { update } = setup();
+        await opened();
+        fireEvent.click(tile(1));
+        fireEvent.click(tile(2));
+        const reread = deferred<Listing>();
+        getLibrary().mockReturnValueOnce(reread.promise);
+        fireEvent.click(refreshButton());
+        update({ submitting: true });
+        await act(async () => reread.resolve(listing([photo(1), photo(2, { allowed: false }), photo(3)])));
+        await waitFor(() => expect(refreshButton().getAttribute('aria-busy')).toBe('false'));
+        await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+        expect(tile(2).getAttribute('aria-pressed')).toBe('true');
+        expect(submitButton().textContent).toBe('Submit 2');
+        update({ submitting: false });
+        await waitFor(() => expect(tile(2).getAttribute('aria-pressed')).toBe('false'));
+    });
+});
+
 describe('failure text', () => {
     test('shows the translated error inline as an alert', async () => {
         setup({ error: 'The photos were not submitted. Pick other photos.' });

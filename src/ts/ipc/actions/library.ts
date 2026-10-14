@@ -20,7 +20,7 @@ import { CHOSEN_PHOTO_ID_RE, MAX_TAG_LENGTH } from '../../settings/limits';
 import { htmlToText } from '../../format/htmlToText';
 import { asPreview } from '../../libraryPreview';
 import { accountGeneration } from '../../services/accountScope';
-import { contextEpoch, readFresh, readLatest, writeListing } from '../../services/libraryCache';
+import { dropEpoch, readFresh, readLatest, writeListing } from '../../services/libraryCache';
 import { errorResult } from '../errorResult';
 import { isIdArg } from '../isIdArg';
 import { refuseInvalidArgs } from './shared';
@@ -188,9 +188,9 @@ const handleGetLibraryPhotos = (async (
             const cached = answerFromCache(token, contextId);
             if (cached) return cached;
         }
-        // Compared after the walk: an account that left, or a challenge whose entry was dropped, meanwhile.
+        // Compared after the walk: an account that left, or an entry dropped by an action of this window, meanwhile.
         const generation = accountGeneration();
-        const epoch = contextEpoch(token, contextId);
+        const epoch = dropEpoch();
         const strategy = apiFactory.getApiStrategy();
 
         // The borrowing lookup is a request of its own, so it runs inside the
@@ -228,7 +228,7 @@ const handleGetLibraryPhotos = (async (
         // Only the no-search listing is kept, and not a read that kept nothing and was cut short (it may be a
         // failed read), nor one an action of this window outdated while it ran.
         const keep = term === undefined && (listing.photos.length > 0 || listing.wonCount > 0 || !listing.truncated);
-        if (keep && epoch === contextEpoch(token, contextId)) writeListing(token, contextId, listing);
+        if (keep && epoch === dropEpoch()) writeListing(token, contextId, listing);
         return { success: true as const, ...listing, preview: false };
     } catch (error) {
         logger.withCategory('autoFill').error('Error handling get-library-photos request:', error);

@@ -17,7 +17,7 @@ const {
     readLatest,
     writeListing,
     dropContext,
-    contextEpoch,
+    dropEpoch,
     clearLibraryCache,
     LIBRARY_FRESH_MS,
     MAX_LIBRARY_ENTRIES,
@@ -144,32 +144,39 @@ describe('the newest listing', () => {
 });
 
 describe('drops', () => {
-    test('a drop forgets that challenge’s entry only, and moves only its epoch', () => {
+    test('a drop forgets that challenge’s entry only, and moves the epoch each time', () => {
         writeListing('t', '1', listingAt(T0, 'one'), T0);
         writeListing('t', '2', listingAt(T0, 'two'), T0);
-        const before = [contextEpoch('t', '1'), contextEpoch('t', '2'), contextEpoch('t', null)];
+        const before = dropEpoch();
         dropContext('t', '1');
         expect(readFresh('t', '1', T0)).toBeNull();
         expect(readFresh('t', '2', T0)).not.toBeNull();
-        expect(contextEpoch('t', '1')).toBeGreaterThan(before[0]);
-        expect([contextEpoch('t', '2'), contextEpoch('t', null)]).toEqual([before[1], before[2]]);
-        const once = contextEpoch('t', '1');
+        expect(dropEpoch()).toBe(before + 1);
         dropContext('t', '1');
-        expect(contextEpoch('t', '1')).toBeGreaterThan(once);
+        expect(dropEpoch()).toBe(before + 2);
     });
 
-    test('an account’s drop is not another account’s', () => {
+    test('writes and reads leave the epoch alone', () => {
+        const before = dropEpoch();
+        writeListing('t', '1', listingAt(T0), T0);
+        readFresh('t', '1', T0);
+        readLatest('t');
+        expect(dropEpoch()).toBe(before);
+    });
+
+    test('any drop moves it, whichever account’s or challenge’s: a read in flight writes nothing after it', () => {
+        const before = dropEpoch();
         dropContext('a', '1');
-        expect(contextEpoch('a', '1')).toBeGreaterThan(0);
-        expect(contextEpoch('b', '1')).toBe(0);
+        dropContext('b', null);
+        expect(dropEpoch()).toBe(before + 2);
     });
 
-    test('only the latest few hundred drops are remembered', () => {
+    test('it only ever rises, however many drops there are, and clearing the cache does not wind it back', () => {
+        const before = dropEpoch();
         for (let i = 0; i < 300; i += 1) dropContext('t', String(i));
-        expect(contextEpoch('t', '0')).toBe(0);
-        expect(contextEpoch('t', '299')).toBeGreaterThan(0);
+        expect(dropEpoch()).toBe(before + 300);
         clearLibraryCache();
-        expect(contextEpoch('t', '299')).toBe(0);
+        expect(dropEpoch()).toBe(before + 300);
     });
 });
 

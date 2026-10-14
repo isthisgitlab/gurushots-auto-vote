@@ -1,15 +1,15 @@
 import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { Modal, ModalActions } from '@/components/ui/Modal';
-import { InlineLoader, LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { Modal } from '@/components/ui/Modal';
+import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { useImageLoads } from '@/hooks/useImageLoads';
 import { buildPhotoUrl } from '@/utils/formatters';
 import { interp } from '@/utils/interp';
 import { ipcErrorText } from '@/api/ipcErrorText';
-import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { useChosenPhotosOwner } from '@/api/useChosenPhotosOwner';
 import { ChooserFooter, SearchForm, holdReasonOf } from './ChooserFooter';
 import { ListingHeader } from './ListingHeader';
+import { OtherAccountNotice } from './OtherAccountNotice';
 import { useChooserSave, useOtherAccountLists, useSavedListReread } from '@/hooks/usePhotoChooser';
 import { useLibraryListing } from '@/hooks/useLibraryListing';
 import * as ipc from '@/api/ipc';
@@ -227,22 +227,35 @@ function MissingTile({
 
 /**
  * A chosen photo the preview does not list: the library is being read again, so whether it is really
- * missing is not known yet. It stays selected, and cannot be removed until that is.
+ * missing is not known yet. It stays selected, and cannot be removed until that read has failed, when it can.
  */
-function PendingTile({ id, position }: { id: string; position: number | null }) {
+function PendingTile({
+    id,
+    position,
+    recheckFailed,
+    onToggle,
+}: {
+    id: string;
+    position: number | null;
+    recheckFailed: boolean;
+    onToggle: (id: string) => void;
+}) {
     const { t } = useTranslation();
-    const text = t('app.photoChooserNotAsLoaded');
+    const text = t(recheckFailed ? 'app.photoChooserNotAsLoadedFailed' : 'app.photoChooserNotAsLoaded');
     return (
         <button
             type="button"
             aria-pressed
-            aria-disabled
+            aria-disabled={!recheckFailed}
             aria-label={withPosition(
                 interp(t('app.photoChooserMissingTileLabel'), { id: shortId(id), reason: text }),
                 t,
                 position,
             )}
             className={`${TILE_BASE} border-base-300 bg-base-200`}
+            onClick={() => {
+                if (recheckFailed) onToggle(id);
+            }}
         >
             <PositionBadge position={position} />
             <span className="text-xs font-medium">{shortId(id)}</span>
@@ -396,7 +409,17 @@ export function PhotoGrid({
                     const photo = lookup(id);
                     if (photo) return tile(photo, shown(++position));
                     if (hideUnlisted) return null;
-                    if (listing.preview) return <PendingTile key={id} id={id} position={shown(++position)} />;
+                    if (listing.preview && !won.has(id)) {
+                        return (
+                            <PendingTile
+                                key={id}
+                                id={id}
+                                position={shown(++position)}
+                                recheckFailed={recheckFailed}
+                                onToggle={onToggle}
+                            />
+                        );
+                    }
                     return (
                         <MissingTile
                             key={id}
@@ -412,74 +435,6 @@ export function PhotoGrid({
                 })}
                 {listing.photos.filter((photo) => !chosen.has(photo.id)).map((photo) => tile(photo, null))}
             </div>
-        </>
-    );
-}
-
-/**
- * The notice shown while the list the chooser opened with was saved under
- * another account: what that means, and the way to remove those lists — behind a
- * confirmation, since it reaches every setting, profile, rule and scenario.
- */
-function OtherAccountNotice({ onRemoved }: { onRemoved: () => void }) {
-    const { t } = useTranslation();
-    const [confirming, setConfirming] = useState(false);
-    const [removing, setRemoving] = useState(false);
-    const [failed, setFailed] = useState(false);
-
-    const remove = async () => {
-        setRemoving(true);
-        setFailed(false);
-        const result = await ipc.callOrNull(() => ipc.clearChosenPhotos());
-        setRemoving(false);
-        setConfirming(false);
-        if (result?.success) {
-            // Every open editor drops its copy of the lists, so saving it cannot put them back.
-            announceChosenPhotosCleared();
-            onRemoved();
-        } else setFailed(true);
-    };
-
-    return (
-        <>
-            <div role="alert" className="alert alert-warning py-2 text-sm">
-                <span className="flex-1">{t('app.photoChooserOtherAccount')}</span>
-                <button type="button" className="btn btn-sm" onClick={() => setConfirming(true)}>
-                    {t('app.photoChooserOtherAccountClear')}
-                </button>
-            </div>
-            {failed && (
-                <div role="alert" className="alert alert-error py-2 text-sm">
-                    <span>{t('app.photoChooserOtherAccountClearError')}</span>
-                </div>
-            )}
-            <Modal
-                isOpen={confirming}
-                onClose={removing ? undefined : () => setConfirming(false)}
-                title={t('app.photoChooserOtherAccountClear')}
-                showCloseButton={!removing}
-            >
-                <p className="text-sm">{t('app.photoChooserOtherAccountConfirm')}</p>
-                <ModalActions>
-                    <button
-                        type="button"
-                        className="btn btn-outline btn-sm"
-                        disabled={removing}
-                        onClick={() => setConfirming(false)}
-                    >
-                        {t('app.cancel')}
-                    </button>
-                    <button
-                        type="button"
-                        className="btn btn-warning btn-sm"
-                        disabled={removing}
-                        onClick={() => void remove()}
-                    >
-                        {removing && <LoadingSpinner size="xs" decorative />}
-                        {t('app.photoChooserOtherAccountClear')}
-                    </button>
-                </ModalActions>
-            </Modal>
         </>
     );
 }

@@ -55,7 +55,7 @@ export function useLibraryListing(
     const generationRef = useRef(0);
     const requestRef = useRef(0);
     const lastSearchRef = useRef('');
-    // The member on screen: a fresh listing that cannot name one keeps it.
+    // The member on screen: the background re-check of a preview, which cannot name one, keeps it.
     const memberRef = useRef<string | null>(null);
 
     const read = useCallback(
@@ -65,18 +65,22 @@ export function useLibraryListing(
     );
 
     /**
-     * Puts a listing on screen and remembers the member it names; a fresh one feeds `known`. A listing that
-     * replaces the one on screen (`replacing`) and cannot name a member keeps the one already shown.
+     * Puts a listing on screen and remembers the member it names; a fresh one feeds `known`, which a change of
+     * member empties first. The re-check of a preview (`keepMember`) that cannot name a member keeps the one
+     * already shown.
      */
-    const show = useCallback((listing: Listing, replacing = false) => {
-        const memberId = listing.memberId ?? (replacing ? memberRef.current : null);
+    const show = useCallback((listing: Listing, keepMember = false) => {
+        const previous = memberRef.current;
+        const memberId = listing.memberId ?? (keepMember ? previous : null);
+        const switched = previous !== null && memberId !== previous;
         memberRef.current = memberId;
         rememberCurrentMember(memberId);
-        if (!listing.preview) {
-            setKnown(
-                (prev) =>
-                    new Map([...prev, ...listing.photos.map((photo): [string, LibraryPhoto] => [photo.id, photo])]),
-            );
+        if (switched || !listing.preview) {
+            setKnown((prev) => {
+                const base = switched ? new Map<string, LibraryPhoto>() : prev;
+                if (listing.preview) return base;
+                return new Map([...base, ...listing.photos.map((photo): [string, LibraryPhoto] => [photo.id, photo])]);
+            });
         }
         setState({ status: 'ready', listing: { ...listing, memberId } });
     }, []);
@@ -106,12 +110,14 @@ export function useLibraryListing(
             setRevalidating(false);
             setRecheckFailed(false);
             setState({ status: 'loading' });
+            const startedAt = Date.now();
             const result = await read(search, mode);
             if (request !== requestRef.current) return;
             if (!result?.success) return showFailure(result);
-            // A cached answer is a preview when it says so, or when the caller trusts no cached marks.
-            const asShown =
-                mode === 'cached' && alwaysFresh && !result.preview ? { ...asPreview(result), preview: true } : result;
+            // A cached answer is a preview when it says so, or when the caller trusts no cached marks: unless
+            // the read walked the library just now (it began after this request), which a second read repeats.
+            const cachedMarks = mode === 'cached' && alwaysFresh && !result.preview && result.readAtMs < startedAt;
+            const asShown = cachedMarks ? { ...asPreview(result), preview: true } : result;
             show(asShown);
             if (!asShown.preview) return;
             setRevalidating(true);
@@ -144,7 +150,7 @@ export function useLibraryListing(
         if (result?.success) {
             generationRef.current += 1;
             setGeneration(generationRef.current);
-            show(result, true);
+            show(result);
         } else if (replacesListing(result?.error)) {
             showFailure(result);
         } else setRecheckFailed(true);

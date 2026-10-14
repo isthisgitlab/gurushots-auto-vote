@@ -206,6 +206,17 @@ describe('alwaysFresh', () => {
         expect(getLibrary().mock.calls.map((call) => call[2])).toEqual(['cached', 'fresh']);
     });
 
+    test('an answer whose read began after the request is not a cached one: one call, no preview, nothing locked', async () => {
+        getLibrary().mockResolvedValueOnce(answer({ readAtMs: Date.now() + 60_000 }));
+        const { result } = renderHook(() => useLibraryListing(7, { alwaysFresh: true }));
+        await waitFor(() => expect(result.current.state.status).toBe('ready'));
+        await act(async () => undefined);
+        expect(getLibrary()).toHaveBeenCalledTimes(1);
+        expect(result.current.state).toMatchObject({ listing: { preview: false, allowedKnown: true } });
+        expect(result.current.revalidating).toBe(false);
+        expect([...result.current.known.keys()]).toEqual(['a']);
+    });
+
     test('a search is a fresh read, with no preview', async () => {
         getLibrary().mockResolvedValueOnce(previewAnswer()).mockResolvedValueOnce(answer()).mockResolvedValue(answer());
         const { result } = renderHook(() => useLibraryListing(7, { alwaysFresh: true }));
@@ -324,19 +335,6 @@ describe('refresh', () => {
         expect(result.current.recheckFailed).toBe(false);
     });
 
-    test('keeps the member on screen when the new listing cannot name one', async () => {
-        getLibrary()
-            .mockResolvedValueOnce(answer())
-            .mockResolvedValueOnce(answer({ memberId: null }));
-        const { result } = renderHook(() => useLibraryListing(7));
-        await waitFor(() => expect(result.current.state.status).toBe('ready'));
-        await act(async () => {
-            result.current.refresh();
-        });
-        await waitFor(() => expect(result.current.generation).toBe(2));
-        expect(result.current.state).toMatchObject({ listing: { memberId: 'member-1' } });
-    });
-
     test.each([
         ['no-challenge-context', { status: 'no-context' }],
         ['account-changed', { status: 'error', error: 'account-changed' }],
@@ -368,5 +366,73 @@ describe('refresh', () => {
         await act(async () => undefined);
         expect(ids(result.current.state as never)).toEqual(['searched']);
         expect(result.current.generation).toBe(generation);
+    });
+});
+
+describe('the member on screen', () => {
+    test('is kept by a preview’s background re-check only: Refresh and Retry that cannot name one show none', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(answer({ memberId: 'member-1' }))
+            .mockResolvedValueOnce(answer({ memberId: null }))
+            .mockResolvedValueOnce(answer({ memberId: null }));
+        const { result } = renderHook(() => useLibraryListing(7));
+        await waitFor(() => expect(result.current.state).toMatchObject({ listing: { memberId: 'member-1' } }));
+        await act(async () => {
+            result.current.refresh();
+        });
+        await waitFor(() => expect(result.current.state).toMatchObject({ listing: { memberId: null } }));
+        await act(async () => {
+            result.current.retry();
+        });
+        await waitFor(() => expect(result.current.state).toMatchObject({ listing: { memberId: null } }));
+    });
+
+    test('after an account switch, a Refresh that cannot name a member keeps neither the old member nor the old photos', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(answer({ memberId: 'member-1', photos: [photo('a')] }))
+            .mockResolvedValueOnce(answer({ memberId: 'member-2', photos: [photo('b')] }))
+            .mockResolvedValueOnce(answer({ memberId: null, photos: [photo('c')] }));
+        const { result } = renderHook(() => useLibraryListing(7));
+        await waitFor(() => expect([...result.current.known.keys()]).toEqual(['a']));
+        // The account switched: the next listing names another member, and what was known is not theirs.
+        await act(async () => {
+            result.current.refresh();
+        });
+        await waitFor(() => expect(result.current.state).toMatchObject({ listing: { memberId: 'member-2' } }));
+        expect([...result.current.known.keys()]).toEqual(['b']);
+        await act(async () => {
+            result.current.refresh();
+        });
+        await waitFor(() => expect(result.current.state).toMatchObject({ listing: { memberId: null } }));
+        expect([...result.current.known.keys()]).toEqual(['c']);
+    });
+
+    test('the same member keeps what was known, and a first listing with none has nothing to clear', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(answer({ memberId: null, photos: [photo('a')] }))
+            .mockResolvedValueOnce(answer({ memberId: 'member-1', photos: [photo('b')] }))
+            .mockResolvedValueOnce(answer({ memberId: 'member-1', photos: [photo('c')] }));
+        const { result } = renderHook(() => useLibraryListing(7));
+        await waitFor(() => expect([...result.current.known.keys()]).toEqual(['a']));
+        await act(async () => {
+            result.current.refresh();
+        });
+        await waitFor(() => expect([...result.current.known.keys()]).toEqual(['a', 'b']));
+        await act(async () => {
+            result.current.refresh();
+        });
+        await waitFor(() => expect([...result.current.known.keys()]).toEqual(['a', 'b', 'c']));
+    });
+
+    test('a preview whose member differs from the one on screen empties what was known too', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(answer({ memberId: 'member-1', photos: [photo('a')] }))
+            .mockResolvedValueOnce(previewAnswer({ memberId: 'member-2' }))
+            .mockResolvedValueOnce(answer({ memberId: 'member-2', photos: [photo('d')] }));
+        const { result } = renderHook(() => useLibraryListing(7));
+        await waitFor(() => expect([...result.current.known.keys()]).toEqual(['a']));
+        await act(async () => result.current.load(''));
+        await waitFor(() => expect(result.current.revalidating).toBe(false));
+        await waitFor(() => expect([...result.current.known.keys()]).toEqual(['d']));
     });
 });

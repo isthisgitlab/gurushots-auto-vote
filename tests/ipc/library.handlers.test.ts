@@ -545,6 +545,33 @@ describe('the library cache', () => {
         expect(walk).toHaveBeenCalledTimes(2);
     });
 
+    test('a read with no challenge to read through answers no-challenge-context even when the account left meanwhile: the context is judged first', async () => {
+        const challenges = deferred<unknown>();
+        const walk = newWalk();
+        stubStrategy({
+            getEligiblePhotosWalk: walk,
+            getActiveChallenges: jest.fn<Promise<unknown>, [string]>(() => challenges.promise),
+        });
+        const running = call(undefined, null);
+        bumpAccountGeneration();
+        challenges.resolve({ challenges: [] });
+        await expect(running).resolves.toEqual({ success: false, error: 'no-challenge-context' });
+        expect(walk).not.toHaveBeenCalled();
+    });
+
+    test('any drop during a walk, whichever challenge it names, keeps that walk from writing', async () => {
+        const slow = deferred<WalkResult>();
+        const walk = newWalk(listed('b'));
+        walk.mockReturnValueOnce(slow.promise);
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        const running = call('5');
+        dropContext('tok', '99');
+        slow.resolve(listed('a'));
+        await running;
+        await next('5', undefined, 'cached');
+        expect(walk).toHaveBeenCalledTimes(2);
+    });
+
     test('a walk in flight when the challenge is dropped answers its photos but keeps nothing', async () => {
         const slow = deferred<WalkResult>();
         const walk = newWalk(listed('b'));
