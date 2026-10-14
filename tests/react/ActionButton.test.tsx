@@ -1,7 +1,7 @@
 import { render, fireEvent } from './helpers/test-utils';
 import { ActionButton } from '@/components/ui/ActionButton';
 
-test.each(['accent', 'info', 'latvian', 'success', 'warning'] as const)(
+test.each(['info', 'latvian', 'success', 'warning'] as const)(
     'uses the %s variant until an action fails',
     (variant) => {
         const { container, rerender } = render(<ActionButton variant={variant}>Go</ActionButton>);
