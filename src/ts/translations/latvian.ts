@@ -369,7 +369,7 @@ export const app = {
     currencyOutcomeStaleCandidate:
         'Apmaiņas piedāvājums vairs nav aktuāls vai ir mainījies, tāpēc nekas netika iztērēts. Sāc apmaiņu no jauna.',
     currencyOutcomeAlreadyEntered:
-        'Šis foto jau ir iesniegts šajā izaicinājumā, tāpēc nekas netika iztērēts. Izvēlies citu foto.',
+        'Šis foto jau ir iesniegts šajā izaicinājumā, tāpēc nekas netika iztērēts. Sāc apmaiņu no jauna ar citu foto.',
     currencyOutcomeBusy: 'Vēl notiek cita valūtas darbība — pēc brīža mēģini vēlreiz.',
     currencyOutcomeUnclear:
         'Uz pieprasījumu netika saņemta atbilde, tāpēc nav zināms, vai tas izdevās. Atsvaidzini izaicinājumu un pārbaudi to, pirms mēģini vēlreiz.',

@@ -366,7 +366,7 @@ export const app = {
         'No different photo is available to swap in — every eligible photo is already used here.',
     currencyOutcomeStaleCandidate: 'The swap offer expired or changed, so nothing was spent. Start the swap again.',
     currencyOutcomeAlreadyEntered:
-        'That photo is already entered in this challenge, so nothing was spent. Pick a different photo.',
+        'That photo is already entered in this challenge, so nothing was spent. Start the swap again with a different photo.',
     currencyOutcomeBusy: 'Another currency action is still running — try again in a moment.',
     currencyOutcomeUnclear:
         'The request got no answer, so it may or may not have gone through. Refresh the challenge and check it before trying again.',

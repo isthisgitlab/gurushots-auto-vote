@@ -288,7 +288,7 @@ describe('a refused pick or spend', () => {
         expect(window.api.swapEntryPhoto).toHaveBeenLastCalledWith(101, ENTRY_ID, OTHER_ID, true);
     });
 
-    test('a preview that says the entry is gone ends the flow and refreshes the card instead of trapping the picker', async () => {
+    test('a preview that says the entry is gone keeps the picker open with its alert and refreshes the card behind it', async () => {
         renderCard();
         await openPicker();
         window.api.previewSwapPhoto = jest
@@ -296,11 +296,11 @@ describe('a refused pick or spend', () => {
             .mockResolvedValue({ success: false, outcome: 'not-available', error: 'not-available' });
         fireEvent.click(tile(PICK_ID));
         fireEvent.click(useThisPhoto());
+        expect((await screen.findByRole('alert')).textContent).toBe(app.currencyOutcomeNotAvailable);
         await waitFor(() => expect(onCurrencySpent).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect(pickerTitle()).toBeNull());
+        expect(pickerTitle()).not.toBeNull();
         expect(suggestionTitle()).toBeNull();
         expect(window.api.swapEntryPhoto).not.toHaveBeenCalled();
-        await waitFor(() => expect(document.activeElement === swapButton()).toBe(true));
     });
 
     test('cancelling after a refused spend ends the flow, and a fresh one starts clean', async () => {

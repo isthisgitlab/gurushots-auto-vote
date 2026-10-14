@@ -81,16 +81,20 @@ const withSpendLock = async <T>(spend: () => Promise<T>): Promise<{ busy: true }
 const cat = (logger: Logger) => logger.withCategory('currency');
 
 /**
- * Reads the live challenge and bankroll. A missing challenge is reported as
- * notAvailable; an unreadable bankroll is left null for blockedOutcome to map
- * onto balanceUnknown.
+ * Reads the live challenge and bankroll. `readFailed` tells a failed challenge
+ * read (no usable response, or one flagged `fetchFailed`) from a read that worked
+ * but does not list the challenge (closed or gone): checkLive maps the first onto
+ * apiFailed and the second onto notAvailable. An unreadable bankroll is left null
+ * for blockedOutcome to map onto balanceUnknown.
  */
 const loadLive = async (challengeId: string | number, token: string, strategy: CurrencyStrategy) => {
     const [challengesResponse, bankroll] = await Promise.all([
         strategy.getActiveChallenges(token),
         strategy.getBankroll(token),
     ]);
-    return { challenge: findActiveChallenge(challengesResponse?.challenges, challengeId), bankroll };
+    const readFailed =
+        !challengesResponse || !!challengesResponse.fetchFailed || !Array.isArray(challengesResponse.challenges);
+    return { challenge: findActiveChallenge(challengesResponse?.challenges, challengeId), bankroll, readFailed };
 };
 
 const entriesOf = (challenge: Challenge): RankingEntry[] =>
@@ -131,8 +135,10 @@ const checkLive = async (
 ): Promise<
     { blocked: CurrencyOutcome; challenge: null } | { blocked: CurrencyOutcome | null; challenge: Challenge }
 > => {
-    const { challenge, bankroll } = await loadLive(challengeId, token, strategy);
-    if (!challenge) return { blocked: CURRENCY_OUTCOME.notAvailable, challenge: null };
+    const { challenge, bankroll, readFailed } = await loadLive(challengeId, token, strategy);
+    if (!challenge) {
+        return { blocked: readFailed ? CURRENCY_OUTCOME.apiFailed : CURRENCY_OUTCOME.notAvailable, challenge: null };
+    }
     // blockedOutcome only ever answers a CURRENCY_OUTCOME value or null.
     const blocked = blockedOutcome(action, challenge, bankroll, nowSec()) as CurrencyOutcome | null;
     return { blocked, challenge };

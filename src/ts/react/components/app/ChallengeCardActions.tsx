@@ -216,7 +216,7 @@ type SwapPickFlow = {
     notice: string | null;
     returnFocusEl: HTMLElement | null;
     candidate: SwapCandidate | null;
-    held: string | null;
+    held: typeof CURRENCY_OUTCOME.unclear | typeof CURRENCY_OUTCOME.noBalance | null;
 };
 
 /**
@@ -275,17 +275,17 @@ function useSwapPickModal({
     };
 
     // A refusal leaves the picker open (its alert says why); a preview that went through moves on to the confirm.
-    // "Not available" means the entry being replaced is no longer entered (or the challenge changed), so every
-    // later pick would fail the same way: that ends the flow and refreshes the card instead.
+    // "Not available" means the entry being replaced is no longer entered (or the challenge changed): the picker
+    // stays open so its alert says so, and the card refreshes behind it (the picker is card-level, so the refresh
+    // does not unmount it); the user closes it.
     const pick =
         (current: SwapPickFlow) =>
         async (imageIds: string[]): Promise<PickOutcome> => {
             commit.clearError();
             const result = await preview.run(challenge.id, current.entry.id, imageIds[0]);
             if (!result?.success) {
-                if (result?.error !== CURRENCY_OUTCOME.notAvailable) return 'failed';
-                endAndRefresh(current);
-                return 'done';
+                if (result?.error === CURRENCY_OUTCOME.notAvailable) onCurrencySpent?.();
+                return 'failed';
             }
             if (!result.candidate) return 'failed';
             setFlow({ ...current, candidate: result.candidate });
@@ -307,7 +307,8 @@ function useSwapPickModal({
         setFlow({ ...current, candidate: held ? candidate : null, held });
     };
 
-    // A refused pick and a refused spend are both told in the picker, which a refused spend reopens.
+    // A refused pick and a refused spend are told in the picker, which a refused spend reopens; a refused spend
+    // that is held (`unclear`, `no-balance`) is told in the confirm instead.
     const pickError = preview.error || commit.error;
     const candidate = flow?.candidate ?? null;
 

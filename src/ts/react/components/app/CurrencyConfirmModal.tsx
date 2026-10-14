@@ -45,7 +45,7 @@ export interface CurrencyConfirmModalProps {
     field: keyof typeof CURRENCY_LABELS;
     bankroll: Bankroll | null;
     spending: boolean;
-    /** the spend already went out and its answer is unclear or refused for good: Spend stays off, Cancel still closes */
+    /** the spend must not be sent again — its answer was unclear (it may have landed) or it cannot be made (no balance, refused before any request): Spend stays off, Cancel still closes */
     spendHeld?: boolean;
     /** action-specific body */
     children: ComponentChildren;

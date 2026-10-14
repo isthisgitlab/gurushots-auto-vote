@@ -97,13 +97,25 @@ describe('live re-check (shared by every spend)', () => {
         expect(strategy.keyUnlock).toHaveBeenCalledWith(555, 'tok');
     });
 
-    test('challenge gone → not-available, nothing spent', async () => {
+    test('a good read that does not list the challenge → not-available, nothing spent', async () => {
         const strategy = stubStrategy({ challenge: null });
         expect(await unlockBoostWithKey(555, 'tok', { strategy, logger })).toEqual({
             ok: false,
             outcome: 'not-available',
         });
         expect(strategy.keyUnlock).not.toHaveBeenCalled();
+    });
+
+    test('a failed challenge read → api-failed (not not-available), nothing spent', async () => {
+        for (const response of [null, { challenges: [], fetchFailed: true }, {}]) {
+            const strategy = stubStrategy();
+            strategy.getActiveChallenges = jest.fn().mockResolvedValue(response);
+            expect(await unlockBoostWithKey(555, 'tok', { strategy, logger })).toEqual({
+                ok: false,
+                outcome: 'api-failed',
+            });
+            expect(strategy.keyUnlock).not.toHaveBeenCalled();
+        }
     });
 
     test('already unlocked (repeat request) → not-available, nothing spent', async () => {

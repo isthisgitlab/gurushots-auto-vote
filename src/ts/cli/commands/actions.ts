@@ -159,7 +159,8 @@ const OUTCOME_TEXT: Record<string, string> = {
     'balance-unknown': 'Could not read your balance, so nothing was spent. Try again shortly.',
     'no-alternative': 'No different photo is available to swap in.',
     'stale-candidate': 'The swap offer expired or changed since the preview. Nothing was spent — run the swap again.',
-    'already-entered': 'That photo is already entered in this challenge. Nothing was spent — pick a different photo.',
+    'already-entered':
+        'That photo is already entered in this challenge. Nothing was spent — run the swap again with a different photo.',
     busy: 'Another currency action is still running. Try again in a moment.',
     'invalid-args': INVALID_ID_TEXT,
     unclear:
