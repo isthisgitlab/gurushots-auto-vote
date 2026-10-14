@@ -4133,7 +4133,9 @@ describe('runJoinPass — Manual Photos Only', () => {
         const warnings = paidNotEntered();
         expect(warnings).toHaveLength(1);
         expect(String(warnings[0][0])).toContain('challenge 27');
-        expect(String(warnings[0][0])).toContain('Join in Discover');
+        expect(String(warnings[0][0])).toContain(
+            'from Discover: choose the photo for this challenge (Chosen Photos), then press Join',
+        );
         // Another paid challenge gets its own warning.
         await runJoinPass('tok', Date.now(), paidPass(28));
         expect(paidNotEntered()).toHaveLength(2);

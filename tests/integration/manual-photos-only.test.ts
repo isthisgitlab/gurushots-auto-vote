@@ -217,6 +217,14 @@ describe('a pass over a challenge every automatic photo path wants', () => {
         for (const [, imageId] of api.applyBoostToEntry.mock.calls) expect(['e1', 'e2']).not.toContain(imageId);
     });
 
+    test('control, switch off: Turbo goes on a freshly submitted photo, not an existing entry', async () => {
+        mockSettings({ manualPhotosOnly: false });
+        const api = makeApi(challenge());
+        await run(api);
+        expect(api.applyTurbo).toHaveBeenCalledTimes(1);
+        expect(['e1', 'e2']).not.toContain(api.applyTurbo.mock.calls[0][1]);
+    });
+
     test('switch on: Boost and Turbo still go on the entries the challenge already has', async () => {
         mockSettings({ manualPhotosOnly: true });
         const api = makeApi(challenge());
