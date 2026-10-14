@@ -173,7 +173,8 @@ describe('orderByVisualFit', () => {
                 accepted,
             ),
         ).toBeNull();
-        expect(accepted).toHaveBeenCalledWith(new Set());
+        // The model could not judge the theme: that is no evidence, not a rejection.
+        expect(accepted).not.toHaveBeenCalled();
         expect(orderByVisualFit([])).toBeNull();
     });
 });

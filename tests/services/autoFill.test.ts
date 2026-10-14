@@ -140,22 +140,61 @@ describe('uncertain auto-submit tracking', () => {
         expect(result).toBe('submitted');
     });
 
-    test('visual abstention marks a tag-matching photo uncertain', async () => {
+    test('a visual abstain falls back to the semantic and keyword evidence', async () => {
+        // The model reports no evidence when it abstains ("Artificial vs Natural"
+        // has no visible subject), so the photo is judged by its labels and score.
+        for (const [labels, semantic, uncertain] of [
+            [['Car'], true, false],
+            [['Dog'], false, false],
+            [['Car'], false, true],
+        ] as const) {
+            const ledger = createMemoryEntryAgeLedger();
+            const challenge = makeChallenge({ title: 'Dogs', entries: [{ id: 'existing' }] });
+            const logger = makeLogger();
+            const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+                settings: makeSettings({ autoFill: true }),
+                logger,
+                getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', [...labels])]),
+                getSemanticScores: jest.fn(async () =>
+                    semantic ? new Map([['photo', { score: 0.62, support: 1 }]]) : null,
+                ),
+                submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
+                rankVisually: jest.fn(async (_challenge, ids, _eligible, wantCount) => ids.slice(0, wantCount)),
+                entryAges: ledger,
+            });
+            expect(result).toBe('submitted');
+            expect(ledger.isUncertain(challenge.id, 'photo')).toBe(uncertain);
+            if (uncertain) {
+                const warnings = logger.withCategory.mock.results.flatMap(
+                    (result) => jest.mocked(result.value as jest.MockedObject<CategoryLogger>).warning.mock.calls,
+                );
+                expect(warnings).toEqual(expect.arrayContaining([[expect.stringContaining('no subject match'), null]]));
+            }
+        }
+    });
+
+    test('a visual check that accepts other photos but not this one marks it uncertain', async () => {
         const ledger = createMemoryEntryAgeLedger();
         const challenge = makeChallenge({ title: 'Dogs', entries: [{ id: 'existing' }] });
-        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+        const logger = makeLogger();
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({ autoFill: true }),
-            logger: makeLogger(),
+            logger,
             getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', ['Dog'])]),
             submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
             rankVisually: jest.fn(async (_challenge, ids, _eligible, wantCount, options) => {
-                options.onVisualEvidence?.(new Set());
+                options.onVisualEvidence?.(new Set(['other']));
                 return ids.slice(0, wantCount);
             }),
             entryAges: ledger,
         });
-        expect(result).toBe('submitted');
         expect(ledger.isUncertain(challenge.id, 'photo')).toBe(true);
+        const warnings = logger.withCategory.mock.results.flatMap(
+            (result) => jest.mocked(result.value as jest.MockedObject<CategoryLogger>).warning.mock.calls,
+        );
+        expect(warnings).toEqual(
+            expect.arrayContaining([[expect.stringContaining('visual check did not confirm the subject'), null]]),
+        );
     });
 
     test('description words alone do not confirm the challenge subject', async () => {

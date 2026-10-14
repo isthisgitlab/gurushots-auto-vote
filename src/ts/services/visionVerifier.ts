@@ -173,6 +173,8 @@ const toLogit = (score: number | undefined): number => {
  * rejected the real smoke photo the description prompt preferred.
  *
  * @param scored - in tag/popularity order
+ * @param onAccepted - told which photos fit; never called on an abstain, where
+ *   the model could not judge the theme and so holds no evidence either way
  * @returns ids, accepted photos first; null to abstain
  */
 const orderByVisualFit = (
@@ -181,10 +183,7 @@ const orderByVisualFit = (
 ): string[] | null => {
     if (scored.length === 0) return null;
     const peak = Math.max(...scored.flatMap((item) => item.logits));
-    if (peak < ABSTAIN_LOGIT) {
-        onAccepted?.(new Set());
-        return null;
-    }
+    if (peak < ABSTAIN_LOGIT) return null;
     const fits = scored.map((item) => ({
         id: item.id,
         fit: item.logits.reduce((sum, logit) => sum + logit, 0) / item.logits.length,

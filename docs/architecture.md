@@ -371,7 +371,8 @@ repeated six times is one that gets forgotten at one of them.
 - **It only reorders and never empties a pick.** A photo's fit is the mean logit over the prompts; photos
   more than `ln(10)` below the best fit move behind the rest, and tag/popularity order is kept inside both
   groups. It **abstains** (original order) when the title has no visual subject, when no photo reaches
-  `ABSTAIN_LOGIT` for any prompt, or on any load/inference/URL failure. Both thresholds were calibrated on
+  `ABSTAIN_LOGIT` for any prompt, or on any load/inference/URL failure. An abstain reports no visual
+  evidence, so the uncertain-photo check falls back to the semantic/keyword evidence. Both thresholds were calibrated on
   16 live challenges (2026-09-24) — re-measure against real shortlists before moving them.
 - **Packaging, per shell** — the model is fetched and sha256-pinned at build time by
   `scripts/fetch-vision-model.ts`; nothing downloads at runtime (`allowRemoteModels = false`).
