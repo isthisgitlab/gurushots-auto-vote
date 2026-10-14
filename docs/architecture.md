@@ -362,6 +362,7 @@ repeated six times is one that gets forgotten at one of them.
   decision. One call site feeds every submission path: `verifyFillPick()` in `services/autoFill/pipeline/verify.ts` (auto, emergency,
   manual, and fill-new fills via `runFillAttempt`, plus swaps via `rankCandidatesForChallenge`), and
   `pickJoinPhoto()` (`services/joinChallenges/photoPick.ts`) for auto-join.
+- **Suggestions** (Pick… > Auto, `list-photos --suggest`): `suggest-photos` ranks the library under the same rules as the scheduled fill (`suggestFillPhotos`) without a submitter in its deps, so it can never submit. It has its own photo-stats budget (`createStatsBudget()`), so a ranking neither spends nor trips a running pass's budget or breaker, and its answer is kept for 2 minutes in `libraryCache` (per account and challenge, re-filtered against the live entries and dropped by `dropContext`).
 - **Prompts come from the challenge, never a theme list**: `a photo of <subject>` from
   `visualSubjectWords()` (the title subject — series prefix, negated words and `ignoreTitleWords` removed,
   **unstemmed**, and deliberately without `abstractTitleWords`, which reads "leaves" as a verb) plus

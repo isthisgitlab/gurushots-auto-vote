@@ -1,4 +1,4 @@
-import { ipcErrorText } from '@/api/ipcErrorText';
+import { ipcErrorText, suggestErrorText } from '@/api/ipcErrorText';
 
 const t = (key: string) => `[${key}]`;
 
@@ -51,5 +51,31 @@ describe('ipcErrorText', () => {
         expect(ipcErrorText(null, t)).toBeNull();
         expect(ipcErrorText(undefined, t)).toBeUndefined();
         expect(ipcErrorText('', t)).toBe('');
+    });
+});
+
+describe('suggestErrorText', () => {
+    test.each([
+        ['no-chosen-entered', 'errors.suggestNoChosenEntered'],
+        ['no-chosen-unusable', 'errors.suggestNoChosenUnusable'],
+        ['no-match', 'errors.suggestNoMatch'],
+        ['no-eligible', 'errors.suggestNoEligible'],
+        ['suggest-busy', 'errors.suggestBusy'],
+        ['account-changed', 'errors.suggestAccountChanged'],
+        ['challenge-ended', 'errors.suggestChallengeEnded'],
+        ['invalid-args', 'errors.actionInvalidArgs'],
+        ['not-logged-in', 'errors.notLoggedIn'],
+        ['fetch-failed', 'errors.suggestFailed'],
+        ['suggest-failed', 'errors.suggestFailed'],
+        ['ECONNRESET at socket.js:12', 'errors.suggestFailed'],
+        ['constructor', 'errors.suggestFailed'],
+    ])('words %j as %s', (error, key) => {
+        expect(suggestErrorText(error, t)).toBe(`[${key}]`);
+    });
+
+    test('a missing error stays missing', () => {
+        expect(suggestErrorText(null, t)).toBeNull();
+        expect(suggestErrorText(undefined, t)).toBeUndefined();
+        expect(suggestErrorText('', t)).toBe('');
     });
 });

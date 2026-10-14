@@ -187,6 +187,7 @@ function usePickModal({
                 max={slotsRemaining}
                 submitting={picking}
                 error={ipcErrorText(failure, t)}
+                suggest
                 onSubmit={submit}
             />
         ),

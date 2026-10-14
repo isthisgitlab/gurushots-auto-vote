@@ -46,3 +46,24 @@ export const ipcErrorText = <E extends string | null | undefined>(
     t: (key: string) => string,
     fallbackKey = 'errors.actionFailed',
 ) => (error ? t(Object.hasOwn(KNOWN_ERRORS, error) ? KNOWN_ERRORS[error] : fallbackKey) : error);
+
+/** The translation key for each code the photo suggestions (Pick… > Auto) answer with. */
+const SUGGEST_ERRORS: Record<string, string> = {
+    'no-chosen-entered': 'errors.suggestNoChosenEntered',
+    'no-chosen-unusable': 'errors.suggestNoChosenUnusable',
+    'no-match': 'errors.suggestNoMatch',
+    'no-eligible': 'errors.suggestNoEligible',
+    'suggest-busy': 'errors.suggestBusy',
+    'account-changed': 'errors.suggestAccountChanged',
+    'challenge-ended': 'errors.suggestChallengeEnded',
+};
+
+/**
+ * Display text for a failed photo suggestion: its own codes get their own wording, a failure every action can
+ * have (not logged in, invalid arguments) its usual text, and anything else (`fetch-failed`, `suggest-failed`)
+ * says the ranking failed. A missing error stays missing.
+ */
+export const suggestErrorText = <E extends string | null | undefined>(error: E, t: (key: string) => string) =>
+    error && Object.hasOwn(SUGGEST_ERRORS, error)
+        ? t(SUGGEST_ERRORS[error])
+        : ipcErrorText(error, t, 'errors.suggestFailed');

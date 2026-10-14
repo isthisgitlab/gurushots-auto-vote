@@ -57,6 +57,19 @@ export const errors = {
         'The photos were not submitted. A submit for this challenge is already running. Wait for it to finish, then check the card.',
     pickUnclear:
         'The photos may have been submitted. GuruShots did not answer clearly, and the card is refreshing. Check the card before you try again.',
+    suggestNoChosenEntered:
+        'Nothing to suggest. Submit Only Chosen Photos is on and every chosen photo is already entered. Pick… does not apply Submit Only, so pick any photo here, or update your Chosen Photos.',
+    suggestNoChosenUnusable:
+        'Nothing to suggest. Submit Only Chosen Photos is on and none of your chosen photos can go in this challenge. Pick any photo here, or update your Chosen Photos.',
+    suggestNoMatch: 'Nothing to suggest. No photo matches your Must Include Tags. Loosen the tags, or pick by hand.',
+    suggestNoEligible:
+        'Nothing to suggest. Your library has no photo this challenge accepts right now. Upload one, or try a search.',
+    suggestBusy: 'The photos were not ranked. Another ranking is still running. Wait for it to finish, then try again.',
+    suggestAccountChanged: 'The photos were not ranked. You switched accounts while it ran. Reopen Pick….',
+    suggestChallengeEnded:
+        'The photos were not ranked. This challenge has ended or could not be read. Close this window and reopen the card.',
+    suggestFailed:
+        'The photos were not ranked. GuruShots did not answer, or the ranking did not finish. Try again in a moment.',
     fetchChallengesFailed: 'The challenges could not be loaded. GuruShots did not answer. Try again in a moment.',
     accountChanged: 'The account changed while the list was loading, so the result was dropped. Open the list again.',
     accountCheckFailed: 'The account could not be checked. GuruShots did not answer. Try again in a moment.',
@@ -856,6 +869,17 @@ export const app = {
     pickNoSlots: 'No open slots left: every slot already holds a photo. Close this window.',
     pickSubmit: 'Submit',
     pickSubmitCount: 'Submit {count}',
+    pickAuto: 'Auto',
+    pickAutoHelp:
+        'Auto ranks your photos by your auto-submit rules, including the local image check. Nothing is submitted.',
+    pickAutoRunning: 'Ranking your photos… this can take a minute. Nothing is submitted.',
+    pickSuggestedTitle: 'Suggestions',
+    pickSuggestedCount: 'Suggestions: {count}',
+    pickSuggestedStatsLimited:
+        "Popularity stats couldn't all be read (the lookups kept failing), so this ranking leans on tags and the image check.",
+    pickSuggestionRank: 'Suggestion #{n}',
+    pickAddSuggestions: 'Add suggestions',
+    pickAddSuggestionsFull: 'No free slots',
     swapPickTitle: 'Choose the photo to swap in',
     swapPickHelp:
         "The photo you pick replaces the current one as is: your tag filters and Chosen Photos setting don't apply. GuruShots checks whether the challenge accepts it only when the swap is spent.",

@@ -82,11 +82,30 @@ function PositionBadge({ position }: { position: number | null }) {
     );
 }
 
-function PhotoTile({
+/** A tile's name with "Suggestion #3." added after it when it stands in the suggestions. */
+const withRank = (label: string, t: (key: string) => string, rank: number | null): string =>
+    rank === null ? label : `${label.replace(/[.!?]*$/, '.')} ${interp(t('app.pickSuggestionRank'), { n: rank })}.`;
+
+/** The visible "#3" on a suggestion's tile: its rank, fixed whatever is picked. */
+function RankBadge({ rank }: { rank: number | null }) {
+    const { t } = useTranslation();
+    return rank === null ? null : (
+        <span
+            role="img"
+            aria-label={interp(t('app.pickSuggestionRank'), { n: rank })}
+            className="badge badge-secondary badge-sm self-start"
+        >
+            #{rank}
+        </span>
+    );
+}
+
+export function PhotoTile({
     photo,
     memberId,
     selected,
     position,
+    rank = null,
     blockedReason,
     atCap,
     fullKey,
@@ -100,6 +119,8 @@ function PhotoTile({
     selected: boolean;
     /** Where the photo stands in the list (1-based), for a selected tile; null otherwise. */
     position: number | null;
+    /** Where the photo stands in the suggestions (1-based), for a suggestion's tile; null otherwise. */
+    rank?: number | null;
     blockedReason: string | null;
     atCap: boolean;
     /** The translation key of what a tile that cannot be added because the selection is full says. */
@@ -128,10 +149,18 @@ function PhotoTile({
         <button
             type="button"
             aria-pressed={selected}
-            aria-label={withPosition(
-                interp(t('app.photoChooserTileLabel'), { id: shortId(photo.id), labels, reason: reason ?? '' }).trim(),
+            aria-label={withRank(
+                withPosition(
+                    interp(t('app.photoChooserTileLabel'), {
+                        id: shortId(photo.id),
+                        labels,
+                        reason: reason ?? '',
+                    }).trim(),
+                    t,
+                    position,
+                ),
                 t,
-                position,
+                rank,
             )}
             aria-disabled={unavailable}
             className={`${TILE_BASE} ${tone}`}
@@ -140,6 +169,7 @@ function PhotoTile({
             }}
         >
             <PositionBadge position={position} />
+            <RankBadge rank={rank} />
             {showImage ? (
                 <img
                     src={url as string}
@@ -289,6 +319,7 @@ export function PhotoGrid({
     max = MAX_CHOSEN_PHOTOS,
     fullKey = 'app.photoChooserListFull',
     numbered = true,
+    extraPhotos,
 }: {
     state: ListState;
     known: Map<string, LibraryPhoto>;
@@ -322,6 +353,8 @@ export function PhotoGrid({
     fullKey?: string;
     /** Selected tiles show their position (a list's order); off for a plain set. */
     numbered?: boolean;
+    /** Records of photos the listing may not return (the suggestions), looked up after it for a selected id. */
+    extraPhotos?: ReadonlyMap<string, LibraryPhoto>;
 }) {
     const { t } = useTranslation();
     // Every won id this chooser has been told of: a search that no longer lists a chosen photo still knows it has won.
@@ -353,7 +386,7 @@ export function PhotoGrid({
     const won = everWon.current;
     // A preview's photos carry no marks and are not remembered in `known`, so the selection is looked up in them.
     const previewPhotos = listing.preview ? new Map(listing.photos.map((photo) => [photo.id, photo])) : null;
-    const lookup = (id: string): LibraryPhoto | undefined => (previewPhotos ?? known).get(id);
+    const lookup = (id: string): LibraryPhoto | undefined => (previewPhotos ?? known).get(id) ?? extraPhotos?.get(id);
     const atCap = selected.length >= max;
     let position = 0;
     const blockedReasonOf = (photo: LibraryPhoto): string | null => {

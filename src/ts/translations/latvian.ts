@@ -57,6 +57,19 @@ export const errors = {
         'Foto netika iesniegti. Šajā izaicinājumā foto iesniegšana jau notiek. Pagaidi, kamēr tā beidzas, un pārbaudi kartīti.',
     pickUnclear:
         'Foto, iespējams, tika iesniegti. GuruShots neatbildēja skaidri, un kartīte tiek atsvaidzināta. Pārbaudi kartīti, pirms mēģini vēlreiz.',
+    suggestNoChosenEntered:
+        'Nav ko ieteikt. Ir ieslēgts uzstādījums „Iesniegt tikai izvēlētos foto”, un visi izvēlētie foto jau ir iesniegti. Poga „Izvēlēties…” šo uzstādījumu nepiemēro, tāpēc izvēlies jebkuru foto šeit vai atjauno izvēlētos foto.',
+    suggestNoChosenUnusable:
+        'Nav ko ieteikt. Ir ieslēgts uzstādījums „Iesniegt tikai izvēlētos foto”, un neviens izvēlētais foto šim izaicinājumam neder. Izvēlies jebkuru foto šeit vai atjauno izvēlētos foto.',
+    suggestNoMatch:
+        'Nav ko ieteikt. Neviens foto neatbilst taviem obligātajiem tagiem. Atbrīvo tagus vai izvēlies foto pats.',
+    suggestNoEligible:
+        'Nav ko ieteikt. Tavā bibliotēkā šobrīd nav foto, ko šis izaicinājums pieņem. Augšupielādē foto vai pamēģini meklēšanu.',
+    suggestBusy: 'Foto netika sarindoti. Cita rindošana vēl turpinās. Pagaidi, kamēr tā beidzas, un mēģini vēlreiz.',
+    suggestAccountChanged: 'Foto netika sarindoti. Rindošanas laikā tu nomainīji kontu. Atver „Izvēlēties…” vēlreiz.',
+    suggestChallengeEnded:
+        'Foto netika sarindoti. Izaicinājums ir beidzies vai to nevarēja nolasīt. Aizver šo logu un atver kartīti vēlreiz.',
+    suggestFailed: 'Foto netika sarindoti. GuruShots neatbildēja vai rindošana nepabeidzās. Mēģini vēlreiz pēc brīža.',
     fetchChallengesFailed: 'Izaicinājumus neizdevās ielādēt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
     accountChanged: 'Saraksta ielādes laikā mainījās konts, tāpēc rezultāts tika atmests. Atver sarakstu vēlreiz.',
     tokenNotSaved:
@@ -868,6 +881,17 @@ export const app = {
     pickNoSlots: 'Brīvu vietu vairs nav: katrā vietā jau ir foto. Aizver šo logu.',
     pickSubmit: 'Iesniegt',
     pickSubmitCount: 'Iesniegt {count} foto',
+    pickAuto: 'Automātiski',
+    pickAutoHelp:
+        'Šī poga sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem, arī ar vietējo attēlu pārbaudi. Nekas netiek iesniegts.',
+    pickAutoRunning: 'Foto tiek sarindoti… tas var aizņemt minūti. Nekas netiek iesniegts.',
+    pickSuggestedTitle: 'Ieteikumi',
+    pickSuggestedCount: 'Ieteikumi: {count}',
+    pickSuggestedStatsLimited:
+        'Popularitātes statistiku neizdevās nolasīt pilnībā (pieprasījumi turpināja neizdoties), tāpēc rindojums balstās uz tagiem un attēlu pārbaudi.',
+    pickSuggestionRank: 'Ieteikums Nr. {n}',
+    pickAddSuggestions: 'Pievienot ieteikumus',
+    pickAddSuggestionsFull: 'Nav brīvu vietu',
     swapPickTitle: 'Izvēlies foto, ar ko apmainīt',
     swapPickHelp:
         'Izvēlētais foto aizstās pašreizējo bez tagu filtriem un uzstādījuma „Izvēlētie foto”. Vai izaicinājums to pieņem, GuruShots pārbauda tikai tad, kad apmaiņa tiek veikta.',
