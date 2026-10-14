@@ -128,6 +128,22 @@ describe('autovoteScheduler resolvers', () => {
         });
     });
 
+    it('resolveCurrencyAuto: Manual Photos Only leaves the swap with no wake, as the Node resolver does', async () => {
+        const values = {
+            autoKeyUnlock: true,
+            autoKeyAfterStart: 60,
+            autoSwap: true,
+            autoSwapAfterStart: 60,
+            autoExposureFill: true,
+            autoExposureFillAfterStart: 60,
+        };
+        withSettings({ ...values, autoKeyBeforeEnd: 0, autoKeyAfterPercent: 0, manualPhotosOnly: true });
+        await expect(resolveCurrencyAuto('c1')).resolves.toMatchObject({ swap: null, key: { afterStartSec: 60 } });
+        expect(mockApi.getEffectiveSetting).toHaveBeenCalledWith('manualPhotosOnly', 'c1');
+        withSettings({ ...values, autoSwapBeforeEnd: 0, autoSwapAfterPercent: 0, manualPhotosOnly: false });
+        await expect(resolveCurrencyAuto('c1')).resolves.toMatchObject({ swap: { afterStartSec: 60 } });
+    });
+
     it('computeNextCycleDelayMs defaults the timezone and falls back to the normal delay', async () => {
         withSettings({});
         const now = Math.floor(Date.now() / 1000);

@@ -319,6 +319,13 @@ describe('validateScenario — semantic checks', () => {
             });
         });
 
+        test('Manual Photos Only cannot be overlaid either, and says so in its own words', () => {
+            expect(withSettings({ manualPhotosOnly: false })).toEqual([
+                { path: 'phases.main.settings.manualPhotosOnly', message: 'A phase cannot change Manual Photos Only' },
+            ]);
+            expect(withSettings({ manualPhotosOnly: true })[0].message).not.toContain('scenario assignment');
+        });
+
         test('each value is validated like a setting', () => {
             expect(withSettings({ autoFill: 'yes' })[0].path).toBe('phases.main.settings.autoFill');
         });

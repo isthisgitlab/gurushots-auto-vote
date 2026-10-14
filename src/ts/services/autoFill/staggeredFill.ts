@@ -8,6 +8,7 @@ import { resolveScheduleTarget } from './schedule';
 import { getEntries, getSlotsRemaining, reflectNewEntry } from './challengeState';
 import { runFillAttempt } from './pipeline';
 import { finiteOr } from '../../numbers';
+import { isManualPhotosOnly } from '../manualPhotosOnly';
 
 import type { Challenge } from '../../types/gurushots';
 import type { SettingsFillDeps } from '../../types/autoFill';
@@ -32,6 +33,7 @@ const maybeAutoFillChallenge = async (
     const { settings, logger } = deps;
     const challengeId = challenge?.id;
     if (challengeId === undefined || challengeId === null) return 'skipped';
+    if (isManualPhotosOnly(settings, challengeId)) return 'disabled';
 
     const enabled = settings.getEffectiveSetting('autoFill', String(challengeId));
     if (enabled !== true) return 'disabled';

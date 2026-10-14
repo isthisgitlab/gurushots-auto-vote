@@ -62,6 +62,7 @@ jest.mock('../../src/ts/settings', () => ({
     getChallengeProfiles: jest.fn(() => ({})),
     resolveRuleSetting: jest.fn(() => null),
     hasRuleJoinOptIn: jest.fn(() => false),
+    getChallengeOverride: jest.fn(() => null),
 }));
 
 import cancellationModule = require('../../src/ts/voting/cancellation');
@@ -4045,5 +4046,120 @@ describe('on the app window, where the background service writes the same claims
         });
         await pruneClosedClaims([{ id: 1 }], 'tok', deps());
         expect(native.keys()).toEqual(['10', '9']);
+    });
+});
+
+describe('runJoinPass — Manual Photos Only', () => {
+    const A = 'a'.repeat(32);
+    const memberIdentity = require('../../src/ts/services/autoFill/memberIdentity') as typeof memberIdentityModule;
+    const switchOn = () =>
+        settings.getEffectiveSetting.mockImplementation((k) => ({ ...DEFAULT_SETTINGS, manualPhotosOnly: true })[k]);
+    const paidNotEntered = () =>
+        warned().mock.calls.filter(([msg]) => String(msg).includes('already paid for, but no photo is entered'));
+    const paidPass = (id: number) =>
+        makeDeps({
+            getMemberChallenges: openList([{ id, join_coins: 100, type: 'flash' }]),
+            getCurrentMemberProfile: jest.fn(async () => ({ id: A, userName: 'u' })),
+            joinStateStore: fileWith({ [`${A}:${id}`]: { unlockedAt: RECENT } }),
+        });
+    const warned = () => invalid<LoggerMock>(require('../../src/ts/logger')).withCategory().warning;
+
+    beforeEach(() => memberIdentity.__resetMemberIdCache());
+
+    test('off: the candidate joins as ever, and no warning is written', async () => {
+        const deps = makeDeps({ getMemberChallenges: openList([{ id: 21, join_coins: 0, type: 'flash' }]) });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res.results).toEqual([{ id: 21, status: 'joined' }]);
+        expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+        expect(paidNotEntered()).toHaveLength(0);
+    });
+
+    test('on: a free candidate is skipped and nothing is submitted', async () => {
+        switchOn();
+        const deps = makeDeps({ getMemberChallenges: openList([{ id: 22, join_coins: 0, type: 'flash' }]) });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res.results).toEqual([{ id: 22, status: 'skipped:manual-photos-only' }]);
+        expect(res.joined).toBe(0);
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(paidNotEntered()).toHaveLength(0);
+    });
+
+    test('on for one title through a rule: only that candidate is skipped', async () => {
+        rulesGive((target) => (titleOf(target) === 'Manual' ? { manualPhotosOnly: true } : {}));
+        const deps = makeDeps({
+            getMemberChallenges: openList([
+                { id: 23, join_coins: 0, type: 'flash', title: 'Manual' },
+                { id: 24, join_coins: 0, type: 'flash', title: 'Other' },
+            ]),
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res.results).toEqual([
+            { id: 23, status: 'skipped:manual-photos-only' },
+            { id: 24, status: 'joined' },
+        ]);
+    });
+
+    test('an un-joined id the user switched it on for is honoured through the per-id override', async () => {
+        settings.getChallengeOverride.mockImplementation((key, id) =>
+            key === 'manualPhotosOnly' && id === '25' ? true : null,
+        );
+        try {
+            const deps = makeDeps({
+                getMemberChallenges: openList([
+                    { id: 25, join_coins: 0, type: 'flash' },
+                    { id: 26, join_coins: 0, type: 'flash' },
+                ]),
+            });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results).toEqual([
+                { id: 25, status: 'skipped:manual-photos-only' },
+                { id: 26, status: 'joined' },
+            ]);
+        } finally {
+            settings.getChallengeOverride.mockImplementation(() => null);
+        }
+    });
+
+    test('a join already paid for is not entered either, and the warning names the challenge, once per challenge', async () => {
+        switchOn();
+        const deps = paidPass(27);
+        for (let pass = 0; pass < 3; pass++) {
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results).toEqual([{ id: 27, status: 'skipped:manual-photos-only' }]);
+        }
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        const warnings = paidNotEntered();
+        expect(warnings).toHaveLength(1);
+        expect(String(warnings[0][0])).toContain('challenge 27');
+        expect(String(warnings[0][0])).toContain('Join or Pick');
+        // Another paid challenge gets its own warning.
+        await runJoinPass('tok', Date.now(), paidPass(28));
+        expect(paidNotEntered()).toHaveLength(2);
+    });
+
+    test('a paid candidate this account holds no claim for is skipped without a warning', async () => {
+        switchOn();
+        const deps = makeDeps({
+            getMemberChallenges: openList([{ id: 29, join_coins: 100, type: 'flash' }]),
+            getCurrentMemberProfile: jest.fn(async () => ({ id: A, userName: 'u' })),
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res.results).toEqual([{ id: 29, status: 'skipped:manual-photos-only' }]);
+        expect(paidNotEntered()).toHaveLength(0);
+    });
+
+    test('with auto-join off for the candidate the switch is never read', async () => {
+        settings.getEffectiveSetting.mockImplementation(
+            (k) => ({ ...DEFAULT_SETTINGS, autoJoin: false, manualPhotosOnly: true })[k],
+        );
+        settings.getTitleRules.mockReturnValue([{ title: 'Joinable', autoJoin: true }]);
+        rulesGive((target) => (titleOf(target) === 'Joinable' ? { autoJoin: true } : {}));
+        const deps = makeDeps({
+            getMemberChallenges: openList([{ id: 30, join_coins: 0, type: 'flash', title: 'Elsewhere' }]),
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res.results).toEqual([{ id: 30, status: 'skipped:autojoin-off' }]);
     });
 });

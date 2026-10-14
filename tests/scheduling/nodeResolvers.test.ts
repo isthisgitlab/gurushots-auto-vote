@@ -86,4 +86,24 @@ describe('resolveCurrencyAuto', () => {
             fill: { afterStartSec: 0, beforeEndSec: 25200, afterPercent: 50 },
         });
     });
+
+    test('Manual Photos Only leaves the swap with no wake, and the other two rules alone', () => {
+        const timing = { afterStartSec: 60, beforeEndSec: 0, afterPercent: 0 };
+        const rule = (enableKey: string, prefix: string) => ({
+            [enableKey]: true,
+            [`${prefix}AfterStart`]: 60,
+            [`${prefix}BeforeEnd`]: 0,
+            [`${prefix}AfterPercent`]: 0,
+        });
+        const values = {
+            ...rule('autoKeyUnlock', 'autoKey'),
+            ...rule('autoSwap', 'autoSwap'),
+            ...rule('autoExposureFill', 'autoExposureFill'),
+        };
+        withSettings({ ...values, manualPhotosOnly: true });
+        expect(resolveCurrencyAuto('c1')).toEqual({ key: timing, swap: null, fill: timing });
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('manualPhotosOnly', 'c1');
+        withSettings({ ...values, manualPhotosOnly: false });
+        expect(resolveCurrencyAuto('c1')).toEqual({ key: timing, swap: timing, fill: timing });
+    });
 });

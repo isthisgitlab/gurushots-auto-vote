@@ -12,7 +12,12 @@ import type { ChallengeValues, TitleRule } from '../../types/settings';
 import { cat } from './shared';
 
 // The only join settings that read the per-id override layer (see resolveJoinSetting).
-const PER_ID_JOIN_KEYS: ReadonlySet<string> = new Set(['chosenPhotos', 'chosenPhotosOnly', 'chosenPhotosInOrder']);
+const PER_ID_JOIN_KEYS: ReadonlySet<string> = new Set([
+    'chosenPhotos',
+    'chosenPhotosOnly',
+    'chosenPhotosInOrder',
+    'manualPhotosOnly',
+]);
 
 /**
  * Resolve one setting for an un-joined candidate. The id-keyed
@@ -21,13 +26,13 @@ const PER_ID_JOIN_KEYS: ReadonlySet<string> = new Set(['chosenPhotos', 'chosenPh
  * match the rules against the candidate payload itself and fall back to the
  * global default.
  *
- * Precedence (the chosen-photos keys only: the candidate's own
+ * Precedence (the chosen-photos keys and manualPhotosOnly only: the candidate's own
  * per-id override first, then the same chain): rules in list order, the first matching rule that sets the key
  * wins — a rule's inline override before the profile it names — then the
  * global default. See `ruleValuesFor` in settings/ruleResolution.ts.
  */
 const resolveJoinSetting = (key: string, challenge: Partial<Challenge>): unknown => {
-    // The chosen-photos keys also honour an override saved for THIS id: an
+    // The chosen-photos keys and manualPhotosOnly also honour an override saved for THIS id: an
     // un-joined challenge has no cached id for getEffectiveSetting, yet the
     // Discover view saves the user's choice per challenge id. Every other key
     // keeps resolving by rule alone.

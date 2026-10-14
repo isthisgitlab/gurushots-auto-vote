@@ -24,6 +24,7 @@ import type { Challenge } from '../../src/ts/types/gurushots';
 const mockChallengeSettings = {
     hasCustomSettings: false,
     autoFillEnabled: false,
+    manualPhotosOnly: false,
     isCompact: false,
     hasCompactOverride: false,
     toggleCompact: jest.fn(),
@@ -95,6 +96,7 @@ beforeEach(() => {
     Object.assign(mockChallengeSettings, {
         hasCustomSettings: false,
         autoFillEnabled: false,
+        manualPhotosOnly: false,
         isCompact: false,
         hasCompactOverride: false,
         toggleCompact: jest.fn(),
@@ -128,6 +130,7 @@ describe('ChallengeCard badge row — logical/state badges', () => {
                 lowExposure
                 exposureFactor={0}
                 showAutoFillBadge
+                showManualPhotosBadge={false}
                 hasCustomSettings
             />,
         );
@@ -148,6 +151,21 @@ describe('ChallengeCard badge row — logical/state badges', () => {
         mockChallengeSettings.autoFillEnabled = true;
         const { container } = renderCard(makeChallenge({ maxPhotos: 4, entriesCount: 4 }));
         expect(badgeByText(container, '📥 app.autoFillBadge')).toBeFalsy();
+    });
+
+    test('Manual Photos Only shows its own badge in place of the auto-submit one', () => {
+        mockChallengeSettings.autoFillEnabled = true;
+        mockChallengeSettings.manualPhotosOnly = true;
+        const { container } = renderCard(makeChallenge());
+        const manual = badgeByText(container, '✋ app.manualPhotosBadge');
+        expect(manual).toBeTruthy();
+        expect(manual!.className).toMatch(/badge-info/);
+        expect(badgeByText(container, '📥 app.autoFillBadge')).toBeFalsy();
+    });
+
+    test('the manual-photos badge is absent while the switch is off', () => {
+        const { container } = renderCard(makeChallenge());
+        expect(badgeByText(container, '✋ app.manualPhotosBadge')).toBeFalsy();
     });
 
     test('photo-count badge is hidden for single-submission challenges', () => {

@@ -8,6 +8,7 @@ import * as settings from '../../settings';
 import { isBoostWindowOpen as boostWindowOpen } from '../../voting/boostWindow';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
 import { livePinnedId, pickEntryAvoidingConflict, resolvePin } from './entryPick';
+import { isManualPhotosOnly } from '../manualPhotosOnly';
 
 interface TurboDecision {
     apply: boolean;
@@ -272,11 +273,14 @@ const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergenc
     const applyWith = (decision: TurboDecision): TurboDecision =>
         pinFallback ? { ...decision, pinFallback } : decision;
 
-    const fillNew = settings.getEffectiveSetting('turboFillNew', challengeId) === true;
+    // Manual Photos Only turns both fresh-photo options off: the turbo goes on an entry already there.
+    const manualOnly = isManualPhotosOnly(settings, challengeId);
+    const fillNew = !manualOnly && settings.getEffectiveSetting('turboFillNew', challengeId) === true;
     // Narrower opt-in: fill a fresh photo ONLY to break a boost/turbo conflict
     // (the single existing entry already has Boost, so Turbo cannot go there).
     // `turboFillNew` (always) takes precedence and is handled first below.
-    const fillNewOnConflict = settings.getEffectiveSetting('turboFillNewOnConflict', challengeId) === true;
+    const fillNewOnConflict =
+        !manualOnly && settings.getEffectiveSetting('turboFillNewOnConflict', challengeId) === true;
 
     // Resolve the existing-entry pick. With fill-new on it is only the
     // fallback target (used when no fresh photo can be submitted), so an

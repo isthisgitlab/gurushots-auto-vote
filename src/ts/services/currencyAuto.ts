@@ -32,6 +32,7 @@ import type * as currencyAutoStore from '../currencyAutoStore';
 import { neediestFillMission } from './missions';
 import type { FillMission, MissionNeeds } from './missions';
 import { errorMessage } from '../errorMessage';
+import { isManualPhotosOnly } from './manualPhotosOnly';
 
 type AutoSpendLedger = ReturnType<typeof currencyAutoStore.createAutoSpendLedger>;
 
@@ -202,6 +203,7 @@ const runAutoSwap = guarded('swap', async (ctx) => {
     const { challenge, token } = ctx;
     const id = String(challenge.id);
     if (settings.getEffectiveSetting('autoSwap', id) !== true) return false;
+    if (isManualPhotosOnly(settings, id)) return false;
     if (!baseGate('swap', 'autoSwap', ctx)) return false;
 
     const ranking = (challenge.member as ChallengeMember).ranking;

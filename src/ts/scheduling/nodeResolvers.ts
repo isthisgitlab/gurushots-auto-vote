@@ -9,6 +9,7 @@
 
 import * as settings from '../settings';
 import { getScenarioStatus, scenarioWakeInput } from '../services/scenarioStatus';
+import { isManualPhotosOnly } from '../services/manualPhotosOnly';
 
 import type {
     ResolveThreshold,
@@ -86,7 +87,8 @@ const currencyTimingOf = (
 
 const resolveCurrencyAuto = ((challengeId: string) => ({
     key: currencyTimingOf('autoKeyUnlock', 'autoKey', challengeId),
-    swap: currencyTimingOf('autoSwap', 'autoSwap', challengeId),
+    // Manual Photos Only: no swap ever fires on its own, so the scheduler has no wake to hold for it.
+    swap: isManualPhotosOnly(settings, challengeId) ? null : currencyTimingOf('autoSwap', 'autoSwap', challengeId),
     fill: currencyTimingOf('autoExposureFill', 'autoExposureFill', challengeId),
 })) satisfies ResolveCurrencyAuto;
 

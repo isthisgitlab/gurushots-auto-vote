@@ -26,8 +26,15 @@ const SETTING_PAIRS = [
     ['finalWindowExposure', 'finalWindowExposureTarget'],
 ];
 
-/** Setting keys a phase may never overlay. */
-const PHASE_FORBIDDEN_KEYS = new Set(['scenario']);
+/**
+ * Setting keys a phase may never overlay, each with its refusal. A phase overlay sits above every
+ * layer, the per-challenge override included, so a phase setting `manualPhotosOnly: false` would
+ * turn automatic photo entry back on against the user's own switch.
+ */
+const PHASE_FORBIDDEN_KEYS = new Map([
+    ['scenario', 'A phase cannot change the scenario assignment itself'],
+    ['manualPhotosOnly', 'A phase cannot change Manual Photos Only'],
+]);
 
 /**
  * Nesting depth of a condition list (a flat list is depth 1).
@@ -68,8 +75,9 @@ const phaseSettingsIssues = (
     const context = { ...globalDefaults, ...values };
     for (const [key, value] of Object.entries(values)) {
         const path = `${basePath}.${key}`;
-        if (PHASE_FORBIDDEN_KEYS.has(key)) {
-            issues.push({ path, message: 'A phase cannot change the scenario assignment itself' });
+        const forbidden = PHASE_FORBIDDEN_KEYS.get(key);
+        if (forbidden !== undefined) {
+            issues.push({ path, message: forbidden });
         } else if (!schemaEntry(key)?.perChallenge) {
             issues.push({ path, message: 'Not a per-challenge setting' });
         } else if (!validateSetting(key, value, context)) {

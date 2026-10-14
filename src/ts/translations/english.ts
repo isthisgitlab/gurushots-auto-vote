@@ -723,6 +723,7 @@ export const app = {
     validationOutOfRange: 'Enter a value between {min} and {max}.',
     validationAtLeast: 'Enter a value of {min} or more.',
     autoFillBadge: 'auto-submit',
+    manualPhotosBadge: 'manual photos',
     customBadge: 'custom',
     customSettingsHint: 'Has custom settings',
     mustIncludeTags: 'Must Include Tags',
@@ -739,7 +740,7 @@ export const app = {
         "With Chosen Photos set, enter them in the order you picked them (the numbers in the chooser) instead of ranking them the way the app ranks its own picks. A photo that fails your must-include tags, is already entered or isn't offered for the challenge is skipped, and the next one in the list is used; any slots left over are filled by ranking as usual. Off by default.",
     chosenPhotosOnly: 'Submit Only Chosen Photos',
     chosenPhotosOnlyDesc:
-        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically (Pick… on a challenge card submits photos you choose, once), Emergency Submit ignores this setting (turn Emergency Submit off for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted. Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your must-include tags, they can still be entered. With an empty list this does nothing.',
+        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically (Pick… on a challenge card submits photos you choose, once), Emergency Submit ignores this setting (turn on Manual Photos Only for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted (unless Manual Photos Only is on: then enter a photo with Join or Pick…). Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your must-include tags, they can still be entered. With an empty list this does nothing.',
     chosenPhotosMemberId: 'Chosen Photos Account',
     chosenPhotosClearedAt: 'Chosen Photos Cleared At',
     chosenPhotosClearedAtDesc:
@@ -1120,6 +1121,12 @@ export const app = {
     normal: 'NORMAL',
     of: 'of',
     onePhoto: '1 photo',
+    manualPhotosOnly: 'Manual Photos Only',
+    manualPhotosOnlyDesc:
+        "The app never joins, submits or swaps a photo in this challenge on its own, and that includes scenario steps that enter or swap a photo. Your manual Join and +1/+N still pick the photo themselves, while Pick… and Swap let you choose. Boost and Turbo still go on entries you already have. For a challenge you haven't joined yet, or one that comes back under a new id, use a Challenge Rule.",
+    manualPhotosOnlyHint: 'Manual Photos Only is on for this challenge, so this never enters a photo by itself.',
+    manualPhotosOnlyBoostHint:
+        'Manual Photos Only is on for this challenge, so Boost and Turbo go on an entry you already have, never on a fresh photo.',
     onlyBoost: 'Only Boost Mode',
     onlyBoostDesc: 'Skip regular voting for this challenge entirely and only apply Boost.',
     voteOnNewEntry: 'Vote on New Entry',
@@ -1372,6 +1379,7 @@ export const app = {
     scenarioIssueTooLarge: 'The file is larger than {kb} KB.',
     scenarioIssueNotJson: 'This is not valid JSON.',
     scenarioIssuePhaseScenario: 'A phase cannot change which scenario is assigned.',
+    scenarioIssuePhaseManualPhotos: 'A phase cannot change Manual Photos Only.',
     scenarioIssueNotPerChallenge: 'This setting cannot be set for a single challenge.',
     scenarioIssueSetTogether: 'Set {fields} together.',
     scenarioIssueConflictDefaults: 'These values conflict with the global defaults they work together with.',

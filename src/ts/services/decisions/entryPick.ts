@@ -12,6 +12,7 @@ import * as settings from '../../settings';
 // 0 = last / 1-4 = slot addressing, shared with the swap automation.
 import { resolveEntryIndex } from '../../voting/entrySlot';
 import { canStillFire, findPinnedEntry } from '../../voting/entryPins';
+import { isManualPhotosOnly } from '../manualPhotosOnly';
 
 /**
  * Resolve the photo pinned for `kind` against the challenge's current entries.
@@ -123,7 +124,8 @@ const pickBoostEntry = (challenge: Challenge, challengeId: string): RankingEntry
  *   already turboed (so Boost cannot be placed on any existing entry): submit a
  *   fresh photo purely to break that boost/turbo conflict.
  * - `'no'` — boost an existing entry the normal way (always the case while the photo pinned
- *   for Boost is usable: the pin names the target).
+ *   for Boost is usable: the pin names the target, and while Manual Photos Only is on: no
+ *   fresh photo is ever submitted by itself).
  *
  * `boostFillNew` (always) takes precedence over `boostFillNewOnConflict`, and the
  * conflict mode only engages when the conflict actually exists — mirroring the
@@ -131,6 +133,7 @@ const pickBoostEntry = (challenge: Challenge, challengeId: string): RankingEntry
  * one entry means the single entry carries the other feature's flag.
  */
 const resolveBoostFillNewMode = (challenge: Challenge, challengeId: string): 'always' | 'conflict' | 'no' => {
+    if (isManualPhotosOnly(settings, challengeId)) return 'no';
     if (resolvePin(challenge, challengeId, 'boost').state === 'hit') return 'no';
     if (settings.getEffectiveSetting('boostFillNew', challengeId) === true) return 'always';
     if (settings.getEffectiveSetting('boostFillNewOnConflict', challengeId) === true) {

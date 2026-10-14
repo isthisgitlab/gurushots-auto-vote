@@ -27,7 +27,20 @@ export const TITLE_RULE_INLINE_KEYS = [
     'chosenPhotos',
     'chosenPhotosOnly',
     'chosenPhotosInOrder',
+    'manualPhotosOnly',
 ];
+
+/**
+ * Keys that exist only as "on": `false` is stored nowhere but a challenge's own override. Rules
+ * resolve first-match-wins per key, so an explicit `false` in an early broad rule or in a profile
+ * would silently cancel a later, more specific "on". The rule sanitizer and the profile sanitizer
+ * drop it, and the rule editor offers only inherit / on.
+ */
+export const ON_ONLY_KEYS: readonly string[] = ['manualPhotosOnly'];
+
+/** Whether a value is the `false` an on-only key may not hold in a rule or profile. */
+export const isDroppedOffValue = (key: string, value: unknown): boolean =>
+    value === false && ON_ONLY_KEYS.includes(key);
 
 /**
  * The inline keys that only decide whether, and when, an un-joined challenge is joined. Once it is
@@ -39,10 +52,13 @@ const JOIN_ONLY_INLINE_KEYS = ['autoJoin', 'autoJoinWithinHoursOfEnd', 'autoJoin
 export const hasPostJoinInlineValue = (inline: Record<string, unknown>): boolean =>
     Object.keys(inline).some((key) => TITLE_RULE_INLINE_KEYS.includes(key) && !JOIN_ONLY_INLINE_KEYS.includes(key));
 
-/** The inline overrides a rule sets: the allowlisted keys whose value is not the editor's "inherit" (null, undefined, ''). */
+/**
+ * The inline overrides a rule sets: the allowlisted keys whose value is not the editor's "inherit"
+ * (null, undefined, '') and not the `false` of an on-only key.
+ */
 export const ruleInlineEntries = (rule: Record<string, unknown>): Array<[string, unknown]> =>
     TITLE_RULE_INLINE_KEYS.filter((key) => Object.prototype.hasOwnProperty.call(rule, key)).flatMap((key) =>
-        rule[key] === null || rule[key] === undefined || rule[key] === ''
+        rule[key] === null || rule[key] === undefined || rule[key] === '' || isDroppedOffValue(key, rule[key])
             ? []
             : [[key, rule[key]] as [string, unknown]],
     );

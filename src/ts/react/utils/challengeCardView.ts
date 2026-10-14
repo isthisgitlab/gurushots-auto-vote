@@ -78,7 +78,14 @@ export function deriveChallengeCardView(
         bankroll,
         autovoteRunning,
         autoFillEnabled,
-    }: { now: number; bankroll: Bankroll | null; autovoteRunning: boolean; autoFillEnabled: boolean },
+        manualPhotosOnly,
+    }: {
+        now: number;
+        bankroll: Bankroll | null;
+        autovoteRunning: boolean;
+        autoFillEnabled: boolean;
+        manualPhotosOnly: boolean;
+    },
 ) {
     const member = (challenge as RankedChallenge).member;
     const entries = member.ranking.entries || [];
@@ -126,7 +133,9 @@ export function deriveChallengeCardView(
         lowExposure,
         exposureClass: lowExposure ? 'text-error font-bold' : '',
         cardAlertClass: `${lowExposure ? 'border-2 border-error' : 'border'}${boostOpen ? ' ring-2 ring-info ring-offset-2 ring-offset-base-100' : ''}`,
-        showAutoFillBadge: autoFillEnabled && slotsRemaining > 0,
+        // Manual Photos Only stops the auto-submit, so its badge gives way to the manual-photos one.
+        showAutoFillBadge: autoFillEnabled && !manualPhotosOnly && slotsRemaining > 0,
+        showManualPhotosBadge: manualPhotosOnly,
         // Bankroll-currency actions — shown only when the balance and the
         // challenge both allow them (shared predicates; the main process
         // re-checks the live state before spending).

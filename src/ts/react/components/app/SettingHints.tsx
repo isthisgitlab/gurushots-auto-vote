@@ -175,6 +175,15 @@ export const chosenPhotosOnlyReachHint = (t: Translate): SettingHint => ({
     text: t('app.chosenPhotosOnlyReachHint'),
 });
 
+/**
+ * Manual Photos Only is on for the challenge: the setting this hint sits under never enters a photo.
+ * The four Boost/Turbo fresh-photo options go on an entry the challenge already has instead.
+ */
+export const manualPhotosOnlyHint = (
+    t: Translate,
+    textKey: 'app.manualPhotosOnlyHint' | 'app.manualPhotosOnlyBoostHint',
+): SettingHint => ({ tone: 'text-warning', text: t(textKey) });
+
 const GLOBAL_HINTS: Map<string, (ctx: GlobalHintContext) => SettingHint[]> = new Map([
     [
         'useVotingPause',
@@ -343,6 +352,17 @@ function votingPauseStatusHints(ctx: ChallengeHintContext): SettingHint[] {
     return hints;
 }
 
+// The settings Manual Photos Only overrides: each automatic photo path it blocks.
+const MANUAL_PHOTOS_HINTED_KEYS = [
+    ['autoFill', 'app.manualPhotosOnlyHint'],
+    ['emergencyFill', 'app.manualPhotosOnlyHint'],
+    ['autoSwap', 'app.manualPhotosOnlyHint'],
+    ['boostFillNew', 'app.manualPhotosOnlyBoostHint'],
+    ['boostFillNewOnConflict', 'app.manualPhotosOnlyBoostHint'],
+    ['turboFillNew', 'app.manualPhotosOnlyBoostHint'],
+    ['turboFillNewOnConflict', 'app.manualPhotosOnlyBoostHint'],
+] as const;
+
 const CHALLENGE_HINTS: Map<string, (ctx: ChallengeHintContext) => SettingHint[]> = new Map([
     ['useScheduledFill', scheduledFillStatusHints],
     ['scheduledFillBeforeEnd', wastedFillWindowHints],
@@ -356,6 +376,10 @@ const CHALLENGE_HINTS: Map<string, (ctx: ChallengeHintContext) => SettingHint[]>
     // stepped straight over, and voting proceeds as if it were never set.
     ['votingPauseDurationMinutes', (ctx) => shortWindowHints(ctx.pause, 'app.votingPauseShortWindowHint', ctx)],
     ['voteBeforeBoost', boostPrefillHints],
+    ...MANUAL_PHOTOS_HINTED_KEYS.map(([key, textKey]): [string, (ctx: ChallengeHintContext) => SettingHint[]] => [
+        key,
+        ({ effectiveOf, t }) => (effectiveOf('manualPhotosOnly') === true ? [manualPhotosOnlyHint(t, textKey)] : []),
+    ]),
 ]);
 
 /**

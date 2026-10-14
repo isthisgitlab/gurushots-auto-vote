@@ -15,6 +15,7 @@ import * as logger from '../logger';
 import { schemaEntry, validateSetting } from './schema';
 import { challengeValueSetIsValid } from './defaults';
 import { loggableSettingValue } from './logValue';
+import { isDroppedOffValue } from './ruleBehaviour';
 
 import type { AppSettings, ChallengeValues } from '../types/settings';
 
@@ -65,7 +66,8 @@ const _profileSchemaValues = (values: ChallengeValues): ChallengeValues => {
     for (const key of Object.keys(values)) {
         // Prototype-shaped keys fall out here too: SETTINGS_SCHEMA['__proto__']
         // resolves to Object.prototype, whose .perChallenge is undefined.
-        if (schemaEntry(key)?.perChallenge) whitelisted[key] = values[key];
+        // An on-only key's `false` is dropped, not rejected: it lives only in a challenge's own override.
+        if (schemaEntry(key)?.perChallenge && !isDroppedOffValue(key, values[key])) whitelisted[key] = values[key];
     }
     return whitelisted;
 };

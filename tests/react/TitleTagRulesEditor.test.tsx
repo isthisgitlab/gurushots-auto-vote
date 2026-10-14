@@ -243,6 +243,32 @@ describe('TitleTagRulesEditor', () => {
                 expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotosInOrder: true })]);
             });
 
+            test('Manual Photos Only offers inherit and on only: a rule never holds off', () => {
+                const onChange = jest.fn();
+                render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+                const select = screen.getByLabelText<HTMLSelectElement>('app.manualPhotosOnly');
+                expect([...select.options].map((option) => option.value)).toEqual(['', 'on']);
+                expect(select.value).toBe('');
+                pick('app.manualPhotosOnly', 'on');
+                expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ manualPhotosOnly: true })]);
+                pick('app.manualPhotosOnly', '');
+                expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ manualPhotosOnly: '' })]);
+            });
+
+            test('a stored false reads as inherit, not as an option the select lacks', () => {
+                render(<TitleTagRulesEditor value={rowWith({ manualPhotosOnly: false })} onChange={jest.fn()} />);
+                expect(screen.getByLabelText<HTMLSelectElement>('app.manualPhotosOnly').value).toBe('');
+            });
+
+            test('Manual Photos Only on a rule says Auto-Submit will not enter photos', () => {
+                const { rerender } = render(
+                    <TitleTagRulesEditor value={rowWith({ manualPhotosOnly: true })} onChange={jest.fn()} />,
+                );
+                expect(screen.getByText('app.manualPhotosOnlyHint')).toBeTruthy();
+                rerender(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+                expect(screen.queryByText('app.manualPhotosOnlyHint')).toBeNull();
+            });
+
             test('Submit Only on a rule warns that it reaches every matching challenge', () => {
                 const { rerender } = render(
                     <TitleTagRulesEditor value={rowWith({ chosenPhotosOnly: true })} onChange={jest.fn()} />,

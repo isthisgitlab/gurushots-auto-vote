@@ -1,7 +1,8 @@
 import { useId } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ChosenPhotosControl, photoIdsOf } from './ChosenPhotosField';
-import { SettingHintList, chosenPhotosOnlyReachHint } from './SettingHints';
+import { SettingHintList, chosenPhotosOnlyReachHint, manualPhotosOnlyHint } from './SettingHints';
+import { isDroppedOffValue } from '../../../settings/ruleBehaviour';
 import { RuleNumberField } from './RuleFields';
 
 import type { LooseRecord, TitleRule } from '../../../types/settings';
@@ -19,7 +20,14 @@ const triPatch = (key: string, raw: string): LooseRecord => ({
     [key]: raw === 'on' ? true : raw === 'off' ? false : '',
 });
 
-function TristateSelect({ rule, settingKey, labelKey, onPatch }: RuleFieldProps) {
+// `onOnly`: a key whose `false` a rule never holds (see ON_ONLY_KEYS), so the select offers inherit / on alone.
+function TristateSelect({
+    rule,
+    settingKey,
+    labelKey,
+    onPatch,
+    onOnly = false,
+}: RuleFieldProps & { onOnly?: boolean }) {
     const { t } = useTranslation();
     return (
         <div className="flex flex-col gap-1">
@@ -27,12 +35,12 @@ function TristateSelect({ rule, settingKey, labelKey, onPatch }: RuleFieldProps)
             <select
                 aria-label={t(labelKey)}
                 className="select select-sm w-full"
-                value={triValue(rule[settingKey])}
+                value={isDroppedOffValue(settingKey, rule[settingKey]) ? '' : triValue(rule[settingKey])}
                 onChange={(event) => onPatch(triPatch(settingKey, event.currentTarget.value))}
             >
                 <option value="">{t('app.titleRuleInherit')}</option>
                 <option value="on">{t('app.titleRuleOn')}</option>
-                <option value="off">{t('app.titleRuleOff')}</option>
+                {!onOnly && <option value="off">{t('app.titleRuleOff')}</option>}
             </select>
         </div>
     );
@@ -44,6 +52,7 @@ const TRISTATE_OVERRIDES = [
     { settingKey: 'autoFill', labelKey: 'app.titleRuleAutoFill' },
     { settingKey: 'chosenPhotosOnly', labelKey: 'app.chosenPhotosOnly' },
     { settingKey: 'chosenPhotosInOrder', labelKey: 'app.chosenPhotosInOrder' },
+    { settingKey: 'manualPhotosOnly', labelKey: 'app.manualPhotosOnly', onOnly: true },
 ];
 const JOIN_TIMING_FIELDS = [
     {
@@ -99,6 +108,9 @@ export function RuleBehaviour({ rule, onPatch }: { rule: TitleRule; onPatch: Rul
             </div>
             <RulePhotosField rule={rule} onPatch={onPatch} />
             {rule.chosenPhotosOnly === true && <SettingHintList hints={[chosenPhotosOnlyReachHint(t)]} />}
+            {rule.manualPhotosOnly === true && (
+                <SettingHintList hints={[manualPhotosOnlyHint(t, 'app.manualPhotosOnlyHint')]} />
+            )}
         </div>
     );
 }

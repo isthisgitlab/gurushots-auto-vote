@@ -11,6 +11,7 @@ import * as ipc from '@/api/ipc';
  * Returns:
  *   hasCustomSettings   any perChallenge key has an override
  *   autoFillEnabled     effective autoFill value
+ *   manualPhotosOnly    effective manualPhotosOnly value
  *   isCompact           effective compactCards value
  *   hasCompactOverride  whether compactCards has a per-challenge override
  *   toggleCompact()     flip the per-card density (or remove the override)
@@ -30,6 +31,7 @@ export function useChallengeSettings(
 ) {
     const [hasCustomSettings, setHasCustomSettings] = useState(false);
     const [autoFillEnabled, setAutoFillEnabled] = useState(false);
+    const [manualPhotosOnly, setManualPhotosOnly] = useState(false);
     const [isCompact, setIsCompact] = useState(initialCompact);
     const [hasCompactOverride, setHasCompactOverride] = useState(false);
 
@@ -60,13 +62,15 @@ export function useChallengeSettings(
             if (!current()) return;
             setHasCustomSettings(overrideResults.some((o) => o !== null));
 
-            const [fillOn, compact, compactOverride] = await Promise.all([
+            const [fillOn, manualOnly, compact, compactOverride] = await Promise.all([
                 ipc.getEffectiveSetting('autoFill', id),
+                ipc.getEffectiveSetting('manualPhotosOnly', id),
                 ipc.getEffectiveSetting('compactCards', id),
                 ipc.getChallengeOverride('compactCards', id),
             ]);
             if (!current()) return;
             setAutoFillEnabled(fillOn === true);
+            setManualPhotosOnly(manualOnly === true);
             setIsCompact(compact === true);
             setHasCompactOverride(compactOverride !== null);
         } catch {
@@ -100,6 +104,7 @@ export function useChallengeSettings(
     return {
         hasCustomSettings,
         autoFillEnabled,
+        manualPhotosOnly,
         isCompact,
         hasCompactOverride,
         toggleCompact,

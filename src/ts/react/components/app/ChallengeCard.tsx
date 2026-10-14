@@ -57,11 +57,8 @@ export function ChallengeCard({
     bankroll?: Bankroll | null;
     onCurrencySpent: () => void;
 }) {
-    const { hasCustomSettings, autoFillEnabled, isCompact, hasCompactOverride, toggleCompact } = useChallengeSettings(
-        challenge.id,
-        defaultCompact,
-        settingsVersion,
-    );
+    const { hasCustomSettings, autoFillEnabled, manualPhotosOnly, isCompact, hasCompactOverride, toggleCompact } =
+        useChallengeSettings(challenge.id, defaultCompact, settingsVersion);
     // Advisory deadline-action preview + boost/turbo conflict flag (read-only,
     // computed main-side). Failure yields empty actions / false — the card just
     // renders without them, never an error surface.
@@ -80,7 +77,13 @@ export function ChallengeCard({
     useTick(1000, needsSecondTick(challenge, now));
     useRerenderAt(nextBoundaryFlip(challenge, now));
 
-    const view = deriveChallengeCardView(challenge, { now, bankroll, autovoteRunning, autoFillEnabled });
+    const view = deriveChallengeCardView(challenge, {
+        now,
+        bankroll,
+        autovoteRunning,
+        autoFillEnabled,
+        manualPhotosOnly,
+    });
     const actions = useChallengeCardActions({
         challenge,
         view,
@@ -104,6 +107,7 @@ export function ChallengeCard({
         lowExposure: view.lowExposure,
         exposureFactor: view.exposureFactor,
         showAutoFillBadge: view.showAutoFillBadge,
+        showManualPhotosBadge: view.showManualPhotosBadge,
         hasCustomSettings,
     };
 

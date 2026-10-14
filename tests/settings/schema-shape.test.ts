@@ -34,6 +34,7 @@ describe('settings schema shape', () => {
             'exposureTarget',
             'onlyBoost',
             'voteOnNewEntry',
+            'manualPhotosOnly',
             'discoverUpcomingHours',
             'autovoteStartupDelay',
             'compactCards',

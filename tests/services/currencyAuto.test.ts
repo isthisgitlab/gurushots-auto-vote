@@ -260,6 +260,18 @@ describe('runAutoSwap', () => {
         expect(ranking.swaps).toEqual([{ id: 'e2' }]);
     });
 
+    test('does nothing while Manual Photos Only is on, however auto-swap is set', async () => {
+        set({ manualPhotosOnly: true });
+        const ctx = makeCtx();
+        expect(await runAutoSwap(ctx)).toBe(false);
+        expect(currencyActions.previewSwap).not.toHaveBeenCalled();
+        expect(currencyActions.swapEntry).not.toHaveBeenCalled();
+        expect(ctx.challenge.member.ranking.entries.map((e) => e.id)).toEqual(['e1', 'e2']);
+        // The switch is read per challenge, so turning it off brings the swap back.
+        set({ manualPhotosOnly: false });
+        expect(await runAutoSwap(makeCtx())).toBe(true);
+    });
+
     test('a missing swap ledger and swap history are tolerated', async () => {
         const ctx = makeCtx();
         ctx.currency.swapLedger = undefined;

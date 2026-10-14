@@ -202,6 +202,36 @@ describe('shouldApplyTurbo', () => {
         });
     });
 
+    describe('Manual Photos Only turns both fresh-photo options off', () => {
+        test('turboFillNew: turbo goes on the existing entry, never a fresh photo', () => {
+            mockSettings({ turboFillNew: true, manualPhotosOnly: true });
+            const result = VotingLogic.shouldApplyTurbo(buildChallenge({ closeInSeconds: 600 }), NOW());
+            expect(result).toMatchObject({ apply: true, fillNew: false, imageId: 'entry-1' });
+        });
+
+        test('turboFillNew with no entries: nothing to turbo, and no photo is submitted for it', () => {
+            mockSettings({ turboFillNew: true, manualPhotosOnly: true });
+            const result = VotingLogic.shouldApplyTurbo(buildChallenge({ closeInSeconds: 600, entries: [] }), NOW());
+            expect(result.apply).toBe(false);
+            expect(result.fillNew).toBe(false);
+        });
+
+        test('turboFillNewOnConflict: a boosted sole entry is left alone, with no fresh photo', () => {
+            mockSettings({ turboFillNewOnConflict: true, manualPhotosOnly: true });
+            const challenge = buildChallenge({ closeInSeconds: 600, entries: [{ id: 'b1', boosted: true }] });
+            const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
+            expect(result.apply).toBe(false);
+            expect(result.fillNew).toBe(false);
+            expect(result.reason).toContain('Boost');
+        });
+
+        test('with the switch off the same settings still fill a fresh photo', () => {
+            mockSettings({ turboFillNew: true, turboFillNewOnConflict: true, manualPhotosOnly: false });
+            const result = VotingLogic.shouldApplyTurbo(buildChallenge({ closeInSeconds: 600 }), NOW());
+            expect(result.fillNew).toBe(true);
+        });
+    });
+
     describe('turboFillNewOnConflict (fill-new only to break a boost/turbo conflict)', () => {
         test('fills a fresh photo when the only existing entry is already boosted', () => {
             // The narrower opt-in: turbo cannot go on the single boosted entry, so

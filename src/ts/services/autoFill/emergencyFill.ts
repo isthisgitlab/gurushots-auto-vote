@@ -6,6 +6,7 @@
 import { pickPhotosForChallenge } from '../photoPicker';
 import { getSlotsRemaining, reflectNewEntry } from './challengeState';
 import { runFillAttempt } from './pipeline';
+import { isManualPhotosOnly } from '../manualPhotosOnly';
 
 import type { Challenge } from '../../types/gurushots';
 import type { FillSettings, SettingsFillDeps } from '../../types/autoFill';
@@ -31,11 +32,12 @@ const onlyChosenActive = (settings: FillSettings, challengeId: string | number):
  * timeline and the desktop notifications) decides row visibility from the very
  * same code instead of a second copy that can silently drift.
  *
- * Covers the three state-only stand-downs maybeEmergencyFillChallenge takes
+ * Covers the state-only stand-downs maybeEmergencyFillChallenge takes
  * before any network call:
  *   - no challenge id (`undefined`/`null`, exactly the runner's own guard — an
  *     empty-string id is NOT one of them, so callers that normalise a missing id
  *     to '' must pass the raw id instead),
+ *   - Manual Photos Only on for the challenge (it never submits by itself),
  *   - no free slot left to fill, and
  *   - "normal auto-fill already owns this challenge": auto-fill on with no
  *     must-include filter, the common configuration, in which the staggered
@@ -80,6 +82,8 @@ const evaluateEmergencyFill = (
     };
     if (challengeId === undefined || challengeId === null) return inert;
     if (getSlotsRemaining(challenge) <= 0) return inert;
+    // Manual Photos Only: nothing is submitted by itself, so the deadline view drops the row too.
+    if (isManualPhotosOnly(settings, challengeId)) return inert;
 
     const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
     const autoFillEnabled = settings.getEffectiveSetting('autoFill', String(challengeId)) === true;

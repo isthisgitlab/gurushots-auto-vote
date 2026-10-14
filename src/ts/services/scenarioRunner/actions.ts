@@ -5,7 +5,9 @@
  * before each action, persist after each, unreadable state halts).
  */
 
+import * as settings from '../../settings';
 import * as currencyActions from '../currencyActions';
+import { isManualPhotosOnly } from '../manualPhotosOnly';
 import { submitNewEntryForAction, reflectNewEntry, reflectEntryFlag, getSlotsRemaining } from '../autoFill';
 import { selectEntry, entriesOf } from '../../scenarios/selectors';
 import type {
@@ -35,9 +37,14 @@ import {
 } from './support';
 import type { Retry } from './support';
 
+// A scenario step that enters or swaps a photo is as automatic as any other: with Manual Photos Only on it is
+// skipped, never marked fired, so the entry is not lost for good once the switch is turned off.
+const MANUAL_PHOTOS_SKIP = 'Manual Photos Only is on';
+
 const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type: K }>> } = {
     enterPhoto: async (action, ctx, state) => {
         const { challenge, pass } = ctx;
+        if (isManualPhotosOnly(settings, challenge.id)) return skipped(MANUAL_PHOTOS_SKIP);
         const photoId = rememberedPhoto(action.photo, state);
         if (photoId === undefined)
             return skipped(`memory slot "${(action.photo as { memory: string }).memory}" is empty`);
@@ -68,6 +75,7 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
 
     swap: async (action, ctx, state) => {
         const { challenge, pass } = ctx;
+        if (isManualPhotosOnly(settings, challenge.id)) return skipped(MANUAL_PHOTOS_SKIP);
         const newPhoto = rememberedPhoto(action.with, state);
         if (newPhoto === undefined)
             return skipped(`memory slot "${(action.with as { memory: string }).memory}" is empty`);

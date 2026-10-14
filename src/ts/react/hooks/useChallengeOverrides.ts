@@ -8,6 +8,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { ChallengeValues, RuleSource, TitleRuleInfo } from '../../types/settings';
 import type { RendererSchema, SettingChangeHandler, SettingResetHandler } from '../../types/settingsEditor';
 import { errorMessage } from '../../errorMessage';
+import { ON_ONLY_KEYS } from '../../settings/ruleBehaviour';
 
 /**
  * What the challenge's matching rules contribute, as the modal holds it: the matched profile
@@ -302,7 +303,11 @@ function useTitleRules({
         const next = perChallengeOnly(schema, values);
         const replacesWasOn = effectiveOf('scheduledFillReplaces') === true;
         setProfileReplacesWarning(next.scheduledFillReplaces === true && !replacesWasOn);
-        setOverrides(next);
+        // A profile never holds an on-only key's `false`; the challenge's own value stays.
+        const kept = Object.fromEntries(
+            ON_ONLY_KEYS.filter((key) => hasOwn(overrides, key)).map((key) => [key, overrides[key]]),
+        );
+        setOverrides({ ...next, ...kept });
         setTitleRules((current) => ({ ...(current ?? NO_RULES), suppressed: true }));
     };
 

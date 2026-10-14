@@ -14,6 +14,7 @@ import { boostApplyThreshold } from '../../voting/boostWindow';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
 import { isBoostWindowOpen } from './boostTurbo';
 import { pickBoostEntry, resolveBoostFillNewMode } from './entryPick';
+import { isManualPhotosOnly } from '../manualPhotosOnly';
 
 /**
  * Effective seconds-before-close at which the next auto-fill becomes due:
@@ -179,7 +180,10 @@ const describeDeadlineActions = (
                 if (boostTimerBranch && !(getEffectiveBoostTime(challengeId) > 0)) return false;
                 return true;
             case 'autoFill':
-                return settings.getEffectiveSetting('autoFill', challengeId) === true;
+                return (
+                    settings.getEffectiveSetting('autoFill', challengeId) === true &&
+                    !isManualPhotosOnly(settings, challengeId)
+                );
             case 'emergencyFill':
                 // thresholdSec > 0 already means enabled (0 = off); the runner
                 // owns the state-only stand-downs, so ask it rather than keeping

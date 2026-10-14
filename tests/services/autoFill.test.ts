@@ -279,6 +279,7 @@ const makeSettings = ({
     fillWithoutTagMatch = true, // mirrors the schema default
     emergencyFill = 300, // mirrors the schema default (5 minutes in seconds)
     ignoreTitleWords = [],
+    manualPhotosOnly = false,
 }: {
     autoFill?: boolean;
     schedule?: FillSchedule;
@@ -287,6 +288,7 @@ const makeSettings = ({
     fillWithoutTagMatch?: boolean;
     emergencyFill?: number;
     ignoreTitleWords?: string[];
+    manualPhotosOnly?: boolean;
 } = {}): jest.MockedObject<FillSettings> =>
     invalid({
         getEffectiveSetting: jest.fn((key: string) => {
@@ -296,6 +298,7 @@ const makeSettings = ({
             if (key === 'shouldIncludeTags') return shouldIncludeTags;
             if (key === 'fillWithoutTagMatch') return fillWithoutTagMatch;
             if (key === 'emergencyFill') return emergencyFill;
+            if (key === 'manualPhotosOnly') return manualPhotosOnly;
             return null;
         }),
         // Title-aware tag resolver. The default stub carries no title rules, so it
@@ -394,6 +397,21 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const submitToChallenge = jest.fn();
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({ autoFill: false }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('disabled');
+        expect(getEligiblePhotos).not.toHaveBeenCalled();
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('returns disabled while Manual Photos Only is on, even with auto-submit on', async () => {
+        const challenge = makeChallenge({ entries: [{ id: 'e1' }] });
+        const getEligiblePhotos = jest.fn();
+        const submitToChallenge = jest.fn();
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true, manualPhotosOnly: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -1173,8 +1191,19 @@ describe('evaluateEmergencyFill — the state-only stand-downs, shared with the 
         const settings = makeSettings({ autoFill: true, mustIncludeTags: ['sunset'] });
         const gate = evaluateEmergencyFill(open(), 'c1', settings);
         expect(gate).toEqual({ standDown: false, autoFillEnabled: true, mustIncludeTags: ['sunset'] });
-        expect(settings.getEffectiveSetting).toHaveBeenCalledTimes(1);
+        // Manual Photos Only and autoFill: nothing else is read.
+        expect(settings.getEffectiveSetting).toHaveBeenCalledTimes(2);
         expect(settings.getEffectiveTagSetting).toHaveBeenCalledTimes(1);
+    });
+
+    test('stands down while Manual Photos Only is on, however auto-fill is set', () => {
+        const settings = makeSettings({ autoFill: false, manualPhotosOnly: true });
+        expect(evaluateEmergencyFill(open(), 'c1', settings)).toEqual({
+            standDown: true,
+            autoFillEnabled: false,
+            mustIncludeTags: null,
+        });
+        expect(settings.getEffectiveTagSetting).not.toHaveBeenCalled();
     });
 
     test('reads no settings at all when it can decide from state alone', () => {
@@ -1223,6 +1252,21 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         });
         expect(result).toBe('disabled');
         expect(getEligiblePhotos).not.toHaveBeenCalled();
+    });
+
+    test('returns skipped inside the window while Manual Photos Only is on, and submits nothing', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const getEligiblePhotos = jest.fn();
+        const submitToChallenge = jest.fn();
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 300, manualPhotosOnly: true }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('skipped');
+        expect(getEligiblePhotos).not.toHaveBeenCalled();
+        expect(submitToChallenge).not.toHaveBeenCalled();
     });
 
     test('returns disabled when emergencyFill is non-numeric', async () => {

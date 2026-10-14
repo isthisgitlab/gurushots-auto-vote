@@ -169,6 +169,42 @@ describe('describeDeadlineActions — row gating', () => {
     });
 });
 
+describe('describeDeadlineActions — Manual Photos Only', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    test('drops the Auto-Submit and Emergency Submit rows, whatever else is set', () => {
+        mockSettings({ autoFill: true, emergencyFill: 300, manualPhotosOnly: true, mustIncludeTags: ['sunset'] });
+        expect(actionsOf(build())).not.toContain('autoFill');
+        expect(actionsOf(build())).not.toContain('emergencyFill');
+        mockSettings({ autoFill: false, emergencyFill: 300, manualPhotosOnly: true });
+        expect(actionsOf(build())).not.toContain('emergencyFill');
+    });
+
+    test('keeps the Boost and Turbo rows: they go on entries that already exist', () => {
+        mockSettings({ manualPhotosOnly: true, useTurbo: true });
+        const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' } });
+        expect(actionsOf(challenge)).toEqual(expect.arrayContaining(['boost', 'turbo']));
+    });
+
+    test('with the switch off the same challenge keeps both rows', () => {
+        mockSettings({ autoFill: true, emergencyFill: 300, mustIncludeTags: ['sunset'], manualPhotosOnly: false });
+        expect(actionsOf(build())).toEqual(expect.arrayContaining(['autoFill', 'emergencyFill']));
+    });
+
+    test('boostBlocked stays true for a turboed sole entry even with fill-new on and a free slot', () => {
+        // No fresh photo will be submitted, so the fill-new option resolves nothing and the warning must show.
+        mockSettings({ boostFillNew: true, boostFillNewOnConflict: true, manualPhotosOnly: true });
+        const challenge = build({
+            boost: { state: 'AVAILABLE_KEY' },
+            entries: [{ id: 'e1', turbo: true }],
+            maxSubmits: 2,
+        });
+        const result = VotingLogic.describeDeadlineActions(challenge, NOW);
+        expect(result.boostBlocked).toBe(true);
+        expect(result.actions.map((a) => a.action)).not.toContain('boost');
+    });
+});
+
 describe('describeDeadlineActions — boostBlocked', () => {
     beforeEach(() => jest.clearAllMocks());
 
@@ -251,6 +287,12 @@ describe('resolveBoostFillNewMode', () => {
         mockSettings({ boostFillNew: true });
         expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('always');
         expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('always');
+    });
+
+    test("'no' while Manual Photos Only is on, whichever fill-new option is set", () => {
+        mockSettings({ boostFillNew: true, boostFillNewOnConflict: true, manualPhotosOnly: true });
+        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('no');
+        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('no');
     });
 
     test("'conflict' when only boostFillNewOnConflict is on AND the sole entry is turboed", () => {

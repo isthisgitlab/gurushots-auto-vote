@@ -416,4 +416,5 @@ export {
     replaceChallengeOverridesInSettings,
     getEffectiveSetting,
     trimmedChallengeId,
+    ownChallengeValues,
 };

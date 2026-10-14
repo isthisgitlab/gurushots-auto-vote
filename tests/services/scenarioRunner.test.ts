@@ -1316,6 +1316,82 @@ describe('actions', () => {
     });
 });
 
+describe('Manual Photos Only', () => {
+    const switchOn = () =>
+        settings.getEffectiveSetting.mockImplementation((key) =>
+            key === 'scenario' ? assigned : key === 'manualPhotosOnly' ? true : 0,
+        );
+    const entering = { type: 'enterPhoto', photo: 'best' };
+    const swapping = { type: 'swap', entry: { by: 'mostVotes' }, with: 'best' };
+
+    test.each([
+        ['enterPhoto', entering],
+        ['swap', swapping],
+    ])(
+        '%s: an uncommitted rule stops without firing, spends nothing, and retries once the switch is off',
+        async (_n, action) => {
+            autoFill.submitNewEntryForAction.mockResolvedValue({
+                ok: true,
+                imageId: invalid<string>(99),
+                reason: 'submitted',
+            });
+            currencyActions.previewSwap.mockResolvedValue(
+                invalid({ ok: true, candidate: { id: 'n1', member_id: 'm' } }),
+            );
+            currencyActions.swapEntry.mockResolvedValue({ ok: true, outcome: 'ok' });
+            setup(single([action]));
+            switchOn();
+            await run();
+            expect(state().lastError!.message).toContain('Manual Photos Only is on');
+            expect(state().fired).toEqual({});
+            expect(state().inFlight).toBeNull();
+            expect(autoFill.submitNewEntryForAction).not.toHaveBeenCalled();
+            expect(pass.api.submitToChallenge).not.toHaveBeenCalled();
+            expect(currencyActions.previewSwap).not.toHaveBeenCalled();
+            expect(currencyActions.swapEntry).not.toHaveBeenCalled();
+            expect(autoFill.refreshChallengeState).not.toHaveBeenCalled();
+            expect(state().spent.swaps).toBe(0);
+
+            // The rule was not marked as run, so turning the switch off lets it fire.
+            settings.getEffectiveSetting.mockImplementation((key) => (key === 'scenario' ? assigned : 0));
+            await run();
+            expect(state().fired.r1).toBeDefined();
+            expect(
+                autoFill.submitNewEntryForAction.mock.calls.length + currencyActions.swapEntry.mock.calls.length,
+            ).toBe(1);
+        },
+    );
+
+    test.each([
+        ['enterPhoto', entering],
+        ['swap', swapping],
+    ])('%s: a committed rule passes over the step and carries on to its goto', async (_n, action) => {
+        currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+        setup(
+            plan({
+                main: { rules: [rule('r1', [{ type: 'fillExposure' }, action, { type: 'goto', phase: 'next' }])] },
+                next: {},
+            }),
+        );
+        switchOn();
+        await run();
+        expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+        expect(autoFill.submitNewEntryForAction).not.toHaveBeenCalled();
+        expect(currencyActions.swapEntry).not.toHaveBeenCalled();
+        expect(state().fired.r1).toBeDefined();
+        expect(state().phase).toBe('next');
+        expect(state().lastError!.message).toContain('Manual Photos Only is on');
+    });
+
+    test('a remembered photo is not entered either', async () => {
+        setup(single([{ type: 'enterPhoto', photo: { memory: 'held' } }]));
+        ledger.set(7, { ...initialState('Plan', 'main', NOW), memory: { held: 'p9' } });
+        switchOn();
+        await run();
+        expect(pass.api.submitToChallenge).not.toHaveBeenCalled();
+    });
+});
+
 describe('rule execution', () => {
     test('a phase change takes effect when the rule finishes', async () => {
         currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));

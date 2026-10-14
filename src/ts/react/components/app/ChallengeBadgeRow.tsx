@@ -7,7 +7,7 @@ import type { ChallengeCardView } from './ChallengeCard';
 
 export type ChallengeBadgeRowProps = Pick<
     ChallengeCardView,
-    'boostOpen' | 'boostTimeLeft' | 'lowExposure' | 'exposureFactor' | 'showAutoFillBadge'
+    'boostOpen' | 'boostTimeLeft' | 'lowExposure' | 'exposureFactor' | 'showAutoFillBadge' | 'showManualPhotosBadge'
 > & {
     challenge: Challenge;
     hasCustomSettings: boolean;
@@ -37,13 +37,20 @@ export function ChallengeBadgeRow({
     lowExposure,
     exposureFactor,
     showAutoFillBadge,
+    showManualPhotosBadge,
     hasCustomSettings,
     showPhotoCount = true,
 }: ChallengeBadgeRowProps) {
     const { t } = useTranslation();
     const showPhotos = showPhotoCount && (challenge.max_photo_submits ?? 0) > 1;
     const hasLogicalBadge = Boolean(
-        boostOpen || lowExposure || challenge.type || challenge.badge || showPhotos || showAutoFillBadge,
+        boostOpen ||
+        lowExposure ||
+        challenge.type ||
+        challenge.badge ||
+        showPhotos ||
+        showAutoFillBadge ||
+        showManualPhotosBadge,
     );
 
     if (!hasLogicalBadge && !hasCustomSettings) return null;
@@ -71,6 +78,7 @@ export function ChallengeBadgeRow({
                 </StatusBadge>
             )}
             {showAutoFillBadge && <StatusBadge variant="success">📥 {t('app.autoFillBadge')}</StatusBadge>}
+            {showManualPhotosBadge && <StatusBadge variant="info">✋ {t('app.manualPhotosBadge')}</StatusBadge>}
             {hasLogicalBadge && hasCustomSettings && (
                 <span data-testid="badge-divider" className="w-px h-3 bg-base-300 mx-0.5 self-center" />
             )}

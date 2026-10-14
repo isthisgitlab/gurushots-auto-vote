@@ -54,6 +54,9 @@ Common Settings:
                          ${THEMES.join(', ')}
   language             - UI language: "en" or "lv" (default: "en")
   timezone             - Timezone for timestamps (default: "Europe/Riga")
+  manualPhotosOnly     - Per-challenge only (set-setting --challenge=<id>, or a challenge rule): true =
+                         the app never joins, submits or swaps a photo there by itself, scenario
+                         steps included; manual Join, +1/+N, Pick… and Swap still work (default: false)
 
 Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
   boostTime            - Seconds left on the BOOST'S OWN timer at which a timer
@@ -64,7 +67,8 @@ Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
   turboTime            - Seconds before close to apply turbo (default: 7200 = 2h)
   emergencyFill        - Emergency Submit: seconds before close to submit photos to
                          empty slots as a last resort
-                         (default: 300 = 5 min; 0 = off).
+                         (default: 300 = 5 min; 0 = off). To block it for one
+                         challenge only, set manualPhotosOnly there.
 
 Scheduled voting (vote exposure up to 100% at chosen times — per-challenge, set
 with set-global-default or set-setting --challenge=<id>; every entry opens its

@@ -21,7 +21,8 @@ import {
 } from './profileStore';
 import { sanitizeTitleRuleInline } from './titleRuleSanitize';
 import { titleProfileComposesWithKnownOverrides } from './ruleResolution';
-import { replaceChallengeOverridesInSettings, trimmedChallengeId } from './challengeOverrides';
+import { ownChallengeValues, replaceChallengeOverridesInSettings, trimmedChallengeId } from './challengeOverrides';
+import { ON_ONLY_KEYS } from './ruleBehaviour';
 
 import type { AppSettings, ChallengeIdInput, ChallengeValues, TitleRule } from '../types/settings';
 
@@ -222,7 +223,13 @@ const applyChallengeProfile = (name: unknown, challengeId: ChallengeIdInput): bo
     // Safety net: sanitizeProfileValues already validated these values against
     // the same {globals + profile} context, so this only fails if a schema rule
     // starts depending on the challenge id. Kept so nothing invalid is persisted.
-    if (!replaceChallengeOverridesInSettings(settings, id, sanitized, true)) return false;
+    // A profile never holds an on-only key's `false`, so replacing every override would silently
+    // switch the challenge's own Manual Photos Only off: that value stays.
+    const own = ownChallengeValues(settings.challengeSettings.perChallenge, id) ?? {};
+    const kept = Object.fromEntries(
+        ON_ONLY_KEYS.filter((key) => Object.hasOwn(own, key)).map((key) => [key, own[key]]),
+    );
+    if (!replaceChallengeOverridesInSettings(settings, id, { ...sanitized, ...kept }, true)) return false;
     return saveSettings(settings);
 };
 

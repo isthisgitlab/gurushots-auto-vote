@@ -149,6 +149,23 @@ const noteTimingRefusal = (challenge: Challenge, reason: string, pass: JoinPassS
     warnMissingCloseTime(challenge, reason);
 };
 
+// Challenges already warned about a paid-but-not-entered join, so the warning is once per challenge per process.
+const warnedPaidNotEntered = new Set<string>();
+
+/**
+ * With Manual Photos Only on, a join the user already paid for is still not entered by itself. Say so once, so
+ * the coins are not left stranded unnoticed: the entry is the user's to make with Join or Pick….
+ */
+const noteUnenteredPaidJoin = async (challenge: Challenge, token: string, deps: JoinDeps): Promise<void> => {
+    const key = String(challenge?.id);
+    if (warnedPaidNotEntered.has(key) || !(await paidByThisAccount(challenge, token, deps))) return;
+    warnedPaidNotEntered.add(key);
+    cat().warning(
+        `Manual Photos Only is on for ${logger.challengeTag(challenge)}: the join was already paid for, but no photo is entered automatically — enter one with Join or Pick…`,
+        null,
+    );
+};
+
 /**
  * Decide and (when due) perform one candidate's join, keeping the pass's
  * balance and budget in step with what it spent.
@@ -165,6 +182,11 @@ const joinCandidate = async (
     // for, BEFORE resolving the rest of the config (avoid redundant work).
     if (resolveJoinSetting('autoJoin', challenge) !== true) {
         return 'skipped:autojoin-off';
+    }
+    // Manual Photos Only: the join would enter a photo by itself, so it is left to the user.
+    if (resolveJoinSetting('manualPhotosOnly', challenge) === true) {
+        await noteUnenteredPaidJoin(challenge, token, deps);
+        return 'skipped:manual-photos-only';
     }
     const alreadyPaid = await paidByThisAccount(challenge, token, deps);
     const decision = decideCandidateJoin(challenge, pass, alreadyPaid);

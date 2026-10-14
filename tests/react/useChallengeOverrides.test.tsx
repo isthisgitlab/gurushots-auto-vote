@@ -65,6 +65,27 @@ test('applyProfile() without a schema (its fetch failed) keeps no key instead of
     expect(result.current.titleRules).toMatchObject({ suppressed: true, profile: null });
 });
 
+test("applyProfile() keeps the challenge's own Manual Photos Only, which a profile never holds as off", async () => {
+    mockApi.getChallengeOverrides.mockReset().mockResolvedValue({ exposure: 50, manualPhotosOnly: false });
+    const p = {
+        ...props(),
+        schema: invalid<RendererSchema>({
+            exposure: { type: 'number', default: 100, perChallenge: true },
+            manualPhotosOnly: { type: 'boolean', default: false, perChallenge: true, challengeOnly: true },
+        }),
+    };
+    const { result } = renderHook(() => useChallengeOverrides(p));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.applyProfile({ exposure: 80 }));
+    expect(result.current.overrides).toEqual({ exposure: 80, manualPhotosOnly: false });
+
+    // With no value of its own, the profile's "on" is taken.
+    act(() => result.current.clearAll());
+    act(() => result.current.applyProfile({ manualPhotosOnly: true }));
+    expect(result.current.overrides).toEqual({ manualPhotosOnly: true });
+});
+
 test('every list removed while the form is open leaves the overrides and the matched profile without it', async () => {
     mockApi.getChallengeOverrides.mockReset().mockResolvedValue({ exposure: 50, chosenPhotos: ['a'] });
     mockApi.getTitleProfile.mockReset().mockResolvedValue(
