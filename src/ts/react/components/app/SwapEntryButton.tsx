@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSwapPhoto, useSwapBack } from '@/api/useCurrencyActions';
 import { interp } from '@/utils/interp';
 import { entryPhotoUrl } from '@/utils/formatters';
 import { spentOrStale } from '@/utils/spentOrStale';
+import { CURRENCY_OUTCOME } from '../../../voting/currencyActions';
 import { ActionButton } from '@/components/ui/ActionButton';
 import { InlineError } from '@/components/ui/InlineError';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
@@ -14,6 +15,7 @@ import type { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots
 import type { SwapCandidate } from '../../../services/currencyActions';
 import type { EntryPinKind } from '../../../types/settings';
 import type { SwapBackOffer } from '@/api/useSwapBacks';
+import type { Ref } from 'preact';
 import type { ActionButtonVariant } from '@/components/ui/ActionButton';
 import type { CurrencyConfirmModalProps } from './CurrencyConfirmModal';
 
@@ -51,6 +53,7 @@ function SwapTrigger({
     label,
     busy,
     error,
+    buttonRef,
     onClick,
     onDismiss,
 }: {
@@ -58,6 +61,7 @@ function SwapTrigger({
     label: string;
     busy: boolean;
     error: string | null;
+    buttonRef?: Ref<HTMLButtonElement>;
     onClick: () => void | Promise<void>;
     onDismiss: () => void;
 }) {
@@ -65,6 +69,7 @@ function SwapTrigger({
     return (
         <>
             <ActionButton
+                ref={buttonRef}
                 variant={variant}
                 error={error}
                 onClick={() => void onClick()}
@@ -82,7 +87,7 @@ function SwapTrigger({
  * Swap confirm modal: the current photo beside the one that would take its
  * slot (once known), then the caller's explanation.
  */
-function SwapConfirmModal({
+export function SwapConfirmModal({
     current,
     other,
     otherCaption,
@@ -106,15 +111,54 @@ function SwapConfirmModal({
 }
 
 /**
+ * What swapping an entry out puts at risk: the entry is boosted or turbo'd (its boost/turbo stays with the
+ * photo, so the replacement won't get it), and the feature it is live-pinned for (the pin would be left with
+ * no photo). Shown in both confirm modals of a swap.
+ */
+export type SwapWarnings = { actioned: boolean; pinned: EntryPinKind | null };
+
+/**
+ * The warning lines of a swap's confirm modal.
+ */
+export function SwapWarningLines({ actioned, pinned }: SwapWarnings) {
+    const { t } = useTranslation();
+    return (
+        <>
+            {actioned && <p className="text-warning">{t('app.currencySwapBoostedWarning')}</p>}
+            {pinned && (
+                <p className="text-warning">
+                    {interp(t('app.pinSwapWarning'), { kind: t(pinned === 'boost' ? 'app.boost' : 'app.turbo') })}
+                </p>
+            )}
+        </>
+    );
+}
+
+/**
+ * Opens the card's swap picker for one entry (ChallengeCardActions' useSwapPickModal): the user picks the
+ * replacement from the library. `returnFocusEl` is where focus goes when the flow ends; `notice` says why the
+ * picker opened.
+ */
+export type OpenSwapPick = (
+    entry: RankingEntry,
+    warnings: SwapWarnings,
+    returnFocusEl: HTMLElement | null,
+    notice?: string | null,
+) => void;
+
+/**
  * Per-entry Swap button. Click → the app suggests a replacement (spends
  * nothing; the button spins meanwhile) → confirm modal shows current vs
- * replacement → Spend swaps exactly that suggestion. A swap that can't happen
- * (no different photo) is reported inline without opening the modal.
+ * replacement → Spend swaps exactly that suggestion. The modal's "Choose
+ * another photo…" hands over to the card's swap picker (`onChoose`), which owns
+ * the rest of a chosen swap; so does a suggestion that can't be made (no
+ * different photo), which opens the picker with that reason instead of an error.
  *
  * @param props.entry - entry record (id, member_id)
  * @param props.warnActioned - the entry is boosted or turbo'd (its boost/turbo stays with the photo, so the replacement won't get it)
  * @param props.warnPinned - the feature the entry is live-pinned for (the pin would be left with no photo)
  * @param props.onSpent - called after a successful swap
+ * @param props.onChoose - opens the card's swap picker for this entry
  */
 export function SwapEntryButton({
     entry,
@@ -123,6 +167,7 @@ export function SwapEntryButton({
     warnActioned,
     warnPinned = null,
     onSpent,
+    onChoose,
 }: {
     entry: RankingEntry;
     warnActioned: boolean;
@@ -130,11 +175,15 @@ export function SwapEntryButton({
     challengeId: Challenge['id'];
     bankroll: Bankroll | null;
     onSpent: () => void;
+    onChoose: OpenSwapPick;
 }) {
     const { t } = useTranslation();
     const { preview, commit } = useSwapPhoto();
     const [candidate, setCandidate] = useState<SwapCandidate | null>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
     const error = preview.error || commit.error;
+
+    const warnings = { actioned: warnActioned, pinned: warnPinned };
 
     const dismissError = () => {
         preview.clearError();
@@ -145,6 +194,17 @@ export function SwapEntryButton({
         commit.clearError();
         const result = await preview.run(challengeId, entry.id);
         if (result?.success && result.candidate) setCandidate(result.candidate);
+        else if (!result?.success && result?.error === CURRENCY_OUTCOME.noAlternative) {
+            // No suggestion to offer: the picker opens and says why, instead of an error under the button.
+            preview.clearError();
+            onChoose(entry, warnings, triggerRef.current, currencyOutcomeText(t, CURRENCY_OUTCOME.noAlternative));
+        }
+    };
+
+    const handleChoose = () => {
+        setCandidate(null);
+        dismissError();
+        onChoose(entry, warnings, triggerRef.current);
     };
 
     const handleConfirm = async () => {
@@ -161,6 +221,7 @@ export function SwapEntryButton({
                 label={`🔄 ${t('app.currencySwap')}`}
                 busy={preview.loading || commit.loading}
                 error={error}
+                buttonRef={triggerRef}
                 onClick={handlePreview}
                 onDismiss={dismissError}
             />
@@ -176,14 +237,15 @@ export function SwapEntryButton({
                 otherCaption={t('app.currencySwapReplacement')}
             >
                 <p>{t('app.currencySwapBody')}</p>
-                {warnActioned && <p className="text-warning">{t('app.currencySwapBoostedWarning')}</p>}
-                {warnPinned && (
-                    <p className="text-warning">
-                        {interp(t('app.pinSwapWarning'), {
-                            kind: t(warnPinned === 'boost' ? 'app.boost' : 'app.turbo'),
-                        })}
-                    </p>
-                )}
+                <SwapWarningLines {...warnings} />
+                <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    disabled={commit.loading}
+                    onClick={handleChoose}
+                >
+                    {t('app.currencySwapChoose')}
+                </button>
             </SwapConfirmModal>
         </>
     );

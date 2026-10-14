@@ -22,6 +22,7 @@ import type { ComponentChildren } from 'preact';
 import type { Bankroll, Challenge, RankingTotal } from '../../../types/gurushots';
 import type { ChallengeCardView } from './ChallengeCard';
 import type { ChallengeCardActionSet } from './ChallengeCardActions';
+import type { OpenSwapPick } from './SwapEntryButton';
 import type { ChallengeBadgeRowProps } from './ChallengeBadgeRow';
 import type { DeadlineAction } from './DeadlineTimeline';
 import type * as useSwapBacksModule from '@/api/useSwapBacks';
@@ -272,6 +273,7 @@ function EntryDetails({
     bankroll,
     onVoteComplete,
     onCurrencySpent,
+    onChooseSwap,
 }: {
     challenge: Challenge;
     view: ChallengeCardView;
@@ -280,6 +282,7 @@ function EntryDetails({
     bankroll: Bankroll | null;
     onVoteComplete: () => void;
     onCurrencySpent: () => void;
+    onChooseSwap: OpenSwapPick;
 }) {
     const { t } = useTranslation();
     const { pins, togglePin, setPin, loading: pinBusy, error: pinError, clearError: clearPinError } = entryPins;
@@ -360,6 +363,7 @@ function EntryDetails({
                         swapAvailable={view.swapAvailable}
                         bankroll={bankroll}
                         onSwapped={onCurrencySpent}
+                        onChooseSwap={onChooseSwap}
                         swapBack={swapBacks.find((r) => r.currentId === String(entry.id)) ?? null}
                         pin={{
                             pins,
@@ -490,6 +494,7 @@ export function ChallengeCardDetail({
                     bankroll={bankroll}
                     onVoteComplete={onVoteComplete}
                     onCurrencySpent={onCurrencySpent}
+                    onChooseSwap={actions.openSwapPick}
                 />
             )}
 

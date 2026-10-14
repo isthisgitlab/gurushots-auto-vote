@@ -157,8 +157,8 @@ const OUTCOME_TEXT: Record<string, string> = {
     'no-balance': 'You have none of that currency left.',
     'balance-unknown': 'Could not read your balance, so nothing was spent. Try again shortly.',
     'no-alternative': 'No different photo is available to swap in.',
-    'stale-candidate':
-        'The replacement photo changed since the preview. Nothing was spent — re-run without --yes to see the new suggestion.',
+    'stale-candidate': 'The swap offer expired or changed since the preview. Nothing was spent — run the swap again.',
+    'already-entered': 'That photo is already entered in this challenge. Nothing was spent — pick a different photo.',
     busy: 'Another currency action is still running. Try again in a moment.',
     'invalid-args': INVALID_ID_TEXT,
     unclear:
@@ -251,12 +251,12 @@ const unlockBoostCmd = async (challengeId: string, { yes = false }: { yes?: bool
         run: () => currencyHandlers()['key-unlock-boost'](null, challengeId, true),
     });
 
-const SWAP_USAGE = 'Usage: swap --challenge=<id> --image=<id> [--to=<id> --yes]';
+const SWAP_USAGE = 'Usage: swap --challenge=<id> --image=<id> [--to=<id>] [--yes]';
 const SWAP_BACK_USAGE = 'Usage: swap-back --challenge=<id> --image=<id> [--yes]';
 
 /**
  * Reads swap's own flags from the args left after --challenge:
- * --image=<id> (the entry to replace), --to=<id> (the confirmed replacement), --yes.
+ * --image=<id> (the entry to replace), --to=<id> (the photo to swap in), --yes.
  */
 const parseSwapFlags = (rest: string[]) => {
     const flag = (name: string) => {
@@ -267,9 +267,11 @@ const parseSwapFlags = (rest: string[]) => {
 };
 
 /**
- * Spend a SWAP to replace entered photo `imageId` with the app's best-ranked
- * different photo. The dry run prints the suggested replacement; --yes must
- * repeat it as --to=<id>, and is refused if the suggestion changed since.
+ * Spend a SWAP to replace entered photo `imageId`. Without --to the dry run
+ * prints the app's best-ranked different photo, and --yes must repeat it as
+ * --to=<id>. With --to the named photo is the replacement, as chosen (nothing
+ * is ranked; the server checks eligibility when the swap is spent): the dry run
+ * prints it, and --to=<id> --yes spends it.
  * Returns false on a usage error (no --image), true otherwise.
  */
 const swapCmd = async (
@@ -284,7 +286,7 @@ const swapCmd = async (
     const challenge = await resolveChallenge(challengeId);
     if (!challenge) return true;
     try {
-        const preview = await currencyHandlers()['preview-swap-photo'](null, challengeId, imageId);
+        const preview = await currencyHandlers()['preview-swap-photo'](null, challengeId, imageId, to ?? undefined);
         if (!preview?.success) {
             logger.withCategory('currency').error(describeOutcome(preview));
             return true;
@@ -293,6 +295,13 @@ const swapCmd = async (
         if (!yes) {
             logger.withCategory('currency').info(`Swap in "${challenge.title}": ${imageId} → ${newId}`);
             await printCost('swaps');
+            if (to) {
+                logger
+                    .withCategory('currency')
+                    .info(
+                        `GuruShots checks that the challenge accepts ${newId} when the swap is spent; list-photos --challenge=${challengeId} shows the photos it accepts.`,
+                    );
+            }
             logger
                 .withCategory('currency')
                 .info(
@@ -300,14 +309,10 @@ const swapCmd = async (
                 );
             return true;
         }
-        if (!to || to !== newId) {
+        if (!to) {
             logger
                 .withCategory('currency')
-                .error(
-                    to
-                        ? `The suggested replacement is now ${newId}, not ${to}. Nothing was spent — re-run with --to=${newId} --yes to confirm it.`
-                        : `Add --to=${newId} to confirm the replacement (run without --yes first to review it).`,
-                );
+                .error(`Add --to=${newId} to confirm the replacement (run without --yes first to review it).`);
             return true;
         }
         const result = await currencyHandlers()['swap-entry-photo'](null, challengeId, imageId, newId, true);

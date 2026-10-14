@@ -24,6 +24,7 @@ const renderBadge = () => {
             onBoostApplied={onBoostApplied}
             onTurboApplied={onTurboApplied}
             onSwapped={() => {}}
+            onChooseSwap={() => {}}
         />,
     );
     return { onBoostApplied, onTurboApplied };
@@ -85,6 +86,7 @@ describe('swap controls', () => {
                 swapAvailable
                 bankroll={invalid({ swaps: 2 })}
                 onSwapped={jest.fn()}
+                onChooseSwap={() => {}}
                 swapBack={swapBack}
             />,
         );

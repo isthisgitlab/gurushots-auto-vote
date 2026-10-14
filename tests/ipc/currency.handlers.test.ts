@@ -13,6 +13,7 @@ jest.mock('../../src/ts/services/currencyActions');
 
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
+import { logCategories } from '../helpers/logCategories';
 
 import apiFactoryModule = require('../../src/ts/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
@@ -204,6 +205,77 @@ describe('swap preview binding', () => {
         currencyActions.previewSwap.mockResolvedValueOnce({ ok: false, outcome: 'no-alternative' });
         expect((await handlers['preview-swap-photo'](null, 10, 'x')).outcome).toBe('no-alternative');
         expect((await handlers['swap-entry-photo'](null, 10, 'x', 'new1', true)).outcome).toBe('stale-candidate');
+    });
+});
+
+describe('swap preview of a chosen photo', () => {
+    const chosen = (chosenId: unknown) => handlers['preview-swap-photo'](null, 10, 'old', invalid(chosenId));
+
+    test.each([[undefined], [null]])('%s means "not given": the ranked path', async (chosenId) => {
+        expect((await chosen(chosenId)).success).toBe(true);
+        expect(currencyActions.previewSwap).toHaveBeenCalledWith(10, 'old', 'tok', expect.any(Object), {});
+    });
+
+    test('a chosen id goes to the service, as a string', async () => {
+        currencyActions.previewSwap.mockResolvedValueOnce({ ...OK, candidate: { id: 'pick-1', member_id: 'm' } });
+        expect(await chosen('pick-1')).toEqual({
+            success: true,
+            outcome: 'ok',
+            candidate: { id: 'pick-1', member_id: 'm' },
+        });
+        expect(currencyActions.previewSwap).toHaveBeenCalledWith(10, 'old', 'tok', expect.any(Object), {
+            chosenId: 'pick-1',
+        });
+    });
+
+    test('a numeric chosen id is normalised to a string', async () => {
+        await chosen(4242);
+        expect(currencyActions.previewSwap.mock.calls[0][4]).toEqual({ chosenId: '4242' });
+    });
+
+    test.each([['has space'], ['a/b'], [''], ['x'.repeat(65)], [{}], [true], [Number.NaN]])(
+        'a chosen id that is not a library id (%p) → invalid-args, nothing previewed',
+        async (chosenId) => {
+            expect((await chosen(chosenId)).outcome).toBe('invalid-args');
+            expect(currencyActions.previewSwap).not.toHaveBeenCalled();
+        },
+    );
+
+    test('the chosen id is logged only when given', async () => {
+        await chosen(null);
+        await chosen('pick-1');
+        const base = '🔄 Swap preview request: Challenge=10, Image=old';
+        expect(logCategories('info', base, null)).toEqual(['currency']);
+        expect(logCategories('info', `${base}, chosen=pick-1`, null)).toEqual(['currency']);
+    });
+
+    test('the commit takes exactly the remembered chosen id, once', async () => {
+        currencyActions.previewSwap.mockResolvedValueOnce({ ...OK, candidate: { id: 'pick-1', member_id: 'm' } });
+        await chosen('pick-1');
+        expect((await handlers['swap-entry-photo'](null, 10, 'old', 'other', true)).outcome).toBe('stale-candidate');
+        expect(currencyActions.swapEntry).not.toHaveBeenCalled();
+        // The refused attempt consumed it.
+        expect((await handlers['swap-entry-photo'](null, 10, 'old', 'pick-1', true)).outcome).toBe('stale-candidate');
+    });
+
+    test('the remembered chosen id is accepted at the commit', async () => {
+        currencyActions.previewSwap.mockResolvedValueOnce({ ...OK, candidate: { id: 'pick-1', member_id: 'm' } });
+        await chosen('pick-1');
+        expect((await handlers['swap-entry-photo'](null, 10, 'old', 'pick-1', true)).success).toBe(true);
+        expect(currencyActions.swapEntry).toHaveBeenCalledWith(10, 'old', 'pick-1', 'tok', expect.any(Object));
+    });
+
+    test('a later preview for the same entry replaces the earlier one', async () => {
+        currencyActions.previewSwap.mockResolvedValueOnce({ ...OK, candidate: { id: 'pick-1', member_id: 'm' } });
+        await chosen('pick-1');
+        await handlers['preview-swap-photo'](null, 10, 'old');
+        expect((await handlers['swap-entry-photo'](null, 10, 'old', 'pick-1', true)).outcome).toBe('stale-candidate');
+    });
+
+    test('an already-entered refusal is passed on and not remembered', async () => {
+        currencyActions.previewSwap.mockResolvedValueOnce({ ok: false, outcome: 'already-entered' });
+        expect((await chosen('pick-1')).outcome).toBe('already-entered');
+        expect((await handlers['swap-entry-photo'](null, 10, 'old', 'pick-1', true)).outcome).toBe('stale-candidate');
     });
 });
 

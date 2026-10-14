@@ -45,6 +45,7 @@ const renderBadge = (entry: RankingEntry) =>
             onBoostApplied={() => {}}
             onTurboApplied={() => {}}
             onSwapped={() => {}}
+            onChooseSwap={() => {}}
         />,
     );
 

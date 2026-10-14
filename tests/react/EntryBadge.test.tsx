@@ -59,7 +59,7 @@ const baseEntry = (overrides = {}) => ({
 });
 
 // The parent callbacks are never triggered here.
-const noCallbacks = { onBoostApplied: () => {}, onTurboApplied: () => {}, onSwapped: () => {} };
+const noCallbacks = { onBoostApplied: () => {}, onTurboApplied: () => {}, onSwapped: () => {}, onChooseSwap: () => {} };
 
 beforeEach(() => {
     resetHookState();

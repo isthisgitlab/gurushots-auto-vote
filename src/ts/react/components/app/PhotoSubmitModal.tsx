@@ -14,6 +14,35 @@ import { PhotoGrid } from './PhotoChooserModal';
 export type PickOutcome = 'done' | 'refreshed' | 'failed';
 
 /**
+ * The translation keys of every line the modal's body and title read. The default is the Pick… submit's;
+ * another use (the swap picker) names its own.
+ */
+export type PickTexts = {
+    title: string;
+    help: string;
+    count: string;
+    overCap: string;
+    submit: string;
+    submitCount: string;
+    full: string;
+    noSlots: string;
+};
+
+/** Photos the modal shows as blocked (ids) and the translation key of what their tiles say. */
+export type BlockedPhotos = { ids: ReadonlySet<string>; reasonKey: string };
+
+export const PICK_TEXTS: PickTexts = {
+    title: 'app.pickTitle',
+    help: 'app.pickHelp',
+    count: 'app.pickCount',
+    overCap: 'app.pickOverCap',
+    submit: 'app.pickSubmit',
+    submitCount: 'app.pickSubmitCount',
+    full: 'app.pickFull',
+    noSlots: 'app.pickNoSlots',
+};
+
+/**
  * Cancel and Submit: Submit names how many are picked and is held with none, while the pick cannot be sent
  * (over the cap, or the listing is being read), or while sending.
  */
@@ -21,17 +50,19 @@ function SubmitFooter({
     count,
     held,
     submitting,
+    texts,
     onSubmit,
     onCancel,
 }: {
     count: number;
     held: boolean;
     submitting: boolean;
+    texts: PickTexts;
     onSubmit: () => void;
     onCancel: () => void;
 }) {
     const { t } = useTranslation();
-    const label = count > 0 ? interp(t('app.pickSubmitCount'), { count }) : t('app.pickSubmit');
+    const label = count > 0 ? interp(t(texts.submitCount), { count }) : t(texts.submit);
     return (
         <div className="flex justify-end gap-2">
             <button type="button" className="btn btn-outline btn-sm" disabled={submitting} onClick={onCancel}>
@@ -61,6 +92,9 @@ function PhotoSubmitBody({
     max,
     submitting,
     error,
+    texts,
+    notice,
+    blocked,
     onSubmit,
     onClose,
 }: {
@@ -68,6 +102,9 @@ function PhotoSubmitBody({
     max: number;
     submitting: boolean;
     error: string | null;
+    texts: PickTexts;
+    notice: string | null;
+    blocked?: BlockedPhotos;
     onSubmit: (imageIds: string[]) => Promise<PickOutcome>;
     onClose: () => void;
 }) {
@@ -140,7 +177,7 @@ function PhotoSubmitBody({
         return (
             <div className="space-y-3">
                 <p className="text-sm" role="status">
-                    {t('app.pickNoSlots')}
+                    {t(texts.noSlots)}
                 </p>
                 <ModalActions>
                     <button type="button" className="btn btn-outline btn-sm" disabled={submitting} onClick={onClose}>
@@ -154,10 +191,15 @@ function PhotoSubmitBody({
     const over = selected.length > max;
     return (
         <div className="space-y-3">
-            <p className="text-base-content/70 text-xs">{t('app.pickHelp')}</p>
+            {notice && (
+                <div role="status" className="alert alert-info py-2 text-sm">
+                    <span>{notice}</span>
+                </div>
+            )}
+            <p className="text-base-content/70 text-xs">{t(texts.help)}</p>
             <SearchForm onSearch={(term) => void load(term)} />
             <p className="text-xs" role="status">
-                {interp(t(over ? 'app.pickOverCap' : 'app.pickCount'), { count: selected.length, max })}
+                {interp(t(over ? texts.overCap : texts.count), { count: selected.length, max })}
             </p>
             <PhotoGrid
                 state={state}
@@ -176,7 +218,9 @@ function PhotoSubmitBody({
                 onRefresh={refreshListing}
                 // With one slot the modal swaps the pick, so the grid never stops offering tiles.
                 max={max === 1 ? Number.POSITIVE_INFINITY : max}
-                fullKey="app.pickFull"
+                fullKey={texts.full}
+                blockedIds={blocked?.ids}
+                blockedKey={blocked?.reasonKey}
                 numbered={false}
             />
             {alert}
@@ -184,6 +228,7 @@ function PhotoSubmitBody({
                 count={selected.length}
                 held={over || state.status !== 'ready' || checking}
                 submitting={submitting}
+                texts={texts}
                 onSubmit={submit}
                 onCancel={onClose}
             />
@@ -199,6 +244,10 @@ function PhotoSubmitBody({
  *
  * @param max - the card's live count of open slots
  * @param error - the translated text of the last failed submit
+ * @param texts - the translation keys of the title and every line of the body (the Pick… submit's by default)
+ * @param notice - a line shown at the top of the body, e.g. why the modal opened
+ * @param blocked - photos shown as blocked, with the translation key of the reason, that cannot be picked: the
+ *   listing marks only what the server refuses for the challenge, not what is already entered
  * @param onSubmit - sends the ids and says what came of it (the card refreshes itself)
  */
 export function PhotoSubmitModal({
@@ -208,6 +257,9 @@ export function PhotoSubmitModal({
     max,
     submitting,
     error,
+    texts = PICK_TEXTS,
+    notice = null,
+    blocked,
     onSubmit,
 }: {
     isOpen: boolean;
@@ -216,6 +268,9 @@ export function PhotoSubmitModal({
     max: number;
     submitting: boolean;
     error: string | null;
+    texts?: PickTexts;
+    notice?: string | null;
+    blocked?: BlockedPhotos;
     onSubmit: (imageIds: string[]) => Promise<PickOutcome>;
 }) {
     const { t } = useTranslation();
@@ -224,7 +279,7 @@ export function PhotoSubmitModal({
         <Modal
             isOpen
             onClose={submitting ? undefined : onClose}
-            title={t('app.pickTitle')}
+            title={t(texts.title)}
             size="xl"
             showCloseButton={!submitting}
         >
@@ -233,6 +288,9 @@ export function PhotoSubmitModal({
                 max={max}
                 submitting={submitting}
                 error={error}
+                texts={texts}
+                notice={notice}
+                blocked={blocked}
                 onSubmit={onSubmit}
                 onClose={onClose}
             />

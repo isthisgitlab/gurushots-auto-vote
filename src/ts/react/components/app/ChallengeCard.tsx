@@ -107,8 +107,8 @@ export function ChallengeCard({
         hasCustomSettings,
     };
 
-    // The Pick… modal sits beside the card, in the same place whichever layout shows, so switching
-    // layouts (or a refresh that hides the submit buttons) never unmounts it.
+    // The Pick… and swap-picker modals sit beside the card, in the same place whichever layout shows, so
+    // switching layouts (or a refresh that hides the buttons) never unmounts them.
     const card = isCompact ? (
         <div id={cardId} className={cardClass} tabIndex={-1}>
             <ChallengeCardCompact
@@ -157,6 +157,7 @@ export function ChallengeCard({
         <>
             {card}
             {actions.pickModal}
+            {actions.swapPickModal}
         </>
     );
 }

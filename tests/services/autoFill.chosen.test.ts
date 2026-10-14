@@ -12,7 +12,7 @@ import type * as photoPickerModule from '../../src/ts/services/photoPicker';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
 import type { FillDeps, FillLogger, FillSettings, RankDeps } from '../../src/ts/types/autoFill';
-import type { PickerPhoto } from '../../src/ts/types/photoPicker';
+import type { PickerPhoto, ScoredCandidate } from '../../src/ts/types/photoPicker';
 import { invalid } from '../helpers/invalid';
 
 jest.mock('../../src/ts/services/semantic/lexicon', () => ({
@@ -44,7 +44,8 @@ const {
 const { forgetChosenPhotosMemory, resolveMissingChosen, logChosenSkipOnce } =
     require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
-const { verifyFillPick } = require('../../src/ts/services/autoFill/pipeline/verify') as typeof verifyModule;
+const { verifyFillPick, recordUncertainSubmission } =
+    require('../../src/ts/services/autoFill/pipeline/verify') as typeof verifyModule;
 const { buildChosenCandidates } = require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
 const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
 
@@ -282,7 +283,7 @@ describe('chosen photos rank first', () => {
         expect(submittedIds(single)).toEqual([['theme-b']]);
     });
 
-    test('the visual evidence of both blocks is combined, and each block reorders only itself', async () => {
+    test("only the top-up block's visual evidence is kept, and each block reorders only itself", async () => {
         const challenge = makeChallenge();
         const photos = ['c1', 'c2', 'r1', 'r2', 'r3'].map((id, n) => photo(id, ['Pink'], { upload_date: 9000 - n }));
         const { scored, chosenIds } = buildChosenCandidates(challenge, photos, {
@@ -313,11 +314,54 @@ describe('chosen photos rank first', () => {
             chosenIds,
         );
         expect(verified.picked).toEqual(['c1', 'r1']);
-        expect([...(verified.visualEvidence as Set<string>)].sort()).toEqual(['c1', 'r1']);
+        expect([...(verified.visualEvidence as Set<string>)]).toEqual(['r1']);
         // Two runs, one per block, and a chosen photo never competes with a top-up photo.
         expect(seen).toHaveLength(2);
         expect(seen[0].every((id) => id.startsWith('c'))).toBe(true);
         expect(seen[1].every((id) => id.startsWith('r'))).toBe(true);
+    });
+
+    test('a top-up photo is judged by its own evidence when the model abstains on that block', async () => {
+        const challenge = makeChallenge({ title: 'Dogs' });
+        const candidate = (id: string, semantic: number) =>
+            invalid<ScoredCandidate>({ id, photo: photo(id, ['Car']), semantic, semanticSupport: 1, score: 0 });
+        const scored = [candidate('c1', 0), candidate('c2', 0), candidate('r1', 0.6), candidate('r2', 0)];
+        const chosenIds = new Set(['c1', 'c2']);
+        // The chosen block is re-ranked and its first photo accepted; the model abstains on the top-up block.
+        const rankVisually = jest.fn(
+            async (
+                _c: unknown,
+                ids: string[],
+                _e: unknown,
+                want: number,
+                options?: { onVisualEvidence?: (accepted: Set<string>) => void },
+            ) => {
+                if (ids[0].startsWith('c')) options?.onVisualEvidence?.(new Set([ids[0]]));
+                return ids.slice(0, want);
+            },
+        );
+        const ledger = createMemoryEntryAgeLedger();
+        const { logger, lines } = makeLog();
+        const deps = invalid<RankDeps>({ logger, rankVisually, entryAges: ledger });
+        const picked = ['c1', 'r1', 'r2'];
+        const verified = await verifyFillPick(challenge, scored, [], picked, null, deps, chosenIds);
+        expect(rankVisually).toHaveBeenCalledTimes(2);
+        expect(verified.visualEvidence).toBeNull();
+        recordUncertainSubmission({
+            challenge,
+            label: 'autoFill',
+            scored,
+            picked: verified.picked,
+            visualEvidence: verified.visualEvidence,
+            ignoreWords: null,
+            chosenIds,
+            deps,
+        });
+        // The semantic match stands, the unmatched top-up photo is doubtful, a chosen photo never is.
+        expect(ledger.isUncertain(challenge.id, 'r1')).toBe(false);
+        expect(ledger.isUncertain(challenge.id, 'r2')).toBe(true);
+        expect(ledger.isUncertain(challenge.id, 'c1')).toBe(false);
+        expect(lines.warning).toEqual([expect.stringContaining('photo r2 no subject match')]);
     });
 
     test('an empty chosen set behaves exactly like no list, evidence and uncertainty included', async () => {

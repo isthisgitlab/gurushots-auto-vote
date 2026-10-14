@@ -26,8 +26,9 @@ Commands:
   submit   - Submit photo(s) to a challenge's empty slots: submit --challenge=<id> [--all]
   unlock-boost  - Spend a key to unlock a locked boost (does not apply it):
              unlock-boost --challenge=<id> [--yes]
-  swap     - Spend a swap to replace an entered photo with a different one:
-             swap --challenge=<id> --image=<id> [--to=<id> --yes]
+  swap     - Spend a swap to replace an entered photo: without --to it suggests a different one,
+             with --to=<id> it swaps in the photo you name (list-photos --challenge=<id> shows them):
+             swap --challenge=<id> --image=<id> [--to=<id>] [--yes]
   swap-back - Swap a photo that was swapped out while boosted/turbo'd back in (it gets
              its boost/turbo back): swap-back --challenge=<id> --image=<current id> [--yes]
   fill-exposure - Spend a fill to top exposure up to 100%: fill-exposure --challenge=<id> [--yes]
@@ -103,6 +104,7 @@ Examples:
   submit --challenge=12345 --all
   unlock-boost --challenge=12345 --yes
   swap --challenge=12345 --image=abc123
+  swap --challenge=12345 --image=abc123 --to=def456 --yes
   fill-exposure --challenge=12345 --yes
   bankroll
   discover

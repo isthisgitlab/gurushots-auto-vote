@@ -83,10 +83,12 @@ const verifyFillPick = async (
                 : await rankBlock(challenge, block, eligible, blockPicked, ignoreWords, deps),
         );
     }
-    const evidence = results.flatMap((result) => (result.visualEvidence ? [...result.visualEvidence] : []));
+    // A chosen photo is never marked uncertain, so only the top-up block's
+    // evidence is read; merging in the chosen block's would read a top-up
+    // photo as rejected whenever that block's model run abstained.
     return {
         picked: results.flatMap((result) => result.picked),
-        visualEvidence: results.some((result) => result.visualEvidence) ? new Set(evidence) : null,
+        visualEvidence: results[1].visualEvidence,
     };
 };
 

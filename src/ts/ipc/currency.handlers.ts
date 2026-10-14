@@ -21,6 +21,7 @@ import * as auth from '../services/auth';
 import * as currencyActions from '../services/currencyActions';
 import { dropContext } from '../services/libraryCache';
 import { CURRENCY_OUTCOME } from '../voting/currencyActions';
+import { CHOSEN_PHOTO_ID_RE } from '../settings/limits';
 import { swapBackLedger, mockSwapBackLedger } from '../swapBackStore';
 
 import type { IpcMain } from 'electron';
@@ -31,9 +32,15 @@ import type { SpendOutcome } from '../services/currencyActions';
 const sanitizeForLog = logger.sanitizeLogString;
 
 // Swap previews awaiting confirmation, keyed `challengeId:imageId`. The commit
-// must name the exact candidate the user was shown; an entry is single-use
-// (deleted on any commit attempt) and expires after PREVIEW_TTL_MS. Bounded so
-// a long session cannot grow it without limit.
+// must name the exact candidate the user was shown, which is either the app's
+// ranked suggestion or a photo the user chose from the library. For a chosen
+// photo this gate proves only that the commit names the id of a recent,
+// single-use preview for that entry, which passed the live checks, the
+// library-id format and "not already entered"; eligibility is the server's call
+// when the swap is spent, as for the Pick… submit. An entry is single-use
+// (deleted on any commit attempt) and expires after PREVIEW_TTL_MS; a later
+// preview for the same entry replaces it. Bounded so a long session cannot grow
+// it without limit.
 const swapPreviews: Map<string, { candidateId: string; expiresAt: number }> = new Map();
 const PREVIEW_TTL_MS = 5 * 60 * 1000;
 const MAX_SWAP_PREVIEWS = 32;
@@ -126,26 +133,39 @@ const buildHandlers = () =>
             );
         },
 
-        // Suggest the replacement a swap of `imageId` would use. Spends nothing;
-        // the candidate is remembered so swap-entry-photo can require it.
-        'preview-swap-photo': async (event: unknown, challengeId: string | number, imageId: string | number) => {
+        // Preview the replacement a swap of `imageId` would use: the app's
+        // suggestion, or `chosenId` (a library photo the user picked; null and
+        // undefined both mean "not given"). Spends nothing; the candidate is
+        // remembered so swap-entry-photo can require it.
+        'preview-swap-photo': async (
+            event: unknown,
+            challengeId: string | number,
+            imageId: string | number,
+            chosenId?: string | number | null,
+        ) => {
+            const hasChosen = chosenId !== undefined && chosenId !== null;
             if (!isIdArg(challengeId) || !isIdArg(imageId)) return currencyFailure(CURRENCY_OUTCOME.invalidArgs);
+            if (hasChosen && !(isIdArg(chosenId) && CHOSEN_PHOTO_ID_RE.test(String(chosenId)))) {
+                return currencyFailure(CURRENCY_OUTCOME.invalidArgs);
+            }
             // isIdArg admits numbers; the service and the preview key work on strings.
             const image = String(imageId);
             try {
                 logger
                     .withCategory('currency')
                     .info(
-                        `🔄 Swap preview request: Challenge=${sanitizeForLog(challengeId)}, Image=${sanitizeForLog(imageId)}`,
+                        `🔄 Swap preview request: Challenge=${sanitizeForLog(challengeId)}, Image=${sanitizeForLog(imageId)}${hasChosen ? `, chosen=${sanitizeForLog(chosenId)}` : ''}`,
                         null,
                     );
                 const guard = auth.requireAuthToken('swap preview');
                 if (!guard.ok) return guard.response;
-                const result = await currencyActions.previewSwap(challengeId, image, guard.token, {
-                    strategy: apiFactory.getApiStrategy(),
-                    logger,
-                    settings,
-                });
+                const result = await currencyActions.previewSwap(
+                    challengeId,
+                    image,
+                    guard.token,
+                    { strategy: apiFactory.getApiStrategy(), logger, settings },
+                    hasChosen ? { chosenId: String(chosenId) } : {},
+                );
                 if (!result?.ok || !result.candidate) return currencyFailure(result?.outcome);
                 rememberSwapPreview(previewKey(challengeId, image), result.candidate.id);
                 return { success: true as const, outcome: CURRENCY_OUTCOME.ok, candidate: result.candidate };
@@ -156,7 +176,8 @@ const buildHandlers = () =>
         },
 
         // Spend a SWAP: replace `imageId` with `newImageId`, which must be the
-        // unexpired candidate preview-swap-photo returned for this entry.
+        // unexpired candidate preview-swap-photo returned for this entry — the
+        // suggestion, or the photo the user chose (see swapPreviews).
         'swap-entry-photo': async (
             event: unknown,
             challengeId: string | number,

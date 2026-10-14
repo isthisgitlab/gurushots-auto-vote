@@ -281,6 +281,8 @@ export function PhotoGrid({
     recheckFailed,
     submit = false,
     refreshDisabled = false,
+    blockedIds,
+    blockedKey = 'app.photoChooserNotEligible',
     onToggle,
     onRetry,
     onRefresh,
@@ -307,6 +309,10 @@ export function PhotoGrid({
     submit?: boolean;
     /** Refresh cannot be pressed now (a submit is running). */
     refreshDisabled?: boolean;
+    /** Photos the caller already knows cannot be picked (the listing does not say), shown blocked. */
+    blockedIds?: ReadonlySet<string>;
+    /** The translation key of what a tile in `blockedIds` says. */
+    blockedKey?: string;
     onToggle: (id: string) => void;
     onRetry: () => void;
     onRefresh: () => void;
@@ -350,8 +356,10 @@ export function PhotoGrid({
     const lookup = (id: string): LibraryPhoto | undefined => (previewPhotos ?? known).get(id);
     const atCap = selected.length >= max;
     let position = 0;
-    const blockedReasonOf = (photo: LibraryPhoto): string | null =>
-        listing.allowedKnown && !photo.allowed ? photo.message || t('app.photoChooserNotEligible') : null;
+    const blockedReasonOf = (photo: LibraryPhoto): string | null => {
+        if (blockedIds?.has(photo.id)) return t(blockedKey);
+        return listing.allowedKnown && !photo.allowed ? photo.message || t('app.photoChooserNotEligible') : null;
+    };
     const shown = (n: number): number | null => (numbered ? n : null);
     const tile = (photo: LibraryPhoto, position: number | null) => (
         <PhotoTile

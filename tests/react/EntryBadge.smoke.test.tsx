@@ -36,6 +36,7 @@ describe('EntryBadge — smoke', () => {
                 onBoostApplied={() => {}}
                 onTurboApplied={() => {}}
                 onSwapped={() => {}}
+                onChooseSwap={() => {}}
             />,
         );
         // Translation keys come through as the keys themselves in tests

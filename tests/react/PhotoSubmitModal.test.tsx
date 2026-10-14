@@ -575,3 +575,76 @@ describe('the listing states', () => {
         await screen.findByRole('button', { name: 'Retry' });
     });
 });
+
+describe('texts, notice and blocked photos (the swap picker)', () => {
+    // Photo 1 is the blocked one, so the fresh read is told by photo 2.
+    const openedPast1 = async () => {
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await waitFor(() => expect(tile(2).textContent).toContain('Can be entered'));
+    };
+    const swapTexts = {
+        title: 'app.swapPickTitle',
+        help: 'app.swapPickHelp',
+        count: 'app.swapPickCount',
+        overCap: 'app.pickOverCap',
+        submit: 'app.swapPickSubmit',
+        submitCount: 'app.swapPickSubmit',
+        full: 'app.pickFull',
+        noSlots: 'app.pickNoSlots',
+    };
+
+    test('texts replace the title, help, count and both submit labels', async () => {
+        setup({ max: 1, texts: swapTexts });
+        await opened();
+        expect(screen.getByText('Choose the photo to swap in')).toBeTruthy();
+        expect(screen.getByText(/^The photo you pick replaces the current one as is/)).toBeTruthy();
+        expect(countLine().textContent).toBe('Picked: 0/1');
+        const useButton = () => screen.getByRole('button', { name: /^Use this photo/ });
+        expect(useButton().textContent).toBe('Use this photo');
+        fireEvent.click(tile(1));
+        expect(useButton().textContent).toBe('Use this photo');
+        expect(useButton().hasAttribute('disabled')).toBe(false);
+    });
+
+    test('texts name the no-slots line too', () => {
+        setup({ max: 0, texts: { ...swapTexts, noSlots: 'app.pickFull' } });
+        expect(screen.getByRole('status').textContent).toBe('All open slots picked');
+    });
+
+    test('a notice shows as an info line above the body, and is absent by default', async () => {
+        const { unmount } = setup({ notice: 'No different photo is available.' });
+        await opened();
+        const notice = screen.getByText('No different photo is available.');
+        expect(notice.closest('[role="status"]')?.className).toContain('alert-info');
+        unmount();
+        setup();
+        await opened();
+        expect(document.querySelector('.alert-info')).toBeNull();
+    });
+
+    test('blocked photos show their reason and cannot be picked', async () => {
+        const { props } = setup({
+            max: 1,
+            blocked: { ids: new Set([idOf(1)]), reasonKey: 'app.swapPickBlocked' },
+        });
+        await openedPast1();
+        expect(tile(1).textContent).toContain('Already in this challenge');
+        expect(tile(1).getAttribute('aria-disabled')).toBe('true');
+        fireEvent.click(tile(1));
+        expect(tile(1).getAttribute('aria-pressed')).toBe('false');
+        expect(submitButton().hasAttribute('disabled')).toBe(true);
+        expect(tile(2).getAttribute('aria-disabled')).toBe('false');
+        fireEvent.click(tile(2));
+        fireEvent.click(submitButton());
+        await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith([idOf(2)]));
+    });
+
+    test('a blocked photo is blocked even when the listing cannot judge eligibility', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1), photo(2)], { allowedKnown: false }));
+        setup({ max: 1, blocked: { ids: new Set([idOf(1)]), reasonKey: 'app.swapPickBlocked' } });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await waitFor(() => expect(tile(2).getAttribute('aria-disabled')).toBe('false'));
+        expect(tile(1).textContent).toContain('Already in this challenge');
+        expect(tile(1).getAttribute('aria-disabled')).toBe('true');
+    });
+});

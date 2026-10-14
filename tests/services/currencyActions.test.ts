@@ -214,6 +214,55 @@ describe('previewSwap', () => {
     });
 });
 
+describe('previewSwap with a chosen photo', () => {
+    const chosen = (strategy: ReturnType<typeof stubStrategy>, chosenId: string, imageId = 'old') =>
+        previewSwap(555, imageId, 'tok', { strategy, logger, settings: noSettings }, { chosenId });
+
+    test('names the chosen photo as the candidate without ranking anything', async () => {
+        const strategy = stubStrategy({ library: [photo('fresh', 1)] });
+        expect(await chosen(strategy, 'picked')).toEqual({
+            ok: true,
+            outcome: 'ok',
+            candidate: { id: 'picked', member_id: 'mem1' },
+        });
+        expect(strategy.getEligiblePhotos).not.toHaveBeenCalled();
+        expect(strategy.getImageData).not.toHaveBeenCalled();
+    });
+
+    test('a photo swapped out earlier can be chosen', async () => {
+        const strategy = stubStrategy();
+        expect((await chosen(strategy, 'swapped-before')).ok).toBe(true);
+    });
+
+    test('the photo being replaced is refused as already entered', async () => {
+        const strategy = stubStrategy();
+        expect(await chosen(strategy, 'old')).toEqual({ ok: false, outcome: 'already-entered' });
+    });
+
+    test('another entered photo is refused as already entered', async () => {
+        const strategy = stubStrategy();
+        expect(await chosen(strategy, 'entered')).toEqual({ ok: false, outcome: 'already-entered' });
+    });
+
+    test('a live block still applies: nothing is named', async () => {
+        const strategy = stubStrategy({ challenge: makeChallenge({ swap_locked: true }) });
+        expect(await chosen(strategy, 'picked')).toEqual({ ok: false, outcome: 'not-available' });
+    });
+
+    test('the replaced entry must still be entered', async () => {
+        const strategy = stubStrategy();
+        expect(await chosen(strategy, 'picked', 'gone')).toEqual({ ok: false, outcome: 'not-available' });
+    });
+
+    test('an entry without a member id gives an empty one, not "undefined"', async () => {
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries = [{ id: 'old' }];
+        const strategy = stubStrategy({ challenge });
+        expect((await chosen(strategy, 'picked')).ok).toBe(true);
+        expect(await chosen(strategy, 'picked')).toMatchObject({ candidate: { id: 'picked', member_id: '' } });
+    });
+});
+
 describe('swapEntry', () => {
     test('swaps the entry for the new photo', async () => {
         const strategy = stubStrategy();

@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
 import { useSubmitPicked } from '@/api/useSubmitPicked';
+import { useSwapPhoto } from '@/api/useCurrencyActions';
+import { spentOrStale } from '@/utils/spentOrStale';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { ActionButton } from '@/components/ui/ActionButton';
@@ -12,11 +14,16 @@ import { BusyContent } from '@/components/ui/LoadingSpinner';
 import { VoteButton } from './VoteButton';
 import { RunButton } from './RunButton';
 import { CurrencyCellButton } from './CurrencyActionButton';
-import { PhotoSubmitModal } from './PhotoSubmitModal';
+import { PhotoSubmitModal, PICK_TEXTS } from './PhotoSubmitModal';
+import { currencyOutcomeText } from './CurrencyConfirmModal';
+import { SwapConfirmModal, SwapWarningLines } from './SwapEntryButton';
+import { swapExcludedIds } from '../../../voting/currencyActions';
 
-import type { Bankroll, Challenge } from '../../../types/gurushots';
+import type { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots';
+import type { SwapCandidate } from '../../../services/currencyActions';
 import type { ChallengeCardView } from './ChallengeCard';
 import type { PickOutcome } from './PhotoSubmitModal';
+import type { OpenSwapPick, SwapWarnings } from './SwapEntryButton';
 
 /**
  * The challenge-level action elements and fill-button props one card shares
@@ -186,6 +193,137 @@ function usePickModal({
     };
 }
 
+// What the swap picker says: the Pick… submit's lines, with the ones about slots and submitting made to fit
+// choosing the one photo that takes an entry's place (overCap, full and noSlots can't be reached with one).
+const SWAP_PICK_TEXTS = {
+    ...PICK_TEXTS,
+    title: 'app.swapPickTitle',
+    help: 'app.swapPickHelp',
+    count: 'app.swapPickCount',
+    submit: 'app.swapPickSubmit',
+    submitCount: 'app.swapPickSubmit',
+};
+
+/**
+ * One chosen swap in progress: the entry being replaced, then the picker (no `candidate`) and the confirm
+ * modal for the photo picked (`candidate`). `returnFocusEl` is the Swap button that started it.
+ */
+type SwapPickFlow = {
+    entry: RankingEntry;
+    warnings: SwapWarnings;
+    notice: string | null;
+    returnFocusEl: HTMLElement | null;
+    candidate: SwapCandidate | null;
+};
+
+/**
+ * The chosen swap's state: the library picker for the photo that takes an entry's place, then the confirm
+ * modal for that photo. Owned by the card (not by the entry's Swap button, which a refresh can unmount), so
+ * a long library browse or a preview in flight survives it. It has its own swap actions, so its errors never
+ * mix with the button's inline one. Like Pick…, nothing is ranked: the photo is sent as chosen and the server
+ * has the final say on whether the challenge accepts it.
+ */
+function useSwapPickModal({
+    challenge,
+    bankroll,
+    onCurrencySpent,
+}: {
+    challenge: Challenge;
+    bankroll: Bankroll | null;
+    onCurrencySpent?: () => void;
+}) {
+    const { t } = useTranslation();
+    const { preview, commit } = useSwapPhoto();
+    const [flow, setFlow] = useState<SwapPickFlow | null>(null);
+    const returnFocusRef = useRef<HTMLElement | null>(null);
+    // The listing does not say which photos are entered, so the picker blocks them itself.
+    const entered = useMemo(() => swapExcludedIds(challenge), [challenge]);
+
+    // The button that started the flow is focused once the flow's modals have gone: their own focus return
+    // would land on the "Choose another photo…" button, which has unmounted by then.
+    useEffect(() => {
+        if (flow !== null) return;
+        returnFocusRef.current?.focus();
+        returnFocusRef.current = null;
+    }, [flow]);
+
+    const open: OpenSwapPick = (entry, warnings, returnFocusEl, notice = null) => {
+        preview.clearError();
+        commit.clearError();
+        setFlow({ entry, warnings, notice, returnFocusEl, candidate: null });
+    };
+
+    const end = (current: SwapPickFlow) => {
+        returnFocusRef.current = current.returnFocusEl;
+        preview.clearError();
+        commit.clearError();
+        setFlow(null);
+    };
+
+    // A refusal leaves the picker open (its alert says why); a preview that went through moves on to the confirm.
+    const pick =
+        (current: SwapPickFlow) =>
+        async (imageIds: string[]): Promise<PickOutcome> => {
+            commit.clearError();
+            const result = await preview.run(challenge.id, current.entry.id, imageIds[0]);
+            if (!result?.success || !result.candidate) return 'failed';
+            setFlow({ ...current, candidate: result.candidate });
+            return 'done';
+        };
+
+    // The spend consumes the preview whatever it comes to, so a spend that went through or found the card stale
+    // ends the flow and refreshes the card; any other failure goes back to the picker, whose alert gives the
+    // reason, for a new pick (and a new preview).
+    const confirm = async (current: SwapPickFlow, candidate: SwapCandidate) => {
+        const result = await commit.run(challenge.id, current.entry.id, candidate.id);
+        if (spentOrStale(result)) {
+            end(current);
+            onCurrencySpent?.();
+            return;
+        }
+        setFlow({ ...current, candidate: null });
+    };
+
+    // A refused pick and a refused spend are both told in the picker, which a refused spend reopens.
+    const pickError = preview.error || commit.error;
+    const picking = flow !== null && flow.candidate === null;
+    const confirming = flow !== null && flow.candidate !== null;
+
+    return {
+        open,
+        modal: flow && (
+            <>
+                <PhotoSubmitModal
+                    isOpen={picking}
+                    onClose={() => end(flow)}
+                    challengeId={challenge.id}
+                    max={1}
+                    submitting={preview.loading}
+                    error={pickError && currencyOutcomeText(t, pickError)}
+                    texts={SWAP_PICK_TEXTS}
+                    notice={flow.notice}
+                    blocked={{ ids: entered, reasonKey: 'app.swapPickBlocked' }}
+                    onSubmit={pick(flow)}
+                />
+                <SwapConfirmModal
+                    isOpen={confirming}
+                    onClose={() => end(flow)}
+                    onConfirm={() => confirm(flow, flow.candidate as SwapCandidate)}
+                    title={t('app.currencySwapTitle')}
+                    bankroll={bankroll}
+                    spending={commit.loading}
+                    current={flow.entry}
+                    other={flow.candidate}
+                    otherCaption={t('app.currencySwapYourPick')}
+                >
+                    <p>{t('app.currencySwapChosenBody')}</p>
+                    <SwapWarningLines {...flow.warnings} />
+                </SwapConfirmModal>
+            </>
+        ),
+    };
+}
+
 /**
  * Challenge-level action elements, shared by the detailed card's header and
  * cells and the compact tile's action row, so both offer the same actions
@@ -193,7 +331,8 @@ function usePickModal({
  * right now. Also owns the turbo-play / photo-submit calls and their
  * auto-clearing inline errors, and the Pick… modal (`pickModal`, rendered once
  * by the card, outside both layouts and the submit buttons' gate, so a refresh
- * cannot unmount it or lose a submit's answer).
+ * cannot unmount it or lose a submit's answer) and the chosen swap's picker and confirm
+ * (`swapPickModal`, rendered the same way; `openSwapPick` starts it from an entry's Swap button).
  */
 export function useChallengeCardActions({
     challenge,
@@ -215,6 +354,7 @@ export function useChallengeCardActions({
     const { fillNow, loading: filling, error: fillFailure, clearError: clearFillError } = useFillChallenge();
 
     const pick = usePickModal({ challenge, slotsRemaining: view.slotsRemaining, onVoteComplete });
+    const swapPick = useSwapPickModal({ challenge, bankroll, onCurrencySpent });
 
     const turboError = ipcErrorText(turboFailure, t);
     const fillError = ipcErrorText(fillFailure, t);
@@ -264,6 +404,8 @@ export function useChallengeCardActions({
             onPick: pick.open,
         },
         pickModal: pick.modal,
+        openSwapPick: swapPick.open,
+        swapPickModal: swapPick.modal,
     };
 }
 

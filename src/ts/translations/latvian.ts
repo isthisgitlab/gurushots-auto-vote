@@ -328,8 +328,11 @@ export const app = {
     currencySwapTitle: 'Apmainīt šo foto?',
     currencySwapBody:
         'Pašreizējo foto aizstās foto, ko lietotne izvēlējās šim izaicinājumam. Aizstāto foto nevar apmainīt atpakaļ.',
+    currencySwapChoose: 'Izvēlēties citu foto…',
     currencySwapCurrent: 'Pašreizējais foto',
     currencySwapReplacement: 'Jaunais foto',
+    currencySwapYourPick: 'Tavs izvēlētais foto',
+    currencySwapChosenBody: 'Pašreizējo foto aizstās tavs izvēlētais foto. Aizstāto foto nevar apmainīt atpakaļ.',
     currencySwapBoostedWarning:
         'Šim foto ir Boost vai Turbo. Tas paliek pie šī foto — jaunajam foto tā nebūs, un šajā izaicinājumā to vairs nevarēs izmantot, ja vien šo foto neapmainīsi atpakaļ.',
     currencySwapBack: 'Apmainīt atpakaļ',
@@ -351,7 +354,9 @@ export const app = {
         'Neizdevās pārbaudīt atlikumu, tāpēc nekas netika iztērēts. Pēc brīža mēģini vēlreiz.',
     currencyOutcomeNoAlternative: 'Nav cita foto, ar ko apmainīt, — visi derīgie foto šeit jau izmantoti.',
     currencyOutcomeStaleCandidate:
-        'Ieteiktais foto vairs nav aktuāls. Vēlreiz nospied „Apmainīt”, lai saņemtu jaunu ieteikumu.',
+        'Apmaiņas piedāvājums vairs nav aktuāls vai ir mainījies, tāpēc nekas netika iztērēts. Sāc apmaiņu no jauna.',
+    currencyOutcomeAlreadyEntered:
+        'Šis foto jau ir iesniegts šajā izaicinājumā, tāpēc nekas netika iztērēts. Izvēlies citu foto.',
     currencyOutcomeBusy: 'Vēl notiek cita valūtas darbība — pēc brīža mēģini vēlreiz.',
     currencyOutcomeUnclear:
         'Uz pieprasījumu netika saņemta atbilde, tāpēc nav zināms, vai tas izdevās. Atsvaidzini izaicinājumu un pārbaudi to, pirms mēģini vēlreiz.',
@@ -862,6 +867,12 @@ export const app = {
     pickNoSlots: 'Brīvu vietu vairs nav: katrā vietā jau ir foto. Aizver šo logu.',
     pickSubmit: 'Iesniegt',
     pickSubmitCount: 'Iesniegt {count} foto',
+    swapPickTitle: 'Izvēlies foto, ar ko apmainīt',
+    swapPickHelp:
+        'Izvēlētais foto aizstās pašreizējo bez tagu filtriem un uzstādījuma „Izvēlētie foto”. Vai izaicinājums to pieņem, GuruShots pārbauda tikai tad, kad apmaiņa tiek veikta.',
+    swapPickCount: 'Izvēlēts: {count}/1',
+    swapPickSubmit: 'Izmantot šo foto',
+    swapPickBlocked: 'Jau iesniegts šajā izaicinājumā',
     discoverChosenChip: 'Izvēlētie foto',
     discoverChosenChipHint: 'Šim izaicinājumam ir izvēlēti foto. Spied, lai tos mainītu.',
     discoverChosenChipLabel: 'Izvēlētie foto izaicinājumam „{title}”: mainīt',

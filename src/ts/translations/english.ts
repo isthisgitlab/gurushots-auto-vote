@@ -325,8 +325,12 @@ export const app = {
     currencySwapTitle: 'Swap this photo?',
     currencySwapBody:
         'The current photo is replaced by the one the app picked for this challenge. The replaced photo cannot be swapped back in.',
+    currencySwapChoose: 'Choose another photo…',
     currencySwapCurrent: 'Current photo',
     currencySwapReplacement: 'Replacement photo',
+    currencySwapYourPick: 'Your pick',
+    currencySwapChosenBody:
+        'The current photo is replaced by the photo you picked. The replaced photo cannot be swapped back in.',
     currencySwapBoostedWarning:
         'This photo is boosted or turbo-charged. The boost/turbo stays with this photo — the replacement will not have it, and it cannot be used again in this challenge unless you swap this photo back in.',
     currencySwapBack: 'Swap back',
@@ -347,7 +351,9 @@ export const app = {
     currencyOutcomeBalanceUnknown: 'Your balance could not be checked, so nothing was spent. Try again in a moment.',
     currencyOutcomeNoAlternative:
         'No different photo is available to swap in — every eligible photo is already used here.',
-    currencyOutcomeStaleCandidate: 'The suggested replacement expired. Press Swap again for a fresh pick.',
+    currencyOutcomeStaleCandidate: 'The swap offer expired or changed, so nothing was spent. Start the swap again.',
+    currencyOutcomeAlreadyEntered:
+        'That photo is already entered in this challenge, so nothing was spent. Pick a different photo.',
     currencyOutcomeBusy: 'Another currency action is still running — try again in a moment.',
     currencyOutcomeUnclear:
         'The request got no answer, so it may or may not have gone through. Refresh the challenge and check it before trying again.',
@@ -849,6 +855,12 @@ export const app = {
     pickNoSlots: 'No open slots left: every slot already holds a photo. Close this window.',
     pickSubmit: 'Submit',
     pickSubmitCount: 'Submit {count}',
+    swapPickTitle: 'Choose the photo to swap in',
+    swapPickHelp:
+        "The photo you pick replaces the current one as is: your tag filters and Chosen Photos setting don't apply. GuruShots checks whether the challenge accepts it only when the swap is spent.",
+    swapPickCount: 'Picked: {count}/1',
+    swapPickSubmit: 'Use this photo',
+    swapPickBlocked: 'Already in this challenge',
     discoverChosenChip: 'Chosen',
     discoverChosenChipHint: 'This challenge has chosen photos. Click to change them.',
     discoverChosenChipLabel: 'Chosen photos for {title}: change them',

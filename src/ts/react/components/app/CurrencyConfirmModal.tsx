@@ -14,6 +14,7 @@ const OUTCOME_KEY: Partial<Record<string, string>> = {
     'balance-unknown': 'app.currencyOutcomeBalanceUnknown',
     'no-alternative': 'app.currencyOutcomeNoAlternative',
     'stale-candidate': 'app.currencyOutcomeStaleCandidate',
+    'already-entered': 'app.currencyOutcomeAlreadyEntered',
     busy: 'app.currencyOutcomeBusy',
     unclear: 'app.currencyOutcomeUnclear',
 };

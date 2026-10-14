@@ -1,6 +1,7 @@
 import type { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots';
 import type { EntryPinKind, EntryPins } from '../../../types/settings';
 import type { SwapBackOffer } from '@/api/useSwapBacks';
+import type { OpenSwapPick } from './SwapEntryButton';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useBoost } from '@/api/useBoost';
 import { ipcErrorText } from '@/api/ipcErrorText';
@@ -115,6 +116,7 @@ function PinToggles({
  * @param props.swapAvailable - A swap can be spent on this challenge (balance + challenge flags)
  * @param props.bankroll - For the swap confirm modal's balance line
  * @param props.onSwapped - called after a swap / swap back spent
+ * @param props.onChooseSwap - opens the card's swap picker for this entry
  * @param props.swapBack - Swap-back offer for this slot (the original was swapped out while boosted/turbo'd)
  * @param props.pin - the pin toggles (absent = none shown)
  */
@@ -128,6 +130,7 @@ export function EntryBadge({
     swapAvailable = false,
     bankroll = null,
     onSwapped,
+    onChooseSwap,
     swapBack = null,
     pin,
 }: {
@@ -140,6 +143,7 @@ export function EntryBadge({
     swapAvailable?: boolean;
     bankroll?: Bankroll | null;
     onSwapped: () => void;
+    onChooseSwap: OpenSwapPick;
     swapBack?: SwapBackOffer | null;
     pin?: EntryPinControls;
 }) {
@@ -229,6 +233,7 @@ export function EntryBadge({
                         warnActioned={isEntryActioned}
                         warnPinned={pin?.livePin ?? null}
                         onSpent={onSwapped}
+                        onChoose={onChooseSwap}
                     />
                     {swapBack && (
                         <SwapBackButton

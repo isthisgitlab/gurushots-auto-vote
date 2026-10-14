@@ -23,6 +23,7 @@ const CURRENCY_OUTCOME = Object.freeze({
     balanceUnknown: 'balance-unknown',
     noAlternative: 'no-alternative',
     staleCandidate: 'stale-candidate',
+    alreadyEntered: 'already-entered',
     busy: 'busy',
     invalidArgs: 'invalid-args',
     apiFailed: 'api-failed',

@@ -36,6 +36,7 @@ const renderBadge = (pin?: EntryPinControls, props = {}) =>
             onBoostApplied={() => {}}
             onTurboApplied={() => {}}
             onSwapped={() => {}}
+            onChooseSwap={() => {}}
             pin={pin}
             {...props}
         />,

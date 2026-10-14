@@ -202,26 +202,45 @@ const unlockBoostWithKey = async (
 };
 
 /**
- * Picks the photo a swap would put in place of `imageId` — the best-ranked
- * candidate under the same pipeline a fill uses, excluding every photo already
- * entered and `imageId` itself. A photo swapped out earlier stays a candidate
- * unless `excludeSwapped` is set — the automatic swap sets it, since it means
- * "bring in a fresh photo" and would otherwise flip a slot between the photo it
- * just swapped out and its replacement. Spends nothing.
+ * Previews the photo a swap would put in place of `imageId`. Spends nothing.
+ *
+ * Without `chosenId` it is the app's suggestion: the best-ranked candidate under
+ * the same pipeline a fill uses, excluding every photo already entered and
+ * `imageId` itself. A photo swapped out earlier stays a candidate unless
+ * `excludeSwapped` is set — the automatic swap sets it, since it means "bring in
+ * a fresh photo" and would otherwise flip a slot between the photo it just
+ * swapped out and its replacement.
+ *
+ * With `chosenId` the user picked the photo: nothing is ranked and no tag rule
+ * applies, like the Pick… submit. Beyond the live checks, `imageId` still being
+ * entered and `chosenId` not being entered, the server has the final say on
+ * whether the photo is eligible when the swap is spent.
  *
  * @param imageId - the entered photo to replace
+ * @param options.chosenId - the library photo to swap in instead of a suggestion
  */
 const previewSwap = async (
     challengeId: string | number,
     imageId: string,
     token: string,
     { strategy, logger, settings }: { strategy: CurrencyStrategy; logger: Logger; settings: SettingsFacade },
-    { excludeSwapped = false }: { excludeSwapped?: boolean } = {},
+    { excludeSwapped = false, chosenId }: { excludeSwapped?: boolean; chosenId?: string } = {},
 ): Promise<{ ok: false; outcome: string } | { ok: true; outcome: string; candidate: SwapCandidate }> => {
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
     if (!entryIds(challenge).has(imageId)) {
         return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
+    }
+    if (chosenId !== undefined) {
+        // swapExcludedIds holds every entered photo, `imageId` included.
+        if (swapExcludedIds(challenge).has(chosenId)) {
+            return { ok: false, outcome: CURRENCY_OUTCOME.alreadyEntered };
+        }
+        return {
+            ok: true,
+            outcome: CURRENCY_OUTCOME.ok,
+            candidate: { id: chosenId, member_id: String(findEntry(challenge, imageId)?.member_id ?? '') },
+        };
     }
 
     // A manual swap is its own operation, like a manual fill: fresh photo-stats
