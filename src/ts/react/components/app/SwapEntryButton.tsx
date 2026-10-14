@@ -217,7 +217,7 @@ export function SwapEntryButton({
     return (
         <>
             <SwapTrigger
-                variant="accent"
+                variant="latvian"
                 label={`🔄 ${t('app.currencySwap')}`}
                 busy={preview.loading || commit.loading}
                 error={error}
@@ -288,7 +288,7 @@ export function SwapBackButton({
     return (
         <>
             <SwapTrigger
-                variant="info"
+                variant="latvian"
                 label={`↩️ ${t('app.currencySwapBack')}`}
                 busy={loading}
                 error={error}

@@ -47,6 +47,14 @@ test('preview spends nothing and shows the labelled current / replacement photos
     expect(screen.getByAltText('app.currencySwapReplacement')).toBeTruthy();
 });
 
+test("the Swap button and its confirm modal's Spend are carmine", async () => {
+    renderButton();
+    expect(swapButton().className).toContain('btn-latvian');
+    fireEvent.click(swapButton());
+    await screen.findByText('app.currencySwapTitle');
+    expect(screen.getByText('app.currencySpend').closest('button')!.className).toContain('btn-latvian');
+});
+
 test('the button spins while the preview is in flight', async () => {
     let resolve: ((value: Awaited<ReturnType<Window['api']['previewSwapPhoto']>>) => void) | undefined;
     window.api.previewSwapPhoto = jest.fn(() => new Promise((r) => (resolve = r)));
@@ -202,6 +210,18 @@ describe('SwapBackButton', () => {
         fireEvent.click(screen.getByText('app.currencySpend'));
         await waitFor(() => expect(onSpent).toHaveBeenCalledTimes(1));
         expect(window.api.swapBackEntryPhoto).toHaveBeenCalledWith(7, ENTRY.id, true);
+    });
+
+    test('the Swap back button is carmine until a failure turns it red', async () => {
+        window.api.swapBackEntryPhoto = jest.fn().mockResolvedValue({ success: false, outcome: 'failed' });
+        renderSwapBack();
+        const button = screen.getByText(/app\.currencySwapBack$/).closest('button')!;
+        expect(button.className).toContain('btn-latvian');
+        fireEvent.click(button);
+        fireEvent.click(screen.getByText('app.currencySpend'));
+        await screen.findByRole('alert');
+        expect(button.className).toContain('btn-error');
+        expect(button.className).not.toContain('btn-latvian');
     });
 
     test('Cancel spends nothing', () => {

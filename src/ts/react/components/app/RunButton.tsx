@@ -20,7 +20,7 @@ export function RunButton({
 
     return (
         <IconActionButton
-            className="btn btn-latvian btn-sm"
+            className="btn btn-success btn-sm"
             action={() => ipc.runVotingCycleForChallenge(challengeId)}
             onSuccess={onVoteComplete}
             failureLogPrefix="Run failed"

@@ -128,7 +128,7 @@ export function FillButtons({
  */
 function SettingsButton({ onClick, label }: { onClick: () => void; label: string }) {
     return (
-        <button className="btn btn-outline btn-sm" onClick={onClick}>
+        <button className="btn btn-ghost btn-sm" onClick={onClick}>
             <StrokeIcon d={ICON_PATHS.cog} className="w-4 h-4 mr-1" />
             {label}
         </button>

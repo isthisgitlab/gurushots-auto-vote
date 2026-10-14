@@ -101,8 +101,10 @@ function DetailHeader({
             <div className="flex flex-wrap gap-1 shrink-0">
                 {actions.voteButton}
                 {actions.runButton}
-                <CardDensityToggle isCompact={false} hasOverride={hasCompactOverride} onToggle={onToggleCompact} />
-                {actions.settingsButton}
+                <div className="flex flex-wrap gap-1 ml-auto">
+                    <CardDensityToggle isCompact={false} hasOverride={hasCompactOverride} onToggle={onToggleCompact} />
+                    {actions.settingsButton}
+                </div>
             </div>
         </div>
     );

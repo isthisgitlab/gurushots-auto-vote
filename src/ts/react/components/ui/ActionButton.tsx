@@ -1,6 +1,7 @@
 import type { ComponentChildren, JSX } from 'preact';
 const VARIANT_CLASSES = {
     accent: 'btn-accent',
+    latvian: 'btn-latvian',
     info: 'btn-info',
     success: 'btn-success',
     warning: 'btn-warning',

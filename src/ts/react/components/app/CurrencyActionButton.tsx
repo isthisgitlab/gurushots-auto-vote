@@ -61,7 +61,7 @@ function CurrencyActionButton({
     return (
         <>
             <ActionButton
-                variant="accent"
+                variant="latvian"
                 error={error}
                 className="mt-1"
                 onClick={() => setConfirmOpen(true)}

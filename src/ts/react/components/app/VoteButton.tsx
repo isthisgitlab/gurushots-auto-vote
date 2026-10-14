@@ -20,7 +20,7 @@ export function VoteButton({
 
     return (
         <IconActionButton
-            className="btn btn-latvian btn-sm"
+            className="btn btn-success btn-sm"
             title={t('app.voteTitle')}
             action={() => ipc.voteOnChallengeManual(challengeId, challengeTitle)}
             onSuccess={onVoteComplete}

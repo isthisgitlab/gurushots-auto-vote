@@ -231,6 +231,25 @@ describe('header', () => {
         await waitFor(() => expect(onVoteComplete).toHaveBeenCalledTimes(2));
     });
 
+    test('Vote and Run are green: they cost nothing', () => {
+        renderCard(makeChallenge());
+        expect(screen.getByText('app.vote').closest('button')!.className).toContain('btn-success');
+        expect(screen.getByText('app.run').closest('button')!.className).toContain('btn-success');
+    });
+
+    test('Compact and Settings are ghost view controls, grouped to the right of Vote and Run', () => {
+        renderCard(makeChallenge());
+        const compact = screen.getByText('app.compact').closest('button')!;
+        const settings = screen.getByText('app.settings').closest('button')!;
+        expect(compact.className).toContain('btn-ghost');
+        expect(settings.className).toContain('btn-ghost');
+        const group = compact.parentElement!;
+        expect(group).toBe(settings.parentElement);
+        expect(group.className).toContain('ml-auto');
+        expect(group.contains(screen.getByText('app.vote'))).toBe(false);
+        expect(group.contains(screen.getByText('app.run'))).toBe(false);
+    });
+
     test('Run is hidden while autovote runs', () => {
         renderCard(makeChallenge(), { autovoteRunning: true });
         expect(screen.queryByText('app.run')).toBeNull();

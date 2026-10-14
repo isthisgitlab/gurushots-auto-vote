@@ -140,6 +140,27 @@ describe('visibility', () => {
     });
 });
 
+describe('colour', () => {
+    test("Fill exposure and Unlock are carmine, as is the confirm modal's Spend", () => {
+        renderCard(makeChallenge());
+        expect(fillButton()!.closest('button')!.className).toContain('btn-latvian');
+        expect(keyButton()!.closest('button')!.className).toContain('btn-latvian');
+        fireEvent.click(keyButton()!);
+        expect(screen.getByText('app.currencySpend').closest('button')!.className).toContain('btn-latvian');
+    });
+
+    test('a failed spend turns the button red', async () => {
+        window.api.fillExposure = jest.fn().mockResolvedValue({ success: false, outcome: 'busy', error: 'busy' });
+        renderCard(makeChallenge());
+        fireEvent.click(fillButton()!);
+        fireEvent.click(screen.getByText('app.currencySpend'));
+        await screen.findByText('app.currencyOutcomeBusy');
+        const button = fillButton()!.closest('button')!;
+        expect(button.className).toContain('btn-error');
+        expect(button.className).not.toContain('btn-latvian');
+    });
+});
+
 describe('confirm flow', () => {
     test('Cancel spends nothing', () => {
         renderCard(makeChallenge());
