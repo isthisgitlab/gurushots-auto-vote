@@ -9,7 +9,8 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 import type { ReactNode, RefObject } from 'react';
-import type { ListState, useSavedListReread } from '@/hooks/usePhotoChooser';
+import type { useSavedListReread } from '@/hooks/usePhotoChooser';
+import type { ListState } from '@/hooks/useLibraryListing';
 
 // What Save being held says, by the listing's state: loading will resolve by itself, an error needs
 // Retry, and no context will not load at all, so it names the way out instead of a wait.

@@ -9,11 +9,14 @@ import { ipcErrorText } from '@/api/ipcErrorText';
 import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { useChosenPhotosOwner } from '@/api/useChosenPhotosOwner';
 import { ChooserFooter, SearchForm, holdReasonOf } from './ChooserFooter';
-import { useChooserSave, useLibraryListing, useOtherAccountLists, useSavedListReread } from '@/hooks/usePhotoChooser';
+import { ListingHeader } from './ListingHeader';
+import { useChooserSave, useOtherAccountLists, useSavedListReread } from '@/hooks/usePhotoChooser';
+import { useLibraryListing } from '@/hooks/useLibraryListing';
 import * as ipc from '@/api/ipc';
 import { MAX_CHOSEN_PHOTOS } from '../../../settings/limits';
 
-import type { AccountCheck, LibraryPhoto, ListState } from '@/hooks/usePhotoChooser';
+import type { AccountCheck } from '@/hooks/usePhotoChooser';
+import type { LibraryPhoto, ListState } from '@/hooks/useLibraryListing';
 
 // Edge length requested from the photo CDN for a tile (the grid shows them ~150px wide).
 const TILE_PX = 240;
@@ -36,6 +39,7 @@ const TILE_BASE = 'rounded-box border p-1 text-left flex flex-col gap-1 w-full';
  */
 const tileReason = ({
     locked,
+    lockedKey,
     blockedReason,
     full,
     fullKey,
@@ -43,6 +47,7 @@ const tileReason = ({
     t,
 }: {
     locked: boolean;
+    lockedKey: string;
     blockedReason: string | null;
     full: boolean;
     fullKey: string;
@@ -50,7 +55,7 @@ const tileReason = ({
     t: (key: string) => string;
 }): string | null => {
     // Nothing can be added yet, so the tile must not say it can be.
-    if (locked) return t('app.photoChooserTileLocked');
+    if (locked) return t(lockedKey);
     if (blockedReason !== null) return blockedReason;
     if (full) return t(fullKey);
     return allowedKnown ? t('app.photoChooserAllowed') : null;
@@ -87,6 +92,7 @@ function PhotoTile({
     fullKey,
     allowedKnown,
     locked,
+    lockedKey,
     onToggle,
 }: {
     photo: LibraryPhoto;
@@ -100,6 +106,8 @@ function PhotoTile({
     fullKey: string;
     allowedKnown: boolean;
     locked: boolean;
+    /** The translation key of what a locked tile says. */
+    lockedKey: string;
     onToggle: (id: string) => void;
 }) {
     const { t } = useTranslation();
@@ -111,7 +119,7 @@ function PhotoTile({
     // Tab still reaches it and a screen reader can read why it cannot be added.
     const unavailable = locked || (!selected && (blockedReason !== null || atCap));
     const full = !selected && atCap;
-    const reason = tileReason({ locked, blockedReason, full, fullKey, allowedKnown, t });
+    const reason = tileReason({ locked, lockedKey, blockedReason, full, fullKey, allowedKnown, t });
     // Only the picture and its tags are dimmed: the reason line stays at full contrast, since it is
     // what says why the tile cannot be added.
     const dim = unavailable ? 'opacity-50' : '';
@@ -218,6 +226,32 @@ function MissingTile({
 }
 
 /**
+ * A chosen photo the preview does not list: the library is being read again, so whether it is really
+ * missing is not known yet. It stays selected, and cannot be removed until that is.
+ */
+function PendingTile({ id, position }: { id: string; position: number | null }) {
+    const { t } = useTranslation();
+    const text = t('app.photoChooserNotAsLoaded');
+    return (
+        <button
+            type="button"
+            aria-pressed
+            aria-disabled
+            aria-label={withPosition(
+                interp(t('app.photoChooserMissingTileLabel'), { id: shortId(id), reason: text }),
+                t,
+                position,
+            )}
+            className={`${TILE_BASE} border-base-300 bg-base-200`}
+        >
+            <PositionBadge position={position} />
+            <span className="text-xs font-medium">{shortId(id)}</span>
+            <span className="text-xs">{text}</span>
+        </button>
+    );
+}
+
+/**
  * The library listing with its states: loading, an error with Retry, the
  * missing-challenge explanation, and the tiles (selected ones pinned first).
  * The defaults are the Chosen Photos list's: numbered, capped at MAX_CHOSEN_PHOTOS.
@@ -228,8 +262,15 @@ export function PhotoGrid({
     selected,
     hideUnlisted,
     locked,
+    lockedKey = 'app.photoChooserTileLocked',
+    hasChallenge,
+    revalidating,
+    recheckFailed,
+    submit = false,
+    refreshDisabled = false,
     onToggle,
     onRetry,
+    onRefresh,
     max = MAX_CHOSEN_PHOTOS,
     fullKey = 'app.photoChooserListFull',
     numbered = true,
@@ -241,8 +282,21 @@ export function PhotoGrid({
     hideUnlisted: boolean;
     /** The saved list is not read yet: the tiles are inert, so a late read cannot overwrite a pick. */
     locked: boolean;
+    /** The translation key of what a locked tile says. */
+    lockedKey?: string;
+    /** The listing is read for a challenge (and says which photos it accepts), not for the library alone. */
+    hasChallenge: boolean;
+    /** The library is being read again (a preview's re-check, or a Refresh). */
+    revalidating: boolean;
+    /** The last re-read failed, so what is shown is the library as last loaded. */
+    recheckFailed: boolean;
+    /** The grid is the submit modal's: picking is held while a preview shows, and its lines say so. */
+    submit?: boolean;
+    /** Refresh cannot be pressed now (a submit is running). */
+    refreshDisabled?: boolean;
     onToggle: (id: string) => void;
     onRetry: () => void;
+    onRefresh: () => void;
     /** How many photos may be selected: the rest are offered no more. */
     max?: number;
     /** The translation key of what a tile says when the selection is full. */
@@ -278,6 +332,9 @@ export function PhotoGrid({
     const chosen = new Set(selected);
     for (const id of listing.wonIds) everWon.current.add(id);
     const won = everWon.current;
+    // A preview's photos carry no marks and are not remembered in `known`, so the selection is looked up in them.
+    const previewPhotos = listing.preview ? new Map(listing.photos.map((photo) => [photo.id, photo])) : null;
+    const lookup = (id: string): LibraryPhoto | undefined => (previewPhotos ?? known).get(id);
     const atCap = selected.length >= max;
     let position = 0;
     const blockedReasonOf = (photo: LibraryPhoto): string | null =>
@@ -295,14 +352,23 @@ export function PhotoGrid({
             fullKey={fullKey}
             allowedKnown={listing.allowedKnown}
             locked={locked}
+            lockedKey={lockedKey}
             onToggle={onToggle}
         />
     );
     return (
         <>
-            {!listing.allowedKnown && (
-                <p className="text-base-content/70 text-xs">{t('app.photoChooserEligibilityLater')}</p>
-            )}
+            <ListingHeader
+                readAtMs={listing.readAtMs}
+                reading={revalidating}
+                disabled={refreshDisabled}
+                preview={listing.preview}
+                recheckFailed={recheckFailed}
+                hasChallenge={hasChallenge}
+                submit={submit}
+                onRefresh={onRefresh}
+            />
+            {!hasChallenge && <p className="text-base-content/70 text-xs">{t('app.photoChooserEligibilityLater')}</p>}
             {listing.wonCount > 0 && (
                 <p className="text-base-content/70 text-xs">
                     {interp(t(listing.truncated ? 'app.photoChooserWonHiddenTruncated' : 'app.photoChooserWonHidden'), {
@@ -327,15 +393,17 @@ export function PhotoGrid({
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                 {/* Numbered 1, 2, 3… as shown: a photo left out (another account's) leaves no gap. */}
                 {selected.map((id) => {
-                    const photo = known.get(id);
+                    const photo = lookup(id);
                     if (photo) return tile(photo, shown(++position));
-                    return hideUnlisted ? null : (
+                    if (hideUnlisted) return null;
+                    if (listing.preview) return <PendingTile key={id} id={id} position={shown(++position)} />;
+                    return (
                         <MissingTile
                             key={id}
                             id={id}
                             position={shown(++position)}
                             count={listing.photos.length}
-                            hasChallenge={listing.allowedKnown}
+                            hasChallenge={hasChallenge}
                             truncated={listing.truncated}
                             won={won.has(id)}
                             onToggle={onToggle}
@@ -425,7 +493,8 @@ const confirmAccount = async (): Promise<AccountCheck> => {
 
 /**
  * The modal's body. Mounted only while the modal is open, so every opening
- * starts from the saved value with a fresh listing.
+ * starts from the saved value and reads the listing afresh (the main process may answer it from memory,
+ * as a preview or as it was read for this challenge a few minutes ago).
  */
 function PhotoChooserBody({
     value,
@@ -447,7 +516,8 @@ function PhotoChooserBody({
     const { t } = useTranslation();
     const owner = useChosenPhotosOwner();
     const [selected, setSelected] = useState<string[]>(value);
-    const { state, known, generation, load, retry, setMember } = useLibraryListing(challengeId);
+    const { state, known, generation, revalidating, recheckFailed, load, refresh, retry, setMember } =
+        useLibraryListing(challengeId);
     const [listsRemoved, setListsRemoved] = useState(false);
 
     const toggle = useCallback((id: string) => {
@@ -506,8 +576,12 @@ function PhotoChooserBody({
                 selected={selected}
                 hideUnlisted={otherAccount}
                 locked={locked}
+                hasChallenge={challengeId !== null}
+                revalidating={revalidating}
+                recheckFailed={recheckFailed}
                 onToggle={toggle}
                 onRetry={retry}
+                onRefresh={refresh}
             />
             <ChooserFooter
                 saveFailed={saveFailed}

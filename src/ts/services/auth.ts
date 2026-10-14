@@ -12,6 +12,8 @@ import * as settings from '../settings';
 import * as logger from '../logger';
 import { clearOpenChallenges } from './openChallengeCache';
 import { clearUpcomingCache } from './discoverChallenges';
+import { clearLibraryCache } from './libraryCache';
+import { bumpAccountGeneration } from './accountScope';
 import { forgetChosenPhotosMemory } from './autoFill/chosenPhotos';
 
 import type { AppSettings } from '../types/settings';
@@ -87,12 +89,16 @@ const extractAuthResult = (
 
 /**
  * What the process remembered about the account that left must not carry over to the next: its
- * listed challenges and the cached upcoming list, the open- and upcoming-id lists cleanup spares
- * chosen lists for, and the chosen-photo walk memos and explained skips.
+ * listed challenges and the cached upcoming list, its photo-library listings, the open- and
+ * upcoming-id lists cleanup spares chosen lists for, and the chosen-photo walk memos and explained
+ * skips. The account generation moves once, so every read that began under the account that left
+ * writes nothing.
  */
 const forgetAccountMemory = (): void => {
+    bumpAccountGeneration();
     clearOpenChallenges();
     clearUpcomingCache();
+    clearLibraryCache();
     settings.forgetOpenChallengeIds();
     forgetChosenPhotosMemory();
 };

@@ -40,6 +40,8 @@ const listing = (photos: LibraryPhoto[], over: Partial<Listing> = {}): Listing =
     truncated: false,
     wonIds: [],
     wonCount: 0,
+    preview: false,
+    readAtMs: 1_700_000_000_000,
     allowedKnown: true,
     ...over,
 });
@@ -130,7 +132,7 @@ describe('listing and tiles', () => {
     test('reads the library through the challenge it was opened for', async () => {
         setup({ challengeId: 42 });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(getLibrary()).toHaveBeenCalledWith(42, undefined);
+        expect(getLibrary()).toHaveBeenCalledWith(42, undefined, 'cached');
     });
 
     test('a photo with no usable URL becomes a text tile with its tags and short id', async () => {
@@ -279,8 +281,12 @@ describe('selection', () => {
                     selected={[idOf(1), idOf(9), idOf(2)]}
                     hideUnlisted={hideUnlisted}
                     locked={false}
+                    hasChallenge
+                    revalidating={false}
+                    recheckFailed={false}
                     onToggle={jest.fn()}
                     onRetry={jest.fn()}
+                    onRefresh={jest.fn()}
                 />,
             );
         };
@@ -315,8 +321,12 @@ describe('selection', () => {
                     selected={[idOf(1), idOf(9)]}
                     hideUnlisted={false}
                     locked={false}
+                    hasChallenge
+                    revalidating={false}
+                    recheckFailed={false}
                     onToggle={jest.fn()}
                     onRetry={jest.fn()}
+                    onRefresh={jest.fn()}
                     {...props}
                 />,
             );
@@ -445,7 +455,7 @@ describe('selection', () => {
         setup();
         expect(
             await screen.findByText(
-                'No photos you can enter were found: every match has won a challenge. Try another tag, or upload new photos to your GuruShots library.',
+                'No photos you can enter were found: every match has won a challenge. Try another tag, or upload new photos to your GuruShots library and press Refresh.',
             ),
         ).toBeTruthy();
         expect(screen.queryByText(/^No photos found/)).toBeNull();
@@ -564,7 +574,7 @@ describe('eligibility', () => {
         expect(only.getAttribute('aria-disabled')).toBe('false');
         expect(screen.queryByText('Not eligible for this challenge')).toBeNull();
         expect(screen.queryByText('Can be entered')).toBeNull();
-        expect(getLibrary()).toHaveBeenCalledWith(null, undefined);
+        expect(getLibrary()).toHaveBeenCalledWith(null, undefined, 'cached');
     });
 });
 
@@ -577,7 +587,7 @@ describe('search', () => {
         expect(getLibrary()).toHaveBeenCalledTimes(1);
         fireEvent.submit(box.closest('form')!);
         await waitFor(() => expect(getLibrary()).toHaveBeenCalledTimes(2));
-        expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat');
+        expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh');
     });
 
     test('a selected photo a narrower search no longer lists keeps its tile', async () => {
@@ -659,7 +669,7 @@ describe('failures', () => {
         expect(alert.textContent).not.toContain('details below');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined);
+        expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh');
     });
 
     test('an error is shown as a translated detail, never as raw handler text; invalid-args has its own', async () => {
@@ -692,7 +702,7 @@ describe('failures', () => {
         fireEvent.submit(box.closest('form')!);
         await screen.findByRole('alert');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'dog'));
+        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'dog', 'fresh'));
     });
 
     test('with no challenge to read the library through it explains what is needed', async () => {
@@ -1556,4 +1566,196 @@ test('Escape closes only the chooser when it is open inside another modal', asyn
     expect(document.body.style.overflow).toBe('hidden');
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(outerClose).toHaveBeenCalledTimes(1);
+});
+
+describe('the cached listing, its preview and Refresh', () => {
+    const previewOf = (photos: LibraryPhoto[], over: Partial<Listing> = {}) =>
+        listing(
+            photos.map((p) => ({ ...p, allowed: false, message: null })),
+            { preview: true, allowedKnown: false, ...over },
+        );
+    const failure = invalid<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>>({
+        success: false,
+        error: 'Failed to read your photo library',
+    });
+    const refreshButton = () => screen.getByRole('button', { name: 'Refresh photos' });
+    const pendingTile = (n: number) => screen.getByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(n)}:`) });
+
+    test('says when the photos were read: the time when it was today, the date as well when it was not', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1)], { readAtMs: Date.now() }));
+        const { unmount } = setup();
+        const today = await screen.findByText(/^Photos as of \d{2}:\d{2}$/);
+        // Its own live region, apart from the count of what is picked.
+        expect(today.getAttribute('role')).toBe('status');
+        expect(countLine().textContent).not.toContain('Photos as of');
+        unmount();
+        getLibrary().mockResolvedValue(listing([photo(1)], { readAtMs: 1_700_000_000_000 }));
+        setup();
+        expect(await screen.findByText(/^Photos as of \d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}$/)).toBeTruthy();
+    });
+
+    test('Refresh is named for what it does, reads again at once with the listing still on screen, and shows the new one', async () => {
+        setup();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        const button = refreshButton();
+        expect(button.textContent).toBe('Refresh');
+        expect(button.getAttribute('aria-busy')).toBe('false');
+        expect(button.hasAttribute('disabled')).toBe(false);
+        const reread = deferred<Listing>();
+        getLibrary().mockReturnValueOnce(reread.promise);
+        fireEvent.click(button);
+        expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh');
+        await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+        expect(button.hasAttribute('disabled')).toBe(true);
+        // The photos stay while it reads.
+        expect(tile(1)).toBeTruthy();
+        await act(async () => reread.resolve(listing([photo(1), photo(5)])));
+        await screen.findByRole('button', { name: /^Photo 00000005:/ });
+        expect(refreshButton().getAttribute('aria-busy')).toBe('false');
+        expect(refreshButton().hasAttribute('disabled')).toBe(false);
+    });
+
+    test('Refresh reads the search that is on screen again', async () => {
+        setup();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.change(screen.getByLabelText('Search your photos by tag'), { target: { value: 'cat' } });
+        fireEvent.submit(screen.getByLabelText('Search your photos by tag').closest('form')!);
+        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh'));
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.click(refreshButton());
+        expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh');
+    });
+
+    test('a listing read for this challenge in the last minutes opens as it is: no status line, no second read', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1, { allowed: false, message: 'Already used' })]));
+        setup();
+        expect(await screen.findByText('Already used')).toBeTruthy();
+        await effectsFlushed();
+        expect(getLibrary()).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText(/as last loaded/)).toBeNull();
+    });
+
+    test.each([
+        [7, 'Showing your photos as last loaded while the app checks which ones this challenge accepts…'],
+        [null, 'Showing your photos as last loaded while the app checks for anything new…'],
+    ])(
+        'a preview for challenge %p says the app is checking, shows the photos without marks and is replaced by the fresh listing',
+        async (challengeId, line) => {
+            const fresh = deferred<Listing>();
+            getLibrary()
+                .mockResolvedValueOnce(previewOf([photo(1), photo(2)]))
+                .mockReturnValueOnce(fresh.promise);
+            setup({ challengeId });
+            await screen.findByRole('button', { name: /^Photo 00000001:/ });
+            expect(screen.getByText(line).getAttribute('role')).toBe('status');
+            // Whatever the other challenge said is withheld: no "can be entered", no reason.
+            expect(screen.queryByText('Can be entered')).toBeNull();
+            expect(screen.queryByText('Not eligible for this challenge')).toBeNull();
+            expect(refreshButton().getAttribute('aria-busy')).toBe('true');
+            expect(getLibrary().mock.calls.map((call) => call[2])).toEqual(['cached', 'fresh']);
+            await act(async () =>
+                fresh.resolve(
+                    listing([photo(1, { allowed: false, message: 'Already used' }), photo(2)], {
+                        allowedKnown: challengeId !== null,
+                    }),
+                ),
+            );
+            await waitFor(() => expect(screen.queryByText(line)).toBeNull());
+            // With a challenge its marks are in now; without one the photos still carry none.
+            if (challengeId === null) expect(screen.queryByText('Already used')).toBeNull();
+            else expect(screen.getByText('Already used')).toBeTruthy();
+            expect(refreshButton().getAttribute('aria-busy')).toBe('false');
+        },
+    );
+
+    test('eligibility is only said to be unchecked for a chooser with no challenge, preview or not', async () => {
+        getLibrary().mockResolvedValue(previewOf([photo(1)]));
+        const { unmount } = setup({ challengeId: 7 });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(screen.queryByText(/Eligibility is not checked here/)).toBeNull();
+        unmount();
+        setup({ challengeId: null });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(screen.getByText(/Eligibility is not checked here/)).toBeTruthy();
+    });
+
+    test.each([
+        [
+            7,
+            "Couldn't check which of these photos this challenge accepts, so they're shown as last loaded. Press Refresh.",
+        ],
+        [null, "Couldn't check your photos for changes, so they're shown as last loaded. Press Refresh."],
+    ])('a re-check that failed for challenge %p says so and keeps the photos', async (challengeId, line) => {
+        getLibrary()
+            .mockResolvedValueOnce(previewOf([photo(1)]))
+            .mockResolvedValueOnce(failure);
+        setup({ challengeId });
+        expect(await screen.findByText(line)).toBeTruthy();
+        expect(tile(1)).toBeTruthy();
+        expect(screen.queryByText(/while the app checks/)).toBeNull();
+        // Refresh tries again, and a listing that arrives clears the line.
+        getLibrary().mockResolvedValueOnce(listing([photo(1)]));
+        fireEvent.click(refreshButton());
+        await waitFor(() => expect(screen.queryByText(line)).toBeNull());
+    });
+
+    test('a selected photo the preview lists is a normal tile with no marks, and picking works on a preview', async () => {
+        const fresh = deferred<Listing>();
+        getLibrary()
+            .mockResolvedValueOnce(previewOf([photo(1), photo(2)]))
+            .mockReturnValueOnce(fresh.promise);
+        setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(tile(1).getAttribute('aria-pressed')).toBe('true');
+        expect(tile(1).getAttribute('aria-label')).toMatch(/Number 1 in your list\.$/);
+        fireEvent.click(tile(2));
+        expect(tile(2).getAttribute('aria-pressed')).toBe('true');
+        expect(countLine().textContent).toContain('2 of');
+        await act(async () => fresh.resolve(listing([photo(1), photo(2)])));
+    });
+
+    test.each([
+        [7, 'Not available for this challenge (in another challenge, or deleted)'],
+        [null, 'Not found in your library (it may have been deleted)'],
+    ])(
+        'a selected photo the preview lacks waits as a tile that cannot be removed, then follows the usual missing rules (challenge %p)',
+        async (challengeId, missing) => {
+            const fresh = deferred<Listing>();
+            getLibrary()
+                .mockResolvedValueOnce(previewOf([photo(1)]))
+                .mockReturnValueOnce(fresh.promise);
+            setup({ value: [idOf(9)], challengeId });
+            await screen.findByRole('button', { name: /^Photo 00000001:/ });
+            const waiting = pendingTile(9);
+            expect(waiting.textContent).toContain('Not among your photos as last loaded. Checking again…');
+            expect(waiting.getAttribute('aria-pressed')).toBe('true');
+            expect(waiting.getAttribute('aria-disabled')).toBe('true');
+            expect(waiting.getAttribute('aria-label')).toMatch(/Number 1 in your list\.$/);
+            fireEvent.click(waiting);
+            expect(pendingTile(9).getAttribute('aria-pressed')).toBe('true');
+            expect(countLine().textContent).toContain('1 of');
+            await act(async () => fresh.resolve(listing([photo(1)], { allowedKnown: challengeId !== null })));
+            await waitFor(() => expect(pendingTile(9).textContent).toContain(missing));
+            // Now it is the usual missing tile: removable.
+            fireEvent.click(pendingTile(9));
+            expect(screen.queryByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) })).toBeNull();
+        },
+    );
+
+    test.each([
+        [
+            'an empty listing',
+            listing([]),
+            'No photos found. Try another tag, or upload photos to your GuruShots library and press Refresh.',
+        ],
+        [
+            'one where every match has won',
+            listing([], { wonIds: [idOf(7)], wonCount: 1 }),
+            'No photos you can enter were found: every match has won a challenge. Try another tag, or upload new photos to your GuruShots library and press Refresh.',
+        ],
+    ])('%s ends by pointing at Refresh', async (_name, empty, text) => {
+        getLibrary().mockResolvedValue(empty);
+        setup();
+        expect(await screen.findByText(text)).toBeTruthy();
+    });
 });

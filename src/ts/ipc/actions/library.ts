@@ -18,6 +18,9 @@ import * as auth from '../../services/auth';
 import { resolveMemberId } from '../../services/autoFill';
 import { CHOSEN_PHOTO_ID_RE, MAX_TAG_LENGTH } from '../../settings/limits';
 import { htmlToText } from '../../format/htmlToText';
+import { asPreview } from '../../libraryPreview';
+import { accountGeneration } from '../../services/accountScope';
+import { contextEpoch, readFresh, readLatest, writeListing } from '../../services/libraryCache';
 import { errorResult } from '../errorResult';
 import { isIdArg } from '../isIdArg';
 import { refuseInvalidArgs } from './shared';
@@ -140,18 +143,38 @@ const borrowChallengeId = async (strategy: apiFactory.ApiStrategy, token: string
 };
 
 /**
+ * The cached answer to a no-search `'cached'` request: the challenge's own listing while it is fresh, else
+ * the newest one read for any challenge as a preview (its marks withheld). Null when nothing is cached.
+ */
+const answerFromCache = (token: string, contextId: string | number | null) => {
+    const fresh = readFresh(token, contextId);
+    if (fresh) return { success: true as const, ...fresh, preview: false };
+    const latest = readLatest(token);
+    return latest ? { success: true as const, ...asPreview(latest), preview: true } : null;
+};
+
+/**
  * @param challengeId - read the library as seen by this challenge (its photos'
  *   `allowed` flags are then meaningful); omitted for the plain library
  * @param search - a tag to narrow the listing to, as the server matches it
+ * @param mode - `'cached'` answers the no-search listing from memory when it can: a listing read for this
+ *   challenge in the last LIBRARY_FRESH_MS as it is, else the newest listing read for any challenge as a
+ *   preview (`preview: true`, no marks), and walks only when nothing is cached. `'fresh'` (the default)
+ *   always walks, and a no-search walk is kept for the next `'cached'` request.
  */
 const handleGetLibraryPhotos = (async (
     event: unknown,
     challengeId?: string | number | null,
     search?: string | null,
+    mode?: 'cached' | 'fresh',
 ) => {
     const hasChallenge = challengeId !== undefined && challengeId !== null;
     const hasSearch = search !== undefined && search !== null;
-    if ((hasChallenge && !isIdArg(challengeId)) || (hasSearch && typeof search !== 'string')) {
+    if (
+        (hasChallenge && !isIdArg(challengeId)) ||
+        (hasSearch && typeof search !== 'string') ||
+        (mode !== undefined && mode !== 'cached' && mode !== 'fresh')
+    ) {
         return refuseInvalidArgs('autoFill', 'get-library-photos');
     }
     const term = typeof search === 'string' ? cleanSearch(search) : undefined;
@@ -159,27 +182,38 @@ const handleGetLibraryPhotos = (async (
         const guard = auth.requireAuthToken('library photos');
         if (!guard.ok) return guard.response;
         const { token } = guard;
+        // The cache keys the challenge asked for: the settings and rules choosers ask for none, whatever one is borrowed.
+        const contextId = challengeId ?? null;
+        if (mode === 'cached' && term === undefined) {
+            const cached = answerFromCache(token, contextId);
+            if (cached) return cached;
+        }
+        // Compared after the walk: an account that left, or a challenge whose entry was dropped, meanwhile.
+        const generation = accountGeneration();
+        const epoch = contextEpoch(token, contextId);
         const strategy = apiFactory.getApiStrategy();
 
         // The borrowing lookup is a request of its own, so it runs inside the
         // throttled job like the walk it serves.
         const outcome = await throttled(async () => {
-            const contextId = challengeId ?? (await borrowChallengeId(strategy, token));
+            const readAtMs = Date.now();
+            const readThrough = challengeId ?? (await borrowChallengeId(strategy, token));
             // Nothing to read the library through: no active challenge and no open one seen yet.
-            if (contextId === null) return null;
-            const walk = await strategy.getEligiblePhotosWalk(contextId, token, {
+            if (readThrough === null) return null;
+            const walk = await strategy.getEligiblePhotosWalk(readThrough, token, {
                 search: term,
                 logLabel: 'library',
                 skip: hasWonChallenge,
             });
             const memberId = await resolveMemberId(token, strategy.getCurrentMemberProfile, logger, 'library');
-            return { walk, memberId };
+            return { walk, memberId, readAtMs };
         });
         if (outcome === SUPERSEDED) return { success: false as const, error: 'superseded' as const };
         if (outcome === null) return { success: false as const, error: 'no-challenge-context' as const };
+        // The account left while the walk ran: what it read is not the signed-in account's to be shown.
+        if (generation !== accountGeneration()) return { success: false as const, error: 'account-changed' as const };
         const skipped = outcome.walk.skipped ?? [];
-        return {
-            success: true as const,
+        const listing = {
             // An id that is not a safe token could never be stored in a list, so it is not offered.
             photos: outcome.walk.items.filter((photo) => CHOSEN_PHOTO_ID_RE.test(String(photo.id))).map(mapPhoto),
             memberId: outcome.memberId,
@@ -189,7 +223,13 @@ const handleGetLibraryPhotos = (async (
             wonIds: skipped.filter((id) => CHOSEN_PHOTO_ID_RE.test(id)).slice(0, MAX_WON_IDS),
             truncated: outcome.walk.truncated,
             allowedKnown: hasChallenge,
+            readAtMs: outcome.readAtMs,
         };
+        // Only the no-search listing is kept, and not a read that kept nothing and was cut short (it may be a
+        // failed read), nor one an action of this window outdated while it ran.
+        const keep = term === undefined && (listing.photos.length > 0 || listing.wonCount > 0 || !listing.truncated);
+        if (keep && epoch === contextEpoch(token, contextId)) writeListing(token, contextId, listing);
+        return { success: true as const, ...listing, preview: false };
     } catch (error) {
         logger.withCategory('autoFill').error('Error handling get-library-photos request:', error);
         return errorResult(error, 'Failed to read your photo library');

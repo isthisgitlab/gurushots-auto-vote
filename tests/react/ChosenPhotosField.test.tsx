@@ -26,6 +26,8 @@ const libraryOf = (...numbers: number[]) => ({
     truncated: false,
     wonIds: [],
     wonCount: 0,
+    preview: false,
+    readAtMs: 1_700_000_000_000,
     allowedKnown: true,
 });
 
@@ -176,13 +178,13 @@ describe('challenge context', () => {
             </SettingsChallengeProvider>,
         );
         fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
-        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(77, undefined));
+        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(77, undefined, 'cached'));
     });
 
     test('outside one it asks with no challenge', async () => {
         renderInput([]);
         fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
-        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined));
+        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined, 'cached'));
     });
 });
 

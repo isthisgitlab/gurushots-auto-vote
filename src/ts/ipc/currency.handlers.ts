@@ -19,6 +19,7 @@ import * as logger from '../logger';
 import * as apiFactory from '../apiFactory';
 import * as auth from '../services/auth';
 import * as currencyActions from '../services/currencyActions';
+import { dropContext } from '../services/libraryCache';
 import { CURRENCY_OUTCOME } from '../voting/currencyActions';
 import { swapBackLedger, mockSwapBackLedger } from '../swapBackStore';
 
@@ -62,6 +63,17 @@ const takeSwapPreview = (key: string): string | null => {
 // the one the mock voting pass also records automatic swaps into.
 const ledgerFor = (strategy: ApiStrategy | null | undefined) =>
     strategy?.getStrategyType?.() === 'MockAPI' ? mockSwapBackLedger : swapBackLedger;
+
+const swapDeps = (strategy: ApiStrategy) => ({ strategy, logger, ledger: ledgerFor(strategy) });
+
+/** Runs a swap, then drops the challenge's cached photo listing: the entry's photo changed, so what it accepts did too. */
+const droppingListing = async <T>(token: string, challengeId: string | number, spend: () => Promise<T>): Promise<T> => {
+    try {
+        return await spend();
+    } finally {
+        dropContext(token, challengeId);
+    }
+};
 
 const currencyFailure = ((outcome: string | undefined) => ({
     success: false as const,
@@ -166,11 +178,9 @@ const buildHandlers = () =>
                 if (previewed === null || previewed !== newImage) {
                     return { ok: false, outcome: CURRENCY_OUTCOME.staleCandidate };
                 }
-                return currencyActions.swapEntry(challengeId, image, newImage, token, {
-                    strategy,
-                    logger,
-                    ledger: ledgerFor(strategy),
-                });
+                return droppingListing(token, challengeId, () =>
+                    currencyActions.swapEntry(challengeId, image, newImage, token, swapDeps(strategy)),
+                );
             });
         },
 
@@ -211,11 +221,9 @@ const buildHandlers = () =>
                 );
             return runCurrencySpend('swap back', [challengeId, currentImageId], confirmed, (token, strategy) =>
                 // Validated by runCurrencySpend, which admits numbers; the service works on strings.
-                currencyActions.swapBack(challengeId, String(currentImageId), token, {
-                    strategy,
-                    logger,
-                    ledger: ledgerFor(strategy),
-                }),
+                droppingListing(token, challengeId, () =>
+                    currencyActions.swapBack(challengeId, String(currentImageId), token, swapDeps(strategy)),
+                ),
             );
         },
 

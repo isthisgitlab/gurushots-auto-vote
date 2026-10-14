@@ -9,6 +9,8 @@
  * Nothing here decides who may join: that stays with the live open lookup in services/joinChallenges.
  */
 
+import { tokenKey } from './accountScope';
+
 import type { Challenge, DiscoverChallenge } from '../types/gurushots';
 
 type ListFetcher = (token: string, filter: 'upcoming') => Promise<Challenge[] | null>;
@@ -22,20 +24,6 @@ const MAX_UPCOMING_ROWS = 100;
 type CachedList = { at: number; list: Promise<Challenge[] | null> };
 
 let cache: Map<string, CachedList> = new Map();
-
-/** A short non-cryptographic digest (cyrb53): it only keeps the raw token out of a map key. */
-const tokenKey = (token: string): string => {
-    let h1 = 0xdeadbeef;
-    let h2 = 0x41c6ce57;
-    for (let i = 0; i < token.length; i += 1) {
-        const code = token.charCodeAt(i);
-        h1 = Math.imul(h1 ^ code, 2654435761);
-        h2 = Math.imul(h2 ^ code, 1597334677);
-    }
-    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
-};
 
 /**
  * The account's upcoming list: the cached one while it is under a minute old, else a fresh fetch
@@ -59,17 +47,9 @@ const fetchUpcoming = (
     return list;
 };
 
-// Bumped whenever the account's memory is forgotten (logout, account switch): a request that
-// began before it belongs to the account that left, and must not write anything afterwards.
-let generation = 0;
-
-/** Which account's memory is current; compare before and after an await to see it was forgotten meanwhile. */
-const accountGeneration = (): number => generation;
-
 /** Forget every cached upcoming list (an account left, and tests start clean). */
 const clearUpcomingCache = (): void => {
     cache = new Map();
-    generation += 1;
 };
 
 const idOf = (c: Challenge | null): string | null => (c?.id == null ? null : String(c.id));
@@ -114,12 +94,5 @@ const mergeDiscoverLists = ({
     ];
 };
 
-export {
-    fetchUpcoming,
-    clearUpcomingCache,
-    accountGeneration,
-    mergeDiscoverLists,
-    UPCOMING_CACHE_MS,
-    MAX_UPCOMING_ROWS,
-};
+export { fetchUpcoming, clearUpcomingCache, mergeDiscoverLists, UPCOMING_CACHE_MS, MAX_UPCOMING_ROWS };
 export type { ListFetcher };

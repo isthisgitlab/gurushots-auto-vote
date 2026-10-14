@@ -13,7 +13,7 @@
  * `t(key)` returns the key (see tests/react setup).
  */
 
-import { render, screen, fireEvent } from './helpers/test-utils';
+import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { getEntryStatus } from '@/utils/formatters';
 import { buildChallenge } from '../helpers/challengeFixtures';
@@ -213,7 +213,7 @@ describe('compact ChallengeCard tile with compactActions', () => {
         expect(pick.getAttribute('title')).toBe('app.fillPickLabel');
         fireEvent.click(pick);
         expect(await screen.findByText('app.pickTitle')).toBeTruthy();
-        expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(202, undefined);
+        expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(202, undefined, 'cached');
     });
 
     test('the picker stays open, with its listing, when the card switches layout', async () => {
@@ -236,7 +236,7 @@ describe('compact ChallengeCard tile with compactActions', () => {
         mockChallengeSettings.isCompact = false;
         rerender(<ChallengeCard {...props} />);
         expect(screen.getByRole('dialog')).toBe(dialog);
-        expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(2));
     });
 
     test('a fill in flight disables Pick… along with +1 / +N', () => {

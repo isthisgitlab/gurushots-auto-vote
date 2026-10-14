@@ -1,98 +1,11 @@
 /**
- * State behind the Chosen Photos chooser: the library listing for a challenge, which account the
- * saved lists belong to, and the re-read of a list that came without its ids.
+ * State behind the Chosen Photos chooser: which account the saved lists belong to, and the re-read of a
+ * list that came without its ids.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
-import * as ipc from '@/api/ipc';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import type { WindowApi } from '../../types/ipc';
-
-type Listing = Extract<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>, { success: true }>;
-export type LibraryPhoto = Listing['photos'][number];
-
-/**
- * What the chooser is showing. `ready` keeps the listing's photos beside what
- * the response said about them; every other state is a reason there are none.
- */
-export type ListState =
-    | { status: 'loading' }
-    | { status: 'ready'; listing: Listing }
-    | { status: 'no-context' }
-    | { status: 'error'; error: string | null };
-
-/**
- * The library listing for a challenge and what has been learned from it: the
- * current state, every photo any response has listed so far (by id), and `load`
- * to read again for a search term. A response for any but the newest request is a
- * late answer and is dropped; leaving drops whatever is still in flight.
- */
-export function useLibraryListing(challengeId: string | number | null) {
-    const [state, setState] = useState<ListState>({ status: 'loading' });
-    // Every photo any response has listed, by id: a selected photo that a narrower
-    // search omits keeps its record and is not shown as a missing tile.
-    const [known, setKnown] = useState<Map<string, LibraryPhoto>>(new Map());
-    // Which load the listing is on: a new search or load is a new generation, a member patched into
-    // the listing on screen (setMember) is not. What a Retry did belongs to the generation it ends
-    // up on.
-    const [generation, setGeneration] = useState(0);
-    const generationRef = useRef(0);
-    const requestRef = useRef(0);
-    const lastSearchRef = useRef('');
-
-    const load = useCallback(
-        async (search: string) => {
-            const request = ++requestRef.current;
-            lastSearchRef.current = search;
-            generationRef.current += 1;
-            setGeneration(generationRef.current);
-            setState({ status: 'loading' });
-            const result = await ipc.callOrNull(() => ipc.getLibraryPhotos(challengeId, search || undefined));
-            if (request !== requestRef.current) return;
-            if (result?.success) {
-                rememberCurrentMember(result.memberId);
-                setKnown(
-                    (prev) =>
-                        new Map([...prev, ...result.photos.map((photo): [string, LibraryPhoto] => [photo.id, photo])]),
-                );
-                setState({ status: 'ready', listing: result });
-            } else if (result?.error === 'no-challenge-context') {
-                setState({ status: 'no-context' });
-            } else {
-                // A 'superseded' answer to the newest request means nothing newer is coming: offer Retry.
-                const error = result?.error && result.error !== 'superseded' ? result.error : null;
-                setState({ status: 'error', error });
-            }
-        },
-        [challengeId],
-    );
-
-    useEffect(() => {
-        void load('');
-        return () => {
-            requestRef.current += 1;
-        };
-    }, [load]);
-
-    // A member the listing could not name but a later check did: put it in the listing on screen,
-    // without reading the library again.
-    const setMember = useCallback((memberId: string) => {
-        rememberCurrentMember(memberId);
-        setState((prev) =>
-            prev.status === 'ready' ? { status: 'ready', listing: { ...prev.listing, memberId } } : prev,
-        );
-    }, []);
-
-    // Reads the listing again; answers the generation that read is, so a Retry can be recorded
-    // against the listing it created rather than the one it replaced.
-    const retry = () => {
-        void load(lastSearchRef.current);
-        return generationRef.current;
-    };
-
-    return { state, known, generation, load, setMember, retry };
-}
+import type { ListState } from './useLibraryListing';
 
 /**
  * Whether the lists on record belong to another account than the signed-in one,

@@ -22,7 +22,10 @@ import currencyActionsModule = require('../../src/ts/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
 import type * as currency_handlersModule from '../../src/ts/ipc/currency.handlers';
 import type * as swapBackStoreModule from '../../src/ts/swapBackStore';
+import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
 const { buildHandlers } = require('../../src/ts/ipc/currency.handlers') as typeof currency_handlersModule;
+const { writeListing, readFresh, clearLibraryCache } =
+    require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
 
 const OK = { ok: true, outcome: 'ok' };
 // The handlers as the tests read them: every result is an envelope whose `outcome` the
@@ -39,6 +42,7 @@ let handlers: Handlers;
 
 beforeEach(() => {
     jest.clearAllMocks();
+    clearLibraryCache();
     auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'tok', settings: {} });
     apiFactory.getApiStrategy = jest.fn().mockReturnValue({});
     // The spend lock is real (the handlers share it with the automatic runners);
@@ -252,6 +256,67 @@ describe('swap back channels', () => {
         const { swapBackLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
         await handlers['swap-back-entry-photo'](null, 10, 'repl', true);
         expect(currencyActions.swapBack.mock.calls[0][3].ledger).not.toBe(swapBackLedger);
+    });
+});
+
+describe('the library listing a swap outdates', () => {
+    const keepListings = () => {
+        const listing = {
+            photos: [],
+            memberId: 'm',
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        };
+        writeListing('tok', '10', listing);
+        writeListing('tok', '11', listing);
+    };
+    const kept = (id: string) => readFresh('tok', id) !== null;
+    const swap = async () => {
+        await handlers['preview-swap-photo'](null, 10, 'old');
+        return handlers['swap-entry-photo'](null, 10, 'old', 'new1', true);
+    };
+    const swapBack = () => handlers['swap-back-entry-photo'](null, 10, 'repl', true);
+
+    test.each([
+        ['swap-entry-photo', swap, () => currencyActions.swapEntry],
+        ['swap-back-entry-photo', swapBack, () => currencyActions.swapBack],
+    ])('%s drops that challenge’s listing, whatever the spend came to', async (_name, act, service) => {
+        for (const outcome of [
+            () => Promise.resolve(OK),
+            () => Promise.resolve({ ok: false, outcome: 'api-failed' }),
+            () => Promise.reject(new Error('boom')),
+        ]) {
+            keepListings();
+            service().mockImplementationOnce(outcome);
+            await act();
+            expect(kept('10')).toBe(false);
+            expect(kept('11')).toBe(true);
+        }
+    });
+
+    test('nothing is dropped when nothing was spent: unconfirmed, a stale preview, a busy lock, invalid arguments, no token', async () => {
+        keepListings();
+        await handlers['swap-entry-photo'](null, 10, 'old', 'new1', false);
+        await handlers['swap-entry-photo'](null, 10, 'old', 'never-previewed', true);
+        await invalid<OmitLast<Handlers['swap-back-entry-photo']>>(handlers['swap-back-entry-photo'])(null, 10, 'repl');
+        await handlers['swap-back-entry-photo'](null, invalid<number>({}), 'repl', true);
+        auth.requireAuthToken = jest
+            .fn()
+            .mockReturnValue({ ok: false, response: { success: false, error: 'No authentication token found' } });
+        await handlers['swap-back-entry-photo'](null, 10, 'repl', true);
+        expect([kept('10'), kept('11')]).toEqual([true, true]);
+        expect(currencyActions.swapEntry).not.toHaveBeenCalled();
+        expect(currencyActions.swapBack).not.toHaveBeenCalled();
+    });
+
+    test('the other spends leave the listing alone: a key unlock and an exposure fill change no photo', async () => {
+        keepListings();
+        await handlers['key-unlock-boost'](null, 10, true);
+        await handlers['fill-exposure'](null, 10, true);
+        expect([kept('10'), kept('11')]).toEqual([true, true]);
     });
 });
 

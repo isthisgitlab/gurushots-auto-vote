@@ -507,6 +507,8 @@ describe('pick', () => {
         truncated: false,
         wonIds: [],
         wonCount: 0,
+        preview: false,
+        readAtMs: 1_700_000_000_000,
         allowedKnown: true,
     });
     const english = (key: string) =>
@@ -521,6 +523,8 @@ describe('pick', () => {
     const openAndPick = async (n = 1) => {
         fireEvent.click(pickButton());
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        // The opening shows the library as last loaded with picking held; the fresh read unlocks it.
+        await waitFor(() => expect(tile(1).getAttribute('aria-disabled')).toBe('false'));
         fireEvent.click(tile(n));
     };
     type SubmitPicked = WindowApi['submitPickedPhotos'];
@@ -583,7 +587,7 @@ describe('pick', () => {
             );
             expect(screen.getByRole('dialog')).toBeTruthy();
             expect(onVoteComplete).toHaveBeenCalledTimes(1);
-            await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(2));
+            await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(3));
         },
     );
 
@@ -596,7 +600,7 @@ describe('pick', () => {
             submit();
             await screen.findByRole('alert');
             expect(onVoteComplete).not.toHaveBeenCalled();
-            expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(1);
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(2);
         },
     );
 

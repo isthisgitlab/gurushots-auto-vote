@@ -42,6 +42,8 @@ const autoFill = jest.mocked(autoFillModule);
 import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
 import type * as logCategoriesModule from '../helpers/logCategories';
 import type * as actions_handlersModule from '../../src/ts/ipc/actions.handlers';
+import type * as accountScopeModule from '../../src/ts/services/accountScope';
+import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
 import type * as discoverChallengesModule from '../../src/ts/services/discoverChallenges';
 import type * as autoClaimModule from '../../src/ts/services/autoClaim';
 const { rememberChallenges } = jest.mocked(require('../../src/ts/windows/quitGuard') as typeof quitGuardModule);
@@ -115,6 +117,9 @@ const mockChosenSettings = ({
 // jest.mock() bindings anyway by giving the handler fresh mock instances).
 const { buildHandlers } = require('../../src/ts/ipc/actions.handlers') as typeof actions_handlersModule;
 const { clearUpcomingCache } = require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
+const { bumpAccountGeneration } = require('../../src/ts/services/accountScope') as typeof accountScopeModule;
+const { writeListing, readFresh, clearLibraryCache } =
+    require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
 
 type Handlers = ReturnType<typeof buildHandlers>;
 // A zero-parameter handler invoked the way ipcMain does, with the event first.
@@ -128,6 +133,7 @@ beforeEach(() => {
     jest.clearAllMocks();
     // The upcoming list is cached for a minute per account; every test starts without it.
     clearUpcomingCache();
+    clearLibraryCache();
 });
 
 describe('get-active-challenges', () => {
@@ -2030,7 +2036,7 @@ describe('get-member-challenges — upcoming challenges', () => {
         test('writes nothing: no id lists, no cached challenges, and says so', async () => {
             const { release } = inFlight();
             const pending = listChallenges();
-            clearUpcomingCache(); // what logout / an account switch does (forgetAccountMemory)
+            bumpAccountGeneration(); // what logout / an account switch does (forgetAccountMemory)
             release();
             expect(await pending).toEqual({
                 success: false,
@@ -2165,6 +2171,166 @@ describe('register', () => {
         await expect(channels.get('get-bankroll')!(invalid(undefined))).resolves.toEqual({
             success: false,
             error: 'No authentication token found',
+        });
+    });
+});
+
+describe('the library listing an action of this window outdates', () => {
+    const live = { id: 123, title: 'C' };
+    // A listing kept for the challenge (and one for another), as the chooser's walk leaves them.
+    const keepListings = () => {
+        const listing = {
+            photos: [],
+            memberId: 'm',
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        };
+        writeListing('tok', '123', listing);
+        writeListing('tok', '124', listing);
+        writeListing('tok', null, listing);
+    };
+    const kept = (id: string | null) => readFresh('tok', id) !== null;
+    const expectDropped = () => {
+        expect(kept('123')).toBe(false);
+        // Only that challenge's: another's, and the no-challenge one, stay.
+        expect(kept('124')).toBe(true);
+        expect(kept(null)).toBe(true);
+    };
+    const expectKept = () => expect([kept('123'), kept('124'), kept(null)]).toEqual([true, true, true]);
+    const liveStrategy = () =>
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [live] }) });
+
+    describe('submit-picked-photos', () => {
+        test.each([
+            ['is done', () => Promise.resolve({ success: true, submitted: 1 })],
+            ['is refused', () => Promise.resolve({ success: false, error: 'submit-rejected' })],
+            ['is unclear', () => Promise.resolve({ success: false, error: 'submit-unclear' })],
+            ['throws after the challenge was read', () => Promise.reject(new Error('boom'))],
+        ])('drops the challenge’s listing when the submit %s', async (_name, outcome) => {
+            stubAuthGuardOk();
+            liveStrategy();
+            keepListings();
+            autoFill.submitPickedPhotos.mockReset().mockImplementation(invalid(outcome));
+            await buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+            expectDropped();
+        });
+
+        test.each([
+            ['invalid arguments', () => buildHandlers()['submit-picked-photos']({}, '123', invalid<string[]>('x'))],
+            [
+                'no token',
+                () => {
+                    stubAuthGuardFail();
+                    return buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+                },
+            ],
+            [
+                'a challenge that is no longer active',
+                () => {
+                    stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }) });
+                    return buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+                },
+            ],
+        ])('keeps it with %s: nothing was sent', async (_name, act) => {
+            stubAuthGuardOk();
+            keepListings();
+            await act();
+            expectKept();
+        });
+
+        test('keeps it when a second submit is turned away as busy, and drops it once the first one ends', async () => {
+            stubAuthGuardOk();
+            liveStrategy();
+            keepListings();
+            let finish: (value: { success: true; submitted: number }) => void = () => undefined;
+            autoFill.submitPickedPhotos.mockReset().mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+            const first = buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+            await expect(buildHandlers()['submit-picked-photos']({}, '123', ['b'])).resolves.toEqual({
+                success: false,
+                error: 'submit-busy',
+            });
+            expectKept();
+            finish({ success: true, submitted: 1 });
+            await first;
+            expectDropped();
+        });
+    });
+
+    describe('fill-challenge-now', () => {
+        test.each([
+            ['is done', () => Promise.resolve({ success: true, submitted: 1, skipped: 0 })],
+            [
+                'finds nothing to submit',
+                () => Promise.resolve({ success: false, submitted: 0, skipped: 2, error: 'x' }),
+            ],
+            ['throws', () => Promise.reject(new Error('boom'))],
+        ])('drops the challenge’s listing when the fill %s', async (_name, outcome) => {
+            stubAuthGuardOk();
+            liveStrategy();
+            keepListings();
+            autoFill.fillChallengeNow = jest.fn().mockImplementation(outcome);
+            await buildHandlers()['fill-challenge-now']({}, '123', 'one');
+            expectDropped();
+        });
+
+        test.each([
+            ['invalid arguments', () => buildHandlers()['fill-challenge-now']({}, invalid<string>({}), 'one')],
+            [
+                'no token',
+                () => {
+                    stubAuthGuardFail();
+                    return buildHandlers()['fill-challenge-now']({}, '123', 'one');
+                },
+            ],
+            [
+                'a challenge that is no longer active',
+                () => {
+                    stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }) });
+                    return buildHandlers()['fill-challenge-now']({}, '123', 'one');
+                },
+            ],
+        ])('keeps it with %s: nothing was filled', async (_name, act) => {
+            stubAuthGuardOk();
+            keepListings();
+            await act();
+            expectKept();
+        });
+    });
+
+    describe('join-challenge', () => {
+        test('drops the challenge’s listing when it joined', async () => {
+            stubAuthGuardOk();
+            stubStrategy({ joinChallenge: jest.fn().mockResolvedValue({ status: 'joined', challengeId: 123 }) });
+            keepListings();
+            await buildHandlers()['join-challenge']({}, 123, true);
+            expectDropped();
+        });
+
+        test.each([
+            ['needs-confirm', { status: 'needs-confirm', challengeId: 123, cost: 50 }],
+            ['not-started', { status: 'not-started', challengeId: 123 }],
+            ['no answer', null],
+        ])('keeps it when the join comes to %s', async (_name, outcome) => {
+            stubAuthGuardOk();
+            stubStrategy({ joinChallenge: jest.fn().mockResolvedValue(outcome) });
+            keepListings();
+            await buildHandlers()['join-challenge']({}, 123, true);
+            expectKept();
+        });
+
+        test('keeps it with invalid arguments, no token or a throw', async () => {
+            keepListings();
+            stubAuthGuardOk();
+            await buildHandlers()['join-challenge']({}, invalid<string>({}), true);
+            stubAuthGuardFail();
+            await buildHandlers()['join-challenge']({}, 123, true);
+            stubAuthGuardOk();
+            stubStrategy({ joinChallenge: jest.fn().mockRejectedValue(new Error('boom')) });
+            await buildHandlers()['join-challenge']({}, 123, true);
+            expectKept();
         });
     });
 });

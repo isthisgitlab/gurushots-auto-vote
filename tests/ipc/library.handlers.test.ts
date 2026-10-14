@@ -19,12 +19,17 @@ const auth = jest.mocked(authModule);
 import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
 import type * as libraryModule from '../../src/ts/ipc/actions/library';
+import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
+import type * as accountScopeModule from '../../src/ts/services/accountScope';
 import type { LibraryPhoto } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 import { logCategories } from '../helpers/logCategories';
 
 const { handleGetLibraryPhotos, hasWonChallenge, __resetLibraryThrottle, MIN_WALK_INTERVAL_MS } =
     require('../../src/ts/ipc/actions/library') as typeof libraryModule;
+const { clearLibraryCache, dropContext, LIBRARY_FRESH_MS } =
+    require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
+const { bumpAccountGeneration } = require('../../src/ts/services/accountScope') as typeof accountScopeModule;
 
 // The handler is invoked the way ipcMain does: the event first.
 const call = (...args: unknown[]) =>
@@ -46,6 +51,12 @@ type Walk = jest.Mock<Promise<WalkResult>, [string | number, string, WalkOptions
 const newWalk = (result: WalkResult = { items: [rawPhoto], truncated: false }): Walk =>
     jest.fn<Promise<WalkResult>, [string | number, string, WalkOptions]>(async () => result);
 
+const deferred = <T>() => {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((r) => (resolve = r));
+    return { promise, resolve };
+};
+
 const stubStrategy = (
     over: {
         getActiveChallenges?: jest.Mock<Promise<unknown>, [string]>;
@@ -66,6 +77,7 @@ beforeEach(() => {
     jest.clearAllMocks();
     jest.useRealTimers();
     __resetLibraryThrottle();
+    clearLibraryCache();
     auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'tok', settings: {} });
     autoFill.resolveMemberId = jest.fn().mockResolvedValue('member-1');
     settings.getOpenChallengeIds = jest.fn().mockReturnValue(null);
@@ -138,6 +150,8 @@ describe('the listing', () => {
             wonCount: 0,
             truncated: true,
             allowedKnown: true,
+            preview: false,
+            readAtMs: expect.any(Number),
         });
         expect(autoFill.resolveMemberId).toHaveBeenCalledWith(
             'tok',
@@ -295,11 +309,6 @@ describe('the throttle', () => {
         expect(strategy.getActiveChallenges).toHaveBeenCalledTimes(2);
     });
 
-    const deferred = <T>() => {
-        let resolve!: (value: T) => void;
-        const promise = new Promise<T>((r) => (resolve = r));
-        return { promise, resolve };
-    };
     const walkResult = { items: [rawPhoto], truncated: false };
 
     test('one walk at a time; a newer request replaces a queued one; a minimum gap separates walks', async () => {
@@ -345,6 +354,237 @@ describe('the throttle', () => {
         await jest.advanceTimersByTimeAsync(MIN_WALK_INTERVAL_MS * 4);
         await call(4);
         expect(walk).toHaveBeenCalledTimes(3);
+    });
+});
+
+describe('the library cache', () => {
+    const listed = (...ids: string[]) => ({
+        items: ids.map((id) => ({ id, labels: [`tag-${id}`], permission: { allowed: false, message: `No ${id}` } })),
+        truncated: false,
+        skipped: ['won-1', 'won-2'],
+    });
+    const idsOf = (result: unknown) => (result as { photos: Array<{ id: string }> }).photos.map((photo) => photo.id);
+    const next = async (...args: unknown[]) => {
+        __resetLibraryThrottle();
+        return call(...args);
+    };
+
+    test('a no-search read is kept, and a cached request for that challenge answers it with its marks and no walk', async () => {
+        const walk = newWalk(listed('a', 'b'));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        const read = (await call('5')) as { readAtMs: number };
+        const cached = await next('5', undefined, 'cached');
+        expect(walk).toHaveBeenCalledTimes(1);
+        expect(cached).toMatchObject({
+            success: true,
+            preview: false,
+            allowedKnown: true,
+            readAtMs: read.readAtMs,
+            wonCount: 2,
+            wonIds: ['won-1', 'won-2'],
+        });
+        expect((cached as { photos: unknown[] }).photos[0]).toMatchObject({ allowed: false, message: 'No a' });
+        // The request-less read asked the same, whatever number or text the id was given as.
+        await expect(next(5, null, 'cached')).resolves.toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(1);
+    });
+
+    test('a request without a mode, or with mode fresh, walks every time', async () => {
+        const walk = newWalk(listed('a'));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5');
+        await next('5');
+        await next('5', undefined, 'fresh');
+        expect(walk).toHaveBeenCalledTimes(3);
+    });
+
+    test('another challenge, or an expired entry, answers the newest listing as a preview with its marks withheld and the won photos kept', async () => {
+        const walk = newWalk({ ...listed('a', 'b'), skipped: ['won-1'] });
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5');
+        for (const challenge of ['6', null]) {
+            const preview = (await next(challenge, undefined, 'cached')) as {
+                photos: Array<{ allowed: boolean; message: string | null; labels: string[] }>;
+            };
+            expect(preview).toMatchObject({ success: true, preview: true, allowedKnown: false, wonCount: 1 });
+            expect(preview.photos.map((photo) => [photo.allowed, photo.message])).toEqual([
+                [false, null],
+                [false, null],
+            ]);
+            expect(preview.photos[0].labels).toEqual(['tag-a']);
+            // None of the reasons the other challenge gave is in what was sent.
+            expect(JSON.stringify(preview)).not.toContain('No a');
+        }
+        expect(walk).toHaveBeenCalledTimes(1);
+    });
+
+    test('an entry answers for LIBRARY_FRESH_MS and is a preview from then on', async () => {
+        jest.useFakeTimers({ now: 1_000_000 });
+        const walk = newWalk(listed('a'));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5');
+        jest.setSystemTime(1_000_000 + LIBRARY_FRESH_MS - 1);
+        await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: false });
+        jest.setSystemTime(1_000_000 + LIBRARY_FRESH_MS);
+        await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: true, allowedKnown: false });
+        expect(walk).toHaveBeenCalledTimes(1);
+    });
+
+    test('with nothing cached a cached request walks, and keeps what the walk read', async () => {
+        const walk = newWalk(listed('a'));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await expect(call('5', undefined, 'cached')).resolves.toMatchObject({ success: true, preview: false });
+        expect(walk).toHaveBeenCalledTimes(1);
+        await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(1);
+    });
+
+    test('a read with no challenge is kept for the no-challenge chooser only, not for the challenge it borrowed', async () => {
+        const walk = newWalk(listed('a'));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call(undefined, null);
+        expect(walk).toHaveBeenCalledWith('active-1', 'tok', expect.anything());
+        await expect(next(undefined, null, 'cached')).resolves.toMatchObject({ preview: false, allowedKnown: false });
+        await expect(next('active-1', null, 'cached')).resolves.toMatchObject({ preview: true });
+        expect(walk).toHaveBeenCalledTimes(1);
+    });
+
+    test('a search is never kept, and a cached request with a search walks even with an entry for the challenge', async () => {
+        const walk = newWalk(listed('a'));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5', 'pink');
+        await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(2);
+        await expect(next('5', 'pink', 'cached')).resolves.toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(3);
+        expect(walk.mock.calls[2][2]).toMatchObject({ search: 'pink' });
+        // Whitespace is no search: it is the no-search listing.
+        await expect(next('5', '   ', 'cached')).resolves.toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(3);
+    });
+
+    test('a failed read, one with no challenge to read through and one that was replaced write nothing', async () => {
+        const failing = jest
+            .fn<Promise<WalkResult>, [string | number, string, WalkOptions]>()
+            .mockRejectedValue(new Error('down'));
+        stubStrategy({ getEligiblePhotosWalk: failing });
+        await expect(call('5')).resolves.toMatchObject({ success: false });
+        const walk = newWalk(listed('a'));
+        stubStrategy({
+            getEligiblePhotosWalk: walk,
+            getActiveChallenges: jest.fn<Promise<unknown>, [string]>(async () => ({ challenges: [] })),
+        });
+        await expect(next(undefined, null)).resolves.toEqual({ success: false, error: 'no-challenge-context' });
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(1);
+        // The failed read left nothing for the next cached request, which therefore walked.
+        const first = call('6');
+        const replaced = call('7');
+        await expect(first).resolves.toEqual({ success: false, error: 'superseded' });
+        await replaced;
+    });
+
+    test('a read that kept nothing and was cut short is not kept', async () => {
+        const cutShort = newWalk({ items: [], truncated: true });
+        stubStrategy({ getEligiblePhotosWalk: cutShort });
+        await expect(call('5')).resolves.toMatchObject({ success: true, photos: [], truncated: true });
+        await next('5', undefined, 'cached');
+        expect(cutShort).toHaveBeenCalledTimes(2);
+        // A complete empty library, and a cut-short read that did see won photos, are kept.
+        const empty = newWalk({ items: [], truncated: false });
+        stubStrategy({ getEligiblePhotosWalk: empty });
+        await next('6');
+        await next('6', undefined, 'cached');
+        expect(empty).toHaveBeenCalledTimes(1);
+        const onlyWon = newWalk({ items: [], truncated: true, skipped: ['w'] });
+        stubStrategy({ getEligiblePhotosWalk: onlyWon });
+        await next('7');
+        await next('7', undefined, 'cached');
+        expect(onlyWon).toHaveBeenCalledTimes(1);
+    });
+
+    test('a cached answer does not queue behind, supersede or wait for a walk in flight', async () => {
+        const walk = newWalk(listed('a'));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5');
+        const slow = deferred<WalkResult>();
+        walk.mockReturnValueOnce(slow.promise);
+        __resetLibraryThrottle();
+        const running = call('6');
+        // Another cached request is answered at once, from the cache, while the walk is pending...
+        await expect(call('5', undefined, 'cached')).resolves.toMatchObject({ preview: false });
+        await expect(call('9', undefined, 'cached')).resolves.toMatchObject({ preview: true });
+        // ...and the walk was not replaced by either.
+        slow.resolve(listed('z'));
+        await expect(running).resolves.toMatchObject({ success: true, preview: false });
+    });
+
+    test('a cached answer is a copy: changing it never changes what is kept', async () => {
+        stubStrategy({ getEligiblePhotosWalk: newWalk(listed('a')) });
+        await call('5');
+        const first = (await next('5', undefined, 'cached')) as { photos: Array<{ id: string; labels: string[] }> };
+        first.photos[0].id = 'changed';
+        first.photos[0].labels.push('changed');
+        first.photos.push({ id: 'extra', labels: [] });
+        const second = (await next('5', undefined, 'cached')) as typeof first;
+        expect(second.photos).toEqual([expect.objectContaining({ id: 'a', labels: ['tag-a'] })]);
+    });
+
+    test('a walk in flight when the account leaves writes nothing and answers account-changed, never the old photos', async () => {
+        const slow = deferred<WalkResult>();
+        const walk = newWalk();
+        walk.mockReturnValueOnce(slow.promise);
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        const running = call('5');
+        bumpAccountGeneration();
+        slow.resolve(listed('old-account-photo'));
+        await expect(running).resolves.toEqual({ success: false, error: 'account-changed' });
+        // The same for a search: no account's photos reach a signed-out view.
+        await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(2);
+    });
+
+    test('a walk in flight when the challenge is dropped answers its photos but keeps nothing', async () => {
+        const slow = deferred<WalkResult>();
+        const walk = newWalk(listed('b'));
+        walk.mockReturnValueOnce(slow.promise);
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        const running = call('5');
+        dropContext('tok', '5');
+        slow.resolve(listed('a'));
+        await expect(running).resolves.toMatchObject({ success: true });
+        // Nothing was kept, so a cached request walks again.
+        await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(2);
+    });
+
+    test.each([['stale'], [null], [7], [{}]])('refuses the mode %j before looking up the token', async (mode) => {
+        const walk = newWalk();
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await expect(call('5', undefined, mode)).resolves.toEqual({ success: false, error: 'invalid-args' });
+        expect(auth.requireAuthToken).not.toHaveBeenCalled();
+        expect(walk).not.toHaveBeenCalled();
+    });
+
+    test('a cached answer reads the token once and signed out is the guard’s answer', async () => {
+        auth.requireAuthToken = jest
+            .fn()
+            .mockReturnValue({ ok: false, response: { success: false, error: 'No token' } });
+        stubStrategy();
+        await expect(call('5', undefined, 'cached')).resolves.toEqual({ success: false, error: 'No token' });
+    });
+
+    test('a cached answer differs per account: another token is never shown this one’s listing', async () => {
+        stubStrategy({ getEligiblePhotosWalk: newWalk(listed('a')) });
+        await call('5');
+        auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'other', settings: {} });
+        const walk = newWalk(listed('b'));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        const result = await next('5', undefined, 'cached');
+        expect(idsOf(result)).toEqual(['b']);
+        expect(result).toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(1);
     });
 });
 

@@ -5,6 +5,7 @@ import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import * as autoFill from '../../services/autoFill';
+import { dropContext } from '../../services/libraryCache';
 import { CHOSEN_PHOTO_ID_RE, MAX_CHOSEN_PHOTOS } from '../../settings/limits';
 import { sanitizeForLog, refuseInvalidArgs, fetchLiveChallenge } from './shared';
 
@@ -45,17 +46,22 @@ const handleFillChallengeNow = (async (event: unknown, challengeId: string | num
             return { success: false as const, error: 'Challenge no longer active' };
         }
 
-        const result = await autoFill.fillChallengeNow(liveChallenge, guard.token, safeMode, {
-            settings,
-            logger,
-            getEligiblePhotos: strategy.getEligiblePhotos,
-            getEligiblePhotosWalk: strategy.getEligiblePhotosWalk,
-            getImageData: strategy.getImageData,
-            submitToChallenge: strategy.submitToChallenge,
-            searchTagAutocomplete: strategy.searchTagAutocomplete,
-            getCurrentMemberProfile: strategy.getCurrentMemberProfile,
-        });
-        return fillResponse(result);
+        try {
+            const result = await autoFill.fillChallengeNow(liveChallenge, guard.token, safeMode, {
+                settings,
+                logger,
+                getEligiblePhotos: strategy.getEligiblePhotos,
+                getEligiblePhotosWalk: strategy.getEligiblePhotosWalk,
+                getImageData: strategy.getImageData,
+                submitToChallenge: strategy.submitToChallenge,
+                searchTagAutocomplete: strategy.searchTagAutocomplete,
+                getCurrentMemberProfile: strategy.getCurrentMemberProfile,
+            });
+            return fillResponse(result);
+        } finally {
+            // Whatever the fill came to, which photos this challenge accepts may have changed.
+            dropContext(guard.token, challengeId);
+        }
     } catch (error) {
         logger.withCategory('autoFill').error('Error handling fill-challenge-now request:', error);
         return errorResult(error, 'Failed to submit photos');
@@ -107,10 +113,15 @@ const handleSubmitPickedPhotos = (async (event: unknown, challengeId: string | n
             return { success: false as const, error: 'Challenge no longer active' };
         }
 
-        return await autoFill.submitPickedPhotos(liveChallenge, guard.token, imageIds, {
-            logger,
-            submitToChallenge: strategy.submitToChallenge,
-        });
+        try {
+            return await autoFill.submitPickedPhotos(liveChallenge, guard.token, imageIds, {
+                logger,
+                submitToChallenge: strategy.submitToChallenge,
+            });
+        } finally {
+            // Whatever the submit came to (even an unclear answer), which photos this challenge accepts may have changed.
+            dropContext(guard.token, challengeId);
+        }
     } catch (error) {
         logger.withCategory('autoFill').error('Error handling submit-picked-photos request:', error);
         return errorResult(error, 'Failed to submit photos');

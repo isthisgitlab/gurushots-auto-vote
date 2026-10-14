@@ -8,7 +8,9 @@ import { isAutoJoinActive } from '../../services/joinChallenges';
 import { forgetFailedMemberId, resolveMemberId } from '../../services/autoFill';
 import { chosenAnnotator, annotateOpenIds, MAX_ANNOTATED_IDS } from './chosenAnnotations';
 import { rememberOpenChallenges } from '../../services/openChallengeCache';
-import { fetchUpcoming, mergeDiscoverLists, accountGeneration } from '../../services/discoverChallenges';
+import { fetchUpcoming, mergeDiscoverLists } from '../../services/discoverChallenges';
+import { accountGeneration } from '../../services/accountScope';
+import { dropContext } from '../../services/libraryCache';
 import { getAutoClaimStatus } from '../../services/autoClaim';
 import { rememberChallenges } from '../../windows/quitGuard';
 import { sanitizeForLog, refuseInvalidArgs } from './shared';
@@ -276,6 +278,8 @@ const handleJoinChallenge = (async (
             guard.token,
             ...(expectedCost === undefined ? [] : [expectedCost]),
         );
+        // Joining enters photos, so which ones the challenge now accepts has changed.
+        if (outcome?.status === 'joined') dropContext(guard.token, challengeId);
         return {
             success: outcome?.status === 'joined',
             status: outcome?.status,

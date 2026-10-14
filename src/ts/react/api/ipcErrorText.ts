@@ -26,6 +26,7 @@ const KNOWN_ERRORS: Record<string, string> = {
     'Could not list challenges': 'errors.fetchChallengesFailed',
     'Could not read your balance right now': 'errors.fetchChallengesFailed',
     'The account changed while listing challenges': 'errors.accountChanged',
+    'account-changed': 'errors.accountChanged',
     'account-check-failed': 'errors.accountCheckFailed',
     'token-not-saved': 'errors.tokenNotSaved',
     'web-shell-token': 'errors.webShellToken',

@@ -391,6 +391,8 @@ describe('SettingsModal — title-tag-rules save', () => {
                 truncated: false,
                 wonIds: [],
                 wonCount: 0,
+                preview: false,
+                readAtMs: 1_700_000_000_000,
                 allowedKnown: true,
             }),
         );

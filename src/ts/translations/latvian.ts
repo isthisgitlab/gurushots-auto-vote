@@ -778,9 +778,27 @@ export const app = {
         'Paslēpti foto, kas uzvarējuši izaicinājumā: vismaz {count}. Uzvarējušo foto nevar iesniegt vēlreiz.',
     photoChooserWonInList:
         'Uzvarējis izaicinājumā, tāpēc to nevar iesniegt vēlreiz. Noklikšķini uz tā, lai to noņemtu no saraksta.',
-    photoChooserEmpty: 'Foto nav atrasti. Pamēģini citu tagu vai augšupielādē foto savā GuruShots bibliotēkā.',
+    photoChooserEmpty:
+        'Foto nav atrasti. Pamēģini citu tagu vai augšupielādē foto savā GuruShots bibliotēkā un spied „Atsvaidzināt”.',
     photoChooserEmptyAllWon:
-        'Nav atrasts neviens foto, ko var iesniegt: visi atrastie foto ir uzvarējuši izaicinājumā. Pamēģini citu tagu vai augšupielādē jaunus foto savā GuruShots bibliotēkā.',
+        'Nav atrasts neviens foto, ko var iesniegt: visi atrastie foto ir uzvarējuši izaicinājumā. Pamēģini citu tagu vai augšupielādē jaunus foto savā GuruShots bibliotēkā un spied „Atsvaidzināt”.',
+    photoChooserAsOf: 'Foto ielādēti plkst. {time}',
+    photoChooserAsOfDate: 'Foto ielādēti {date} plkst. {time}',
+    photoChooserRefresh: 'Atsvaidzināt',
+    photoChooserRefreshLabel: 'Atsvaidzināt foto',
+    photoChooserPreview:
+        'Rāda tavus foto, kā tie ielādēti iepriekš, kamēr lietotne pārbauda, kuri no tiem der šim izaicinājumam…',
+    photoChooserPreviewNoChallenge:
+        'Rāda tavus foto, kā tie ielādēti iepriekš, kamēr lietotne pārbauda, vai nav kas jauns…',
+    photoChooserPreviewSubmit:
+        'Rāda tavus foto, kā tie ielādēti iepriekš. Izvēlēties varēs, kad lietotne būs pārbaudījusi, kuri no tiem der šim izaicinājumam…',
+    photoChooserRecheckFailed:
+        'Neizdevās pārbaudīt, kuri no šiem foto der šim izaicinājumam, tāpēc tie rādīti, kā ielādēti iepriekš. Spied „Atsvaidzināt”.',
+    photoChooserRecheckFailedNoChallenge:
+        'Neizdevās pārbaudīt, vai tavos foto nav izmaiņu, tāpēc tie rādīti, kā ielādēti iepriekš. Spied „Atsvaidzināt”.',
+    photoChooserRecheckFailedSubmit:
+        'Neizdevās pārbaudīt, kuri no šiem foto der šim izaicinājumam, tāpēc izvēle ir aizturēta. Spied „Atsvaidzināt”.',
+    photoChooserNotAsLoaded: 'Nav starp taviem foto, kā tie ielādēti iepriekš. Pārbauda vēlreiz…',
     photoChooserMissing: 'Nav pieejams šim izaicinājumam (atrodas citā izaicinājumā vai ir dzēsts)',
     photoChooserMissingTruncated:
         'Nav pieejams šim izaicinājumam (atrodas citā izaicinājumā, ir dzēsts vai ir tālāk par pirmajiem {count} foto)',
@@ -838,6 +856,7 @@ export const app = {
     pickCount: 'Izvēlēti: {count}, brīvās vietas: {max}',
     pickOverCap: 'Izvēlēti: {count}, brīvās vietas: {max}. Noņem dažus, lai iesniegtu.',
     pickFull: 'Visām brīvajām vietām foto izvēlēti',
+    pickTileLocked: 'Bloķēts, kamēr lietotne pārbauda, vai tas der šim izaicinājumam.',
     pickNoSlots: 'Brīvu vietu vairs nav: katrā vietā jau ir foto. Aizver šo logu.',
     pickSubmit: 'Iesniegt',
     pickSubmitCount: 'Iesniegt {count} foto',

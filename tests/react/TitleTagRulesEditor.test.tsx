@@ -186,6 +186,8 @@ describe('TitleTagRulesEditor', () => {
                     truncated: false,
                     wonIds: [],
                     wonCount: 0,
+                    preview: false,
+                    readAtMs: 1_700_000_000_000,
                     allowedKnown: false,
                 });
             });
@@ -214,7 +216,7 @@ describe('TitleTagRulesEditor', () => {
                     expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotos: [ID] })]),
                 );
                 // A rule has no challenge to read eligibility through.
-                expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined);
+                expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined, 'cached');
             });
 
             test('an explicit empty list means none, and Inherit writes the empty sentinel', () => {

@@ -1253,6 +1253,8 @@ describe('chosen photos', () => {
                     truncated: false,
                     wonIds: [],
                     wonCount: 0,
+                    preview: false,
+                    readAtMs: 1_700_000_000_000,
                     allowedKnown: true,
                 }),
         });
@@ -1272,7 +1274,7 @@ describe('chosen photos', () => {
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
-        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(900001, undefined));
+        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(900001, undefined, 'cached'));
         fireEvent.click(await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ }));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
         await waitFor(() =>
@@ -1335,6 +1337,8 @@ describe('chosen photos', () => {
                     truncated: false,
                     wonIds: [],
                     wonCount: 0,
+                    preview: false,
+                    readAtMs: 1_700_000_000_000,
                     allowedKnown: true,
                 };
             });

@@ -57,6 +57,8 @@ describe('list-photos', () => {
             truncated: true,
             wonIds: [],
             wonCount: 0,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
             allowedKnown: true,
             memberId: 'm',
         });
@@ -84,6 +86,8 @@ describe('list-photos', () => {
             truncated: false,
             wonIds: [],
             wonCount: 0,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
             allowedKnown: false,
             memberId: null,
         });
@@ -99,6 +103,8 @@ describe('list-photos', () => {
             truncated: false,
             wonIds: [],
             wonCount: 0,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
             allowedKnown: true,
             memberId: null,
         });
@@ -112,6 +118,8 @@ describe('list-photos', () => {
             truncated: false,
             wonIds: [],
             wonCount: 0,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
             allowedKnown: false,
             memberId: null,
         });
@@ -123,12 +131,34 @@ describe('list-photos', () => {
         expect(text('stdout')).toEqual([]);
     });
 
+    test('asks for the listing with no mode, so it walks every time and never reads the cache', async () => {
+        handlers['get-library-photos'].mockResolvedValue({
+            success: true,
+            photos,
+            truncated: false,
+            wonIds: [],
+            wonCount: 0,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
+            allowedKnown: true,
+            memberId: 'm',
+        });
+        await listPhotosCmd('5', null);
+        await listPhotosCmd(null, 'pink');
+        expect(handlers['get-library-photos'].mock.calls).toEqual([
+            [null, '5', null],
+            [null, null, 'pink'],
+        ]);
+    });
+
     test('says how many photos were left out for having won a challenge, with the photos or without any', async () => {
         handlers['get-library-photos'].mockResolvedValue({
             success: true,
             photos: [photos[0]],
             wonIds: ['w1', 'w2'],
             wonCount: 2,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
             truncated: false,
             allowedKnown: true,
             memberId: 'm',
@@ -145,6 +175,8 @@ describe('list-photos', () => {
             photos: [photos[0]],
             wonIds: ['w1'],
             wonCount: 1500,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
             truncated: false,
             allowedKnown: true,
             memberId: 'm',
@@ -160,6 +192,8 @@ describe('list-photos', () => {
             photos: [photos[0]],
             wonIds: ['w1'],
             wonCount: 1,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
             truncated: true,
             allowedKnown: true,
             memberId: 'm',
@@ -176,6 +210,8 @@ describe('list-photos', () => {
             photos: [],
             wonIds: ['w1'],
             wonCount: 3,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
             truncated: false,
             allowedKnown: true,
             memberId: 'm',
@@ -203,6 +239,8 @@ describe('list-photos', () => {
             photos: [photos[0]],
             wonIds: [],
             wonCount: 0,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
             truncated: false,
             allowedKnown: true,
             memberId: 'm',
@@ -225,6 +263,8 @@ describe('list-photos', () => {
             ],
             wonIds: [],
             wonCount: 0,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
             truncated: false,
             allowedKnown: true,
             memberId: 'm',
@@ -240,6 +280,8 @@ describe('list-photos', () => {
             truncated: false,
             wonIds: [],
             wonCount: 0,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
             allowedKnown: true,
             memberId: null,
         });

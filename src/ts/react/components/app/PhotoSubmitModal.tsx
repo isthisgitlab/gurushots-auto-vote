@@ -3,7 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
 import { interp } from '@/utils/interp';
-import { useLibraryListing } from '@/hooks/usePhotoChooser';
+import { useLibraryListing } from '@/hooks/useLibraryListing';
 import { SearchForm } from './ChooserFooter';
 import { PhotoGrid } from './PhotoChooserModal';
 
@@ -54,7 +54,7 @@ function SubmitFooter({
 
 /**
  * The modal's body. Mounted only while the modal is open, so every opening starts with nothing picked
- * and a fresh listing. `max` is the card's live count of open slots: it can shrink while the modal is open.
+ * and reads the listing afresh, picking only once that read is in. `max` is the card's live count of open slots: it can shrink while the modal is open.
  */
 function PhotoSubmitBody({
     challengeId,
@@ -73,7 +73,15 @@ function PhotoSubmitBody({
 }) {
     const { t } = useTranslation();
     const [selected, setSelected] = useState<string[]>([]);
-    const { state, known, generation, load, retry } = useLibraryListing(challengeId);
+    // Marks read before an action of this window (a join, a submit) are not to be trusted: a cached listing
+    // always comes back as a preview, and picking waits for the fresh read.
+    const { state, known, generation, revalidating, recheckFailed, load, refresh, retry } = useLibraryListing(
+        challengeId,
+        { alwaysFresh: true },
+    );
+    const preview = state.status === 'ready' && state.listing.preview;
+    // Until the app has checked which photos the challenge accepts, none can be picked or sent.
+    const checking = preview || recheckFailed;
 
     // The generation of the read a failed submit asked for: once a listing of that generation (or later) is
     // in, photos it says can no longer be entered leave the pick. Null when nothing is waiting.
@@ -94,8 +102,9 @@ function PhotoSubmitBody({
 
     useEffect(() => {
         const from = pruneFromRef.current;
-        // `generation < from`: a guard for a read that has not landed yet (defence in depth).
-        if (from === null || state.status !== 'ready' || generation < from) return;
+        // `generation < from`: a guard for a read that has not landed yet (defence in depth). A preview, or a
+        // listing still being read again, says nothing about what the challenge accepts yet.
+        if (from === null || state.status !== 'ready' || generation < from || checking || revalidating) return;
         pruneFromRef.current = null;
         if (!state.listing.allowedKnown) return;
         // A photo that has won since the last read is left out of the listing, so `known` still has it as allowed.
@@ -104,7 +113,12 @@ function PhotoSubmitBody({
             const kept = prev.filter((id) => known.get(id)?.allowed !== false && !won.has(id));
             return kept.length === prev.length ? prev : kept;
         });
-    }, [state, known, generation]);
+    }, [state, known, generation, checking, revalidating]);
+
+    // After a Refresh answers, the pick is checked against the listing it brought, as after a refused submit.
+    const refreshListing = () => {
+        pruneFromRef.current = refresh();
+    };
 
     const submit = () => {
         void (async () => {
@@ -148,9 +162,16 @@ function PhotoSubmitBody({
                 known={known}
                 selected={selected}
                 hideUnlisted={false}
-                locked={false}
+                locked={checking}
+                lockedKey="app.pickTileLocked"
+                hasChallenge
+                revalidating={revalidating}
+                recheckFailed={recheckFailed}
+                submit
+                refreshDisabled={submitting}
                 onToggle={toggle}
                 onRetry={retry}
+                onRefresh={refreshListing}
                 // With one slot the modal swaps the pick, so the grid never stops offering tiles.
                 max={max === 1 ? Number.POSITIVE_INFINITY : max}
                 fullKey="app.pickFull"
@@ -159,7 +180,7 @@ function PhotoSubmitBody({
             {alert}
             <SubmitFooter
                 count={selected.length}
-                held={over || state.status !== 'ready'}
+                held={over || state.status !== 'ready' || checking}
                 submitting={submitting}
                 onSubmit={submit}
                 onCancel={onClose}

@@ -769,9 +769,25 @@ export const app = {
     photoChooserWonHiddenTruncated:
         "Hidden: at least {count} photo(s) that have won a challenge. A winning photo can't be entered again.",
     photoChooserWonInList: "Has won a challenge, so it can't be entered again. Click it to remove it from your list.",
-    photoChooserEmpty: 'No photos found. Try another tag, or upload photos to your GuruShots library.',
+    photoChooserEmpty:
+        'No photos found. Try another tag, or upload photos to your GuruShots library and press Refresh.',
     photoChooserEmptyAllWon:
-        'No photos you can enter were found: every match has won a challenge. Try another tag, or upload new photos to your GuruShots library.',
+        'No photos you can enter were found: every match has won a challenge. Try another tag, or upload new photos to your GuruShots library and press Refresh.',
+    photoChooserAsOf: 'Photos as of {time}',
+    photoChooserAsOfDate: 'Photos as of {date}, {time}',
+    photoChooserRefresh: 'Refresh',
+    photoChooserRefreshLabel: 'Refresh photos',
+    photoChooserPreview: 'Showing your photos as last loaded while the app checks which ones this challenge accepts…',
+    photoChooserPreviewNoChallenge: 'Showing your photos as last loaded while the app checks for anything new…',
+    photoChooserPreviewSubmit:
+        'Showing your photos as last loaded. You can pick once the app has checked which ones this challenge accepts…',
+    photoChooserRecheckFailed:
+        "Couldn't check which of these photos this challenge accepts, so they're shown as last loaded. Press Refresh.",
+    photoChooserRecheckFailedNoChallenge:
+        "Couldn't check your photos for changes, so they're shown as last loaded. Press Refresh.",
+    photoChooserRecheckFailedSubmit:
+        "Couldn't check which of these photos this challenge accepts, so picking is held. Press Refresh.",
+    photoChooserNotAsLoaded: 'Not among your photos as last loaded. Checking again…',
     photoChooserMissing: 'Not available for this challenge (in another challenge, or deleted)',
     photoChooserMissingTruncated:
         'Not available for this challenge (in another challenge, deleted, or beyond the first {count} photos)',
@@ -828,6 +844,7 @@ export const app = {
     pickCount: 'Picked: {count}/{max} open slots',
     pickOverCap: 'Picked: {count}, open slots: {max}. Remove some to submit.',
     pickFull: 'All open slots picked',
+    pickTileLocked: 'Locked while the app checks whether this challenge accepts it.',
     pickNoSlots: 'No open slots left: every slot already holds a photo. Close this window.',
     pickSubmit: 'Submit',
     pickSubmitCount: 'Submit {count}',

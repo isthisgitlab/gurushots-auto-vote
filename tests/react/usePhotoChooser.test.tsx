@@ -5,10 +5,12 @@
  */
 
 import { act, renderHook, waitFor } from '@testing-library/preact';
-import { useLibraryListing, useSavedListReread } from '@/hooks/usePhotoChooser';
+import { useSavedListReread } from '@/hooks/usePhotoChooser';
+import { useLibraryListing } from '@/hooks/useLibraryListing';
 import { mockApi } from './helpers/setup';
 
-import type { AccountCheck, ListState } from '@/hooks/usePhotoChooser';
+import type { AccountCheck } from '@/hooks/usePhotoChooser';
+import type { ListState } from '@/hooks/useLibraryListing';
 import type { WindowApi } from '../../src/ts/types/ipc';
 import { invalid } from '../helpers/invalid';
 
@@ -23,6 +25,8 @@ const ready = (memberId: string | null): ListState => ({
         truncated: false,
         wonIds: [],
         wonCount: 0,
+        preview: false,
+        readAtMs: 1_700_000_000_000,
         allowedKnown: true,
     }),
 });
@@ -216,6 +220,8 @@ describe('useLibraryListing.setMember — a member the listing could not name, f
             truncated: false,
             wonIds: [],
             wonCount: 0,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
             allowedKnown: true,
         });
 
