@@ -141,7 +141,7 @@ const makeApi = (live: Challenge) => ({
     applyBoostToEntry: jest.fn<Promise<{ success: boolean }>, [string, string, string]>(async () => ({
         success: true,
     })),
-    applyTurbo: jest.fn(async () => ({ ok: true })),
+    applyTurbo: jest.fn<Promise<{ ok: boolean }>, [number | string, string, string]>(async () => ({ ok: true })),
     getEligiblePhotos: jest.fn(async () => photos()),
     getImageData: jest.fn(async () => null),
     submitToChallenge: jest.fn(async () => ({ ok: true, raw: { success: true } })),
@@ -189,6 +189,13 @@ describe('a pass over a challenge every automatic photo path wants', () => {
         expect(api.submitToChallenge).toHaveBeenCalled();
     });
 
+    test('control, only the fresh-photo Boost/Turbo options on, switch off: they submit through fill-new', async () => {
+        mockSettings({ manualPhotosOnly: false, autoFill: false, emergencyFill: 0, autoSwap: false });
+        const api = makeApi(challenge());
+        await run(api);
+        expect(api.submitToChallenge).toHaveBeenCalled();
+    });
+
     test.each([
         ['every option on', {}],
         ['Auto-Submit off, so Emergency Submit is the one that would act', { autoFill: false }],
@@ -202,13 +209,23 @@ describe('a pass over a challenge every automatic photo path wants', () => {
         expect(currencyActions.swapEntry).not.toHaveBeenCalled();
     });
 
+    test('control, switch off: Boost goes on a freshly submitted photo, not an existing entry', async () => {
+        mockSettings({ manualPhotosOnly: false });
+        const api = makeApi(challenge());
+        await run(api);
+        expect(api.applyBoostToEntry).toHaveBeenCalled();
+        for (const [, imageId] of api.applyBoostToEntry.mock.calls) expect(['e1', 'e2']).not.toContain(imageId);
+    });
+
     test('switch on: Boost and Turbo still go on the entries the challenge already has', async () => {
         mockSettings({ manualPhotosOnly: true });
         const api = makeApi(challenge());
         await run(api);
-        expect(api.applyBoostToEntry.mock.calls.length + api.applyBoost.mock.calls.length).toBeGreaterThan(0);
-        expect(api.applyTurbo).toHaveBeenCalled();
-        for (const [, imageId] of api.applyBoostToEntry.mock.calls) expect(['e1', 'e2']).toContain(imageId);
+        // Boost takes the existing-entry path (never the explicit fresh-photo one) and Turbo lands on an existing entry.
+        expect(api.applyBoost).toHaveBeenCalledTimes(1);
+        expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+        expect(api.applyTurbo).toHaveBeenCalledTimes(1);
+        expect(['e1', 'e2']).toContain(api.applyTurbo.mock.calls[0][1]);
     });
 
     test('switch on: the deadline view lists no Auto-Submit or Emergency Submit row', () => {

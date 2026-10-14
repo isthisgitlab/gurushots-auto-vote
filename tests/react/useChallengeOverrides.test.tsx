@@ -86,6 +86,26 @@ test("applyProfile() keeps the challenge's own Manual Photos Only, which a profi
     expect(result.current.overrides).toEqual({ manualPhotosOnly: true });
 });
 
+test("applyProfile(): a profile that sets Manual Photos Only wins over the challenge's own value, and one that does not leaves it", async () => {
+    mockApi.getChallengeOverrides.mockReset().mockResolvedValue({ manualPhotosOnly: false });
+    const p = {
+        ...props(),
+        schema: invalid<RendererSchema>({
+            exposure: { type: 'number', default: 100, perChallenge: true },
+            manualPhotosOnly: { type: 'boolean', default: false, perChallenge: true, challengeOnly: true },
+        }),
+    };
+    const { result } = renderHook(() => useChallengeOverrides(p));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.applyProfile({ manualPhotosOnly: true }));
+    expect(result.current.overrides).toEqual({ manualPhotosOnly: true });
+
+    // An own `true` stays when the profile has no value for the key.
+    act(() => result.current.applyProfile({ exposure: 60 }));
+    expect(result.current.overrides).toEqual({ exposure: 60, manualPhotosOnly: true });
+});
+
 test('every list removed while the form is open leaves the overrides and the matched profile without it', async () => {
     mockApi.getChallengeOverrides.mockReset().mockResolvedValue({ exposure: 50, chosenPhotos: ['a'] });
     mockApi.getTitleProfile.mockReset().mockResolvedValue(

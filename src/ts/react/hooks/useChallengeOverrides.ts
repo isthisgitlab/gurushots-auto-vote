@@ -303,9 +303,12 @@ function useTitleRules({
         const next = perChallengeOnly(schema, values);
         const replacesWasOn = effectiveOf('scheduledFillReplaces') === true;
         setProfileReplacesWarning(next.scheduledFillReplaces === true && !replacesWasOn);
-        // A profile never holds an on-only key's `false`; the challenge's own value stays.
+        // A profile never holds an on-only key's `false`; the challenge's own value stays unless the profile sets the key.
         const kept = Object.fromEntries(
-            ON_ONLY_KEYS.filter((key) => hasOwn(overrides, key)).map((key) => [key, overrides[key]]),
+            ON_ONLY_KEYS.filter((key) => hasOwn(overrides, key) && !hasOwn(next, key)).map((key) => [
+                key,
+                overrides[key],
+            ]),
         );
         setOverrides({ ...next, ...kept });
         setTitleRules((current) => ({ ...(current ?? NO_RULES), suppressed: true }));

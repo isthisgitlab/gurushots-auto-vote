@@ -260,13 +260,20 @@ describe('TitleTagRulesEditor', () => {
                 expect(screen.getByLabelText<HTMLSelectElement>('app.manualPhotosOnly').value).toBe('');
             });
 
-            test('Manual Photos Only on a rule says Auto-Submit will not enter photos', () => {
+            test('Manual Photos Only on a rule says what it does to the rule, directly under its own select', () => {
                 const { rerender } = render(
                     <TitleTagRulesEditor value={rowWith({ manualPhotosOnly: true })} onChange={jest.fn()} />,
                 );
-                expect(screen.getByText('app.manualPhotosOnlyHint')).toBeTruthy();
-                rerender(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+                const hint = screen.getByText('app.manualPhotosOnlyRuleHint');
+                const select = screen.getByLabelText('app.manualPhotosOnly');
+                // The hint shares the select's own cell, after it: not under Chosen Photos at the foot of the editor.
+                expect(hint.parentElement).toBe(select.parentElement);
+                expect(select.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+                expect(screen.getByRole('group', { name: 'app.chosenPhotos' }).contains(hint)).toBe(false);
+                // A rule has no single challenge: the per-challenge wording is not used.
                 expect(screen.queryByText('app.manualPhotosOnlyHint')).toBeNull();
+                rerender(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+                expect(screen.queryByText('app.manualPhotosOnlyRuleHint')).toBeNull();
             });
 
             test('Submit Only on a rule warns that it reaches every matching challenge', () => {

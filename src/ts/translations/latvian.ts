@@ -747,7 +747,7 @@ export const app = {
         'Kad ir uzstādīti izvēlētie foto, iesniedz tos tādā secībā, kādā tos izvēlējies (numuri izvēles logā), nevis kārto tā, kā lietotne kārto savas automātiskās izvēles. Foto, kas neiztur tavus obligātos tagus, jau ir iesniegts vai šim izaicinājumam nav pieejams, izlaiž un izmanto nākamo sarakstā; atlikušās vietas aizpilda pēc kārtojuma kā parasti. Pēc noklusējuma izslēgts.',
     chosenPhotosOnly: 'Iesniegt tikai izvēlētos foto',
     chosenPhotosOnlyDesc:
-        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski (ar pogu „Izvēlēties…” izaicinājuma kartītē vienreiz iesniedz tevis izvēlētos foto), ārkārtas iesniegšana šo uzstādījumu neņem vērā (ieslēdz izaicinājumam „Foto tikai manuāli”, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā (ja vien nav ieslēgts „Foto tikai manuāli”: tad foto iesniedz ar „Pievienoties” vai „Izvēlēties…”). Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem obligātajiem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
+        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski (ar pogu „Izvēlēties…” izaicinājuma kartītē vienreiz iesniedz tevis izvēlētos foto), ārkārtas iesniegšana šo uzstādījumu neņem vērā (ieslēdz izaicinājumam „Foto tikai manuāli”, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā (ja vien nav ieslēgts „Foto tikai manuāli”: tad foto iesniedz ar „Pievienoties” sadaļā „Atrast izaicinājumus”). Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem obligātajiem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
     chosenPhotosMemberId: 'Izvēlēto foto konts',
     chosenPhotosClearedAt: 'Izvēlēto foto notīrīšanas laiks',
     chosenPhotosClearedAtDesc:
@@ -1143,11 +1143,13 @@ export const app = {
     onePhoto: '1 foto',
     manualPhotosOnly: 'Foto tikai manuāli',
     manualPhotosOnlyDesc:
-        'Lietotne šajā izaicinājumā pati nepievienojas, neiesniedz un neapmaina nevienu foto, un tas attiecas arī uz scenāriju soļiem, kas iesniedz vai apmaina foto. Tava manuālā pievienošanās un pogas +1/+N foto joprojām izvēlas pašas, bet ar „Izvēlēties…” un „Apmainīt” foto izvēlies tu. Boost un Turbo joprojām tiek uzlikti jau esošiem foto. Ja izaicinājumam vēl neesi pievienojies vai tas atgriežas ar jaunu ID, izmanto izaicinājumu noteikumu.',
+        'Lietotne pati nepievienojas šim izaicinājumam un neiesniedz vai neapmaina tajā nevienu foto, un tas attiecas arī uz scenāriju soļiem, kas iesniedz vai apmaina foto. Tava manuālā pievienošanās un pogas +1/+N foto joprojām izvēlas pašas, bet ar „Izvēlēties…” un „Apmainīt” foto izvēlies tu. Boost un Turbo joprojām tiek uzlikti jau esošiem foto. Ja izaicinājumam vēl neesi pievienojies vai tas atgriežas ar jaunu ID, izmanto izaicinājumu noteikumu.',
     manualPhotosOnlyHint:
         'Šim izaicinājumam ir ieslēgts „Foto tikai manuāli”, tāpēc šis uzstādījums nekad pats neiesniedz foto.',
     manualPhotosOnlyBoostHint:
         'Šim izaicinājumam ir ieslēgts „Foto tikai manuāli”, tāpēc Boost un Turbo tiek uzlikti jau esošam foto, nekad jaunam.',
+    manualPhotosOnlyRuleHint:
+        'Kad ir ieslēgts „Foto tikai manuāli”, izaicinājumiem, kurus šis noteikums aptver, lietotne automātiski nepievienojas un neiesniedz foto, tāpēc šī noteikuma automātiskā pievienošanās un automātiskā iesniegšana nedarbojas.',
     onlyBoost: 'Tikai Boost režīms',
     onlyBoostDesc: 'Šajā izaicinājumā pilnībā izlaist parasto balsošanu un tikai izmantot Boost.',
     voteOnNewEntry: 'Balsot par jaunu foto',

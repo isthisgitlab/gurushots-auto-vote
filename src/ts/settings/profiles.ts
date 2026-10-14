@@ -224,10 +224,14 @@ const applyChallengeProfile = (name: unknown, challengeId: ChallengeIdInput): bo
     // the same {globals + profile} context, so this only fails if a schema rule
     // starts depending on the challenge id. Kept so nothing invalid is persisted.
     // A profile never holds an on-only key's `false`, so replacing every override would silently
-    // switch the challenge's own Manual Photos Only off: that value stays.
+    // switch the challenge's own Manual Photos Only off: that value stays, unless the profile sets the key itself
+    // (a profile's "on" turns it on even over the challenge's own `false`).
     const own = ownChallengeValues(settings.challengeSettings.perChallenge, id) ?? {};
     const kept = Object.fromEntries(
-        ON_ONLY_KEYS.filter((key) => Object.hasOwn(own, key)).map((key) => [key, own[key]]),
+        ON_ONLY_KEYS.filter((key) => Object.hasOwn(own, key) && !Object.hasOwn(sanitized, key)).map((key) => [
+            key,
+            own[key],
+        ]),
     );
     if (!replaceChallengeOverridesInSettings(settings, id, { ...sanitized, ...kept }, true)) return false;
     return saveSettings(settings);

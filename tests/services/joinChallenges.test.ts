@@ -4133,9 +4133,26 @@ describe('runJoinPass — Manual Photos Only', () => {
         const warnings = paidNotEntered();
         expect(warnings).toHaveLength(1);
         expect(String(warnings[0][0])).toContain('challenge 27');
-        expect(String(warnings[0][0])).toContain('Join or Pick');
+        expect(String(warnings[0][0])).toContain('Join in Discover');
         // Another paid challenge gets its own warning.
         await runJoinPass('tok', Date.now(), paidPass(28));
+        expect(paidNotEntered()).toHaveLength(2);
+    });
+
+    test('two accounts holding a claim on the same challenge each get the warning once', async () => {
+        switchOn();
+        const B = 'b'.repeat(32);
+        const passAs = (member: string) =>
+            makeDeps({
+                getMemberChallenges: openList([{ id: 44, join_coins: 100, type: 'flash' }]),
+                getCurrentMemberProfile: jest.fn(async () => ({ id: member, userName: 'u' })),
+                joinStateStore: fileWith({ [`${member}:44`]: { unlockedAt: RECENT } }),
+            });
+        for (const member of [A, B, A, B]) {
+            memberIdentity.__resetMemberIdCache();
+            const res = await runJoinPass('tok', Date.now(), passAs(member));
+            expect(res.results).toEqual([{ id: 44, status: 'skipped:manual-photos-only' }]);
+        }
         expect(paidNotEntered()).toHaveLength(2);
     });
 

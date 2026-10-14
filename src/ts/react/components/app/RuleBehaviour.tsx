@@ -7,6 +7,7 @@ import { RuleNumberField } from './RuleFields';
 
 import type { LooseRecord, TitleRule } from '../../../types/settings';
 import type { RuleFieldProps, RulePatchHandler } from './RuleFields';
+import type { SettingHint } from '../../../types/settingsEditor';
 
 // Tri-state boolean override. '' = inherit (the key is omitted from the saved
 // rule entirely, so the rule never freezes today's default into storage);
@@ -21,13 +22,15 @@ const triPatch = (key: string, raw: string): LooseRecord => ({
 });
 
 // `onOnly`: a key whose `false` a rule never holds (see ON_ONLY_KEYS), so the select offers inherit / on alone.
+// `hints` sit directly under the select.
 function TristateSelect({
     rule,
     settingKey,
     labelKey,
     onPatch,
     onOnly = false,
-}: RuleFieldProps & { onOnly?: boolean }) {
+    hints,
+}: RuleFieldProps & { onOnly?: boolean; hints: SettingHint[] }) {
     const { t } = useTranslation();
     return (
         <div className="flex flex-col gap-1">
@@ -42,6 +45,7 @@ function TristateSelect({
                 <option value="on">{t('app.titleRuleOn')}</option>
                 {!onOnly && <option value="off">{t('app.titleRuleOff')}</option>}
             </select>
+            <SettingHintList hints={hints} />
         </div>
     );
 }
@@ -100,7 +104,17 @@ export function RuleBehaviour({ rule, onPatch }: { rule: TitleRule; onPatch: Rul
             <span className="text-sm font-medium">{t('app.titleRuleOverridesLabel')}</span>
             <div className="grid gap-2 sm:grid-cols-2">
                 {TRISTATE_OVERRIDES.map((field) => (
-                    <TristateSelect key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
+                    <TristateSelect
+                        key={field.settingKey}
+                        {...field}
+                        rule={rule}
+                        onPatch={onPatch}
+                        hints={
+                            field.settingKey === 'manualPhotosOnly' && rule.manualPhotosOnly === true
+                                ? [manualPhotosOnlyHint(t, 'app.manualPhotosOnlyRuleHint')]
+                                : []
+                        }
+                    />
                 ))}
                 {JOIN_TIMING_FIELDS.map((field) => (
                     <RuleNumberField key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
@@ -108,9 +122,6 @@ export function RuleBehaviour({ rule, onPatch }: { rule: TitleRule; onPatch: Rul
             </div>
             <RulePhotosField rule={rule} onPatch={onPatch} />
             {rule.chosenPhotosOnly === true && <SettingHintList hints={[chosenPhotosOnlyReachHint(t)]} />}
-            {rule.manualPhotosOnly === true && (
-                <SettingHintList hints={[manualPhotosOnlyHint(t, 'app.manualPhotosOnlyHint')]} />
-            )}
         </div>
     );
 }

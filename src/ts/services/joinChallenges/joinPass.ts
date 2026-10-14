@@ -20,7 +20,7 @@ import {
     warnMissingCloseTime,
 } from './settingsResolution';
 import { performJoin } from './performJoin';
-import { paidByThisAccount, pruneClosedClaims } from './unlockMarker';
+import { markerKey, markerOwner, paidByThisAccount, pruneClosedClaims } from './unlockMarker';
 
 /**
  * Mutable per-pass join state: the balance and budget kept locally accurate as
@@ -149,19 +149,20 @@ const noteTimingRefusal = (challenge: Challenge, reason: string, pass: JoinPassS
     warnMissingCloseTime(challenge, reason);
 };
 
-// Challenges already warned about a paid-but-not-entered join, so the warning is once per challenge per process.
+// Account + challenge pairs already warned about a paid-but-not-entered join: once per pair per process.
 const warnedPaidNotEntered = new Set<string>();
 
 /**
  * With Manual Photos Only on, a join the user already paid for is still not entered by itself. Say so once, so
- * the coins are not left stranded unnoticed: the entry is the user's to make with Join or Pick….
+ * the coins are not left stranded unnoticed. The challenge is not joined, so it has no card and no Pick… button:
+ * the user enters it from Discover with Join.
  */
 const noteUnenteredPaidJoin = async (challenge: Challenge, token: string, deps: JoinDeps): Promise<void> => {
-    const key = String(challenge?.id);
+    const key = markerKey(String(challenge?.id), await markerOwner(token, deps));
     if (warnedPaidNotEntered.has(key) || !(await paidByThisAccount(challenge, token, deps))) return;
     warnedPaidNotEntered.add(key);
     cat().warning(
-        `Manual Photos Only is on for ${logger.challengeTag(challenge)}: the join was already paid for, but no photo is entered automatically — enter one with Join or Pick…`,
+        `Manual Photos Only is on for ${logger.challengeTag(challenge)}: the join was already paid for, but no photo is entered automatically — enter one with Join in Discover`,
         null,
     );
 };

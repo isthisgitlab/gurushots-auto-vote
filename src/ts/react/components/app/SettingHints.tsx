@@ -177,11 +177,12 @@ export const chosenPhotosOnlyReachHint = (t: Translate): SettingHint => ({
 
 /**
  * Manual Photos Only is on for the challenge: the setting this hint sits under never enters a photo.
- * The four Boost/Turbo fresh-photo options go on an entry the challenge already has instead.
+ * The four Boost/Turbo fresh-photo options go on an entry the challenge already has instead. In the rule
+ * editor there is no single challenge: the hint says what the rule's Auto-Join and Auto-Submit come to.
  */
 export const manualPhotosOnlyHint = (
     t: Translate,
-    textKey: 'app.manualPhotosOnlyHint' | 'app.manualPhotosOnlyBoostHint',
+    textKey: 'app.manualPhotosOnlyHint' | 'app.manualPhotosOnlyBoostHint' | 'app.manualPhotosOnlyRuleHint',
 ): SettingHint => ({ tone: 'text-warning', text: t(textKey) });
 
 const GLOBAL_HINTS: Map<string, (ctx: GlobalHintContext) => SettingHint[]> = new Map([

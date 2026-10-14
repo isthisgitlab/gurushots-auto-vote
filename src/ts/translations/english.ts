@@ -740,7 +740,7 @@ export const app = {
         "With Chosen Photos set, enter them in the order you picked them (the numbers in the chooser) instead of ranking them the way the app ranks its own picks. A photo that fails your must-include tags, is already entered or isn't offered for the challenge is skipped, and the next one in the list is used; any slots left over are filled by ranking as usual. Off by default.",
     chosenPhotosOnly: 'Submit Only Chosen Photos',
     chosenPhotosOnlyDesc:
-        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically (Pick… on a challenge card submits photos you choose, once), Emergency Submit ignores this setting (turn on Manual Photos Only for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted (unless Manual Photos Only is on: then enter a photo with Join or Pick…). Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your must-include tags, they can still be entered. With an empty list this does nothing.',
+        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically (Pick… on a challenge card submits photos you choose, once), Emergency Submit ignores this setting (turn on Manual Photos Only for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted (unless Manual Photos Only is on: then enter a photo with Join in Discover). Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your must-include tags, they can still be entered. With an empty list this does nothing.',
     chosenPhotosMemberId: 'Chosen Photos Account',
     chosenPhotosClearedAt: 'Chosen Photos Cleared At',
     chosenPhotosClearedAtDesc:
@@ -1127,6 +1127,8 @@ export const app = {
     manualPhotosOnlyHint: 'Manual Photos Only is on for this challenge, so this never enters a photo by itself.',
     manualPhotosOnlyBoostHint:
         'Manual Photos Only is on for this challenge, so Boost and Turbo go on an entry you already have, never on a fresh photo.',
+    manualPhotosOnlyRuleHint:
+        "With Manual Photos Only on, the challenges this rule matches are never joined or given a photo automatically, so this rule's Auto-Join and Auto-Submit have no effect.",
     onlyBoost: 'Only Boost Mode',
     onlyBoostDesc: 'Skip regular voting for this challenge entirely and only apply Boost.',
     voteOnNewEntry: 'Vote on New Entry',

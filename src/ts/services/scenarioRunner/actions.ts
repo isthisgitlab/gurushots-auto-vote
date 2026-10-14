@@ -38,7 +38,9 @@ import {
 import type { Retry } from './support';
 
 // A scenario step that enters or swaps a photo is as automatic as any other: with Manual Photos Only on it is
-// skipped, never marked fired, so the entry is not lost for good once the switch is turned off.
+// skipped. What a skip comes to is the rule's usual skip semantics (scenarioRunner/rule.ts): a rule with no
+// completed step yet stops there without firing and retries on later passes, so it runs once the switch is off;
+// a rule whose earlier step already went through moves past the skipped step for good.
 const MANUAL_PHOTOS_SKIP = 'Manual Photos Only is on';
 
 const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type: K }>> } = {

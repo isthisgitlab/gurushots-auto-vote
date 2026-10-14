@@ -157,6 +157,24 @@ describe('Manual Photos Only setting', () => {
             expect(settings.getChallengeOverride('exposure', '7')).toBe(50);
         });
 
+        test("a profile that turns the switch on wins over the challenge's own `false`", () => {
+            settings.setTitleRules([{ title: 'Big show', manualPhotosOnly: true }]);
+            settings.rememberChallengeTitles([{ id: '7', title: 'Big show' }]);
+            settings.saveChallengeProfile('Locked', { manualPhotosOnly: true });
+            settings.setChallengeOverride('manualPhotosOnly', '7', false);
+            expect(settings.getChallengeOverride('manualPhotosOnly', '7')).toBe(false);
+            expect(settings.applyChallengeProfile('Locked', '7')).toBe(true);
+            expect(effective('7')).toBe(true);
+        });
+
+        test("the challenge's own `true` is kept when the profile does not set the key", () => {
+            settings.saveChallengeProfile('Plain', { exposure: 50 });
+            settings.setChallengeOverride('manualPhotosOnly', '7', true);
+            expect(settings.applyChallengeProfile('Plain', '7')).toBe(true);
+            expect(settings.getChallengeOverride('manualPhotosOnly', '7')).toBe(true);
+            expect(settings.getChallengeOverride('exposure', '7')).toBe(50);
+        });
+
         test('applying one replaces the other overrides, and takes the profile\'s "on" when the challenge has no value', () => {
             settings.saveChallengeProfile('Locked', { manualPhotosOnly: true });
             settings.setChallengeOverride('exposure', '7', 40);
