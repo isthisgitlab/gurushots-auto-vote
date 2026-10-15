@@ -66,6 +66,7 @@ describe('Capacitor entry', () => {
             initSettings: initSettingsRejects
                 ? jest.fn().mockRejectedValue(initSettingsRejects)
                 : jest.fn().mockResolvedValue(undefined),
+            checkLegacyDrift: jest.fn().mockResolvedValue(undefined),
             flushPendingWrites: jest.fn(),
             getSetting: jest.fn((): string | undefined => {
                 if (getSettingThrows) throw new Error('not hydrated');
@@ -97,6 +98,7 @@ describe('Capacitor entry', () => {
             jest.doMock(`${SRC}/bridge/capacitor`, () => ({ installBridge: m.installBridge, subscribe: m.subscribe }));
             jest.doMock(`${SRC}/settings`, () => ({
                 initializeAsync: m.initSettings,
+                checkLegacyDrift: m.checkLegacyDrift,
                 flushPendingWrites: m.flushPendingWrites,
                 getSetting: m.getSetting,
             }));
@@ -163,6 +165,7 @@ describe('Capacitor entry', () => {
         const order = [
             m.installBridge,
             m.initSettings,
+            m.checkLegacyDrift,
             m.initializeMetadataAsync,
             m.initializeJoinStateAsync,
             m.initializeSwapBackAsync,

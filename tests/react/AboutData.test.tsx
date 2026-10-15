@@ -6,6 +6,7 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
 import { AboutDataSection } from '@/components/app/AboutDataSection';
+import { mockTranslator, defaultTranslate } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 import { about as englishAbout } from '../../src/ts/translations/english';
 import { about as latvianAbout } from '../../src/ts/translations/latvian';
@@ -409,5 +410,82 @@ describe('the Android delete failure text', () => {
     test('the guard does not treat a bare retry as restart wording', () => {
         expect('Mēģini atkal tūlīt.').not.toMatch(LATVIAN_RESTART);
         expect('Mēģini vēlreiz tūlīt.').not.toMatch(LATVIAN_RESTART);
+    });
+});
+
+describe('the import report in About and data', () => {
+    const answer = (result: unknown) => jest.mocked(window.api.getImportReport).mockResolvedValue(invalid(result));
+
+    test('lists the references that were kept and still do not apply, read-only, when they were acknowledged too', async () => {
+        answer({
+            success: true,
+            report: {
+                at: '2026-10-16T09:00:00.000Z',
+                refsBlocked: ['rules[2].profile: "Night owl"', 'challenges.123.values.scenario: "Plan B"'],
+                acknowledged: true,
+            },
+        });
+        render(<AboutDataSection />);
+
+        expect(await screen.findByRole('heading', { name: 'about.importTitle' })).toBeTruthy();
+        expect(screen.getByText('about.importSome')).toBeTruthy();
+        expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+            'rules[2].profile: "Night owl"',
+            'challenges.123.values.scenario: "Plan B"',
+        ]);
+        expect(screen.getByText('about.importAt')).toBeTruthy();
+        expect(screen.queryByText('about.importNone')).toBeNull();
+    });
+
+    test('says when it ran, in the date format of the page language', async () => {
+        mockTranslator.t.mockImplementation((text) => (text === 'about.importAt' ? 'On {date}' : text));
+        answer({ success: true, report: { at: '2026-10-16T12:00:00.000Z', refsBlocked: [], acknowledged: true } });
+        render(<AboutDataSection />);
+
+        expect(await screen.findByText('On 16/10/2026')).toBeTruthy();
+        mockTranslator.t.mockImplementation(defaultTranslate);
+    });
+
+    test('a date that cannot be read is shown as stored', async () => {
+        mockTranslator.t.mockImplementation((text) => (text === 'about.importAt' ? 'On {date}' : text));
+        answer({ success: true, report: { at: 'sometime', refsBlocked: [], acknowledged: true } });
+        render(<AboutDataSection />);
+
+        expect(await screen.findByText('On sometime')).toBeTruthy();
+        mockTranslator.t.mockImplementation(defaultTranslate);
+    });
+
+    test('says nothing needed attention when the list is empty', async () => {
+        answer({ success: true, report: { at: '2026-10-16T09:00:00.000Z', refsBlocked: [], acknowledged: false } });
+        render(<AboutDataSection />);
+
+        expect(await screen.findByText('about.importNone')).toBeTruthy();
+        expect(screen.queryByText('about.importSome')).toBeNull();
+        expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+    });
+
+    test.each([
+        ['settings that were not imported', { success: true, report: null }],
+        ['a refused read', { success: false, error: 'x' }],
+        ['no answer', undefined],
+    ])('%s shows no block', async (_name, result) => {
+        answer(result);
+        render(<AboutDataSection />);
+
+        await waitFor(() => expect(window.api.getImportReport).toHaveBeenCalledTimes(1));
+        expect(screen.queryByText('about.importTitle')).toBeNull();
+    });
+});
+
+describe('the import report texts', () => {
+    test('are in both languages, name no value and do not talk about what the keys used to be', () => {
+        for (const text of [englishAbout, latvianAbout]) {
+            for (const key of ['importTitle', 'importAt', 'importNone', 'importSome'] as const) {
+                expect(text[key].trim()).not.toBe('');
+                expect(text[key]).not.toMatch(/formerly|legacy|renamed|previously called|agrāk|bijušais/i);
+            }
+        }
+        expect(englishAbout.importAt).toContain('{date}');
+        expect(latvianAbout.importAt).toContain('{date}');
     });
 });

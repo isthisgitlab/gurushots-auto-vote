@@ -74,6 +74,7 @@ jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(() => ''),
     setSetting: jest.fn(() => true),
     seedIntentProfiles: jest.fn(),
+    checkLegacyDrift: jest.fn(async () => undefined),
     getEnvironmentInfo: jest.fn(() => ({ defaultMock: false })),
     getUserDataPath: jest.fn(() => '/tmp/user-data'),
 }));
@@ -586,6 +587,7 @@ describe('startWebServer', () => {
         try {
             expect(randomizer.initializeHeaders).toHaveBeenCalled();
             expect(settings.seedIntentProfiles).toHaveBeenCalled();
+            expect(settings.checkLegacyDrift).toHaveBeenCalledTimes(1);
             expect(started.url).toBe(
                 `http://localhost:${(started.server.address() as net.AddressInfo).port}/#t=${started.token}`,
             );

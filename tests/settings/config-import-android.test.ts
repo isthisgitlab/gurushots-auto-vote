@@ -74,7 +74,11 @@ describe('the import in the Android app window', () => {
 
         // Before the window has hydrated, nothing can be read: saves are refused, but the failure is not remembered.
         expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
-        expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-import-failed', path: 'gurushots-settings' });
+        expect(settings.getSettingsRecovery()).toEqual({
+            code: 'settings-import-failed',
+            path: 'gurushots-settings',
+            blocking: true,
+        });
         expect(settings.setSetting('theme', 'light')).toBe(false);
 
         await settings.initializeAsync();
@@ -87,6 +91,53 @@ describe('the import in the Android app window', () => {
         expect(parseJsonObject(saved.get('gurushots-config') ?? 'null')).toMatchObject({ version: 2 });
         expect(saved.has('gs_v2_import')).toBe(true);
         expect(parseJsonObject(saved.get('gurushots-settings') ?? 'null')).toMatchObject({ theme: 'dark', token: '' });
+    });
+});
+
+describe('the settings.json the Android import was made from', () => {
+    const latest = () => {
+        const saved = new Map<string, string>();
+        for (const [call] of mockPreferences.set.mock.calls) saved.set(call.key, call.value);
+        return saved;
+    };
+    const importedHash = () => {
+        const { imported } = parseJsonObject(latest().get('gurushots-config') ?? '{}');
+        return typeof imported === 'object' && imported !== null && 'sha256' in imported ? imported.sha256 : undefined;
+    };
+
+    beforeEach(() => {
+        g.Capacitor = { isNativePlatform: () => true };
+    });
+
+    test('its hash is stored with the import, and a change made later raises the notice at the next start', async () => {
+        mockPreferences.get.mockImplementation(({ key }) =>
+            Promise.resolve({ value: key === 'gurushots-settings' ? ONE_X : null }),
+        );
+        const first = loadSettingsModule();
+        await first.initializeAsync();
+        first.loadSettings();
+        for (let attempt = 0; attempt < 200 && !/^[0-9a-f]{64}$/.test(`${importedHash()}`); attempt += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            await first.flushPendingWrites();
+        }
+        expect(importedHash()).toMatch(/^[0-9a-f]{64}$/);
+
+        // The next start: the same stores, and a settings.json that was edited meanwhile.
+        const saved = latest();
+        const edited = JSON.stringify({ ...parseJsonObject(ONE_X), theme: 'light' });
+        mockPreferences.get.mockImplementation(({ key }) =>
+            Promise.resolve({ value: key === 'gurushots-settings' ? edited : (saved.get(key) ?? null) }),
+        );
+        const next = loadSettingsModule();
+        await next.initializeAsync();
+        await next.checkLegacyDrift();
+
+        expect(next.getSettingsRecovery()).toEqual({
+            code: 'settings-v1-changed',
+            path: 'gurushots-settings',
+            blocking: false,
+        });
+        expect(next.setSetting('theme', 'light')).toBe(true);
     });
 });
 
@@ -118,7 +169,11 @@ describe('the import in the Android app window is done only once its configurati
         // ... and when the store turns it down, nothing says it is done, and nothing is saved over what is left.
         expect(savedKeys()).not.toContain('gs_v2_import');
         expect(savedKeys()).not.toContain('gurushots-settings');
-        expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-import-failed', path: 'gurushots-settings' });
+        expect(settings.getSettingsRecovery()).toEqual({
+            code: 'settings-import-failed',
+            path: 'gurushots-settings',
+            blocking: true,
+        });
         expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
         expect(settings.setSetting('theme', 'light')).toBe(false);
 
@@ -227,7 +282,11 @@ describe('an import the Android native store does not take', () => {
 
         settings.loadSettings();
 
-        expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-import-failed', path: 'gurushots-settings' });
+        expect(settings.getSettingsRecovery()).toEqual({
+            code: 'settings-import-failed',
+            path: 'gurushots-settings',
+            blocking: true,
+        });
         expect(store.keys.has('gs_v2_import')).toBe(false);
         expect(parseJsonObject(store.legacy ?? 'null')).toMatchObject({ token: 'tok-secret' });
     });

@@ -257,12 +257,16 @@ const buildEnvironmentHandlers = () => ({
 });
 
 // A recovery action of the stored settings (see settings/persistence.ts): what it did is announced to the windows, and a
-// failure answers with its code (the import is described in the log).
+// failure answers with its code (what went wrong is described in the log).
 const recoveryAction =
-    (broadcastSettingsChange: BroadcastSettingsChange | undefined, action: () => boolean, label: string) =>
+    (
+        broadcastSettingsChange: BroadcastSettingsChange | undefined,
+        action: () => boolean | Promise<boolean>,
+        label: string,
+    ) =>
     async () => {
         try {
-            if (!action()) return { success: false as const, error: 'settings-import-failed' };
+            if (!(await action())) return { success: false as const, error: 'settings-import-failed' };
             if (typeof broadcastSettingsChange === 'function') {
                 broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
             }
@@ -297,6 +301,28 @@ const buildLocalDataHandlers = ({ afterWipe, broadcastSettingsChange }: Settings
         broadcastSettingsChange,
         () => settings.reimportFromV1(),
         'reimport-settings-from-v1',
+    ),
+    // Keep the settings as they are after settings.json changed since the import (the notice goes away).
+    'keep-current-config': recoveryAction(
+        broadcastSettingsChange,
+        () => settings.keepCurrentConfig(),
+        'keep-current-config',
+    ),
+
+    // What the 1.x import left unresolved (names only), and the window's acknowledgement of it; the report stays
+    // readable afterwards. `report` is null when the configuration was not imported from a settings.json.
+    'get-import-report': async () => {
+        try {
+            return { success: true as const, report: settings.getImportReport() };
+        } catch (error) {
+            logger.withCategory('settings').error('Error reading the import report:', error);
+            return errorResult(error, 'The import report could not be read');
+        }
+    },
+    'acknowledge-import-report': recoveryAction(
+        broadcastSettingsChange,
+        () => settings.acknowledgeImportReport(),
+        'acknowledge-import-report',
     ),
 
     'get-third-party-notices': async () => {

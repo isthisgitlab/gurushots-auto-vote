@@ -178,6 +178,8 @@ async function onReady() {
     holdAppMarker();
     prepareApp();
     registerPowerHandlers();
+    // Before the first window, which asks for the notice this may raise.
+    await settings.checkLegacyDrift();
     await openFirstWindow();
     registerLifecycleHandlers();
 }

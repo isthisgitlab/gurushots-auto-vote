@@ -235,6 +235,7 @@ export {
     authValueAllowed,
     dropInvalidValues,
     isAuthKey,
+    isImportedRecord,
     isPrototypeKey,
     mergeWithDefaults,
 };

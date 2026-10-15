@@ -15,6 +15,7 @@ jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(),
     setSetting: jest.fn(),
     seedIntentProfiles: jest.fn(),
+    checkLegacyDrift: jest.fn(async () => undefined),
 }));
 jest.mock('../../src/ts/settings/cliSessionLock', () => ({
     isCliSessionActive: jest.fn(() => Promise.resolve(false)),
@@ -226,6 +227,15 @@ describe('desktop startup marks the app as running', () => {
             settings.seedIntentProfiles.mock.invocationCallOrder[0],
         );
         expect(jest.mocked(app.on)).toHaveBeenCalledWith('will-quit', mockReleaseAppLock);
+    });
+
+    test('looks for a settings.json that changed since the import before the first window opens', async () => {
+        await onReady();
+
+        expect(settings.checkLegacyDrift).toHaveBeenCalledTimes(1);
+        expect(settings.checkLegacyDrift.mock.invocationCallOrder[0]).toBeLessThan(
+            windows.checkAutoLogin.mock.invocationCallOrder[0],
+        );
     });
 
     test('a marker that cannot be written is logged and never stops startup', async () => {

@@ -483,6 +483,8 @@ describe('the recovery of the stored settings', () => {
         ['retry-settings-import', 'retryImport'],
         ['start-fresh-settings', 'startFresh'],
         ['reimport-settings-from-v1', 'reimportFromV1'],
+        ['keep-current-config', 'keepCurrentConfig'],
+        ['acknowledge-import-report', 'acknowledgeImportReport'],
     ] as const;
 
     test.each(channels)('%s runs %s, then announces the settings to every window', async (channel, method) => {
@@ -528,6 +530,44 @@ describe('the recovery of the stored settings', () => {
         settings.retryImport = jest.fn().mockReturnValue(true);
         await expect(handlers['retry-settings-import']()).resolves.toEqual({ success: true });
     });
+
+    test('keep-current-config waits for the answer of an asynchronous action', async () => {
+        settings.keepCurrentConfig = jest.fn().mockResolvedValue(false);
+        await expect(handlers['keep-current-config']()).resolves.toEqual({
+            success: false,
+            error: 'settings-import-failed',
+        });
+        settings.keepCurrentConfig = jest.fn().mockResolvedValue(true);
+        await expect(handlers['keep-current-config']()).resolves.toEqual({ success: true });
+    });
+});
+
+describe('get-import-report', () => {
+    test('answers the report the settings hold, or null when there was no import', async () => {
+        const report = {
+            at: '2026-10-16T09:00:00.000Z',
+            refsBlocked: ['rules[0].profile: "Gone"'],
+            acknowledged: false,
+        };
+        settings.getImportReport = jest.fn().mockReturnValue(report);
+        await expect(handlers['get-import-report']()).resolves.toEqual({ success: true, report });
+        settings.getImportReport = jest.fn().mockReturnValue(null);
+        await expect(handlers['get-import-report']()).resolves.toEqual({ success: true, report: null });
+    });
+
+    test('never throws to the renderer', async () => {
+        settings.getImportReport = invalid(jest.fn(boom));
+        await expect(handlers['get-import-report']()).resolves.toEqual({ success: false, error: 'boom' });
+        settings.getImportReport = invalid(
+            jest.fn(() => {
+                throw null;
+            }),
+        );
+        await expect(handlers['get-import-report']()).resolves.toEqual({
+            success: false,
+            error: 'The import report could not be read',
+        });
+    });
 });
 
 describe('get-settings-recovery', () => {
@@ -556,13 +596,15 @@ describe('get-settings-recovery', () => {
     });
 
     test('a recovery of the stored settings comes before a dropped save', async () => {
-        settings.getSettingsRecovery = jest.fn().mockReturnValue({ code: 'settings-unreadable', path: '/u/s.json' });
+        settings.getSettingsRecovery = jest
+            .fn()
+            .mockReturnValue({ code: 'settings-unreadable', path: '/u/s.json', blocking: true });
         settings.getSettingsSaveDropped = jest
             .fn()
             .mockReturnValue({ code: 'settings-save-dropped', path: 'gurushots-config' });
         await expect(handlers['get-settings-recovery']()).resolves.toEqual({
             success: true,
-            recovery: { code: 'settings-unreadable', path: '/u/s.json' },
+            recovery: { code: 'settings-unreadable', path: '/u/s.json', blocking: true },
         });
     });
 });

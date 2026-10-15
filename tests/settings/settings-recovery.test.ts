@@ -98,6 +98,7 @@ describe('settings recovery (real fs)', () => {
             expect(settings.getSettingsRecovery()).toEqual({
                 code: 'settings-corrupt',
                 path: path.join(userData, backup),
+                blocking: false,
             });
 
             // Saves work normally, including the token write a login makes.
@@ -186,7 +187,11 @@ describe('settings recovery (real fs)', () => {
             expect(settings.saveAppSettings({ theme: 'dark' })).toBe(false);
 
             expect(fs.readFileSync(settingsFile, 'utf8')).toBe('{not json');
-            expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-unreadable', path: settingsFile });
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-unreadable',
+                path: settingsFile,
+                blocking: true,
+            });
         });
     });
 
@@ -222,7 +227,11 @@ describe('settings recovery (real fs)', () => {
             expect(settings.saveAppSettings({ theme: 'light' })).toBe(false);
             expect(settings.setSetting('token', 'planted')).toBe(false);
 
-            expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-unreadable', path: settingsFile });
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-unreadable',
+                path: settingsFile,
+                blocking: true,
+            });
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('EACCES'));
             expect(backups()).toEqual([]);
             failing.mockRestore();

@@ -77,6 +77,11 @@ export const getSettingsRecovery = persistence.getSettingsRecovery;
 export const retryImport = persistence.retryImport;
 export const startFresh = persistence.startFresh;
 export const reimportFromV1 = persistence.reimportFromV1;
+export const checkLegacyDrift = persistence.checkLegacyDrift;
+export const keepCurrentConfig = persistence.keepCurrentConfig;
+// What the 1.x import left unresolved
+export const getImportReport = persistence.getImportReport;
+export const acknowledgeImportReport = persistence.acknowledgeImportReport;
 export type SettingsRecovery = persistence.SettingsRecovery;
 export const getSettingsSaveDropped = persistence.getSettingsSaveDropped;
 export const onSettingsSaveDroppedChange = persistence.onSettingsSaveDroppedChange;

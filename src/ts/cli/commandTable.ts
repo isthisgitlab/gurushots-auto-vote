@@ -365,7 +365,7 @@ const COMMANDS: Record<string, CommandHandler> = {
     licenses: async () => licensesCmd(),
     'help-settings': exitsZero(helpSettings),
     'reset-windows': exitsZero(resetWindows),
-    'settings-recovery': async (argv) => settingsRecoveryCmd(argv),
+    'settings-recovery': settingsRecoveryCmd,
     help: exitsZero(showHelp),
     '--help': exitsZero(showHelp),
     '-h': exitsZero(showHelp),

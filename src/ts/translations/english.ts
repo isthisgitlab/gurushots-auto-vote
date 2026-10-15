@@ -1530,14 +1530,14 @@ export const notice = {
     terms: 'Voting automatically may break the GuruShots terms of use and can lead to your account being suspended. You use this app at your own risk.',
     updates: 'To check for updates, the app contacts GitHub.',
     acknowledge: 'I understand',
-    recoveryCorruptWhat: 'Your settings file was damaged, so the app started with default settings.',
-    recoveryCorruptWhy: 'The file could not be read as valid settings. The damaged copy was kept at {path}.',
+    recoveryCorruptWhat: 'Your settings file config.json was damaged, so the app started with default settings.',
+    recoveryCorruptWhy: 'config.json could not be read as valid settings. The damaged copy was kept at {path}.',
     recoveryCorruptNext:
-        'You can save new settings as usual. To get the old values back, repair that copy or read them from it.',
+        'You can save new settings as usual. To import the settings.json of the previous version over the defaults instead, choose Re-import from settings.json. Or repair the damaged copy and read the old values from it.',
     recoveryCorruptWhyAndroid:
         'The stored settings could not be read as valid settings. The app kept the damaged copy in its own storage, where you cannot open it.',
     recoveryCorruptNextAndroid:
-        'Your settings were reset to the defaults. Set them again; you can save new settings as usual.',
+        "Your settings were reset to the defaults. Set them again, or choose Re-import from settings.json to import the previous version's settings instead. You can save new settings as usual.",
     recoveryUnreadableWhat: 'Your settings file could not be read, so saving settings is turned off.',
     recoveryUnreadableWhy:
         'The app could not open {path}. It may be locked by another program, or its permissions may block access.',
@@ -1549,12 +1549,53 @@ export const notice = {
         'Restart the app. Nothing was overwritten, and saving settings stays off until they can be read. If this keeps happening, use "Delete all local data" under About and data to start with default settings.',
     recoveryImportWhat:
         'Your settings from the previous version could not be imported, so saving settings is turned off and the app uses default settings.',
-    recoveryImportWhy: 'The file at {path} could not be read or converted.',
+    recoveryImportWhy: 'The file settings.json at {path} could not be read or converted.',
     recoveryImportNext:
-        'Restart the app to try again, or fix that file. Nothing was overwritten; the file stays where it is as a backup.',
+        'Fix that file, then choose Retry, or choose Start fresh to begin with default settings. Nothing was overwritten; settings.json stays where it is as a backup.',
     recoveryImportWhyAndroid: "The previous version's stored settings could not be read or converted.",
     recoveryImportNextAndroid:
-        'Restart the app to try again. Nothing was overwritten, and saving settings stays off until they can be imported. If this keeps happening, use "Delete all local data" under About and data to start with default settings.',
+        "Choose Retry to try again, or Start fresh to begin with default settings. Nothing was overwritten, and saving settings stays off until one of them is done. The previous version's settings stay as a backup.",
+    recoveryChangedWhat: 'The file settings.json changed after your settings were imported from it.',
+    recoveryChangedWhy:
+        'The file at {path} is no longer the one your current settings came from. It may have been edited, or saved by the previous version of the app.',
+    recoveryChangedNext:
+        'Your current settings are unchanged and saving works. Choose Re-import from settings.json to use the file instead (your current settings are set aside and your login is kept), or Keep current settings.',
+    recoveryChangedWhyAndroid:
+        "The previous version's stored settings are no longer the ones your current settings came from. The previous version of the app may have saved them.",
+    recoveryChangedNextAndroid:
+        'Your current settings are unchanged and saving works. Choose Re-import from settings.json to use the stored ones instead (your current settings are set aside and your login is kept), or Keep current settings.',
+    recoveryRetry: 'Retry',
+    recoveryStartFresh: 'Start fresh',
+    recoveryReimport: 'Re-import from settings.json',
+    recoveryKeep: 'Keep current settings',
+    recoveryWorking: 'Working…',
+    recoveryStartFreshTitle: 'Start with default settings?',
+    recoveryStartFreshBody:
+        'The app begins with default settings. settings.json is not imported and stays where it is as a backup.',
+    recoveryReimportTitle: 'Import settings.json again?',
+    recoveryReimportBody:
+        'Your current settings are set aside and the settings in settings.json are imported in their place. Your login is kept.',
+    recoveryReimportConfirm: 'Import again',
+    recoveryRetryDone: 'Your settings from the previous version were imported. Saving settings works again.',
+    recoveryRetryFailed:
+        'The import did not work. settings.json could not be read or converted, or the settings could not be saved. Nothing was changed. Fix settings.json and choose Retry again, or choose Start fresh. The log has the details.',
+    recoveryStartFreshDone:
+        'The app now uses default settings and saving works. settings.json stays where it is as a backup.',
+    recoveryStartFreshFailed:
+        'Starting with default settings did not work. The new settings could not be saved. Nothing was changed. Try again, and if it keeps failing, check that the app can write to its storage. The log has the details.',
+    recoveryReimportDone:
+        'settings.json was imported again. Your earlier settings were set aside and your login is kept.',
+    recoveryReimportFailed:
+        'The import did not work. settings.json is missing, could not be read or converted, or the settings could not be saved. Fix settings.json and try again. If a new notice appears, follow it. The log has the details.',
+    recoveryKeepDone:
+        'Your current settings are kept. You will see this notice again only if settings.json changes once more.',
+    recoveryKeepFailed:
+        'The choice could not be saved. The app could not read settings.json or save the settings. Nothing was changed. Try again. The log has the details.',
+    importReportTitle: 'Settings imported',
+    importReportIntro:
+        'Your settings from the previous version were imported. These references to profiles and scenarios were kept and still do not apply, as before; create or fix the profile or scenario each one names.',
+    importReportFailed:
+        'The app could not save that this was seen. It will show again at the next start. Check that the app can write to its storage.',
     recoveryDroppedWhat: 'A change to your settings could not be saved.',
     recoveryDroppedWhyConflict: 'The background service changed the settings at the same time.',
     recoveryDroppedWhyTooLarge: 'The settings are too large to save.',
@@ -1604,4 +1645,9 @@ export const about = {
     deleteDone: 'All local data was deleted. The app restarts now; if it does not, close it and open it again.',
     deleteDoneWeb:
         'All local data was deleted. The web server has stopped. Start pnpm web again and open the URL it prints.',
+    importTitle: 'Settings import',
+    importAt: 'Your settings from the previous version were imported on {date}.',
+    importNone: 'Nothing needed attention.',
+    importSome:
+        'These references to profiles and scenarios were kept and still do not apply, as before the import. Create or fix the profile or scenario each one names:',
 };

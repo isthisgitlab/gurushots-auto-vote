@@ -72,6 +72,7 @@ describe('settings facade — edge cases', () => {
             expect(settings.getSettingsRecovery()).toEqual({
                 code: 'settings-unreadable',
                 path: 'gurushots-config',
+                blocking: true,
             });
             expect(settings.saveAppSettings({ theme: 'dark' })).toBe(false);
             expect(store.value).toBe('{not json');

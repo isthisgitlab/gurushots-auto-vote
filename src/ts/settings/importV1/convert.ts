@@ -84,6 +84,10 @@ const convertChallenges = (blob: V1Blob): Record<string, ChallengeRecordV2> => {
 
 const quoted = (name: string): string => JSON.stringify(name.slice(0, 80));
 
+/** The path of a challenge's stored record in a report entry: bracketed and JSON-quoted unless the id is plain. */
+const challengePath = (id: string): string =>
+    /^[\w-]+$/.test(id) ? `challenges.${id}` : `challenges[${JSON.stringify(id)}]`;
+
 /**
  * The references 1.x could not resolve, which stay as stored and block as in 1.x: a rule naming a profile that is
  * missing or reserved, and a `scenario` value naming a scenario that is not stored. A `scenario` among the defaults
@@ -114,8 +118,7 @@ const unresolvedRefs = (config: StoredConfigV2): string[] => {
         }
     });
     for (const [id, record] of Object.entries(config.challenges)) {
-        const path = /^[\w-]+$/.test(id) ? `challenges.${id}` : `challenges[${JSON.stringify(id)}]`;
-        unresolvedScenario(`${path}.values`, record.values);
+        unresolvedScenario(`${challengePath(id)}.values`, record.values);
     }
     return refs;
 };
@@ -152,4 +155,4 @@ const convertV1Blob = (blob: V1Blob, { mockStored }: { mockStored: boolean }): C
     return { config, titlePins, report: { refsBlocked: unresolvedRefs(config) } };
 };
 
-export { convertV1Blob, TOP_LEVEL_ONLY_KEYS };
+export { challengePath, convertV1Blob, quoted, TOP_LEVEL_ONLY_KEYS };

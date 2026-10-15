@@ -15,6 +15,8 @@ import { getDefaultSettings } from './defaults';
 import { AUTH_KEYS, authValueAllowed } from './loadValidation';
 import { importV1Settings } from './importV1';
 import { isImportMarked, markImportDone } from './importMarker';
+import { invalidReferences } from './importReport';
+import { recordImportHash } from './importedRecord';
 import { legacyStorage, storage } from './storage';
 import { importTitlePins } from './titlePins';
 
@@ -135,10 +137,14 @@ const whenStored = (
     });
 };
 
-/** What an import leaves once the configuration is stored: the marker, then the legacy sign-in state blanked. */
-const markImported = (): void => {
+/**
+ * What an import leaves once the configuration is stored: the marker, the hash of the `settings.json` it was made from,
+ * then the legacy sign-in state blanked.
+ */
+const markImported = (raw: string): void => {
     carriedAuth = null;
     markImportDone();
+    void recordImportHash(raw);
     try {
         blankLegacyAuth();
     } catch (error) {
@@ -159,10 +165,12 @@ const importLegacyText = (
 ): ImportOutcome => {
     const result = importV1Settings(raw);
     if (!result.ok) return failure(result.code, result.detail);
+    const { refsBlocked } = result.report;
+    // The hash is filled once the configuration is stored (markImported); the rest of the record is known now.
     const imported: ImportedV2 = {
         at: new Date().toISOString(),
         sha256: '',
-        report: result.report,
+        report: { refsBlocked: [...refsBlocked, ...invalidReferences(result.config, refsBlocked)] },
         acknowledged: false,
     };
     const refused = replacing?.() ?? null;
@@ -178,7 +186,7 @@ const importLegacyText = (
             ? { ok: true, kind: 'adopted', text: written.current }
             : failure('write-failed', 'config.json could not be read');
     }
-    whenStored(written, markImported, onLateFailure);
+    whenStored(written, () => markImported(raw), onLateFailure);
     return { ok: true, kind: 'imported', text };
 };
 

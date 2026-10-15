@@ -9,9 +9,16 @@ jest.mock('../../src/ts/settings', () => ({
     retryImport: jest.fn(),
     startFresh: jest.fn(),
     reimportFromV1: jest.fn(),
+    keepCurrentConfig: jest.fn(),
+    getImportReport: jest.fn(),
+    acknowledgeImportReport: jest.fn(),
 }));
 const mockCategory = { success: jest.fn(), error: jest.fn(), info: jest.fn() };
-jest.mock('../../src/ts/logger', () => ({ printStderr: jest.fn(), withCategory: jest.fn(() => mockCategory) }));
+jest.mock('../../src/ts/logger', () => ({
+    printStderr: jest.fn(),
+    printLine: jest.fn(),
+    withCategory: jest.fn(() => mockCategory),
+}));
 
 import loggerModule = require('../../src/ts/logger');
 import settingsModule = require('../../src/ts/settings');
@@ -51,9 +58,24 @@ describe('describeSettingsRecovery', () => {
     });
 });
 
+describe('describeSettingsRecovery for a settings.json that changed', () => {
+    test('says it changed after the import, that saving works, and the two ways forward', () => {
+        const text = describeSettingsRecovery({ code: 'settings-v1-changed', path: '/u/settings.json' });
+        expect(text).toContain('/u/settings.json');
+        expect(text).toContain('changed after they were imported');
+        expect(text).toContain('saving works');
+        expect(text).toContain('settings-recovery reimport');
+        expect(text).toContain('settings-recovery keep');
+    });
+});
+
 describe('reportSettingsRecovery', () => {
     test('prints the notice on stderr', () => {
-        settings.getSettingsRecovery.mockReturnValue({ code: 'settings-corrupt', path: '/u/config.json.corrupt-1' });
+        settings.getSettingsRecovery.mockReturnValue({
+            code: 'settings-corrupt',
+            path: '/u/config.json.corrupt-1',
+            blocking: false,
+        });
 
         reportSettingsRecovery();
 
@@ -75,19 +97,19 @@ describe('settingsRecoveryCmd', () => {
         ['retry', () => settings.retryImport, 'The 1.x settings were imported.'],
         ['start-fresh', () => settings.startFresh, 'Started with default settings'],
         ['reimport', () => settings.reimportFromV1, 'imported again'],
-    ] as const)('%s runs its action and says it worked', (action, which, said) => {
+    ] as const)('%s runs its action and says it worked', async (action, which, said) => {
         jest.mocked(which()).mockReturnValue(true);
 
-        expect(settingsRecoveryCmd([action])).toBe(0);
+        await expect(settingsRecoveryCmd([action])).resolves.toBe(0);
 
         expect(which()).toHaveBeenCalledTimes(1);
         expect(mockCategory.success).toHaveBeenCalledWith(expect.stringContaining(said));
     });
 
-    test('an action that did not work exits 1 and points to the log', () => {
+    test('an action that did not work exits 1 and points to the log', async () => {
         jest.mocked(settings.retryImport).mockReturnValue(false);
 
-        expect(settingsRecoveryCmd(['retry'])).toBe(1);
+        await expect(settingsRecoveryCmd(['retry'])).resolves.toBe(1);
 
         expect(mockCategory.error).toHaveBeenCalledWith(expect.stringContaining('logs --settings'));
         expect(mockCategory.success).not.toHaveBeenCalled();
@@ -100,11 +122,77 @@ describe('settingsRecoveryCmd', () => {
         await expect(COMMANDS['settings-recovery'](['start-fresh'])).resolves.toBe(0);
     });
 
-    test.each([[[]], [['nope']], [['retry', 'extra']], [['constructor']]])('%j is a usage error', (argv) => {
-        expect(settingsRecoveryCmd(argv)).toBe(1);
+    test.each([[[]], [['nope']], [['retry', 'extra']], [['constructor']], [['report', 'extra']]])(
+        '%j is a usage error',
+        async (argv) => {
+            await expect(settingsRecoveryCmd(argv)).resolves.toBe(1);
 
-        expect(settings.retryImport).not.toHaveBeenCalled();
-        expect(settings.startFresh).not.toHaveBeenCalled();
-        expect(settings.reimportFromV1).not.toHaveBeenCalled();
+            expect(settings.retryImport).not.toHaveBeenCalled();
+            expect(settings.startFresh).not.toHaveBeenCalled();
+            expect(settings.reimportFromV1).not.toHaveBeenCalled();
+            expect(settings.keepCurrentConfig).not.toHaveBeenCalled();
+        },
+    );
+
+    test('keep waits for the current settings.json to be recorded', async () => {
+        jest.mocked(settings.keepCurrentConfig).mockResolvedValue(true);
+
+        await expect(settingsRecoveryCmd(['keep'])).resolves.toBe(0);
+
+        expect(mockCategory.success).toHaveBeenCalledWith(expect.stringContaining('Kept the current settings'));
+    });
+
+    test('keep that could not record exits 1', async () => {
+        jest.mocked(settings.keepCurrentConfig).mockResolvedValue(false);
+
+        await expect(settingsRecoveryCmd(['keep'])).resolves.toBe(1);
+    });
+
+    test('acknowledge marks the import report as seen', async () => {
+        jest.mocked(settings.acknowledgeImportReport).mockReturnValue(true);
+
+        await expect(settingsRecoveryCmd(['acknowledge'])).resolves.toBe(0);
+
+        expect(mockCategory.success).toHaveBeenCalledWith(expect.stringContaining('marked as seen'));
+    });
+
+    describe('report', () => {
+        test('lists the references that were kept and still do not apply', async () => {
+            settings.getImportReport.mockReturnValue({
+                at: '2026-10-16T09:00:00.000Z',
+                refsBlocked: ['rules[2].profile: "Night owl"', 'challenges.123.values.scenario: "Plan B"'],
+                acknowledged: false,
+            });
+
+            await expect(settingsRecoveryCmd(['report'])).resolves.toBe(0);
+
+            const [text] = jest.mocked(loggerModule.printLine).mock.calls[0];
+            expect(text).toContain('2026-10-16T09:00:00.000Z');
+            expect(text).toContain('  rules[2].profile: "Night owl"');
+            expect(text).toContain('  challenges.123.values.scenario: "Plan B"');
+        });
+
+        test('says nothing needed attention when the list is empty', async () => {
+            settings.getImportReport.mockReturnValue({
+                at: '2026-10-16T09:00:00.000Z',
+                refsBlocked: [],
+                acknowledged: true,
+            });
+
+            await expect(settingsRecoveryCmd(['report'])).resolves.toBe(0);
+
+            expect(jest.mocked(loggerModule.printLine)).toHaveBeenCalledWith(
+                expect.stringContaining('nothing needed attention'),
+            );
+        });
+
+        test('says so when the settings were not imported', async () => {
+            settings.getImportReport.mockReturnValue(null);
+
+            await expect(settingsRecoveryCmd(['report'])).resolves.toBe(0);
+
+            expect(mockCategory.info).toHaveBeenCalledWith(expect.stringContaining('not imported'));
+            expect(loggerModule.printLine).not.toHaveBeenCalled();
+        });
     });
 });

@@ -30,6 +30,7 @@ import {
     startFreshConfig,
 } from './legacyImport';
 import type { ImportFailure, ImportOutcome } from './legacyImport';
+import { canonicalLegacyHash, updateImported } from './importedRecord';
 import { isPlainObject } from '../plainObject';
 import { oneLine } from '../format/logSafe';
 
@@ -43,19 +44,23 @@ let lastCleanRaw: string | null = null;
 let lastWarning: string | null = null;
 
 /**
- * Why the stored configuration is not in use, for a renderer or the CLI to tell the user. `code` is stable:
- *   - settings-corrupt: `config.json` is not a parseable configuration; it sits at `path`, set aside. Defaults apply
- *     and saves work. It is never replaced by an import unasked.
- *   - settings-unreadable: `config.json` cannot be read, or cannot be set aside; `path` is the configuration file.
- *     Saves are refused until it can be read.
- *   - settings-import-failed: there is no `config.json` and the 1.x `settings.json` at `path` could not be imported
- *     (it cannot be read, is damaged, cannot be converted, or is not loaded yet). Nothing is written and saves are
- *     refused until the import is retried (`retryImport`), a fresh configuration is started (`startFresh`, which
- *     leaves `settings.json` as a backup) or the file is fixed.
+ * Why the stored configuration is not in use, or what a start found worth telling, for a renderer or the CLI to tell
+ * the user. `code` is stable; `blocking` says whether saves are refused while it stands (a notice only informs):
+ *   - settings-corrupt (notice): `config.json` is not a parseable configuration; it sits at `path`, set aside. Defaults
+ *     apply and saves work. It is never replaced by an import unasked (`reimportFromV1` is the explicit way).
+ *   - settings-unreadable (blocking): `config.json` cannot be read, or cannot be set aside; `path` is the configuration
+ *     file. Saves are refused until it can be read.
+ *   - settings-import-failed (blocking): there is no `config.json` and the 1.x `settings.json` at `path` could not be
+ *     imported (it cannot be read, is damaged, cannot be converted, or is not loaded yet). Nothing is written and
+ *     saves are refused until the import is retried (`retryImport`), a fresh configuration is started (`startFresh`,
+ *     which leaves `settings.json` as a backup) or the file is fixed.
+ *   - settings-v1-changed (notice): `settings.json` at `path` is not the file the configuration was imported from.
+ *     Saves work. Cleared by `reimportFromV1` (import it again) or `keepCurrentConfig` (it stays as it is).
  */
 type SettingsRecovery = {
-    code: 'settings-corrupt' | 'settings-unreadable' | 'settings-import-failed';
+    code: 'settings-corrupt' | 'settings-unreadable' | 'settings-import-failed' | 'settings-v1-changed';
     path: string;
+    blocking: boolean;
 };
 
 /**
@@ -67,7 +72,7 @@ type SettingsRecovery = {
 type SettingsSaveDropped = { code: 'settings-save-dropped'; path: string; cause: SaveDroppedCause };
 
 // Set while the stored settings cannot be used and must not be overwritten; cleared by the next load that gets through.
-let blocked: SettingsRecovery | null = null;
+let blocked: (SettingsRecovery & { blocking: true }) | null = null;
 // Where the last unparseable configuration went; kept for the rest of the process so a window opened later can still say so.
 let corruptBackupPath: string | null = null;
 // The unparseable text already moved aside, so a store that keeps handing it back (the Android service's) is not
@@ -79,6 +84,8 @@ let importFailure: ImportFailure | null = null;
 // Whether this process has found out that no import is due (the marker says it ran, or a set-aside configuration says
 // it must not run unasked): a read of the defaults then takes no lock and looks at nothing.
 let importSettled = false;
+// The path of `settings.json` while the last check found it changed since the import (see checkLegacyDrift).
+let legacyChangedPath: string | null = null;
 
 /**
  * Default configuration for a missing or unreadable file, logging which case applied.
@@ -93,8 +100,12 @@ const _loadDefaults = (message: string): ConfigV2 => {
  * A configuration that cannot be used and must not be overwritten: defaults apply for reads, saves are refused until a
  * load gets through, and getSettingsRecovery says why.
  */
-const _blockWrites = (code: SettingsRecovery['code'], detail: string, path: string): ConfigV2 => {
-    blocked = { code, path };
+const _blockWrites = (
+    code: 'settings-unreadable' | 'settings-import-failed',
+    detail: string,
+    path: string,
+): ConfigV2 => {
+    blocked = { code, path, blocking: true };
     logger
         .withCategory('settings')
         .error(
@@ -228,8 +239,11 @@ const loadSettings = (): ConfigV2 => {
 /**
  * Why the stored settings are not in use, or null: see SettingsRecovery.
  */
-const getSettingsRecovery = (): SettingsRecovery | null =>
-    blocked ?? (corruptBackupPath ? { code: 'settings-corrupt', path: corruptBackupPath } : null);
+const getSettingsRecovery = (): SettingsRecovery | null => {
+    if (blocked) return blocked;
+    if (corruptBackupPath) return { code: 'settings-corrupt', path: corruptBackupPath, blocking: false };
+    return legacyChangedPath ? { code: 'settings-v1-changed', path: legacyChangedPath, blocking: false } : null;
+};
 
 /**
  * The change the app window made last that could not be saved, or null: see SettingsSaveDropped.
@@ -401,10 +415,84 @@ const startFresh = (): boolean => _recovered(() => startFreshConfig(_importFaile
  */
 const reimportFromV1 = (): boolean => {
     const recovered = _recovered(() => reimportLegacyFile(_importFailedLater));
-    // The damaged configuration the notice was about is not the one in use any more.
-    if (recovered) corruptBackupPath = null;
+    // The damaged configuration the notice was about is not the one in use any more, and the file it imports is the
+    // one it was compared with.
+    if (recovered) {
+        corruptBackupPath = null;
+        legacyChangedPath = null;
+    }
     return recovered;
 };
+
+/**
+ * The hash of the 1.x `settings.json` as it is now, or null when there is none to compare (missing, not loaded yet or
+ * not a JSON object): such a file is no drift, since there is nothing to import from.
+ */
+const _legacyHash = async (): Promise<string | null> => {
+    const raw = legacyStorage.readRaw();
+    return raw ? canonicalLegacyHash(raw) : null;
+};
+
+/**
+ * Compare `settings.json` with the one the configuration was imported from (the hash in `imported.sha256`) and, when
+ * they differ (edited after a downgrade, or by a 1.x command line sharing the user data), raise the
+ * settings-v1-changed notice; saves stay allowed. A record without a hash (the process that imported ended before
+ * it was written) takes the hash of the file as it is, without a notice. Run once per start by the shell after its
+ * settings are hydrated; never throws.
+ */
+const checkLegacyDrift = async (): Promise<void> => {
+    try {
+        legacyChangedPath = null;
+        const { imported } = loadSettings();
+        if (blocked || !imported) return;
+        const hash = await _legacyHash();
+        if (hash === null) return;
+        if (imported.sha256 === '') {
+            updateImported((record) => ({ ...record, sha256: hash }));
+        } else if (imported.sha256 !== hash) {
+            legacyChangedPath = legacyStorage.location();
+        }
+    } catch (error) {
+        logger.withCategory('settings').error('Could not compare settings.json with the import:', error);
+    }
+};
+
+/**
+ * Keep the settings as they are after `settings.json` changed: the hash of the file as it is now is recorded, so the
+ * notice goes away and the next start compares with this file.
+ *
+ * @returns whether the notice was cleared
+ */
+const keepCurrentConfig = async (): Promise<boolean> => {
+    try {
+        const hash = await _legacyHash();
+        if (hash !== null && !updateImported((record) => ({ ...record, sha256: hash }))) return false;
+        legacyChangedPath = null;
+        return true;
+    } catch (error) {
+        logger.withCategory('settings').error('Could not record the current settings.json:', error);
+        return false;
+    }
+};
+
+/**
+ * What the 1.x import left unresolved, or null when the configuration was not imported from a `settings.json`. The
+ * report stays after it is acknowledged (About and data shows it).
+ */
+const getImportReport = (): { at: string; refsBlocked: string[]; acknowledged: boolean } | null => {
+    const { imported } = loadSettings();
+    return imported
+        ? { at: imported.at, refsBlocked: [...imported.report.refsBlocked], acknowledged: imported.acknowledged }
+        : null;
+};
+
+/**
+ * Mark the import report as seen.
+ *
+ * @returns whether it is recorded as acknowledged
+ */
+const acknowledgeImportReport = (): boolean =>
+    updateImported((record) => (record.acknowledged ? null : { ...record, acknowledged: true }));
 
 export type { SettingsRecovery };
 export {
@@ -423,4 +511,8 @@ export {
     retryImport,
     startFresh,
     reimportFromV1,
+    checkLegacyDrift,
+    keepCurrentConfig,
+    getImportReport,
+    acknowledgeImportReport,
 };

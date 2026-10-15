@@ -350,6 +350,7 @@ const startWebServer = async ({ port, distDir }: StartOptions) => {
     } catch (err) {
         logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
     }
+    await settings.checkLegacyDrift();
     const { server, emit, token } = createWebServer({
         distDir,
         onLocalDataWiped: () =>

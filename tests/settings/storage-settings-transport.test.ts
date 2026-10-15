@@ -256,6 +256,7 @@ describe('an unusable settings value in the Android app (Preferences)', () => {
         expect(settings!.getSettingsRecovery()).toEqual({
             code: 'settings-corrupt',
             path: expect.stringMatching(SET_ASIDE_KEY),
+            blocking: false,
         });
         expect(settings!.setSetting('theme', 'dark')).toBe(true);
         expect(settings!.getSetting('theme')).toBe('dark');

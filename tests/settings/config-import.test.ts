@@ -290,7 +290,11 @@ describe('the one-time import of a 1.x settings.json (real fs)', () => {
 
             expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
 
-            expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-import-failed', path: legacyFile });
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-import-failed',
+                path: legacyFile,
+                blocking: true,
+            });
             expectNothingWritten();
             expect(fs.readFileSync(legacyFile, 'utf8')).toBe(text);
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining(`(${reason})`));
@@ -314,7 +318,11 @@ describe('the one-time import of a 1.x settings.json (real fs)', () => {
 
             expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
 
-            expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-import-failed', path: legacyFile });
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-import-failed',
+                path: legacyFile,
+                blocking: true,
+            });
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('(unreadable)'));
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining(said));
             jest.restoreAllMocks();
@@ -331,7 +339,11 @@ describe('the one-time import of a 1.x settings.json (real fs)', () => {
 
             settings.loadSettings();
 
-            expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-import-failed', path: legacyFile });
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-import-failed',
+                path: legacyFile,
+                blocking: true,
+            });
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('(migration-failed): a pass exploded'));
             expectNothingWritten();
             expect(fs.readFileSync(legacyFile, 'utf8')).toBe(RAW);
@@ -348,7 +360,11 @@ describe('the one-time import of a 1.x settings.json (real fs)', () => {
 
             settings.loadSettings();
 
-            expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-import-failed', path: legacyFile });
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-import-failed',
+                path: legacyFile,
+                blocking: true,
+            });
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('EROFS'));
             expect(fs.readFileSync(legacyFile, 'utf8')).toBe(RAW);
             expect(fs.existsSync(markerFile)).toBe(false);
@@ -399,7 +415,11 @@ describe('the one-time import of a 1.x settings.json (real fs)', () => {
 
             settings.loadSettings();
 
-            expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-import-failed', path: legacyFile });
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-import-failed',
+                path: legacyFile,
+                blocking: true,
+            });
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('another process is importing'));
             expectNothingWritten();
         });
@@ -571,7 +591,11 @@ describe('the one-time import of a 1.x settings.json (real fs)', () => {
 
             settings.loadSettings();
 
-            expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-import-failed', path: legacyFile });
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-import-failed',
+                path: legacyFile,
+                blocking: true,
+            });
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('config.json could not be read'));
             expect(fs.existsSync(markerFile)).toBe(false);
         });
@@ -832,7 +856,11 @@ describe('the one-time import of a 1.x settings.json (real fs)', () => {
             jest.restoreAllMocks();
             expect(fs.existsSync(configFile)).toBe(false);
             expect(backups()).toHaveLength(1);
-            expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-import-failed', path: legacyFile });
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-import-failed',
+                path: legacyFile,
+                blocking: true,
+            });
             expect(settings.saveAppSettings({ theme: 'light' })).toBe(false);
 
             // The marker and the set-aside configuration make the automatic import skip; the retry is the explicit

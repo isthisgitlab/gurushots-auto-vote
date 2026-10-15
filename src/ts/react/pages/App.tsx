@@ -22,6 +22,7 @@ import { UpdateDialog } from '@/components/app/UpdateDialog';
 import { WelcomeModal } from '@/components/app/WelcomeModal';
 import { UnofficialNoticeModal } from '@/components/app/UnofficialNoticeModal';
 import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice';
+import { ImportReportModal } from '@/components/app/ImportReportModal';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { ScrollToTopButton } from '@/components/ui/ScrollToTopButton';
@@ -164,6 +165,11 @@ function AppModals({
             {/* The unofficial-app notice, shown at the next open after an install or a change to its text */}
             <ErrorBoundary>
                 <UnofficialNoticeModal isOpen={noticeOpen} onAcknowledge={() => void onNoticeAcknowledge()} />
+            </ErrorBoundary>
+
+            {/* What the import of the previous version's settings left unresolved, once */}
+            <ErrorBoundary>
+                <ImportReportModal hold={noticeOpen} />
             </ErrorBoundary>
 
             {/* First-run onboarding — after the notice, never on top of it */}

@@ -211,6 +211,7 @@ jest.mock('../../src/ts/settings', () => ({
     setSetting: jest.fn(),
     getUserDataPath: jest.fn(() => '/tmp/userData'),
     seedIntentProfiles: jest.fn(),
+    checkLegacyDrift: jest.fn(async () => undefined),
     getEnvironmentInfo: jest.fn(() => ({ defaultMock: true })),
 }));
 
@@ -428,6 +429,7 @@ describe('startup (whenReady)', () => {
         expect(m.cat.info).toHaveBeenCalledWith('[App] UserData path: /tmp/userData', null);
         expect(m.randomizer.initializeHeaders).toHaveBeenCalled();
         expect(m.settings.seedIntentProfiles).toHaveBeenCalled();
+        expect(m.settings.checkLegacyDrift).toHaveBeenCalledTimes(1);
         expect(m.logger.cleanup).toHaveBeenCalled();
         expect(m.menu.createApplicationMenu).toHaveBeenCalled();
         expect(m.permissions.installPermissionHandlers).toHaveBeenCalledTimes(1);

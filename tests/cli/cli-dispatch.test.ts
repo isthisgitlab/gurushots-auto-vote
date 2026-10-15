@@ -64,6 +64,7 @@ jest.mock('../../src/ts/logger', () => {
 jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(() => ({ app: { mock: false } })),
     getSettingsRecovery: jest.fn(() => null),
+    checkLegacyDrift: jest.fn(async () => undefined),
     getSetting: jest.fn(() => 1),
     setSetting: jest.fn(() => true),
     seedIntentProfiles: jest.fn(),
@@ -232,6 +233,7 @@ describe('startup', () => {
         const m = await run(['status']);
         expect(m.randomizer.initializeHeaders).toHaveBeenCalled();
         expect(m.settings.seedIntentProfiles).toHaveBeenCalled();
+        expect(m.settings.checkLegacyDrift).toHaveBeenCalledTimes(1);
         expect(Object.keys(processHandlers).sort()).toEqual(['uncaughtException', 'unhandledRejection']);
         expect(m.voting.showStatus).toHaveBeenCalled();
         expect(m.exitCodes).toEqual([0]);
@@ -243,6 +245,7 @@ describe('startup', () => {
             mods.settings.getSettingsRecovery.mockReturnValue({
                 code: 'settings-corrupt',
                 path: '/u/settings.json.corrupt-1',
+                blocking: false,
             }),
         );
         expect(m.msgs('stderr')).toEqual([expect.stringContaining('/u/settings.json.corrupt-1')]);

@@ -34,6 +34,9 @@ const invokeChannels = [
     'retry-settings-import',
     'start-fresh-settings',
     'reimport-settings-from-v1',
+    'keep-current-config',
+    'get-import-report',
+    'acknowledge-import-report',
     'get-third-party-notices',
     'wipe-local-data',
     // Voting / strategy

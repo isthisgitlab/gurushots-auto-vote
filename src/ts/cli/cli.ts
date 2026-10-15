@@ -53,6 +53,7 @@ const main = async () => {
         } catch (err) {
             logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
         }
+        await settings.checkLegacyDrift();
         reportSettingsRecovery();
         showUnofficialNotice();
         logger.withCategory('api').debug('main: Command is:', command);

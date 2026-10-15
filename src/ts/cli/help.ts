@@ -93,8 +93,10 @@ Commands:
              the extracted vision runtime. It cannot be undone, so it does nothing without --yes. Quit the
              desktop app and stop any CLI session first: it refuses to delete while either is running.
   reset-windows  - Reset window positions to default
-  settings-recovery retry|start-fresh|reimport - When the saved settings are not in use: try importing your 1.x settings
-             again, begin with default settings (the 1.x file stays as a backup), or import the 1.x file over the settings in use
+  settings-recovery retry|start-fresh|reimport|keep|report|acknowledge - When the saved settings are not in use, or the
+             1.x settings.json changed after it was imported: try importing it again, begin with default settings (the 1.x
+             file stays as a backup), import the 1.x file over the settings in use, keep the current settings, print what
+             the import left unresolved (report), or mark that report as seen (acknowledge)
   help     - Show this help message
 
 Examples:
