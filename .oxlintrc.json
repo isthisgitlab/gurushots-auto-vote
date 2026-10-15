@@ -159,7 +159,7 @@
                                 "message": "consoleSink is the logger's unredacted console path — only src/ts/logger/ may import it; log through the logger."
                             },
                             {
-                                "regex": "settings/(atomicWrite|capacitorPreferences|challengeFacts|challengeOverrides|chosenPhotosClear|defaults|jsonStore|loadValidation|logValue|migrations|openChallenges|ownerOnlyWrite|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|settingsMerge|staleChallengeCleanup|titlePins|titleRuleSanitize|titleRules|userDataPaths)(/[^/]+)?(\\.js)?$",
+                                "regex": "settings/(atomicWrite|capacitorPreferences|challengeFacts|challengeOverrides|chosenPhotosClear|defaults|importV1|jsonStore|loadValidation|logValue|migrations|openChallenges|ownerOnlyWrite|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|settingsMerge|staleChallengeCleanup|titlePins|titleRuleSanitize|titleRules|userDataPaths)(/[^/]+)?(\\.js)?$",
                                 "message": "Settings internals are private to the facade — import settings.ts instead.",
                                 "allowTypeImports": true
                             },
@@ -279,7 +279,7 @@
                                 "message": "consoleSink is the logger's unredacted console path — only src/ts/logger/ may import it; log through the logger."
                             },
                             {
-                                "regex": "settings/(atomicWrite|capacitorPreferences|challengeFacts|challengeOverrides|chosenPhotosClear|defaults|jsonStore|loadValidation|logValue|migrations|openChallenges|ownerOnlyWrite|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|settingsMerge|staleChallengeCleanup|titlePins|titleRuleSanitize|titleRules|userDataPaths)(/[^/]+)?(\\.js)?$",
+                                "regex": "settings/(atomicWrite|capacitorPreferences|challengeFacts|challengeOverrides|chosenPhotosClear|defaults|importV1|jsonStore|loadValidation|logValue|migrations|openChallenges|ownerOnlyWrite|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|settingsMerge|staleChallengeCleanup|titlePins|titleRuleSanitize|titleRules|userDataPaths)(/[^/]+)?(\\.js)?$",
                                 "message": "Settings internals are private to the facade — import settings.ts instead.",
                                 "allowTypeImports": true
                             },
