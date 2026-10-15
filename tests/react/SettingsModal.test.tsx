@@ -322,7 +322,7 @@ describe('SettingsModal — schema save rejection (commit reports rejected keys)
         // useSettingsForm.commit resolves the schema keys whose
         // setGlobalDefault write returned false (validation rejection —
         // e.g. a duplicate-count auto-fill schedule).
-        mockFormState.commit = jest.fn().mockResolvedValue(['autoFillSchedule']);
+        mockFormState.commit = jest.fn().mockResolvedValue(['autoSubmitSchedule']);
         const onClose = jest.fn();
 
         render(<SettingsModal isOpen={true} onClose={onClose} />);

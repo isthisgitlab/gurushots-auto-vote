@@ -44,7 +44,7 @@ const submitNewEntryForAction = async (
 
     const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
     const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
-    const fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
+    const submitWithoutTagMatch = settings.getEffectiveSetting('submitWithoutTagMatch', String(challengeId));
 
     const attempt = await runFillAttempt({
         label: 'fillNew',
@@ -54,7 +54,7 @@ const submitNewEntryForAction = async (
         wantCount: 1,
         mustIncludeTags,
         shouldIncludeTags,
-        fillWithoutTagMatch,
+        submitWithoutTagMatch,
         // Live re-check just before consuming a slot: an entry added outside
         // this run (e.g. a manual submission) may have filled the challenge
         // since the pass-start snapshot; callers fall back to acting on an
@@ -62,7 +62,7 @@ const submitNewEntryForAction = async (
         onRefreshed: () => {
             if (getSlotsRemaining(challenge) <= 0) {
                 logger
-                    .withCategory('autoFill')
+                    .withCategory('autoSubmit')
                     .info(
                         `fillNew: live re-check shows ${logger.challengeTag(challenge)} has no free slots — an entry was added outside this run (e.g. a manual submission); not submitting a new photo`,
                         null,
@@ -92,7 +92,7 @@ const submitNewEntryForAction = async (
     // because applyBoostToEntry has no null-guard of its own.
     const imageId = attempt.picked[0];
     logger
-        .withCategory('autoFill')
+        .withCategory('autoSubmit')
         .success(`fillNew: submitted entry ${imageId} for ${logger.challengeTag(challenge)}`, null);
     return { ok: true, imageId, reason: 'submitted' };
 };

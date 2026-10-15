@@ -643,7 +643,7 @@ describe('mock/index', () => {
 
             test('boost fill-new submits a fresh photo and boosts that entry', async () => {
                 challenges.mockActiveChallenges = { challenges: [fillableChallenge()] };
-                stubToggles({ boostFillNew: true, useTurbo: false, turboFillNew: false });
+                stubToggles({ boostNewSubmit: true, useTurbo: false, turboNewSubmit: false });
                 const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
                 const boostEntrySpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoostToEntry');
                 const boostSpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoost');
@@ -661,7 +661,7 @@ describe('mock/index', () => {
                 challenges.mockActiveChallenges = {
                     challenges: [fillableChallenge({ max_photo_submits: 1 })], // 1 entry already → full
                 };
-                stubToggles({ boostFillNew: true, useTurbo: false, turboFillNew: false });
+                stubToggles({ boostNewSubmit: true, useTurbo: false, turboNewSubmit: false });
                 const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
                 const boostEntrySpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoostToEntry');
                 const boostSpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoost');
@@ -686,10 +686,10 @@ describe('mock/index', () => {
                     ],
                 };
                 stubToggles({
-                    boostFillNew: false,
+                    boostNewSubmit: false,
                     useTurbo: true,
-                    turboFillNew: true,
-                    protectUncertainAutoFills: false,
+                    turboNewSubmit: true,
+                    protectUncertainAutoSubmits: false,
                 });
                 const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
                 const turboSpy = jest.spyOn(mockIndex.mockApiClient, 'applyTurbo');
@@ -720,10 +720,10 @@ describe('mock/index', () => {
                     ],
                 };
                 stubToggles({
-                    boostFillNew: true,
+                    boostNewSubmit: true,
                     useTurbo: true,
-                    turboFillNew: true,
-                    protectUncertainAutoFills: false,
+                    turboNewSubmit: true,
+                    protectUncertainAutoSubmits: false,
                 });
                 const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
                 const boostEntrySpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoostToEntry');

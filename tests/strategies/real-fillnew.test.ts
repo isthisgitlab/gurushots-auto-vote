@@ -2,7 +2,7 @@
  * Orchestration tests for the "fill-new" boost/turbo options in
  * fetchChallengesAndVote (src/ts/strategies/real/index.ts).
  *
- * These verify the wiring only — that when boostFillNew/turboFillNew is on the
+ * These verify the wiring only — that when boostNewSubmit/turboNewSubmit is on the
  * cycle submits a fresh entry via autoFill.submitNewEntryForAction and then
  * boosts/turbos THAT id, and that it falls back to the existing-entry path when
  * a fresh photo can't be submitted. The picker/submit internals and the turbo
@@ -26,9 +26,9 @@ jest.mock('../../src/ts/metadata', () => ({ cleanupStaleMetadata: jest.fn(() => 
 // tests override orderDeadlineActions per case.
 const ALL_ACTIONS: ReturnType<typeof votingLogicModule.orderDeadlineActions> = [
     { action: 'boost', thresholdSec: 0 },
-    { action: 'autoFill', thresholdSec: 0 },
+    { action: 'autoSubmit', thresholdSec: 0 },
     { action: 'turbo', thresholdSec: 0 },
-    { action: 'emergencyFill', thresholdSec: 0 },
+    { action: 'emergencySubmit', thresholdSec: 0 },
 ];
 jest.mock('../../src/ts/services/VotingLogic', () => ({
     resolvePin: jest.fn(() => ({ state: 'none' })),
@@ -45,9 +45,9 @@ jest.mock('../../src/ts/services/VotingLogic', () => ({
     evaluateVotingDecision: jest.fn(() => ({ shouldVote: false })),
     orderDeadlineActions: jest.fn(() => [
         { action: 'boost', thresholdSec: 0 },
-        { action: 'autoFill', thresholdSec: 0 },
+        { action: 'autoSubmit', thresholdSec: 0 },
         { action: 'turbo', thresholdSec: 0 },
-        { action: 'emergencyFill', thresholdSec: 0 },
+        { action: 'emergencySubmit', thresholdSec: 0 },
     ]),
 }));
 jest.mock('../../src/ts/services/autoFill', () => ({
@@ -123,7 +123,7 @@ beforeEach(() => {
 
 describe('fetchChallengesAndVote — boost fill-new', () => {
     // `mode` mirrors votingLogic.resolveBoostFillNewMode's result: 'always'
-    // (boostFillNew), 'conflict' (boostFillNewOnConflict + sole entry turboed),
+    // (boostNewSubmit), 'conflict' (boostNewSubmitOnConflict + sole entry turboed),
     // or 'no'. VotingLogic is mocked here, so drive the resolved mode directly.
     const setup = ({ mode }: { mode: ReturnType<typeof votingLogicModule.resolveBoostFillNewMode> }) => {
         const challenge = makeChallenge({ boostState: 'AVAILABLE', boostTimeout: NOW() + 120 });
@@ -250,9 +250,9 @@ describe('fetchChallengesAndVote — timer-ordered actions', () => {
     test('runs auto-fill before turbo when orderDeadlineActions ranks auto-fill first', async () => {
         getActiveChallenges.mockResolvedValue({ challenges: [makeChallenge()] });
         votingLogic.orderDeadlineActions.mockReturnValue([
-            { action: 'autoFill', thresholdSec: 900 },
+            { action: 'autoSubmit', thresholdSec: 900 },
             { action: 'turbo', thresholdSec: 720 },
-            { action: 'emergencyFill', thresholdSec: 300 },
+            { action: 'emergencySubmit', thresholdSec: 300 },
             { action: 'boost', thresholdSec: -Infinity },
         ]);
         votingLogic.shouldApplyTurbo.mockReturnValue({
@@ -277,8 +277,8 @@ describe('fetchChallengesAndVote — timer-ordered actions', () => {
         getActiveChallenges.mockResolvedValue({ challenges: [makeChallenge()] });
         votingLogic.orderDeadlineActions.mockReturnValue([
             { action: 'turbo', thresholdSec: 1200 },
-            { action: 'autoFill', thresholdSec: 900 },
-            { action: 'emergencyFill', thresholdSec: 300 },
+            { action: 'autoSubmit', thresholdSec: 900 },
+            { action: 'emergencySubmit', thresholdSec: 300 },
             { action: 'boost', thresholdSec: -Infinity },
         ]);
         votingLogic.shouldApplyTurbo.mockReturnValue({

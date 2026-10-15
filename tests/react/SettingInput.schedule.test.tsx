@@ -6,7 +6,7 @@
  * 0h 0m = off. Edits emit ONLY the active rows (seconds > 0) sorted by count;
  * any stored row not keyed by counts 2/3/4 is dropped on the first edit. The
  * translation manager mock returns each key verbatim, so labels are the i18n
- * keys (row aria-labels read e.g. "app.autoFillScheduleImage 2 app.hours").
+ * keys (row aria-labels read e.g. "app.autoSubmitScheduleImage 2 app.hours").
  */
 
 import { fireEvent, render, screen } from './helpers/test-utils';
@@ -14,7 +14,7 @@ import { SettingInput } from '@/components/app/SettingInput';
 import type { SerializableSchemaEntry } from '../../src/ts/ipc/settings.handlers';
 import { invalid } from '../helpers/invalid';
 
-const KEY = 'autoFillSchedule';
+const KEY = 'autoSubmitSchedule';
 const MAX_SECONDS = 30 * 24 * 3600;
 const config = invalid<SerializableSchemaEntry>({
     type: 'schedule',
@@ -31,10 +31,10 @@ const renderSchedule = (value: unknown, onChange = jest.fn()) => {
 };
 
 const hoursInput = (count: number) =>
-    screen.getByLabelText<HTMLInputElement>(`app.autoFillScheduleImage ${count} app.hours`);
+    screen.getByLabelText<HTMLInputElement>(`app.autoSubmitScheduleImage ${count} app.hours`);
 const minutesInput = (count: number) =>
-    screen.getByLabelText<HTMLInputElement>(`app.autoFillScheduleImage ${count} app.minutes`);
-const allHoursInputs = () => screen.queryAllByLabelText(/^app\.autoFillScheduleImage \d+ app\.hours$/);
+    screen.getByLabelText<HTMLInputElement>(`app.autoSubmitScheduleImage ${count} app.minutes`);
+const allHoursInputs = () => screen.queryAllByLabelText(/^app\.autoSubmitScheduleImage \d+ app\.hours$/);
 
 describe('SettingInput type=schedule — fixed three-row rendering', () => {
     test('renders exactly the three fixed rows for an empty stored array', () => {
@@ -55,7 +55,7 @@ describe('SettingInput type=schedule — fixed three-row rendering', () => {
         expect(minutesInput(3).value).toBe('0');
         expect(minutesInput(4).value).toBe('15');
         // Images 2 and 3 carry the off hint; image 4 does not.
-        expect(screen.getAllByText('app.autoFillScheduleOff')).toHaveLength(2);
+        expect(screen.getAllByText('app.autoSubmitScheduleOff')).toHaveLength(2);
     });
 
     test('renders exactly three rows for a full stored array with per-row values', () => {
@@ -64,16 +64,16 @@ describe('SettingInput type=schedule — fixed three-row rendering', () => {
         expect(minutesInput(2).value).toBe('30');
         expect(minutesInput(3).value).toBe('20');
         expect(minutesInput(4).value).toBe('10');
-        expect(screen.queryByText('app.autoFillScheduleOff')).toBeNull();
+        expect(screen.queryByText('app.autoSubmitScheduleOff')).toBeNull();
     });
 
     test('row labels and aria-labels carry the image identity', () => {
         renderSchedule(config.default);
-        // Visible row label: "app.autoFillScheduleImage N ≤".
+        // Visible row label: "app.autoSubmitScheduleImage N ≤".
         [2, 3, 4].forEach((count) => {
-            expect(screen.getByText(`app.autoFillScheduleImage ${count} ≤`)).toBeTruthy();
-            expect(screen.getByLabelText(`app.autoFillScheduleImage ${count} app.hours`)).toBeTruthy();
-            expect(screen.getByLabelText(`app.autoFillScheduleImage ${count} app.minutes`)).toBeTruthy();
+            expect(screen.getByText(`app.autoSubmitScheduleImage ${count} ≤`)).toBeTruthy();
+            expect(screen.getByLabelText(`app.autoSubmitScheduleImage ${count} app.hours`)).toBeTruthy();
+            expect(screen.getByLabelText(`app.autoSubmitScheduleImage ${count} app.minutes`)).toBeTruthy();
         });
     });
 });
@@ -127,7 +127,7 @@ describe('SettingInput type=schedule — inline diagnostics', () => {
     test('all rows off shows the role="status" empty warning', () => {
         renderSchedule([]);
         const status = screen.getByRole('status');
-        expect(status.textContent).toBe('app.autoFillScheduleEmpty');
+        expect(status.textContent).toBe('app.autoSubmitScheduleEmpty');
     });
 
     test('rows stored with seconds 0 also count as off for the empty warning', () => {
@@ -135,7 +135,7 @@ describe('SettingInput type=schedule — inline diagnostics', () => {
             { count: 2, seconds: 0 },
             { count: 3, seconds: 0 },
         ]);
-        expect(screen.getByRole('status').textContent).toBe('app.autoFillScheduleEmpty');
+        expect(screen.getByRole('status').textContent).toBe('app.autoSubmitScheduleEmpty');
     });
 
     test('no empty warning while at least one row is active', () => {
@@ -150,7 +150,7 @@ describe('SettingInput type=schedule — inline diagnostics', () => {
             { count: 2, seconds: 600 },
             { count: 3, seconds: 10800 },
         ]);
-        const badges = screen.getAllByText('app.autoFillScheduleDominated');
+        const badges = screen.getAllByText('app.autoSubmitScheduleDominated');
         expect(badges).toHaveLength(1);
         // The badge sits in image 2's hint span (aria-describedby wiring).
         expect(badges[0].closest(`[id="${KEY}-row-2-hint"]`)).not.toBeNull();
@@ -158,20 +158,20 @@ describe('SettingInput type=schedule — inline diagnostics', () => {
 
     test('a well-ordered schedule shows no dominated badge', () => {
         renderSchedule(config.default);
-        expect(screen.queryByText('app.autoFillScheduleDominated')).toBeNull();
+        expect(screen.queryByText('app.autoSubmitScheduleDominated')).toBeNull();
     });
 
     test('off rows never get the dominated badge — only the off hint', () => {
         // Images 2 and 4 are off; an active row "covers" a 0-second row
         // trivially, but off rows are excluded from the check by design.
         renderSchedule([{ count: 3, seconds: 10800 }]);
-        expect(screen.queryByText('app.autoFillScheduleDominated')).toBeNull();
-        expect(screen.getAllByText('app.autoFillScheduleOff')).toHaveLength(2);
+        expect(screen.queryByText('app.autoSubmitScheduleDominated')).toBeNull();
+        expect(screen.getAllByText('app.autoSubmitScheduleOff')).toHaveLength(2);
     });
 
     test('seconds above the 30-day cap flag the row out-of-range with the error class', () => {
         renderSchedule([{ count: 2, seconds: MAX_SECONDS + 60 }]);
-        expect(screen.getByText('app.autoFillScheduleOutOfRange')).toBeTruthy();
+        expect(screen.getByText('app.autoSubmitScheduleOutOfRange')).toBeTruthy();
         expect(hoursInput(2).className).toMatch(/input-error/);
         expect(minutesInput(2).className).toMatch(/input-error/);
         // In-range rows carry no error class.
@@ -180,7 +180,7 @@ describe('SettingInput type=schedule — inline diagnostics', () => {
 
     test('a row exactly at the 30-day cap is not flagged out-of-range', () => {
         renderSchedule([{ count: 2, seconds: MAX_SECONDS }]);
-        expect(screen.queryByText('app.autoFillScheduleOutOfRange')).toBeNull();
+        expect(screen.queryByText('app.autoSubmitScheduleOutOfRange')).toBeNull();
     });
 
     test('a corrupted negative seconds value is flagged out-of-range, never dominated', () => {
@@ -191,13 +191,13 @@ describe('SettingInput type=schedule — inline diagnostics', () => {
             { count: 2, seconds: -5 },
             { count: 3, seconds: 10800 },
         ]);
-        expect(screen.getByText('app.autoFillScheduleOutOfRange')).toBeTruthy();
-        expect(screen.queryByText('app.autoFillScheduleDominated')).toBeNull();
-        expect(screen.queryByText('app.autoFillScheduleOff')).not.toBeNull(); // image 4 is off
+        expect(screen.getByText('app.autoSubmitScheduleOutOfRange')).toBeTruthy();
+        expect(screen.queryByText('app.autoSubmitScheduleDominated')).toBeNull();
+        expect(screen.queryByText('app.autoSubmitScheduleOff')).not.toBeNull(); // image 4 is off
     });
 
     test('a corrupted fractional seconds value is flagged out-of-range', () => {
         renderSchedule([{ count: 2, seconds: 600.5 }]);
-        expect(screen.getByText('app.autoFillScheduleOutOfRange')).toBeTruthy();
+        expect(screen.getByText('app.autoSubmitScheduleOutOfRange')).toBeTruthy();
     });
 });

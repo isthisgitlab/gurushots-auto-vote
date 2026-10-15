@@ -12,7 +12,7 @@ const LEVEL_COLORS = {
     ERROR: 'text-red-400',
 };
 const CATEGORY_KEYS: Record<string, true> = {
-    api: true, authentication: true, autoFill: true, boost: true, challenges: true, claim: true,
+    api: true, authentication: true, autoSubmit: true, boost: true, challenges: true, claim: true,
     currency: true, error: true, general: true, join: true, lexicon: true, middleware: true,
     missions: true, scenario: true, settings: true, translation: true, turbo: true, ui: true,
     update: true, voting: true,

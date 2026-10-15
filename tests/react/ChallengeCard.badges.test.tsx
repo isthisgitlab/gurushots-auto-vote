@@ -9,7 +9,7 @@
  * are filled.
  *
  * useChallengeSettings, useTurbo and useFillChallenge are stubbed so the test
- * can drive hasCustomSettings / autoFillEnabled directly; the child buttons
+ * can drive hasCustomSettings / autoSubmitEnabled directly; the child buttons
  * and EntryBadge are mocked to null so `span.badge` resolves to the top row
  * only. `t(key)` returns the key (see tests/react setup), so labels assert as
  * 'app.*' strings. Mock state object names start with "mock" for jest hoisting.
@@ -24,7 +24,7 @@ import type { Challenge } from '../../src/ts/types/gurushots';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
-    autoFillEnabled: false,
+    autoSubmitEnabled: false,
     manualPhotosOnly: false,
     isCompact: false,
     hasCompactOverride: false,
@@ -96,7 +96,7 @@ const badgeByText = (container: Element, text: string) =>
 beforeEach(() => {
     Object.assign(mockChallengeSettings, {
         hasCustomSettings: false,
-        autoFillEnabled: false,
+        autoSubmitEnabled: false,
         manualPhotosOnly: false,
         isCompact: false,
         hasCompactOverride: false,
@@ -106,7 +106,7 @@ beforeEach(() => {
 
 describe('ChallengeCard badge row — logical/state badges', () => {
     test('type, photo-count and auto-fill all render icon + text with solid colors', () => {
-        mockChallengeSettings.autoFillEnabled = true;
+        mockChallengeSettings.autoSubmitEnabled = true;
         const { container } = renderCard(makeChallenge());
 
         const type = badgeByText(container, '🏁 FLASH');
@@ -117,9 +117,9 @@ describe('ChallengeCard badge row — logical/state badges', () => {
         expect(photos).toBeTruthy();
         expect(photos!.className).toMatch(/badge-warning/);
 
-        const autoFill = badgeByText(container, '📥 app.autoFillBadge');
-        expect(autoFill).toBeTruthy();
-        expect(autoFill!.className).toMatch(/badge-success/);
+        const autoSubmit = badgeByText(container, '📥 app.autoSubmitBadge');
+        expect(autoSubmit).toBeTruthy();
+        expect(autoSubmit!.className).toMatch(/badge-success/);
     });
 
     test('alert, state and configuration badges share the same size', () => {
@@ -130,7 +130,7 @@ describe('ChallengeCard badge row — logical/state badges', () => {
                 boostTimeLeft="23m"
                 lowExposure
                 exposureFactor={0}
-                showAutoFillBadge
+                showAutoSubmitBadge
                 showManualPhotosBadge={false}
                 hasCustomSettings
             />,
@@ -149,19 +149,19 @@ describe('ChallengeCard badge row — logical/state badges', () => {
     });
 
     test('auto-fill badge is hidden once all slots are filled', () => {
-        mockChallengeSettings.autoFillEnabled = true;
+        mockChallengeSettings.autoSubmitEnabled = true;
         const { container } = renderCard(makeChallenge({ maxPhotos: 4, entriesCount: 4 }));
-        expect(badgeByText(container, '📥 app.autoFillBadge')).toBeFalsy();
+        expect(badgeByText(container, '📥 app.autoSubmitBadge')).toBeFalsy();
     });
 
     test('Manual Photos Only shows its own badge in place of the auto-submit one', () => {
-        mockChallengeSettings.autoFillEnabled = true;
+        mockChallengeSettings.autoSubmitEnabled = true;
         mockChallengeSettings.manualPhotosOnly = true;
         const { container } = renderCard(makeChallenge());
         const manual = badgeByText(container, '✋ app.manualPhotosBadge');
         expect(manual).toBeTruthy();
         expect(manual!.className).toMatch(/badge-info/);
-        expect(badgeByText(container, '📥 app.autoFillBadge')).toBeFalsy();
+        expect(badgeByText(container, '📥 app.autoSubmitBadge')).toBeFalsy();
     });
 
     test('the manual-photos badge is absent while the switch is off', () => {
@@ -194,7 +194,7 @@ describe('ChallengeCard badge row — shared with the Discover rows', () => {
                 boostTimeLeft={null}
                 lowExposure={false}
                 exposureFactor={0}
-                showAutoFillBadge={false}
+                showAutoSubmitBadge={false}
                 showManualPhotosBadge={false}
                 hasCustomSettings={false}
                 showPhotoCount={false}
@@ -233,7 +233,7 @@ describe('ChallengeCard badge row — shared with the Discover rows', () => {
                 boostTimeLeft={null}
                 lowExposure={false}
                 exposureFactor={0}
-                showAutoFillBadge={false}
+                showAutoSubmitBadge={false}
                 showManualPhotosBadge={false}
                 hasCustomSettings
             />,
@@ -257,7 +257,7 @@ describe('ChallengeCard badge row — shared with the Discover rows', () => {
                 boostTimeLeft={null}
                 lowExposure={false}
                 exposureFactor={0}
-                showAutoFillBadge={false}
+                showAutoSubmitBadge={false}
                 showManualPhotosBadge={false}
                 hasCustomSettings={false}
             />,
@@ -276,7 +276,7 @@ describe('ChallengeCard badge row — shared with the Discover rows', () => {
                     boostTimeLeft={null}
                     lowExposure={false}
                     exposureFactor={0}
-                    showAutoFillBadge={false}
+                    showAutoSubmitBadge={false}
                     showManualPhotosBadge={false}
                     hasCustomSettings
                 />,
@@ -302,7 +302,7 @@ describe('ChallengeCard badge row — shared with the Discover rows', () => {
 describe('ChallengeCard badge row — override/config badge', () => {
     test('renders icon + translated label in the muted ghost style, distinct from state badges', () => {
         mockChallengeSettings.hasCustomSettings = true;
-        mockChallengeSettings.autoFillEnabled = true;
+        mockChallengeSettings.autoSubmitEnabled = true;
         const { container } = renderCard(makeChallenge());
 
         const custom = badgeByText(container, '⚙️ app.customBadge');
@@ -312,8 +312,8 @@ describe('ChallengeCard badge row — override/config badge', () => {
         // share the auto-fill (success) styling.
         expect(custom!.className).not.toMatch(/badge-success/);
 
-        const autoFill = badgeByText(container, '📥 app.autoFillBadge');
-        expect(autoFill!.className).not.toMatch(/badge-ghost/);
+        const autoSubmit = badgeByText(container, '📥 app.autoSubmitBadge');
+        expect(autoSubmit!.className).not.toMatch(/badge-ghost/);
     });
 
     test('the override badge meaning is visible text, not hidden in a tooltip', () => {

@@ -276,7 +276,7 @@ const previewSwap = async (
             wantCount: 1,
             mustIncludeTags: settings.getEffectiveTagSetting('mustIncludeTags', challenge) ?? null,
             shouldIncludeTags: settings.getEffectiveTagSetting('shouldIncludeTags', challenge) ?? null,
-            fillWithoutTagMatch: settings.getEffectiveSetting('fillWithoutTagMatch', id),
+            submitWithoutTagMatch: settings.getEffectiveSetting('submitWithoutTagMatch', id),
         },
     );
     if (ranked.status !== 'ranked') {

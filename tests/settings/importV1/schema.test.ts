@@ -1,6 +1,7 @@
 /**
- * The frozen 1.x schema and list sanitizers against the live ones as of the freeze: same keys in the same order, same
- * defaults, same verdict on every probe value. The live comparison is deleted when the live schema changes.
+ * The frozen 1.x schema and list sanitizers against the live ones: same keys in the same order, same defaults, same
+ * verdict on every probe value, each frozen key read under its current name (`liveKey`). The live comparison is
+ * deleted with the live pipeline in B1b.
  */
 
 import { V1_SETTINGS_SCHEMA, v1SchemaEntry, validateV1Setting } from '../../../src/ts/settings/importV1/schema';
@@ -9,6 +10,7 @@ import {
     sanitizeFillSchedule,
     sanitizeTimeOfDayList,
 } from '../../../src/ts/settings/importV1/validators';
+import { liveKey } from '../v2/liveAdapter';
 import type * as liveSchemaModule from '../../../src/ts/settings/schema';
 
 const live = require('../../../src/ts/settings/schema') as typeof liveSchemaModule;
@@ -73,12 +75,12 @@ describe('the frozen 1.x schema', () => {
     const keys = Object.keys(V1_SETTINGS_SCHEMA);
 
     test('has the live schema keys, in the live order', () => {
-        expect(keys).toEqual(Object.keys(live.SETTINGS_SCHEMA));
+        expect(keys.map(liveKey)).toEqual(Object.keys(live.SETTINGS_SCHEMA));
     });
 
     test.each(keys)('%s has the live default', (key) => {
         expect(V1_SETTINGS_SCHEMA[key as keyof typeof V1_SETTINGS_SCHEMA].default).toEqual(
-            live.schemaEntry(key)?.default,
+            live.schemaEntry(liveKey(key))?.default,
         );
     });
 
@@ -87,7 +89,7 @@ describe('the frozen 1.x schema', () => {
             expect([key, probe, validateV1Setting(key, probe)]).toEqual([
                 key,
                 probe,
-                live.schemaEntry(key)?.validation.safeParse(probe).success,
+                live.schemaEntry(liveKey(key))?.validation.safeParse(probe).success,
             ]);
         }
     });

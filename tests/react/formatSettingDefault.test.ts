@@ -32,7 +32,7 @@ describe('formatSettingDefault', () => {
     });
 
     describe('number settings with a unit', () => {
-        test('appends the translated unit (emergencyFill → "5 minutes")', () => {
+        test('appends the translated unit (emergencySubmit → "5 minutes")', () => {
             expect(formatSettingDefault(5, { type: 'number', unit: 'app.minutes' }, t)).toBe('5 minutes');
         });
 

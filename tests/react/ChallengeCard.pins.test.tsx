@@ -13,7 +13,7 @@ import latvian = require('../../src/ts/translations/latvian');
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
-    autoFillEnabled: false,
+    autoSubmitEnabled: false,
     isCompact: false,
     hasCompactOverride: false,
     toggleCompact: jest.fn(),

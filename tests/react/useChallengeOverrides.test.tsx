@@ -207,26 +207,26 @@ describe("what the challenge's rules contribute", () => {
         test('an edit shows what the settings now say, not a client-side merge', async () => {
             const { result } = await open(seaside());
             const opened = callsAfterOpen();
-            // The settings' first-match order decides: the edited profile's autoFill (rule 1) beats rule 2's inline one.
+            // The settings' first-match order decides: the edited profile's autoSubmit (rule 1) beats rule 2's inline one.
             mockApi.getTitleProfile.mockResolvedValue(
                 titleRuleInfo({
-                    profile: { name: 'quad', values: { exposure: 80, autoFill: false } },
-                    inlineValues: { scenario: 'Plan', autoJoin: true, autoFill: true },
-                    ruleValues: { exposure: 80, autoFill: false, scenario: 'Plan', autoJoin: true },
+                    profile: { name: 'quad', values: { exposure: 80, autoSubmit: false } },
+                    inlineValues: { scenario: 'Plan', autoJoin: true, autoSubmit: true },
+                    ruleValues: { exposure: 80, autoSubmit: false, scenario: 'Plan', autoJoin: true },
                     ruleSources: {
                         scenario: { title: 'Seaside', index: 1 },
-                        autoFill: { title: 'Seaside', index: 1, viaProfile: true },
+                        autoSubmit: { title: 'Seaside', index: 1, viaProfile: true },
                     },
-                    inlineSources: { autoFill: { title: 'Sea', index: 2 }, scenario: { title: 'Seaside', index: 1 } },
+                    inlineSources: { autoSubmit: { title: 'Sea', index: 2 }, scenario: { title: 'Seaside', index: 1 } },
                 }),
             );
-            act(() => result.current.onProfilesChanged({ name: 'quad', values: { exposure: 80, autoFill: false } }));
+            act(() => result.current.onProfilesChanged({ name: 'quad', values: { exposure: 80, autoSubmit: false } }));
             await waitFor(() => expect(result.current.inheritedOf('exposure')).toBe(80));
             expect(callsAfterOpen()).toBe(opened + 1);
             expect(mockApi.getTitleProfile).toHaveBeenLastCalledWith('Challenge 1', '1');
             // The profile's value runs, so it is not credited to rule 2, which only sets it inline.
-            expect(result.current.inheritedOf('autoFill')).toBe(false);
-            expect(result.current.ruleSourceOf('autoFill')).toBeUndefined();
+            expect(result.current.inheritedOf('autoSubmit')).toBe(false);
+            expect(result.current.ruleSourceOf('autoSubmit')).toBeUndefined();
             expect(result.current.ruleSourceOf('scenario')).toEqual({ title: 'Seaside', index: 1 });
         });
 
@@ -235,15 +235,15 @@ describe("what the challenge's rules contribute", () => {
             mockApi.getTitleProfile.mockResolvedValue(
                 titleRuleInfo({
                     suppressed: true,
-                    profile: { name: 'quad', values: { autoFill: false } },
-                    inlineValues: { autoFill: true },
-                    ruleSources: { autoFill: { title: 'Seaside', index: 1, viaProfile: true } },
-                    inlineSources: { autoFill: { title: 'Sea', index: 2 } },
+                    profile: { name: 'quad', values: { autoSubmit: false } },
+                    inlineValues: { autoSubmit: true },
+                    ruleSources: { autoSubmit: { title: 'Seaside', index: 1, viaProfile: true } },
+                    inlineSources: { autoSubmit: { title: 'Sea', index: 2 } },
                 }),
             );
-            act(() => result.current.onProfilesChanged({ name: 'Quad', values: { autoFill: false } }));
-            await waitFor(() => expect(result.current.inheritedOf('autoFill')).toBe(true));
-            expect(result.current.ruleSourceOf('autoFill')).toEqual({ title: 'Sea', index: 2 });
+            act(() => result.current.onProfilesChanged({ name: 'Quad', values: { autoSubmit: false } }));
+            await waitFor(() => expect(result.current.inheritedOf('autoSubmit')).toBe(true));
+            expect(result.current.ruleSourceOf('autoSubmit')).toEqual({ title: 'Sea', index: 2 });
         });
 
         test('a deletion leaves the inline values, with or without a suppression', async () => {

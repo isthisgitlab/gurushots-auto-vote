@@ -168,7 +168,7 @@ describe('applyImminentBoostsOnSuspend — no-ops', () => {
     });
 
     test('the emergency-only case (no boost row because autoBoost is off) is not selected', async () => {
-        await run({ describeDeadlineActions: () => ({ actions: [{ action: 'autoFill', dueAt: NOW + 60 }] }) });
+        await run({ describeDeadlineActions: () => ({ actions: [{ action: 'autoSubmit', dueAt: NOW + 60 }] }) });
         expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
     });
 

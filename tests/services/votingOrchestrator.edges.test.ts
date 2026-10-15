@@ -269,7 +269,7 @@ describe('uncertain auto-fill action protection', () => {
     };
 
     test('skips key-unlocked Boost on an uncertain entry', async () => {
-        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoFills');
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoSubmits');
         votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'boost' }]));
         votingLogic.shouldApplyBoost.mockReturnValue(true);
         votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1' }));
@@ -284,7 +284,7 @@ describe('uncertain auto-fill action protection', () => {
     });
 
     test('allows expiring Boost and emergency Boost on an uncertain entry', async () => {
-        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoFills');
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoSubmits');
         votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'boost' }]));
         votingLogic.shouldApplyBoost.mockReturnValue(true);
         votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1' }));
@@ -309,7 +309,7 @@ describe('uncertain auto-fill action protection', () => {
     });
 
     test('skips Turbo on an uncertain entry unless in the emergency window', async () => {
-        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoFills');
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoSubmits');
         votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'turbo' }]));
         votingLogic.shouldApplyTurbo.mockReturnValue(invalid({ apply: true, fillNew: false, imageId: 'e1' }));
         const challenge = withBoost({ state: 'LOCKED' }, { member: { ranking: { entries: [{ id: 'e1' }] } } });
@@ -592,11 +592,11 @@ describe('runTurboApply fallbacks', () => {
 
 describe('emergency fill and turbo mini-game', () => {
     test('a submitted emergency fill is logged', async () => {
-        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'emergencyFill' }]));
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'emergencySubmit' }]));
         autoFill.maybeEmergencyFillChallenge.mockResolvedValueOnce('submitted');
         await run(makeApi([withBoost({ state: 'LOCKED', timeout: 0 })]));
         expect(messages('info')).toEqual(
-            expect.arrayContaining([expect.stringContaining('emergencyFill: entries submitted near deadline')]),
+            expect.arrayContaining([expect.stringContaining('emergencySubmit: entries submitted near deadline')]),
         );
     });
 
@@ -937,7 +937,7 @@ describe('pinned photo', () => {
         });
 
         test('a pinned photo is not skipped as uncertain: the pin is the confirmation', async () => {
-            settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoFills');
+            settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoSubmits');
             votingLogic.resolvePin.mockReturnValue(invalid({ state: 'hit', entry: { id: 'e1' } }));
             const api = makeApi([keyedWith(['e1'])]);
             await run(api, { entryAges: uncertainLedger() });
@@ -983,7 +983,7 @@ describe('pinned photo', () => {
             withBoost({ state: 'LOCKED' }, { member: { ranking: { entries: [{ id: 'e1' }] } } });
 
         test('a pinned photo is not skipped as uncertain', async () => {
-            settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoFills');
+            settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoSubmits');
             votingLogic.shouldApplyTurbo.mockReturnValue(
                 invalid({ apply: true, fillNew: false, imageId: 'e1', pinned: true }),
             );

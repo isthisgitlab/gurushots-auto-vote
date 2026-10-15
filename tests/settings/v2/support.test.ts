@@ -77,7 +77,10 @@ describe('v1ViewOf', () => {
         });
     });
 
-    test('live names are the 1.x names until phase B', () => {
-        expect(liveKey('autoFill')).toBe('autoFill');
+    test('live names are the 2.x names of the renamed keys', () => {
+        expect(liveKey('autoFill')).toBe('autoSubmit');
+        expect(liveKey('boostFillNewOnConflict')).toBe('boostNewSubmitOnConflict');
+        expect(liveKey('autoExposureFill')).toBe('autoExposureFill');
+        expect(liveKey('scenario')).toBe('scenario');
     });
 });

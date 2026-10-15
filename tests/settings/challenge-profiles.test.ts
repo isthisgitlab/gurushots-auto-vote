@@ -73,9 +73,9 @@ describe('settings facade — challenge profiles', () => {
         });
 
         test('round-trips a saved profile', () => {
-            expect(settings.saveChallengeProfile('2-pic tactic', { exposure: 80, autoFill: true })).toBe(true);
+            expect(settings.saveChallengeProfile('2-pic tactic', { exposure: 80, autoSubmit: true })).toBe(true);
             expect(settings.getChallengeProfiles()).toEqual({
-                '2-pic tactic': { exposure: 80, autoFill: true },
+                '2-pic tactic': { exposure: 80, autoSubmit: true },
             });
         });
 
@@ -187,8 +187,8 @@ describe('settings facade — challenge profiles', () => {
 
         test('returns the sparse override map', () => {
             settings.setChallengeOverride('exposure', '123', 80);
-            settings.setChallengeOverride('autoFill', '123', true);
-            expect(settings.getChallengeOverrides('123')).toEqual({ exposure: 80, autoFill: true });
+            settings.setChallengeOverride('autoSubmit', '123', true);
+            expect(settings.getChallengeOverrides('123')).toEqual({ exposure: 80, autoSubmit: true });
             expect(settings.getChallengeOverrides('456')).toEqual({});
         });
     });
@@ -228,7 +228,7 @@ describe('settings facade — challenge profiles', () => {
         });
 
         test('sets listed keys and removes unlisted ones atomically', () => {
-            settings.setChallengeOverride('autoFill', '123', true);
+            settings.setChallengeOverride('autoSubmit', '123', true);
             settings.setChallengeOverride('boostTime', '123', 1800);
             settings.saveChallengeProfile('p', { exposure: 80 });
 
@@ -323,7 +323,7 @@ describe('settings facade — challenge profiles', () => {
         });
 
         test('writes nothing when a stored value has become invalid (schema drift)', () => {
-            settings.setChallengeOverride('autoFill', '123', true);
+            settings.setChallengeOverride('autoSubmit', '123', true);
             settings.saveChallengeProfile('p', { exposure: 80 });
             const raw = settings.loadSettings();
             raw.challengeSettings.profiles!.p.exposure = 999; // corrupt in place
@@ -331,13 +331,13 @@ describe('settings facade — challenge profiles', () => {
 
             expect(settings.applyChallengeProfile('p', '123')).toBe(false);
             // Pre-existing override untouched — no partial write.
-            expect(settings.getChallengeOverrides('123')).toEqual({ autoFill: true });
+            expect(settings.getChallengeOverrides('123')).toEqual({ autoSubmit: true });
         });
     });
 
     describe('automatic title profile inheritance', () => {
         beforeEach(() => {
-            settings.saveChallengeProfile('Recurring Tactic', { exposure: 80, autoFill: true });
+            settings.saveChallengeProfile('Recurring Tactic', { exposure: 80, autoSubmit: true });
             settings.setTitleRules([
                 {
                     title: 'Weekly Theme',
@@ -351,7 +351,7 @@ describe('settings facade — challenge profiles', () => {
         test('inherits profile values for the current id and a rotated id with the same title', () => {
             settings.rememberChallengeTitles([{ id: 100, title: 'Weekly Theme' }]);
             expect(settings.getEffectiveSetting('exposure', '100')).toBe(80);
-            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(true);
+            expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(true);
 
             settings.rememberChallengeTitles([{ id: 999, title: 'weekly theme' }]);
             expect(settings.getEffectiveSetting('exposure', '999')).toBe(80);
@@ -361,7 +361,7 @@ describe('settings facade — challenge profiles', () => {
             settings.rememberChallengeTitles([{ id: 100, title: 'Weekly Theme' }]);
             expect(settings.setChallengeOverride('exposure', '100', 65)).toBe(true);
             expect(settings.getEffectiveSetting('exposure', '100')).toBe(65);
-            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(true);
+            expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(true);
         });
 
         test('clears a redundant manual value against the profile baseline, not the global default', () => {
@@ -398,15 +398,15 @@ describe('settings facade — challenge profiles', () => {
         });
 
         test('batch override rejects an invalid composition without partially saving sibling values', () => {
-            settings.saveChallengeProfile('Strict', { exposure: 50, exposureTarget: 80, autoFill: true });
+            settings.saveChallengeProfile('Strict', { exposure: 50, exposureTarget: 80, autoSubmit: true });
             settings.setTitleRules([
                 { title: 'Strict Theme', profile: 'Strict', mustIncludeTags: [], shouldIncludeTags: [] },
             ]);
             settings.rememberChallengeTitles([{ id: 123, title: 'Strict Theme' }]);
 
-            expect(settings.setChallengeOverrides('123', { exposure: 90, autoFill: false })).toBe(false);
+            expect(settings.setChallengeOverrides('123', { exposure: 90, autoSubmit: false })).toBe(false);
             expect(settings.getChallengeOverrides('123')).toEqual({});
-            expect(settings.getEffectiveSetting('autoFill', '123')).toBe(true);
+            expect(settings.getEffectiveSetting('autoSubmit', '123')).toBe(true);
         });
 
         test('rejects removing an override when the inherited trigger would exceed the remaining target', () => {
@@ -428,9 +428,9 @@ describe('settings facade — challenge profiles', () => {
 
             expect(settings.applyChallengeProfile('Reset', '100')).toBe(true);
             expect(settings.getChallengeOverrides('100')).toEqual({});
-            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
+            expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(false);
             expect(settings.getTitleProfile('Weekly Theme', '100')).toMatchObject({
-                profile: { name: 'Recurring Tactic', values: { exposure: 80, autoFill: true } },
+                profile: { name: 'Recurring Tactic', values: { exposure: 80, autoSubmit: true } },
                 suppressed: true,
             });
         });
@@ -440,11 +440,11 @@ describe('settings facade — challenge profiles', () => {
 
             expect(settings.replaceChallengeOverrides('100', { exposure: 70 }, true)).toBe(true);
             expect(settings.getEffectiveSetting('exposure', '100')).toBe(70);
-            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
+            expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(false);
 
             expect(settings.replaceChallengeOverrides('100', {}, false)).toBe(true);
             expect(settings.getEffectiveSetting('exposure', '100')).toBe(80);
-            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(true);
+            expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(true);
         });
 
         test('rejects an automatic profile assignment that conflicts with existing manual values', () => {
@@ -492,19 +492,19 @@ describe('settings facade — challenge profiles', () => {
             logger.withCategory.mockClear();
 
             expect(settings.getTitleProfile('Weekly Theme').profile).toBeNull();
-            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
+            expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(false);
             expect(settings.getEffectiveSetting('exposure', '100')).toBe(100);
             expect(logger.withCategory).not.toHaveBeenCalled();
         });
 
         test('does not exact-match an over-length observed title to its 200-character prefix', () => {
             const prefix = 'x'.repeat(settings.MAX_TITLE_LENGTH);
-            settings.saveChallengeProfile('Long', { autoFill: true });
+            settings.saveChallengeProfile('Long', { autoSubmit: true });
             settings.setTitleRules([{ title: prefix, profile: 'Long', mustIncludeTags: [], shouldIncludeTags: [] }]);
             settings.rememberChallengeTitles([{ id: 100, title: `${prefix}-different-suffix` }]);
 
             expect(settings.getTitleProfile(`${prefix}-different-suffix`).profile).toBeNull();
-            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
+            expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(false);
         });
     });
 });

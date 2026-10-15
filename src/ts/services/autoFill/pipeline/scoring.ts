@@ -72,7 +72,7 @@ const loadFillCandidates = async ({
         );
     } catch (error) {
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .warning(
                 `${label}: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`,
                 null,
@@ -110,7 +110,7 @@ const scoreFillCandidates = async ({
     wantCount,
     mustIncludeTags,
     shouldIncludeTags,
-    fillWithoutTagMatch,
+    submitWithoutTagMatch,
     chosen = null,
 }: {
     label: string;
@@ -123,7 +123,7 @@ const scoreFillCandidates = async ({
     wantCount: number;
     mustIncludeTags: readonly string[] | null;
     shouldIncludeTags: readonly string[] | null;
-    fillWithoutTagMatch: boolean | undefined;
+    submitWithoutTagMatch: boolean | undefined;
     chosen?: ChosenPick | null;
 }): Promise<{
     scored: ScoredCandidate[];
@@ -136,7 +136,7 @@ const scoreFillCandidates = async ({
     const { scored, chosenIds, orderedIds } = buildChosenCandidates(challenge, eligible, {
         mustIncludeTags,
         shouldIncludeTags,
-        fillWithoutTagMatch,
+        submitWithoutTagMatch,
         semanticScores,
         ignoreWords,
         onFallback: makeFallbackLogger(label, challenge, logger),

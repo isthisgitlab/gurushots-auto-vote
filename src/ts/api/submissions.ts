@@ -168,7 +168,7 @@ const walkLibrary = async (
     // Prefix the library-walk warnings with the calling flow (auto-fill vs join)
     // so a "10-page limit" message from a join isn't mislabeled as auto-fill.
     const logLabel =
-        typeof options.logLabel === 'string' && options.logLabel.trim() ? options.logLabel.trim() : 'autoFill';
+        typeof options.logLabel === 'string' && options.logLabel.trim() ? options.logLabel.trim() : 'autoSubmit';
     const warn = (message: string) => logger.withCategory('api').warning(`${logLabel}: ${message}`, null);
     // With a `skip`, the photos left out do not use up the cap, so the walk may need more pages to keep as many.
     const { skip } = options;
@@ -257,7 +257,7 @@ const walkLibrary = async (
  *
  * @param options
  *   usage: 'submit' (default) or 'swap' — forwarded to every page request.
- *   logLabel: prefix for the paginated-walk warnings (default 'autoFill'); the
+ *   logLabel: prefix for the paginated-walk warnings (default 'autoSubmit'); the
  *   join flow passes 'join' so its messages aren't attributed to auto-fill.
  *   search: optional free-text term; when a non-empty string, the server
  *   filters the library against its own tag index (mirrors the web UI's

@@ -65,13 +65,13 @@ describe('tag-list schema validation', () => {
         });
     });
 
-    describe('fillWithoutTagMatch', () => {
+    describe('submitWithoutTagMatch', () => {
         test('accepts booleans, rejects everything else', () => {
-            expect(validateSetting('fillWithoutTagMatch', true)).toBe(true);
-            expect(validateSetting('fillWithoutTagMatch', false)).toBe(true);
-            expect(validateSetting('fillWithoutTagMatch', 'true')).toBe(false);
-            expect(validateSetting('fillWithoutTagMatch', 1)).toBe(false);
-            expect(validateSetting('fillWithoutTagMatch', null)).toBe(false);
+            expect(validateSetting('submitWithoutTagMatch', true)).toBe(true);
+            expect(validateSetting('submitWithoutTagMatch', false)).toBe(true);
+            expect(validateSetting('submitWithoutTagMatch', 'true')).toBe(false);
+            expect(validateSetting('submitWithoutTagMatch', 1)).toBe(false);
+            expect(validateSetting('submitWithoutTagMatch', null)).toBe(false);
         });
     });
 });

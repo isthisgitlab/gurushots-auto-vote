@@ -106,7 +106,7 @@ type SettingsSpec = {
     only?: boolean;
     inOrder?: boolean;
     must?: string[];
-    fillWithoutTagMatch?: boolean;
+    submitWithoutTagMatch?: boolean;
 };
 
 const makeSettings = ({
@@ -114,13 +114,13 @@ const makeSettings = ({
     only = false,
     inOrder = false,
     must = [],
-    fillWithoutTagMatch = true,
+    submitWithoutTagMatch = true,
 }: SettingsSpec = {}): jest.MockedObject<FillSettings> =>
     invalid({
         getEffectiveSetting: jest.fn((key: string) => {
             switch (key) {
-                case 'fillWithoutTagMatch':
-                    return fillWithoutTagMatch;
+                case 'submitWithoutTagMatch':
+                    return submitWithoutTagMatch;
                 case 'chosenPhotos':
                     return chosen;
                 case 'chosenPhotosOnly':
@@ -282,7 +282,7 @@ describe('suggestFillPhotos', () => {
             const settings = deps.settings as jest.MockedObject<FillSettings>;
             expect(settings.getEffectiveTagSetting).toHaveBeenCalledWith('mustIncludeTags', challenge);
             expect(settings.getEffectiveTagSetting).toHaveBeenCalledWith('shouldIncludeTags', challenge);
-            expect(settings.getEffectiveSetting).toHaveBeenCalledWith('fillWithoutTagMatch', 'c1');
+            expect(settings.getEffectiveSetting).toHaveBeenCalledWith('submitWithoutTagMatch', 'c1');
         });
 
         test('are skipped without settings: no filter applies', async () => {
@@ -292,7 +292,7 @@ describe('suggestFillPhotos', () => {
 
         test('answer no-match when Must Include is active, photos were considered and none matched', async () => {
             const deps = makeDeps({
-                settings: { must: ['Dogs'], fillWithoutTagMatch: false },
+                settings: { must: ['Dogs'], submitWithoutTagMatch: false },
                 photos: [photo('p0', ['Cats']), photo('p1', ['Cats'])],
             });
             expect(await suggestFillPhotos(makeChallenge(), 'tok', deps)).toEqual({ status: 'no-match' });
@@ -300,14 +300,14 @@ describe('suggestFillPhotos', () => {
 
         test('answer no-eligible when the library holds nothing, Must Include or not', async () => {
             for (const must of [[], ['Dogs']]) {
-                const deps = makeDeps({ settings: { must, fillWithoutTagMatch: false }, photos: [] });
+                const deps = makeDeps({ settings: { must, submitWithoutTagMatch: false }, photos: [] });
                 expect(await suggestFillPhotos(makeChallenge(), 'tok', deps)).toEqual({ status: 'no-eligible' });
             }
         });
 
         test('answer no-eligible, not no-match, when only entered photos were left to consider', async () => {
             const deps = makeDeps({
-                settings: { must: ['Dogs'], fillWithoutTagMatch: false },
+                settings: { must: ['Dogs'], submitWithoutTagMatch: false },
                 photos: [photo('p0', ['Cats'])],
             });
             expect(await suggestFillPhotos(makeChallenge([{ id: 'p0' }]), 'tok', deps)).toEqual({
@@ -317,7 +317,7 @@ describe('suggestFillPhotos', () => {
 
         test('answer no-eligible when Must Include is off and no photo is allowed for the challenge', async () => {
             const blocked = [photo('p0', ['Pink'], { permission: { allowed: false, message: 'used' } })];
-            const deps = makeDeps({ settings: { fillWithoutTagMatch: false }, photos: blocked });
+            const deps = makeDeps({ settings: { submitWithoutTagMatch: false }, photos: blocked });
             expect(await suggestFillPhotos(makeChallenge(), 'tok', deps)).toEqual({ status: 'no-eligible' });
         });
     });
@@ -379,7 +379,7 @@ describe('suggestFillPhotos', () => {
                 'tok',
                 makeDeps({
                     logger,
-                    settings: { must: ['Dogs'], fillWithoutTagMatch: false },
+                    settings: { must: ['Dogs'], submitWithoutTagMatch: false },
                     photos: [photo('p0', ['Cats'])],
                 }),
             );

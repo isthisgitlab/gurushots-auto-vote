@@ -78,9 +78,9 @@ const mockVotingLogic = {
     // the boost runner still executes (order is irrelevant to these assertions).
     orderDeadlineActions: jest.fn(() => [
         { action: 'boost', thresholdSec: 0 },
-        { action: 'autoFill', thresholdSec: 0 },
+        { action: 'autoSubmit', thresholdSec: 0 },
         { action: 'turbo', thresholdSec: 0 },
-        { action: 'emergencyFill', thresholdSec: 0 },
+        { action: 'emergencySubmit', thresholdSec: 0 },
     ]),
 };
 

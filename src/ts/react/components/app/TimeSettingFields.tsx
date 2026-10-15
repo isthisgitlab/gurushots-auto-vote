@@ -157,9 +157,9 @@ const isDominated = (activeRows: { count: number; seconds: number }[], count: nu
  * trigger is max-based). Emits only rows with seconds > 0, ordered by count,
  * so "all off" emits [] — the runtime's 'no-schedule' state. Rebuilding from
  * the three fixed slots is lossy by design: any stored row not keyed by
- * counts 2/3/4 is dropped on the first edit (the load-time autoFillSchedule
+ * counts 2/3/4 is dropped on the first edit (the load-time autoSubmitSchedule
  * migration removes such rows anyway, through sanitizeFillSchedule in
- * settings/schema/autoFill.ts).
+ * settings/schema/autoSubmit.ts).
  */
 export function ScheduleField({ settingKey, value, onChange, onReset, disabled }: SettingFieldProps) {
     const { t } = useTranslation();
@@ -183,7 +183,7 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled }
                 const outOfRange = secondsOutOfRange(seconds);
                 const dominated = !off && !outOfRange && isDominated(activeRows, count, seconds);
                 const hintId = `${settingKey}-row-${count}-hint`;
-                const rowLabel = `${t('app.autoFillScheduleImage')} ${count}`;
+                const rowLabel = `${t('app.autoSubmitScheduleImage')} ${count}`;
                 return (
                     <div key={count} className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm w-20">{rowLabel} ≤</span>
@@ -198,11 +198,11 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled }
                             disabled={disabled}
                         />
                         <span aria-live="polite" id={hintId} className="text-xs">
-                            {off && <span className="opacity-60">{t('app.autoFillScheduleOff')}</span>}
-                            {outOfRange && <span className="text-error">{t('app.autoFillScheduleOutOfRange')}</span>}
+                            {off && <span className="opacity-60">{t('app.autoSubmitScheduleOff')}</span>}
+                            {outOfRange && <span className="text-error">{t('app.autoSubmitScheduleOutOfRange')}</span>}
                             {dominated && (
                                 <span className="badge badge-warning badge-sm">
-                                    {t('app.autoFillScheduleDominated')}
+                                    {t('app.autoSubmitScheduleDominated')}
                                 </span>
                             )}
                         </span>
@@ -211,7 +211,7 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled }
             })}
             {activeRows.length === 0 && (
                 <div role="status" className="text-xs text-warning">
-                    {t('app.autoFillScheduleEmpty')}
+                    {t('app.autoSubmitScheduleEmpty')}
                 </div>
             )}
             {onReset && (
@@ -420,7 +420,7 @@ const BEFORE_END_ROWS: RowKind<number> = {
             hint: (
                 <>
                     {seconds === 0 && <span className="opacity-60">{t('app.scheduledFillEntryDraft')}</span>}
-                    {outOfRange && <span className="text-error">{t('app.autoFillScheduleOutOfRange')}</span>}
+                    {outOfRange && <span className="text-error">{t('app.autoSubmitScheduleOutOfRange')}</span>}
                     {duplicate && <span className="text-error">{t('app.scheduledFillDuplicateEntry')}</span>}
                 </>
             ),

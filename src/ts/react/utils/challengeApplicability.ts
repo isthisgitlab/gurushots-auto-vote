@@ -20,7 +20,7 @@ import { featureNeverFires } from '../../voting/entryPins';
  *                      Boost never unlocks — its state stays LOCKED for the whole
  *                      challenge and can never reach AVAILABLE.
  *   - turbo group    → flash or exhibition challenge (no turbo); turbo already USED
- *   - autoFill group → all entry slots full
+ *   - autoSubmit group → all entry slots full
  *   - scheduledFill group → flash challenge (the flash voting rule intercepts
  *                      before the scheduled-fill check ever runs)
  *   - votingPause group → flash challenge (same reason: the flash rule returns
@@ -46,7 +46,7 @@ export function getGroupApplicability(
     if (!challenge) return applicable;
 
     const member: ChallengeMember = challenge.member || {};
-    // Slot state. maxSlots drives the autoFill "all full" check; entries feeds
+    // Slot state. maxSlots drives the autoSubmit "all full" check; entries feeds
     // slotsFull. Derive once.
     const entries = member.ranking?.entries || [];
     const maxSlots = challenge.max_photo_submits || 0;
@@ -71,7 +71,7 @@ export function getGroupApplicability(
             return member.turbo?.state === 'USED' ? { applicable: false, reasonKey: 'app.naTurboUsed' } : applicable;
         }
 
-        case 'autoFill':
+        case 'autoSubmit':
             return slotsFull ? { applicable: false, reasonKey: 'app.naSlotsFull' } : applicable;
 
         case 'scheduledFill':

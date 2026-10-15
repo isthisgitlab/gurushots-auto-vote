@@ -193,11 +193,11 @@ const isTurboEarnSaved = (challenge: Challenge, now: number): boolean => {
  * A usable pinned photo is the target and beats both fill-new modes; an unusable
  * pin (gone, or already boosted) falls back to the rules below and is reported
  * as `pinFallback`. The slot pick never lands on the photo pinned for Boost while that
- * pin is live (pickTurboEntry); with every candidate taken, `turboFillNewOnConflict`
+ * pin is live (pickTurboEntry); with every candidate taken, `turboNewSubmitOnConflict`
  * submits a fresh photo, else the turbo is skipped. Once that pin has given way, a fresh photo is
  * still preferred and the pinned one is the target only when nothing else can take the turbo.
  *
- * When `turboFillNew` is on the caller will submit a fresh photo and Turbo
+ * When `turboNewSubmit` is on the caller will submit a fresh photo and Turbo
  * that instead of an existing entry, so the "no entries" guard is relaxed
  * (fill-new can create the first entry) and `imageId` is returned only as a
  * fallback target for when the fresh submit can't happen.

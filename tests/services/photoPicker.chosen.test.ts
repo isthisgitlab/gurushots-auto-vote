@@ -103,7 +103,7 @@ describe('chosen photos in the picker', () => {
         const options = { mustIncludeTags: ['Pink'], chosen: { ids: ['off-a'], inOrder: false, only: true } };
         // The chosen photo lacks the required tag while other photos have it: it is
         // filtered out for good when relaxing is off, so nothing is picked...
-        expect(pickPhotosForChallenge(challenge, library, 1, { ...options, fillWithoutTagMatch: false })).toEqual([]);
+        expect(pickPhotosForChallenge(challenge, library, 1, { ...options, submitWithoutTagMatch: false })).toEqual([]);
         // ...and when relaxing is on, it is relaxed on the chosen set — whether
         // the chosen photo is used never depends on unrelated photos.
         const relaxed = jest.fn();

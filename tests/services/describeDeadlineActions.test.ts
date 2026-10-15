@@ -25,14 +25,14 @@ const CLOSE = 1_000_000;
 
 const mockSettings = (overrides = {}) => {
     const defaults = {
-        autoFillSchedule: [{ count: 2, seconds: 900 }],
+        autoSubmitSchedule: [{ count: 2, seconds: 900 }],
         turboTime: 7200,
-        emergencyFill: 300,
+        emergencySubmit: 300,
         boostTime: 3600,
         keyUnlockedBoostTime: 900,
         autoBoost: true,
         useTurbo: true,
-        autoFill: true,
+        autoSubmit: true,
         boostImageIndex: 1,
         mustIncludeTags: [], // mirrors the schema default
     };
@@ -114,7 +114,7 @@ describe('describeDeadlineActions — row gating', () => {
     });
 
     test('boost row suppressed when a pin for Turbo blocks the only entry', () => {
-        mockSettings({ autoBoost: true, keyUnlockedBoostTime: 900, emergencyFill: 0 });
+        mockSettings({ autoBoost: true, keyUnlockedBoostTime: 900, emergencySubmit: 0 });
         settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
         const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } });
         const result = VotingLogic.describeDeadlineActions(challenge, NOW);
@@ -129,7 +129,7 @@ describe('describeDeadlineActions — row gating', () => {
     });
 
     test('turbo row suppressed when a pin for Boost blocks the only entry', () => {
-        mockSettings({ useTurbo: true, emergencyFill: 0 });
+        mockSettings({ useTurbo: true, emergencySubmit: 0 });
         settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
         const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' } });
         const result = VotingLogic.describeDeadlineActions(challenge, NOW);
@@ -162,7 +162,7 @@ describe('describeDeadlineActions — row gating', () => {
             VotingLogic.describeDeadlineActions(challenge, FAR).actions.find((a) => a.action === action);
 
         test('a key-unlocked Boost blocked by a Turbo pin is due at the release, later than its own time', () => {
-            mockSettings({ keyUnlockedBoostTime: 900, emergencyFill: 300 });
+            mockSettings({ keyUnlockedBoostTime: 900, emergencySubmit: 300 });
             settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
             const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } });
             expect(VotingLogic.describeDeadlineActions(challenge, FAR)).toMatchObject({
@@ -174,7 +174,7 @@ describe('describeDeadlineActions — row gating', () => {
         });
 
         test('a timer Boost releases by its own timeout: due at min(close - release, its own threshold)', () => {
-            mockSettings({ boostTime: 3600, emergencyFill: 300 });
+            mockSettings({ boostTime: 3600, emergencySubmit: 300 });
             settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
             const timeout = CLOSE - 2000;
             const challenge = build({ boost: { state: 'AVAILABLE', timeout }, turbo: { state: 'LOCKED' } });
@@ -187,7 +187,7 @@ describe('describeDeadlineActions — row gating', () => {
         });
 
         test('a Turbo blocked by a Boost pin is due at the release', () => {
-            mockSettings({ turboTime: 7200, useTurbo: true, emergencyFill: 300 });
+            mockSettings({ turboTime: 7200, useTurbo: true, emergencySubmit: 300 });
             settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
             const challenge = build({ boost: { state: 'LOCKED' }, turbo: { state: 'WON' } });
             expect(VotingLogic.describeDeadlineActions(challenge, FAR)).toMatchObject({
@@ -199,25 +199,25 @@ describe('describeDeadlineActions — row gating', () => {
         });
 
         test('a held row is listed by its adjusted time: a Turbo held by a Boost pin follows an Auto-fill row now due earlier', () => {
-            mockSettings({ turboTime: 7200, useTurbo: true, emergencyFill: 300, autoFill: true });
+            mockSettings({ turboTime: 7200, useTurbo: true, emergencySubmit: 300, autoSubmit: true });
             settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
             const challenge = build({ boost: { state: 'LOCKED' }, turbo: { state: 'WON' } });
             // Turbo ordered first on its own 7200 s, then moved to the release 300 s before close.
             expect(VotingLogic.describeDeadlineActions(challenge, FAR).actions).toEqual([
-                { action: 'autoFill', thresholdSec: 900, dueAt: CLOSE - 900 },
+                { action: 'autoSubmit', thresholdSec: 900, dueAt: CLOSE - 900 },
                 { action: 'turbo', thresholdSec: 300, dueAt: CLOSE - 300 },
             ]);
         });
 
         test('a release earlier than the row’s own time leaves the row where it was', () => {
-            mockSettings({ keyUnlockedBoostTime: 900, emergencyFill: 3600 });
+            mockSettings({ keyUnlockedBoostTime: 900, emergencySubmit: 3600 });
             settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
             const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } });
             expect(rowOf(challenge, 'boost')).toEqual({ action: 'boost', thresholdSec: 900, dueAt: CLOSE - 900 });
         });
 
         test('a pin that never gives way (ready, or Emergency Submit off) hides the row', () => {
-            mockSettings({ keyUnlockedBoostTime: 900, emergencyFill: 300 });
+            mockSettings({ keyUnlockedBoostTime: 900, emergencySubmit: 300 });
             settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
             const ready = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' } });
             expect(VotingLogic.describeDeadlineActions(ready, FAR)).toMatchObject({
@@ -225,7 +225,7 @@ describe('describeDeadlineActions — row gating', () => {
                 boostReleaseAt: null,
             });
             expect(rowOf(ready, 'boost')).toBeUndefined();
-            mockSettings({ keyUnlockedBoostTime: 900, emergencyFill: 0 });
+            mockSettings({ keyUnlockedBoostTime: 900, emergencySubmit: 0 });
             settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
             const off = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } });
             expect(rowOf(off, 'boost')).toBeUndefined();
@@ -233,7 +233,7 @@ describe('describeDeadlineActions — row gating', () => {
     });
 
     test('turbo is not blocked while a turbo is not held, or while an entry is free', () => {
-        mockSettings({ emergencyFill: 0 });
+        mockSettings({ emergencySubmit: 0 });
         settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
         const notHeld = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'NONE' } });
         expect(VotingLogic.describeDeadlineActions(notHeld, NOW).turboBlocked).toBe(false);
@@ -241,59 +241,59 @@ describe('describeDeadlineActions — row gating', () => {
         expect(VotingLogic.describeDeadlineActions(spare, NOW).turboBlocked).toBe(false);
     });
 
-    test('autoFill row hidden when autoFill is off', () => {
-        mockSettings({ autoFill: false });
-        expect(actionsOf(build())).not.toContain('autoFill');
+    test('autoSubmit row hidden when autoSubmit is off', () => {
+        mockSettings({ autoSubmit: false });
+        expect(actionsOf(build())).not.toContain('autoSubmit');
     });
 
     test('emergency-fill row omitted when off (0)', () => {
-        mockSettings({ emergencyFill: 0 });
-        expect(actionsOf(build())).not.toContain('emergencyFill');
+        mockSettings({ emergencySubmit: 0 });
+        expect(actionsOf(build())).not.toContain('emergencySubmit');
     });
 
     test('no phantom emergency-fill row when normal auto-fill already owns the challenge', () => {
         // The common configuration: auto-fill on, no must-include filter. The
         // runner returns 'skipped' before any network call, so the row would be
         // permanent noise on every challenge.
-        mockSettings({ autoFill: true, mustIncludeTags: [] });
-        expect(actionsOf(build())).not.toContain('emergencyFill');
+        mockSettings({ autoSubmit: true, mustIncludeTags: [] });
+        expect(actionsOf(build())).not.toContain('emergencySubmit');
     });
 
     test('the must-include lookup receives the challenge OBJECT, not its id', () => {
         // The second argument drives the title-rule union in getEffectiveTagSetting,
         // so passing challengeId here would silently break title-rule-driven
         // mustIncludeTags for this row. Same contract the runner's own tests lock.
-        mockSettings({ autoFill: false });
+        mockSettings({ autoSubmit: false });
         const challenge = build();
         VotingLogic.describeDeadlineActions(challenge, NOW);
         expect(settings.getEffectiveTagSetting).toHaveBeenCalledWith('mustIncludeTags', challenge);
     });
 
     test('emergency-fill row shown when auto-fill is off (nothing else fills the slot)', () => {
-        mockSettings({ autoFill: false });
-        expect(actionsOf(build())).toContain('emergencyFill');
+        mockSettings({ autoSubmit: false });
+        expect(actionsOf(build())).toContain('emergencySubmit');
     });
 
     test('emergency-fill row shown with auto-fill on when a must-include filter is set', () => {
         // The filter may leave the slot empty; only a network probe can tell, so
         // the advisory row stays.
-        mockSettings({ autoFill: true, mustIncludeTags: ['sunset'] });
-        expect(actionsOf(build())).toContain('emergencyFill');
+        mockSettings({ autoSubmit: true, mustIncludeTags: ['sunset'] });
+        expect(actionsOf(build())).toContain('emergencySubmit');
     });
 
     test('no phantom emergency-fill row when every slot is already full', () => {
         // 2/2 entries — getSlotsRemaining hits 0 and the runner skips. auto-fill
         // is off so the stand-down above cannot be what hides the row.
-        mockSettings({ autoFill: false });
+        mockSettings({ autoSubmit: false });
         const full = build({ entries: [{ id: 'e1' }, { id: 'e2' }], maxSubmits: 2 });
-        expect(actionsOf(full)).not.toContain('emergencyFill');
+        expect(actionsOf(full)).not.toContain('emergencySubmit');
     });
 
     test('dueAt = close_time − thresholdSec', () => {
-        mockSettings({ autoFill: true, autoFillSchedule: [{ count: 2, seconds: 900 }] });
+        mockSettings({ autoSubmit: true, autoSubmitSchedule: [{ count: 2, seconds: 900 }] });
         const { actions } = VotingLogic.describeDeadlineActions(build(), NOW);
-        const autoFill = actions.find((a) => a.action === 'autoFill');
-        expect(autoFill!.dueAt).toBe(CLOSE - autoFill!.thresholdSec);
+        const autoSubmit = actions.find((a) => a.action === 'autoSubmit');
+        expect(autoSubmit!.dueAt).toBe(CLOSE - autoSubmit!.thresholdSec);
     });
 });
 
@@ -301,11 +301,11 @@ describe('describeDeadlineActions — Manual Photos Only', () => {
     beforeEach(() => jest.clearAllMocks());
 
     test('drops the Auto-Submit and Emergency Submit rows, whatever else is set', () => {
-        mockSettings({ autoFill: true, emergencyFill: 300, manualPhotosOnly: true, mustIncludeTags: ['sunset'] });
-        expect(actionsOf(build())).not.toContain('autoFill');
-        expect(actionsOf(build())).not.toContain('emergencyFill');
-        mockSettings({ autoFill: false, emergencyFill: 300, manualPhotosOnly: true });
-        expect(actionsOf(build())).not.toContain('emergencyFill');
+        mockSettings({ autoSubmit: true, emergencySubmit: 300, manualPhotosOnly: true, mustIncludeTags: ['sunset'] });
+        expect(actionsOf(build())).not.toContain('autoSubmit');
+        expect(actionsOf(build())).not.toContain('emergencySubmit');
+        mockSettings({ autoSubmit: false, emergencySubmit: 300, manualPhotosOnly: true });
+        expect(actionsOf(build())).not.toContain('emergencySubmit');
     });
 
     test('keeps the Boost and Turbo rows: they go on entries that already exist', () => {
@@ -315,13 +315,13 @@ describe('describeDeadlineActions — Manual Photos Only', () => {
     });
 
     test('with the switch off the same challenge keeps both rows', () => {
-        mockSettings({ autoFill: true, emergencyFill: 300, mustIncludeTags: ['sunset'], manualPhotosOnly: false });
-        expect(actionsOf(build())).toEqual(expect.arrayContaining(['autoFill', 'emergencyFill']));
+        mockSettings({ autoSubmit: true, emergencySubmit: 300, mustIncludeTags: ['sunset'], manualPhotosOnly: false });
+        expect(actionsOf(build())).toEqual(expect.arrayContaining(['autoSubmit', 'emergencySubmit']));
     });
 
     test('boostBlocked stays true for a turboed sole entry even with fill-new on and a free slot', () => {
         // No fresh photo will be submitted, so the fill-new option resolves nothing and the warning must show.
-        mockSettings({ boostFillNew: true, boostFillNewOnConflict: true, manualPhotosOnly: true });
+        mockSettings({ boostNewSubmit: true, boostNewSubmitOnConflict: true, manualPhotosOnly: true });
         const challenge = build({
             boost: { state: 'AVAILABLE_KEY' },
             entries: [{ id: 'e1', turbo: true }],
@@ -360,10 +360,10 @@ describe('describeDeadlineActions — boostBlocked', () => {
         expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(false);
     });
 
-    test('false when boostFillNew (always) will resolve the conflict via a free slot', () => {
+    test('false when boostNewSubmit (always) will resolve the conflict via a free slot', () => {
         // Sole entry turboed, but a fresh photo can be submitted (2 slots, 1 used)
         // and boosted instead — so there is no conflict to warn about.
-        mockSettings({ boostFillNew: true });
+        mockSettings({ boostNewSubmit: true });
         const challenge = build({
             boost: { state: 'AVAILABLE_KEY' },
             entries: [{ id: 'e1', turbo: true }],
@@ -372,8 +372,8 @@ describe('describeDeadlineActions — boostBlocked', () => {
         expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(false);
     });
 
-    test('false when boostFillNewOnConflict will resolve the conflict via a free slot', () => {
-        mockSettings({ boostFillNewOnConflict: true });
+    test('false when boostNewSubmitOnConflict will resolve the conflict via a free slot', () => {
+        mockSettings({ boostNewSubmitOnConflict: true });
         const challenge = build({
             boost: { state: 'AVAILABLE_KEY' },
             entries: [{ id: 'e1', turbo: true }],
@@ -385,7 +385,7 @@ describe('describeDeadlineActions — boostBlocked', () => {
     test('true when fill-new is on but there is no free slot to submit into', () => {
         // maxSubmits equals the entry count → fill-new cannot break the conflict,
         // so the warning must still show.
-        mockSettings({ boostFillNewOnConflict: true });
+        mockSettings({ boostNewSubmitOnConflict: true });
         const challenge = build({
             boost: { state: 'AVAILABLE_KEY' },
             entries: [{ id: 'e1', turbo: true }],
@@ -395,7 +395,7 @@ describe('describeDeadlineActions — boostBlocked', () => {
     });
 
     test('boost row shown (not suppressed) when fill-new will place the boost on a fresh entry', () => {
-        mockSettings({ boostFillNewOnConflict: true });
+        mockSettings({ boostNewSubmitOnConflict: true });
         const challenge = build({
             boost: { state: 'AVAILABLE_KEY' },
             entries: [{ id: 'e1', turbo: true }],
@@ -411,30 +411,30 @@ describe('resolveBoostFillNewMode', () => {
     const conflicted = () => build({ entries: [{ id: 'e1', turbo: true }], maxSubmits: 2 });
     const placeable = () => build({ entries: [{ id: 'e1' }], maxSubmits: 2 });
 
-    test("'always' when boostFillNew is on, regardless of conflict", () => {
-        mockSettings({ boostFillNew: true });
+    test("'always' when boostNewSubmit is on, regardless of conflict", () => {
+        mockSettings({ boostNewSubmit: true });
         expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('always');
         expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('always');
     });
 
     test("'no' while Manual Photos Only is on, whichever fill-new option is set", () => {
-        mockSettings({ boostFillNew: true, boostFillNewOnConflict: true, manualPhotosOnly: true });
+        mockSettings({ boostNewSubmit: true, boostNewSubmitOnConflict: true, manualPhotosOnly: true });
         expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('no');
         expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('no');
     });
 
-    test("'conflict' when only boostFillNewOnConflict is on AND the sole entry is turboed", () => {
-        mockSettings({ boostFillNewOnConflict: true });
+    test("'conflict' when only boostNewSubmitOnConflict is on AND the sole entry is turboed", () => {
+        mockSettings({ boostNewSubmitOnConflict: true });
         expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('conflict');
     });
 
-    test("'no' when boostFillNewOnConflict is on but there is no conflict", () => {
-        mockSettings({ boostFillNewOnConflict: true });
+    test("'no' when boostNewSubmitOnConflict is on but there is no conflict", () => {
+        mockSettings({ boostNewSubmitOnConflict: true });
         expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('no');
     });
 
-    test("'no' when boostFillNewOnConflict is on but there are no entries (not a conflict)", () => {
-        mockSettings({ boostFillNewOnConflict: true });
+    test("'no' when boostNewSubmitOnConflict is on but there are no entries (not a conflict)", () => {
+        mockSettings({ boostNewSubmitOnConflict: true });
         const empty = build({ entries: [], maxSubmits: 2 });
         expect(VotingLogic.resolveBoostFillNewMode(empty, '42')).toBe('no');
     });
@@ -444,8 +444,8 @@ describe('resolveBoostFillNewMode', () => {
         expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('no');
     });
 
-    test('boostFillNew takes precedence over on-conflict', () => {
-        mockSettings({ boostFillNew: true, boostFillNewOnConflict: true });
+    test('boostNewSubmit takes precedence over on-conflict', () => {
+        mockSettings({ boostNewSubmit: true, boostNewSubmitOnConflict: true });
         expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('always');
     });
 });

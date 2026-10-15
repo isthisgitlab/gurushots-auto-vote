@@ -18,7 +18,7 @@ jest.mock('../../src/ts/settings');
 const NOW = 1_700_000_000;
 
 const DEFAULTS = {
-    autoFillSchedule: [],
+    autoSubmitSchedule: [],
     onlyBoost: false,
     voteOnlyInLastMinute: false,
     exposure: 50,
@@ -36,7 +36,7 @@ const DEFAULTS = {
     boostTime: 600,
     keyUnlockedBoostTime: 900,
     turboTime: 7200,
-    emergencyFill: 0,
+    emergencySubmit: 0,
 };
 
 const mockSettings = (overrides: Record<string, unknown> = {}) => {
@@ -106,10 +106,10 @@ describe('evaluateManualVotingDecision', () => {
 
 describe('isWithinEmergencyWindow', () => {
     test('reads the setting under an empty id when the challenge has none', () => {
-        mockSettings({ emergencyFill: 300 });
+        mockSettings({ emergencySubmit: 300 });
         const challenge = invalid<Challenge>({ close_time: NOW + 100 });
         expect(VotingLogic.isWithinEmergencyWindow(challenge, NOW)).toBe(true);
-        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('emergencyFill', '');
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('emergencySubmit', '');
     });
 });
 
@@ -225,16 +225,16 @@ describe('shouldApplyTurbo defensive paths', () => {
 
 describe('deadline-action helpers with sparse challenges', () => {
     test('getAutoFillThresholdSec treats non-array entries as zero entries', () => {
-        mockSettings({ autoFillSchedule: [] });
+        mockSettings({ autoSubmitSchedule: [] });
         const sparse = VotingLogic.getAutoFillThresholdSec(invalid({ member: {} }), '42');
         const empty = VotingLogic.getAutoFillThresholdSec(regular(), '42');
         expect(sparse).toBe(empty);
     });
 
     test('orderDeadlineActions tolerates an id-less challenge', () => {
-        mockSettings({ emergencyFill: 300, turboTime: 600 });
+        mockSettings({ emergencySubmit: 300, turboTime: 600 });
         const order = VotingLogic.orderDeadlineActions(invalid({ close_time: NOW + 100 }));
-        expect(order.map((a) => a.action)).toEqual(['turbo', 'emergencyFill', 'autoFill', 'boost']);
+        expect(order.map((a) => a.action)).toEqual(['turbo', 'emergencySubmit', 'autoSubmit', 'boost']);
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('turboTime', '');
     });
 

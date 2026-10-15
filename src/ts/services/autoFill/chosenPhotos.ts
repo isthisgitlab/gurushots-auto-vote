@@ -75,7 +75,7 @@ const resolveChosenPhotos = async ({
             if (!warnedMismatch.has(pair)) {
                 warnedMismatch.add(pair);
                 logger
-                    .withCategory(label === 'join' ? 'join' : 'autoFill')
+                    .withCategory(label === 'join' ? 'join' : 'autoSubmit')
                     .warning(
                         `${label}: your Chosen Photos were saved while another account was logged in, so they are ignored — remove them (chooser → Remove those lists, or clear-chosen-photos), then choose photos for this account`,
                         null,
@@ -327,7 +327,7 @@ const resolveMissingChosen = async ({
         walk = await deps.getEligiblePhotosWalk(challenge.id, token, { logLabel: label });
     } catch (error) {
         deps.logger
-            .withCategory(label === 'join' ? 'join' : 'autoFill')
+            .withCategory(label === 'join' ? 'join' : 'autoSubmit')
             .debug(`${label}: could not look for your chosen photos: ${oneLine(errorMessage(error) || error)}`, null);
         // A failing walk waits like a cut-short one, so a library that is down is not hit every cycle.
         const kept = memo?.outcomes ?? new Map<string, WalkOutcome>();
@@ -338,7 +338,7 @@ const resolveMissingChosen = async ({
     const tally = recordWalk(unresolved, walk, outcomes);
     const notReached = unresolved.length - tally.found - tally.refused - tally.notFound;
     deps.logger
-        .withCategory(label === 'join' ? 'join' : 'autoFill')
+        .withCategory(label === 'join' ? 'join' : 'autoSubmit')
         .info(
             `${label}: looked for your chosen photos outside the themed search for ${deps.logger.challengeTag(challenge)} — ${tally.found} found, ${tally.refused} not allowed here, ${tally.notFound} not in your library, ${notReached} not reached`,
             null,
@@ -361,7 +361,7 @@ const logChosenSkipOnce = (logger: FillLogger, challenge: Challenge, label: stri
     if (loggedSkips.get(key) === reason) return;
     if (loggedSkips.size >= MAX_LOGGED_SKIPS) loggedSkips.clear();
     loggedSkips.set(key, reason);
-    const log = logger.withCategory(label === 'join' ? 'join' : 'autoFill');
+    const log = logger.withCategory(label === 'join' ? 'join' : 'autoSubmit');
     const tag = logger.challengeTag(challenge);
     // what happened -> why -> what next. Emergency Submit ignores the setting
     // near the deadline, so the way to keep a slot empty is to turn that off too.

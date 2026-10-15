@@ -14,6 +14,7 @@ import { errorMessage } from '../errorMessage';
 import { getDefaultSettings } from './defaults';
 import { dropInvalidValues, isPrototypeKey, mergeWithDefaults, topLevelValueAllowed } from './loadValidation';
 import { runMigrations, pruneObsoleteSettings } from './migrations';
+import { toCurrentNames, toStoredNames, withoutCurrentNames } from './v1Bridge';
 import { isPlainObject } from '../plainObject';
 import { oneLine } from '../format/logSafe';
 
@@ -138,8 +139,10 @@ const _recoverCorrupt = (raw: string, reason: string): AppSettings => {
  * is not the same as it being broken: it is left as it is and saves are refused.
  */
 const _interpretSettings = (settingsData: string, parsed: object): AppSettings => {
-    const mergedSettings = mergeWithDefaults(parsed);
-    const migrated = runMigrations(mergedSettings);
+    const stored = mergeWithDefaults(withoutCurrentNames(parsed, settingsData));
+    const migrated = runMigrations(stored);
+    // Temporary: the file on disk is still the 1.x one (v1Bridge.ts).
+    const mergedSettings = toCurrentNames(stored);
     if (settingsData !== lastCleanRaw) {
         const dropped = dropInvalidValues(mergedSettings);
         const warning = `Ignoring stored settings that are not valid (defaults apply): ${oneLine(dropped.join(', ')).slice(0, 500)}`;
@@ -153,7 +156,7 @@ const _interpretSettings = (settingsData: string, parsed: object): AppSettings =
     blocked = null;
     if (migrated) {
         try {
-            storage.writeRaw(JSON.stringify(mergedSettings, null, 2));
+            storage.writeRaw(JSON.stringify(toStoredNames(mergedSettings), null, 2));
         } catch (error) {
             logger
                 .withCategory('settings')
@@ -218,7 +221,7 @@ const _persist = (settings: object): boolean => {
             .error(`Not saving settings: ${blocked.code}; the stored settings at ${blocked.path} are left as they are`);
         return false;
     }
-    return storage.writeRaw(JSON.stringify(settings, null, 2));
+    return storage.writeRaw(JSON.stringify(toStoredNames(settings), null, 2));
 };
 
 /**

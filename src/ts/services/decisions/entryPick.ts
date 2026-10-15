@@ -44,7 +44,7 @@ const livePinnedIds = (challenge: Challenge, challengeId: string): string[] =>
  * `secondsLeft` — seconds to a deadline — is inside it.
  */
 const isInsideEmergencyWindow = (challengeId: string, secondsLeft: number): boolean => {
-    const emergencySeconds = settings.getEffectiveSetting('emergencyFill', challengeId);
+    const emergencySeconds = settings.getEffectiveSetting('emergencySubmit', challengeId);
     if (!Number.isFinite(emergencySeconds) || emergencySeconds <= 0) return false;
     return secondsLeft > 0 && secondsLeft <= emergencySeconds;
 };
@@ -90,7 +90,7 @@ const pinBlockOf = (challenge: Challenge, challengeId: string, kind: EntryPinKin
     if (id === null) return null;
     const ready =
         kind === 'turbo' ? challenge?.member?.turbo?.state === 'WON' : isBoostWindowOpen(challenge?.member?.boost, now);
-    const emergencySeconds = settings.getEffectiveSetting('emergencyFill', challengeId);
+    const emergencySeconds = settings.getEffectiveSetting('emergencySubmit', challengeId);
     // A pin for Turbo blocks a Boost, so the deadline is the boost's; a pin for Boost blocks a Turbo.
     const deadline = kind === 'turbo' ? boostDeadline(challenge) : Number(challenge?.close_time);
     if (ready || !Number.isFinite(emergencySeconds) || emergencySeconds <= 0 || !Number.isFinite(deadline)) {
@@ -172,8 +172,8 @@ type FeatureSpec = {
     other: EntryPinKind;
     conflictField: 'turbo' | 'boosted';
     imageIndex: 'boostImageIndex' | 'turboImageIndex';
-    fillNew: 'boostFillNew' | 'turboFillNew';
-    fillNewOnConflict: 'boostFillNewOnConflict' | 'turboFillNewOnConflict';
+    fillNew: 'boostNewSubmit' | 'turboNewSubmit';
+    fillNewOnConflict: 'boostNewSubmitOnConflict' | 'turboNewSubmitOnConflict';
 };
 
 const BOOST: FeatureSpec = {
@@ -181,8 +181,8 @@ const BOOST: FeatureSpec = {
     other: 'turbo',
     conflictField: 'turbo',
     imageIndex: 'boostImageIndex',
-    fillNew: 'boostFillNew',
-    fillNewOnConflict: 'boostFillNewOnConflict',
+    fillNew: 'boostNewSubmit',
+    fillNewOnConflict: 'boostNewSubmitOnConflict',
 };
 
 const TURBO: FeatureSpec = {
@@ -190,8 +190,8 @@ const TURBO: FeatureSpec = {
     other: 'boost',
     conflictField: 'boosted',
     imageIndex: 'turboImageIndex',
-    fillNew: 'turboFillNew',
-    fillNewOnConflict: 'turboFillNewOnConflict',
+    fillNew: 'turboNewSubmit',
+    fillNewOnConflict: 'turboNewSubmitOnConflict',
 };
 
 /**
@@ -280,7 +280,7 @@ const pickBoostEntry = (challenge: Challenge, challengeId: string, now: number):
     pickFor(BOOST, challenge, challengeId, now);
 
 /**
- * How a boost sources its target entry (see fillNewModeFor): `boostFillNew` / `boostFillNewOnConflict`,
+ * How a boost sources its target entry (see fillNewModeFor): `boostNewSubmit` / `boostNewSubmitOnConflict`,
  * the conflict being every entry turboed or pinned for Turbo.
  */
 const resolveBoostFillNewMode = (challenge: Challenge, challengeId: string): 'always' | 'conflict' | 'no' =>
@@ -299,7 +299,7 @@ const pickTurboEntry = (challenge: Challenge, challengeId: string, now: number):
     pickFor(TURBO, challenge, challengeId, now);
 
 /**
- * How a Turbo sources its target entry (see fillNewModeFor): `turboFillNew` / `turboFillNewOnConflict`,
+ * How a Turbo sources its target entry (see fillNewModeFor): `turboNewSubmit` / `turboNewSubmitOnConflict`,
  * the conflict being every entry boosted or pinned for Boost.
  */
 const resolveTurboFillNewMode = (challenge: Challenge, challengeId: string): 'always' | 'conflict' | 'no' =>

@@ -135,7 +135,7 @@ const resolveBoostTarget = async (ctx: ActionContext): Promise<BoostTarget | nul
     const named = pinnedBoostTarget(challenge) ?? pendingBoostTarget(ctx);
     if (named) return named;
     const existing = () => existingBoostTarget(challenge, now);
-    // 'always' = boostFillNew; 'conflict' = boostFillNewOnConflict when every
+    // 'always' = boostNewSubmit; 'conflict' = boostNewSubmitOnConflict when every
     // entry has Turbo or is pinned for Turbo; 'no' = boost an existing entry.
     const fillMode = votingLogic.resolveBoostFillNewMode(challenge, cid);
     if (fillMode === 'no') {
@@ -297,7 +297,7 @@ const skipForUncertainPhoto = (ctx: ActionContext, target: BoostTarget, isTimerB
         target.atRelease ||
         isTimerBasedAvailable ||
         votingLogic.isWithinEmergencyWindow(challenge, now) ||
-        !settings.getEffectiveSetting('protectUncertainAutoFills', challenge.id.toString()) ||
+        !settings.getEffectiveSetting('protectUncertainAutoSubmits', challenge.id.toString()) ||
         !ctx.entryAges?.isUncertain(challenge.id, target.imageId)
     ) {
         return false;

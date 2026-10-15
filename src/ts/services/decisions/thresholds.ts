@@ -108,7 +108,7 @@ const getEffectiveBoostTime = (challengeId: string): number => {
  */
 const getEffectiveKeyUnlockedBoostTime = (challengeId: string): number =>
     // An explicit 0 means "never auto-apply", matching the 0-is-off convention boostTime and
-    // emergencyFill already use; the schema accepts it, so it is honoured.
+    // emergencySubmit already use; the schema accepts it, so it is honoured.
     settings.getEffectiveSetting('keyUnlockedBoostTime', challengeId);
 
 const getEffectiveTurboTime = (challengeId: string): number => {

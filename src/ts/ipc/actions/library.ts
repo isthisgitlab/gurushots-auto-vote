@@ -175,7 +175,7 @@ const handleGetLibraryPhotos = (async (
         (hasSearch && typeof search !== 'string') ||
         (mode !== undefined && mode !== 'cached' && mode !== 'fresh')
     ) {
-        return refuseInvalidArgs('autoFill', 'get-library-photos');
+        return refuseInvalidArgs('autoSubmit', 'get-library-photos');
     }
     const term = typeof search === 'string' ? cleanSearch(search) : undefined;
     try {
@@ -231,7 +231,7 @@ const handleGetLibraryPhotos = (async (
         if (keep && epoch === dropEpoch()) writeListing(token, contextId, listing);
         return { success: true as const, ...listing, preview: false };
     } catch (error) {
-        logger.withCategory('autoFill').error('Error handling get-library-photos request:', error);
+        logger.withCategory('autoSubmit').error('Error handling get-library-photos request:', error);
         return errorResult(error, 'Failed to read your photo library');
     }
 }) satisfies IpcReplyFn;

@@ -1,14 +1,17 @@
 /**
- * The frozen 1.x pipeline against the live loader, as of the freeze: for representative 1.x files (one per migration's
- * legacy input among them) the frozen merge, migrations and load validation give what the live `loadSettings` returns
- * for the same text, and the frozen prune gives what its next read returns. The proof the snapshot is faithful when it
- * is taken; deleted together with the live pipeline it compares to.
+ * The frozen 1.x pipeline against the live loader: for representative 1.x files (one per migration's legacy input
+ * among them) the frozen merge, migrations and load validation, with its setting keys renamed to the current names,
+ * give what the live `loadSettings` returns for the same text, and the frozen prune gives what its next read returns.
+ * The proof the snapshot is faithful; deleted together with the live pipeline it compares to.
  */
 
 import { interpretV1Settings, parseV1Settings } from '../../../src/ts/settings/importV1';
 import { pruneV1Obsolete } from '../../../src/ts/settings/importV1/loadValidation';
+import { renameV1ScenarioDocument, renameV1Value } from '../../../src/ts/settings/importV1/renames';
 import { V1_SETTINGS_SCHEMA } from '../../../src/ts/settings/importV1/schema';
+import { isPlainObject } from '../../../src/ts/plainObject';
 import { parseJsonObject } from '../../helpers/parseJson';
+import { liveKey } from '../v2/liveAdapter';
 import type * as settingsModule from '../../../src/ts/settings';
 import type * as liveSchemaModule from '../../../src/ts/settings/schema';
 import type { AndroidHeadlessStore, AppSettings } from '../../../src/ts/types/settings';
@@ -17,6 +20,26 @@ import type { AndroidHeadlessStore, AppSettings } from '../../../src/ts/types/se
 jest.mock('electron', () => ({}));
 
 type Values = Record<string, unknown>;
+
+const mapEach = (map: unknown, convert: (item: unknown) => unknown): unknown =>
+    isPlainObject(map) ? Object.fromEntries(Object.entries(map).map(([key, item]) => [key, convert(item)])) : map;
+
+/** A frozen 1.x blob with its setting keys renamed wherever a key can sit, as the live loader holds it. */
+const currentNames = (blob: object): object => {
+    const top = renameV1Value(blob, 'keep-lone-targets');
+    if (!isPlainObject(top) || !isPlainObject(top.challengeSettings)) return top as object;
+    const challengeSettings: Values = { ...top.challengeSettings };
+    const rename = (value: unknown) => renameV1Value(value, 'keep-lone-targets');
+    const convert = (field: string, convertField: (value: unknown) => unknown) => {
+        if (Object.hasOwn(challengeSettings, field)) challengeSettings[field] = convertField(challengeSettings[field]);
+    };
+    convert('globalDefaults', rename);
+    convert('perChallenge', (value) => mapEach(value, rename));
+    convert('titleRules', (value) => (Array.isArray(value) ? value.map(rename) : value));
+    convert('profiles', (value) => mapEach(value, rename));
+    convert('scenarios', (value) => mapEach(value, (doc) => renameV1ScenarioDocument(doc, 'keep-lone-targets')));
+    return { ...top, challengeSettings };
+};
 
 const g = globalThis as typeof globalThis & {
     __GS_HEADLESS__?: boolean;
@@ -261,10 +284,10 @@ describe('the frozen pipeline against the live loader', () => {
 
         const { blob: frozen } = interpretV1Settings(parsed.value);
         expect(live.recovery).toBeNull();
-        expect(frozen).toEqual(live.first);
+        expect(currentNames(frozen)).toEqual(live.first);
 
         pruneV1Obsolete(frozen);
-        expect(frozen).toEqual(live.second);
+        expect(currentNames(frozen)).toEqual(live.second);
         expect(Object.keys(Object.prototype)).toEqual([]);
     });
 
@@ -293,14 +316,14 @@ describe('the frozen schema flags against the live schema', () => {
     test.each(keys)('%s has the live resolver flags', (key) => {
         const frozen: { perChallenge: boolean; challengeOnly?: true; dependsOn?: readonly string[] } =
             V1_SETTINGS_SCHEMA[key as keyof typeof V1_SETTINGS_SCHEMA];
-        const entry = live.schemaEntry(key);
+        const entry = live.schemaEntry(liveKey(key));
         expect([key, frozen.perChallenge]).toEqual([key, entry?.perChallenge]);
         expect([key, frozen.challengeOnly === true]).toEqual([key, entry?.challengeOnly === true]);
-        expect([key, frozen.dependsOn ?? []]).toEqual([key, entry?.dependsOn ?? []]);
+        expect([key, (frozen.dependsOn ?? []).map(liveKey)]).toEqual([key, entry?.dependsOn ?? []]);
     });
 
     test('the keys with a cross-field check are the keys with dependencies', () => {
-        const withCheck = keys.filter((key) => live.schemaEntry(key)?.contextValidation !== undefined);
+        const withCheck = keys.filter((key) => live.schemaEntry(liveKey(key))?.contextValidation !== undefined);
         const withDependencies = keys.filter(
             (key) => 'dependsOn' in V1_SETTINGS_SCHEMA[key as keyof typeof V1_SETTINGS_SCHEMA],
         );

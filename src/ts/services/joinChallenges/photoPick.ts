@@ -87,7 +87,7 @@ const resolveJoinChosen = (challenge: Challenge, token: string, deps: JoinDeps) 
 /**
  * Pick a single eligible entry photo for a candidate, honoring the same
  * must/should tag rules and picker as auto-fill. Tags are resolved by the
- * challenge object (title-aware); fillWithoutTagMatch by title profile.
+ * challenge object (title-aware); submitWithoutTagMatch by title profile.
  *
  * The user's chosen photos come first: when any can be entered the shortlist is
  * the chosen block alone, so the visual re-rank can only choose between chosen
@@ -104,7 +104,7 @@ const pickJoinPhoto = async (
 ): Promise<JoinPick> => {
     const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
     const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
-    const fillWithoutTagMatch = resolveJoinSetting('fillWithoutTagMatch', challenge) === true;
+    const submitWithoutTagMatch = resolveJoinSetting('submitWithoutTagMatch', challenge) === true;
     // Same list the fill path uses; resolved here because join does its own
     // fetch/score/pick rather than going through runFillAttempt.
     // Optional-chained like every other per-challenge settings read here: a
@@ -140,7 +140,7 @@ const pickJoinPhoto = async (
     const ranked = pickPhotosForChallenge(challenge, eligible as PickerPhoto[], VISUAL_SHORTLIST, {
         mustIncludeTags,
         shouldIncludeTags,
-        fillWithoutTagMatch,
+        submitWithoutTagMatch,
         semanticScores,
         ignoreWords,
         chosen:

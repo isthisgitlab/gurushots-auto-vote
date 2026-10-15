@@ -15,7 +15,7 @@ import type { ComponentProps } from 'preact';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
-    autoFillEnabled: false,
+    autoSubmitEnabled: false,
     isCompact: false,
     hasCompactOverride: false,
     toggleCompact: jest.fn(),

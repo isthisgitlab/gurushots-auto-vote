@@ -77,13 +77,13 @@ export function deriveChallengeCardView(
         now,
         bankroll,
         autovoteRunning,
-        autoFillEnabled,
+        autoSubmitEnabled,
         manualPhotosOnly,
     }: {
         now: number;
         bankroll: Bankroll | null;
         autovoteRunning: boolean;
-        autoFillEnabled: boolean;
+        autoSubmitEnabled: boolean;
         manualPhotosOnly: boolean;
     },
 ) {
@@ -134,7 +134,7 @@ export function deriveChallengeCardView(
         exposureClass: lowExposure ? 'text-error font-bold' : '',
         cardAlertClass: `${lowExposure ? 'border-2 border-error' : 'border'}${boostOpen ? ' ring-2 ring-info ring-offset-2 ring-offset-base-100' : ''}`,
         // Manual Photos Only stops the auto-submit, so its badge gives way to the manual-photos one.
-        showAutoFillBadge: autoFillEnabled && !manualPhotosOnly && slotsRemaining > 0,
+        showAutoSubmitBadge: autoSubmitEnabled && !manualPhotosOnly && slotsRemaining > 0,
         showManualPhotosBadge: manualPhotosOnly,
         // Bankroll-currency actions — shown only when the balance and the
         // challenge both allow them (shared predicates; the main process

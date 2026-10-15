@@ -83,21 +83,21 @@ const ALL_ON: Record<string, unknown> = {
     scheduledFillBeforeEnd: [],
     timezone: 'UTC',
     // The photo paths
-    autoFill: true,
-    autoFillSchedule: [{ count: 4, seconds: 600 }],
-    emergencyFill: 300,
+    autoSubmit: true,
+    autoSubmitSchedule: [{ count: 4, seconds: 600 }],
+    emergencySubmit: 300,
     autoBoost: true,
     boostTime: 3600,
     keyUnlockedBoostTime: 900,
     boostFreshEntryWait: 0,
     boostImageIndex: 1,
-    boostFillNew: true,
-    boostFillNewOnConflict: true,
+    boostNewSubmit: true,
+    boostNewSubmitOnConflict: true,
     useTurbo: true,
     turboTime: 7200,
     turboImageIndex: 1,
-    turboFillNew: true,
-    turboFillNewOnConflict: true,
+    turboNewSubmit: true,
+    turboNewSubmitOnConflict: true,
     autoSwap: true,
     autoSwapAfterStart: 0,
     autoSwapBeforeEnd: 0,
@@ -111,7 +111,7 @@ const ALL_ON: Record<string, unknown> = {
     // Fill options
     mustIncludeTags: [],
     shouldIncludeTags: [],
-    fillWithoutTagMatch: true,
+    submitWithoutTagMatch: true,
     chosenPhotos: [],
     chosenPhotosOnly: false,
     chosenPhotosInOrder: false,
@@ -183,14 +183,14 @@ describe('a pass over a challenge every automatic photo path wants', () => {
     });
 
     test('control, Auto-Submit off: Emergency Submit alone still submits', async () => {
-        mockSettings({ manualPhotosOnly: false, autoFill: false, boostFillNew: false, turboFillNew: false });
+        mockSettings({ manualPhotosOnly: false, autoSubmit: false, boostNewSubmit: false, turboNewSubmit: false });
         const api = makeApi(challenge());
         await run(api);
         expect(api.submitToChallenge).toHaveBeenCalled();
     });
 
     test('control, only the fresh-photo Boost/Turbo options on, switch off: they submit through fill-new', async () => {
-        mockSettings({ manualPhotosOnly: false, autoFill: false, emergencyFill: 0, autoSwap: false });
+        mockSettings({ manualPhotosOnly: false, autoSubmit: false, emergencySubmit: 0, autoSwap: false });
         const api = makeApi(challenge());
         await run(api);
         expect(api.submitToChallenge).toHaveBeenCalled();
@@ -198,8 +198,8 @@ describe('a pass over a challenge every automatic photo path wants', () => {
 
     test.each([
         ['every option on', {}],
-        ['Auto-Submit off, so Emergency Submit is the one that would act', { autoFill: false }],
-        ['only the fresh-photo Boost/Turbo options on', { autoFill: false, emergencyFill: 0, autoSwap: false }],
+        ['Auto-Submit off, so Emergency Submit is the one that would act', { autoSubmit: false }],
+        ['only the fresh-photo Boost/Turbo options on', { autoSubmit: false, emergencySubmit: 0, autoSwap: false }],
     ])('switch on, %s: no photo is submitted and nothing is swapped', async (_name, overrides) => {
         mockSettings({ manualPhotosOnly: true, ...overrides });
         const api = makeApi(challenge());
@@ -240,7 +240,7 @@ describe('a pass over a challenge every automatic photo path wants', () => {
         mockSettings({ manualPhotosOnly: true });
         const { actions } = VotingLogic.describeDeadlineActions(challenge(), NOW);
         const rows = actions.map((row) => row.action);
-        expect(rows).not.toContain('autoFill');
-        expect(rows).not.toContain('emergencyFill');
+        expect(rows).not.toContain('autoSubmit');
+        expect(rows).not.toContain('emergencySubmit');
     });
 });

@@ -201,14 +201,14 @@ describe('deadline-action dispatch', () => {
         const api = makeApi([makeChallenge()]);
         const order: string[] = [];
         votingLogic.orderDeadlineActions.mockReturnValue(
-            invalid([{ action: 'autoFill' }, { action: 'emergencyFill' }, { action: 'turbo' }]),
+            invalid([{ action: 'autoSubmit' }, { action: 'emergencySubmit' }, { action: 'turbo' }]),
         );
         autoFill.maybeAutoFillChallenge.mockImplementation(async () => {
-            order.push('autoFill');
+            order.push('autoSubmit');
             return 'skipped';
         });
         autoFill.maybeEmergencyFillChallenge.mockImplementation(async () => {
-            order.push('emergencyFill');
+            order.push('emergencySubmit');
             return 'skipped';
         });
         votingLogic.shouldApplyTurbo.mockImplementation(() => {
@@ -217,7 +217,7 @@ describe('deadline-action dispatch', () => {
         });
 
         await runVotingPass('tok', null, deps(api));
-        expect(order).toEqual(['autoFill', 'emergencyFill', 'turbo']);
+        expect(order).toEqual(['autoSubmit', 'emergencySubmit', 'turbo']);
     });
 
     test('an unknown action key degrades to a skip instead of throwing', async () => {
@@ -452,7 +452,7 @@ describe('mock-parity behaviors on the shared path', () => {
     test('auto-fill executes with the injected endpoint pair', async () => {
         const challenge = makeChallenge();
         const api = makeApi([challenge]);
-        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'autoFill' }]));
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'autoSubmit' }]));
         await runVotingPass('tok', null, deps(api));
         expect(autoFill.maybeAutoFillChallenge).toHaveBeenCalledWith(
             challenge,
@@ -469,7 +469,7 @@ describe('mock-parity behaviors on the shared path', () => {
     test('emergency fill executes with the injected endpoint pair', async () => {
         const challenge = makeChallenge();
         const api = makeApi([challenge]);
-        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'emergencyFill' }]));
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'emergencySubmit' }]));
         await runVotingPass('tok', null, deps(api));
         expect(autoFill.maybeEmergencyFillChallenge).toHaveBeenCalledWith(
             challenge,
@@ -498,7 +498,7 @@ describe('mock-parity behaviors on the shared path', () => {
         votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'boost' }]));
         votingLogic.shouldApplyBoost.mockReturnValue(true);
         votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
-        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostNewSubmit');
         try {
             await runVotingPass('tok', null, deps(api));
             expect(autoFill.submitNewEntryForAction).toHaveBeenCalledWith(
@@ -548,7 +548,7 @@ describe('mock-parity behaviors on the shared path', () => {
         votingLogic.shouldApplyBoost.mockReturnValue(true);
         votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
         autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: false, imageId: null, reason: 'challenge-gone' });
-        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostNewSubmit');
         try {
             const result = await runVotingPass('tok', null, deps(api));
             expect(result.success).toBe(true);
@@ -590,7 +590,7 @@ describe('mock-parity behaviors on the shared path', () => {
         votingLogic.shouldApplyBoost.mockReturnValue(true);
         votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
         autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: true, imageId: 'fresh-1', reason: 'submitted' });
-        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostNewSubmit');
         try {
             await runVotingPass('tok', null, deps(api));
             expect(autoFill.reflectNewEntry).toHaveBeenCalledTimes(1);
@@ -654,7 +654,7 @@ describe('cancellation checkpoints', () => {
 
     test('2: between deadline actions', async () => {
         const api = makeApi([makeChallenge()]);
-        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'autoFill' }]));
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'autoSubmit' }]));
         cancellation.isCancelled.mockReturnValueOnce(false).mockReturnValue(true);
         const result = await runVotingPass('tok', null, deps(api));
         expect(result).toMatchObject(CANCELLED);
@@ -817,7 +817,7 @@ describe('voteOnNewEntry — gate, arm, record', () => {
         const challenge = withEntries(['a']);
         const api = makeApi([challenge]);
         const tracker = makeTracker({ 101: ['a'] });
-        votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'autoFill', thresholdSec: 900 }]);
+        votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'autoSubmit', thresholdSec: 900 }]);
         autoFill.maybeAutoFillChallenge.mockImplementation(async (c) => {
             c.member!.ranking!.entries!.push({ id: 'fresh' });
             return 'submitted';

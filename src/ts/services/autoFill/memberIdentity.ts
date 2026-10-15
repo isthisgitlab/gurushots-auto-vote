@@ -76,8 +76,11 @@ const resolveMemberId = async (
             // "why did tag resolution stop firing?" has no thread to pull.
             if (logger) {
                 logger
-                    .withCategory(logLabel || 'autoFill')
-                    .debug(`${logLabel || 'autoFill'}: identity lookup failed: ${errorMessage(error) || error}`, null);
+                    .withCategory(logLabel || 'autoSubmit')
+                    .debug(
+                        `${logLabel || 'autoSubmit'}: identity lookup failed: ${errorMessage(error) || error}`,
+                        null,
+                    );
             }
             return null;
         }

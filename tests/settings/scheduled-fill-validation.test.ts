@@ -166,7 +166,7 @@ describe('scheduled fill override auto-clear', () => {
     // Scalars auto-clear by strict equality; arrays clear via valuesEqual's
     // JSON.stringify comparison, which is ORDER SENSITIVE — an override equal
     // to the default but reordered does not auto-clear (same accepted caveat
-    // as autoFillSchedule; the UI/sanitizer emit canonical order, making it
+    // as autoSubmitSchedule; the UI/sanitizer emit canonical order, making it
     // nearly unobservable). Drives the in-memory headless-store seam.
     const headlessGlobals = globalThis as typeof globalThis & {
         __GS_HEADLESS__?: boolean;

@@ -23,7 +23,7 @@ import {
 } from './entryPick';
 import { isManualPhotosOnly } from '../manualPhotosOnly';
 
-const tieOrder: Record<string, number> = { autoFill: 0, emergencyFill: 1, boost: 2, turbo: 3 };
+const tieOrder: Record<string, number> = { autoSubmit: 0, emergencySubmit: 1, boost: 2, turbo: 3 };
 
 /** Run order of two deadline actions: the larger threshold first, ties by `tieOrder`. */
 const compareDeadlineActions = (
@@ -34,7 +34,7 @@ const compareDeadlineActions = (
 
 /**
  * Effective seconds-before-close at which the next auto-fill becomes due:
- * the largest autoFillSchedule threshold whose target count hasn't been met
+ * the largest autoSubmitSchedule threshold whose target count hasn't been met
  * yet, straight from autoFill.getNextScheduleThresholdSec (single source of
  * truth — it does the end-alignment shift for challenges allowing fewer
  * images than the schedule covers, plus the clamping and defensive parsing).
@@ -47,7 +47,7 @@ const compareDeadlineActions = (
 const getAutoFillThresholdSec = (challenge: Challenge, challengeId: string): number => {
     const entries = challenge?.member?.ranking?.entries;
     const entryCount = Array.isArray(entries) ? entries.length : 0;
-    const schedule = settings.getEffectiveSetting('autoFillSchedule', challengeId);
+    const schedule = settings.getEffectiveSetting('autoSubmitSchedule', challengeId);
     return getNextScheduleThresholdSec(schedule, entryCount, challenge?.max_photo_submits);
 };
 
@@ -55,7 +55,7 @@ const getAutoFillThresholdSec = (challenge: Challenge, challengeId: string): num
  * Effective seconds-before-close at which emergency fill activates (0 = off).
  */
 const getEmergencyFillThresholdSec = (challengeId: string): number => {
-    const seconds = settings.getEffectiveSetting('emergencyFill', challengeId);
+    const seconds = settings.getEffectiveSetting('emergencySubmit', challengeId);
     return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
 };
 
@@ -87,26 +87,26 @@ const getBoostThresholdSec = (challenge: Challenge, challengeId: string): number
  *
  * The ordering is therefore user-controlled: it falls out of the time settings, so
  * widening turboTime or boostTime moves that action earlier in the pass. With the
- * defaults (turboTime 7200, autoFill's top row 1800, emergencyFill 300) the real
- * order is turbo → autoFill → emergencyFill → boost — the numbers, not the code
+ * defaults (turboTime 7200, autoSubmit's top row 1800, emergencySubmit 300) the real
+ * order is turbo → autoSubmit → emergencySubmit → boost — the numbers, not the code
  * order, decide.
  *
  * Note this sorts turbo on its configured window even when no turbo is held or
  * Auto-Apply Turbo is off — the runner then no-ops. That keeps the ordering a pure
  * function of the settings rather than of live challenge state.
  *
- * Tie-break (stable): autoFill → emergencyFill → boost → turbo, so fills and
+ * Tie-break (stable): autoSubmit → emergencySubmit → boost → turbo, so fills and
  * boost precede turbo and a freshly filled (and locally reflected) entry is
  * available when turbo runs on a tie.
  */
 const orderDeadlineActions = (
     challenge: Challenge,
-): Array<{ action: 'autoFill' | 'turbo' | 'emergencyFill' | 'boost'; thresholdSec: number }> => {
+): Array<{ action: 'autoSubmit' | 'turbo' | 'emergencySubmit' | 'boost'; thresholdSec: number }> => {
     const challengeId = challenge?.id?.toString?.() || '';
-    const actions: Array<{ action: 'autoFill' | 'turbo' | 'emergencyFill' | 'boost'; thresholdSec: number }> = [
-        { action: 'autoFill', thresholdSec: getAutoFillThresholdSec(challenge, challengeId) },
+    const actions: Array<{ action: 'autoSubmit' | 'turbo' | 'emergencySubmit' | 'boost'; thresholdSec: number }> = [
+        { action: 'autoSubmit', thresholdSec: getAutoFillThresholdSec(challenge, challengeId) },
         { action: 'turbo', thresholdSec: getEffectiveTurboTime(challengeId) },
-        { action: 'emergencyFill', thresholdSec: getEmergencyFillThresholdSec(challengeId) },
+        { action: 'emergencySubmit', thresholdSec: getEmergencyFillThresholdSec(challengeId) },
         { action: 'boost', thresholdSec: getBoostThresholdSec(challenge, challengeId) },
     ];
     return actions.sort(compareDeadlineActions);
@@ -211,9 +211,9 @@ const describeConflicts = (challenge: Challenge, challengeId: string, now: numbe
  *     only when a turbo is WON and Auto-Apply Turbo is on.
  *   - boost: getBoostThresholdSec's timer branch stays positive when
  *     boostTime=0 ("off") — re-check that, and honour the autoBoost toggle.
- *   - autoFill: gate on the autoFill toggle (a schedule can imply a threshold
+ *   - autoSubmit: gate on the autoSubmit toggle (a schedule can imply a threshold
  *     while auto-fill is disabled).
- *   - emergencyFill: its threshold is a fixed setting that never reflects live
+ *   - emergencySubmit: its threshold is a fixed setting that never reflects live
  *     state, so defer to the runner's own evaluateEmergencyFill (no id, no free
  *     slot, or normal auto-fill already owning the fill). Shared code, not a
  *     copy, so the row cannot drift from what actually runs.
@@ -265,12 +265,12 @@ const describeDeadlineActions = (
                 // branch already resolves to 0 when off and is dropped above.
                 if (boostTimerBranch && !(getEffectiveBoostTime(challengeId) > 0)) return false;
                 return true;
-            case 'autoFill':
+            case 'autoSubmit':
                 return (
-                    settings.getEffectiveSetting('autoFill', challengeId) === true &&
+                    settings.getEffectiveSetting('autoSubmit', challengeId) === true &&
                     !isManualPhotosOnly(settings, challengeId)
                 );
-            case 'emergencyFill':
+            case 'emergencySubmit':
                 // thresholdSec > 0 already means enabled (0 = off); the runner
                 // owns the state-only stand-downs, so ask it rather than keeping
                 // a second copy here that could drift from what actually runs.

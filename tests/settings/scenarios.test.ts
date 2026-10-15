@@ -186,7 +186,7 @@ describe('settings facade — scenarios', () => {
             ]);
             expect(result.preview.phases[0]).toEqual({
                 name: 'buildup',
-                settings: ['exposure', 'exposureTarget', 'useFinalWindowExposure', 'autoFill', 'autoBoost'],
+                settings: ['exposure', 'exposureTarget', 'useFinalWindowExposure', 'autoSubmit', 'autoBoost'],
                 rules: 3,
             });
             expect(result.preview.spending).toEqual(
@@ -298,10 +298,10 @@ describe('settings facade — scenario assignment', () => {
 
     const assignEverywhere = () => {
         settings.setChallengeOverride('scenario', '8', 'plan');
-        settings.saveChallengeProfile('Show tactic', { scenario: 'Plan', autoFill: true });
+        settings.saveChallengeProfile('Show tactic', { scenario: 'Plan', autoSubmit: true });
         settings.setTitleRules([
             { type: 'exhibition', scenario: 'Plan' },
-            { title: 'Other', scenario: 'PLAN', autoFill: true },
+            { title: 'Other', scenario: 'PLAN', autoSubmit: true },
             { title: 'Unrelated', scenario: 'Something else' },
         ]);
     };
@@ -329,7 +329,7 @@ describe('settings facade — scenario assignment', () => {
     });
 
     test('a delete keeps a rule that still has a profile or tags', () => {
-        settings.saveChallengeProfile('Show tactic', { autoFill: true });
+        settings.saveChallengeProfile('Show tactic', { autoSubmit: true });
         settings.setTitleRules([
             { type: 'exhibition', scenario: 'Plan', profile: 'Show tactic' },
             { title: 'Other', scenario: 'Plan', mustIncludeTags: ['sea'] },

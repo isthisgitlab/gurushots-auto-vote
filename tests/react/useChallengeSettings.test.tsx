@@ -1,5 +1,5 @@
 /**
- * Tests for useChallengeSettings — reads a card's effective autoFill /
+ * Tests for useChallengeSettings — reads a card's effective autoSubmit /
  * compactCards values plus override flags, and toggles the per-card density.
  */
 
@@ -15,7 +15,7 @@ function Probe({ id = 42, initialCompact, version }: { id?: number; initialCompa
             <span data-testid="state">
                 {JSON.stringify({
                     custom: s.hasCustomSettings,
-                    fill: s.autoFillEnabled,
+                    fill: s.autoSubmitEnabled,
                     manual: s.manualPhotosOnly,
                     compact: s.isCompact,
                     override: s.hasCompactOverride,
@@ -45,7 +45,7 @@ let effective: Record<string, unknown>;
 
 beforeEach(() => {
     overrides = {};
-    effective = { autoFill: false, manualPhotosOnly: false, compactCards: false };
+    effective = { autoSubmit: false, manualPhotosOnly: false, compactCards: false };
     window.api.getSettingsSchema = jest.fn().mockResolvedValue({
         schema: { boostTime: { perChallenge: true }, compactCards: { perChallenge: true }, theme: {} },
     });
@@ -63,7 +63,7 @@ beforeEach(() => {
 
 test('seeds isCompact from initialCompact, then applies the IPC values', async () => {
     overrides = { boostTime: 10 };
-    effective = { autoFill: true, compactCards: false };
+    effective = { autoSubmit: true, compactCards: false };
     render(<Probe initialCompact={true} />);
     expect(state().compact).toBe(true);
     await waitFor(() =>
@@ -75,7 +75,7 @@ test('seeds isCompact from initialCompact, then applies the IPC values', async (
 });
 
 test('reads the effective Manual Photos Only value', async () => {
-    effective = { autoFill: true, manualPhotosOnly: true, compactCards: false };
+    effective = { autoSubmit: true, manualPhotosOnly: true, compactCards: false };
     render(<Probe />);
     await waitFor(() => expect(state().manual).toBe(true));
 });
@@ -158,7 +158,7 @@ describe('unmount mid-reload drops the pending results', () => {
         // Resolving after unmount must not throw / warn about state updates.
         await act(async () => d.resolve(true));
         expect(jest.mocked(window.api.getEffectiveSetting).mock.calls.map((c) => c[0])).toEqual([
-            'autoFill',
+            'autoSubmit',
             'manualPhotosOnly',
             'compactCards',
         ]);

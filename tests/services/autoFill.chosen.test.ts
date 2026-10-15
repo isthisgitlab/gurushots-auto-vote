@@ -99,41 +99,41 @@ const makeLog = () => {
 };
 
 type SettingsSpec = {
-    autoFill?: boolean;
+    autoSubmit?: boolean;
     chosen?: unknown;
     only?: boolean;
     inOrder?: boolean;
     savedBy?: unknown;
     must?: string[];
-    fillWithoutTagMatch?: boolean;
-    emergencyFill?: number;
+    submitWithoutTagMatch?: boolean;
+    emergencySubmit?: number;
 };
 
 const makeSettings = ({
-    autoFill = true,
+    autoSubmit = true,
     chosen = [],
     only = false,
     inOrder = false,
     savedBy = '',
     must = [],
-    fillWithoutTagMatch = true,
-    emergencyFill = 300,
+    submitWithoutTagMatch = true,
+    emergencySubmit = 300,
 }: SettingsSpec = {}): jest.MockedObject<FillSettings> =>
     invalid({
         getEffectiveSetting: jest.fn((key: string) => {
             switch (key) {
-                case 'autoFill':
-                    return autoFill;
-                case 'autoFillSchedule':
+                case 'autoSubmit':
+                    return autoSubmit;
+                case 'autoSubmitSchedule':
                     return [
                         { count: 2, seconds: 1800 },
                         { count: 3, seconds: 1200 },
                         { count: 4, seconds: 600 },
                     ];
-                case 'fillWithoutTagMatch':
-                    return fillWithoutTagMatch;
-                case 'emergencyFill':
-                    return emergencyFill;
+                case 'submitWithoutTagMatch':
+                    return submitWithoutTagMatch;
+                case 'emergencySubmit':
+                    return emergencySubmit;
                 case 'chosenPhotos':
                     return chosen;
                 case 'chosenPhotosOnly':
@@ -220,7 +220,7 @@ const recalled = async (challenge: ReturnType<typeof makeChallenge>, ids: string
             wantCount: ids.length,
             allowWalk: false,
             deps: { logger: makeLog().logger },
-            label: 'autoFill',
+            label: 'autoSubmit',
         })
     ).map((p) => p.id);
 
@@ -349,7 +349,7 @@ describe('chosen photos rank first', () => {
         expect(verified.visualEvidence).toBeNull();
         recordUncertainSubmission({
             challenge,
-            label: 'autoFill',
+            label: 'autoSubmit',
             scored,
             picked: verified.picked,
             visualEvidence: verified.visualEvidence,
@@ -439,7 +439,7 @@ describe('chosen photos rank first', () => {
     test('with Only on and Submit Even Without a Tag Match on, the tag check relaxes on the chosen photos alone', async () => {
         const deps = makeDeps({
             library: [photo('theme-a', ['Pink']), photo('car', ['Car'])],
-            settings: { chosen: ['car'], only: true, must: ['Pink'], fillWithoutTagMatch: true },
+            settings: { chosen: ['car'], only: true, must: ['Pink'], submitWithoutTagMatch: true },
         });
         // theme-a fits the tags but is not chosen; car does not fit them, yet it is the only candidate
         // and so the relaxation applies to it alone: it is entered, theme-a never is.
@@ -480,7 +480,7 @@ describe('chosen photos rank first', () => {
                 getEligiblePhotosWalk: jest.fn(async () => ({ items: [photo('car', ['Car'])], truncated: false })),
                 logger,
             },
-            label: 'autoFill',
+            label: 'autoSubmit',
         });
         // Newest first, so the scorer's last tie-break puts the car ahead of the dog.
         const full = [photo('theme-a'), photo('car', ['Car'], { upload_date: 9500 }), photo('dog', ['Dog'])];
@@ -585,8 +585,8 @@ describe('chosen photos rank first', () => {
         // A genuinely new id is looked up at once, and the count starts over (wait: 5 minutes).
         deps.settings.getEffectiveSetting.mockImplementation(
             (key: string) =>
-                ({ autoFill: true, chosenPhotos: ['ant', 'bee', 'cat'], chosenPhotosOnly: true })[key] ??
-                (key === 'autoFillSchedule' ? [{ count: 4, seconds: 600 }] : null),
+                ({ autoSubmit: true, chosenPhotos: ['ant', 'bee', 'cat'], chosenPhotosOnly: true })[key] ??
+                (key === 'autoSubmitSchedule' ? [{ count: 4, seconds: 600 }] : null),
         );
         expect(await at(42)).toBe(4);
         expect(await at(46)).toBe(4);
@@ -623,8 +623,9 @@ describe('chosen photos rank first', () => {
         // Emergency fill may not walk: it still sees the photo the first walk found.
         deps.settings.getEffectiveSetting.mockImplementation(
             (key: string) =>
-                ({ autoFill: false, chosenPhotos: ['car', 'dog'], chosenPhotosOnly: false, emergencyFill: 300 })[key] ??
-                null,
+                ({ autoSubmit: false, chosenPhotos: ['car', 'dog'], chosenPhotosOnly: false, emergencySubmit: 300 })[
+                    key
+                ] ?? null,
         );
         expect(await maybeEmergencyFillChallenge(challenge, 'tok', NOW, deps)).toBe('submitted');
         expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
@@ -726,9 +727,12 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         const dog = photo('dog', ['Dog']);
         deps.settings.getEffectiveSetting.mockImplementation(
             (key: string) =>
-                ({ autoFill: true, chosenPhotos: ['car', 'dog'], chosenPhotosOnly: true, fillWithoutTagMatch: true })[
-                    key
-                ] ?? (key === 'autoFillSchedule' ? [{ count: 4, seconds: 600 }] : null),
+                ({
+                    autoSubmit: true,
+                    chosenPhotos: ['car', 'dog'],
+                    chosenPhotosOnly: true,
+                    submitWithoutTagMatch: true,
+                })[key] ?? (key === 'autoSubmitSchedule' ? [{ count: 4, seconds: 600 }] : null),
         );
         deps.getEligiblePhotosWalk.mockResolvedValue({ items: [photo('theme-a'), dog], truncated: true });
         clock.mockReturnValue(5_000_001);
@@ -794,7 +798,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
                 wantCount: 2,
                 allowWalk: true,
                 deps: { getEligiblePhotosWalk: walk, logger },
-                label: 'autoFill',
+                label: 'autoSubmit',
             });
         expect((await lookup()).map((p) => p.id)).toEqual(['car']);
         reflectNewEntry(challenge, 'someone');
@@ -866,21 +870,21 @@ describe('looking for a chosen photo the themed fetch missed', () => {
                 wantCount: 1,
                 allowWalk: true,
                 deps: walkDeps,
-                label: 'autoFill',
+                label: 'autoSubmit',
             });
         }
         expect(walkDeps.getEligiblePhotosWalk).toHaveBeenCalledTimes(70);
         for (let i = 0; i < 70; i++) {
-            logChosenSkipOnce(logger, buildChallenge({ id: `s${i}` }), 'autoFill', 'none-usable');
+            logChosenSkipOnce(logger, buildChallenge({ id: `s${i}` }), 'autoSubmit', 'none-usable');
         }
         const warnings: string[] = [];
         const spy = invalid<FillLogger>({
             withCategory: () => ({ warning: (m: string) => warnings.push(m) }),
             challengeTag: () => '[tag]',
         });
-        logChosenSkipOnce(spy, buildChallenge({ id: 's69' }), 'autoFill', 'none-usable');
+        logChosenSkipOnce(spy, buildChallenge({ id: 's69' }), 'autoSubmit', 'none-usable');
         expect(warnings).toEqual([]); // still remembered
-        logChosenSkipOnce(spy, buildChallenge({ id: 's0' }), 'autoFill', 'none-usable');
+        logChosenSkipOnce(spy, buildChallenge({ id: 's0' }), 'autoSubmit', 'none-usable');
         expect(warnings).toHaveLength(1); // the early ones were forgotten and are explained again
     });
 
@@ -928,7 +932,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
                 allowWalk: true,
                 inOrder,
                 deps: { getEligiblePhotosWalk, logger: makeLog().logger },
-                label: 'autoFill',
+                label: 'autoSubmit',
             });
             return { walked: getEligiblePhotosWalk.mock.calls.length, found: found.map((p) => p.id) };
         };
@@ -1122,7 +1126,7 @@ describe('chosen photos in the order they were picked', () => {
         ];
         const deps = makeDeps({
             library: photos,
-            settings: { autoFill: false, chosen: ['theme-d', 'theme-b', 'theme-c'], inOrder: true },
+            settings: { autoSubmit: false, chosen: ['theme-d', 'theme-b', 'theme-c'], inOrder: true },
             extra: {
                 getActiveChallenges: jest.fn().mockResolvedValue({
                     challenges: [
@@ -1147,7 +1151,7 @@ describe('chosen photos in the order they were picked', () => {
     test('the stand-down probe goes by the same order', async () => {
         // Auto-fill on with Submit Only and a list: the probe asks what the staggered path would submit.
         const deps = makeDeps({
-            settings: { autoFill: true, chosen: ['theme-b'], inOrder: true, only: true },
+            settings: { autoSubmit: true, chosen: ['theme-b'], inOrder: true, only: true },
         });
         expect(await maybeEmergencyFillChallenge(makeChallenge({ entries: [], closeIn: 200 }), 'tok', NOW, deps)).toBe(
             'skipped',
@@ -1171,15 +1175,15 @@ describe('Submit Only Chosen Photos', () => {
         // A usable chosen photo appears: submitted, and the skip state is cleared...
         deps.settings.getEffectiveSetting.mockImplementation(
             (key: string) =>
-                ({ autoFill: true, chosenPhotos: ['theme-a'], chosenPhotosOnly: true })[key] ??
-                (key === 'autoFillSchedule' ? [{ count: 4, seconds: 600 }] : null),
+                ({ autoSubmit: true, chosenPhotos: ['theme-a'], chosenPhotosOnly: true })[key] ??
+                (key === 'autoSubmitSchedule' ? [{ count: 4, seconds: 600 }] : null),
         );
         expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('submitted');
         // ...so skipping again later is explained again.
         deps.settings.getEffectiveSetting.mockImplementation(
             (key: string) =>
-                ({ autoFill: true, chosenPhotos: ['car'], chosenPhotosOnly: true })[key] ??
-                (key === 'autoFillSchedule' ? [{ count: 4, seconds: 600 }] : null),
+                ({ autoSubmit: true, chosenPhotos: ['car'], chosenPhotosOnly: true })[key] ??
+                (key === 'autoSubmitSchedule' ? [{ count: 4, seconds: 600 }] : null),
         );
         await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
         expect(lines.warning.filter((m) => m.includes('skipped [Challenge c1]'))).toHaveLength(2);
@@ -1208,7 +1212,7 @@ describe('Submit Only Chosen Photos', () => {
     test('the hard filters decide: a chosen photo failing the must-tags skips while other photos pass', async () => {
         const deps = makeDeps({
             library: [photo('theme-a', ['Pink']), photo('car', ['Car'])],
-            settings: { chosen: ['car'], only: true, must: ['Pink'], fillWithoutTagMatch: false },
+            settings: { chosen: ['car'], only: true, must: ['Pink'], submitWithoutTagMatch: false },
         });
         expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('skipped');
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
@@ -1237,7 +1241,7 @@ describe('emergency fill', () => {
     test('ignores Only and ranks the chosen photos first', async () => {
         const deps = makeDeps({
             library: [photo('theme-a'), photo('theme-b'), photo('car', ['Car'])],
-            settings: { autoFill: false, chosen: ['car'], only: true },
+            settings: { autoSubmit: false, chosen: ['car'], only: true },
         });
         expect(await maybeEmergencyFillChallenge(emergencyChallenge(), 'tok', NOW, deps)).toBe('submitted');
         // Never walks the library near the deadline, and leaves the unfound chosen photo out.
@@ -1250,7 +1254,7 @@ describe('emergency fill', () => {
         const library = [photo('theme-a'), photo('theme-b'), photo('theme-c'), photo('theme-d')];
         const deps = makeDeps({
             library,
-            settings: { autoFill: false, chosen: ['theme-d'] },
+            settings: { autoSubmit: false, chosen: ['theme-d'] },
             extra: {
                 getActiveChallenges: jest.fn().mockResolvedValue({
                     challenges: [
@@ -1280,25 +1284,25 @@ describe('emergency fill', () => {
             photo('theme-c', ['Pink'], { upload_date: 9300 }),
             photo('theme-d', ['Pink'], { upload_date: 9400 }),
         ];
-        const deps = makeDeps({ library, settings: { autoFill: false, chosen: ['theme-c', 'theme-d'] } });
+        const deps = makeDeps({ library, settings: { autoSubmit: false, chosen: ['theme-c', 'theme-d'] } });
         expect(await maybeEmergencyFillChallenge(emergencyChallenge(), 'tok', NOW, deps)).toBe('submitted');
         expect(submittedIds(deps)).toEqual([['theme-d', 'theme-c', 'theme-a', 'theme-b']]);
     });
 
     describe('the stand-down probe sees the chosen photos the way the staggered path would', () => {
         test('Only with nothing usable: staggered would skip, so emergency steps in', async () => {
-            const deps = makeDeps({ settings: { autoFill: true, chosen: ['car'], only: true } });
+            const deps = makeDeps({ settings: { autoSubmit: true, chosen: ['car'], only: true } });
             expect(await maybeEmergencyFillChallenge(emergencyChallenge(), 'tok', NOW, deps)).toBe('submitted');
         });
 
         test('Only with a usable chosen photo: staggered fills it, so emergency stands down', async () => {
-            const deps = makeDeps({ settings: { autoFill: true, chosen: ['theme-a'], only: true } });
+            const deps = makeDeps({ settings: { autoSubmit: true, chosen: ['theme-a'], only: true } });
             expect(await maybeEmergencyFillChallenge(emergencyChallenge(), 'tok', NOW, deps)).toBe('skipped');
             expect(deps.submitToChallenge).not.toHaveBeenCalled();
         });
 
         test('Only with every chosen photo entered: staggered would skip, so emergency steps in', async () => {
-            const deps = makeDeps({ settings: { autoFill: true, chosen: ['existing'], only: true } });
+            const deps = makeDeps({ settings: { autoSubmit: true, chosen: ['existing'], only: true } });
             expect(
                 await maybeEmergencyFillChallenge(
                     emergencyChallenge({ entries: [{ id: 'existing' }] }),
@@ -1322,9 +1326,9 @@ describe('emergency fill', () => {
                 wantCount: 1,
                 allowWalk: true,
                 deps: { getEligiblePhotosWalk: jest.fn(async () => ({ items: [car], truncated: false })), logger },
-                label: 'autoFill',
+                label: 'autoSubmit',
             });
-            const standsDown = makeDeps({ settings: { autoFill: true, chosen: ['car'], only: true } });
+            const standsDown = makeDeps({ settings: { autoSubmit: true, chosen: ['car'], only: true } });
             expect(await maybeEmergencyFillChallenge(challenge, 'tok', NOW, standsDown)).toBe('skipped');
 
             // Not found, by contrast: emergency fill takes over.
@@ -1337,9 +1341,9 @@ describe('emergency fill', () => {
                 wantCount: 1,
                 allowWalk: true,
                 deps: { getEligiblePhotosWalk: jest.fn(async () => ({ items: [], truncated: false })), logger },
-                label: 'autoFill',
+                label: 'autoSubmit',
             });
-            const steps = makeDeps({ settings: { autoFill: true, chosen: ['car'], only: true } });
+            const steps = makeDeps({ settings: { autoSubmit: true, chosen: ['car'], only: true } });
             expect(await maybeEmergencyFillChallenge(challenge, 'tok', NOW, steps)).toBe('submitted');
         });
     });
@@ -1347,20 +1351,20 @@ describe('emergency fill', () => {
     test('the deadline view and the runner agree on whether auto-fill owns the challenge', () => {
         const challenge = emergencyChallenge();
         const verdict = (spec: SettingsSpec) => evaluateEmergencyFill(challenge, 'c1', makeSettings(spec)).standDown;
-        expect(verdict({ autoFill: true })).toBe(true);
-        expect(verdict({ autoFill: true, chosen: ['car'], only: false })).toBe(true);
-        expect(verdict({ autoFill: true, chosen: [], only: true })).toBe(true);
-        expect(verdict({ autoFill: true, chosen: ['car'], only: true })).toBe(false);
-        expect(verdict({ autoFill: true, chosen: 'not-a-list', only: true })).toBe(true);
+        expect(verdict({ autoSubmit: true })).toBe(true);
+        expect(verdict({ autoSubmit: true, chosen: ['car'], only: false })).toBe(true);
+        expect(verdict({ autoSubmit: true, chosen: [], only: true })).toBe(true);
+        expect(verdict({ autoSubmit: true, chosen: ['car'], only: true })).toBe(false);
+        expect(verdict({ autoSubmit: true, chosen: 'not-a-list', only: true })).toBe(true);
         // Auto-fill off, or a must-include filter: already "may fill" without reading them.
         const read = (spec: SettingsSpec) => {
             const settings = makeSettings(spec);
             evaluateEmergencyFill(challenge, 'c1', settings);
             return settings.getEffectiveSetting.mock.calls.map((call) => call[0]);
         };
-        expect(read({ autoFill: false, chosen: ['car'], only: true })).not.toContain('chosenPhotos');
-        expect(read({ autoFill: true, must: ['Pink'], chosen: ['car'], only: true })).not.toContain('chosenPhotos');
-        expect(read({ autoFill: true, chosen: ['car'], only: true })).toContain('chosenPhotosOnly');
+        expect(read({ autoSubmit: false, chosen: ['car'], only: true })).not.toContain('chosenPhotos');
+        expect(read({ autoSubmit: true, must: ['Pink'], chosen: ['car'], only: true })).not.toContain('chosenPhotos');
+        expect(read({ autoSubmit: true, chosen: ['car'], only: true })).toContain('chosenPhotosOnly');
     });
 });
 

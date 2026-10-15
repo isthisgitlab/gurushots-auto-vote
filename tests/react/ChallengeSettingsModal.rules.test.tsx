@@ -16,7 +16,7 @@ const field = (type: string, dflt: unknown, label: string) => ({
     type,
     default: dflt,
     perChallenge: true,
-    group: 'autoFill',
+    group: 'autoSubmit',
     label,
     description: 'app.desc',
 });
@@ -29,7 +29,7 @@ const mockSchemaState: Partial<ReturnType<typeof useSettingsSchema>> = {
         boostTime: field('number', 30, 'app.boostTime'),
     }),
     defaults: { scenario: '', autoJoin: false, chosenPhotos: [], boostTime: 30 },
-    groups: [{ id: 'autoFill', label: 'app.groupAutoFill', tier: 'core' }],
+    groups: [{ id: 'autoSubmit', label: 'app.groupAutoSubmit', tier: 'core' }],
     tiers: [{ id: 'core', label: 'app.tierCore' }],
     profileLimits: null,
     refetch: jest.fn(),

@@ -467,7 +467,7 @@ describe('edge paths', () => {
             'shouldIncludeTags',
             expect.objectContaining({ id: 555 }),
         );
-        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('fillWithoutTagMatch', '555');
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('submitWithoutTagMatch', '555');
     });
 
     test('previewSwap: no member id anywhere → empty member_id, not "undefined"', async () => {

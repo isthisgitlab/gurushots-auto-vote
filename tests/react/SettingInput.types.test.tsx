@@ -55,7 +55,7 @@ describe('SettingInput — dispatch guards and empty defaults', () => {
 
     test.each([
         ['tags', () => document.querySelector<HTMLInputElement>('input[type="text"]')!.value === ''],
-        ['schedule', () => screen.queryByText('app.autoFillScheduleEmpty') !== null],
+        ['schedule', () => screen.queryByText('app.autoSubmitScheduleEmpty') !== null],
         ['timeOfDayList', () => screen.queryByText('app.scheduledFillTimeOff') !== null],
         ['timeList', () => screen.queryByText('app.scheduledFillBeforeEndOff') !== null],
     ])('a %s setting with no value and no default renders as an empty list', (type, isEmpty) => {
@@ -196,7 +196,7 @@ describe('SettingInput — text', () => {
 describe('SettingInput — list editors tolerate corrupted stored values', () => {
     test('a non-array schedule renders every image as off', () => {
         renderInput({ type: 'schedule', default: [] }, 'garbage');
-        expect(screen.getAllByText('app.autoFillScheduleOff')).toHaveLength(3);
+        expect(screen.getAllByText('app.autoSubmitScheduleOff')).toHaveLength(3);
     });
 
     test('the schedule reset button reports the key', () => {

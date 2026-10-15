@@ -53,7 +53,7 @@ jest.mock('../../src/ts/settings', () => ({
             autoJoinTypes: '',
             autoJoinMaxCoins: 150,
             autoJoinCycleCoinBudget: 300,
-            fillWithoutTagMatch: true,
+            submitWithoutTagMatch: true,
         };
         return map[key];
     }),
@@ -167,7 +167,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
     autoJoinTypes: '',
     autoJoinMaxCoins: 150,
     autoJoinCycleCoinBudget: 300,
-    fillWithoutTagMatch: true,
+    submitWithoutTagMatch: true,
 };
 
 beforeEach(() => {
@@ -717,7 +717,7 @@ describe('runJoinPass', () => {
                 autoJoinTypes: '',
                 autoJoinMaxCoins: 250,
                 autoJoinCycleCoinBudget: 300,
-                fillWithoutTagMatch: true,
+                submitWithoutTagMatch: true,
             };
             return map[k];
         });
@@ -748,7 +748,7 @@ describe('runJoinPass', () => {
                     autoJoinTypes: '',
                     autoJoinMaxCoins: 150,
                     autoJoinCycleCoinBudget: 300,
-                    fillWithoutTagMatch: true,
+                    submitWithoutTagMatch: true,
                 };
                 return map[k];
             });
@@ -847,7 +847,7 @@ describe('runJoinPass', () => {
                 autoJoinExcludeTypes: ' Flash , Exhibition ', // messy raw string
                 autoJoinMaxCoins: 250,
                 autoJoinCycleCoinBudget: 300,
-                fillWithoutTagMatch: true,
+                submitWithoutTagMatch: true,
             };
             return map[k];
         });
@@ -872,7 +872,7 @@ describe('runJoinPass', () => {
                 autoJoinExcludeTypes: '',
                 autoJoinMaxCoins: 0,
                 autoJoinCycleCoinBudget: 0,
-                fillWithoutTagMatch: true,
+                submitWithoutTagMatch: true,
             };
             return map[k];
         });
@@ -930,7 +930,7 @@ describe('runJoinPass', () => {
                 autoJoinTypes: '',
                 autoJoinMaxCoins: 250,
                 autoJoinCycleCoinBudget: 300,
-                fillWithoutTagMatch: true,
+                submitWithoutTagMatch: true,
             };
             return map[k];
         });

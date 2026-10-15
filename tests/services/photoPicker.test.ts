@@ -751,7 +751,7 @@ describe('photoPicker', () => {
             ];
             const picked = pickPhotosForChallenge(challenge, photos, 5, {
                 mustIncludeTags: ['sunset', 'beach'],
-                fillWithoutTagMatch: false,
+                submitWithoutTagMatch: false,
             });
             expect(picked).toEqual(['hasBoth']);
         });
@@ -762,24 +762,24 @@ describe('photoPicker', () => {
             expect(picked).toEqual(['a']);
         });
 
-        test('no candidates after filter → [] when fillWithoutTagMatch is false', () => {
+        test('no candidates after filter → [] when submitWithoutTagMatch is false', () => {
             const photos = [allowed('a', ['Cat'], 1000), allowed('b', ['Dog'], 5000)];
             expect(
                 pickPhotosForChallenge(challenge, photos, 5, {
                     mustIncludeTags: ['mountain'],
-                    fillWithoutTagMatch: false,
+                    submitWithoutTagMatch: false,
                 }),
             ).toEqual([]);
         });
 
         test('ALL (not ANY) semantics: photo matching only one of several tags is excluded', () => {
             // 'one' matches a single tag, 'all' matches every tag. Under ALL
-            // semantics only 'all' qualifies; fillWithoutTagMatch is off so the
+            // semantics only 'all' qualifies; submitWithoutTagMatch is off so the
             // partial match is not relaxed back in.
             const photos = [allowed('one', ['Sunset'], 9000), allowed('all', ['Sunset', 'Beach', 'Ocean'], 1000)];
             const picked = pickPhotosForChallenge(challenge, photos, 5, {
                 mustIncludeTags: ['sunset', 'beach', 'ocean'],
-                fillWithoutTagMatch: false,
+                submitWithoutTagMatch: false,
             });
             expect(picked).toEqual(['all']);
         });
@@ -787,11 +787,11 @@ describe('photoPicker', () => {
         test('strict matches(): a tag that is merely a substring of a label does NOT match', () => {
             // matches() compares whole stems, not substrings: the tag stem 'bud'
             // and the label stem 'buddha' are different things. With
-            // fillWithoutTagMatch:false the slot is correctly left empty.
+            // submitWithoutTagMatch:false the slot is correctly left empty.
             const photos = [allowed('a', ['Buddha'], 1000)];
             const picked = pickPhotosForChallenge(challenge, photos, 5, {
                 mustIncludeTags: ['bud'],
-                fillWithoutTagMatch: false,
+                submitWithoutTagMatch: false,
             });
             expect(picked).toEqual([]);
         });
@@ -803,13 +803,13 @@ describe('photoPicker', () => {
             const photos = [allowed('a', ['Sunset'], 1000)];
             const picked = pickPhotosForChallenge(challenge, photos, 5, {
                 mustIncludeTags: ['sunset', 'sunsets'],
-                fillWithoutTagMatch: false,
+                submitWithoutTagMatch: false,
             });
             expect(picked).toEqual(['a']);
         });
     });
 
-    describe('pickPhotosForChallenge — fillWithoutTagMatch fallback', () => {
+    describe('pickPhotosForChallenge — submitWithoutTagMatch fallback', () => {
         const challenge = { url: 'pink-in-nature23', title: 'Show the color Pink' };
 
         test('default (undefined): no must-match falls back to unfiltered set', () => {
@@ -825,7 +825,7 @@ describe('photoPicker', () => {
             const photos = [allowed('a', ['Cat'], 1000)];
             const picked = pickPhotosForChallenge(challenge, photos, 5, {
                 mustIncludeTags: ['mountain'],
-                fillWithoutTagMatch: true,
+                submitWithoutTagMatch: true,
             });
             expect(picked).toEqual(['a']);
         });
@@ -835,7 +835,7 @@ describe('photoPicker', () => {
             expect(
                 pickPhotosForChallenge(challenge, photos, 5, {
                     mustIncludeTags: ['mountain'],
-                    fillWithoutTagMatch: false,
+                    submitWithoutTagMatch: false,
                 }),
             ).toEqual([]);
         });
@@ -844,11 +844,11 @@ describe('photoPicker', () => {
             // 'full' matches every required tag; 'partial' matches only one and
             // is excluded under ALL semantics. Because 'full' exists, the filter
             // is non-empty and the fallback never relaxes 'partial' back in —
-            // even with 2 slots and fillWithoutTagMatch on.
+            // even with 2 slots and submitWithoutTagMatch on.
             const photos = [allowed('full', ['Sunset', 'Beach'], 1000), allowed('partial', ['Sunset'], 9000)];
             const picked = pickPhotosForChallenge(challenge, photos, 5, {
                 mustIncludeTags: ['sunset', 'beach'],
-                fillWithoutTagMatch: true,
+                submitWithoutTagMatch: true,
             });
             expect(picked).toEqual(['full']);
         });
@@ -960,7 +960,7 @@ describe('photoPicker', () => {
             // Guards the wholeLabelStems / labelWordStems split in
             // pickPhotosForChallenge, where crossing the wires is silent.
             const photos = [allowed('ocean', ['Ocean Life'], 1000)];
-            expect(pickPhotosForChallenge(challenge, photos, 5, { fillWithoutTagMatch: false })).toEqual([]);
+            expect(pickPhotosForChallenge(challenge, photos, 5, { submitWithoutTagMatch: false })).toEqual([]);
         });
 
         test('short generic labels are excluded by the min-stem-length floor', () => {
@@ -970,15 +970,15 @@ describe('photoPicker', () => {
             expect(pickPhotosForChallenge(iChallenge, photos, 5, {})).toEqual(['iceberg']);
         });
 
-        test('floor leaves the slot empty when only a too-short label would match (fillWithoutTagMatch:false)', () => {
+        test('floor leaves the slot empty when only a too-short label would match (submitWithoutTagMatch:false)', () => {
             const iChallenge = { title: 'Begins With I' };
             const photos = [allowed('shortIn', ['In'], 1000)];
-            expect(pickPhotosForChallenge(iChallenge, photos, 5, { fillWithoutTagMatch: false })).toEqual([]);
+            expect(pickPhotosForChallenge(iChallenge, photos, 5, { submitWithoutTagMatch: false })).toEqual([]);
         });
 
-        test('no letter match + fillWithoutTagMatch:false keeps the slot empty', () => {
+        test('no letter match + submitWithoutTagMatch:false keeps the slot empty', () => {
             const photos = [allowed('cat', ['Cat'], 1000)];
-            expect(pickPhotosForChallenge(challenge, photos, 5, { fillWithoutTagMatch: false })).toEqual([]);
+            expect(pickPhotosForChallenge(challenge, photos, 5, { submitWithoutTagMatch: false })).toEqual([]);
         });
 
         test('no letter match + default fallback submits the off-theme best performer', () => {
@@ -1008,7 +1008,7 @@ describe('photoPicker', () => {
             expect(picked).toEqual(['landscape', 'cat']);
         });
 
-        test('combined must + letter with no full match and fillWithoutTagMatch:false leaves the slot empty', () => {
+        test('combined must + letter with no full match and submitWithoutTagMatch:false leaves the slot empty', () => {
             const photos = [
                 allowed('landscape', ['Landscape'], 9000), // letter only, no must
                 allowed('cat', ['Cat'], 1000), // neither
@@ -1018,7 +1018,7 @@ describe('photoPicker', () => {
             expect(
                 pickPhotosForChallenge(challenge, photos, 5, {
                     mustIncludeTags: ['lighthouse'],
-                    fillWithoutTagMatch: false,
+                    submitWithoutTagMatch: false,
                 }),
             ).toEqual([]);
         });
@@ -1054,9 +1054,9 @@ describe('photoPicker', () => {
             expect(pickPhotosForChallenge(challenge, photos, 5, { mustIncludeTags: ['castle'] })).toEqual(['castle']);
         });
 
-        test('no letter match + fillWithoutTagMatch:false keeps the slot empty', () => {
+        test('no letter match + submitWithoutTagMatch:false keeps the slot empty', () => {
             const photos = [allowed('dog', ['Dog'], 1000)];
-            expect(pickPhotosForChallenge(challenge, photos, 5, { fillWithoutTagMatch: false })).toEqual([]);
+            expect(pickPhotosForChallenge(challenge, photos, 5, { submitWithoutTagMatch: false })).toEqual([]);
         });
 
         test('onFallback fires with the letter when relaxation kicks in', () => {
@@ -1074,10 +1074,10 @@ describe('photoPicker', () => {
             expect(onFallback).not.toHaveBeenCalled();
         });
 
-        test('onFallback does NOT fire when fillWithoutTagMatch:false returns []', () => {
+        test('onFallback does NOT fire when submitWithoutTagMatch:false returns []', () => {
             const photos = [allowed('dog', ['Dog'], 1000)];
             const onFallback = jest.fn();
-            expect(pickPhotosForChallenge(challenge, photos, 5, { onFallback, fillWithoutTagMatch: false })).toEqual(
+            expect(pickPhotosForChallenge(challenge, photos, 5, { onFallback, submitWithoutTagMatch: false })).toEqual(
                 [],
             );
             expect(onFallback).not.toHaveBeenCalled();
@@ -1455,7 +1455,7 @@ describe('photoPicker', () => {
             const ocean = allowed('ocean', ['Ocean', 'Wave'], 2000);
             const picked = pickPhotosForChallenge(challenge, [seaLife, ocean], 5, {
                 mustIncludeTags: ['sea life'],
-                fillWithoutTagMatch: false,
+                submitWithoutTagMatch: false,
             });
             expect(picked).toEqual(['seaLife']);
         });
@@ -1516,7 +1516,7 @@ describe('photoPicker', () => {
         test('respects the must-tag hard filter', () => {
             const photos = [allowed('cat', ['Cat']), allowed('dog', ['Dog']), allowed('bird', ['Bird'])];
             // Only 'cat' survives the filter, so there is nothing left to contest.
-            expect(setOf(abstract, photos, 1, { mustIncludeTags: ['cat'], fillWithoutTagMatch: false })).toEqual([]);
+            expect(setOf(abstract, photos, 1, { mustIncludeTags: ['cat'], submitWithoutTagMatch: false })).toEqual([]);
         });
 
         test('respects the letter-challenge hard filter', () => {
@@ -1710,9 +1710,9 @@ describe('photoPicker', () => {
             expect(onFallback).toHaveBeenCalledWith({ letterPrefix: null, mustStems: [], excludedStems: ['human'] });
         });
 
-        test('fillWithoutTagMatch:false leaves the slot empty instead', () => {
+        test('submitWithoutTagMatch:false leaves the slot empty instead', () => {
             const photos = [allowed('portrait', ['Portrait'], 3000)];
-            expect(pickPhotosForChallenge({ title: 'No Humans' }, photos, 1, { fillWithoutTagMatch: false })).toEqual(
+            expect(pickPhotosForChallenge({ title: 'No Humans' }, photos, 1, { submitWithoutTagMatch: false })).toEqual(
                 [],
             );
         });

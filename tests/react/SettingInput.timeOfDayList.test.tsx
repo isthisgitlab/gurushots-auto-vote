@@ -169,19 +169,19 @@ describe('SettingInput type=timeList', () => {
 
     test('an entry above the 30-day cap flags out-of-range with the error class and hint', () => {
         renderField([31 * 24 * 3600]);
-        expect(screen.getByText('app.autoFillScheduleOutOfRange')).toBeTruthy();
+        expect(screen.getByText('app.autoSubmitScheduleOutOfRange')).toBeTruthy();
         expect(numberInputs().every((i) => i.className.includes('input-error'))).toBe(true);
     });
 
     test('a hand-edited negative or fractional entry flags out-of-range instead of posing as a draft', () => {
         renderField([-5]);
-        expect(screen.getByText('app.autoFillScheduleOutOfRange')).toBeTruthy();
+        expect(screen.getByText('app.autoSubmitScheduleOutOfRange')).toBeTruthy();
         expect(screen.queryByText('app.scheduledFillEntryDraft')).toBeNull();
     });
 
     test('an in-range entry carries no error class', () => {
         renderField([4 * 3600]);
-        expect(screen.queryByText('app.autoFillScheduleOutOfRange')).toBeNull();
+        expect(screen.queryByText('app.autoSubmitScheduleOutOfRange')).toBeNull();
         expect(numberInputs().every((i) => !i.className.includes('input-error'))).toBe(true);
     });
 });

@@ -144,7 +144,7 @@ beforeEach(() => {
 
 describe('the chosen photo is the join photo', () => {
     test('1 chosen photo + 11 on-theme automatic ones: the chosen photo wins, even against a model that prefers another', async () => {
-        withSettings({ chosenPhotos: ['car'], fillWithoutTagMatch: true });
+        withSettings({ chosenPhotos: ['car'], submitWithoutTagMatch: true });
         // Whatever the model is asked, it prefers the LAST id it is given — a top-up photo.
         vision.rankVisually.mockImplementation(async (_c, ids) => [ids[ids.length - 1]]);
         const deps = makeDeps();
@@ -157,7 +157,7 @@ describe('the chosen photo is the join photo', () => {
     });
 
     test('several chosen photos: the shortlist is the chosen block alone', async () => {
-        withSettings({ chosenPhotos: ['auto-3', 'auto-7'], fillWithoutTagMatch: true });
+        withSettings({ chosenPhotos: ['auto-3', 'auto-7'], submitWithoutTagMatch: true });
         const deps = makeDeps();
         await performJoin(challenge(), 'tok', deps, 0);
         expect(vision.rankVisually).toHaveBeenCalledTimes(1);
@@ -166,7 +166,7 @@ describe('the chosen photo is the join photo', () => {
     });
 
     test('a chosen photo that cannot be entered leaves the ordinary pick', async () => {
-        withSettings({ chosenPhotos: ['car'], fillWithoutTagMatch: true });
+        withSettings({ chosenPhotos: ['car'], submitWithoutTagMatch: true });
         const deps = makeDeps(eleven, {
             getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false })),
         });
@@ -176,7 +176,7 @@ describe('the chosen photo is the join photo', () => {
     });
 
     test('a failed lookup of the chosen photo is logged under join and the join goes on', async () => {
-        withSettings({ chosenPhotos: ['car'], fillWithoutTagMatch: true });
+        withSettings({ chosenPhotos: ['car'], submitWithoutTagMatch: true });
         const deps = makeDeps(eleven, {
             getEligiblePhotosWalk: jest.fn(async () => Promise.reject(new Error('down'))),
         });
@@ -199,14 +199,14 @@ describe('the chosen photos in the order they were picked, on a join', () => {
         withSettings({
             chosenPhotos: ['auto-7', 'auto-3', 'auto-5'],
             chosenPhotosInOrder: true,
-            fillWithoutTagMatch: true,
+            submitWithoutTagMatch: true,
         });
         const deps = makeDeps();
         const res = await performJoin(challenge(), 'tok', deps, 0);
         expect(res).toEqual({ status: 'joined', charged: 0, imageId: 'auto-7' });
         expect(vision.rankVisually).not.toHaveBeenCalled();
         // Off, the model chooses among the same shortlist.
-        withSettings({ chosenPhotos: ['auto-7', 'auto-3', 'auto-5'], fillWithoutTagMatch: true });
+        withSettings({ chosenPhotos: ['auto-7', 'auto-3', 'auto-5'], submitWithoutTagMatch: true });
         await performJoin(challenge(2), 'tok', makeDeps(), 0);
         expect(vision.rankVisually).toHaveBeenCalledTimes(1);
     });

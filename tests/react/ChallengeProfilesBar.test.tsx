@@ -44,7 +44,7 @@ const nameInput = () => screen.getByPlaceholderText('app.profileNamePlaceholder'
 describe('ChallengeProfilesBar', () => {
     test('lists profiles with their override counts', async () => {
         mockApi.getChallengeProfiles.mockResolvedValue({
-            '2-pic tactic': { exposure: 80, autoFill: true },
+            '2-pic tactic': { exposure: 80, autoSubmit: true },
             empty: {},
         });
         renderBar();
@@ -108,7 +108,7 @@ describe('ChallengeProfilesBar', () => {
     });
 
     test('Save passes the current sparse overrides under the typed name', async () => {
-        const overrides = { exposure: 70, autoFill: true };
+        const overrides = { exposure: 70, autoSubmit: true };
         renderBar({ overrides });
 
         fireEvent.change(nameInput(), { target: { value: '  3-pic tactic  ' } });
@@ -377,7 +377,7 @@ describe('ChallengeProfilesBar', () => {
             autoBoost: false,
             useTurbo: false,
             autoTurbo: false,
-            autoFill: true,
+            autoSubmit: true,
         };
 
         test('are starred, translated and marked built-in while unedited', async () => {
@@ -391,7 +391,7 @@ describe('ChallengeProfilesBar', () => {
         });
 
         test('are marked modified once their values differ', async () => {
-            mockApi.getChallengeProfiles.mockResolvedValue({ 'Just Participate': { ...JUST, autoFill: false } });
+            mockApi.getChallengeProfiles.mockResolvedValue({ 'Just Participate': { ...JUST, autoSubmit: false } });
             renderBar();
             await waitFor(() => expect(document.body.textContent).toContain('★'));
             await act(async () => changeSelect(selectEl(), 'Just Participate'));

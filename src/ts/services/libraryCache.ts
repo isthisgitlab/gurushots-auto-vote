@@ -52,7 +52,7 @@ let latest: { account: string; listing: Readonly<TimedListing> } | null = null;
 // Counts every drop: a read compares it before and after its walk.
 let dropCount = 0;
 
-const log = (kind: string): void => logger.withCategory('autoFill').debug(`Library cache: ${kind}`, null);
+const log = (kind: string): void => logger.withCategory('autoSubmit').debug(`Library cache: ${kind}`, null);
 
 /** The key of one challenge's entry (null: the settings and rules choosers, which name none) for an account. */
 const keyOf = (token: string, contextId: string | number | null): string =>

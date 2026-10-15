@@ -65,7 +65,7 @@ Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
                          has no timer of its own, so boostTime cannot describe it
                          (default: 900 = 15 min; 0 = off)
   turboTime            - Seconds before close to apply turbo (default: 7200 = 2h)
-  emergencyFill        - Emergency Submit: seconds before close to submit photos to
+  emergencySubmit      - Emergency Submit: seconds before close to submit photos to
                          empty slots as a last resort
                          (default: 300 = 5 min; 0 = off). To block it for one
                          challenge only, set manualPhotosOnly there.
@@ -94,7 +94,7 @@ array on load):
                                and manual voting still apply). A window missed
                                while the app is not running is skipped with no
                                catch-up. (default: false)
-  Set them like autoFillSchedule (validated JSON values):
+  Set them like autoSubmitSchedule (validated JSON values):
     set-global-default scheduledFillTime '["09:00","21:30"]'
     set-setting scheduledFillBeforeEnd '[14400,36000]' --challenge=12345
 
@@ -124,7 +124,7 @@ few votes. Same per-challenge scoping and JSON value format):
     set-global-default votingPauseDurationMinutes 270
 
 Auto-Submit schedule (JSON array of {count, seconds} rows):
-  autoFillSchedule     - Each row: have at least <count> entries once <seconds>
+  autoSubmitSchedule   - Each row: have at least <count> entries once <seconds>
                          remain before close. Counts 2-4 (max 3 rows, unique) —
                          challenges allow at most 4 images and image 1 always
                          exists. Omit a count to never schedule that image; an
@@ -132,9 +132,9 @@ Auto-Submit schedule (JSON array of {count, seconds} rows):
                          Default: [{"count":2,"seconds":1800},{"count":3,"seconds":1200},{"count":4,"seconds":600}]
   Set it with set-global-default (set-setting without --challenge redirects
   here, since the scheduler reads only the global default):
-    set-global-default autoFillSchedule '[{"count":2,"seconds":172800},{"count":3,"seconds":10800},{"count":4,"seconds":900}]'
+    set-global-default autoSubmitSchedule '[{"count":2,"seconds":172800},{"count":3,"seconds":10800},{"count":4,"seconds":900}]'
   Per-challenge override (also validated):
-    set-setting autoFillSchedule '[{"count":2,"seconds":172800}]' --challenge=12345
+    set-setting autoSubmitSchedule '[{"count":2,"seconds":172800}]' --challenge=12345
 
 Value Types:
   String:   "value" or value

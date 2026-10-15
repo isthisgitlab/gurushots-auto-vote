@@ -94,7 +94,9 @@ describe('validation', () => {
         await expect(call(...args)).resolves.toEqual({ success: false, error: 'invalid-args' });
         expect(auth.requireAuthToken).not.toHaveBeenCalled();
         expect(strategy.getEligiblePhotosWalk).not.toHaveBeenCalled();
-        expect(logCategories('warning', 'Refused get-library-photos: invalid id argument', null)).toEqual(['autoFill']);
+        expect(logCategories('warning', 'Refused get-library-photos: invalid id argument', null)).toEqual([
+            'autoSubmit',
+        ]);
     });
 
     test('answers the auth guard when signed out', async () => {

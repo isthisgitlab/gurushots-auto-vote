@@ -1,4 +1,4 @@
-/** Settings of the `autoFill` group (labelled "Auto-Submit" in the UI). */
+/** Settings of the `autoSubmit` group (labelled "Auto-Submit" in the UI). */
 
 import { z } from 'zod';
 import { isInteger } from '../../numbers';
@@ -33,8 +33,8 @@ const fillSchedule = z
     .refine((rows) => new Set(rows.map((r) => r.count)).size === rows.length);
 
 /**
- * Clamp a persisted autoFillSchedule array to the current bounds. Used by the
- * load-time `_autoFillScheduleBoundsV1` sanitizer in settings/migrations/autoFillSchedule.ts: the Settings
+ * Clamp a persisted autoSubmitSchedule array to the current bounds. Used by the
+ * load-time `_autoFillScheduleBoundsV1` sanitizer in settings/migrations/autoSubmitSchedule.ts: the Settings
  * modal resubmits EVERY persisted key on save, so a stored schedule that
  * violates the (tightened) validator would block saving unrelated settings
  * until repaired — this heals such data on load instead. Keeps only strict
@@ -98,31 +98,31 @@ const photoIdList = z
     .max(MAX_CHOSEN_PHOTOS)
     .refine((ids) => new Set(ids).size === ids.length);
 
-export const autoFillSettings = {
-    autoFill: {
+export const autoSubmitSettings = {
+    autoSubmit: {
         type: 'boolean',
         default: false,
         perChallenge: true,
         validation: zBool,
         validationOrder: 1,
-        group: 'autoFill',
-        label: 'app.autoFill',
-        description: 'app.autoFillDesc',
+        group: 'autoSubmit',
+        label: 'app.autoSubmit',
+        description: 'app.autoSubmitDesc',
     },
-    protectUncertainAutoFills: {
+    protectUncertainAutoSubmits: {
         type: 'boolean',
         default: true,
         perChallenge: true,
         validation: zBool,
         validationOrder: 1,
-        group: 'autoFill',
-        label: 'app.protectUncertainAutoFills',
-        description: 'app.protectUncertainAutoFillsDesc',
+        group: 'autoSubmit',
+        label: 'app.protectUncertainAutoSubmits',
+        description: 'app.protectUncertainAutoSubmitsDesc',
     },
     // A stored single autoFillIntervalMinutes value is migrated into this list
-    // in settings/migrations/autoFillSchedule.ts (`_autoFillScheduleMigratedV1`). Default: 2 @ 30m,
+    // in settings/migrations/autoSubmitSchedule.ts (`_autoFillScheduleMigratedV1`). Default: 2 @ 30m,
     // 3 @ 20m, 4 @ 10m before close.
-    autoFillSchedule: {
+    autoSubmitSchedule: {
         type: 'schedule',
         default: [
             { count: 2, seconds: 1800 },
@@ -132,36 +132,36 @@ export const autoFillSettings = {
         perChallenge: true,
         validation: fillSchedule,
         validationOrder: 1,
-        group: 'autoFill',
-        label: 'app.autoFillSchedule',
-        description: 'app.autoFillScheduleDesc',
+        group: 'autoSubmit',
+        label: 'app.autoSubmitSchedule',
+        description: 'app.autoSubmitScheduleDesc',
     },
-    fillWithoutTagMatch: {
+    submitWithoutTagMatch: {
         type: 'boolean',
         default: true,
         perChallenge: true,
         validation: zBool,
         validationOrder: 1,
-        group: 'autoFill',
-        label: 'app.fillWithoutTagMatch',
-        description: 'app.fillWithoutTagMatchDesc',
+        group: 'autoSubmit',
+        label: 'app.submitWithoutTagMatch',
+        description: 'app.submitWithoutTagMatchDesc',
     },
     // Emergency fill only acts on scheduler cycles that actually run, so it
-    // depends on cadence: keep emergencyFill <= lastMinuteThreshold and the
+    // depends on cadence: keep emergencySubmit <= lastMinuteThreshold and the
     // fast last-minute cadence is already active throughout the window. If it is
     // larger, the early part of the window relies on the slower normal cadence
-    // (it still fires, just less tightly) — see emergencyFillDesc.
-    emergencyFill: {
+    // (it still fires, just less tightly) — see emergencySubmitDesc.
+    emergencySubmit: {
         type: 'time', // Special type for hours/minutes input (stored as seconds)
         default: 300, // 5 minutes in seconds
         perChallenge: true,
         // 0 is the off sentinel; otherwise seconds-before-close (mirrors boostTime/turboTime).
         validation: nonNegNumber,
         validationOrder: 1,
-        group: 'autoFill',
-        label: 'app.emergencyFill',
-        description: 'app.emergencyFillDesc',
-        helpKey: 'app.emergencyFillHelp',
+        group: 'autoSubmit',
+        label: 'app.emergencySubmit',
+        description: 'app.emergencySubmitDesc',
+        helpKey: 'app.emergencySubmitHelp',
     },
     mustIncludeTags: {
         type: 'tags',
@@ -169,7 +169,7 @@ export const autoFillSettings = {
         perChallenge: true,
         validation: tagsList,
         validationOrder: 1,
-        group: 'autoFill',
+        group: 'autoSubmit',
         label: 'app.mustIncludeTags',
         description: 'app.mustIncludeTagsDesc',
     },
@@ -179,7 +179,7 @@ export const autoFillSettings = {
         perChallenge: true,
         validation: tagsList,
         validationOrder: 1,
-        group: 'autoFill',
+        group: 'autoSubmit',
         label: 'app.shouldIncludeTags',
         description: 'app.shouldIncludeTagsDesc',
     },
@@ -194,7 +194,7 @@ export const autoFillSettings = {
         perChallenge: true,
         validation: photoIdList,
         validationOrder: 1,
-        group: 'autoFill',
+        group: 'autoSubmit',
         label: 'app.chosenPhotos',
         description: 'app.chosenPhotosDesc',
     },
@@ -207,7 +207,7 @@ export const autoFillSettings = {
         perChallenge: true,
         validation: zBool,
         validationOrder: 1,
-        group: 'autoFill',
+        group: 'autoSubmit',
         label: 'app.chosenPhotosOnly',
         description: 'app.chosenPhotosOnlyDesc',
     },
@@ -221,7 +221,7 @@ export const autoFillSettings = {
         perChallenge: true,
         validation: zBool,
         validationOrder: 1,
-        group: 'autoFill',
+        group: 'autoSubmit',
         label: 'app.chosenPhotosInOrder',
         description: 'app.chosenPhotosInOrderDesc',
     },
@@ -273,7 +273,7 @@ export const autoFillSettings = {
         perChallenge: true,
         validation: tagsList,
         validationOrder: 1,
-        group: 'autoFill',
+        group: 'autoSubmit',
         label: 'app.ignoreTitleWords',
         description: 'app.ignoreTitleWordsDesc',
     },

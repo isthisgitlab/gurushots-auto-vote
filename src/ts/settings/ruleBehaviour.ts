@@ -20,7 +20,7 @@
  */
 export const TITLE_RULE_INLINE_KEYS = [
     'autoJoin',
-    'autoFill',
+    'autoSubmit',
     'autoJoinWithinHoursOfEnd',
     'autoJoinAfterPercentElapsed',
     'scenario',

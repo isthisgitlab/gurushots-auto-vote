@@ -63,7 +63,7 @@ beforeEach(() => {
     settings.SETTINGS_SCHEMA = invalid({
         exposure: { type: 'number', perChallenge: true, default: 50, label: 'Exposure', description: 'Target %' },
         lastMinuteCheckFrequency: { type: 'number', perChallenge: false, default: 1 },
-        emergencyFill: { type: 'time', perChallenge: true, default: 300 },
+        emergencySubmit: { type: 'time', perChallenge: true, default: 300 },
     });
 });
 
@@ -135,8 +135,8 @@ describe('formatSettingForLog', () => {
     });
 
     test('a non-finite or non-number time value is printed raw', () => {
-        expect(cmd.formatSettingForLog('emergencyFill', 'soon')).toBe('"soon"');
-        expect(cmd.formatSettingForLog('emergencyFill', Infinity)).toBe('null');
+        expect(cmd.formatSettingForLog('emergencySubmit', 'soon')).toBe('"soon"');
+        expect(cmd.formatSettingForLog('emergencySubmit', Infinity)).toBe('null');
     });
 });
 
@@ -261,7 +261,7 @@ describe('setGlobalDefault', () => {
     test('an unknown schema key lists the available keys, sorted', () => {
         expect(cmd.setGlobalDefault('exposre', '80')).toBe(false);
         expect(msgs('error')).toEqual(["Unknown schema setting 'exposre'"]);
-        expect(msgs('info')).toEqual(['Available settings: emergencyFill, exposure, lastMinuteCheckFrequency']);
+        expect(msgs('info')).toEqual(['Available settings: emergencySubmit, exposure, lastMinuteCheckFrequency']);
     });
 
     test('an invalid value explains the type and default', () => {
@@ -290,7 +290,7 @@ describe('listSettings', () => {
         expect(msgs('info')).toEqual([]);
         const info = msgs('stdout');
         expect(info[0]).toBe('=== Settings for challenge 7 ===');
-        expect(info).toContain('emergencyFill: 0 (off)  [Inherited ✅]');
+        expect(info).toContain('emergencySubmit: 0 (off)  [Inherited ✅]');
         expect(info).toContain('exposure: 80  [Override ✏️]');
         expect(info.some((l) => l.startsWith('lastMinuteCheckFrequency'))).toBe(false);
     });
@@ -429,7 +429,7 @@ describe('schema and global-default dumps', () => {
         expect(msgs('info')).toEqual([]);
         const info = msgs('stdout');
         expect(info).toContain('exposure: 70');
-        expect(info).toContain('emergencyFill: 300 (5m)');
+        expect(info).toContain('emergencySubmit: 300 (5m)');
     });
 
     test('a photo list is counted in the dumps, never listed', () => {
@@ -462,11 +462,11 @@ describe('profiles', () => {
     });
 
     test('profiles are listed by name with a summary of their values', () => {
-        settings.getChallengeProfiles.mockReturnValue({ zeta: {}, alpha: { exposure: 80, emergencyFill: 0 } });
+        settings.getChallengeProfiles.mockReturnValue({ zeta: {}, alpha: { exposure: 80, emergencySubmit: 0 } });
         cmd.listProfiles();
         expect(msgs('stdout')).toEqual([
             '=== Challenge Profiles ===',
-            'alpha (2): emergencyFill=0 (off), exposure=80',
+            'alpha (2): emergencySubmit=0 (off), exposure=80',
             'zeta (0): (no overrides — applying it resets the challenge to global defaults)',
         ]);
         // Console only: nothing of the profiles reaches the log files.

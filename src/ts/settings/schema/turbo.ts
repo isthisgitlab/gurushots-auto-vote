@@ -41,24 +41,24 @@ export const turboSettings = {
         label: 'app.turboImageIndex',
         description: 'app.turboImageIndexDesc',
     },
-    turboFillNew: {
+    turboNewSubmit: {
         type: 'boolean',
         default: false,
         perChallenge: true,
         validation: zBool,
         validationOrder: 1,
         group: 'turbo',
-        label: 'app.turboFillNew',
-        description: 'app.turboFillNewDesc',
+        label: 'app.turboNewSubmit',
+        description: 'app.turboNewSubmitDesc',
     },
-    turboFillNewOnConflict: {
+    turboNewSubmitOnConflict: {
         type: 'boolean',
         default: false,
         perChallenge: true,
         validation: zBool,
         validationOrder: 1,
         group: 'turbo',
-        label: 'app.turboFillNewOnConflict',
-        description: 'app.turboFillNewOnConflictDesc',
+        label: 'app.turboNewSubmitOnConflict',
+        description: 'app.turboNewSubmitOnConflictDesc',
     },
 } satisfies Record<string, SettingsSchemaEntry>;

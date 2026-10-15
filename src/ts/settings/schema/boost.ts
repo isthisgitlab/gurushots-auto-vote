@@ -108,24 +108,24 @@ export const boostSettings = {
         label: 'app.boostImageIndex',
         description: 'app.boostImageIndexDesc',
     },
-    boostFillNew: {
+    boostNewSubmit: {
         type: 'boolean',
         default: false,
         perChallenge: true,
         validation: zBool,
         validationOrder: 1,
         group: 'boost',
-        label: 'app.boostFillNew',
-        description: 'app.boostFillNewDesc',
+        label: 'app.boostNewSubmit',
+        description: 'app.boostNewSubmitDesc',
     },
-    boostFillNewOnConflict: {
+    boostNewSubmitOnConflict: {
         type: 'boolean',
         default: false,
         perChallenge: true,
         validation: zBool,
         validationOrder: 1,
         group: 'boost',
-        label: 'app.boostFillNewOnConflict',
-        description: 'app.boostFillNewOnConflictDesc',
+        label: 'app.boostNewSubmitOnConflict',
+        description: 'app.boostNewSubmitOnConflictDesc',
     },
 } satisfies Record<string, SettingsSchemaEntry>;

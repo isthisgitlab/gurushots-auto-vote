@@ -203,7 +203,7 @@ const loadCache = (): Map<string, PhotoStatsEntry> => {
         }
     } catch (error) {
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .debug(`photoStats: could not read the stats cache: ${errorMessage(error) || error}`, null);
         cache = new Map();
     }
@@ -230,7 +230,7 @@ const persistCache = () => {
         cacheDirty = false;
     } catch (error) {
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .debug(`photoStats: could not persist the stats cache: ${errorMessage(error) || error}`, null);
     }
 };
@@ -353,8 +353,8 @@ const enrichCandidates = async (
             if (budget.fetched >= budget.cap && !budget.capLogged) {
                 budget.capLogged = true;
                 if (!budget.quiet) {
-                    log.withCategory('autoFill').warning(
-                        `autoFill: reached this cycle's limit of ${MAX_ENRICH_PER_PASS} photo-stat lookups; remaining challenges rank on what is already known and resume next cycle`,
+                    log.withCategory('autoSubmit').warning(
+                        `autoSubmit: reached this cycle's limit of ${MAX_ENRICH_PER_PASS} photo-stat lookups; remaining challenges rank on what is already known and resume next cycle`,
                         null,
                     );
                 }
@@ -363,7 +363,7 @@ const enrichCandidates = async (
             try {
                 payload = await getImageData(id, token);
             } catch (error) {
-                log.withCategory('autoFill').debug(
+                log.withCategory('autoSubmit').debug(
                     `photoStats: get_image_data failed for photo ${oneLine(id)}: ${oneLine(errorMessage(error) || error)}`,
                     null,
                 );
@@ -374,8 +374,8 @@ const enrichCandidates = async (
                 if (breakerOpen(budget) && !budget.breakerLogged) {
                     budget.breakerLogged = true;
                     if (!budget.quiet) {
-                        log.withCategory('autoFill').warning(
-                            `autoFill: photo-stats lookups failed ${FAILURE_BREAKER_THRESHOLD} times in a row; skipping stat enrichment for the rest of this pass — ranking falls back to views and upload date`,
+                        log.withCategory('autoSubmit').warning(
+                            `autoSubmit: photo-stats lookups failed ${FAILURE_BREAKER_THRESHOLD} times in a row; skipping stat enrichment for the rest of this pass — ranking falls back to views and upload date`,
                             null,
                         );
                     }

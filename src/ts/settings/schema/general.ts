@@ -101,7 +101,7 @@ export const generalSettings = {
     // The app never joins, submits or swaps a photo in this challenge by itself (services/manualPhotosOnly.ts).
     // challengeOnly: `false` exists only as a per-challenge override. An explicit `false` in a rule or profile
     // would, with first-match-wins rule order, silently cancel a later, more specific "on".
-    // It sits in `general`, not `autoFill`: that group is disabled once the slots are full, which is
+    // It sits in `general`, not `autoSubmit`: that group is disabled once the slots are full, which is
     // exactly when Auto-Swap is the only automatic photo path left.
     manualPhotosOnly: {
         type: 'boolean',

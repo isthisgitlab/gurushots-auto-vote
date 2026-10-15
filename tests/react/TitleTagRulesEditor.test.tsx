@@ -164,8 +164,8 @@ describe('TitleTagRulesEditor', () => {
         test('choosing Off emits false, not inherit', () => {
             const onChange = jest.fn();
             render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
-            pick('app.titleRuleAutoFill', 'off');
-            expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoFill: false })]);
+            pick('app.titleRuleAutoSubmit', 'off');
+            expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoSubmit: false })]);
         });
 
         test('returning to Inherit emits the empty sentinel the sanitizer drops', () => {
@@ -755,7 +755,7 @@ describe('TitleTagRulesEditor', () => {
                 <TitleTagRulesEditor value={[row({ pics: 4, autoJoin: true })]} onChange={jest.fn()} />,
             );
             expect(screen.getByText('app.titleRuleBroadWarning')).toBeTruthy();
-            rerender(<TitleTagRulesEditor value={[row({ pics: 4, autoFill: true })]} onChange={jest.fn()} />);
+            rerender(<TitleTagRulesEditor value={[row({ pics: 4, autoSubmit: true })]} onChange={jest.fn()} />);
             expect(screen.getByText('app.titleRuleBroadWarning')).toBeTruthy();
         });
 

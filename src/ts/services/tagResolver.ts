@@ -118,7 +118,7 @@ const resolveTermsToTags = async (
         ignoreWords?: IgnoreWords;
     },
 ): Promise<Array<string>> => {
-    const { token, memberId, searchTagAutocomplete, logger, logLabel = 'autoFill', ignoreWords = null } = deps || {};
+    const { token, memberId, searchTagAutocomplete, logger, logLabel = 'autoSubmit', ignoreWords = null } = deps || {};
     if (!Array.isArray(terms) || terms.length === 0) return [];
     if (!token || !memberId || typeof searchTagAutocomplete !== 'function') return [];
 

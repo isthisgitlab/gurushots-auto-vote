@@ -124,7 +124,7 @@ const collectRaisedEntryFlags = (entries: RankingEntry[]): Map<string, { turbo: 
  * Replacing `member` wholesale means an entry that IS in the fresh payload comes back
  * with the server's flags — and the server has not registered an apply from seconds ago,
  * so it reports turbo/boosted false. That would silently undo reflectEntryFlag: with the
- * default action order (turbo, then autoFill, then boost) a turbo applied earlier in the
+ * default action order (turbo, then autoSubmit, then boost) a turbo applied earlier in the
  * pass would have its flag wiped by the refresh, and boost would then pick the very entry
  * turbo had just consumed. Only ever raise a flag, never clear one — if either side says an
  * entry is taken, treat it as taken. That errs toward using a different entry, which is the
@@ -163,7 +163,7 @@ const carryLocalEntryFlags = (prevEntries: RankingEntry[], freshEntries: Ranking
  * looks like. Treating it as 'gone' would silently skip legitimate fills on
  * every API hiccup.
  *
- * @param label - calling flow (autoFill/emergencyFill/fillNew)
+ * @param label - calling flow (autoSubmit/emergencySubmit/fillNew)
  */
 const refreshChallengeState = async (
     challenge: Challenge,
@@ -172,7 +172,7 @@ const refreshChallengeState = async (
     label: string,
 ): Promise<'refreshed' | 'gone' | 'unavailable'> => {
     if (typeof getActiveChallenges !== 'function') return 'unavailable';
-    const log = logger.withCategory('autoFill');
+    const log = logger.withCategory('autoSubmit');
     // Collapse CR/LF in the cause before interpolation (same forgery guard
     // challengeTag applies): the message can carry server-influenced text.
     const staleWarning = (cause: unknown) =>

@@ -33,6 +33,7 @@ import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
 import { isAppSettings } from '../helpers/storedShapes';
 import { parseJsonAs } from '../helpers/parseJson';
+import { V1_KEY_RENAMES } from '../../src/ts/settings/importV1';
 
 const g = globalThis as typeof globalThis & {
     __GS_HEADLESS__?: boolean;
@@ -61,6 +62,9 @@ describe('settings facade — edge cases', () => {
         store.write.mockClear();
     };
     const saved = () => parseJsonAs(store.value!, isAppSettings);
+    // The stored file still names settings the way 1.x did.
+    const storedKey = (key: string): string =>
+        Object.entries(V1_KEY_RENAMES).find(([, name]) => name === key)?.[0] ?? key;
 
     beforeAll(() => {
         // Burn the once-per-process obsolete-settings cleanup so it never
@@ -201,7 +205,9 @@ describe('settings facade — edge cases', () => {
             expect(settings.resetAllGlobalDefaults()).toBe(true);
             const gd = saved().challengeSettings.globalDefaults;
             for (const key of Object.keys(settings.SETTINGS_SCHEMA)) {
-                expect(gd[key]).toEqual(settings.SETTINGS_SCHEMA[key as keyof typeof settings.SETTINGS_SCHEMA].default);
+                expect(gd[storedKey(key)]).toEqual(
+                    settings.SETTINGS_SCHEMA[key as keyof typeof settings.SETTINGS_SCHEMA].default,
+                );
             }
         });
 

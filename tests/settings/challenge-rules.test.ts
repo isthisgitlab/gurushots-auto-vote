@@ -452,7 +452,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
             );
             expect(settings.resolveRuleSetting('autoJoinWithinHoursOfEnd', challenge())).toEqual({ value: 2 });
             expect(settings.resolveRuleSetting('exposure', challenge())).toEqual({ value: 70 });
-            expect(settings.resolveRuleSetting('autoFill', challenge())).toEqual({ value: true });
+            expect(settings.resolveRuleSetting('autoSubmit', challenge())).toEqual({ value: true });
             expect(settings.resolveRuleSetting('autoJoin', challenge())).toBeNull();
         });
 
@@ -536,8 +536,8 @@ describe('settings facade — class conditions and the rule cascade', () => {
                 ruleSources: { scenario: rule(undefined, 1) },
             });
             expect(settings.getTitleProfile('Whatever', 2)).toMatchObject({
-                inlineValues: { autoFill: true },
-                ruleSources: { autoFill: rule(undefined, 2) },
+                inlineValues: { autoSubmit: true },
+                ruleSources: { autoSubmit: rule(undefined, 2) },
             });
         });
 
@@ -565,13 +565,13 @@ describe('settings facade — class conditions and the rule cascade', () => {
             );
             const seaside = rule('Seaside', 1);
             expect(settings.getTitleProfile('Seaside')).toEqual({
-                profile: { name: 'Quad', values: { exposure: 70, autoFill: false } },
+                profile: { name: 'Quad', values: { exposure: 70, autoSubmit: false } },
                 suppressed: false,
-                ruleValues: { autoFill: true, scenario: 'Plan', exposure: 70 },
-                inlineValues: { autoFill: true, scenario: 'Plan' },
+                ruleValues: { autoSubmit: true, scenario: 'Plan', exposure: 70 },
+                inlineValues: { autoSubmit: true, scenario: 'Plan' },
                 // exposure comes from the profile of that same rule.
-                ruleSources: { autoFill: seaside, scenario: seaside, exposure: rule('Seaside', 1, true) },
-                inlineSources: { autoFill: seaside, scenario: seaside },
+                ruleSources: { autoSubmit: seaside, scenario: seaside, exposure: rule('Seaside', 1, true) },
+                inlineSources: { autoSubmit: seaside, scenario: seaside },
             });
         });
 
@@ -586,24 +586,24 @@ describe('settings facade — class conditions and the rule cascade', () => {
                 }),
             );
             const info = settings.getTitleProfile('Seaside');
-            // While the profile applies: autoFill is the profile's (rule 1), autoJoin the later rule's own.
-            expect(info.ruleValues).toEqual({ autoFill: false, autoJoin: true });
-            expect(info.ruleSources).toEqual({ autoFill: rule('Seaside', 1, true), autoJoin: rule('Sea', 2) });
-            // Once the profile is suppressed, the later rule's inline autoFill is what runs.
-            expect(info.inlineValues).toEqual({ autoFill: true, autoJoin: true });
-            expect(info.inlineSources).toEqual({ autoFill: rule('Sea', 2), autoJoin: rule('Sea', 2) });
+            // While the profile applies: autoSubmit is the profile's (rule 1), autoJoin the later rule's own.
+            expect(info.ruleValues).toEqual({ autoSubmit: false, autoJoin: true });
+            expect(info.ruleSources).toEqual({ autoSubmit: rule('Seaside', 1, true), autoJoin: rule('Sea', 2) });
+            // Once the profile is suppressed, the later rule's inline autoSubmit is what runs.
+            expect(info.inlineValues).toEqual({ autoSubmit: true, autoJoin: true });
+            expect(info.inlineSources).toEqual({ autoSubmit: rule('Sea', 2), autoJoin: rule('Sea', 2) });
         });
 
         test('a title of only spaces names nothing: the rule is untitled', () => {
             seed(base({ titleRules: [withTags({ title: '   ', challengeTag: 'Comm', autoFill: true })] }));
             settings.rememberChallengeTitles([{ id: 3, title: 'Seaside', tags: ['Comm'] }]);
-            expect(settings.getTitleProfile('Seaside', 3).ruleSources).toEqual({ autoFill: { index: 1 } });
+            expect(settings.getTitleProfile('Seaside', 3).ruleSources).toEqual({ autoSubmit: { index: 1 } });
         });
 
         test('a hand-edited title that is no text names nothing either', () => {
             seed(base({ titleRules: [withTags({ title: 42, challengeTag: 'Comm', autoFill: true })] }));
             settings.rememberChallengeTitles([{ id: 3, title: 'Seaside', tags: ['Comm'] }]);
-            expect(settings.getTitleProfile('Seaside', 3).ruleSources).toEqual({ autoFill: { index: 1 } });
+            expect(settings.getTitleProfile('Seaside', 3).ruleSources).toEqual({ autoSubmit: { index: 1 } });
         });
 
         test('with the profile suppressed the inline values still apply and the profile still shows, flagged', () => {
@@ -635,10 +635,10 @@ describe('settings facade — class conditions and the rule cascade', () => {
             );
             settings.rememberChallengeTitles([{ id: 3, title: 'Seaside', tags: ['Comm'] }]);
             const info = settings.getTitleProfile('Seaside', 3);
-            expect(info.inlineValues).toEqual({ autoFill: true });
+            expect(info.inlineValues).toEqual({ autoSubmit: true });
             // The untitled rule carries no title, only its place (the renderer words it, translated).
-            expect(info.ruleSources).toEqual({ autoFill: { index: 2 } });
-            expect(info.ruleSources.autoFill).not.toHaveProperty('title');
+            expect(info.ruleSources).toEqual({ autoSubmit: { index: 2 } });
+            expect(info.ruleSources.autoSubmit).not.toHaveProperty('title');
         });
     });
 
@@ -656,8 +656,8 @@ describe('settings facade — class conditions and the rule cascade', () => {
                 { id: 8, ...challenge({ hours: 2 }) },
             ]);
             expect(settings.getEffectiveSetting('exposure', '7')).toBe(70);
-            expect(settings.getEffectiveSetting('autoFill', '7')).toBe(true);
-            expect(settings.getEffectiveSetting('autoFill', '8')).toBe(false);
+            expect(settings.getEffectiveSetting('autoSubmit', '7')).toBe(true);
+            expect(settings.getEffectiveSetting('autoSubmit', '8')).toBe(false);
             expect(settings.getTitleProfile('Seaside', 7)).toMatchObject({
                 profile: { name: 'Quad', values: { exposure: 70 } },
                 suppressed: false,
@@ -678,9 +678,9 @@ describe('settings facade — class conditions and the rule cascade', () => {
         test('a per-challenge override equal to the GLOBAL value still sticks against a rule value', () => {
             seed(rulesForQuad());
             settings.rememberChallengeTitles([{ id: 7, ...challenge() }]);
-            expect(settings.setChallengeOverride('autoFill', '7', false)).toBe(true);
+            expect(settings.setChallengeOverride('autoSubmit', '7', false)).toBe(true);
             expect(saved().challengeSettings.perChallenge['7']).toEqual({ autoFill: false });
-            expect(settings.getEffectiveSetting('autoFill', '7')).toBe(false);
+            expect(settings.getEffectiveSetting('autoSubmit', '7')).toBe(false);
         });
 
         test('suppressing the rule profile keeps the rule inline values', () => {
@@ -688,7 +688,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
             settings.rememberChallengeTitles([{ id: 7, ...challenge() }]);
             expect(settings.replaceChallengeOverrides('7', {}, true)).toBe(true);
             expect(settings.getEffectiveSetting('exposure', '7')).toBe(100);
-            expect(settings.getEffectiveSetting('autoFill', '7')).toBe(true);
+            expect(settings.getEffectiveSetting('autoSubmit', '7')).toBe(true);
             expect(settings.getTitleProfile('Seaside', 7)).toMatchObject({ suppressed: true });
         });
     });

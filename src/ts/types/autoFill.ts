@@ -75,7 +75,7 @@ export type AdoptableMember = ChallengeMember & {
 };
 
 /** The log prefix of a submitting fill path. */
-export type FillLabel = 'autoFill' | 'emergencyFill' | 'manualFill' | 'fillNew';
+export type FillLabel = 'autoSubmit' | 'emergencySubmit' | 'manualFill' | 'fillNew';
 
 /** What onRefreshed may answer after the live re-check. */
 interface RefreshVerdict {
@@ -103,7 +103,7 @@ export interface FillAttemptParams {
     mustIncludeTags: readonly string[] | null;
     shouldIncludeTags: readonly string[] | null;
     /** undefined → the picker's default (true). */
-    fillWithoutTagMatch: boolean | undefined;
+    submitWithoutTagMatch: boolean | undefined;
     probeStandDown?: ((loaded: LoadedCandidates) => boolean) | null;
     onEmptyPick?: ((eligible: PickerPhoto[]) => string) | null;
     onRefreshed?: ((picked: string[]) => RefreshVerdict | null) | null;

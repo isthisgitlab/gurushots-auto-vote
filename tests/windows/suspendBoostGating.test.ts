@@ -26,14 +26,14 @@ const NOW = CLOSE - 3600;
 // Same settings stand-in the describeDeadlineActions suite uses.
 const mockSettings = (overrides = {}) => {
     const defaults = {
-        autoFillSchedule: [{ count: 2, seconds: 900 }],
+        autoSubmitSchedule: [{ count: 2, seconds: 900 }],
         turboTime: 7200,
-        emergencyFill: 300,
+        emergencySubmit: 300,
         boostTime: 300,
         keyUnlockedBoostTime: 900,
         autoBoost: true,
         useTurbo: true,
-        autoFill: true,
+        autoSubmit: true,
         boostImageIndex: 1,
         mustIncludeTags: [],
     };
@@ -103,7 +103,7 @@ describe('imminentBoostChallenges with the real describeDeadlineActions', () => 
     });
 
     test('a boost blocked by the photo pinned for Turbo is not selected, and the sleep boost skips it', async () => {
-        mockSettings({ emergencyFill: 0 });
+        mockSettings({ emergencySubmit: 0 });
         settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
         const blocked = challenge(1);
         quitGuard.rememberChallenges([blocked], false);
@@ -125,7 +125,7 @@ describe('imminentBoostChallenges with the real describeDeadlineActions', () => 
 
     test('a boost blocked by a Turbo pin that gives way inside the horizon is selected, and the sleep boost lands on that photo', async () => {
         // Closes in 30 min; Emergency Submit 300 s: the pin gives way 25 min from now.
-        mockSettings({ emergencyFill: 300 });
+        mockSettings({ emergencySubmit: 300 });
         settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
         const pinned = buildChallenge({
             id: 7,
@@ -164,7 +164,7 @@ describe('imminentBoostChallenges with the real describeDeadlineActions', () => 
     });
 
     test('a block with no release inside the horizon (Emergency Submit off) is neither selected nor boosted', async () => {
-        mockSettings({ emergencyFill: 0 });
+        mockSettings({ emergencySubmit: 0 });
         settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
         const pinned = keyChallenge(8);
         pinned.member!.turbo = { state: 'LOCKED' };
@@ -200,7 +200,7 @@ describe('imminentBoostChallenges with the real describeDeadlineActions', () => 
     });
 
     test('a fill-new conflict row (only entry turboed, free slot) is selected, and the sleep boost skips it with the Turbo reason', async () => {
-        mockSettings({ boostFillNewOnConflict: true });
+        mockSettings({ boostNewSubmitOnConflict: true });
         const conflicted = challenge(1, [{ id: 'e1', turbo: true }]);
         quitGuard.rememberChallenges([conflicted], false);
         expect(selectedIds()).toEqual([1]);

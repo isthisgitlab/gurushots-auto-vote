@@ -64,7 +64,7 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
         const loaded = settings.loadSettings();
         const globalDefaults = loaded.challengeSettings.globalDefaults;
 
-        expect(globalDefaults.autoFillSchedule).toEqual(SCHEDULE_FOR_15);
+        expect(globalDefaults.autoSubmitSchedule).toEqual(SCHEDULE_FOR_15);
         expect(Object.prototype.hasOwnProperty.call(globalDefaults, 'autoFillIntervalMinutes')).toBe(false);
         expect(loaded._autoFillScheduleMigratedV1).toBe(true);
     });
@@ -79,7 +79,7 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
         const loaded = settings.loadSettings();
         const override = loaded.challengeSettings.perChallenge[42];
 
-        expect(override.autoFillSchedule).toEqual(SCHEDULE_FOR_15);
+        expect(override.autoSubmitSchedule).toEqual(SCHEDULE_FOR_15);
         expect(Object.prototype.hasOwnProperty.call(override, 'autoFillIntervalMinutes')).toBe(false);
         expect(loaded._autoFillScheduleMigratedV1).toBe(true);
     });
@@ -94,10 +94,10 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
 
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.globalDefaults.autoFillSchedule).toEqual(SCHEDULE_FOR_15);
+        expect(loaded.challengeSettings.globalDefaults.autoSubmitSchedule).toEqual(SCHEDULE_FOR_15);
         // The scope without the legacy key gains nothing (effective-setting
         // resolution falls through to the global default at read time).
-        expect(loaded.challengeSettings.perChallenge[42]).toEqual({ autoFill: true });
+        expect(loaded.challengeSettings.perChallenge[42]).toEqual({ autoSubmit: true });
     });
 
     test('asymmetric scopes: legacy only per-challenge leaves globalDefaults untouched', () => {
@@ -110,8 +110,8 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
 
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.perChallenge[42].autoFillSchedule).toEqual(SCHEDULE_FOR_15);
-        expect(loaded.challengeSettings.globalDefaults).toEqual({ autoFill: false });
+        expect(loaded.challengeSettings.perChallenge[42].autoSubmitSchedule).toEqual(SCHEDULE_FOR_15);
+        expect(loaded.challengeSettings.globalDefaults).toEqual({ autoSubmit: false });
     });
 
     test('non-integer legacy value 1.35 rounds to integer seconds', () => {
@@ -122,7 +122,8 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
         );
 
         const loaded = settings.loadSettings();
-        const migrated = loaded.challengeSettings.globalDefaults.autoFillSchedule as SettingValues['autoFillSchedule'];
+        const migrated = loaded.challengeSettings.globalDefaults
+            .autoSubmitSchedule as SettingValues['autoSubmitSchedule'];
 
         expect(migrated).toEqual([
             { count: 2, seconds: 243 }, // round(3 * 1.35 * 60)
@@ -141,7 +142,7 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
 
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.globalDefaults.autoFillSchedule).toEqual([
+        expect(loaded.challengeSettings.globalDefaults.autoSubmitSchedule).toEqual([
             { count: 2, seconds: 10800 },
             { count: 3, seconds: 7200 },
             { count: 4, seconds: 3600 },
@@ -178,7 +179,7 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
         const loaded = settings.loadSettings();
         const secondWrites = fs.writeFileSync.mock.calls.length;
 
-        expect(loaded.challengeSettings.globalDefaults.autoFillSchedule).toEqual(SCHEDULE_FOR_15);
+        expect(loaded.challengeSettings.globalDefaults.autoSubmitSchedule).toEqual(SCHEDULE_FOR_15);
         expect(secondWrites).toBe(firstWrites); // no new migration writes
     });
 
@@ -200,7 +201,7 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
 
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.globalDefaults.autoFillSchedule).toBeUndefined();
+        expect(loaded.challengeSettings.globalDefaults.autoSubmitSchedule).toBeUndefined();
         expect(loaded.challengeSettings.globalDefaults.autoFillIntervalMinutes).toBe(15);
     });
 
@@ -213,7 +214,7 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
 
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.globalDefaults.autoFillSchedule).toEqual([
+        expect(loaded.challengeSettings.globalDefaults.autoSubmitSchedule).toEqual([
             { count: 2, seconds: 1800 },
             { count: 3, seconds: 1200 },
             { count: 4, seconds: 600 },
@@ -230,15 +231,15 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
 
         const loaded = settings.loadSettings();
 
-        expect(validateSetting('autoFillSchedule', loaded.challengeSettings.globalDefaults.autoFillSchedule)).toBe(
+        expect(validateSetting('autoSubmitSchedule', loaded.challengeSettings.globalDefaults.autoSubmitSchedule)).toBe(
             true,
         );
-        expect(validateSetting('autoFillSchedule', loaded.challengeSettings.perChallenge[42].autoFillSchedule)).toBe(
-            true,
-        );
-        expect(validateSetting('autoFillSchedule', loaded.challengeSettings.perChallenge[99].autoFillSchedule)).toBe(
-            true,
-        );
+        expect(
+            validateSetting('autoSubmitSchedule', loaded.challengeSettings.perChallenge[42].autoSubmitSchedule),
+        ).toBe(true);
+        expect(
+            validateSetting('autoSubmitSchedule', loaded.challengeSettings.perChallenge[99].autoSubmitSchedule),
+        ).toBe(true);
     });
 
     test('an existing autoFillSchedule is not overwritten but the legacy key is still deleted', () => {
@@ -252,7 +253,7 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
         const loaded = settings.loadSettings();
         const globalDefaults = loaded.challengeSettings.globalDefaults;
 
-        expect(globalDefaults.autoFillSchedule).toEqual(custom);
+        expect(globalDefaults.autoSubmitSchedule).toEqual(custom);
         expect(Object.prototype.hasOwnProperty.call(globalDefaults, 'autoFillIntervalMinutes')).toBe(false);
         expect(loaded._autoFillScheduleMigratedV1).toBe(true);
     });

@@ -133,7 +133,7 @@ export const runTurboApply = async (ctx: ActionContext) => {
     if (
         !turboApply.pinned &&
         !votingLogic.isWithinEmergencyWindow(challenge, now) &&
-        settings.getEffectiveSetting('protectUncertainAutoFills', challenge.id.toString()) &&
+        settings.getEffectiveSetting('protectUncertainAutoSubmits', challenge.id.toString()) &&
         ctx.entryAges?.isUncertain(challenge.id, target.imageId)
     ) {
         logger

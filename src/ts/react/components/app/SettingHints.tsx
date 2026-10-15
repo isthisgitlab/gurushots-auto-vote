@@ -355,13 +355,13 @@ function votingPauseStatusHints(ctx: ChallengeHintContext): SettingHint[] {
 
 // The settings Manual Photos Only overrides: each automatic photo path it blocks.
 const MANUAL_PHOTOS_HINTED_KEYS = [
-    ['autoFill', 'app.manualPhotosOnlyHint'],
-    ['emergencyFill', 'app.manualPhotosOnlyHint'],
+    ['autoSubmit', 'app.manualPhotosOnlyHint'],
+    ['emergencySubmit', 'app.manualPhotosOnlyHint'],
     ['autoSwap', 'app.manualPhotosOnlyHint'],
-    ['boostFillNew', 'app.manualPhotosOnlyBoostHint'],
-    ['boostFillNewOnConflict', 'app.manualPhotosOnlyBoostHint'],
-    ['turboFillNew', 'app.manualPhotosOnlyBoostHint'],
-    ['turboFillNewOnConflict', 'app.manualPhotosOnlyBoostHint'],
+    ['boostNewSubmit', 'app.manualPhotosOnlyBoostHint'],
+    ['boostNewSubmitOnConflict', 'app.manualPhotosOnlyBoostHint'],
+    ['turboNewSubmit', 'app.manualPhotosOnlyBoostHint'],
+    ['turboNewSubmitOnConflict', 'app.manualPhotosOnlyBoostHint'],
 ] as const;
 
 const CHALLENGE_HINTS: Map<string, (ctx: ChallengeHintContext) => SettingHint[]> = new Map([

@@ -198,14 +198,14 @@ describe('settings facade — title-keyed tag rules', () => {
      * and silently stop following a later change to the global setting.
      */
     describe('inline rule overrides', () => {
-        test('round-trips autoJoin, autoFill and the join window', () => {
+        test('round-trips autoJoin, autoSubmit and the join window', () => {
             const ok = settings.setTitleRules([
                 {
                     title: 'abc',
                     mustIncludeTags: [],
                     shouldIncludeTags: [],
                     autoJoin: true,
-                    autoFill: false,
+                    autoSubmit: false,
                     autoJoinWithinHoursOfEnd: 24,
                 },
             ]);
@@ -213,7 +213,7 @@ describe('settings facade — title-keyed tag rules', () => {
             expect(settings.getTitleRules()[0]).toMatchObject({
                 title: 'abc',
                 autoJoin: true,
-                autoFill: false,
+                autoSubmit: false,
                 autoJoinWithinHoursOfEnd: 24,
             });
         });
@@ -800,9 +800,9 @@ describe('settings facade — title-keyed tag rules', () => {
         });
 
         test('a non-tag key falls through to the plain id-keyed resolution', () => {
-            settings.setGlobalDefault('autoFill', true);
+            settings.setGlobalDefault('autoSubmit', true);
             const challenge = { id: 3, title: 'Whatever' };
-            expect(settings.getEffectiveTagSetting('autoFill', challenge)).toBe(true);
+            expect(settings.getEffectiveTagSetting('autoSubmit', challenge)).toBe(true);
         });
 
         test('a challenge without a title returns the base', () => {
@@ -815,7 +815,7 @@ describe('settings facade — title-keyed tag rules', () => {
 
     describe('getTitleProfile', () => {
         test('resolves an exact title case-insensitively and returns sanitized values', () => {
-            settings.saveChallengeProfile('Portrait Tactic', { exposure: 80, autoFill: true });
+            settings.saveChallengeProfile('Portrait Tactic', { exposure: 80, autoSubmit: true });
             settings.setTitleRules([
                 {
                     title: 'Weekly Portraits',
@@ -827,7 +827,7 @@ describe('settings facade — title-keyed tag rules', () => {
 
             expect(settings.getTitleProfile(' weekly PORTRAITS ').profile).toEqual({
                 name: 'Portrait Tactic',
-                values: { exposure: 80, autoFill: true },
+                values: { exposure: 80, autoSubmit: true },
             });
             expect(settings.getTitleProfile('Other').profile).toBeNull();
         });

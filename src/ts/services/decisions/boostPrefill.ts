@@ -57,8 +57,8 @@ const getBoostPrefillLeadSec = (challengeId: string): number =>
  * Emergency Fill override in shouldApplyBoost applies an available boost as soon
  * as the challenge is inside the emergency window, ignoring autoBoost and
  * boostTime. boostApplyThreshold does not model that, so a user who raises
- * `emergencyFill` above the effective boost window gets the boost spent BEFORE
- * this fill window opens. Not the default (emergencyFill 300s sits below both
+ * `emergencySubmit` above the effective boost window gets the boost spent BEFORE
+ * this fill window opens. Not the default (emergencySubmit 300s sits below both
  * boost windows), and the cost is a fill that arrives too late rather than a
  * wrong action.
  *

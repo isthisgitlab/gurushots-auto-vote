@@ -135,7 +135,7 @@ describe('runSuspendBoosts — target rule', () => {
         ledger.markPending(challenge, 'fresh1', NOW);
         ledger.markUncertain(challenge, 'e1', NOW);
         settings.getEffectiveSetting.mockImplementation(
-            (key) => key === 'autoBoost' || key === 'protectUncertainAutoFills',
+            (key) => key === 'autoBoost' || key === 'protectUncertainAutoSubmits',
         );
         votingLogic.resolvePin.mockReturnValue(invalid({ state: 'hit', entry: { id: 'e1' } }));
         expect(await run([challenge], api, ledger)).toEqual([{ status: 'fulfilled', value: 'applied' }]);
@@ -380,7 +380,7 @@ describe('runSuspendBoosts — skips and overrides', () => {
 
         test('is skipped for a key-unlocked boost outside the emergency window', async () => {
             settings.getEffectiveSetting.mockImplementation(
-                (key) => key === 'autoBoost' || key === 'protectUncertainAutoFills',
+                (key) => key === 'autoBoost' || key === 'protectUncertainAutoSubmits',
             );
             const api = makeApi();
             expect(await run([keyed()], api, uncertain())).toEqual([{ status: 'fulfilled', value: 'skipped' }]);
@@ -390,7 +390,7 @@ describe('runSuspendBoosts — skips and overrides', () => {
 
         test('is boosted inside the emergency window', async () => {
             settings.getEffectiveSetting.mockImplementation(
-                (key) => key === 'autoBoost' || key === 'protectUncertainAutoFills',
+                (key) => key === 'autoBoost' || key === 'protectUncertainAutoSubmits',
             );
             votingLogic.isWithinEmergencyWindow.mockReturnValue(true);
             const api = makeApi();
@@ -399,7 +399,7 @@ describe('runSuspendBoosts — skips and overrides', () => {
 
         test("taken at its Turbo pin's release is boosted, as the awake pass at the release would", async () => {
             settings.getEffectiveSetting.mockImplementation(
-                (key) => key === 'autoBoost' || key === 'protectUncertainAutoFills',
+                (key) => key === 'autoBoost' || key === 'protectUncertainAutoSubmits',
             );
             const release = NOW + 600;
             votingLogic.pinReleaseAt.mockReturnValue(release);

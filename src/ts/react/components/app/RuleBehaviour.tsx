@@ -53,7 +53,7 @@ function TristateSelect({
 // Inline behaviour overrides: inherit when blank.
 const TRISTATE_OVERRIDES = [
     { settingKey: 'autoJoin', labelKey: 'app.titleRuleAutoJoin' },
-    { settingKey: 'autoFill', labelKey: 'app.titleRuleAutoFill' },
+    { settingKey: 'autoSubmit', labelKey: 'app.titleRuleAutoSubmit' },
     { settingKey: 'chosenPhotosOnly', labelKey: 'app.chosenPhotosOnly' },
     { settingKey: 'chosenPhotosInOrder', labelKey: 'app.chosenPhotosInOrder' },
     { settingKey: 'manualPhotosOnly', labelKey: 'app.manualPhotosOnly', onOnly: true },

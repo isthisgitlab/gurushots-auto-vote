@@ -53,14 +53,14 @@ const suggestFillPhotos = async (
 ): Promise<SuggestResult> => {
     const { settings, logger } = deps;
     const label = 'suggest';
-    const log = logger.withCategory('autoFill');
+    const log = logger.withCategory('autoSubmit');
     const tag = logger.challengeTag(challenge);
     const statsBudget = createStatsBudget();
     const runDeps: RankDeps = { ...deps, statsBudget };
 
     const mustIncludeTags = settings?.getEffectiveTagSetting('mustIncludeTags', challenge) ?? null;
     const shouldIncludeTags = settings?.getEffectiveTagSetting('shouldIncludeTags', challenge) ?? null;
-    const fillWithoutTagMatch = settings?.getEffectiveSetting('fillWithoutTagMatch', String(challenge.id));
+    const submitWithoutTagMatch = settings?.getEffectiveSetting('submitWithoutTagMatch', String(challenge.id));
 
     const {
         settings: chosenSettings,
@@ -110,7 +110,7 @@ const suggestFillPhotos = async (
         wantCount: count,
         mustIncludeTags,
         shouldIncludeTags,
-        fillWithoutTagMatch,
+        submitWithoutTagMatch,
         chosen,
     });
     if (enforceOnly && scored.length === 0) {

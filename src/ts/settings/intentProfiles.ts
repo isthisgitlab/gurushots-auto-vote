@@ -41,7 +41,7 @@ const INTENT_PROFILES: IntentProfile[] = [
             autoBoost: false,
             useTurbo: false,
             autoTurbo: false,
-            autoFill: true,
+            autoSubmit: true,
         },
     },
     {
@@ -76,7 +76,7 @@ const INTENT_PROFILES: IntentProfile[] = [
             autoBoost: true,
             useTurbo: true,
             autoTurbo: true,
-            autoFill: true,
+            autoSubmit: true,
             useFinalWindowExposure: true,
             finalWindowExposure: 100,
             finalWindowExposureTarget: 100,

@@ -25,7 +25,7 @@ import { recordUncertainSubmission, verifyFillPick } from './verify';
 // slot is left empty at the buzzer and manual fill is explicit user intent, so
 // neither does; both still rank the chosen photos first. The photo suggestions
 // rank the way the scheduled fill picks, so they honour it too.
-const ONLY_LABELS: ReadonlySet<string> = new Set(['autoFill', 'fillNew', 'suggest']);
+const ONLY_LABELS: ReadonlySet<string> = new Set(['autoSubmit', 'fillNew', 'suggest']);
 
 /**
  * The log prefix of a ranking that reads the Chosen Photos settings: a fill path, or the
@@ -88,7 +88,7 @@ const addMissedChosen = async ({
         ids: unentered,
         eligible,
         wantCount,
-        allowWalk: label !== 'emergencyFill' && !loaded.walkedUnfiltered,
+        allowWalk: label !== 'emergencySubmit' && !loaded.walkedUnfiltered,
         inOrder,
         deps,
         label,
@@ -146,7 +146,7 @@ const explainSubmission = ({
  * submitNewEntryForAction all run this exact sequence and differ only in
  * their entry guards, their per-path hooks, and how they map the outcome to
  * their own return shape — so the sequence lives here once, parameterized by
- * `label` (the log prefix: autoFill/emergencyFill/manualFill/fillNew, which
+ * `label` (the log prefix: autoSubmit/emergencySubmit/manualFill/fillNew, which
  * also names the refresh flow) and the hooks below. Every log line the
  * pipeline emits keeps the exact wording the four paths always had.
  *
@@ -194,7 +194,7 @@ const runFillAttempt = async ({
     wantCount,
     mustIncludeTags,
     shouldIncludeTags,
-    fillWithoutTagMatch,
+    submitWithoutTagMatch,
     probeStandDown = null,
     onEmptyPick = null,
     onRefreshed = null,
@@ -255,7 +255,7 @@ const runFillAttempt = async ({
         wantCount,
         mustIncludeTags,
         shouldIncludeTags,
-        fillWithoutTagMatch,
+        submitWithoutTagMatch,
         chosen,
     });
 
@@ -275,7 +275,7 @@ const runFillAttempt = async ({
             return { status: 'no-pick', detail: onEmptyPick(eligible) };
         }
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .info(`${label}: no eligible photos for ${logger.challengeTag(challenge)}`, null);
         return { status: 'no-pick', detail: null };
     }
@@ -331,12 +331,12 @@ const runFillAttempt = async ({
         if (result?.raw) refuseRememberedChosen(challenge, picked, Date.now());
         const reason = describeSubmitFailure(result && result.raw);
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .warning(`${label}: submit rejected for ${logger.challengeTag(challenge)}: ${reason}`, null);
         return { status: 'submit-rejected', reason };
     } catch (error) {
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .warning(
                 `${label}: submit threw for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`,
                 null,

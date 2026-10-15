@@ -19,7 +19,7 @@ import type { Challenge } from '../../src/ts/types/gurushots';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
-    autoFillEnabled: false,
+    autoSubmitEnabled: false,
     isCompact: false,
     hasCompactOverride: false,
     toggleCompact: jest.fn(),
@@ -83,7 +83,7 @@ const renderCard = (challenge: Challenge, autovoteRunning: boolean) =>
 beforeEach(() => {
     Object.assign(mockChallengeSettings, {
         hasCustomSettings: false,
-        autoFillEnabled: false,
+        autoSubmitEnabled: false,
         isCompact: false,
         hasCompactOverride: false,
         toggleCompact: jest.fn(),

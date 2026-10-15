@@ -70,7 +70,7 @@ beforeEach(() => {
         invalid({
             schema: {
                 exposure: { type: 'number', perChallenge: true, default: 100, label: 'app.exposure' },
-                autoFill: { type: 'boolean', perChallenge: true, default: false, label: 'app.autoFill' },
+                autoSubmit: { type: 'boolean', perChallenge: true, default: false, label: 'app.autoSubmit' },
                 scenario: { type: 'scenario', perChallenge: true, default: '', label: 'app.scenario' },
                 chosenPhotos: { type: 'photos', perChallenge: true, default: [], label: 'app.chosenPhotos' },
                 timezone: { type: 'string', perChallenge: false, default: 'UTC', label: 'app.timezone' },
@@ -146,7 +146,7 @@ describe('phases', () => {
         const picker = screen.getAllByLabelText<HTMLSelectElement>('app.sbAddSetting')[0];
         expect(within(picker).queryByText('app.scenario')).toBeNull();
         expect(within(picker).queryByText('app.timezone')).toBeNull();
-        changeSelect(picker, 'autoFill');
+        changeSelect(picker, 'autoSubmit');
         fireEvent.change(document.querySelector('#sb-setting-exposure')!, { target: { value: '55' } });
         fireEvent.click(screen.getAllByTitle('app.resetToDefaultNotSaved')[0]);
         expect(document.querySelector<HTMLInputElement>('#sb-setting-exposure')!.value).toBe('100');
@@ -155,7 +155,7 @@ describe('phases', () => {
         expect(screen.getByText('unknownKey')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'app.sbRemove: unknownKey' }));
         const draft = await saveDraft();
-        expect(draft.phases.main.settings).toEqual({ exposure: 12, autoFill: false });
+        expect(draft.phases.main.settings).toEqual({ exposure: 12, autoSubmit: false });
     });
 });
 

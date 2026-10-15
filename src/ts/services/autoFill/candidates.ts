@@ -186,11 +186,11 @@ const readUnfilteredLibrary = async (
  * caller's catch handles it.
  *
  * The returned set is fed unchanged into pickPhotosForChallenge, so the
- * must/should/fillWithoutTagMatch ranking semantics are preserved.
+ * must/should/submitWithoutTagMatch ranking semantics are preserved.
  *
  * @param challenge - challenge with id and (optional) title
  * @param deps
- *   logLabel: the calling flow ('autoFill' default, or 'join') — used as the log
+ *   logLabel: the calling flow ('autoSubmit' default, or 'join') — used as the log
  *   category and message prefix so a join's messages aren't attributed to auto-fill.
  *   searchTagAutocomplete / getCurrentMemberProfile: OPTIONAL. Supplying both
  *   enables tag resolution on the miss path (see the retry below). Omit either
@@ -211,7 +211,7 @@ const fetchCandidatesForChallenge = async (
     {
         getEligiblePhotos,
         logger,
-        logLabel = 'autoFill',
+        logLabel = 'autoSubmit',
         searchTagAutocomplete,
         getCurrentMemberProfile,
         usage = 'submit',

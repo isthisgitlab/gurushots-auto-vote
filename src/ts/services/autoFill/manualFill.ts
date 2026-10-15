@@ -1,6 +1,6 @@
 /**
  * Auto-fill — the manual "Fill Now" path: one or all missing slots in a single
- * request, ignoring the autoFill toggle and the schedule.
+ * request, ignoring the autoSubmit toggle and the schedule.
  */
 
 import { resetPassState as resetPhotoStatsPassState } from '../photoStats';
@@ -15,7 +15,7 @@ import { errorMessage } from '../../errorMessage';
 
 /**
  * Manual fill (GUI button). Submits one or all missing slots in a
- * single request. Ignores the autoFill toggle and the spacing math,
+ * single request. Ignores the autoSubmit toggle and the spacing math,
  * but still honors mustIncludeTags / shouldIncludeTags so the tag
  * rules mean the same thing whether triggered by the user or the
  * scheduler.
@@ -53,14 +53,14 @@ const fillChallengeNow = async (
     // caller forgot to wire deps; emit a debug line so it's observable.
     let mustIncludeTags = null;
     let shouldIncludeTags = null;
-    let fillWithoutTagMatch; // undefined → picker treats as default (true)
+    let submitWithoutTagMatch; // undefined → picker treats as default (true)
     if (settings) {
         mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
         shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
-        fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
+        submitWithoutTagMatch = settings.getEffectiveSetting('submitWithoutTagMatch', String(challengeId));
     } else {
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .debug(
                 `manualFill: settings module not provided to fillChallengeNow for ${logger.challengeTag(challenge)}; tag rules will not apply`,
                 null,
@@ -75,7 +75,7 @@ const fillChallengeNow = async (
         wantCount: mode === 'all' ? slotsRemaining : 1,
         mustIncludeTags,
         shouldIncludeTags,
-        fillWithoutTagMatch,
+        submitWithoutTagMatch,
         // No onRefreshed hook: manual fill is explicit user intent acting on
         // the state the user is looking at — it never ran the pre-submit live
         // re-check, and keeps not running it.
@@ -91,7 +91,7 @@ const fillChallengeNow = async (
                     ? 'No photos matched the Must Include Tags filter'
                     : 'No eligible photos found';
             logger
-                .withCategory('autoFill')
+                .withCategory('autoSubmit')
                 .info(`manualFill: ${error.toLowerCase()} for ${logger.challengeTag(challenge)}`, null);
             return error;
         },
@@ -130,7 +130,7 @@ const fillChallengeNow = async (
     // No reflectNewEntry here: manual fill has always left the local challenge
     // object untouched (the GUI re-fetches state after the IPC call returns).
     logger
-        .withCategory('autoFill')
+        .withCategory('autoSubmit')
         .success(`manualFill: submitted ${attempt.picked.length} entries for ${logger.challengeTag(challenge)}`, null);
     return {
         success: true,
@@ -166,7 +166,7 @@ const submitPickedPhotos = async (
     deps: Pick<FillDeps, 'logger' | 'submitToChallenge'>,
 ): Promise<SubmitPickedResult> => {
     const { logger, submitToChallenge } = deps;
-    const log = logger.withCategory('autoFill');
+    const log = logger.withCategory('autoSubmit');
     const tag = logger.challengeTag(challenge);
 
     const slotsRemaining = getSlotsRemaining(challenge);

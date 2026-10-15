@@ -98,7 +98,7 @@ export interface ChosenPick {
 
 /** pickPhotosForChallenge / buildScoredCandidates options. */
 export interface PickOptions extends TagOptions {
-    fillWithoutTagMatch?: boolean;
+    submitWithoutTagMatch?: boolean;
     semanticScores?: SemanticScoreMap | null;
     onFallback?: ((info: PickFallbackInfo) => void) | null;
     /** Honoured by pickPhotosForChallenge and buildChosenCandidates; buildScoredCandidates ignores it. */

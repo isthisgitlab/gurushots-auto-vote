@@ -228,7 +228,7 @@ describe('emergencyFill minute->second migration in loadSettings', () => {
 
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.globalDefaults.emergencyFill).toBe(300);
+        expect(loaded.challengeSettings.globalDefaults.emergencySubmit).toBe(300);
         expect(loaded._emergencyFillTimeMigratedV1).toBe(true);
     });
 
@@ -241,7 +241,7 @@ describe('emergencyFill minute->second migration in loadSettings', () => {
 
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.globalDefaults.emergencyFill).toBe(0);
+        expect(loaded.challengeSettings.globalDefaults.emergencySubmit).toBe(0);
     });
 
     test('leaves an already-seconds value (>= 60) untouched', () => {
@@ -253,7 +253,7 @@ describe('emergencyFill minute->second migration in loadSettings', () => {
 
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.globalDefaults.emergencyFill).toBe(300);
+        expect(loaded.challengeSettings.globalDefaults.emergencySubmit).toBe(300);
         expect(loaded._emergencyFillTimeMigratedV1).toBe(true);
     });
 
@@ -270,8 +270,8 @@ describe('emergencyFill minute->second migration in loadSettings', () => {
 
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.perChallenge[42].emergencyFill).toBe(600);
-        expect(loaded.challengeSettings.perChallenge[99].emergencyFill).toBe(600);
+        expect(loaded.challengeSettings.perChallenge[42].emergencySubmit).toBe(600);
+        expect(loaded.challengeSettings.perChallenge[99].emergencySubmit).toBe(600);
     });
 
     test('boundary: 59 migrates, 60 is left alone', () => {
@@ -284,8 +284,8 @@ describe('emergencyFill minute->second migration in loadSettings', () => {
 
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.globalDefaults.emergencyFill).toBe(59 * 60);
-        expect(loaded.challengeSettings.perChallenge[7].emergencyFill).toBe(60);
+        expect(loaded.challengeSettings.globalDefaults.emergencySubmit).toBe(59 * 60);
+        expect(loaded.challengeSettings.perChallenge[7].emergencySubmit).toBe(60);
     });
 
     test('does not migrate when flag is already true even if minute value present', () => {
@@ -299,6 +299,6 @@ describe('emergencyFill minute->second migration in loadSettings', () => {
 
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.globalDefaults.emergencyFill).toBe(5);
+        expect(loaded.challengeSettings.globalDefaults.emergencySubmit).toBe(5);
     });
 });

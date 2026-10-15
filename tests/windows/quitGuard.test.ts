@@ -37,7 +37,7 @@ const expired = invalid<Challenge>({
 const dueAt: Record<Challenge['id'], number> = { 1: NOW + 540, 2: NOW - 30, 3: NOW + 60, 4: NOW + 60 };
 const describe_ = (c: Challenge) => ({
     actions: [
-        { action: 'autoFill', dueAt: 0 },
+        { action: 'autoSubmit', dueAt: 0 },
         { action: 'boost', dueAt: dueAt[c.id] },
     ],
 });

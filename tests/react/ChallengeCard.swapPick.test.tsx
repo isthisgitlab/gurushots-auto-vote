@@ -16,7 +16,7 @@ import type { WindowApi } from '../../src/ts/types/ipc';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
-    autoFillEnabled: false,
+    autoSubmitEnabled: false,
     isCompact: false,
     hasCompactOverride: false,
     toggleCompact: jest.fn(),

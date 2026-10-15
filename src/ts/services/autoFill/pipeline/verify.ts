@@ -41,7 +41,7 @@ const rankBlock = async (
             : { picked, visualEvidence: null };
     } catch (error) {
         deps.logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .warning(
                 `Visual check failed for ${deps.logger.challengeTag(challenge)}: ${errorMessage(error) || error}`,
                 null,
@@ -131,14 +131,14 @@ const recordUncertainSubmission = ({
         try {
             deps.entryAges.markUncertain(challenge, id, Math.floor(Date.now() / 1000));
             deps.logger
-                .withCategory('autoFill')
+                .withCategory('autoSubmit')
                 .warning(
                     `${label}: photo ${oneLine(id)} ${reason} for ${deps.logger.challengeTag(challenge)}; automatic Boost/Turbo may be skipped`,
                     null,
                 );
         } catch (error) {
             deps.logger
-                .withCategory('autoFill')
+                .withCategory('autoSubmit')
                 .warning(
                     `${label}: could not record theme uncertainty for submitted photo ${oneLine(id)}: ${errorMessage(error)}`,
                     null,

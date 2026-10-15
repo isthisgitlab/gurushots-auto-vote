@@ -189,10 +189,10 @@ export const app = {
     deadlineTimelineApprox: 'aptuveni — var mainīties, pievienojot foto',
     deadlineNext: 'Nākamā',
     deadlineDue: 'jau tagad',
-    deadlineActionAutoFill: 'Automātiskā iesniegšana',
+    deadlineActionAutoSubmit: 'Automātiskā iesniegšana',
     deadlineActionBoost: 'Boost',
     deadlineActionTurbo: 'Turbo',
-    deadlineActionEmergencyFill: 'Ārkārtas iesniegšana',
+    deadlineActionEmergencySubmit: 'Ārkārtas iesniegšana',
     conflictFlag:
         '{kind} nevar izmantot: vienīgajam foto jau ir {other} (abi nevar būt vienam foto). Pievieno vēl vienu foto, lai izmantotu abus.',
     conflictPinReleases:
@@ -269,8 +269,8 @@ export const app = {
         'Cik ilgi pirms Boost izmantošanas sākas uzpilde. Atvēli pietiekami laika vairākiem balsošanas cikliem — redzamība nesasniedz 100 % vienā piegājienā.',
     autoBoost: 'Automātiski izmantot Boost',
     autoBoostDesc: 'Automātiski izmanto Boost šajā izaicinājumā, kad tā Boost logs drīz aizvērsies.',
-    protectUncertainAutoFills: 'Saudzēt automātiski iesniegtos foto bez skaidras atbilstības',
-    protectUncertainAutoFillsDesc:
+    protectUncertainAutoSubmits: 'Saudzēt automātiski iesniegtos foto bez skaidras atbilstības',
+    protectUncertainAutoSubmitsDesc:
         'Neizmantot Boost un Turbo automātiski iesniegtiem foto bez atbilstības tēmai. Izņēmumi: ārkārtas darbības, Boost termiņa beigas un atvērtas tēmas.',
     turbo: 'Turbo',
     autoTurbo: 'Automātiski iegūt Turbo',
@@ -287,36 +287,36 @@ export const app = {
     boostImageIndex: 'Boost foto',
     boostImageIndexDesc:
         'Kuram foto izmantot Boost: 1 = pirmajam, 2 = otrajam utt. 0 = pēdējam foto. Ja šim foto jau ir Turbo vai tas ir piesprausts Turbo, Boost pāriet uz iepriekšējo foto (no 1. pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusējuma vērtība ir 1, tāpēc, ja abi automātiskie režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto. Foto, kas izaicinājuma kartītē piesprausts Boost, ir svarīgāks par šo uzstādījumu. Foto, kas piesprausts Turbo, Boost nesaņem, kamēr piespraude bloķē: ja Turbo vēl nav iegūts, tas ilgst, līdz Boost nonāk ārkārtas iesniegšanas laikā (ja tā izslēgta, nekad nebeidzas).',
-    boostFillNew: 'Boost jaunam iesniegtam foto',
-    boostFillNewDesc:
+    boostNewSubmit: 'Boost jaunam iesniegtam foto',
+    boostNewSubmitDesc:
         'Ja ieslēgts, lietotne tieši pirms Boost iesniedz jaunu foto (pēc taviem automātiskās iesniegšanas tagu noteikumiem) un izmanto Boost šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai piemērota foto, Boost saņem tavs norādītais Boost foto.',
-    boostFillNewOnConflict: 'Boost jaunam iesniegtam foto tikai konflikta gadījumā',
-    boostFillNewOnConflictDesc:
+    boostNewSubmitOnConflict: 'Boost jaunam iesniegtam foto tikai konflikta gadījumā',
+    boostNewSubmitOnConflictDesc:
         'Ja ieslēgts, lietotne iesniedz jaunu foto un izmanto tam Boost tikai tad, ja Boost nevar piešķirt nevienam esošajam foto — katram ir Turbo vai tas ir piesprausts Turbo (otrai darbībai piesprausts foto ir konflikts). Parasti Boost joprojām saņem tavs esošais foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Boost šajā ciklā izlaiž. Vienīgais izņēmums: kad Turbo piesprausts foto ārkārtas iesniegšanas laikā atkāpjas, jo Turbo vēl nav gatavs, Boost tiek piešķirts šim foto. Ja ieslēgta iepriekšējā opcija, šo neņem vērā, jo tā vienmēr iesniedz jaunu foto.',
-    turboFillNew: 'Turbo jaunam iesniegtam foto',
-    turboFillNewDesc:
+    turboNewSubmit: 'Turbo jaunam iesniegtam foto',
+    turboNewSubmitDesc:
         'Ja ieslēgts, lietotne tieši pirms Turbo iesniedz jaunu foto (pēc taviem automātiskās iesniegšanas tagu noteikumiem) un izmanto Turbo šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai piemērota foto, Turbo saņem tavs norādītais Turbo foto; ja vēl nav neviena foto, Turbo šajā ciklā izlaiž.',
-    turboFillNewOnConflict: 'Turbo jaunam iesniegtam foto tikai konflikta gadījumā',
-    turboFillNewOnConflictDesc:
+    turboNewSubmitOnConflict: 'Turbo jaunam iesniegtam foto tikai konflikta gadījumā',
+    turboNewSubmitOnConflictDesc:
         'Ja ieslēgts, lietotne iesniedz jaunu foto un izmanto tam Turbo tikai tad, ja Turbo nevar piešķirt nevienam esošajam foto — katram ir Boost vai tas ir piesprausts Boost (otrai darbībai piesprausts foto ir konflikts). Parasti Turbo joprojām saņem tavs esošais foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Turbo šajā ciklā izlaiž. Vienīgais izņēmums: kad Boost piesprausts foto ārkārtas iesniegšanas laikā atkāpjas, jo Boost vēl nav gatavs, Turbo tiek piešķirts šim foto. Ja ieslēgta iepriekšējā opcija, šo neņem vērā, jo tā vienmēr iesniedz jaunu foto.',
     playAutoTurbo: 'Spēlēt Turbo minispēli, lai iegūtu Turbo',
     autoTurboRunsWithAutovote: 'Automātiskā balsošana jau spēlē Turbo minispēli katrā ciklā',
     earnTurbo: 'Iegūt Turbo',
     applyTurboToThisEntry: 'Izmantot savu Turbo šim foto',
     applyBoostToThisEntry: 'Izmantot savu Boost šim foto',
-    autoFill: 'Automātiski iesniegt trūkstošos foto',
-    autoFillDesc:
+    autoSubmit: 'Automātiski iesniegt trūkstošos foto',
+    autoSubmitDesc:
         'Iesniegt papildu foto, kad tuvojas izaicinājuma termiņš, pēc zemāk norādītā grafika. Katrā pārbaudes ciklā iesniedz vienu foto.',
-    autoFillSchedule: 'Automātiskās iesniegšanas grafiks',
-    autoFillScheduleDesc:
+    autoSubmitSchedule: 'Automātiskās iesniegšanas grafiks',
+    autoSubmitScheduleDesc:
         'Uzstādi laiku 0h 0min, lai izslēgtu attiecīgo foto. Katra rinda nozīmē: kad līdz beigām atlicis šis laiks, jābūt iesniegtiem vismaz tik foto — „Foto 2 ≤ 48h” iesniedz tavu 2. foto, kad atlikušas 48 stundas. Ja esi atpalicis no grafika (lietotne palaista vēlu vai laiks ir garāks par visu izaicinājumu), lietotne grafiku panāk, jau no sākuma iesniedzot vienu foto katrā ciklā. Ja izaicinājums atļauj mazāk foto, nekā aptver grafiks, viss grafiks nobīdās uz beigām, lai pēdējā foto laiks attiektos uz izaicinājuma pēdējo foto: piemēram, izaicinājumā ar 2 foto 2. foto izmanto Foto 4 laiku, bet izaicinājumā ar 3 foto 2. foto izmanto Foto 3 laiku un 3. foto — Foto 4 laiku.',
-    autoFillScheduleShiftHint:
+    autoSubmitScheduleShiftHint:
         'Šis izaicinājums atļauj {0} foto — mazāk, nekā aptver grafiks, tāpēc laiki nobīdās uz beigām: pēdējais foto izmanto Foto {1} laiku.',
-    autoFillScheduleImage: 'Foto',
-    autoFillScheduleOff: 'laiks nav uzstādīts — foto var iesniegt, panākot kādu vēlāku foto',
-    autoFillScheduleEmpty: 'Visi foto ir izslēgti — automātiskā iesniegšana neko neiesniegs.',
-    autoFillScheduleDominated: 'nekad nenostrādās (vēlākam foto jau ir tāds pats vai garāks laiks)',
-    autoFillScheduleOutOfRange: 'laiks nedrīkst pārsniegt 30 dienas',
+    autoSubmitScheduleImage: 'Foto',
+    autoSubmitScheduleOff: 'laiks nav uzstādīts — foto var iesniegt, panākot kādu vēlāku foto',
+    autoSubmitScheduleEmpty: 'Visi foto ir izslēgti — automātiskā iesniegšana neko neiesniegs.',
+    autoSubmitScheduleDominated: 'nekad nenostrādās (vēlākam foto jau ir tāds pats vai garāks laiks)',
+    autoSubmitScheduleOutOfRange: 'laiks nedrīkst pārsniegt 30 dienas',
     settingsSaveError: 'Dažus uzstādījumus neizdevās saglabāt — pārbaudi izceltās vērtības un mēģini vēlreiz.',
     unitPercent: '%',
     unitMinutes: 'min',
@@ -746,7 +746,7 @@ export const app = {
     discoverBusy: 'Pievienošanās jau notiek. Mēģini vēlreiz pēc brīža.',
     validationOutOfRange: 'Ievadi vērtību no {min} līdz {max}.',
     validationAtLeast: 'Ievadi vērtību, kas nav mazāka par {min}.',
-    autoFillBadge: 'automātiskā iesniegšana',
+    autoSubmitBadge: 'automātiskā iesniegšana',
     manualPhotosBadge: 'foto tikai manuāli',
     customBadge: 'pielāgots',
     customSettingsHint: 'Ir pielāgoti uzstādījumi',
@@ -918,13 +918,13 @@ export const app = {
     ignoreTitleWords: 'Ignorēt šos vārdus izaicinājumu nosaukumos',
     ignoreTitleWordsDesc:
         'Vārdi, ko izņemt no izaicinājuma nosaukuma, pirms pēc tā meklēt piemērotus foto. Izaicinājumu nosaukumos tēmai parasti pieliek kādu papildu vārdu — „Epic Lighthouses” ir par bākām, nevis par „epic”, — un šie liekie vārdi gan aizmiglo tēmu, gan tērē tās nedaudzās meklēšanas reizes, kas pieejamas vienam izaicinājumam. Saraksts jau ir aizpildīts ar biežākajiem vārdiem; to var brīvi labot. Izņem vārdu no saraksta, ja izaicinājums tiešām ir par to. Sēriju sākumus, piemēram, „Color Hunt:”, lietotne atmet automātiski, tie šeit nav jāraksta.',
-    fillWithoutTagMatch: 'Iesniegt arī bez tagu sakritības',
-    fillWithoutTagMatchDesc:
+    submitWithoutTagMatch: 'Iesniegt arī bez tagu sakritības',
+    submitWithoutTagMatchDesc:
         'Attiecas tikai tad, ja ir uzstādīti obligātie tagi. Tā kā foto jāsakrīt ar visiem tagiem, tas notiek biežāk, ja prasīti vairāki tagi. Kad ieslēgts (noklusējums) un neviens no taviem foto nesakrīt ar visiem šiem tagiem, lietotne tik un tā pievieno labāko pieejamo foto, lai vieta nepaliktu tukša. Kad izslēgts, vieta paliek tukša, līdz parādās foto, kas sakrīt ar visiem tagiem.',
-    emergencyFill: 'Ārkārtas iesniegšana',
-    emergencyFillDesc:
+    emergencySubmit: 'Ārkārtas iesniegšana',
+    emergencySubmitDesc:
         'Drošības tīkls izaicinājuma pēdējām minūtēm, ja automātiskā iesniegšana citādi atstātu foto vietas tukšas — vai nu tāpēc, ka automātiskā iesniegšana ir izslēgta, vai tāpēc, ka obligātie tagi nesakrīt ne ar vienu foto un „Iesniegt arī bez tagu sakritības” ir izslēgts. Kad līdz izaicinājuma beigām atlicis tik daudz laika, lietotne atlikušajās vietās iesniedz labākos pieejamos foto, pat ja tie nesakrīt ar taviem tagiem. Tā apzināti neņem vērā šos uzstādījumus (arī „Iesniegt tikai izvēlētos foto”), lai izaicinājums nebeigtos ar neizmantotām vietām. Šajā pašā logā tā izmanto arī jebkuru pieejamo Boost un jebkuru iegūto Turbo — pat ja „Automātiski izmantot Boost” vai „Automātiski izmantot Turbo” šim izaicinājumam ir izslēgts —, lai tie neaizietu zudumā, kad izaicinājums beidzas. Grafiskajā lietotnē laiku ievada stundās un minūtēs. Noklusējums ir 5 minūtes; uzstādi 0, lai izslēgtu (tas izslēdz arī šo pēdējās minūtes Boost/Turbo izmantošanu). Padoms: šis logs nedrīkst būt garāks par pēdējās minūtes slieksni (noklusējums ir 10 minūtes), lai lietotne visu šo laiku pārbaudītu bieži.',
-    emergencyFillHelp:
+    emergencySubmitHelp:
         'Pēdējo minūšu drošības tīkls; laiku mēra līdz beigām. Uzstādi 0, lai to pilnībā izslēgtu (tas izslēdz arī pēdējās minūtes Boost/Turbo glābšanu). Šeit 0 nozīmē „izslēgts” atšķirībā no redzamības mērķa uzstādījumiem, kur 0 nozīmē „sekot slieksnim”.',
     tagsPlaceholder: 'piem., saulriets, pludmale, okeāns',
     titleTagRules: 'Izaicinājumu noteikumi',
@@ -966,7 +966,7 @@ export const app = {
     titleRuleOn: 'Ieslēgts',
     titleRuleOff: 'Izslēgts',
     titleRuleAutoJoin: 'Automātiski pievienoties',
-    titleRuleAutoFill: 'Automātiskā iesniegšana',
+    titleRuleAutoSubmit: 'Automātiskā iesniegšana',
     titleRulePercentElapsed: 'Pievienoties pēc',
     titleRuleJoinWindow: 'Vai stundas pirms beigām',
     titleRuleJoinWindowPlaceholder: 'noklusējums',
@@ -1061,7 +1061,7 @@ export const app = {
     groupLastMinute: 'Pēdējā minūte',
     groupScheduledFill: 'Plānotā balsošana',
     groupVotingPause: 'Balsošanas pauze',
-    groupAutoFill: 'Automātiskā iesniegšana',
+    groupAutoSubmit: 'Automātiskā iesniegšana',
     groupRewards: 'Balvas',
     groupMissions: 'Misijas',
     groupNotifications: 'Paziņojumi',
@@ -1095,11 +1095,11 @@ export const app = {
     notifyOnBoostDesc: 'Brīdina pirms Boost izmantošanas, lai paspētu atstāt lietotni ieslēgtu.',
     notifyOnTurbo: 'Paziņot pirms Turbo',
     notifyOnTurboDesc: 'Brīdina pirms Turbo spēles, lai paspētu atstāt lietotni ieslēgtu.',
-    notifyOnAutoFill: 'Paziņot pirms automātiskās iesniegšanas',
-    notifyOnAutoFillDesc:
+    notifyOnAutoSubmit: 'Paziņot pirms automātiskās iesniegšanas',
+    notifyOnAutoSubmitDesc:
         'Brīdina, pirms lietotne tuvu beigām automātiski iesniedz foto, lai paspētu atstāt lietotni ieslēgtu.',
-    notifyOnEmergencyFill: 'Paziņot pirms ārkārtas iesniegšanas',
-    notifyOnEmergencyFillDesc:
+    notifyOnEmergencySubmit: 'Paziņot pirms ārkārtas iesniegšanas',
+    notifyOnEmergencySubmitDesc:
         'Brīdina pirms pēdējā brīža ārkārtas iesniegšanas, lai paspētu atstāt lietotni ieslēgtu.',
     notifyLeadTime: 'Cik laicīgi brīdināt',
     notifyLeadTimeDesc: 'Cik minūtes pirms darbības parādīt brīdinājumu.',
@@ -1490,7 +1490,7 @@ export const logs = {
     categories: {
         api: 'API',
         authentication: 'Pieteikšanās',
-        autoFill: 'Automātiskā iesniegšana',
+        autoSubmit: 'Automātiskā iesniegšana',
         boost: 'Boost',
         challenges: 'Izaicinājumi',
         claim: 'Balvu saņemšana',

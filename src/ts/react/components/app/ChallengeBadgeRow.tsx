@@ -9,7 +9,7 @@ import type { ChallengeCardView } from './ChallengeCard';
 
 export type ChallengeBadgeRowProps = Pick<
     ChallengeCardView,
-    'boostOpen' | 'boostTimeLeft' | 'lowExposure' | 'exposureFactor' | 'showAutoFillBadge' | 'showManualPhotosBadge'
+    'boostOpen' | 'boostTimeLeft' | 'lowExposure' | 'exposureFactor' | 'showAutoSubmitBadge' | 'showManualPhotosBadge'
 > & {
     challenge: Challenge;
     hasCustomSettings: boolean;
@@ -38,7 +38,7 @@ export function ChallengeBadgeRow({
     boostTimeLeft,
     lowExposure,
     exposureFactor,
-    showAutoFillBadge,
+    showAutoSubmitBadge,
     showManualPhotosBadge,
     hasCustomSettings,
     showPhotoCount = true,
@@ -50,7 +50,7 @@ export function ChallengeBadgeRow({
         lowExposure ||
         challengeKind(challenge) ||
         showPhotos ||
-        showAutoFillBadge ||
+        showAutoSubmitBadge ||
         showManualPhotosBadge,
     );
 
@@ -72,7 +72,7 @@ export function ChallengeBadgeRow({
                 </StatusBadge>
             )}
             <ChallengeKindBadges challenge={challenge} showPhotoCount={showPhotoCount} />
-            {showAutoFillBadge && <StatusBadge variant="success">📥 {t('app.autoFillBadge')}</StatusBadge>}
+            {showAutoSubmitBadge && <StatusBadge variant="success">📥 {t('app.autoSubmitBadge')}</StatusBadge>}
             {showManualPhotosBadge && <StatusBadge variant="info">✋ {t('app.manualPhotosBadge')}</StatusBadge>}
             {hasLogicalBadge && hasCustomSettings && (
                 <span data-testid="badge-divider" className="w-px h-3 bg-base-300 mx-0.5 self-center" />

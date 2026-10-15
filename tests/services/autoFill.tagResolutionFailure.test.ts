@@ -64,6 +64,6 @@ test.each([
     );
     expect(resolveTermsToTags).toHaveBeenCalled();
     expect(result).toEqual(LIBRARY);
-    expect(lines.debug).toContain(`autoFill: tag resolution unavailable: ${text}`);
+    expect(lines.debug).toContain(`autoSubmit: tag resolution unavailable: ${text}`);
     expect(lines.warning.some((m) => m.includes('nothing found by tag search'))).toBe(true);
 });

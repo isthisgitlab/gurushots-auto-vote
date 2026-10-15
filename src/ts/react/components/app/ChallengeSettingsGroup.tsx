@@ -66,7 +66,7 @@ function ValueSourceBadge({
  * N time" hint would be false.
  */
 function scheduleShiftOf(key: string, value: unknown, challenge: Challenge | null | undefined): number {
-    if (key !== 'autoFillSchedule') return 0;
+    if (key !== 'autoSubmitSchedule') return 0;
     const max = challenge?.max_photo_submits;
     // Number.isInteger does not narrow: an integer here is a number. The form
     // holds this key's value, a schedule.
@@ -117,7 +117,7 @@ function ChallengeSettingCell({
             />
             {scheduleShift > 0 && (
                 <p className="text-xs text-info mt-1">
-                    {t('app.autoFillScheduleShiftHint')
+                    {t('app.autoSubmitScheduleShiftHint')
                         .replace('{0}', String(shiftedChallenge.max_photo_submits))
                         .replace('{1}', String(shiftedChallenge.max_photo_submits + scheduleShift))}
                 </p>

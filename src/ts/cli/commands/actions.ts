@@ -134,15 +134,15 @@ const fillChallenge = async (challengeId: string, { all = false }: { all?: boole
         const result = await handlers()['fill-challenge-now'](null, challengeId, mode);
         if (result?.success) {
             logger
-                .withCategory('autoFill')
+                .withCategory('autoSubmit')
                 .success(
                     `${result.message || `Submitted photos to "${challenge.title}"`} (submitted ${result.submitted ?? 0}, skipped ${result.skipped ?? 0})`,
                 );
         } else {
-            logger.withCategory('autoFill').error(actionError(result, 'Failed to submit photos'));
+            logger.withCategory('autoSubmit').error(actionError(result, 'Failed to submit photos'));
         }
     } catch (err) {
-        logger.withCategory('autoFill').error(`Failed to submit photos: ${errorMessage(err) || err}`);
+        logger.withCategory('autoSubmit').error(`Failed to submit photos: ${errorMessage(err) || err}`);
     }
 };
 

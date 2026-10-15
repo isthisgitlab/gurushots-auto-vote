@@ -188,10 +188,10 @@ export const app = {
     deadlineTimelineApprox: 'approximate — may shift as photos are submitted',
     deadlineNext: 'Next',
     deadlineDue: 'due now',
-    deadlineActionAutoFill: 'Auto-submit',
+    deadlineActionAutoSubmit: 'Auto-submit',
     deadlineActionBoost: 'Boost',
     deadlineActionTurbo: 'Turbo',
-    deadlineActionEmergencyFill: 'Emergency submit',
+    deadlineActionEmergencySubmit: 'Emergency submit',
     conflictFlag:
         "{kind} can't apply: your only entry already has {other} (they can't share an entry). Add another entry to use both.",
     conflictPinReleases:
@@ -266,8 +266,8 @@ export const app = {
         'How long before the Boost is applied the fill starts. Allow enough time for several voting rounds — exposure does not reach 100% in one go.',
     autoBoost: 'Auto-Apply Boost',
     autoBoostDesc: 'Automatically apply Boost on this challenge as its Boost window is about to close.',
-    protectUncertainAutoFills: 'Protect uncertain auto-submitted photos',
-    protectUncertainAutoFillsDesc:
+    protectUncertainAutoSubmits: 'Protect uncertain auto-submitted photos',
+    protectUncertainAutoSubmitsDesc:
         'Skip automatic Boost and Turbo on auto-submitted photos without a confirmed subject match. Emergency actions and Boosts near their own expiry still apply. Open-theme challenges are exempt.',
     turbo: 'Turbo',
     autoTurbo: 'Auto-Earn Turbo',
@@ -284,36 +284,36 @@ export const app = {
     boostImageIndex: 'Boost Entry',
     boostImageIndexDesc:
         'Which entry gets Boost: 1 = first, 2 = second, etc. Use 0 for the last entry. If Turbo is already on that entry, or the photo is pinned for Turbo, Boost moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry. A photo pinned for Boost on the challenge card takes precedence over this setting. A photo pinned for Turbo never gets Boost while its pin blocks: until Turbo is won, that holds until Boost is inside the Emergency Submit window (never with Emergency Submit off).',
-    boostFillNew: 'Boost a Freshly Submitted Photo',
-    boostFillNewDesc:
+    boostNewSubmit: 'Boost a Freshly Submitted Photo',
+    boostNewSubmitDesc:
         'When on, this submits a new photo (using your Auto-Submit tag rules) just before boosting and boosts that new entry instead of an existing one. If there is no free slot or no eligible photo, it falls back to boosting your configured Boost Entry.',
-    boostFillNewOnConflict: 'Boost a Freshly Submitted Photo Only on Conflict',
-    boostFillNewOnConflictDesc:
+    boostNewSubmitOnConflict: 'Boost a Freshly Submitted Photo Only on Conflict',
+    boostNewSubmitOnConflictDesc:
         'When on, a new photo is submitted and boosted only when Boost cannot go on any existing entry — each has Turbo or is pinned for Turbo (a photo pinned for the other feature counts as a conflict). In the normal case Boost still goes to your existing entry. If there is no free slot or no eligible photo to submit, Boost is skipped this cycle. The one exception: once the photo pinned for Turbo gives way inside the Emergency Submit window because Turbo still is not ready, Boost goes on that photo. Ignored when the option above is on, since that always submits a new photo.',
-    turboFillNew: 'Turbo a Freshly Submitted Photo',
-    turboFillNewDesc:
+    turboNewSubmit: 'Turbo a Freshly Submitted Photo',
+    turboNewSubmitDesc:
         'When on, this submits a new photo (using your Auto-Submit tag rules) just before applying Turbo and applies Turbo to that new entry instead of an existing one. If there is no free slot or no eligible photo, it falls back to your configured Turbo Entry; if you have no entry yet, Turbo is skipped this cycle.',
-    turboFillNewOnConflict: 'Turbo a Freshly Submitted Photo Only on Conflict',
-    turboFillNewOnConflictDesc:
+    turboNewSubmitOnConflict: 'Turbo a Freshly Submitted Photo Only on Conflict',
+    turboNewSubmitOnConflictDesc:
         'When on, a new photo is submitted and given Turbo only when Turbo cannot go on any existing entry — each has Boost or is pinned for Boost (a photo pinned for the other feature counts as a conflict). In the normal case Turbo still goes to your existing entry. If there is no free slot or no eligible photo to submit, Turbo is skipped this cycle. The one exception: once the photo pinned for Boost gives way inside the Emergency Submit window because Boost still is not ready, Turbo goes on that photo. Ignored when the option above is on, since that always submits a new photo.',
     playAutoTurbo: 'Play the Turbo mini-game now to earn Turbo',
     autoTurboRunsWithAutovote: 'Auto-vote already plays the Turbo mini-game on each cycle',
     earnTurbo: 'Earn Turbo',
     applyTurboToThisEntry: 'Apply your Turbo to this photo',
     applyBoostToThisEntry: 'Apply your Boost to this photo',
-    autoFill: 'Auto-Submit Missing Entries',
-    autoFillDesc:
+    autoSubmit: 'Auto-Submit Missing Entries',
+    autoSubmitDesc:
         'Submit additional photos as a challenge approaches its deadline, following the schedule below. Submits one photo per check cycle.',
-    autoFillSchedule: 'Auto-Submit Schedule',
-    autoFillScheduleDesc:
+    autoSubmitSchedule: 'Auto-Submit Schedule',
+    autoSubmitScheduleDesc:
         'Set a time to 0h 0m to turn that image off. Each row means: have at least this many entries once this much time remains before close — "Image 2 ≤ 48h" submits your 2nd photo when 48 hours remain. If you are behind schedule (the app started late, or a time is longer than the whole challenge), it catches up one photo per cycle from the start. If a challenge allows fewer images than the schedule covers, the whole schedule shifts toward the end so the last image\'s time applies to the challenge\'s final photo — e.g. in a 2-image challenge the 2nd photo uses the Image 4 time; in a 3-image challenge the 2nd photo uses the Image 3 time and the 3rd the Image 4 time.',
-    autoFillScheduleShiftHint:
+    autoSubmitScheduleShiftHint:
         'This challenge allows {0} photos, fewer than the schedule covers — times shift toward the end: the final photo uses the Image {1} time.',
-    autoFillScheduleImage: 'Image',
-    autoFillScheduleOff: 'no time set — may still be submitted while catching up to a later image',
-    autoFillScheduleEmpty: 'All images are off — auto-submit will never submit anything.',
-    autoFillScheduleDominated: 'never applies (a later image already has an equal or longer time)',
-    autoFillScheduleOutOfRange: 'time must be at most 30 days',
+    autoSubmitScheduleImage: 'Image',
+    autoSubmitScheduleOff: 'no time set — may still be submitted while catching up to a later image',
+    autoSubmitScheduleEmpty: 'All images are off — auto-submit will never submit anything.',
+    autoSubmitScheduleDominated: 'never applies (a later image already has an equal or longer time)',
+    autoSubmitScheduleOutOfRange: 'time must be at most 30 days',
     settingsSaveError: 'Some settings could not be saved — check the highlighted values and try again.',
     unitPercent: '%',
     unitMinutes: 'min',
@@ -739,7 +739,7 @@ export const app = {
     discoverBusy: 'A join is already in progress. Try again in a moment.',
     validationOutOfRange: 'Enter a value between {min} and {max}.',
     validationAtLeast: 'Enter a value of {min} or more.',
-    autoFillBadge: 'auto-submit',
+    autoSubmitBadge: 'auto-submit',
     manualPhotosBadge: 'manual photos',
     customBadge: 'custom',
     customSettingsHint: 'Has custom settings',
@@ -907,13 +907,13 @@ export const app = {
     ignoreTitleWords: 'Ignore These Words in Challenge Titles',
     ignoreTitleWordsDesc:
         'Words to strip from a challenge title before it is used to find matching photos. Challenge titles usually qualify their subject rather than just naming it — "Epic Lighthouses" is about lighthouses, not "epic" — and those extra words both blur the theme and use up the small number of searches per challenge. The list is pre-filled with common ones; edit it freely. Remove a word if a challenge really is about it. Series prefixes like "Color Hunt:" are handled automatically and do not need an entry.',
-    fillWithoutTagMatch: 'Submit Even Without a Tag Match',
-    fillWithoutTagMatchDesc:
+    submitWithoutTagMatch: 'Submit Even Without a Tag Match',
+    submitWithoutTagMatchDesc:
         'Only matters when Must Include Tags is set. Because a photo must match every tag, this triggers more often when several tags are required. When on (default), if none of your photos match all those tags the best available photo is added anyway so the slot is not left empty. When off, the slot stays empty until a fully matching photo exists.',
-    emergencyFill: 'Emergency Submit',
-    emergencyFillDesc:
+    emergencySubmit: 'Emergency Submit',
+    emergencySubmitDesc:
         'Safety net that runs in the last minutes of a challenge when auto-submit would otherwise leave entry slots empty — either because auto-submit is off, or because your Must Include Tags match no photo and Submit Even Without a Tag Match is off. When a challenge is within this much time of closing, it submits your best available photos to the remaining slots anyway, even if they do not match your tags. This overrides those settings on purpose (including Submit Only Chosen Photos), so the challenge does not end with unused slots. Within this same window it also applies any available Boost and any won Turbo — even if Auto-Apply Boost or Auto-Apply Turbo is off for the challenge — so they are not wasted when it closes. Entered as hours and minutes in the GUI. Default 5 minutes; set to 0 to disable it (which also turns off this last-minute Boost/Turbo override). Tip: keep this window no longer than the Last Minute Threshold (default 10 minutes) so the app is already checking frequently for the whole of it.',
-    emergencyFillHelp:
+    emergencySubmitHelp:
         'A last-minutes safety net measured as time-before-close. Set to 0 to disable it entirely (which also drops its last-minute Boost/Turbo rescue). 0 means "off" here — unlike the Exposure Target settings where 0 means "follow the trigger".',
     tagsPlaceholder: 'e.g. sunset, beach, ocean',
     titleTagRules: 'Challenge Rules',
@@ -955,7 +955,7 @@ export const app = {
     titleRuleOn: 'On',
     titleRuleOff: 'Off',
     titleRuleAutoJoin: 'Auto-join',
-    titleRuleAutoFill: 'Auto-submit',
+    titleRuleAutoSubmit: 'Auto-submit',
     titleRulePercentElapsed: 'Join after',
     titleRuleJoinWindow: 'Or hours before end',
     titleRuleJoinWindowPlaceholder: 'inherit',
@@ -1044,7 +1044,7 @@ export const app = {
     groupLastMinute: 'Last Minute',
     groupScheduledFill: 'Scheduled Voting',
     groupVotingPause: 'Voting Pause',
-    groupAutoFill: 'Auto-Submit',
+    groupAutoSubmit: 'Auto-Submit',
     groupRewards: 'Rewards',
     groupMissions: 'Missions',
     groupNotifications: 'Notifications',
@@ -1077,10 +1077,10 @@ export const app = {
     notifyOnBoostDesc: 'Warn before a boost is applied, so you can keep the app running.',
     notifyOnTurbo: 'Notify before turbo',
     notifyOnTurboDesc: 'Warn before a turbo is played, so you can keep the app running.',
-    notifyOnAutoFill: 'Notify before auto-submit',
-    notifyOnAutoFillDesc: 'Warn before a photo is auto-submitted near the deadline, so you can keep the app running.',
-    notifyOnEmergencyFill: 'Notify before emergency submit',
-    notifyOnEmergencyFillDesc: 'Warn before a last-second emergency submit, so you can keep the app running.',
+    notifyOnAutoSubmit: 'Notify before auto-submit',
+    notifyOnAutoSubmitDesc: 'Warn before a photo is auto-submitted near the deadline, so you can keep the app running.',
+    notifyOnEmergencySubmit: 'Notify before emergency submit',
+    notifyOnEmergencySubmitDesc: 'Warn before a last-second emergency submit, so you can keep the app running.',
     notifyLeadTime: 'Warn this far ahead',
     notifyLeadTimeDesc: 'How many minutes before an action a warning is shown.',
     notifyLeadTimeHelp:
@@ -1463,7 +1463,7 @@ export const logs = {
     categories: {
         api: 'api',
         authentication: 'authentication',
-        autoFill: 'autoFill',
+        autoSubmit: 'autoSubmit',
         boost: 'boost',
         challenges: 'challenges',
         claim: 'claim',

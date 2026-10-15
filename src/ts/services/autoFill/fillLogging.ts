@@ -32,7 +32,7 @@ const logSelectionDetails = ({
     inOrder: boolean;
     logger: FillLogger;
 }) => {
-    const log = logger.withCategory('autoFill');
+    const log = logger.withCategory('autoSubmit');
     for (const id of picked) {
         const entry = scored.find((candidate) => String(candidate.id) === String(id));
         // The line says which photos the user chose, so "why did it submit THAT
@@ -99,7 +99,7 @@ const describeSubmitFailure = (raw: unknown): string => {
  * pick. Logs at WARNING level — the debug/info channels are compiled out of
  * packaged builds (logger gates them on isSourceCode), so anything quieter
  * would leave a real user with an unexplained off-theme submission and no
- * trace. `prefix` names the calling flow (autoFill/emergencyFill/manualFill/
+ * trace. `prefix` names the calling flow (autoSubmit/emergencySubmit/manualFill/
  * fillNew) so the line reads like that flow's other logs. Dry-run picks (the
  * emergency-fill probe) must NOT pass this: a probe never submits, so it must
  * never warn.
@@ -126,7 +126,7 @@ const makeFallbackLogger = (
         // never empty.
         const why = reasons.join('; ');
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .warning(
                 `${prefix}: ${why} for ${logger.challengeTag(challenge)}; falling back to the full library (an off-theme photo may be submitted)`,
                 null,
@@ -215,7 +215,7 @@ const logPopularityPick = (
     // when photos did, or says the reverse.
     const themeMatched = hasThemeMatch(sample);
     const subject = explained.length === 1 ? 'the entry was' : `${explained.length} entries were`;
-    const log = logger.withCategory('autoFill');
+    const log = logger.withCategory('autoSubmit');
 
     if (themeMatched) {
         log.info(

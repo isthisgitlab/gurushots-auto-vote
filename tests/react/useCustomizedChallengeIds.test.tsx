@@ -87,7 +87,7 @@ test('a challenge whose only customization is a rule value that matters after th
         if (id === '5') return titleRuleInfo({ inlineValues: { chosenPhotos: [] } });
         // Join-only keys change nothing once joined: not a customization.
         if (id === '6') return titleRuleInfo({ inlineValues: { autoJoin: true, autoJoinWithinHoursOfEnd: 6 } });
-        if (id === '7') return titleRuleInfo({ inlineValues: { autoFill: true } });
+        if (id === '7') return titleRuleInfo({ inlineValues: { autoSubmit: true } });
         return titleRuleInfo();
     });
     render(

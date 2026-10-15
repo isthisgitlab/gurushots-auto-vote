@@ -23,7 +23,7 @@ import { invalid } from '../helpers/invalid';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
-    autoFillEnabled: false,
+    autoSubmitEnabled: false,
     isCompact: true,
     hasCompactOverride: false,
     toggleCompact: jest.fn(),

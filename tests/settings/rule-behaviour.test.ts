@@ -17,7 +17,7 @@ describe('ruleInlineEntries', () => {
             ruleInlineEntries({
                 title: 'x',
                 autoJoin: true,
-                autoFill: '',
+                autoSubmit: '',
                 scenario: null,
                 chosenPhotos: [],
                 chosenPhotosOnly: undefined,
@@ -85,7 +85,7 @@ describe('ruleHasBehaviour', () => {
 
 describe('hasPostJoinInlineValue', () => {
     test.each([
-        ['auto-submit', { autoFill: true }],
+        ['auto-submit', { autoSubmit: true }],
         ['a scenario', { scenario: 'Plan' }],
         ['a chosen photos list, even an empty one', { chosenPhotos: [] }],
         ['the chosen-photos-only flag', { chosenPhotosOnly: true }],

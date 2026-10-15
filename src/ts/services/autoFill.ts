@@ -6,7 +6,7 @@
  *
  * Two entry points:
  *   - maybeAutoFillChallenge: cycle-driven, schedule-based. Fills at most
- *     one slot per call. The user-defined autoFillSchedule (rows of
+ *     one slot per call. The user-defined autoSubmitSchedule (rows of
  *     { count, seconds }) sets the target entry count for the time
  *     remaining: "have ≥ count entries once ≤ seconds remain". With the
  *     default schedule (2 @ 30m, 3 @ 20m, 4 @ 10m) fills land spaced out
@@ -14,7 +14,7 @@
  *     dilutes votes per entry when several are submitted simultaneously;
  *     if the app starts behind schedule it catches up one photo per cycle.
  *   - fillChallengeNow: manual, batched. The GUI buttons call this and
- *     it ignores both the autoFill toggle and the schedule; manual
+ *     it ignores both the autoSubmit toggle and the schedule; manual
  *     means explicit user intent.
  *
  * API methods are injected so the scheduler (real API) and the IPC

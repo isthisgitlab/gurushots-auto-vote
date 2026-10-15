@@ -14,7 +14,7 @@ const t = (key: string) => key;
 
 describe('deriveChallengeCardView', () => {
     const NOW = 500_000;
-    const view = (flags: { autoFillEnabled: boolean; manualPhotosOnly: boolean }, entries: unknown[] = []) =>
+    const view = (flags: { autoSubmitEnabled: boolean; manualPhotosOnly: boolean }, entries: unknown[] = []) =>
         deriveChallengeCardView(
             buildChallenge({
                 start_time: NOW - 1000,
@@ -25,23 +25,23 @@ describe('deriveChallengeCardView', () => {
         );
 
     test('off: the auto-submit badge shows while a slot is free, and the manual-photos one never does', () => {
-        expect(view({ autoFillEnabled: true, manualPhotosOnly: false })).toMatchObject({
-            showAutoFillBadge: true,
+        expect(view({ autoSubmitEnabled: true, manualPhotosOnly: false })).toMatchObject({
+            showAutoSubmitBadge: true,
             showManualPhotosBadge: false,
         });
-        expect(view({ autoFillEnabled: false, manualPhotosOnly: false }).showAutoFillBadge).toBe(false);
+        expect(view({ autoSubmitEnabled: false, manualPhotosOnly: false }).showAutoSubmitBadge).toBe(false);
     });
 
     test('on: the manual-photos badge shows and the auto-submit one is suppressed', () => {
-        expect(view({ autoFillEnabled: true, manualPhotosOnly: true })).toMatchObject({
-            showAutoFillBadge: false,
+        expect(view({ autoSubmitEnabled: true, manualPhotosOnly: true })).toMatchObject({
+            showAutoSubmitBadge: false,
             showManualPhotosBadge: true,
         });
     });
 
     test('on, with every slot full, the manual-photos badge still shows (Auto-Swap is what it holds back)', () => {
         const full = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
-        expect(view({ autoFillEnabled: false, manualPhotosOnly: true }, full).showManualPhotosBadge).toBe(true);
+        expect(view({ autoSubmitEnabled: false, manualPhotosOnly: true }, full).showManualPhotosBadge).toBe(true);
     });
 });
 
@@ -56,13 +56,13 @@ describe('hints under the settings the switch overrides', () => {
         });
 
     test.each([
-        ['autoFill', 'app.manualPhotosOnlyHint'],
-        ['emergencyFill', 'app.manualPhotosOnlyHint'],
+        ['autoSubmit', 'app.manualPhotosOnlyHint'],
+        ['emergencySubmit', 'app.manualPhotosOnlyHint'],
         ['autoSwap', 'app.manualPhotosOnlyHint'],
-        ['boostFillNew', 'app.manualPhotosOnlyBoostHint'],
-        ['boostFillNewOnConflict', 'app.manualPhotosOnlyBoostHint'],
-        ['turboFillNew', 'app.manualPhotosOnlyBoostHint'],
-        ['turboFillNewOnConflict', 'app.manualPhotosOnlyBoostHint'],
+        ['boostNewSubmit', 'app.manualPhotosOnlyBoostHint'],
+        ['boostNewSubmitOnConflict', 'app.manualPhotosOnlyBoostHint'],
+        ['turboNewSubmit', 'app.manualPhotosOnlyBoostHint'],
+        ['turboNewSubmitOnConflict', 'app.manualPhotosOnlyBoostHint'],
     ])('%s carries its hint while the switch is on, and none while it is off', (key, text) => {
         render(<SettingHintList hints={hintsFor({ manualPhotosOnly: true })(key)} />);
         expect(screen.getByText(text)).toBeTruthy();

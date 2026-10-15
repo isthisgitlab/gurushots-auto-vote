@@ -97,7 +97,7 @@ describe('sanitizeFillSchedule — pure normalization', () => {
             { count: 2, seconds: 1800 },
             { count: 4, seconds: 900 },
         ]);
-        expect(validateSetting('autoFillSchedule', cleaned)).toBe(true);
+        expect(validateSetting('autoSubmitSchedule', cleaned)).toBe(true);
     });
 });
 
@@ -138,7 +138,7 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
 
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.globalDefaults.autoFillSchedule).toEqual([
+        expect(loaded.challengeSettings.globalDefaults.autoSubmitSchedule).toEqual([
             { count: 2, seconds: 1800 },
             { count: 4, seconds: 900 },
         ]);
@@ -164,8 +164,8 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
 
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.perChallenge[42].autoFillSchedule).toEqual([{ count: 2, seconds: 100 }]);
-        expect(loaded.challengeSettings.globalDefaults.autoFillSchedule).toEqual(conforming);
+        expect(loaded.challengeSettings.perChallenge[42].autoSubmitSchedule).toEqual([{ count: 2, seconds: 100 }]);
+        expect(loaded.challengeSettings.globalDefaults.autoSubmitSchedule).toEqual(conforming);
     });
 
     test('a conforming schedule is left untouched (flag still set)', () => {
@@ -182,7 +182,7 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
 
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.globalDefaults.autoFillSchedule).toEqual(conforming);
+        expect(loaded.challengeSettings.globalDefaults.autoSubmitSchedule).toEqual(conforming);
         expect(loaded._autoFillScheduleBoundsV1).toBe(true);
     });
 
@@ -216,7 +216,7 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
         const loaded = settings.loadSettings();
         const secondWrites = fs.writeFileSync.mock.calls.length;
 
-        expect(loaded.challengeSettings.globalDefaults.autoFillSchedule).toEqual([]);
+        expect(loaded.challengeSettings.globalDefaults.autoSubmitSchedule).toEqual([]);
         expect(secondWrites).toBe(firstWrites); // no new migration writes
     });
 
@@ -243,7 +243,7 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
         // The one-time sanitizer does not run again (nothing is written);
         // load validation drops the out-of-bounds value instead.
         expect(fs.writeFileSync.mock.calls.length).toBe(writesBefore);
-        expect(loaded.challengeSettings.globalDefaults.autoFillSchedule).toBeUndefined();
+        expect(loaded.challengeSettings.globalDefaults.autoSubmitSchedule).toBeUndefined();
     });
 
     test('composition: legacy interval + no flags runs migration then sanitizer in one load', () => {
@@ -258,14 +258,14 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
         );
 
         const loaded = settings.loadSettings();
-        const migrated = loaded.challengeSettings.globalDefaults.autoFillSchedule;
+        const migrated = loaded.challengeSettings.globalDefaults.autoSubmitSchedule;
 
         expect(migrated).toEqual([
             { count: 2, seconds: 2700 },
             { count: 3, seconds: 1800 },
             { count: 4, seconds: 900 },
         ]);
-        expect(validateSetting('autoFillSchedule', migrated)).toBe(true);
+        expect(validateSetting('autoSubmitSchedule', migrated)).toBe(true);
         expect(sanitizeFillSchedule(migrated)).toBeNull(); // already conforming
         expect(loaded._autoFillScheduleMigratedV1).toBe(true);
         expect(loaded._autoFillScheduleBoundsV1).toBe(true);

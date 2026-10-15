@@ -91,7 +91,7 @@ export function ChallengeCard({
     bankroll?: Bankroll | null;
     onCurrencySpent: () => void;
 }) {
-    const { hasCustomSettings, autoFillEnabled, manualPhotosOnly, isCompact, hasCompactOverride, toggleCompact } =
+    const { hasCustomSettings, autoSubmitEnabled, manualPhotosOnly, isCompact, hasCompactOverride, toggleCompact } =
         useChallengeSettings(challenge.id, defaultCompact, settingsVersion);
     // Advisory deadline-action preview + boost/turbo conflict flags (read-only,
     // computed main-side). Failure yields empty actions / false — the card just
@@ -118,7 +118,7 @@ export function ChallengeCard({
         now,
         bankroll,
         autovoteRunning,
-        autoFillEnabled,
+        autoSubmitEnabled,
         manualPhotosOnly,
     });
     const actions = useChallengeCardActions({
@@ -143,7 +143,7 @@ export function ChallengeCard({
         boostTimeLeft: view.boostTimeLeft,
         lowExposure: view.lowExposure,
         exposureFactor: view.exposureFactor,
-        showAutoFillBadge: view.showAutoFillBadge,
+        showAutoSubmitBadge: view.showAutoSubmitBadge,
         showManualPhotosBadge: view.showManualPhotosBadge,
         hasCustomSettings,
     };

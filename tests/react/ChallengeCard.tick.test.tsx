@@ -17,7 +17,7 @@ const mockRenders = { count: 0 };
 jest.mock('@/hooks/useChallengeSettings', () => ({
     useChallengeSettings: () => ({
         hasCustomSettings: false,
-        autoFillEnabled: false,
+        autoSubmitEnabled: false,
         isCompact: false,
         hasCompactOverride: false,
         toggleCompact: jest.fn(),

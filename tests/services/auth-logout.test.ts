@@ -134,12 +134,12 @@ describe('clearAuthToken', () => {
             challengeTag: () => '[Challenge 9]',
         });
         const challenge = invalid<Challenge>({ id: 9 });
-        logChosenSkipOnce(fillLogger, challenge, 'autoFill', 'none-usable');
-        logChosenSkipOnce(fillLogger, challenge, 'autoFill', 'none-usable');
+        logChosenSkipOnce(fillLogger, challenge, 'autoSubmit', 'none-usable');
+        logChosenSkipOnce(fillLogger, challenge, 'autoSubmit', 'none-usable');
         expect(warning).toHaveBeenCalledTimes(1);
 
         await clearAuthToken();
-        logChosenSkipOnce(fillLogger, challenge, 'autoFill', 'none-usable');
+        logChosenSkipOnce(fillLogger, challenge, 'autoSubmit', 'none-usable');
         expect(warning).toHaveBeenCalledTimes(2);
     });
 
@@ -240,12 +240,12 @@ describe('switchAccountToken — a login on top of another session', () => {
         });
         const challenge = invalid<Challenge>({ id: 9 });
         rememberOpenChallenges([invalid<DiscoverChallenge>(challenge)]);
-        logChosenSkipOnce(fillLogger, challenge, 'autoFill', 'none-usable');
+        logChosenSkipOnce(fillLogger, challenge, 'autoSubmit', 'none-usable');
         return {
             open: () => getOpenChallenge(9),
             skipExplained: () => {
                 const before = warning.mock.calls.length;
-                logChosenSkipOnce(fillLogger, challenge, 'autoFill', 'none-usable');
+                logChosenSkipOnce(fillLogger, challenge, 'autoSubmit', 'none-usable');
                 return warning.mock.calls.length === before;
             },
         };

@@ -31,7 +31,7 @@ const plan = {
     version: 1,
     start: 'buildup',
     phases: {
-        buildup: { settings: { exposure: 10, exposureTarget: 12, autoFill: false } },
+        buildup: { settings: { exposure: 10, exposureTarget: 12, autoSubmit: false } },
         done: {},
     },
 };
@@ -87,16 +87,16 @@ describe('scenario phase-settings overlay', () => {
 
     test('in a phase, its settings win over the manual override and rules', () => {
         assign();
-        settings.setChallengeOverride('autoFill', '7', true);
-        settings.setTitleRules([{ type: 'exhibition', autoFill: true }]);
+        settings.setChallengeOverride('autoSubmit', '7', true);
+        settings.setTitleRules([{ type: 'exhibition', autoSubmit: true }]);
         scenarioStateLedger.set(7, initialState('Plan', 'buildup', 1000));
         expect(settings.getEffectiveSetting('exposure', '7')).toBe(10);
         expect(settings.getEffectiveSetting('exposureTarget', 7)).toBe(12);
-        expect(settings.getEffectiveSetting('autoFill', '7')).toBe(false);
+        expect(settings.getEffectiveSetting('autoSubmit', '7')).toBe(false);
         // Keys the phase does not set, the global view and the stored overrides are unchanged.
         expect(settings.getEffectiveSetting('autoBoost', '7')).toBe(settings.getGlobalDefault('autoBoost'));
         expect(settings.getEffectiveSetting('exposure')).toBe(100);
-        expect(settings.getChallengeOverrides('7')).toEqual({ scenario: 'Plan', autoFill: true });
+        expect(settings.getChallengeOverrides('7')).toEqual({ scenario: 'Plan', autoSubmit: true });
     });
 
     test('the assignment itself is never overlaid', () => {

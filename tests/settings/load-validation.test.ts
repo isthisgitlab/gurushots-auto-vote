@@ -129,8 +129,8 @@ describe('loadSettings validation', () => {
             },
         });
         const { globalDefaults, perChallenge } = settings.loadSettings().challengeSettings;
-        expect(globalDefaults).toEqual({ autoFill: true, noSuchSetting: 1 });
-        expect(perChallenge).toEqual({ c1: { autoFill: false } });
+        expect(globalDefaults).toEqual({ autoSubmit: true, noSuchSetting: 1 });
+        expect(perChallenge).toEqual({ c1: { autoSubmit: false } });
         expect(settings.getGlobalDefault('exposure')).toBe(
             getDefaultSettings().challengeSettings.globalDefaults.exposure,
         );

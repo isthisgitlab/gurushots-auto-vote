@@ -26,18 +26,18 @@ const fillResponse = (result: { success: boolean; submitted: number; skipped: nu
 
 // Manual fill of empty challenge entries on demand. mode = 'one' fills
 // a single slot with the best-ranked eligible photo; mode = 'all' fills
-// every empty slot in one batch. Bypasses both the autoFill toggle and
+// every empty slot in one batch. Bypasses both the autoSubmit toggle and
 // the spacing math — manual click is explicit user intent.
 /**
  * @param mode - anything other than `'all'` means `'one'`.
  */
 const handleFillChallengeNow = (async (event: unknown, challengeId: string | number, mode: 'one' | 'all') => {
-    if (!isIdArg(challengeId)) return refuseInvalidArgs('autoFill', 'fill-challenge-now');
+    if (!isIdArg(challengeId)) return refuseInvalidArgs('autoSubmit', 'fill-challenge-now');
     const safeChallengeId = sanitizeForLog(challengeId);
     const safeMode = mode === 'all' ? 'all' : 'one';
     try {
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .info(`📝 Manual fill request: Challenge=${safeChallengeId}, Mode=${safeMode}`, null);
         const guard = auth.requireAuthToken('manual fill');
         if (!guard.ok) return guard.response;
@@ -65,7 +65,7 @@ const handleFillChallengeNow = (async (event: unknown, challengeId: string | num
             dropContext(guard.token, challengeId);
         }
     } catch (error) {
-        logger.withCategory('autoFill').error('Error handling fill-challenge-now request:', error);
+        logger.withCategory('autoSubmit').error('Error handling fill-challenge-now request:', error);
         return errorResult(error, 'Failed to submit photos');
     }
 }) satisfies IpcReplyFn;
@@ -92,19 +92,19 @@ const submitsInFlight = new Set<string>();
 // fill-challenge-now nothing is ranked or filtered: the ids go to the challenge as
 // given, after a check that they still fit the open slots.
 const handleSubmitPickedPhotos = (async (event: unknown, challengeId: string | number, imageIds: string[]) => {
-    if (!isIdArg(challengeId) || !isPickedIds(imageIds)) return refuseInvalidArgs('autoFill', 'submit-picked-photos');
+    if (!isIdArg(challengeId) || !isPickedIds(imageIds)) return refuseInvalidArgs('autoSubmit', 'submit-picked-photos');
     const inFlightKey = String(challengeId);
     const safeChallengeId = sanitizeForLog(challengeId);
     if (submitsInFlight.has(inFlightKey)) {
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .info(`📝 Manual pick request refused: a submit for Challenge=${safeChallengeId} is already running`, null);
         return { success: false as const, error: 'submit-busy' };
     }
     submitsInFlight.add(inFlightKey);
     try {
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .info(`📝 Manual pick request: Challenge=${safeChallengeId}, Photos=${imageIds.length}`, null);
         const guard = auth.requireAuthToken('manual pick');
         if (!guard.ok) return guard.response;
@@ -125,7 +125,7 @@ const handleSubmitPickedPhotos = (async (event: unknown, challengeId: string | n
             dropContext(guard.token, challengeId);
         }
     } catch (error) {
-        logger.withCategory('autoFill').error('Error handling submit-picked-photos request:', error);
+        logger.withCategory('autoSubmit').error('Error handling submit-picked-photos request:', error);
         return errorResult(error, 'Failed to submit photos');
     } finally {
         submitsInFlight.delete(inFlightKey);
@@ -143,8 +143,8 @@ let suggestRunning = false;
  * Failures are `{ success: false, error: <fixed code> }` and never carry raw text.
  */
 const handleSuggestPhotos = (async (event: unknown, challengeId: string | number) => {
-    if (!isIdArg(challengeId)) return refuseInvalidArgs('autoFill', 'suggest-photos');
-    const log = logger.withCategory('autoFill');
+    if (!isIdArg(challengeId)) return refuseInvalidArgs('autoSubmit', 'suggest-photos');
+    const log = logger.withCategory('autoSubmit');
     if (suggestRunning) {
         log.info('📝 Photo suggestions refused: a ranking is already running', null);
         return { success: false as const, error: 'suggest-busy' as const };

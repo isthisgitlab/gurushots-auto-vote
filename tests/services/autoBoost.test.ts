@@ -39,7 +39,7 @@ const mockSettings = (overrides = {}) => {
         autoBoost: true,
         boostTime: 3600,
         keyUnlockedBoostTime: 900,
-        emergencyFill: 300,
+        emergencySubmit: 300,
     };
     settings.getEffectiveSetting = invalid(
         jest.fn((key: keyof typeof defaults) => ({ ...defaults, ...overrides })[key]),
@@ -66,19 +66,19 @@ describe('shouldApplyBoost — emergency override', () => {
     beforeEach(() => jest.clearAllMocks());
 
     test('applies an available boost in the emergency window even when autoBoost is off', () => {
-        mockSettings({ autoBoost: false, emergencyFill: 300 });
+        mockSettings({ autoBoost: false, emergencySubmit: 300 });
         const now = NOW();
         expect(VotingLogic.shouldApplyBoost(buildClosingChallengeWithBoost(now), now, { emergency: true })).toBe(true);
     });
 
     test('emergency override has no effect without the option flag (default behavior unchanged)', () => {
-        mockSettings({ autoBoost: false, emergencyFill: 300 });
+        mockSettings({ autoBoost: false, emergencySubmit: 300 });
         const now = NOW();
         expect(VotingLogic.shouldApplyBoost(buildClosingChallengeWithBoost(now), now)).toBe(false);
     });
 
     test('does not override outside the emergency window', () => {
-        mockSettings({ autoBoost: false, emergencyFill: 300 });
+        mockSettings({ autoBoost: false, emergencySubmit: 300 });
         const now = NOW();
         // Closes in 10 minutes — beyond the 5-minute emergency window.
         const challenge = buildClosingChallengeWithBoost(now, 600);
@@ -86,13 +86,13 @@ describe('shouldApplyBoost — emergency override', () => {
     });
 
     test('does not override when Emergency Fill is disabled (0)', () => {
-        mockSettings({ autoBoost: false, emergencyFill: 0 });
+        mockSettings({ autoBoost: false, emergencySubmit: 0 });
         const now = NOW();
         expect(VotingLogic.shouldApplyBoost(buildClosingChallengeWithBoost(now), now, { emergency: true })).toBe(false);
     });
 
     test('still requires a boost to actually be available', () => {
-        mockSettings({ autoBoost: false, emergencyFill: 300 });
+        mockSettings({ autoBoost: false, emergencySubmit: 300 });
         const now = NOW();
         const challenge = invalid<Challenge>({
             id: '777',
@@ -103,7 +103,7 @@ describe('shouldApplyBoost — emergency override', () => {
     });
 
     test('applies a key-unlocked boost (AVAILABLE_KEY) in the emergency window with autoBoost off', () => {
-        mockSettings({ autoBoost: false, emergencyFill: 300 });
+        mockSettings({ autoBoost: false, emergencySubmit: 300 });
         const now = NOW();
         const challenge = invalid<Challenge>({
             id: '777',
@@ -114,7 +114,7 @@ describe('shouldApplyBoost — emergency override', () => {
     });
 
     test('does not apply an AVAILABLE boost whose timer has already expired (stale state)', () => {
-        mockSettings({ autoBoost: false, emergencyFill: 300 });
+        mockSettings({ autoBoost: false, emergencySubmit: 300 });
         const now = NOW();
         const challenge = invalid<Challenge>({
             id: '777',
@@ -124,8 +124,8 @@ describe('shouldApplyBoost — emergency override', () => {
         expect(VotingLogic.shouldApplyBoost(challenge, now, { emergency: true })).toBe(false);
     });
 
-    test('window boundary is inclusive (secondsRemaining === emergencyFill applies, +1 does not)', () => {
-        mockSettings({ autoBoost: false, emergencyFill: 300 });
+    test('window boundary is inclusive (secondsRemaining === emergencySubmit applies, +1 does not)', () => {
+        mockSettings({ autoBoost: false, emergencySubmit: 300 });
         const now = NOW();
         expect(VotingLogic.shouldApplyBoost(buildClosingChallengeWithBoost(now, 300), now, { emergency: true })).toBe(
             true,
@@ -142,27 +142,27 @@ describe('isWithinEmergencyWindow', () => {
     const challengeClosingIn = (now: number, secs: number) => invalid<Challenge>({ id: '777', close_time: now + secs });
 
     test('true inside the window, false outside', () => {
-        mockSettings({ emergencyFill: 300 });
+        mockSettings({ emergencySubmit: 300 });
         const now = NOW();
         expect(VotingLogic.isWithinEmergencyWindow(challengeClosingIn(now, 120), now)).toBe(true);
         expect(VotingLogic.isWithinEmergencyWindow(challengeClosingIn(now, 600), now)).toBe(false);
     });
 
-    test('boundary is inclusive at exactly emergencyFill seconds', () => {
-        mockSettings({ emergencyFill: 300 });
+    test('boundary is inclusive at exactly emergencySubmit seconds', () => {
+        mockSettings({ emergencySubmit: 300 });
         const now = NOW();
         expect(VotingLogic.isWithinEmergencyWindow(challengeClosingIn(now, 300), now)).toBe(true);
         expect(VotingLogic.isWithinEmergencyWindow(challengeClosingIn(now, 301), now)).toBe(false);
     });
 
     test('false when Emergency Fill is disabled (0)', () => {
-        mockSettings({ emergencyFill: 0 });
+        mockSettings({ emergencySubmit: 0 });
         const now = NOW();
         expect(VotingLogic.isWithinEmergencyWindow(challengeClosingIn(now, 120), now)).toBe(false);
     });
 
     test('false for already-closed or missing close_time', () => {
-        mockSettings({ emergencyFill: 300 });
+        mockSettings({ emergencySubmit: 300 });
         const now = NOW();
         expect(VotingLogic.isWithinEmergencyWindow(challengeClosingIn(now, 0), now)).toBe(false);
         expect(VotingLogic.isWithinEmergencyWindow(invalid({ id: '777' }), now)).toBe(false);
@@ -187,7 +187,7 @@ describe('shouldApplyBoost — key-unlocked window', () => {
         });
 
     test('honours the configured window, not a fixed 15m constant', () => {
-        mockSettings({ keyUnlockedBoostTime: 1800, emergencyFill: 0 });
+        mockSettings({ keyUnlockedBoostTime: 1800, emergencySubmit: 0 });
         const now = NOW();
 
         // 20 minutes out: inside a 30m window, outside a fixed 15m window.
@@ -197,11 +197,11 @@ describe('shouldApplyBoost — key-unlocked window', () => {
     });
 
     test('an explicit 0 turns key-unlocked auto-apply off', () => {
-        // 0-is-off is the convention boostTime and emergencyFill already use, and both the
+        // 0-is-off is the convention boostTime and emergencySubmit already use, and both the
         // schema and the GUI input accept 0 — so it must be honoured, not overridden by the
         // default. Silently substituting 900 here would ignore a value the user could set
         // through the UI with no indication it had been discarded.
-        mockSettings({ keyUnlockedBoostTime: 0, emergencyFill: 0 });
+        mockSettings({ keyUnlockedBoostTime: 0, emergencySubmit: 0 });
         const now = NOW();
 
         expect(VotingLogic.getEffectiveKeyUnlockedBoostTime('777')).toBe(0);
@@ -210,7 +210,7 @@ describe('shouldApplyBoost — key-unlocked window', () => {
     });
 
     test('does not affect the timer-based window, which still reads boostTime', () => {
-        mockSettings({ keyUnlockedBoostTime: 60, boostTime: 3600, emergencyFill: 0 });
+        mockSettings({ keyUnlockedBoostTime: 60, boostTime: 3600, emergencySubmit: 0 });
         const now = NOW();
         const timerBased = buildChallenge({
             id: '777',
@@ -272,7 +272,7 @@ describe('isBoostDueForMission', () => {
         buildChallenge({ id: '777', close_time: now + closeInSeconds, member: { boost } });
 
     test('is due for a timer boost still outside its own window', () => {
-        mockSettings({ emergencyFill: 0 });
+        mockSettings({ emergencySubmit: 0 });
         const now = NOW();
         const challenge = withBoost(now, { state: 'AVAILABLE', timeout: now + 36000 });
         expect(VotingLogic.shouldApplyBoost(challenge, now)).toBe(false);
@@ -280,7 +280,7 @@ describe('isBoostDueForMission', () => {
     });
 
     test('is due for a key-unlocked boost still outside its close window', () => {
-        mockSettings({ emergencyFill: 0 });
+        mockSettings({ emergencySubmit: 0 });
         const now = NOW();
         const challenge = withBoost(now, { state: 'AVAILABLE_KEY', timeout: 0 });
         expect(VotingLogic.shouldApplyBoost(challenge, now)).toBe(false);
@@ -302,7 +302,7 @@ describe('isBoostDueForMission', () => {
     });
 
     test('a timer boost is not due with boostTime 0 (off), a key-unlocked one still is', () => {
-        mockSettings({ boostTime: 0, emergencyFill: 0 });
+        mockSettings({ boostTime: 0, emergencySubmit: 0 });
         const now = NOW();
         expect(
             VotingLogic.isBoostDueForMission(withBoost(now, { state: 'AVAILABLE', timeout: now + 36000 }), now, 1),
@@ -313,7 +313,7 @@ describe('isBoostDueForMission', () => {
     });
 
     test('a key-unlocked boost is not due with keyUnlockedBoostTime 0 (off), a timer one still is', () => {
-        mockSettings({ keyUnlockedBoostTime: 0, emergencyFill: 0 });
+        mockSettings({ keyUnlockedBoostTime: 0, emergencySubmit: 0 });
         const now = NOW();
         expect(VotingLogic.isBoostDueForMission(withBoost(now, { state: 'AVAILABLE_KEY', timeout: 0 }), now, 1)).toBe(
             false,

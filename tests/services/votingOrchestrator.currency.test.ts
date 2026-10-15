@@ -86,7 +86,7 @@ beforeEach(() => {
     votingLogic.evaluateVotingDecision.mockReturnValue(
         invalid({ shouldVote: false, voteReason: 'skip', targetExposure: 100 }),
     );
-    votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'autoFill' }]));
+    votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'autoSubmit' }]));
 });
 
 test('key, then swap, then the deadline actions — all with the pass currency deps', async () => {

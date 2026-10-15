@@ -39,7 +39,7 @@ export const formatSettingForLog = (key: string, value: unknown): string => {
 
     // Time-typed settings are stored in seconds but read as durations everywhere else —
     // the GUI enters them as hours+minutes, and their own descriptions talk in minutes.
-    // Printing the bare number invited the wrong comparison: `emergencyFill` 300 next to
+    // Printing the bare number invited the wrong comparison: `emergencySubmit` 300 next to
     // `lastMinuteThreshold` 10 looks like 300 > 10 when it is really 5 minutes vs 10.
     // Annotate rather than convert, so the printed value still matches what set-setting
     // expects back.

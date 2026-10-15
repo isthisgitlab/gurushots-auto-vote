@@ -517,19 +517,19 @@ describe('id-taking action handlers — invalid args', () => {
         [
             'fill-challenge-now',
             'fill-challenge-now',
-            'autoFill',
+            'autoSubmit',
             (h: Handlers, id: unknown) => h['fill-challenge-now']({}, invalid<string>(id), 'one'),
         ],
         [
             'submit-picked-photos',
             'submit-picked-photos',
-            'autoFill',
+            'autoSubmit',
             (h: Handlers, id: unknown) => h['submit-picked-photos']({}, invalid<string>(id), ['abc']),
         ],
         [
             'suggest-photos',
             'suggest-photos',
-            'autoFill',
+            'autoSubmit',
             (h: Handlers, id: unknown) => h['suggest-photos']({}, invalid<string>(id)),
         ],
         [
@@ -653,7 +653,7 @@ describe('fill-challenge-now', () => {
         expect(result).toEqual({ success: false, error: 'Challenge no longer active' });
     });
 
-    test('passes normalised mode (anything other than "all" → "one") to autoFill', async () => {
+    test('passes normalised mode (anything other than "all" → "one") to autoSubmit', async () => {
         stubAuthGuardOk();
         const liveChallenge = { id: 123, title: 'C' };
         stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }) });
@@ -717,7 +717,7 @@ describe('submit-picked-photos', () => {
         const result = await buildHandlers()['submit-picked-photos']({}, '123', invalid<string[]>(imageIds));
         expect(result).toEqual({ success: false, error: 'invalid-args' });
         expect(logCategories('warning', 'Refused submit-picked-photos: invalid id argument', null)).toEqual([
-            'autoFill',
+            'autoSubmit',
         ]);
         expect(auth.requireAuthToken).not.toHaveBeenCalled();
         expect(apiFactory.getApiStrategy).not.toHaveBeenCalled();
@@ -764,20 +764,20 @@ describe('submit-picked-photos', () => {
             ),
         );
         expect(JSON.stringify(logged)).not.toContain('secretphoto');
-        expect(logCategories('info', '📝 Manual pick request: Challenge=123, Photos=1', null)).toEqual(['autoFill']);
+        expect(logCategories('info', '📝 Manual pick request: Challenge=123, Photos=1', null)).toEqual(['autoSubmit']);
     });
 
     test.each([
         ['its message', new Error('network down'), 'network down'],
         ['the generic fallback', new Error(''), 'Failed to submit photos'],
-    ])('answers %s instead of throwing, and logs the error under autoFill', async (_label, err, expected) => {
+    ])('answers %s instead of throwing, and logs the error under autoSubmit', async (_label, err, expected) => {
         stubAuthGuardOk();
         stubStrategy({ getActiveChallenges: jest.fn().mockRejectedValue(err) });
         await expect(buildHandlers()['submit-picked-photos']({}, '123', ['a'])).resolves.toEqual({
             success: false,
             error: expected,
         });
-        expect(logCategories('error', 'Error handling submit-picked-photos request:', err)).toEqual(['autoFill']);
+        expect(logCategories('error', 'Error handling submit-picked-photos request:', err)).toEqual(['autoSubmit']);
     });
 
     describe('a second submit for the same challenge', () => {
@@ -807,7 +807,7 @@ describe('submit-picked-photos', () => {
                     '📝 Manual pick request refused: a submit for Challenge=123 is already running',
                     null,
                 ),
-            ).toEqual(['autoFill', 'autoFill']);
+            ).toEqual(['autoSubmit', 'autoSubmit']);
             finish({ success: true, submitted: 1 });
             await expect(first).resolves.toEqual({ success: true, submitted: 1 });
             expect(submitPicked).toHaveBeenCalledTimes(1);
@@ -983,7 +983,7 @@ describe('suggest-photos', () => {
         const first = suggest('123');
         await expect(suggest('124')).resolves.toEqual({ success: false, error: 'suggest-busy' });
         expect(logCategories('info', '📝 Photo suggestions refused: a ranking is already running', null)).toEqual([
-            'autoFill',
+            'autoSubmit',
         ]);
         finish(suggested());
         await expect(first).resolves.toMatchObject({ success: true });
@@ -998,7 +998,7 @@ describe('suggest-photos', () => {
         const result = await suggest();
         expect(result).toEqual({ success: false, error: 'suggest-failed' });
         expect(JSON.stringify(result)).not.toContain('secret');
-        expect(logCategories('error', 'Error handling suggest-photos request:', err)).toEqual(['autoFill']);
+        expect(logCategories('error', 'Error handling suggest-photos request:', err)).toEqual(['autoSubmit']);
         await expect(suggest()).resolves.toMatchObject({ success: true });
     });
 
@@ -1010,7 +1010,7 @@ describe('suggest-photos', () => {
             ),
         );
         expect(JSON.stringify(logged)).not.toContain('a1');
-        expect(logCategories('info', '📝 Photo suggestions request: Challenge=123', null)).toEqual(['autoFill']);
+        expect(logCategories('info', '📝 Photo suggestions request: Challenge=123', null)).toEqual(['autoSubmit']);
     });
 
     describe('when the account changes meanwhile', () => {

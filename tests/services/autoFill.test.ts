@@ -107,7 +107,7 @@ describe('uncertain auto-submit tracking', () => {
             const ledger = createMemoryEntryAgeLedger();
             const challenge = makeChallenge({ title, entries: [{ id: 'existing' }] });
             const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-                settings: makeSettings({ autoFill: true, shouldIncludeTags: [...shouldIncludeTags] }),
+                settings: makeSettings({ autoSubmit: true, shouldIncludeTags: [...shouldIncludeTags] }),
                 logger: makeLogger(),
                 getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', [...labels])]),
                 getSemanticScores: jest.fn(async () =>
@@ -125,7 +125,7 @@ describe('uncertain auto-submit tracking', () => {
     test('a failed uncertainty write does not turn a successful submission into a failure', async () => {
         const challenge = makeChallenge({ title: 'Dogs', entries: [{ id: 'existing' }] });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', ['Car'])]),
             submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
@@ -152,7 +152,7 @@ describe('uncertain auto-submit tracking', () => {
             const challenge = makeChallenge({ title: 'Dogs', entries: [{ id: 'existing' }] });
             const logger = makeLogger();
             const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-                settings: makeSettings({ autoFill: true }),
+                settings: makeSettings({ autoSubmit: true }),
                 logger,
                 getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', [...labels])]),
                 getSemanticScores: jest.fn(async () =>
@@ -178,7 +178,7 @@ describe('uncertain auto-submit tracking', () => {
         const challenge = makeChallenge({ title: 'Dogs', entries: [{ id: 'existing' }] });
         const logger = makeLogger();
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger,
             getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', ['Dog'])]),
             submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
@@ -202,7 +202,7 @@ describe('uncertain auto-submit tracking', () => {
         const challenge = makeChallenge({ title: 'Dogs', entries: [{ id: 'existing' }] });
         challenge.welcome_message = 'Photograph your dog in a landscape you love.';
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', ['Landscape'])]),
             submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
@@ -217,7 +217,7 @@ describe('uncertain auto-submit tracking', () => {
         const ledger = createMemoryEntryAgeLedger();
         const challenge = makeChallenge({ title: 'Dogs', entries: [{ id: 'existing' }] });
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', ['Car'])]),
             submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
@@ -234,7 +234,7 @@ describe('uncertain auto-submit tracking', () => {
         const ledger = createMemoryEntryAgeLedger();
         const challenge = makeChallenge({ title: 'Dogs', entries: [{ id: 'existing' }] });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', ['Car'])]),
             submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
@@ -272,32 +272,32 @@ const makeLogger = (): MockFillLogger => ({
 });
 
 const makeSettings = ({
-    autoFill = false,
+    autoSubmit = false,
     schedule = DEFAULT_SCHEDULE,
     mustIncludeTags = [],
     shouldIncludeTags = [],
-    fillWithoutTagMatch = true, // mirrors the schema default
-    emergencyFill = 300, // mirrors the schema default (5 minutes in seconds)
+    submitWithoutTagMatch = true, // mirrors the schema default
+    emergencySubmit = 300, // mirrors the schema default (5 minutes in seconds)
     ignoreTitleWords = [],
     manualPhotosOnly = false,
 }: {
-    autoFill?: boolean;
+    autoSubmit?: boolean;
     schedule?: FillSchedule;
     mustIncludeTags?: string[];
     shouldIncludeTags?: string[];
-    fillWithoutTagMatch?: boolean;
-    emergencyFill?: number;
+    submitWithoutTagMatch?: boolean;
+    emergencySubmit?: number;
     ignoreTitleWords?: string[];
     manualPhotosOnly?: boolean;
 } = {}): jest.MockedObject<FillSettings> =>
     invalid({
         getEffectiveSetting: jest.fn((key: string) => {
-            if (key === 'autoFill') return autoFill;
-            if (key === 'autoFillSchedule') return schedule;
+            if (key === 'autoSubmit') return autoSubmit;
+            if (key === 'autoSubmitSchedule') return schedule;
             if (key === 'mustIncludeTags') return mustIncludeTags;
             if (key === 'shouldIncludeTags') return shouldIncludeTags;
-            if (key === 'fillWithoutTagMatch') return fillWithoutTagMatch;
-            if (key === 'emergencyFill') return emergencyFill;
+            if (key === 'submitWithoutTagMatch') return submitWithoutTagMatch;
+            if (key === 'emergencySubmit') return emergencySubmit;
             if (key === 'manualPhotosOnly') return manualPhotosOnly;
             return null;
         }),
@@ -320,7 +320,7 @@ describe('ignore-words setting reaches the real fill path', () => {
         const challenge = makeChallenge({ title: 'Epic Lighthouses', closeIn: 300, entries: [{ id: 'e1' }] });
         const searches: string[] = [];
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, ignoreTitleWords: ['epic'] }),
+            settings: makeSettings({ autoSubmit: true, ignoreTitleWords: ['epic'] }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) => {
                 if (opts && opts.search) {
@@ -340,7 +340,7 @@ describe('ignore-words setting reaches the real fill path', () => {
         const challenge = makeChallenge({ title: 'Epic Lighthouses', closeIn: 300, entries: [{ id: 'e1' }] });
         const searches: string[] = [];
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) => {
                 if (opts && opts.search) {
@@ -373,7 +373,7 @@ describe('tag-resolution deps reach the real fill path', () => {
         const getCurrentMemberProfile = jest.fn(async () => ({ id: 'member-hash', userName: 'guru' }));
 
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             // Themed searches miss; the unfiltered library still has a photo, so
             // the fill proceeds and the resolution attempt is reached.
@@ -391,12 +391,12 @@ describe('tag-resolution deps reach the real fill path', () => {
 });
 
 describe('maybeAutoFillChallenge — staggered auto-fill', () => {
-    test('returns disabled when autoFill setting is false', async () => {
+    test('returns disabled when autoSubmit setting is false', async () => {
         const challenge = makeChallenge({ entries: [{ id: 'e1' }] });
         const getEligiblePhotos = jest.fn();
         const submitToChallenge = jest.fn();
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false }),
+            settings: makeSettings({ autoSubmit: false }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -411,7 +411,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const getEligiblePhotos = jest.fn();
         const submitToChallenge = jest.fn();
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, manualPhotosOnly: true }),
+            settings: makeSettings({ autoSubmit: true, manualPhotosOnly: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -424,7 +424,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     test('returns skipped when challenge already closed', async () => {
         const challenge = makeChallenge({ closeIn: -10 });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(),
             submitToChallenge: jest.fn(),
@@ -435,7 +435,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     test('returns skipped when no slots remaining', async () => {
         const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }, { id: 'e2' }] });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(),
             submitToChallenge: jest.fn(),
@@ -448,7 +448,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }, { id: 'e2' }], closeIn: 25 * 60 });
         const getEligiblePhotos = jest.fn();
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge: jest.fn(),
@@ -466,7 +466,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const logger = makeLogger();
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger,
             getEligiblePhotos,
             submitToChallenge,
@@ -488,7 +488,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             search: 'pink',
             paginate: true,
             budgetMs: expect.any(Number),
-            logLabel: 'autoFill',
+            logLabel: 'autoSubmit',
         });
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
         expect(
@@ -511,7 +511,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const rankVisually = jest.fn().mockResolvedValue(['p2']);
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
             submitToChallenge,
@@ -532,7 +532,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const challenge = makeChallenge({ entries: [{ id: 'e1' }], closeIn: 19 * 60 });
         const logger = makeLogger();
         const deps = {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger,
             getEligiblePhotos: jest.fn().mockResolvedValue([{ ...allowedPhoto('p1'), labels: undefined }]),
             submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
@@ -571,7 +571,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const logger = makeLogger();
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger,
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
             submitToChallenge,
@@ -589,7 +589,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     test('schedule: single {2 @ T-10m} row, T-11m → not yet due → skipped', async () => {
         const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 11 * 60 });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, schedule: [{ count: 2, seconds: 600 }] }),
+            settings: makeSettings({ autoSubmit: true, schedule: [{ count: 2, seconds: 600 }] }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(),
             submitToChallenge: jest.fn(),
@@ -602,7 +602,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const getEligiblePhotos = jest.fn().mockResolvedValue([allowedPhoto('p1')]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, schedule: [{ count: 2, seconds: 600 }] }),
+            settings: makeSettings({ autoSubmit: true, schedule: [{ count: 2, seconds: 600 }] }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -619,7 +619,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
             .mockResolvedValue({ ok: true, raw: { success: true } });
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -634,7 +634,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const getEligiblePhotos = jest.fn().mockResolvedValue([]);
         const submitToChallenge = jest.fn();
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -647,7 +647,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const getEligiblePhotos = jest.fn().mockRejectedValue(new Error('network'));
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge: jest.fn(),
@@ -658,7 +658,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     test('returns error when submit returns ok=false', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge: jest.fn().mockResolvedValue({ ok: false, raw: null }),
@@ -669,7 +669,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     test('returns error when submit throws (no crash)', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge: jest.fn().mockRejectedValue(new Error('boom')),
@@ -679,7 +679,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
 
     test('returns skipped when challenge has no id', async () => {
         const result = await maybeAutoFillChallenge(invalid({ title: 'orphan' }), 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(),
             submitToChallenge: jest.fn(),
@@ -697,7 +697,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const getEligiblePhotos = jest.fn().mockResolvedValue([allowedPhoto('p1')]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -713,7 +713,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             member: { ranking: { entries: [] } },
         });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(),
             submitToChallenge: jest.fn(),
@@ -729,7 +729,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             member: { ranking: { entries: [] } },
         });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(),
             submitToChallenge: jest.fn(),
@@ -743,7 +743,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }, { id: 'e2' }], closeIn: 15 * 60 });
         const getEligiblePhotos = jest.fn();
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, schedule: invalid(null) }),
+            settings: makeSettings({ autoSubmit: true, schedule: invalid(null) }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge: jest.fn(),
@@ -755,7 +755,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     test('returns no-schedule for an empty-array schedule', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, schedule: [] }),
+            settings: makeSettings({ autoSubmit: true, schedule: [] }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(),
             submitToChallenge: jest.fn(),
@@ -766,7 +766,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     test('returns no-schedule for a non-array (string) schedule', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, schedule: invalid('garbage') }),
+            settings: makeSettings({ autoSubmit: true, schedule: invalid('garbage') }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(),
             submitToChallenge: jest.fn(),
@@ -779,7 +779,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const submitToChallenge = jest.fn();
         await expect(
             maybeAutoFillChallenge(challenge, 'tok', NOW, {
-                settings: makeSettings({ autoFill: true, schedule: invalid([{ count: 'x' }]) }),
+                settings: makeSettings({ autoSubmit: true, schedule: invalid([{ count: 'x' }]) }),
                 logger: makeLogger(),
                 getEligiblePhotos: jest.fn(),
                 submitToChallenge,
@@ -803,7 +803,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
-                autoFill: true,
+                autoSubmit: true,
                 schedule: [
                     { count: 2, seconds: 1800 },
                     { count: 3, seconds: 0 },
@@ -830,7 +830,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 5 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger,
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge,
@@ -847,7 +847,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
             .mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
             submitToChallenge,
@@ -874,7 +874,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         });
         const submitToChallenge = jest.fn();
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger,
             getEligiblePhotos: jest.fn(),
             submitToChallenge,
@@ -903,7 +903,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         });
         const submitToChallenge = jest.fn();
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger,
             getEligiblePhotos: jest.fn(),
             submitToChallenge,
@@ -913,14 +913,14 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(warning).not.toHaveBeenCalled();
     });
 
-    test('mustIncludeTags hard-filters: with fillWithoutTagMatch off, no-match photo is not submitted', async () => {
+    test('mustIncludeTags hard-filters: with submitWithoutTagMatch off, no-match photo is not submitted', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
-                autoFill: true,
+                autoSubmit: true,
                 mustIncludeTags: ['sunset'],
-                fillWithoutTagMatch: false,
+                submitWithoutTagMatch: false,
             }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat'])]),
@@ -930,13 +930,13 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(submitToChallenge).not.toHaveBeenCalled();
     });
 
-    test('fillWithoutTagMatch default ON: no-match photo IS submitted (fallback)', async () => {
+    test('submitWithoutTagMatch default ON: no-match photo IS submitted (fallback)', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            // fillWithoutTagMatch defaults to true in makeSettings
+            // submitWithoutTagMatch defaults to true in makeSettings
             settings: makeSettings({
-                autoFill: true,
+                autoSubmit: true,
                 mustIncludeTags: ['sunset'],
             }),
             logger: makeLogger(),
@@ -947,14 +947,14 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
     });
 
-    test('fillWithoutTagMatch does NOT override an actual match (matching photo still wins)', async () => {
+    test('submitWithoutTagMatch does NOT override an actual match (matching photo still wins)', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
-                autoFill: true,
+                autoSubmit: true,
                 mustIncludeTags: ['sunset'],
-                fillWithoutTagMatch: true,
+                submitWithoutTagMatch: true,
             }),
             logger: makeLogger(),
             getEligiblePhotos: jest
@@ -971,7 +971,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
-                autoFill: true,
+                autoSubmit: true,
                 mustIncludeTags: ['sunset'],
             }),
             logger: makeLogger(),
@@ -984,14 +984,14 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['keep'], 'tok');
     });
 
-    test('multi-tag ALL: photo missing one required tag is not submitted (fillWithoutTagMatch off)', async () => {
+    test('multi-tag ALL: photo missing one required tag is not submitted (submitWithoutTagMatch off)', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
-                autoFill: true,
+                autoSubmit: true,
                 mustIncludeTags: ['sunset', 'beach'],
-                fillWithoutTagMatch: false,
+                submitWithoutTagMatch: false,
             }),
             logger: makeLogger(),
             // Only carries one of the two required tags → excluded under ALL.
@@ -1007,9 +1007,9 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
-                autoFill: true,
+                autoSubmit: true,
                 mustIncludeTags: ['sunset', 'beach'],
-                fillWithoutTagMatch: true,
+                submitWithoutTagMatch: true,
             }),
             logger: makeLogger(),
             getEligiblePhotos: jest
@@ -1026,9 +1026,9 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            // fillWithoutTagMatch defaults to true in makeSettings
+            // submitWithoutTagMatch defaults to true in makeSettings
             settings: makeSettings({
-                autoFill: true,
+                autoSubmit: true,
                 mustIncludeTags: ['sunset', 'beach'],
             }),
             logger: makeLogger(),
@@ -1051,8 +1051,8 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const settings = invalid<FillSettings>({
             getEffectiveSetting: jest.fn((key: string) => {
-                if (key === 'autoFill') return true;
-                if (key === 'autoFillSchedule') return DEFAULT_SCHEDULE;
+                if (key === 'autoSubmit') return true;
+                if (key === 'autoSubmitSchedule') return DEFAULT_SCHEDULE;
                 return null;
             }),
             // No title rule + null base → stays null ("no filter").
@@ -1073,7 +1073,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         // getEffectiveSetting(key, id). Guard the wiring against regressions.
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
-        const settings = makeSettings({ autoFill: true, mustIncludeTags: ['hat'] });
+        const settings = makeSettings({ autoSubmit: true, mustIncludeTags: ['hat'] });
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings,
             logger: makeLogger(),
@@ -1091,7 +1091,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
-                autoFill: true,
+                autoSubmit: true,
                 shouldIncludeTags: ['sunset'],
             }),
             logger: makeLogger(),
@@ -1109,7 +1109,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     ])('error path handles a thrown non-Error (%s) gracefully', async (_name, thrown) => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const fetchResult = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockRejectedValue(thrown),
             submitToChallenge: jest.fn(),
@@ -1117,7 +1117,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(fetchResult).toBe('error');
 
         const submitResult = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge: jest.fn().mockRejectedValue(thrown),
@@ -1135,33 +1135,33 @@ describe('evaluateEmergencyFill — the state-only stand-downs, shared with the 
     const open = () => makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }] });
 
     test('stands down when there is no free slot left', () => {
-        expect(evaluateEmergencyFill(full(), 'c1', makeSettings({ autoFill: false })).standDown).toBe(true);
+        expect(evaluateEmergencyFill(full(), 'c1', makeSettings({ autoSubmit: false })).standDown).toBe(true);
     });
 
     test('acts when a slot is free and auto-fill is off', () => {
-        expect(evaluateEmergencyFill(open(), 'c1', makeSettings({ autoFill: false })).standDown).toBe(false);
+        expect(evaluateEmergencyFill(open(), 'c1', makeSettings({ autoSubmit: false })).standDown).toBe(false);
     });
 
     test('stands down when auto-fill is on with no must-include filter', () => {
         // The common configuration — the staggered path owns the fill.
-        expect(evaluateEmergencyFill(open(), 'c1', makeSettings({ autoFill: true })).standDown).toBe(true);
+        expect(evaluateEmergencyFill(open(), 'c1', makeSettings({ autoSubmit: true })).standDown).toBe(true);
     });
 
     test('acts when auto-fill is on but a must-include filter is set', () => {
-        const settings = makeSettings({ autoFill: true, mustIncludeTags: ['sunset'] });
+        const settings = makeSettings({ autoSubmit: true, mustIncludeTags: ['sunset'] });
         expect(evaluateEmergencyFill(open(), 'c1', settings).standDown).toBe(false);
     });
 
     test('a non-array truthy mustIncludeTags counts as no filter (corrupt settings blob)', () => {
         // Settings are read back without zod re-validation, so a corrupted value
         // must not be mistaken for an active filter and re-enable the feature.
-        const settings = makeSettings({ autoFill: true, mustIncludeTags: invalid('sunset') });
+        const settings = makeSettings({ autoSubmit: true, mustIncludeTags: invalid('sunset') });
         expect(evaluateEmergencyFill(open(), 'c1', settings).standDown).toBe(true);
     });
 
     test('an empty-array mustIncludeTags counts as no filter', () => {
         expect(
-            evaluateEmergencyFill(open(), 'c1', makeSettings({ autoFill: true, mustIncludeTags: [] })).standDown,
+            evaluateEmergencyFill(open(), 'c1', makeSettings({ autoSubmit: true, mustIncludeTags: [] })).standDown,
         ).toBe(true);
     });
 
@@ -1172,7 +1172,7 @@ describe('evaluateEmergencyFill — the state-only stand-downs, shared with the 
         // Exactly the runner's own guard, so the view must not advertise a fill
         // the runner would refuse outright. describeDeadlineActions therefore
         // passes the RAW id rather than its ''-normalised one.
-        expect(evaluateEmergencyFill(open(), challengeId, makeSettings({ autoFill: false })).standDown).toBe(true);
+        expect(evaluateEmergencyFill(open(), challengeId, makeSettings({ autoSubmit: false })).standDown).toBe(true);
     });
 
     test.each([
@@ -1182,32 +1182,32 @@ describe('evaluateEmergencyFill — the state-only stand-downs, shared with the 
         // The guard names undefined/null explicitly rather than testing
         // falsiness, matching maybeEmergencyFillChallenge — widening it to ''
         // would silently stop the runner filling such a challenge.
-        expect(evaluateEmergencyFill(open(), challengeId, makeSettings({ autoFill: false })).standDown).toBe(false);
+        expect(evaluateEmergencyFill(open(), challengeId, makeSettings({ autoSubmit: false })).standDown).toBe(false);
     });
 
     test('hands back the settings it resolved so the runner need not re-read them', () => {
         // Every getEffectiveSetting is an uncached readFileSync + merge; the
         // runner reuses these instead of paying for them twice near a deadline.
-        const settings = makeSettings({ autoFill: true, mustIncludeTags: ['sunset'] });
+        const settings = makeSettings({ autoSubmit: true, mustIncludeTags: ['sunset'] });
         const gate = evaluateEmergencyFill(open(), 'c1', settings);
-        expect(gate).toEqual({ standDown: false, autoFillEnabled: true, mustIncludeTags: ['sunset'] });
-        // Manual Photos Only and autoFill: nothing else is read.
+        expect(gate).toEqual({ standDown: false, autoSubmitEnabled: true, mustIncludeTags: ['sunset'] });
+        // Manual Photos Only and autoSubmit: nothing else is read.
         expect(settings.getEffectiveSetting).toHaveBeenCalledTimes(2);
         expect(settings.getEffectiveTagSetting).toHaveBeenCalledTimes(1);
     });
 
     test('stands down while Manual Photos Only is on, however auto-fill is set', () => {
-        const settings = makeSettings({ autoFill: false, manualPhotosOnly: true });
+        const settings = makeSettings({ autoSubmit: false, manualPhotosOnly: true });
         expect(evaluateEmergencyFill(open(), 'c1', settings)).toEqual({
             standDown: true,
-            autoFillEnabled: false,
+            autoSubmitEnabled: false,
             mustIncludeTags: null,
         });
         expect(settings.getEffectiveTagSetting).not.toHaveBeenCalled();
     });
 
     test('reads no settings at all when it can decide from state alone', () => {
-        const settings = makeSettings({ autoFill: false });
+        const settings = makeSettings({ autoSubmit: false });
         expect(evaluateEmergencyFill(full(), 'c1', settings).standDown).toBe(true);
         expect(settings.getEffectiveSetting).not.toHaveBeenCalled();
         expect(settings.getEffectiveTagSetting).not.toHaveBeenCalled();
@@ -1217,12 +1217,12 @@ describe('evaluateEmergencyFill — the state-only stand-downs, shared with the 
         // Array.isArray + length is deliberately coarse: the read-only view errs
         // toward showing the row ("may fill") rather than hiding a fill that the
         // runner's own photo probe is the real authority on.
-        const settings = makeSettings({ autoFill: true, mustIncludeTags: [''] });
+        const settings = makeSettings({ autoSubmit: true, mustIncludeTags: [''] });
         expect(evaluateEmergencyFill(open(), 'c1', settings).standDown).toBe(false);
     });
 
     test('reads the must-include list with the challenge OBJECT so title rules apply', () => {
-        const settings = makeSettings({ autoFill: true });
+        const settings = makeSettings({ autoSubmit: true });
         const challenge = open();
         evaluateEmergencyFill(challenge, 'c1', settings);
         expect(settings.getEffectiveTagSetting).toHaveBeenCalledWith('mustIncludeTags', challenge);
@@ -1236,16 +1236,16 @@ describe('evaluateEmergencyFill — the state-only stand-downs, shared with the 
         // ('no phantom emergency-fill row when every slot is already full').
         const malformed = invalid<Challenge>({ id: 'c1', close_time: 1_000_000 + 600 });
         expect(getSlotsRemaining(malformed)).toBe(0);
-        expect(evaluateEmergencyFill(malformed, 'c1', makeSettings({ autoFill: false })).standDown).toBe(true);
+        expect(evaluateEmergencyFill(malformed, 'c1', makeSettings({ autoSubmit: false })).standDown).toBe(true);
     });
 });
 
 describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () => {
-    test('returns disabled when emergencyFill is 0 (off)', async () => {
+    test('returns disabled when emergencySubmit is 0 (off)', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
         const getEligiblePhotos = jest.fn();
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 0 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 0 }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge: jest.fn(),
@@ -1259,7 +1259,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         const getEligiblePhotos = jest.fn();
         const submitToChallenge = jest.fn();
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300, manualPhotosOnly: true }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300, manualPhotosOnly: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -1269,10 +1269,10 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         expect(submitToChallenge).not.toHaveBeenCalled();
     });
 
-    test('returns disabled when emergencyFill is non-numeric', async () => {
+    test('returns disabled when emergencySubmit is non-numeric', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: invalid(null) }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: invalid(null) }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(),
             submitToChallenge: jest.fn(),
@@ -1280,11 +1280,11 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         expect(result).toBe('disabled');
     });
 
-    test('returns skipped outside the emergency window (T-30m, emergencyFill 300s)', async () => {
+    test('returns skipped outside the emergency window (T-30m, emergencySubmit 300s)', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 30 * 60 });
         const getEligiblePhotos = jest.fn();
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge: jest.fn(),
@@ -1296,7 +1296,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
     test('themed search returns nothing → unfiltered fallback + must-relax still fills at the buzzer', async () => {
         // Two fallback layers compose: the Must-tag search ('sunset') returns no
         // photo, so fetchCandidatesForChallenge relaxes to the full library; then
-        // the picker's fillWithoutTagMatch:true (forced by emergency fill) relaxes
+        // the picker's submitWithoutTagMatch:true (forced by emergency fill) relaxes
         // the must-filter so an off-theme photo is submitted rather than no photo.
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
         const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
@@ -1304,7 +1304,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         );
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300, mustIncludeTags: ['sunset'] }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300, mustIncludeTags: ['sunset'] }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -1314,16 +1314,16 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
             search: 'sunset',
             paginate: true,
             budgetMs: expect.any(Number),
-            logLabel: 'autoFill',
+            logLabel: 'autoSubmit',
         });
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // unfiltered fallback
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' }); // unfiltered fallback
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['off'], 'tok');
     });
 
     test('resolves tag lists via getEffectiveTagSetting with the full challenge (enables title rules)', async () => {
         // Wiring guard: emergency fill must resolve tags by challenge (title), not id.
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
-        const settings = makeSettings({ autoFill: false, emergencyFill: 300 });
+        const settings = makeSettings({ autoSubmit: false, emergencySubmit: 300 });
         await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
             settings,
             logger: makeLogger(),
@@ -1337,7 +1337,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
     test('returns skipped when challenge already closed', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: -10 });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(),
             submitToChallenge: jest.fn(),
@@ -1354,7 +1354,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
             .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
             .mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -1369,10 +1369,10 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
-                autoFill: false,
-                emergencyFill: 300,
+                autoSubmit: false,
+                emergencySubmit: 300,
                 mustIncludeTags: ['sunset'],
-                fillWithoutTagMatch: false,
+                submitWithoutTagMatch: false,
             }),
             logger: makeLogger(),
             getEligiblePhotos: jest
@@ -1382,7 +1382,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         });
         expect(result).toBe('submitted');
         // 1 empty slot; the must-include preference is honored when a match exists,
-        // even though emergency fill forces fillWithoutTagMatch on as a fallback.
+        // even though emergency fill forces submitWithoutTagMatch on as a fallback.
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['match'], 'tok');
     });
 
@@ -1391,10 +1391,10 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
-                autoFill: true,
-                emergencyFill: 300,
+                autoSubmit: true,
+                emergencySubmit: 300,
                 mustIncludeTags: ['sunset'],
-                fillWithoutTagMatch: false,
+                submitWithoutTagMatch: false,
             }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat'])]),
@@ -1410,8 +1410,8 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         const submitToChallenge = jest.fn();
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
-                autoFill: true,
-                emergencyFill: 300,
+                autoSubmit: true,
+                emergencySubmit: 300,
                 mustIncludeTags: ['sunset'],
             }),
             logger: makeLogger(),
@@ -1427,7 +1427,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         const getEligiblePhotos = jest.fn();
         const submitToChallenge = jest.fn();
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: true, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -1439,15 +1439,15 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         expect(submitToChallenge).not.toHaveBeenCalled();
     });
 
-    test('auto-fill ON, must tags set but fillWithoutTagMatch on: stands down (staggered path has a fallback)', async () => {
+    test('auto-fill ON, must tags set but submitWithoutTagMatch on: stands down (staggered path has a fallback)', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
         const submitToChallenge = jest.fn();
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
-                autoFill: true,
-                emergencyFill: 300,
+                autoSubmit: true,
+                emergencySubmit: 300,
                 mustIncludeTags: ['sunset'],
-                // fillWithoutTagMatch defaults true → the picker relaxes, so the
+                // submitWithoutTagMatch defaults true → the picker relaxes, so the
                 // normal staggered path can still fill the slot. Emergency stands down.
             }),
             logger: makeLogger(),
@@ -1458,15 +1458,15 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         expect(submitToChallenge).not.toHaveBeenCalled();
     });
 
-    test('fires at the exact window boundary (secondsRemaining === emergencyFill)', async () => {
-        // Window guard is `secondsRemaining > emergencyFill` → the exact
+    test('fires at the exact window boundary (secondsRemaining === emergencySubmit)', async () => {
+        // Window guard is `secondsRemaining > emergencySubmit` → the exact
         // boundary is inside the window, mirroring the staggered fill convention.
         const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 5 * 60 });
         const submitToChallenge = jest
             .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
             .mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
             submitToChallenge,
@@ -1483,7 +1483,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         const challenge = makeChallenge({ id: '', maxSubmits: 2, entries: [], closeIn: 3 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat'])]),
             submitToChallenge,
@@ -1496,7 +1496,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         const challenge = makeChallenge({ maxSubmits: 1, entries: [{ id: 'e1' }], closeIn: 3 * 60 });
         const getEligiblePhotos = jest.fn();
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge: jest.fn(),
@@ -1509,7 +1509,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
         const submitToChallenge = jest.fn();
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([]),
             submitToChallenge,
@@ -1521,7 +1521,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
     test('returns error when getEligiblePhotos throws', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockRejectedValue(new Error('network')),
             submitToChallenge: jest.fn(),
@@ -1532,7 +1532,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
     test('returns error when submit returns ok=false', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge: jest.fn().mockResolvedValue({ ok: false, raw: null }),
@@ -1543,7 +1543,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
     test('returns error when submit throws (Error and non-Error are both caught)', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
         const errResult = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge: jest.fn().mockRejectedValue(new Error('boom')),
@@ -1551,7 +1551,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         expect(errResult).toBe('error');
 
         const nonErrResult = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge: jest.fn().mockRejectedValue('string-not-error'),
@@ -1561,7 +1561,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
 
     test('returns skipped when challenge has no id', async () => {
         const result = await maybeEmergencyFillChallenge(invalid({ title: 'orphan' }), 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(),
             submitToChallenge: jest.fn(),
@@ -1608,7 +1608,7 @@ describe('fillChallengeNow — manual fill', () => {
         expect(submitToChallenge.mock.calls[0][1]).toHaveLength(3);
     });
 
-    test('manual ignores autoFill toggle (operates on disabled challenges)', async () => {
+    test('manual ignores autoSubmit toggle (operates on disabled challenges)', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
         const result = await fillChallengeNow(challenge, 'tok', 'one', {
             logger: makeLogger(),
@@ -1717,11 +1717,11 @@ describe('fillChallengeNow — manual fill', () => {
         },
     );
 
-    test('mustIncludeTags gates manual fill when fillWithoutTagMatch is off', async () => {
+    test('mustIncludeTags gates manual fill when submitWithoutTagMatch is off', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
         const submitToChallenge = jest.fn();
         const result = await fillChallengeNow(challenge, 'tok', 'all', {
-            settings: makeSettings({ mustIncludeTags: ['mountain'], fillWithoutTagMatch: false }),
+            settings: makeSettings({ mustIncludeTags: ['mountain'], submitWithoutTagMatch: false }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat']), allowedPhoto('p2', ['Sky'])]),
             submitToChallenge,
@@ -1737,7 +1737,7 @@ describe('fillChallengeNow — manual fill', () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await fillChallengeNow(challenge, 'tok', 'one', {
-            // fillWithoutTagMatch defaults true
+            // submitWithoutTagMatch defaults true
             settings: makeSettings({ mustIncludeTags: ['mountain'] }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat']), allowedPhoto('p2', ['Sky'])]),
@@ -1751,7 +1751,7 @@ describe('fillChallengeNow — manual fill', () => {
     test('generic "no eligible photos" message when there were no candidates at all', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
         const result = await fillChallengeNow(challenge, 'tok', 'all', {
-            settings: makeSettings({ mustIncludeTags: ['mountain'], fillWithoutTagMatch: false }),
+            settings: makeSettings({ mustIncludeTags: ['mountain'], submitWithoutTagMatch: false }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([]),
             submitToChallenge: jest.fn(),
@@ -1972,7 +1972,7 @@ describe('submitNewEntryForAction — fill-new for boost/turbo', () => {
             .fn()
             .mockResolvedValue([allowedPhoto('cat', ['Cat']), allowedPhoto('dog', ['Dog'])]);
         const result = await submitNewEntryForAction(challenge, 'tok', {
-            settings: makeSettings({ mustIncludeTags: ['dog'], fillWithoutTagMatch: false }),
+            settings: makeSettings({ mustIncludeTags: ['dog'], submitWithoutTagMatch: false }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -2084,7 +2084,7 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
         const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
         expect(getSlotsRemaining(challenge)).toBe(1);
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
@@ -2104,7 +2104,7 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
         const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const deps = {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge,
@@ -2119,7 +2119,7 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
         const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 5 * 60 });
         const before = challenge.member!.ranking!.entries!.length;
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge: jest.fn().mockResolvedValue({ ok: false, raw: null }),
@@ -2131,7 +2131,7 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
     test('maybeEmergencyFillChallenge does NOT reflect when a multi-photo submit fails', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
             submitToChallenge: jest.fn().mockResolvedValue({ ok: false, raw: null }),
@@ -2167,7 +2167,7 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
     test('maybeEmergencyFillChallenge reflects every submitted entry', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest
                 .fn()
@@ -2216,16 +2216,16 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             search: 'cat',
             paginate: true,
             budgetMs: expect.any(Number),
-            logLabel: 'autoFill',
+            logLabel: 'autoSubmit',
         });
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', {
             search: 'dog',
             paginate: true,
             budgetMs: expect.any(Number),
-            logLabel: 'autoFill',
+            logLabel: 'autoSubmit',
         });
         // Search produced allowed candidates → the unfiltered fallback is not used.
-        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' });
+        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' });
     });
 
     test('falls back to the unfiltered library when every search is empty', async () => {
@@ -2243,9 +2243,9 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             search: 'pink',
             paginate: true,
             budgetMs: expect.any(Number),
-            logLabel: 'autoFill',
+            logLabel: 'autoSubmit',
         });
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // unfiltered fallback
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' }); // unfiltered fallback
     });
 
     test('searches related existing tags before the truncated whole-library fallback', async () => {
@@ -2262,7 +2262,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
         );
         expect(related).toHaveBeenCalledWith(['religion', 'history']);
         expect(out.map((p) => p.id)).toEqual(['church']);
-        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' });
+        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' });
         related.mockRestore();
     });
 
@@ -2283,7 +2283,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
         );
         expect(out.map((photo) => photo.id)).toEqual(['history', 'church']);
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', expect.objectContaining({ search: 'church' }));
-        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' });
+        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' });
         related.mockRestore();
     });
 
@@ -2300,7 +2300,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             { getEligiblePhotos, logger: makeLogger() },
         );
         expect(out.map((p) => p.id)).toEqual(['fallback']);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' });
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' });
         related.mockRestore();
     });
 
@@ -2380,7 +2380,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             { getEligiblePhotos, logger: makeLogger() },
         );
         expect(out.map((p) => p.id)).toEqual(['full']);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' });
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' });
     });
 
     test('goes straight to the unfiltered fetch when no terms are derivable', async () => {
@@ -2393,7 +2393,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
         );
         expect(out.map((p) => p.id)).toEqual(['x']);
         expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' });
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' });
     });
 
     test('tolerates a single search term throwing (other terms still contribute)', async () => {
@@ -2409,7 +2409,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             { getEligiblePhotos, logger: makeLogger() },
         );
         expect(out.map((p) => p.id)).toEqual(['p2']);
-        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // dog matched → no fallback
+        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' }); // dog matched → no fallback
     });
 });
 
@@ -2427,7 +2427,7 @@ describe('semantic matching wiring (always on)', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
         const res = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue(photos),
             submitToChallenge,
@@ -2443,7 +2443,7 @@ describe('semantic matching wiring (always on)', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue(photos),
             submitToChallenge,
@@ -2457,7 +2457,7 @@ describe('semantic matching wiring (always on)', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
         const res = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge,
@@ -2537,7 +2537,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         );
         expect(out.map((p) => p.id)).toEqual(['best', 'landscape']);
         expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // no { search } term
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' }); // no { search } term
         expect(debug).toHaveBeenCalledWith(expect.stringContaining('letter challenge "L"'), null);
     });
 
@@ -2556,19 +2556,19 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         ]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
         });
         expect(result).toBe('submitted');
         expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // no themed search
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' }); // no themed search
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['landscape'], 'tok');
     });
 
     test('emergency fill near the deadline also honors the letter filter', async () => {
-        // autoFill off → emergency owns the slot; within the 300s window.
+        // autoSubmit off → emergency owns the slot; within the 300s window.
         const challenge = makeChallenge({
             title: 'Begins With L',
             url: '',
@@ -2581,14 +2581,14 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
             .mockResolvedValue([allowedPhoto('best', ['Pink'], 9000), allowedPhoto('lion', ['Lion'], 1000)]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
         });
         expect(result).toBe('submitted');
         expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // no themed search
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' }); // no themed search
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['lion'], 'tok');
     });
 
@@ -2616,7 +2616,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
             search: 'leaf',
             paginate: true,
             budgetMs: expect.any(Number),
-            logLabel: 'autoFill',
+            logLabel: 'autoSubmit',
         });
         expect(debug).not.toHaveBeenCalled();
     });
@@ -2635,13 +2635,13 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         ]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
         });
         expect(result).toBe('submitted');
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // no themed search
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' }); // no themed search
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['castle'], 'tok');
     });
 
@@ -2659,12 +2659,12 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
             closeIn: 9 * 60,
         });
         // Library has no C-labelled photo at all → the picker relaxes to the
-        // unfiltered set (fillWithoutTagMatch defaults true) and must say so
+        // unfiltered set (submitWithoutTagMatch defaults true) and must say so
         // at a level a packaged-build user can actually see.
         const getEligiblePhotos = jest.fn().mockResolvedValue([allowedPhoto('dog', ['Dog'], 9000)]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger,
             getEligiblePhotos,
             submitToChallenge,
@@ -2684,7 +2684,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
             withCategory: () => ({ info: jest.fn(), warning, success: jest.fn(), error: jest.fn(), debug: jest.fn() }),
             challengeTag: () => '[Challenge c1: C is for…]',
         });
-        // autoFill on + no C-labelled photo: the probe's pick relaxes internally
+        // autoSubmit on + no C-labelled photo: the probe's pick relaxes internally
         // and returns a photo, so emergency fill stands down ('skipped'). A probe
         // never submits, so it must never warn about an off-theme submission.
         const challenge = makeChallenge({
@@ -2697,7 +2697,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         const getEligiblePhotos = jest.fn().mockResolvedValue([allowedPhoto('dog', ['Dog'], 9000)]);
         const submitToChallenge = jest.fn();
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: true, emergencySubmit: 300 }),
             logger,
             getEligiblePhotos,
             submitToChallenge,
@@ -2893,7 +2893,7 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
     // A due fill: 1 entry at T-9m with a single {2 @ T-10m} row → target 2.
     const dueChallenge = () => makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
     const dueDeps = (over = {}) => ({
-        settings: makeSettings({ autoFill: true, schedule: [{ count: 2, seconds: 600 }] }),
+        settings: makeSettings({ autoSubmit: true, schedule: [{ count: 2, seconds: 600 }] }),
         logger: makeLogger(),
         getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
         submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
@@ -2989,7 +2989,7 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
         const { logger, lines } = makeCapturingLogger();
         const deps = dueDeps({
-            settings: makeSettings({ autoFill: true, schedule: [{ count: 4, seconds: 600 }] }),
+            settings: makeSettings({ autoSubmit: true, schedule: [{ count: 4, seconds: 600 }] }),
             logger,
             getActiveChallenges: jest.fn().mockResolvedValue(freshList('c1', [{ id: 'e1' }, { id: 'manual1' }])),
         });
@@ -3009,7 +3009,7 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
             challenge,
             'tok',
             { getActiveChallenges: jest.fn().mockResolvedValue(response), logger: makeLogger() },
-            'autoFill',
+            'autoSubmit',
         );
         expect(result).toBe('refreshed');
         // In-place adoption: later actions this cycle see the fresh member.
@@ -3022,7 +3022,7 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         // is also in the fresh list therefore comes back with the SERVER's flags — and the
         // server has not registered an apply from seconds ago, so it reports turbo/boosted
         // false. Taken as-is, that would undo reflectEntryFlag: under the default action order
-        // (turbo, then autoFill, then boost) a turbo applied earlier in the pass would have its
+        // (turbo, then autoSubmit, then boost) a turbo applied earlier in the pass would have its
         // flag wiped here, and boost would then pick the very entry turbo had just consumed.
         const challenge = invalid<Challenge>({
             id: 'c1',
@@ -3052,7 +3052,7 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
             logger: makeLogger(),
         };
 
-        const result = await refreshChallengeState(challenge, 'tok', deps, 'autoFill');
+        const result = await refreshChallengeState(challenge, 'tok', deps, 'autoSubmit');
 
         expect(result).toBe('refreshed');
         const byId = Object.fromEntries(challenge.member!.ranking!.entries!.map((e) => [e.id, e]));
@@ -3078,14 +3078,14 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
             logger: makeLogger(),
         };
 
-        await refreshChallengeState(challenge, 'tok', deps, 'autoFill');
+        await refreshChallengeState(challenge, 'tok', deps, 'autoSubmit');
 
         expect(challenge.member!.ranking!.entries![0].boosted).toBe(true);
     });
 
     test('helper without the dep wired → unavailable', async () => {
         const challenge = makeChallenge();
-        const result = await refreshChallengeState(challenge, 'tok', { logger: makeLogger() }, 'autoFill');
+        const result = await refreshChallengeState(challenge, 'tok', { logger: makeLogger() }, 'autoSubmit');
         expect(result).toBe('unavailable');
     });
 
@@ -3106,7 +3106,7 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
             challenge,
             'tok',
             { getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [challenge] }), logger: makeLogger() },
-            'autoFill',
+            'autoSubmit',
         );
         expect(result).toBe('refreshed');
         expect(challenge.member!.ranking!.entries!.map((e) => e.id)).toEqual(['e1', 'e2']);
@@ -3118,12 +3118,12 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
             getActiveChallenges: jest.fn().mockResolvedValue(freshList('c1', [{ id: 'e1' }])),
             logger: makeLogger(),
         };
-        expect(await refreshChallengeState(challenge, 'tok', deps, 'autoFill')).toBe('refreshed');
+        expect(await refreshChallengeState(challenge, 'tok', deps, 'autoSubmit')).toBe('refreshed');
         expect(challenge.member!.ranking!.entries).toHaveLength(2);
         // A second refresh in the same pass must not append another copy —
         // id-less entries are deduped by object identity, not by id.
         deps.getActiveChallenges.mockResolvedValue(freshList('c1', [{ id: 'e1' }]));
-        expect(await refreshChallengeState(challenge, 'tok', deps, 'autoFill')).toBe('refreshed');
+        expect(await refreshChallengeState(challenge, 'tok', deps, 'autoSubmit')).toBe('refreshed');
         expect(challenge.member!.ranking!.entries).toHaveLength(2);
     });
 
@@ -3144,16 +3144,16 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
             challenge,
             'tok',
             { getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [challenge] }), logger: makeLogger() },
-            'autoFill',
+            'autoSubmit',
         );
         expect(result).toBe('refreshed');
         expect(challenge.member!.ranking!.entries).toHaveLength(2);
     });
 
-    test('emergencyFill: challenge gone from a non-empty fresh list → skipped, no submit', async () => {
+    test('emergencySubmit: challenge gone from a non-empty fresh list → skipped, no submit', async () => {
         const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 200 });
         const deps = {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge: jest.fn(),
@@ -3164,10 +3164,10 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
     });
 
-    test('emergencyFill: refresh rejects → batch proceeds on pass-start data', async () => {
+    test('emergencySubmit: refresh rejects → batch proceeds on pass-start data', async () => {
         const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 200 });
         const deps = {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
             submitToChallenge: jest
@@ -3180,11 +3180,11 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         expect(deps.submitToChallenge.mock.calls[0][1]).toHaveLength(2);
     });
 
-    test('emergencyFill: refreshed entries shrink the batch → picked truncated to the free slots', async () => {
-        // autoFill off → emergency fill owns the challenge inside the window.
+    test('emergencySubmit: refreshed entries shrink the batch → picked truncated to the free slots', async () => {
+        // autoSubmit off → emergency fill owns the challenge inside the window.
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 200 });
         const deps = {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest
                 .fn()
@@ -3200,10 +3200,10 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         expect(submittedIds).toHaveLength(2);
     });
 
-    test('emergencyFill: refreshed state full → stands down without submitting', async () => {
+    test('emergencySubmit: refreshed state full → stands down without submitting', async () => {
         const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 200 });
         const deps = {
-            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
             submitToChallenge: jest.fn(),
@@ -3298,7 +3298,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
 
         const result = await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             getImageData,
@@ -3335,7 +3335,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
             'tok',
             NOW,
             {
-                settings: makeSettings({ autoFill: true }),
+                settings: makeSettings({ autoSubmit: true }),
                 logger: makeLogger(),
                 getEligiblePhotos: jest.fn().mockResolvedValue(candidates),
                 getSemanticScores: jest.fn().mockResolvedValue(null),
@@ -3362,7 +3362,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
             'tok',
             NOW,
             {
-                settings: makeSettings({ autoFill: true }),
+                settings: makeSettings({ autoSubmit: true }),
                 logger: makeLogger(),
                 getEligiblePhotos,
                 getImageData,
@@ -3383,7 +3383,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
 
         await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger,
             getEligiblePhotos,
             getImageData,
@@ -3429,7 +3429,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
 
         await maybeAutoFillChallenge(makeChallenge({ entries: [{ id: 'e1' }] }), 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger,
             getEligiblePhotos,
             getImageData,
@@ -3499,7 +3499,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
 
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger,
             getEligiblePhotos: jest.fn().mockResolvedValue(photos),
             getImageData,
@@ -3532,7 +3532,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
 
         await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger,
             getEligiblePhotos,
             getImageData,
@@ -3561,7 +3561,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: false, raw: { success: false } });
 
         await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger,
             getEligiblePhotos,
             getImageData,
@@ -3590,7 +3590,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         );
 
         const result = await fillChallengeNow(makeChallenge({ maxSubmits: 3, entries: [{ id: 'e1' }] }), 'tok', 'all', {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger,
             getEligiblePhotos: jest.fn().mockResolvedValue(photos),
             getImageData,
@@ -3614,7 +3614,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
 
         const result = await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             getImageData,
@@ -3633,7 +3633,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
 
         const result = await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
-            settings: makeSettings({ autoFill: true }),
+            settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -3644,7 +3644,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
     });
 
     test('the emergency-fill stand-down probe never triggers enrichment', async () => {
-        // autoFill still owns this challenge and its must-tag filter matches, so
+        // autoSubmit still owns this challenge and its must-tag filter matches, so
         // the probe stands down. That path runs on every scheduler cycle inside
         // the emergency window — spending a burst of lookups there to submit
         // nothing is exactly what the seam placement avoids.
@@ -3658,7 +3658,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         });
 
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, mustIncludeTags: ['boy'] }),
+            settings: makeSettings({ autoSubmit: true, mustIncludeTags: ['boy'] }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([libraryPhoto('soccer', 1203, 9000)]),
             getImageData,
@@ -3690,7 +3690,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
             'tok',
             'all',
             {
-                settings: makeSettings({ autoFill: true }),
+                settings: makeSettings({ autoSubmit: true }),
                 logger: makeLogger(),
                 getEligiblePhotos: jest.fn().mockResolvedValue(photos),
                 getImageData,

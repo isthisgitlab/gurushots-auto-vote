@@ -21,7 +21,7 @@ const {
 } = require('../../src/ts/services/deadlineNotifications') as typeof deadlineNotificationsModule;
 
 const NOW = 1_000_000;
-const ALL_ON = { autoFill: true, boost: true, turbo: true, emergencyFill: true };
+const ALL_ON = { autoSubmit: true, boost: true, turbo: true, emergencySubmit: true };
 
 type ChallengeActions = Parameters<typeof computeDueNotifications>[0][number]['actions'];
 const challenge = (id: string, title: string, actions: ChallengeActions) => ({ id, title, actions });
@@ -56,7 +56,7 @@ describe('computeDueNotifications — lead-time boundary', () => {
         const acts = [
             { action: 'boost', dueAt: null },
             { action: 'turbo', dueAt: undefined },
-            { action: 'autoFill', dueAt: NaN },
+            { action: 'autoSubmit', dueAt: NaN },
         ];
         expect(computeDueNotifications([challenge('1', 'x', invalid(acts))], NOW, opts)).toEqual([]);
     });
@@ -64,7 +64,7 @@ describe('computeDueNotifications — lead-time boundary', () => {
 
 describe('computeDueNotifications — gating & robustness', () => {
     test('only enabled action types are due', () => {
-        const c = challenge('1', 'x', [action('boost', 60), action('turbo', 60), action('autoFill', 60)]);
+        const c = challenge('1', 'x', [action('boost', 60), action('turbo', 60), action('autoSubmit', 60)]);
         const due = computeDueNotifications([c], NOW, { leadSec: 300, enabled: { boost: true } });
         expect(due.map((d) => d.action)).toEqual(['boost']);
     });
@@ -196,10 +196,10 @@ describe('formatNotification — single & coalesced', () => {
     });
 
     test.each([
-        ['autoFill', 'Auto-submit'],
+        ['autoSubmit', 'Auto-submit'],
         ['boost', 'Boost'],
         ['turbo', 'Turbo'],
-        ['emergencyFill', 'Emergency submit'],
+        ['emergencySubmit', 'Emergency submit'],
     ])('single-entry English fallback labels %s → %s', (name, label) => {
         const out = formatNotification([{ title: 'T', action: name, secondsUntil: 60 }], translate);
         expect(out!.title).toContain(label);
@@ -229,7 +229,7 @@ describe('readNotificationConfig', () => {
     test('anyEnabled false when all toggles off (default) → host early-exit', () => {
         const cfg = readNotificationConfig(() => false);
         expect(cfg.anyEnabled).toBe(false);
-        expect(cfg.enabled).toEqual({ autoFill: false, boost: false, turbo: false, emergencyFill: false });
+        expect(cfg.enabled).toEqual({ autoSubmit: false, boost: false, turbo: false, emergencySubmit: false });
     });
 
     test('reads lead time in minutes → seconds and the enabled map', () => {
@@ -276,7 +276,7 @@ describe('defensive inputs from hosts', () => {
     test('readNotificationConfig without an accessor is all-off with no lead window', () => {
         expect(readNotificationConfig(invalid(null))).toEqual({
             leadSec: 0,
-            enabled: { autoFill: false, boost: false, turbo: false, emergencyFill: false },
+            enabled: { autoSubmit: false, boost: false, turbo: false, emergencySubmit: false },
             anyEnabled: false,
         });
     });

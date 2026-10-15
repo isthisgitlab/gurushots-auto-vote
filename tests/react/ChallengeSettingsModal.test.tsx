@@ -428,21 +428,21 @@ describe('ChallengeSettingsModal auto-fill schedule shift hint', () => {
     // only; restore afterwards so the other suites keep their single-field view.
     beforeEach(() => {
         mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
-        mockSchemaState.schema!.autoFillSchedule = invalid({
+        mockSchemaState.schema!.autoSubmitSchedule = invalid({
             type: 'schedule',
             default: DEFAULT_SCHEDULE,
             perChallenge: true,
-            group: 'autoFill',
-            label: 'app.autoFillSchedule',
-            description: 'app.autoFillScheduleDesc',
+            group: 'autoSubmit',
+            label: 'app.autoSubmitSchedule',
+            description: 'app.autoSubmitScheduleDesc',
         });
-        mockSchemaState.defaults!.autoFillSchedule = DEFAULT_SCHEDULE;
-        mockSchemaState.groups!.push(invalid({ id: 'autoFill', label: 'app.groupAutoFill' }));
+        mockSchemaState.defaults!.autoSubmitSchedule = DEFAULT_SCHEDULE;
+        mockSchemaState.groups!.push(invalid({ id: 'autoSubmit', label: 'app.groupAutoSubmit' }));
     });
     afterEach(() => {
-        delete mockSchemaState.schema!.autoFillSchedule;
-        delete mockSchemaState.defaults!.autoFillSchedule;
-        mockSchemaState.groups = mockSchemaState.groups!.filter((g) => g.id !== 'autoFill');
+        delete mockSchemaState.schema!.autoSubmitSchedule;
+        delete mockSchemaState.defaults!.autoSubmitSchedule;
+        mockSchemaState.groups = mockSchemaState.groups!.filter((g) => g.id !== 'autoSubmit');
     });
 
     const renderWithChallenge = (challenge: Challenge | null) =>
@@ -465,9 +465,9 @@ describe('ChallengeSettingsModal auto-fill schedule shift hint', () => {
         );
 
         await waitFor(() => {
-            expect(document.body.textContent).toContain('app.autoFillSchedule');
+            expect(document.body.textContent).toContain('app.autoSubmitSchedule');
         });
-        expect(document.body.textContent).toContain('app.autoFillScheduleShiftHint');
+        expect(document.body.textContent).toContain('app.autoSubmitScheduleShiftHint');
     });
 
     test('absent when the challenge allows the full schedule span', async () => {
@@ -479,9 +479,9 @@ describe('ChallengeSettingsModal auto-fill schedule shift hint', () => {
         );
 
         await waitFor(() => {
-            expect(document.body.textContent).toContain('app.autoFillSchedule');
+            expect(document.body.textContent).toContain('app.autoSubmitSchedule');
         });
-        expect(document.body.textContent).not.toContain('app.autoFillScheduleShiftHint');
+        expect(document.body.textContent).not.toContain('app.autoSubmitScheduleShiftHint');
     });
 
     test('null challenge (dropped off the live poll mid-session): no crash, no hint', async () => {
@@ -491,9 +491,9 @@ describe('ChallengeSettingsModal auto-fill schedule shift hint', () => {
         renderWithChallenge(null);
 
         await waitFor(() => {
-            expect(document.body.textContent).toContain('app.autoFillSchedule');
+            expect(document.body.textContent).toContain('app.autoSubmitSchedule');
         });
-        expect(document.body.textContent).not.toContain('app.autoFillScheduleShiftHint');
+        expect(document.body.textContent).not.toContain('app.autoSubmitScheduleShiftHint');
     });
 
     test('single-photo challenge: no hint (the remapped schedule is empty, no row applies)', async () => {
@@ -505,9 +505,9 @@ describe('ChallengeSettingsModal auto-fill schedule shift hint', () => {
         );
 
         await waitFor(() => {
-            expect(document.body.textContent).toContain('app.autoFillSchedule');
+            expect(document.body.textContent).toContain('app.autoSubmitSchedule');
         });
-        expect(document.body.textContent).not.toContain('app.autoFillScheduleShiftHint');
+        expect(document.body.textContent).not.toContain('app.autoSubmitScheduleShiftHint');
     });
 });
 

@@ -50,25 +50,25 @@ export const notificationsSettings = {
         label: 'app.notifyOnTurbo',
         description: 'app.notifyOnTurboDesc',
     },
-    notifyOnAutoFill: {
+    notifyOnAutoSubmit: {
         type: 'boolean',
         default: false,
         perChallenge: false,
         validation: zBool,
         validationOrder: 1,
         group: 'notifications',
-        label: 'app.notifyOnAutoFill',
-        description: 'app.notifyOnAutoFillDesc',
+        label: 'app.notifyOnAutoSubmit',
+        description: 'app.notifyOnAutoSubmitDesc',
     },
-    notifyOnEmergencyFill: {
+    notifyOnEmergencySubmit: {
         type: 'boolean',
         default: false,
         perChallenge: false,
         validation: zBool,
         validationOrder: 1,
         group: 'notifications',
-        label: 'app.notifyOnEmergencyFill',
-        description: 'app.notifyOnEmergencyFillDesc',
+        label: 'app.notifyOnEmergencySubmit',
+        description: 'app.notifyOnEmergencySubmitDesc',
     },
     notifyLeadTime: {
         type: 'number',

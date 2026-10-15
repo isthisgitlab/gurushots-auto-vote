@@ -215,7 +215,7 @@ const rankVisually = async (
 ): Promise<string[]> => {
     const original = rankedIds.slice(0, wantCount);
     const prompts = challengePrompts(challenge, ignoreWords);
-    const log = logger.withCategory('autoFill');
+    const log = logger.withCategory('autoSubmit');
     const keepOriginal = (reason: string, detail: unknown = null) => {
         log.info(`Visual check ${reason} for ${logger.challengeTag(challenge)}; kept tag order`, detail);
         return original;

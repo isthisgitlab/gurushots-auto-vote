@@ -29,7 +29,7 @@ import type { ScenarioStateLedger } from '../../../src/ts/types/votingPass';
 import type { Customization, OracleEnv, V1Oracle } from '../../helpers/v1Oracle';
 
 /** The live name of a 1.x setting key: the harness always compares `live[liveKey(k)]` with `oracle[k]`. */
-const liveKey = (v1Key: string): string => v1Key;
+const liveKey = (v1Key: string): string => (Object.hasOwn(V1_KEY_RENAMES, v1Key) ? V1_KEY_RENAMES[v1Key] : v1Key);
 
 const headless = globalThis as typeof globalThis & {
     __GS_HEADLESS__?: boolean;

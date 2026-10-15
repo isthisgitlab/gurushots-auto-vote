@@ -63,7 +63,7 @@ function RuleHeader({
 // A rule with conditions but no title reaches a whole class of challenges, so
 // switching joining or auto-submit ON there spends coins / photos broadly.
 const isBroadSpendingRule = (rule: TitleRule): boolean =>
-    rulePatterns(rule).length === 0 && hasRuleCondition(rule) && (rule.autoJoin === true || rule.autoFill === true);
+    rulePatterns(rule).length === 0 && hasRuleCondition(rule) && (rule.autoJoin === true || rule.autoSubmit === true);
 
 /**
  * One rule: conditions, then the behaviour it applies to matching challenges.
@@ -143,7 +143,7 @@ function RuleCard({
  *    type?: string, pics?: number, minHours?: number, maxHours?: number,
  *    closesAt?: string, closesAtTimes?: string[],
  *    profile?: string, mustIncludeTags: string[], shouldIncludeTags: string[],
- *    autoJoin?: boolean, autoFill?: boolean, autoJoinWithinHoursOfEnd?: number,
+ *    autoJoin?: boolean, autoSubmit?: boolean, autoJoinWithinHoursOfEnd?: number,
  *    autoJoinAfterPercentElapsed?: number, chosenPhotos?: string[],
  *    chosenPhotosOnly?: boolean }`.
  * `types` feeds the challenge-type suggestions; the field stays free text.
