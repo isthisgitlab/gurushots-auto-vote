@@ -114,6 +114,7 @@ export const logMessages = {
     m2772df34004c:
         "Couldn't apply Boost — every entry has Turbo or is pinned for Turbo (Boost and Turbo can't share an entry). Add another entry, unpin the photo, or pass --image=<id>",
     m27a6caa84238: 'No update available. Current version is latest:',
+    m27b9a6b5dd90: '{0} auto-Turbo skipped for uncertain auto-submitted photo {1}',
     m2804bf44f7b0: 'Logged out — token cleared',
     m2826e41438c8: 'Turbo applied to entry {0}',
     m289db73f62af: '  🧩 Fills: {0}',
@@ -527,6 +528,8 @@ export const logMessages = {
     mc2689515c535: 'Full main function error details:',
     mc30be3473e80: 'No vote images, returning error',
     mc3272028233f: 'saveChallengeProfile rejected: profile cap of {0} reached',
+    mc37905687d16:
+        '{0} every entry has Turbo or is pinned for Turbo, and a new photo cannot be submitted before sleep — boost skipped',
     mc3b9ce1fd7b0: 'Returning mock vote images: {0}',
     mc4b4ee719e16: '{0}: {1} is no longer in the active challenge list — not submitting a new photo to it',
     mc510d628cbf9: "Setting '{0}' does not support per-challenge overrides",
@@ -535,6 +538,8 @@ export const logMessages = {
     mc8cd4963a8ea: 'Failed to reset all settings',
     mc8d226aceff9: 'Deleted profile "{0}"',
     mc90925d0c1f3: 'Process exiting with code: {0}',
+    mc93c515e28d4:
+        '{0} photo {1} is pinned for Turbo, which gives way at its release time after the device sleeps — boosting it now',
     mca1c843f2bc7: '📋 Found challenges: [{0}]',
     mca1e59c71721: 'Current mode: {0}',
     mca603c794b16: 'Failed to fetch challenges: {0}',
@@ -640,6 +645,7 @@ export const logMessages = {
     mef9335a81d2d: 'Challenge ID is required',
     mef9f34ef6f23: 'Failed to load login window content:',
     mefbe9b168713: 'Reset global default {0} to: {1}',
+    mefe4e859a5ca: '{0} auto-Boost skipped for uncertain auto-submitted photo {1}',
     mf0b105d614a4: 'All windows closed. Forcing exit...',
     mf101e4cf2b93: '{0} Vote submission failed',
     mf16298520924: '❌ Failed to apply turbo',

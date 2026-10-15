@@ -834,12 +834,12 @@ describe('entries, tags and alerts', () => {
             [
                 'Boost',
                 { boost: { by: 'pin' as const } },
-                "Boost won't apply: the photo is pinned for Turbo. Unpin it or add another entry.",
+                "Boost won't apply: the photo is pinned for Turbo, and the pin won't give way (Emergency Submit is off or Turbo is ready). Unpin it or add another entry.",
             ],
             [
                 'Turbo',
                 { turbo: { by: 'pin' as const } },
-                "Turbo won't apply: the photo is pinned for Boost. Unpin it or add another entry.",
+                "Turbo won't apply: the photo is pinned for Boost, and the pin won't give way (Emergency Submit is off or Boost is ready). Unpin it or add another entry.",
             ],
         ])('%s blocked by a pin that never gives way says to unpin', async (_name, blockedBy, text) => {
             answer(blockedBy);

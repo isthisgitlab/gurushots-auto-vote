@@ -198,7 +198,7 @@ export const app = {
     conflictPinReleases:
         '{kind} gaida: foto ir piesprausts {other}. Ja {other} līdz {time} nebūs gatavs, {kind} tiks izmantots šim foto. Noņem piespraudi vai pievieno vēl vienu foto, lai {kind} izmantotu agrāk.',
     conflictPinNever:
-        '{kind} netiks izmantots: foto ir piesprausts {other}. Noņem piespraudi vai pievieno vēl vienu foto.',
+        '{kind} netiks izmantots: foto ir piesprausts {other}, un piespraude neatkāpsies (Ārkārtas iesniegšana ir izslēgta vai {other} ir gatavs). Noņem piespraudi vai pievieno vēl vienu foto.',
     pinForBoost: 'Piespraust Boost',
     pinForTurbo: 'Piespraust Turbo',
     pinnedForBoost: 'Piesprausts Boost',

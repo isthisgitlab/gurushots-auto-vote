@@ -116,6 +116,7 @@ export const logMessages = {
     m2772df34004c:
         'Neizdevās izmantot Boost — katram foto ir Turbo vai tas ir piesprausts Turbo (Boost un Turbo nevar būt vienam foto). Pievieno vēl vienu foto, noņem piespraudi vai norādi --image=<id>',
     m27a6caa84238: 'Atjauninājums nav pieejams. Pašreizējā versija ir jaunākā:',
+    m27b9a6b5dd90: '{0} Automātiskais Turbo izlaists — automātiski iesniegtajam foto {1} nav skaidras atbilstības',
     m2804bf44f7b0: 'Izrakstījies — pieteikšanās tokens dzēsts',
     m2826e41438c8: 'Turbo izmantots foto {0}',
     m289db73f62af: '  🧩 Uzpildes: {0}',
@@ -540,6 +541,8 @@ export const logMessages = {
     mc2689515c535: 'Pilna informācija par galvenās funkcijas kļūdu:',
     mc30be3473e80: 'Nav balsošanas foto, atgriež kļūdu',
     mc3272028233f: 'saveChallengeProfile noraidīts: sasniegts profilu skaita ierobežojums {0}',
+    mc37905687d16:
+        '{0} Katram foto ir Turbo vai tas ir piesprausts Turbo, un pirms miega jaunu foto iesniegt nevar — Boost izlaists',
     mc3b9ce1fd7b0: 'Atgriež testa balsošanas foto: {0}',
     mc4b4ee719e16: '{0}: {1} vairs nav aktīvo izaicinājumu sarakstā — jaunu foto tam neiesniedz',
     mc510d628cbf9: 'Uzstādījums "{0}" neatbalsta individuālas vērtības izaicinājumiem',
@@ -548,6 +551,8 @@ export const logMessages = {
     mc8cd4963a8ea: 'Neizdevās atiestatīt visus uzstādījumus',
     mc8d226aceff9: 'Dzēsts profils "{0}"',
     mc90925d0c1f3: 'Process beidz darbu ar kodu: {0}',
+    mc93c515e28d4:
+        '{0} Foto {1} ir piesprausts Turbo, bet piespraude atkāpjas laikā, kad ierīce jau būs miegā — izmanto Boost uzreiz',
     mca1c843f2bc7: '📋 Atrasti izaicinājumi: [{0}]',
     mca1e59c71721: 'Pašreizējais režīms: {0}',
     mca603c794b16: 'Neizdevās ielādēt izaicinājumus: {0}',
@@ -656,6 +661,7 @@ export const logMessages = {
     mef9335a81d2d: 'Nepieciešams izaicinājuma ID',
     mef9f34ef6f23: 'Neizdevās ielādēt pieteikšanās loga saturu:',
     mefbe9b168713: 'Globālā noklusējuma vērtība {0} atiestatīta uz {1}',
+    mefe4e859a5ca: '{0} Automātiskais Boost izlaists — automātiski iesniegtajam foto {1} nav skaidras atbilstības',
     mf0b105d614a4: 'Visi logi aizvērti. Piespiedu iziešana...',
     mf101e4cf2b93: '{0} Neizdevās iesniegt balsis',
     mf16298520924: '❌ Neizdevās izmantot Turbo',

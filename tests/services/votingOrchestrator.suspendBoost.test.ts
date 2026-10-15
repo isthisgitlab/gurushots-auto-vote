@@ -15,8 +15,14 @@ jest.mock('../../src/ts/services/VotingLogic', () => ({
     describePinFallback: jest.fn(() => ''),
     isWithinEmergencyWindow: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
-    pinReleaseAt: jest.fn<number | null, unknown[]>(() => null),
-    isBoostBlocked: jest.fn<boolean, unknown[]>(() => false),
+    pinReleaseAt: jest.fn<
+        ReturnType<typeof votingLogicModule.pinReleaseAt>,
+        Parameters<typeof votingLogicModule.pinReleaseAt>
+    >(() => null),
+    isBoostBlocked: jest.fn<
+        ReturnType<typeof votingLogicModule.isBoostBlocked>,
+        Parameters<typeof votingLogicModule.isBoostBlocked>
+    >(() => false),
     pickBoostEntry: jest.fn(() => null),
     getBoostHoldUntil: jest.fn(() => null),
 }));
@@ -199,6 +205,9 @@ describe('runSuspendBoosts — target rule', () => {
         expect(api.applyBoost).not.toHaveBeenCalled();
         expect(api.applyBoostToEntry).toHaveBeenCalledWith('101', 'pinned', 'tok');
         expect(autoFill.reflectEntryFlag).toHaveBeenCalledWith(challenge, 'pinned', 'boosted');
+        expect(messages('info')).toContain(
+            '[Challenge 101: Orchestrated] photo pinned is pinned for Turbo, which gives way at its release time after the device sleeps — boosting it now',
+        );
     });
 
     test('a free entry now is boosted through applyBoost even when a pin will give way later', async () => {
@@ -386,6 +395,22 @@ describe('runSuspendBoosts — skips and overrides', () => {
             votingLogic.isWithinEmergencyWindow.mockReturnValue(true);
             const api = makeApi();
             expect(await run([keyed()], api, uncertain())).toEqual([{ status: 'fulfilled', value: 'applied' }]);
+        });
+
+        test("taken at its Turbo pin's release is boosted, as the awake pass at the release would", async () => {
+            settings.getEffectiveSetting.mockImplementation(
+                (key) => key === 'autoBoost' || key === 'protectUncertainAutoFills',
+            );
+            const release = NOW + 600;
+            votingLogic.pinReleaseAt.mockReturnValue(release);
+            votingLogic.isBoostBlocked.mockReturnValue(true);
+            votingLogic.pickBoostEntry.mockImplementation((_challenge, _id, at) =>
+                invalid(at >= release ? { id: 'e1' } : null),
+            );
+            const api = makeApi();
+            expect(await run([keyed()], api, uncertain())).toEqual([{ status: 'fulfilled', value: 'applied' }]);
+            expect(api.applyBoostToEntry).toHaveBeenCalledWith('102', 'e1', 'tok');
+            expect(messages('info').join()).not.toContain('auto-Boost skipped for uncertain');
         });
     });
 });

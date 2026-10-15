@@ -196,7 +196,8 @@ export const app = {
         "{kind} can't apply: your only entry already has {other} (they can't share an entry). Add another entry to use both.",
     conflictPinReleases:
         "{kind} is waiting: the photo is pinned for {other}. If {other} isn't ready by {time}, {kind} goes on that photo. Unpin it or add another entry to use {kind} sooner.",
-    conflictPinNever: "{kind} won't apply: the photo is pinned for {other}. Unpin it or add another entry.",
+    conflictPinNever:
+        "{kind} won't apply: the photo is pinned for {other}, and the pin won't give way (Emergency Submit is off or {other} is ready). Unpin it or add another entry.",
     pinForBoost: 'Pin for Boost',
     pinForTurbo: 'Pin for Turbo',
     pinnedForBoost: 'Pinned for Boost',

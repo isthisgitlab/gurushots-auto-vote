@@ -15,7 +15,8 @@ import type { EntryAgeLedger } from '../../types/stores';
 
 // `explicit`: sent by id (boostEntryById), not left to applyBoost's own pick.
 // `pinned`: the photo the user pinned for Boost, which counts as their confirmation of it.
-type BoostTarget = { imageId: string; explicit: boolean; pinned?: boolean };
+// `atRelease`: a photo pinned for Turbo, boosted at the instant its pin gives way (sleep boost only).
+type BoostTarget = { imageId: string; explicit: boolean; pinned?: boolean; atRelease?: boolean };
 
 /** What a boost sent on device sleep came to. */
 export type SuspendBoostOutcome = 'applied' | 'unconfirmed' | 'skipped';
@@ -222,7 +223,7 @@ const applyAvailableBoost = async (
             return true;
         }
         // On null/falsy result the operation is already closed with the failure
-        // reason (by applyBoost itself, or by boostFreshEntry) — no caller-side
+        // reason (by applyBoost itself, or by boostEntryById) — no caller-side
         // fallback log needed (mirrors the turbo handling shape).
     } catch (error) {
         endBoostOperation(challenge, failureText(error));
@@ -284,7 +285,8 @@ const holdBoostForFreshEntry = (ctx: ActionContext, imageId: string): boolean =>
 /**
  * Skip a key-unlocked boost (outside the emergency window) that would land on an
  * auto-submitted photo whose standing is still uncertain. A pinned photo is never
- * skipped: pinning it is the user's confirmation.
+ * skipped: pinning it is the user's confirmation. A photo taken at its pin's release
+ * is never skipped either: a release happens inside the blocked spend's own emergency window.
  *
  * @returns true when the boost is skipped (already logged)
  */
@@ -292,6 +294,7 @@ const skipForUncertainPhoto = (ctx: ActionContext, target: BoostTarget, isTimerB
     const { challenge, now } = ctx;
     if (
         target.pinned ||
+        target.atRelease ||
         isTimerBasedAvailable ||
         votingLogic.isWithinEmergencyWindow(challenge, now) ||
         !settings.getEffectiveSetting('protectUncertainAutoFills', challenge.id.toString()) ||
@@ -363,7 +366,8 @@ const resolveSuspendBoostTarget = (ctx: ActionContext): BoostTarget | null => {
     const blocked = votingLogic.isBoostBlocked(challenge, cid, ctx.now);
     const releaseAt = blocked ? votingLogic.pinReleaseAt(challenge, cid, 'turbo', ctx.now) : null;
     const released = releaseAt === null ? null : existingBoostTarget(challenge, releaseAt);
-    const existing = existingBoostTarget(challenge, ctx.now) ?? (released && { ...released, explicit: true });
+    const existing =
+        existingBoostTarget(challenge, ctx.now) ?? (released && { ...released, explicit: true, atRelease: true });
     if (!existing) {
         if (!blocked && hasEntries(challenge) && votingLogic.resolveBoostFillNewMode(challenge, cid) !== 'no') {
             // Fill-new would have put the boost on a fresh photo, and the pin keeps the existing one.
@@ -382,6 +386,12 @@ const resolveSuspendBoostTarget = (ctx: ActionContext): BoostTarget | null => {
         logBoostTarget(
             challenge,
             'boost fill-new is on, but a new photo cannot be submitted before sleep; boosting existing entry',
+        );
+    }
+    if (existing.atRelease) {
+        logBoostTarget(
+            challenge,
+            `photo ${oneLine(existing.imageId)} is pinned for Turbo, which gives way at its release time after the device sleeps — boosting it now`,
         );
     }
     return existing;

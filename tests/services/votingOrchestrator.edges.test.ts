@@ -22,7 +22,10 @@ jest.mock('../../src/ts/services/VotingLogic', () => ({
     isWithinEmergencyWindow: jest.fn(() => false),
     isBoostDueForMission: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
-    pinReleaseAt: jest.fn<number | null, unknown[]>(() => null),
+    pinReleaseAt: jest.fn<
+        ReturnType<typeof votingLogicModule.pinReleaseAt>,
+        Parameters<typeof votingLogicModule.pinReleaseAt>
+    >(() => null),
     pickBoostEntry: jest.fn(() => ({ id: 'e1' })),
     getBoostHoldUntil: jest.fn(() => null),
     shouldApplyTurbo: jest.fn(() => ({ apply: false })),
