@@ -52,31 +52,35 @@ let handlers: ReturnType<typeof buildHandlers>;
 
 beforeEach(() => {
     jest.clearAllMocks();
-    settings.getDefaultSettings = jest.fn().mockReturnValue({ theme: 'light', boostTime: 3600 });
+    settings.getDefaultSettings = jest.fn().mockReturnValue({ app: { theme: 'light', boostTime: 3600 } });
     handlers = buildHandlers();
 });
 
 describe('get-settings', () => {
     test('returns the loaded settings without the token, plus hasToken', async () => {
-        jest.mocked(settings.loadSettings).mockReturnValue(invalid({ token: 'secret', theme: 'dark' }));
+        jest.mocked(settings.loadSettings).mockReturnValue(
+            invalid({ auth: { token: 'secret' }, app: { theme: 'dark' } }),
+        );
         const result = await handlers['get-settings']();
-        expect(result).toEqual({ theme: 'dark', hasToken: true });
-        expect(result).not.toHaveProperty('token');
+        expect(result).toEqual({ app: { theme: 'dark' }, hasToken: true });
+        expect(result).not.toHaveProperty('auth');
     });
 
     test('reports hasToken false for an empty or missing token', async () => {
-        settings.loadSettings = jest.fn().mockReturnValue({ token: '', theme: 'dark' });
-        await expect(handlers['get-settings']()).resolves.toEqual({ theme: 'dark', hasToken: false });
-        settings.loadSettings = jest.fn().mockReturnValue({ theme: 'dark' });
-        await expect(handlers['get-settings']()).resolves.toEqual({ theme: 'dark', hasToken: false });
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: '' }, app: { theme: 'dark' } });
+        await expect(handlers['get-settings']()).resolves.toEqual({ app: { theme: 'dark' }, hasToken: false });
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: {}, app: { theme: 'dark' } });
+        await expect(handlers['get-settings']()).resolves.toEqual({ app: { theme: 'dark' }, hasToken: false });
     });
 
     test('falls back to defaults (still token-free) when loading throws', async () => {
         settings.loadSettings = jest.fn(boom);
-        settings.getDefaultSettings = jest.fn().mockReturnValue({ token: '', theme: 'light', boostTime: 3600 });
+        settings.getDefaultSettings = jest
+            .fn()
+            .mockReturnValue({ auth: { token: '' }, app: { theme: 'light', boostTime: 3600 } });
         const result = await handlers['get-settings']();
-        expect(result).toEqual({ theme: 'light', boostTime: 3600, hasToken: false });
-        expect(result).not.toHaveProperty('token');
+        expect(result).toEqual({ app: { theme: 'light', boostTime: 3600 }, hasToken: false });
+        expect(result).not.toHaveProperty('auth');
         expect(settings.getDefaultSettings).toHaveBeenCalled();
     });
 });
@@ -88,11 +92,20 @@ describe('get-setting', () => {
         expect(settings.getSetting).toHaveBeenCalledWith('theme');
     });
 
-    test.each(['token', 'hasToken', 'apiHeaders'])('never returns the %s key', async (key) => {
+    test.each(['auth', 'token', 'hasToken', 'apiHeaders'])('never returns the %s key', async (key) => {
         settings.getSetting = jest.fn().mockReturnValue('secret');
         await expect(handlers['get-setting']({}, key)).resolves.toBeNull();
         expect(settings.getSetting).not.toHaveBeenCalled();
     });
+
+    test.each(['lastUsername', 'chosenPhotosMemberId'])(
+        'answers the account key %s: the renderer reads it',
+        async (key) => {
+            settings.getSetting = jest.fn().mockReturnValue('me');
+            await expect(handlers['get-setting']({}, key)).resolves.toBe('me');
+            expect(settings.getSetting).toHaveBeenCalledWith(key);
+        },
+    );
 
     test('rejects a non-string key and returns null (no default for it)', async () => {
         settings.getSetting = jest.fn();
@@ -118,7 +131,7 @@ describe('set-setting', () => {
         expect(settings.setSetting).toHaveBeenCalledWith('theme', 'dark');
     });
 
-    test.each(['token', 'hasToken', 'apiHeaders'])(
+    test.each(['auth', 'token', 'hasToken', 'apiHeaders', 'lastUsername', 'chosenPhotosMemberId'])(
         'refuses to write the %s key and does not broadcast',
         async (key) => {
             const broadcastSettingsChange = jest.fn();
@@ -129,6 +142,21 @@ describe('set-setting', () => {
             expect(broadcastSettingsChange).not.toHaveBeenCalled();
         },
     );
+
+    test('turning Stay Logged In off also clears the saved user name; turning it on does not', async () => {
+        settings.setSetting = jest.fn().mockReturnValue(true);
+        await expect(handlers['set-setting']({}, 'stayLoggedIn', true)).resolves.toBe(true);
+        expect(settings.setSetting).toHaveBeenCalledTimes(1);
+
+        await expect(handlers['set-setting']({}, 'stayLoggedIn', false)).resolves.toBe(true);
+        expect(settings.setSetting).toHaveBeenLastCalledWith('lastUsername', '');
+    });
+
+    test('a refused Stay Logged In write leaves the saved user name', async () => {
+        settings.setSetting = jest.fn().mockReturnValue(false);
+        await expect(handlers['set-setting']({}, 'stayLoggedIn', false)).resolves.toBe(false);
+        expect(settings.setSetting).toHaveBeenCalledTimes(1);
+    });
 
     test('returns false for a non-string key without writing', async () => {
         settings.setSetting = jest.fn();
@@ -144,11 +172,16 @@ describe('set-setting', () => {
     test('broadcasts the freshly loaded settings after a successful write', async () => {
         const broadcastSettingsChange = jest.fn();
         settings.setSetting = jest.fn().mockReturnValue(true);
-        settings.loadSettings = jest.fn().mockReturnValue({ token: 'secret', language: 'lv', theme: 'dark' });
+        settings.loadSettings = jest
+            .fn()
+            .mockReturnValue({ auth: { token: 'secret' }, app: { language: 'lv', theme: 'dark' } });
         const h = buildHandlers({ broadcastSettingsChange });
 
         await expect(h['set-setting']({}, 'language', 'lv')).resolves.toBe(true);
-        expect(broadcastSettingsChange).toHaveBeenCalledWith({ language: 'lv', theme: 'dark', hasToken: true });
+        expect(broadcastSettingsChange).toHaveBeenCalledWith({
+            app: { language: 'lv', theme: 'dark' },
+            hasToken: true,
+        });
     });
 
     test('does not broadcast a rejected write', async () => {
@@ -164,46 +197,62 @@ describe('set-setting', () => {
 describe('save-settings', () => {
     test('saves, then broadcasts the stored settings without the token', async () => {
         const broadcastSettingsChange = jest.fn();
-        settings.saveSettings = jest.fn().mockReturnValue(true);
-        settings.loadSettings = jest.fn().mockReturnValue({ token: 'secret', theme: 'dark', language: 'en' });
+        settings.saveAppSettings = jest.fn().mockReturnValue(true);
+        settings.loadSettings = jest
+            .fn()
+            .mockReturnValue({ auth: { token: 'secret' }, app: { theme: 'dark', language: 'en' } });
         const h = buildHandlers({ broadcastSettingsChange });
 
         await expect(h['save-settings']({}, { theme: 'dark' })).resolves.toBe(true);
-        expect(settings.saveSettings).toHaveBeenCalledWith({ theme: 'dark' });
-        expect(broadcastSettingsChange).toHaveBeenCalledWith({ theme: 'dark', language: 'en', hasToken: true });
+        expect(settings.saveAppSettings).toHaveBeenCalledWith({ theme: 'dark' });
+        expect(broadcastSettingsChange).toHaveBeenCalledWith({
+            app: { theme: 'dark', language: 'en' },
+            hasToken: true,
+        });
     });
 
-    test('strips apiHeaders from the payload too: a renderer cannot write the API headers', async () => {
-        settings.saveSettings = jest.fn().mockReturnValue(true);
-        settings.loadSettings = jest.fn().mockReturnValue({ theme: 'dark', apiHeaders: { a: 'b' } });
-        await expect(handlers['save-settings']({}, { apiHeaders: { evil: '1' }, theme: 'dark' })).resolves.toBe(true);
-        expect(settings.saveSettings).toHaveBeenCalledWith({ theme: 'dark' });
+    test('strips the sign-in keys from the payload too: a renderer cannot write them', async () => {
+        settings.saveAppSettings = jest.fn().mockReturnValue(true);
+        settings.loadSettings = jest.fn().mockReturnValue({ app: { theme: 'dark' }, auth: { apiHeaders: { a: 'b' } } });
+        await expect(
+            handlers['save-settings'](
+                {},
+                {
+                    apiHeaders: { evil: '1' },
+                    lastUsername: 'evil',
+                    chosenPhotosMemberId: 'evil',
+                    auth: { token: 'evil' },
+                    theme: 'dark',
+                },
+            ),
+        ).resolves.toBe(true);
+        expect(settings.saveAppSettings).toHaveBeenCalledWith({ theme: 'dark' });
     });
 
-    test('get-settings then save-settings round-trips without touching the stored API headers', async () => {
-        const stored = { token: 'secret', theme: 'dark', apiHeaders: { a: 'b' } };
+    test('get-settings then save-settings of its app block round-trips without touching the sign-in state', async () => {
+        const stored = { auth: { token: 'secret', apiHeaders: { a: 'b' } }, app: { theme: 'dark' } };
         settings.loadSettings = jest.fn().mockReturnValue(stored);
-        settings.saveSettings = jest.fn().mockReturnValue(true);
+        settings.saveAppSettings = jest.fn().mockReturnValue(true);
         const fetched = await handlers['get-settings']();
-        expect(fetched).not.toHaveProperty('apiHeaders');
-        await expect(handlers['save-settings']({}, fetched)).resolves.toBe(true);
-        expect(settings.saveSettings).toHaveBeenCalledWith({ theme: 'dark' });
+        expect(fetched).not.toHaveProperty('auth');
+        await expect(handlers['save-settings']({}, fetched.app)).resolves.toBe(true);
+        expect(settings.saveAppSettings).toHaveBeenCalledWith({ theme: 'dark' });
     });
 
     test('strips token and hasToken from the payload before saving and from the broadcast', async () => {
         const broadcastSettingsChange = jest.fn();
-        settings.saveSettings = jest.fn().mockReturnValue(true);
-        settings.loadSettings = jest.fn().mockReturnValue({ token: 'stored', theme: 'dark' });
+        settings.saveAppSettings = jest.fn().mockReturnValue(true);
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 'stored' }, app: { theme: 'dark' } });
         const h = buildHandlers({ broadcastSettingsChange });
 
         await expect(h['save-settings']({}, { token: 'planted', hasToken: false, theme: 'dark' })).resolves.toBe(true);
-        expect(settings.saveSettings).toHaveBeenCalledWith({ theme: 'dark' });
-        expect(broadcastSettingsChange).toHaveBeenCalledWith({ theme: 'dark', hasToken: true });
+        expect(settings.saveAppSettings).toHaveBeenCalledWith({ theme: 'dark' });
+        expect(broadcastSettingsChange).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 
     test('does not broadcast when the save fails', async () => {
         const broadcastSettingsChange = jest.fn();
-        settings.saveSettings = jest.fn().mockReturnValue(false);
+        settings.saveAppSettings = jest.fn().mockReturnValue(false);
         const h = buildHandlers({ broadcastSettingsChange });
 
         await expect(h['save-settings']({}, { theme: 'dark' })).resolves.toBe(false);
@@ -211,18 +260,18 @@ describe('save-settings', () => {
     });
 
     test('succeeds without a broadcaster (CLI / Capacitor shape)', async () => {
-        settings.saveSettings = jest.fn().mockReturnValue(true);
+        settings.saveAppSettings = jest.fn().mockReturnValue(true);
         await expect(handlers['save-settings']({}, { theme: 'dark' })).resolves.toBe(true);
     });
 
     test.each([null, 'str', 5, undefined])('rejects non-object payload %p', async (bad) => {
-        settings.saveSettings = jest.fn();
+        settings.saveAppSettings = jest.fn();
         await expect(handlers['save-settings']({}, invalid(bad))).resolves.toBe(false);
-        expect(settings.saveSettings).not.toHaveBeenCalled();
+        expect(settings.saveAppSettings).not.toHaveBeenCalled();
     });
 
-    test('returns false when saveSettings throws', async () => {
-        settings.saveSettings = invalid(jest.fn(boom));
+    test('returns false when saveAppSettings throws', async () => {
+        settings.saveAppSettings = invalid(jest.fn(boom));
         await expect(handlers['save-settings']({}, { theme: 'dark' })).resolves.toBe(false);
     });
 });
@@ -429,14 +478,66 @@ describe('cleanup-stale-challenge-setting', () => {
     });
 });
 
+describe('the recovery of the stored settings', () => {
+    const channels = [
+        ['retry-settings-import', 'retryImport'],
+        ['start-fresh-settings', 'startFresh'],
+        ['reimport-settings-from-v1', 'reimportFromV1'],
+    ] as const;
+
+    test.each(channels)('%s runs %s, then announces the settings to every window', async (channel, method) => {
+        const broadcastSettingsChange = jest.fn();
+        settings[method] = jest.fn().mockReturnValue(true);
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 't' }, app: { theme: 'dark' } });
+        const h = buildHandlers({ broadcastSettingsChange });
+
+        await expect(h[channel]()).resolves.toEqual({ success: true });
+
+        expect(settings[method]).toHaveBeenCalledTimes(1);
+        expect(broadcastSettingsChange).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
+    });
+
+    test.each(channels)(
+        '%s answers the failure code when the action did not work, and announces nothing',
+        async (channel, method) => {
+            const broadcastSettingsChange = jest.fn();
+            settings[method] = jest.fn().mockReturnValue(false);
+            const h = buildHandlers({ broadcastSettingsChange });
+
+            await expect(h[channel]()).resolves.toEqual({ success: false, error: 'settings-import-failed' });
+
+            expect(broadcastSettingsChange).not.toHaveBeenCalled();
+        },
+    );
+
+    test.each(channels)('%s never throws to the renderer', async (channel, method) => {
+        settings[method] = invalid(jest.fn(boom));
+        await expect(handlers[channel]()).resolves.toEqual({ success: false, error: 'boom' });
+        settings[method] = invalid(
+            jest.fn(() => {
+                throw null;
+            }),
+        );
+        await expect(handlers[channel]()).resolves.toEqual({
+            success: false,
+            error: 'Failed to recover the settings',
+        });
+    });
+
+    test('works without a broadcaster (CLI / Capacitor shape)', async () => {
+        settings.retryImport = jest.fn().mockReturnValue(true);
+        await expect(handlers['retry-settings-import']()).resolves.toEqual({ success: true });
+    });
+});
+
 describe('get-settings-recovery', () => {
     test('reports the settings layer recovery, or null', async () => {
         settings.getSettingsRecovery = jest
             .fn()
-            .mockReturnValue({ code: 'settings-corrupt', path: '/u/settings.json.corrupt-1' });
+            .mockReturnValue({ code: 'settings-corrupt', path: '/u/config.json.corrupt-1' });
         await expect(handlers['get-settings-recovery']()).resolves.toEqual({
             success: true,
-            recovery: { code: 'settings-corrupt', path: '/u/settings.json.corrupt-1' },
+            recovery: { code: 'settings-corrupt', path: '/u/config.json.corrupt-1' },
         });
         settings.getSettingsRecovery = jest.fn().mockReturnValue(null);
         settings.getSettingsSaveDropped = jest.fn().mockReturnValue(null);
@@ -447,10 +548,10 @@ describe('get-settings-recovery', () => {
         settings.getSettingsRecovery = jest.fn().mockReturnValue(null);
         settings.getSettingsSaveDropped = jest
             .fn()
-            .mockReturnValue({ code: 'settings-save-dropped', path: 'gurushots-settings' });
+            .mockReturnValue({ code: 'settings-save-dropped', path: 'gurushots-config' });
         await expect(handlers['get-settings-recovery']()).resolves.toEqual({
             success: true,
-            recovery: { code: 'settings-save-dropped', path: 'gurushots-settings' },
+            recovery: { code: 'settings-save-dropped', path: 'gurushots-config' },
         });
     });
 
@@ -458,7 +559,7 @@ describe('get-settings-recovery', () => {
         settings.getSettingsRecovery = jest.fn().mockReturnValue({ code: 'settings-unreadable', path: '/u/s.json' });
         settings.getSettingsSaveDropped = jest
             .fn()
-            .mockReturnValue({ code: 'settings-save-dropped', path: 'gurushots-settings' });
+            .mockReturnValue({ code: 'settings-save-dropped', path: 'gurushots-config' });
         await expect(handlers['get-settings-recovery']()).resolves.toEqual({
             success: true,
             recovery: { code: 'settings-unreadable', path: '/u/s.json' },
@@ -469,13 +570,13 @@ describe('get-settings-recovery', () => {
 describe('a save the window gave up', () => {
     test('is announced like a settings change, with the settings as the window now has them', () => {
         const broadcast = jest.fn();
-        settings.loadSettings = jest.fn().mockReturnValue({ token: 'secret', theme: 'dark' });
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 'secret' }, app: { theme: 'dark' } });
         buildHandlers({ broadcastSettingsChange: broadcast });
 
         const [listener] = settings.onSettingsSaveDroppedChange.mock.calls.at(-1) ?? [];
         listener?.();
 
-        expect(broadcast).toHaveBeenCalledWith({ theme: 'dark', hasToken: true });
+        expect(broadcast).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 
     test('is not listened for where nothing is announced', () => {
@@ -550,12 +651,14 @@ describe('clear-chosen-photos', () => {
     test('removes the lists, broadcasts the change and reports how many went', async () => {
         const broadcast = jest.fn();
         jest.mocked(settings.clearChosenPhotos).mockReturnValue(4);
-        jest.mocked(settings.loadSettings).mockReturnValue(invalid({ token: 'secret', theme: 'dark' }));
+        jest.mocked(settings.loadSettings).mockReturnValue(
+            invalid({ auth: { token: 'secret' }, app: { theme: 'dark' } }),
+        );
         await expect(buildHandlers({ broadcastSettingsChange: broadcast })['clear-chosen-photos']()).resolves.toEqual({
             success: true,
             removed: 4,
         });
-        expect(broadcast).toHaveBeenCalledWith({ theme: 'dark', hasToken: true });
+        expect(broadcast).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 
     test('works without a broadcast listener', async () => {
@@ -588,10 +691,12 @@ describe('set-entry-pin', () => {
     test('pins a photo, broadcasts the change and answers success', async () => {
         const broadcast = jest.fn();
         jest.mocked(settings.setEntryPin).mockReturnValue('ok');
-        jest.mocked(settings.loadSettings).mockReturnValue(invalid({ token: 'secret', theme: 'dark' }));
+        jest.mocked(settings.loadSettings).mockReturnValue(
+            invalid({ auth: { token: 'secret' }, app: { theme: 'dark' } }),
+        );
         await expect(pin(broadcast, 'boost', 100, 'img_a')).resolves.toEqual({ success: true });
         expect(settings.setEntryPin).toHaveBeenCalledWith('boost', 100, 'img_a');
-        expect(broadcast).toHaveBeenCalledWith({ theme: 'dark', hasToken: true });
+        expect(broadcast).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 
     test('clears a pin (imageId null) and works without a broadcast listener', async () => {
@@ -650,15 +755,17 @@ describe('register (Electron)', () => {
         const winA = { isDestroyed: () => false, webContents: { send: jest.fn() } };
         const winB = { isDestroyed: () => false, webContents: { send: jest.fn() } };
         getAllWindowsMock.mockReturnValue([winA, winB]);
-        settings.saveSettings = jest.fn().mockReturnValue(true);
-        jest.mocked(settings.loadSettings).mockReturnValue(invalid({ token: 'secret', theme: 'dark' }));
+        settings.saveAppSettings = jest.fn().mockReturnValue(true);
+        jest.mocked(settings.loadSettings).mockReturnValue(
+            invalid({ auth: { token: 'secret' }, app: { theme: 'dark' } }),
+        );
         const ipcMain = makeIpcMain();
         register(invalid(ipcMain));
 
         const payload = { theme: 'dark' };
         await expect(ipcMain.channels.get('save-settings')!(invalid(undefined), payload)).resolves.toBe(true);
 
-        const sent = { theme: 'dark', hasToken: true };
+        const sent = { app: { theme: 'dark' }, hasToken: true };
         expect(winA.webContents.send).toHaveBeenCalledWith('settings-changed', sent);
         expect(winB.webContents.send).toHaveBeenCalledWith('settings-changed', sent);
     });
@@ -693,14 +800,17 @@ describe('register (Electron)', () => {
         };
         const open = { isDestroyed: () => false, webContents: { send: jest.fn() } };
         getAllWindowsMock.mockReturnValue([closed, open]);
-        settings.saveSettings = jest.fn().mockReturnValue(true);
-        settings.loadSettings = jest.fn().mockReturnValue({ theme: 'dark' });
+        settings.saveAppSettings = jest.fn().mockReturnValue(true);
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: '' }, app: { theme: 'dark' } });
         const ipcMain = makeIpcMain();
         register(invalid(ipcMain));
 
         await expect(ipcMain.channels.get('save-settings')!(invalid(undefined), { theme: 'dark' })).resolves.toBe(true);
 
         expect(closed.webContents.send).not.toHaveBeenCalled();
-        expect(open.webContents.send).toHaveBeenCalledWith('settings-changed', { theme: 'dark', hasToken: false });
+        expect(open.webContents.send).toHaveBeenCalledWith('settings-changed', {
+            app: { theme: 'dark' },
+            hasToken: false,
+        });
     });
 });

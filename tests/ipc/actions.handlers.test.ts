@@ -58,7 +58,7 @@ const { extractAuthResult: realExtractAuthResult } =
 const NOW = () => Math.floor(Date.now() / 1000);
 
 const setToken = (token: string | null) => {
-    settings.loadSettings = jest.fn().mockReturnValue({ token });
+    settings.loadSettings = jest.fn().mockReturnValue({ auth: { token }, app: { mock: false } });
 };
 
 const stubStrategy = <O extends object = {}>(overrides: O = invalid<O>({})) => {
@@ -151,7 +151,7 @@ describe('get-active-challenges', () => {
     });
 
     test('records the mock setting the list was fetched under', async () => {
-        settings.loadSettings = jest.fn().mockReturnValue({ token: 'tok', mock: true });
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 'tok' }, app: { mock: true } });
         stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 1 }] }) });
         await buildHandlers()['get-active-challenges']();
         expect(rememberChallenges).toHaveBeenCalledWith([{ id: 1 }], true);
@@ -1230,7 +1230,7 @@ describe('get-open-chosen-annotations — read from the settings, with one cache
 
     beforeEach(() => {
         clearOpenChallenges();
-        jest.mocked(settings.loadSettings).mockReturnValue(invalid({ token: 'tok' }));
+        jest.mocked(settings.loadSettings).mockReturnValue(invalid({ auth: { token: 'tok' } }));
         mockChosenSettings({ own: { '7': ['a', 'b'] }, inherited: ['g'] });
         jest.mocked(autoFill.resolveMemberId).mockReset().mockResolvedValue(null);
     });
@@ -1285,7 +1285,7 @@ describe('get-open-chosen-annotations — read from the settings, with one cache
             unknownUntilResolved(null);
             expect(JSON.stringify(await ask([7]))).not.toContain('secret');
             jest.mocked(autoFill.resolveMemberId).mockClear();
-            jest.mocked(settings.loadSettings).mockReturnValue(invalid({ token: '' }));
+            jest.mocked(settings.loadSettings).mockReturnValue(invalid({ auth: { token: '' } }));
             await ask([7]);
             expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
         });

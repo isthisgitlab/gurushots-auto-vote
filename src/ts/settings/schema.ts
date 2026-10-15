@@ -3,7 +3,7 @@ import type { z } from 'zod';
 // can read them without pulling zod in through this file. Re-exported below to
 // keep this module's public surface unchanged.
 import { MAX_SCHEDULED_FILL_ENTRIES } from './limits';
-import { autoSubmitSettings, sanitizeFillSchedule } from './schema/autoSubmit';
+import { autoSubmitSettings } from './schema/autoSubmit';
 import { autoJoinSettings } from './schema/autoJoin';
 import { boostSettings } from './schema/boost';
 import { currencyAutoSettings } from './schema/currencyAuto';
@@ -14,7 +14,7 @@ import { internalSettings } from './schema/internal';
 import { lastMinuteSettings } from './schema/lastMinute';
 import { notificationsSettings } from './schema/notifications';
 import { rewardsSettings } from './schema/rewards';
-import { sanitizeBeforeEndList, sanitizeTimeOfDayList, scheduledFillSettings } from './schema/scheduledFill';
+import { scheduledFillSettings } from './schema/scheduledFill';
 import { turboSettings } from './schema/turbo';
 import { votingPauseSettings } from './schema/votingPause';
 
@@ -211,13 +211,10 @@ export {
     validateSetting,
     getValidationError,
     getSettingsSchema,
-    sanitizeFillSchedule,
-    sanitizeTimeOfDayList,
-    sanitizeBeforeEndList,
     // Shared cap for the scheduled-fill lists: the write path enforces it via
-    // zod, the load-time bounds migration heals older data, and the hot-path
+    // zod, load validation drops what exceeds it, and the hot-path
     // consumers (VotingLogic, scheduledFill.ts, the settings modal) slice
-    // defensively with it so a post-migration hand-edited array can't inflate
+    // defensively with it so a hand-edited array can't inflate
     // per-cycle Intl work.
     MAX_SCHEDULED_FILL_ENTRIES,
 };

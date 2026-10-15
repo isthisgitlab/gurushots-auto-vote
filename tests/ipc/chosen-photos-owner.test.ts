@@ -29,7 +29,7 @@ let saved: unknown;
 beforeEach(() => {
     jest.clearAllMocks();
     saved = '';
-    settings.loadSettings = jest.fn().mockReturnValue({ token: 'tok' });
+    settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 'tok' } });
     settings.getSetting = invalid(jest.fn(() => saved));
     autoFill.peekMemberId = jest.fn().mockReturnValue('member-1');
 });
@@ -66,7 +66,7 @@ describe('stampChosenPhotosOwner', () => {
     test('an unknown member or no token leaves the record alone', () => {
         autoFill.peekMemberId = jest.fn().mockReturnValue(null);
         stampChosenPhotosOwner(['chosenPhotos', ['a']]);
-        settings.loadSettings = jest.fn().mockReturnValue({ token: '' });
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: '' } });
         stampChosenPhotosOwner(['chosenPhotos', ['a']]);
         expect(settings.setSetting).not.toHaveBeenCalled();
         expect(autoFill.peekMemberId).toHaveBeenCalledTimes(1);

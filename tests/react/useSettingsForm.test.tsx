@@ -23,7 +23,7 @@ const baseProps = (over: Partial<Record<keyof FormProps, unknown>> = {}) =>
         isOpen: true,
         schema,
         defaults: { exposure: 70, autoBoost: true },
-        settings: { ...DEFAULT_UI_VALUES, theme: 'dark', language: 'lv' },
+        settings: { app: { ...DEFAULT_UI_VALUES, theme: 'dark', language: 'lv' } },
         refetchSettings: jest.fn(),
         refetchSchema: jest.fn(),
         updateSetting: jest.fn().mockResolvedValue(undefined),
@@ -68,7 +68,7 @@ describe('useSettingsForm — open lifecycle', () => {
         expect(result.current.originalFormValues).toBeNull();
         expect(result.current.originalUiValues).toBeNull();
 
-        rerender({ ...props, defaults: { exposure: 5 }, settings: invalid({ theme: 'dark' }) });
+        rerender({ ...props, defaults: { exposure: 5 }, settings: invalid({ app: { theme: 'dark' } }) });
         expect(result.current.formValues).toEqual({ exposure: 5 });
         expect(result.current.uiValues.theme).toBe('dark');
     });
@@ -78,7 +78,11 @@ describe('useSettingsForm — open lifecycle', () => {
         const { result, rerender } = renderForm(props);
 
         act(() => result.current.handleFormChange('exposure', 42));
-        rerender({ ...props, defaults: { exposure: 1, autoBoost: false }, settings: invalid({ theme: 'light' }) });
+        rerender({
+            ...props,
+            defaults: { exposure: 1, autoBoost: false },
+            settings: invalid({ app: { theme: 'light' } }),
+        });
 
         expect(result.current.formValues.exposure).toBe(42);
         expect(result.current.uiValues.theme).toBe('dark');
@@ -100,12 +104,14 @@ describe('useSettingsForm — per-key fallback on hydrate', () => {
     test('arrays, strings and scalars each fall back with their own rule', () => {
         const props = baseProps({
             settings: {
-                customTimezones: 'not-an-array',
-                timezone: '',
-                language: 'lv',
-                stayLoggedIn: false,
-                apiMaxRetries: 0,
-                apiTimeout: null,
+                app: {
+                    customTimezones: 'not-an-array',
+                    timezone: '',
+                    language: 'lv',
+                    stayLoggedIn: false,
+                    apiMaxRetries: 0,
+                    apiTimeout: null,
+                },
             },
         });
         const { result } = renderForm(props);
@@ -123,7 +129,7 @@ describe('useSettingsForm — per-key fallback on hydrate', () => {
     });
 
     test('a stored array is kept as-is', () => {
-        const props = baseProps({ settings: { customTimezones: ['Asia/Tokyo'] } });
+        const props = baseProps({ settings: { app: { customTimezones: ['Asia/Tokyo'] } } });
         const { result } = renderForm(props);
         expect(result.current.uiValues.customTimezones).toEqual(['Asia/Tokyo']);
     });

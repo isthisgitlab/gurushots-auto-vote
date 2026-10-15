@@ -47,7 +47,7 @@ beforeEach(() => {
         getMemberChallenges: jest.fn().mockResolvedValue([invalid<Challenge>({ id: 7 })]),
     });
     auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'tok', settings: {} });
-    jest.mocked(settings.loadSettings).mockReturnValue(invalid({ token: 'tok' }));
+    jest.mocked(settings.loadSettings).mockReturnValue(invalid({ auth: { token: 'tok' } }));
     jest.mocked(settings.getSetting).mockReturnValue(invalid(OWNER));
     jest.mocked(settings.getChallengeOverride).mockReturnValue(invalid(['a', 'b']));
     jest.mocked(settings.resolveRuleSetting).mockReturnValue(invalid(null));

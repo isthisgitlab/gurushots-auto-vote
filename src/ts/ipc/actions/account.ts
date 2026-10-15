@@ -34,7 +34,9 @@ const handleGetActiveChallenges = (async (): Promise<ActiveChallengesResponse> =
         // The token never travels from the renderer: it is read from the store.
         // No token is the pre-login state, answered with the failed-fetch shape
         // (the renderer polls this, so no warning per call).
-        const { token, mock } = settings.loadSettings();
+        const { auth, app } = settings.loadSettings();
+        const { token } = auth;
+        const { mock } = app;
         if (!token) return { challenges: [], fetchFailed: true };
         const strategy = apiFactory.getApiStrategy();
         const result: ActiveChallengesResponse = await strategy.getActiveChallenges(token);
@@ -46,7 +48,7 @@ const handleGetActiveChallenges = (async (): Promise<ActiveChallengesResponse> =
         // Never throw to the renderer (architecture invariant). Return the
         // same `{ challenges, fetchFailed }` shape the happy path uses so
         // useActiveChallenges' "always resolves a list shape" assumption
-        // holds — a corrupted settings.json during getApiStrategy() must
+        // holds — a corrupted config.json during getApiStrategy() must
         // surface as a failed fetch, not a raw stack in the error UI.
         logger.withCategory('api').error('Error handling get-active-challenges request:', error);
         return { challenges: [], fetchFailed: true };
@@ -75,6 +77,8 @@ const handleAuthenticate = (async (event: unknown, username: string, password: s
                     .error('Authentication succeeded but the token was not saved', null);
                 return { success: false as const, error: 'token-not-saved' };
             }
+            // The login form pre-fills the name while "Stay logged in" is on.
+            settings.setSetting('lastUsername', settings.getSetting('stayLoggedIn') === true ? String(username) : '');
             logger.withCategory('authentication').info('🔐 Authentication successful', { success: true });
             return { success: true as const };
         }
@@ -202,7 +206,7 @@ const handleGetOpenChosenAnnotations = (async (event: unknown, ids: Array<string
         return refuseInvalidArgs('join', 'get-open-chosen-annotations');
     }
     try {
-        const { token } = settings.loadSettings();
+        const { token } = settings.loadSettings().auth;
         return { success: true as const, annotations: await annotateOpenIds(ids, token) };
     } catch (error) {
         logger.withCategory('join').error('Error handling get-open-chosen-annotations request:', error);

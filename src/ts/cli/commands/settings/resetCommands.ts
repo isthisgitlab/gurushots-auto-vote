@@ -22,7 +22,7 @@ export const resetSetting = (key: string, challengeId: string | null = null) => 
                 .success(`Reset ${key} for challenge ${challengeId} (now inherits its profile/global baseline)`);
             return true;
         }
-        const defaultSettings = getDefaultSettings();
+        const defaultSettings = getDefaultSettings().app;
         const defaultValue = defaultSettings[key];
 
         if (defaultValue === undefined) {
@@ -86,7 +86,7 @@ export const resetWindows = () => {
     try {
         const userSettings = settings.loadSettings();
         const defaultSettings = settings.getDefaultSettings();
-        userSettings.windowBounds = defaultSettings.windowBounds;
+        userSettings.app.windowBounds = defaultSettings.app.windowBounds;
         settings.saveSettings(userSettings);
         logger.withCategory('settings').success('Window positions reset to default');
     } catch (error) {

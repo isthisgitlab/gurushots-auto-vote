@@ -13,7 +13,7 @@ import { convertV1Blob } from './convert';
 import { dropInvalidV1Values, mergeV1WithDefaults, pruneV1Obsolete } from './loadValidation';
 import { runV1Migrations } from './migrations';
 
-import type { ConfigV2, ImportReportV2 } from '../../types/config';
+import type { ImportReportV2, StoredConfigV2 } from '../../types/config';
 import type { V1Blob } from './types';
 
 /**
@@ -41,7 +41,7 @@ const interpretV1Settings = (parsed: object): { blob: V1Blob; dropped: string[] 
 };
 
 type ImportV1Result =
-    | { ok: true; config: ConfigV2; titlePins: Record<string, string>; report: ImportReportV2 }
+    | { ok: true; config: StoredConfigV2; titlePins: Record<string, string>; report: ImportReportV2 }
     | { ok: false; code: 'corrupt' | 'migration-failed'; detail: string };
 
 /**
@@ -62,7 +62,9 @@ const importV1Settings = (raw: string): ImportV1Result => {
                 );
         }
         pruneV1Obsolete(blob);
-        return { ok: true, ...convertV1Blob(blob) };
+        // A `mock` the load had to replace (the wrong type) is one the file did not usefully hold.
+        const mockStored = Object.hasOwn(parsed.value, 'mock') && !dropped.includes('mock');
+        return { ok: true, ...convertV1Blob(blob, { mockStored }) };
     } catch (error) {
         return { ok: false, code: 'migration-failed', detail: errorMessage(error) ?? 'unknown error' };
     }

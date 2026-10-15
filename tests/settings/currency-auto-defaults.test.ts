@@ -4,7 +4,7 @@
  * reads and writes exercise the real settings facade without touching disk.
  */
 
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/settings');
 import type * as nodeResolversModule from '../../src/ts/scheduling/nodeResolvers';
 import type { SettingsSchemaEntry } from '../../src/ts/settings/schema';
@@ -13,29 +13,15 @@ const { resolveCurrencyAuto } = require('../../src/ts/scheduling/nodeResolvers')
 // The node resolver answers synchronously; its shared type also admits the renderer's async variant.
 
 describe('currency automation defaults', () => {
-    const headlessGlobals = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let store: { value: string | null; read: jest.Mock<string | null, []>; write: jest.Mock<void, [string]> };
     const challengeId = '4242';
 
     beforeEach(() => {
-        headlessGlobals.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((data) => {
-                store.value = data;
-            }),
-        };
-        headlessGlobals.AndroidHeadlessStore = store;
+        installHeadlessStore();
         settings.rememberChallengeTitles([]);
     });
 
     afterEach(() => {
-        delete headlessGlobals.__GS_HEADLESS__;
-        delete headlessGlobals.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
     test('every currency rule has a global default and a per-challenge override', () => {

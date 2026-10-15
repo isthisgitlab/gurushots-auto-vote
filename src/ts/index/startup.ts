@@ -23,8 +23,8 @@ import { installPermissionHandlers } from './permissions';
 const clearLeftoverToken = async () => {
     try {
         const userSettings = settings.loadSettings();
-        const leftover = userSettings.token;
-        if (userSettings.stayLoggedIn || !leftover) return;
+        const leftover = userSettings.auth.token;
+        if (userSettings.app.stayLoggedIn || !leftover) return;
         if (await isCliSessionActive()) {
             logger
                 .withCategory('authentication')
@@ -32,7 +32,7 @@ const clearLeftoverToken = async () => {
             return;
         }
         const now = settings.loadSettings();
-        if (now.token !== leftover || now.stayLoggedIn) return;
+        if (now.auth.token !== leftover || now.app.stayLoggedIn) return;
         if (settings.setSetting('token', '')) {
             logger
                 .withCategory('authentication')
@@ -101,7 +101,7 @@ const registerPowerHandlers = () => {
 const openFirstWindow = async () => {
     // Check if we should auto-login and run update check before creating main window
     const userSettings = settings.loadSettings();
-    const shouldAutoLogin = userSettings.token && userSettings.stayLoggedIn;
+    const shouldAutoLogin = userSettings.auth.token && userSettings.app.stayLoggedIn;
 
     // Initialize global AutoUpdater instance. Deliberately constructed
     // WITHOUT a window — unlike the windowed constructions in

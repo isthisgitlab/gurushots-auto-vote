@@ -62,7 +62,7 @@ jest.mock('../../src/ts/logger', () => {
 });
 
 jest.mock('../../src/ts/settings', () => ({
-    loadSettings: jest.fn(() => ({ mock: false })),
+    loadSettings: jest.fn(() => ({ app: { mock: false } })),
     getSettingsRecovery: jest.fn(() => null),
     getSetting: jest.fn(() => 1),
     setSetting: jest.fn(() => true),
@@ -344,7 +344,9 @@ describe('help and unknown commands', () => {
     });
 
     test('help in MOCK mode says so', async () => {
-        const m = await run(['help'], (mods) => mods.settings.loadSettings.mockReturnValue(invalid({ mock: true })));
+        const m = await run(['help'], (mods) =>
+            mods.settings.loadSettings.mockReturnValue(invalid({ app: { mock: true } })),
+        );
         const [text] = m.msgs('stdout');
         expect(text).toContain('(MOCK MODE)');
         expect(text).toContain('Current mode: MOCK (simulated API calls)');

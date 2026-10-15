@@ -1,29 +1,40 @@
 /**
- * Load/save mechanics of the settings blob over the storage adapter: read +
- * merge over defaults + load-time migrations, the once-per-process obsolete
- * key cleanup, whole-blob save, top-level key accessors, and window bounds.
- * Sole owner of the load-time re-entry/cleanup guards; the persisted bytes
- * themselves (and Capacitor's write-behind cache) are owned by storage.ts.
+ * Load/save mechanics of the configuration over the storage adapter: read +
+ * validation + fill over the defaults, the one-time import of a 1.x
+ * `settings.json` when there is no configuration yet, whole-config save,
+ * `app` / `auth` key accessors, window bounds, and the recovery states of a
+ * configuration that cannot be used. Sole owner of the load-time re-entry
+ * guards; the persisted bytes themselves (and Capacitor's write-behind cache)
+ * are owned by storage.ts.
  */
 
 import * as logger from '../logger';
 import { schemaEntry } from './schema';
-import { getSaveDroppedCause, isSaveDropped, onSaveDroppedChange, storage } from './storage';
+import { getSaveDroppedCause, isSaveDropped, legacyStorage, onSaveDroppedChange, storage } from './storage';
 import type { SaveDroppedCause } from './storage';
 import { errorMessage } from '../errorMessage';
 import { getDefaultSettings } from './defaults';
-import { dropInvalidValues, isPrototypeKey, mergeWithDefaults, topLevelValueAllowed } from './loadValidation';
-import { runMigrations, pruneObsoleteSettings } from './migrations';
-import { toCurrentNames, toStoredNames, withoutCurrentNames } from './v1Bridge';
+import {
+    appValueAllowed,
+    authValueAllowed,
+    dropInvalidValues,
+    isAuthKey,
+    isPrototypeKey,
+    mergeWithDefaults,
+} from './loadValidation';
+import {
+    blankLegacyAuthOnce,
+    importWhenAbsent,
+    reimportLegacyFile,
+    retryLegacyImport,
+    startFreshConfig,
+} from './legacyImport';
+import type { ImportFailure, ImportOutcome } from './legacyImport';
 import { isPlainObject } from '../plainObject';
 import { oneLine } from '../format/logSafe';
 
-import type { AppSettings, WindowBounds, WindowType } from '../types/settings';
-
-// Module-local guards so cleanupObsoleteSettings (which itself calls
-// loadSettings) doesn't recurse and doesn't re-run on every read.
-let migrationInProgress = false;
-let cleanupCompleted = false;
+import type { ConfigApp, ConfigAuthV2, ConfigV2 } from '../types/config';
+import type { WindowBounds, WindowType } from '../types/settings';
 
 // The last file text found to hold only valid values, so an unchanged file is
 // not re-validated on every read; and the last warning, so an invalid file
@@ -32,16 +43,18 @@ let lastCleanRaw: string | null = null;
 let lastWarning: string | null = null;
 
 /**
- * Why the stored settings are not in use, for a renderer or the CLI to tell the user. `code` is stable:
- *   - settings-corrupt: the file is not a parseable settings object; it sits at `path`, set aside. Defaults apply and
- *     saves work.
- *   - settings-unreadable: the file cannot be read, or cannot be set aside; `path` is the settings file. Saves are
- *     refused until it can be read.
- *   - settings-migration-failed: the file parses but cannot be brought up to date; `path` is the settings file. Saves
- *     are refused until it can be.
+ * Why the stored configuration is not in use, for a renderer or the CLI to tell the user. `code` is stable:
+ *   - settings-corrupt: `config.json` is not a parseable configuration; it sits at `path`, set aside. Defaults apply
+ *     and saves work. It is never replaced by an import unasked.
+ *   - settings-unreadable: `config.json` cannot be read, or cannot be set aside; `path` is the configuration file.
+ *     Saves are refused until it can be read.
+ *   - settings-import-failed: there is no `config.json` and the 1.x `settings.json` at `path` could not be imported
+ *     (it cannot be read, is damaged, cannot be converted, or is not loaded yet). Nothing is written and saves are
+ *     refused until the import is retried (`retryImport`), a fresh configuration is started (`startFresh`, which
+ *     leaves `settings.json` as a backup) or the file is fixed.
  */
 type SettingsRecovery = {
-    code: 'settings-corrupt' | 'settings-unreadable' | 'settings-migration-failed';
+    code: 'settings-corrupt' | 'settings-unreadable' | 'settings-import-failed';
     path: string;
 };
 
@@ -55,42 +68,33 @@ type SettingsSaveDropped = { code: 'settings-save-dropped'; path: string; cause:
 
 // Set while the stored settings cannot be used and must not be overwritten; cleared by the next load that gets through.
 let blocked: SettingsRecovery | null = null;
-// Where the last unparseable settings went; kept for the rest of the process so a window opened later can still say so.
+// Where the last unparseable configuration went; kept for the rest of the process so a window opened later can still say so.
 let corruptBackupPath: string | null = null;
 // The unparseable text already moved aside, so a store that keeps handing it back (the Android service's) is not
 // moved, and logged, again on every read.
 let lastQuarantinedRaw: string | null = null;
-
-// Run obsolete-settings cleanup once per process. The re-entry guard exists
-// because cleanupObsoleteSettings calls back into loadSettings.
-const _cleanupOnce = () => {
-    if (migrationInProgress) return;
-    migrationInProgress = true;
-    try {
-        if (!cleanupCompleted) {
-            cleanupObsoleteSettings();
-            cleanupCompleted = true;
-        }
-    } finally {
-        migrationInProgress = false;
-    }
-};
+// The import that failed for a reason that will not pass by itself: not tried again until `retryImport`, so a
+// damaged `settings.json` is not read and converted on every read of a setting. (A 'not-loaded' failure is tried again.)
+let importFailure: ImportFailure | null = null;
+// Whether this process has found out that no import is due (the marker says it ran, or a set-aside configuration says
+// it must not run unasked): a read of the defaults then takes no lock and looks at nothing.
+let importSettled = false;
 
 /**
- * Default settings for a missing or unreadable file, logging which case applied.
+ * Default configuration for a missing or unreadable file, logging which case applied.
  */
-const _loadDefaults = (message: string): AppSettings => {
+const _loadDefaults = (message: string): ConfigV2 => {
     const defaultSettings = getDefaultSettings();
-    logger.withCategory('settings').info(`${message}: ${Object.keys(defaultSettings).join(', ')}`);
+    logger.withCategory('settings').info(`${message}: ${Object.keys(defaultSettings.app).join(', ')}`);
     return defaultSettings;
 };
 
 /**
- * Settings that cannot be used and must not be overwritten: defaults apply for reads, saves are refused until a
+ * A configuration that cannot be used and must not be overwritten: defaults apply for reads, saves are refused until a
  * load gets through, and getSettingsRecovery says why.
  */
-const _blockWrites = (code: SettingsRecovery['code'], detail: string): AppSettings => {
-    blocked = { code, path: storage.settingsLocation() };
+const _blockWrites = (code: SettingsRecovery['code'], detail: string, path: string): ConfigV2 => {
+    blocked = { code, path };
     logger
         .withCategory('settings')
         .error(
@@ -100,7 +104,7 @@ const _blockWrites = (code: SettingsRecovery['code'], detail: string): AppSettin
 };
 
 /**
- * Parse the stored text as a settings object; the reason it is not one otherwise.
+ * Parse the stored text as a configuration object; the reason it is not one otherwise.
  */
 const _parseSettings = (raw: string): { ok: true; value: object } | { ok: false; reason: string } => {
     let parsed: unknown;
@@ -113,18 +117,20 @@ const _parseSettings = (raw: string): { ok: true; value: object } | { ok: false;
 };
 
 /**
- * Settings text that does not parse is set aside once (see storage.quarantineRaw) and defaults apply, so the next
- * save writes a new file instead of mixing into a broken one. When it cannot be set aside it is left alone and
- * saves are refused.
+ * Configuration text that does not parse is set aside once (see storage.quarantineRaw) and defaults apply, so the next
+ * save writes a new file instead of mixing into a broken one. It is never replaced by an import: the set-aside copy
+ * makes the import stand down. When it cannot be set aside it is left alone and saves are refused.
  */
-const _recoverCorrupt = (raw: string, reason: string): AppSettings => {
+const _recoverCorrupt = (raw: string, reason: string): ConfigV2 => {
     if (raw === lastQuarantinedRaw) return _loadDefaults('Loaded default settings with keys');
     const moved = storage.quarantineRaw(raw);
-    if (!moved.ok)
+    if (!moved.ok) {
         return _blockWrites(
             'settings-unreadable',
             `the unusable settings (${reason}) could not be set aside: ${moved.error}`,
+            storage.location(),
         );
+    }
     lastQuarantinedRaw = raw;
     corruptBackupPath = moved.path;
     blocked = null;
@@ -135,16 +141,12 @@ const _recoverCorrupt = (raw: string, reason: string): AppSettings => {
 };
 
 /**
- * Merge, migrate and validate the parsed settings. Any throw here means the file cannot be brought up to date, which
- * is not the same as it being broken: it is left as it is and saves are refused.
+ * Fill and validate the parsed configuration.
  */
-const _interpretSettings = (settingsData: string, parsed: object): AppSettings => {
-    const stored = mergeWithDefaults(withoutCurrentNames(parsed, settingsData));
-    const migrated = runMigrations(stored);
-    // Temporary: the file on disk is still the 1.x one (v1Bridge.ts).
-    const mergedSettings = toCurrentNames(stored);
+const _interpretSettings = (settingsData: string, parsed: object): ConfigV2 => {
+    const config = mergeWithDefaults(parsed);
     if (settingsData !== lastCleanRaw) {
-        const dropped = dropInvalidValues(mergedSettings);
+        const dropped = dropInvalidValues(config);
         const warning = `Ignoring stored settings that are not valid (defaults apply): ${oneLine(dropped.join(', ')).slice(0, 500)}`;
         if (dropped.length === 0) {
             lastCleanRaw = settingsData;
@@ -154,47 +156,73 @@ const _interpretSettings = (settingsData: string, parsed: object): AppSettings =
         }
     }
     blocked = null;
-    if (migrated) {
-        try {
-            storage.writeRaw(JSON.stringify(toStoredNames(mergedSettings), null, 2));
-        } catch (error) {
-            logger
-                .withCategory('settings')
-                .error('Could not save the migrated settings (they are migrated again on the next load):', error);
-        }
-    }
-    return mergedSettings;
+    importFailure = null;
+    return config;
 };
 
 /**
- * Load settings from the userData directory
+ * The configuration a stored text holds: parsed, filled and validated, or defaults (the damaged text set aside).
  */
-const loadSettings = (): AppSettings => {
+const _loadFromText = (settingsData: string): ConfigV2 => {
+    const parsed = _parseSettings(settingsData);
+    if (!parsed.ok) return _recoverCorrupt(settingsData, parsed.reason);
+    return _interpretSettings(settingsData, parsed.value);
+};
+
+/**
+ * A failed import blocks saves, with the 1.x settings file as the place to look at. One that will not pass by itself
+ * is remembered, so the next read does not try it again.
+ */
+const _importFailed = (failure: ImportFailure): ConfigV2 => {
+    if (failure.reason !== 'not-loaded') importFailure = failure;
+    return _blockWrites(
+        'settings-import-failed',
+        `the 1.x settings could not be imported (${failure.reason}): ${failure.detail}`,
+        legacyStorage.location(),
+    );
+};
+
+/**
+ * An import that looked done (its configuration shown by the cache) and then was not stored: where the save is only
+ * queued, the answer comes later. The cache is back to what is stored, so the next read finds no configuration, and
+ * until the import is retried nothing is saved over what the 1.x file still holds.
+ */
+const _importFailedLater = (failure: ImportFailure): void => {
+    _importFailed(failure);
+};
+
+/**
+ * What a load finds when there is no configuration: the import of `settings.json` the first time, defaults after.
+ */
+const _loadWithoutConfig = (): ConfigV2 => {
+    if (importFailure) return _loadDefaults('Loaded default settings with keys');
+    if (importSettled) {
+        blocked = null;
+        return _loadDefaults('No settings file found, loaded default settings with keys');
+    }
+    const outcome = importWhenAbsent(_importFailedLater);
+    if (!outcome.ok) return _importFailed(outcome);
+    if (outcome.kind === 'imported' || outcome.kind === 'adopted') return _loadFromText(outcome.text);
+    importSettled = true;
+    blocked = null;
+    return _loadDefaults('No settings file found, loaded default settings with keys');
+};
+
+/**
+ * Load the configuration from the userData directory (on the first load without one, importing the 1.x settings).
+ */
+const loadSettings = (): ConfigV2 => {
     let settingsData: string | null;
     try {
         // Read via the storage adapter so the Capacitor cache path is exercised
         // on Android; Electron/CLI hit fs synchronously. Falsy when no file exists.
         settingsData = storage.readRaw();
     } catch (error) {
-        return _blockWrites('settings-unreadable', errorMessage(error) ?? 'unknown error');
+        return _blockWrites('settings-unreadable', errorMessage(error) ?? 'unknown error', storage.location());
     }
-
-    if (!settingsData) {
-        blocked = null;
-        return _loadDefaults('No settings file found, loaded default settings with keys');
-    }
-
-    const parsed = _parseSettings(settingsData);
-    if (!parsed.ok) return _recoverCorrupt(settingsData, parsed.reason);
-
-    let settings: AppSettings;
-    try {
-        settings = _interpretSettings(settingsData, parsed.value);
-    } catch (error) {
-        return _blockWrites('settings-migration-failed', errorMessage(error) ?? 'unknown error');
-    }
-    _cleanupOnce();
-    return settings;
+    const config = settingsData ? _loadFromText(settingsData) : _loadWithoutConfig();
+    if (blocked === null) blankLegacyAuthOnce();
+    return config;
 };
 
 /**
@@ -207,43 +235,48 @@ const getSettingsRecovery = (): SettingsRecovery | null =>
  * The change the app window made last that could not be saved, or null: see SettingsSaveDropped.
  */
 const getSettingsSaveDropped = (): SettingsSaveDropped | null =>
-    isSaveDropped()
-        ? { code: 'settings-save-dropped', path: storage.settingsLocation(), cause: getSaveDroppedCause() }
-        : null;
+    isSaveDropped() ? { code: 'settings-save-dropped', path: storage.location(), cause: getSaveDroppedCause() } : null;
 
 /**
- * Write the whole settings blob, unless the stored settings are not usable (writing then would erase them).
+ * Write the whole configuration, unless the stored settings are not usable (writing then would erase them).
  */
-const _persist = (settings: object): boolean => {
+const _persist = (config: ConfigV2): boolean => {
     if (blocked) {
         logger
             .withCategory('settings')
             .error(`Not saving settings: ${blocked.code}; the stored settings at ${blocked.path} are left as they are`);
         return false;
     }
-    return storage.writeRaw(JSON.stringify(toStoredNames(settings), null, 2));
+    return storage.writeRaw(JSON.stringify({ ...config, version: 2 }, null, 2));
 };
 
 /**
- * Save settings to the userData directory
+ * The key of the first value in a partial configuration that may not be saved: an `app` key that names an
+ * Object.prototype member, or an `app` or `auth` value its schema entry or range rejects.
  */
-const saveSettings = (settings: Partial<AppSettings>): boolean => {
+const _refusedKey = (settings: Partial<ConfigV2>): string | undefined => {
+    const { app, auth } = settings;
+    const appKey = app && Object.keys(app).find((key) => isPrototypeKey(key) || !appValueAllowed(key, app[key]));
+    if (appKey !== undefined) return appKey;
+    return auth && Object.keys(auth).find((key) => !isAuthKey(key) || !authValueAllowed(key, auth[key]));
+};
+
+/**
+ * Save what `change` makes of the configuration as it is stored now: it is loaded once, here, and the change is made on
+ * it, so what another writer saved between two reads is not written back over. A key that names an Object.prototype
+ * member, or a value its schema entry or range rejects, refuses the whole save.
+ */
+const _saveChange = (change: (current: ConfigV2) => Partial<ConfigV2>): boolean => {
     try {
-        // A key that names an Object.prototype member, or a value its schema entry or range rejects, is refused whole.
-        const refused = Object.keys(settings).find(
-            (key) => isPrototypeKey(key) || !topLevelValueAllowed(key, settings[key]),
-        );
+        const current = loadSettings();
+        const changed = change(current);
+        const refused = _refusedKey(changed);
         if (refused !== undefined) {
             logger.withCategory('settings').error(`Invalid setting not saved: ${oneLine(refused)}`, null);
             return false;
         }
-
-        // Merge with existing settings
-        const currentSettings = loadSettings();
-        const mergedSettings = { ...currentSettings, ...settings };
-
         // Write via storage adapter (sync fs on Electron/CLI; cache + async write-behind on Capacitor)
-        return _persist(mergedSettings);
+        return _persist({ ...current, ...changed });
     } catch (error) {
         logger.withCategory('settings').error('Error saving settings:', error);
         return false;
@@ -251,41 +284,38 @@ const saveSettings = (settings: Partial<AppSettings>): boolean => {
 };
 
 /**
- * Prune keys the schema does not define from the stored settings and write the
- * result back when anything was removed.
+ * Save the configuration: the containers given replace the stored ones whole, the others stay. Callers load, change
+ * what they mean to and save the loaded configuration back.
  */
-const cleanupObsoleteSettings = () => {
-    try {
-        const settings = loadSettings();
-        if (pruneObsoleteSettings(settings)) {
-            logger.withCategory('settings').debug('Settings cleanup completed - saving cleaned settings');
-            // Write the full cleaned blob directly: saveSettings merges over the
-            // on-disk settings, which would resurrect deleted top-level keys.
-            _persist(settings);
-        }
-    } catch (error) {
-        logger.withCategory('settings').error('Error during settings cleanup:', error);
-    }
+const saveSettings = (settings: Partial<ConfigV2>): boolean => _saveChange(() => settings);
+
+/**
+ * Set several `app` keys at once on the configuration as it is stored now (the settings form's payload).
+ */
+const saveAppSettings = (settings: Partial<ConfigApp>): boolean =>
+    _saveChange((current) => ({ app: { ...current.app, ...settings } }));
+
+/**
+ * Get a specific setting: an `auth` key (`token`, `apiHeaders`, `lastUsername`, `chosenPhotosMemberId`) from the
+ * sign-in state, any other key from `app`.
+ */
+const getSetting = <K extends string>(key: K): (ConfigApp & ConfigAuthV2)[K] => {
+    const config = loadSettings();
+    return (isAuthKey(key) ? config.auth[key] : config.app[key]) as (ConfigApp & ConfigAuthV2)[K];
 };
 
 /**
- * Get a specific setting
- */
-const getSetting = <K extends string>(key: K): AppSettings[K] => {
-    return loadSettings()[key];
-};
-
-/**
- * Set a specific setting
+ * Set a specific setting: an `auth` key in the sign-in state, any other key in `app`. Only the changed key is
+ * written, on the configuration as it is stored now.
  */
 const setSetting = (key: string, value: unknown): boolean => {
     if (isPrototypeKey(key)) {
         logger.withCategory('settings').error(`Invalid setting key: ${oneLine(key)}`, null);
         return false;
     }
-    // Only the changed key: saveSettings merges it onto the settings it loads itself, so what another writer saved
-    // between two reads is not written back over.
-    return saveSettings({ [key]: value });
+    return _saveChange((current) =>
+        isAuthKey(key) ? { auth: { ...current.auth, [key]: value } } : { app: { ...current.app, [key]: value } },
+    );
 };
 
 /**
@@ -305,24 +335,75 @@ const isReloadRequired = (key: string): boolean | undefined => {
 /**
  * Save window bounds for a specific window type
  */
-const saveWindowBounds = (windowType: WindowType, bounds: WindowBounds): boolean => {
-    const settings = loadSettings();
-    if (!settings.windowBounds) {
-        settings.windowBounds = {} as AppSettings['windowBounds'];
-    }
-    settings.windowBounds[windowType] = bounds;
-    return saveSettings(settings);
-};
+const saveWindowBounds = (windowType: WindowType, bounds: WindowBounds): boolean =>
+    // A file that holds no (or a broken) bounds container gets one.
+    _saveChange((current) => ({
+        app: { ...current.app, windowBounds: { ...current.app.windowBounds, [windowType]: bounds } },
+    }));
 
 /**
  * Get window bounds for a specific window type
  */
 const getWindowBounds = (windowType: WindowType): WindowBounds => {
-    const settings = loadSettings();
-    if (!settings.windowBounds || !settings.windowBounds[windowType]) {
-        return getDefaultSettings().windowBounds[windowType];
+    const { windowBounds } = loadSettings().app;
+    if (!windowBounds || !windowBounds[windowType]) {
+        return getDefaultSettings().app.windowBounds[windowType];
     }
-    return settings.windowBounds[windowType];
+    return windowBounds[windowType];
+};
+
+/**
+ * What a recovery action came to: the failure it ran into leaves the state as it was, except that a configuration
+ * that is no longer there blocks saves (the import is what is missing). Never throws.
+ */
+const _recovered = (run: () => ImportOutcome): boolean => {
+    try {
+        const outcome = run();
+        if (outcome.ok) {
+            importFailure = null;
+            importSettled = false;
+            blocked = null;
+            return true;
+        }
+        logger
+            .withCategory('settings')
+            .error(`The 1.x settings could not be imported (${outcome.reason}): ${outcome.detail}`);
+        if (storage.readRaw() === null) _importFailed(outcome);
+    } catch (error) {
+        logger
+            .withCategory('settings')
+            .error(`The 1.x settings could not be imported: ${errorMessage(error) ?? 'unknown error'}`);
+    }
+    return false;
+};
+
+/**
+ * Import `settings.json` again after it failed (the file was fixed, or has loaded since): the operation that failed,
+ * run as the explicit import it is whatever the marker and a set-aside configuration say.
+ *
+ * @returns whether a configuration is stored now
+ */
+const retryImport = (): boolean => _recovered(() => retryLegacyImport(_importFailedLater));
+
+/**
+ * Begin with a default configuration instead of importing: `settings.json` stays where it is, as a backup, and is
+ * not imported later unasked.
+ *
+ * @returns whether the configuration was written
+ */
+const startFresh = (): boolean => _recovered(() => startFreshConfig(_importFailedLater));
+
+/**
+ * Import `settings.json` again on request: the configuration in use is set aside the way a damaged one is
+ * (`config.json.corrupt-<time>`) and the import is saved in its place, keeping the sign-in state.
+ *
+ * @returns whether the import was saved
+ */
+const reimportFromV1 = (): boolean => {
+    const recovered = _recovered(() => reimportLegacyFile(_importFailedLater));
+    // The damaged configuration the notice was about is not the one in use any more.
+    if (recovered) corruptBackupPath = null;
+    return recovered;
 };
 
 export type { SettingsRecovery };
@@ -333,10 +414,13 @@ export {
     isPrototypeKey,
     loadSettings,
     saveSettings,
-    cleanupObsoleteSettings,
+    saveAppSettings,
     getSetting,
     setSetting,
     isReloadRequired,
     saveWindowBounds,
     getWindowBounds,
+    retryImport,
+    startFresh,
+    reimportFromV1,
 };

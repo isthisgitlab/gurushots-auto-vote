@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import type { TargetedEvent, TargetedSubmitEvent } from 'preact';
@@ -19,6 +19,10 @@ export function LoginForm({
 }) {
     const { t } = useTranslation();
     const [username, setUsername] = useState(initialUsername);
+    // A saved name that arrives after the form is up fills the field, unless something was typed by then.
+    useEffect(() => {
+        setUsername((typed) => typed || initialUsername);
+    }, [initialUsername]);
     const [password, setPassword] = useState('');
     const [errors, setErrors] = useState<{ username?: string | null; password?: string | null }>({});
 

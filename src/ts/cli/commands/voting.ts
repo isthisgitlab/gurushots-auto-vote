@@ -54,7 +54,7 @@ const runVotingCycle = async (
     const opId = isManual ? `manual-vote-cycle-${cycleNumber}` : `vote-cycle-${cycleNumber}`;
     try {
         const userSettings = settings.loadSettings();
-        const isMockMode = userSettings.mock;
+        const isMockMode = userSettings.app.mock;
 
         logger
             .withCategory('voting')
@@ -171,7 +171,7 @@ const parseChallengeFlag = (argv: string[]): string | null => {
  */
 const startContinuousVoting = async () => {
     const userSettings = settings.loadSettings();
-    const isMockMode = userSettings.mock;
+    const isMockMode = userSettings.app.mock;
 
     logger
         .withCategory('voting')
@@ -232,7 +232,7 @@ const startContinuousVoting = async () => {
  * valid pin are listed, and an id is printed as text: a raw settings write or a hand edit can put anything in a key.
  */
 const logPinnedEntries = (userSettings: ReturnType<typeof settings.loadSettings>) => {
-    const pinned = Object.keys(userSettings.challengeSettings?.entryPins ?? {}).flatMap((challengeId) => {
+    const pinned = Object.keys(userSettings.challenges).flatMap((challengeId) => {
         const { boost, turbo } = settings.getEntryPins(challengeId);
         return boost === null && turbo === null ? [] : [{ challengeId, boost, turbo }];
     });
@@ -249,7 +249,7 @@ const logPinnedEntries = (userSettings: ReturnType<typeof settings.loadSettings>
 
 const showStatus = async () => {
     const userSettings = settings.loadSettings();
-    const isMockMode = userSettings.mock;
+    const isMockMode = userSettings.app.mock;
     const isAuthenticated = getMiddleware().isAuthenticated();
 
     logger.withCategory('ui').info('=== GuruShots Auto Voter - Status ===');
@@ -260,17 +260,17 @@ const showStatus = async () => {
         .info(`Authentication: ${isAuthenticated ? '✅ Authenticated' : '❌ Not authenticated'}`);
 
     if (isAuthenticated) {
-        logger.withCategory('authentication').info(`Token: ${userSettings.token ? '✅ Present' : '❌ Missing'}`);
+        logger.withCategory('authentication').info(`Token: ${userSettings.auth.token ? '✅ Present' : '❌ Missing'}`);
     }
 
     logger.withCategory('settings').info('\nSettings:');
-    logger.withCategory('settings').info(`  Theme: ${userSettings.theme}`);
-    logger.withCategory('settings').info(`  Language: ${userSettings.language}`);
-    logger.withCategory('settings').info(`  Timezone: ${userSettings.timezone}`);
-    logger.withCategory('settings').info(`  API Timeout: ${userSettings.apiTimeout}s`);
+    logger.withCategory('settings').info(`  Theme: ${userSettings.app.theme}`);
+    logger.withCategory('settings').info(`  Language: ${userSettings.app.language}`);
+    logger.withCategory('settings').info(`  Timezone: ${userSettings.app.timezone}`);
+    logger.withCategory('settings').info(`  API Timeout: ${userSettings.app.apiTimeout}s`);
     {
-        const min = userSettings.checkFrequencyMin;
-        const max = userSettings.checkFrequencyMax;
+        const min = userSettings.app.checkFrequencyMin;
+        const max = userSettings.app.checkFrequencyMax;
         const label = min === max ? `${min}min` : `${min}–${max}min (random per cycle)`;
         logger.withCategory('settings').info(`  Check Frequency: ${label}`);
     }
@@ -280,16 +280,17 @@ const showStatus = async () => {
             `  Last Minute Check Frequency: ${settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global')}min`,
         );
 
-    if (userSettings.challengeSettings && Object.keys(userSettings.challengeSettings).length > 0) {
+    const withValues = Object.entries(userSettings.challenges).flatMap(([challengeId, { values }]) =>
+        values === undefined ? [] : [{ challengeId, values }],
+    );
+    if (withValues.length > 0) {
         logger.withCategory('settings').info('\nChallenge Settings:');
-        Object.entries(userSettings.challengeSettings)
-            .filter(([key]) => key !== 'entryPins')
-            .forEach(([challengeId, challengeSettings]: [string, unknown]) => {
-                logger.withCategory('settings').info(`  Challenge ${challengeId}:`);
-                Object.entries(challengeSettings as object).forEach(([key, value]: [string, unknown]) => {
-                    logger.withCategory('settings').info(`    ${key}: ${formatSettingForLog(key, value)}`);
-                });
+        withValues.forEach(({ challengeId, values }) => {
+            logger.withCategory('settings').info(`  Challenge ${printableChallengeId(challengeId)}:`);
+            Object.entries(values).forEach(([key, value]) => {
+                logger.withCategory('settings').info(`    ${key}: ${formatSettingForLog(key, value)}`);
             });
+        });
     }
 
     logPinnedEntries(userSettings);

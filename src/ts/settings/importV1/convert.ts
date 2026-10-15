@@ -10,13 +10,27 @@ import { hasV1ProfileNamed, normalizeV1ProfileName, V1_RESERVED_PROFILE_NAMES } 
 import { isReservedChallengeId } from './loadValidation';
 import { renameV1Keys, renameV1ScenarioDocument, renameV1Value } from './renames';
 
-import type { ChallengePinsV2, ChallengeRecordV2, ConfigV2, ImportReportV2 } from '../../types/config';
-import type { V1Blob } from './types';
+import type { ChallengePinsV2, ChallengeRecordV2, ImportReportV2, StoredConfigV2 } from '../../types/config';
+import type { V1Blob, V1Values } from './types';
 
-type ConvertedV1 = { config: ConfigV2; titlePins: Record<string, string>; report: ImportReportV2 };
+type ConvertedV1 = { config: StoredConfigV2; titlePins: Record<string, string>; report: ImportReportV2 };
 
 // The top-level keys that become `auth`.
 const AUTH_KEYS = ['token', 'apiHeaders', 'lastUsername', 'chosenPhotosMemberId'];
+
+// The schema keys of the app-state flags: 1.x kept them at the top level and read them from there only (a copy among
+// the global defaults was never read), so they are `app` values, and `chosenPhotosMemberId` an `auth` one.
+const TOP_LEVEL_ONLY_KEYS = new Set([
+    'autovoteRunning',
+    'autovoteStartedLaunch',
+    'skipUpdateVersion',
+    'chosenPhotosMemberId',
+    'chosenPhotosClearedAt',
+    'noticeAcknowledgedVersion',
+]);
+
+const withoutKeys = (values: V1Values, dropped: ReadonlySet<string>): V1Values =>
+    Object.fromEntries(Object.entries(values).filter(([key]) => !dropped.has(key)));
 
 const stringOrEmpty = (value: unknown): string => (typeof value === 'string' ? value : '');
 
@@ -75,7 +89,7 @@ const quoted = (name: string): string => JSON.stringify(name.slice(0, 80));
  * missing or reserved, and a `scenario` value naming a scenario that is not stored. A `scenario` among the defaults
  * is no reference: it is challenge-only, so 1.x never applied a global value.
  */
-const unresolvedRefs = (config: ConfigV2): string[] => {
+const unresolvedRefs = (config: StoredConfigV2): string[] => {
     const refs: string[] = [];
     const unresolvedScenario = (path: string, values: unknown) => {
         const name = isPlainObject(values) ? values.scenario : undefined;
@@ -108,12 +122,13 @@ const unresolvedRefs = (config: ConfigV2): string[] => {
 
 /**
  * The 2.x configuration for a merged, migrated, validated and pruned 1.x blob, with the title pins (kept in a cache
- * store, not in the configuration) and the references that could not be resolved.
+ * store, not in the configuration) and the references that could not be resolved. `mockStored`: the 1.x file held a
+ * `mock` value; without one the configuration has none, so the build's own default applies at load, as 1.x's merge did.
  */
-const convertV1Blob = (blob: V1Blob): ConvertedV1 => {
+const convertV1Blob = (blob: V1Blob, { mockStored }: { mockStored: boolean }): ConvertedV1 => {
     const { challengeSettings } = blob;
-    const moved = new Set(['challengeSettings', ...AUTH_KEYS, ...V1_MIGRATION_FLAGS]);
-    const config: ConfigV2 = {
+    const moved = new Set(['challengeSettings', ...AUTH_KEYS, ...V1_MIGRATION_FLAGS, ...(mockStored ? [] : ['mock'])]);
+    const config: StoredConfigV2 = {
         version: 2,
         app: renameV1Keys(Object.fromEntries(Object.entries(blob).filter(([key]) => !moved.has(key))), 'drop-targets'),
         auth: {
@@ -122,7 +137,7 @@ const convertV1Blob = (blob: V1Blob): ConvertedV1 => {
             lastUsername: stringOrEmpty(blob.lastUsername),
             chosenPhotosMemberId: stringOrEmpty(blob.chosenPhotosMemberId),
         },
-        defaults: renameV1Keys(challengeSettings.globalDefaults, 'drop-targets'),
+        defaults: renameV1Keys(withoutKeys(challengeSettings.globalDefaults, TOP_LEVEL_ONLY_KEYS), 'drop-targets'),
         profiles: mapValues(challengeSettings.profiles, (values) => renameV1Value(values, 'drop-targets')),
         seededProfiles: Array.isArray(challengeSettings.seededProfiles)
             ? challengeSettings.seededProfiles.filter((name): name is string => typeof name === 'string')
@@ -137,4 +152,4 @@ const convertV1Blob = (blob: V1Blob): ConvertedV1 => {
     return { config, titlePins, report: { refsBlocked: unresolvedRefs(config) } };
 };
 
-export { convertV1Blob };
+export { convertV1Blob, TOP_LEVEL_ONLY_KEYS };

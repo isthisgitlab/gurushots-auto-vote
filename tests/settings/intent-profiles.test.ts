@@ -17,7 +17,7 @@
  * so loadSettings/saveSettings round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/settings');
 import type * as intentProfilesModule from '../../src/ts/settings/intentProfiles';
 import type * as schemaModule from '../../src/ts/settings/schema';
@@ -38,27 +38,12 @@ jest.mock('../../src/ts/logger', () => {
 });
 
 describe('intent profile seeding', () => {
-    const headlessGlobals = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let store: { value: string | null; read: jest.Mock<string | null, []>; write: jest.Mock<void, [string]> };
-
     beforeEach(() => {
-        headlessGlobals.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-        };
-        headlessGlobals.AndroidHeadlessStore = store;
+        installHeadlessStore();
     });
 
     afterEach(() => {
-        delete headlessGlobals.__GS_HEADLESS__;
-        delete headlessGlobals.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
     describe('bundle validity (as a set)', () => {

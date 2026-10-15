@@ -43,7 +43,7 @@ import settingsModule = require('../../src/ts/settings');
 import lockModule = require('../../src/ts/settings/cliSessionLock');
 import windowsModule = require('../../src/ts/index/windows');
 import type * as startupModule from '../../src/ts/index/startup';
-import type { AppSettings } from '../../src/ts/types/settings';
+import type { ConfigV2 } from '../../src/ts/types/config';
 import { invalid } from '../helpers/invalid';
 
 const settings = jest.mocked(settingsModule);
@@ -76,7 +76,11 @@ afterEach(() => {
     }
 });
 
-const stored = (over: Partial<AppSettings>) => settings.loadSettings.mockReturnValue(invalid(over));
+// The configuration the settings answer: what a test says about the sign-in state and the Stay Logged In choice.
+const config = (over: { token?: string; stayLoggedIn?: boolean }) =>
+    invalid<ConfigV2>({ auth: { token: over.token }, app: { stayLoggedIn: over.stayLoggedIn } });
+const stored = (over: { token?: string; stayLoggedIn?: boolean }) =>
+    settings.loadSettings.mockReturnValue(config(over));
 
 describe('desktop startup clears a leftover login', () => {
     beforeEach(() => {
@@ -206,7 +210,7 @@ describe('desktop startup marks the app as running', () => {
     beforeEach(() => {
         jest.useFakeTimers();
         jest.clearAllMocks();
-        settings.loadSettings.mockReturnValue(invalid({ token: '', stayLoggedIn: false }));
+        settings.loadSettings.mockReturnValue(config({ token: '', stayLoggedIn: false }));
     });
 
     afterEach(() => {

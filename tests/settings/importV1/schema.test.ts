@@ -1,7 +1,6 @@
 /**
- * The frozen 1.x schema and list sanitizers against the live ones: same keys in the same order, same defaults, same
- * verdict on every probe value, each frozen key read under its current name (`liveKey`). The live comparison is
- * deleted with the live pipeline in B1b.
+ * The frozen 1.x schema and list sanitizers: every default passes its own validator, a key the schema does not know is
+ * valid, and the list sanitizers do what 1.x did. Frozen code: nothing here follows the live schema.
  */
 
 import { V1_SETTINGS_SCHEMA, v1SchemaEntry, validateV1Setting } from '../../../src/ts/settings/importV1/schema';
@@ -10,89 +9,9 @@ import {
     sanitizeFillSchedule,
     sanitizeTimeOfDayList,
 } from '../../../src/ts/settings/importV1/validators';
-import { liveKey } from '../v2/liveAdapter';
-import type * as liveSchemaModule from '../../../src/ts/settings/schema';
-
-const live = require('../../../src/ts/settings/schema') as typeof liveSchemaModule;
-
-const PROBES: unknown[] = [
-    undefined,
-    null,
-    0,
-    1,
-    -1,
-    4,
-    5,
-    59,
-    60,
-    99,
-    100,
-    101,
-    720,
-    721,
-    1439,
-    3600,
-    1e9,
-    2592000,
-    2592001,
-    1_000_000,
-    1_000_001,
-    0.5,
-    NaN,
-    Infinity,
-    '',
-    'a',
-    'x'.repeat(61),
-    '12:30',
-    true,
-    false,
-    [],
-    [1],
-    [1, 1],
-    ['a'],
-    ['12:30'],
-    ['12:30', '12:30'],
-    ['25:00'],
-    [{ count: 2, seconds: 60 }],
-    [
-        { count: 2, seconds: 60 },
-        { count: 2, seconds: 90 },
-    ],
-    [{ count: 5, seconds: 1 }],
-    [{ count: 2, seconds: 60, extra: 1 }],
-    {},
-    { a: 1 },
-    ['a'.repeat(51)],
-    [' '],
-    ['pic_1'],
-    ['bad id'],
-    Array.from({ length: 21 }, (_, i) => `p${i}`),
-    Array.from({ length: 7 }, (_, i) => i + 1),
-    Array.from({ length: 51 }, () => 't'),
-];
 
 describe('the frozen 1.x schema', () => {
     const keys = Object.keys(V1_SETTINGS_SCHEMA);
-
-    test('has the live schema keys, in the live order', () => {
-        expect(keys.map(liveKey)).toEqual(Object.keys(live.SETTINGS_SCHEMA));
-    });
-
-    test.each(keys)('%s has the live default', (key) => {
-        expect(V1_SETTINGS_SCHEMA[key as keyof typeof V1_SETTINGS_SCHEMA].default).toEqual(
-            live.schemaEntry(liveKey(key))?.default,
-        );
-    });
-
-    test.each(keys)('%s gives the live verdict on every probe value', (key) => {
-        for (const probe of PROBES) {
-            expect([key, probe, validateV1Setting(key, probe)]).toEqual([
-                key,
-                probe,
-                live.schemaEntry(liveKey(key))?.validation.safeParse(probe).success,
-            ]);
-        }
-    });
 
     test('every default passes its own validator', () => {
         for (const key of keys) expect(validateV1Setting(key, v1SchemaEntry(key)?.default)).toBe(true);
@@ -147,19 +66,5 @@ describe('the frozen list sanitizers', () => {
         expect(sanitizeBeforeEndList([60, 120])).toBeNull();
         expect(sanitizeBeforeEndList([300, 60, 60, 0, 1.5, 3_000_000, 'a'])).toEqual([60, 300]);
         expect(sanitizeBeforeEndList([8, 7, 6, 5, 4, 3, 2, 1])).toEqual([1, 2, 3, 4, 5, 6]);
-    });
-
-    test.each([
-        ...PROBES,
-        [
-            { count: 4, seconds: 1 },
-            { count: 2, seconds: 2 },
-        ],
-        ['08:00', '07:00', 'x'],
-        [3, 2, 2, 'x'],
-    ])('agree with the live sanitizers on %j', (probe) => {
-        expect(sanitizeFillSchedule(probe)).toEqual(live.sanitizeFillSchedule(probe));
-        expect(sanitizeTimeOfDayList(probe)).toEqual(live.sanitizeTimeOfDayList(probe));
-        expect(sanitizeBeforeEndList(probe)).toEqual(live.sanitizeBeforeEndList(probe));
     });
 });

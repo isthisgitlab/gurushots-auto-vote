@@ -11,6 +11,7 @@
  */
 
 import { invalid } from '../helpers/invalid';
+import type { ConfigV2 } from '../../src/ts/types/config';
 
 jest.unmock('path');
 jest.unmock('node:path');
@@ -33,7 +34,7 @@ jest.mock('electron', () => ({
 }));
 
 jest.mock('../../src/ts/settings', () => ({
-    getSettingsPath: jest.fn(() => '/tmp/settings.json'),
+    getSettingsPath: jest.fn(() => '/tmp/config.json'),
     loadSettings: jest.fn(),
     isReloadRequired: jest.fn(() => false),
 }));
@@ -58,6 +59,10 @@ const { watchSettingsFile } = require('../../src/ts/windows/settingsWatcher') as
 
 type Deps = Parameters<typeof watchSettingsFile>[0];
 
+// The configuration the settings answer: the app preferences and the sign-in state (and any other part under test).
+const loaded = (app: object, auth: object = {}, rest: object = {}) =>
+    invalid<ConfigV2>({ app, auth: { token: '', ...auth }, ...rest });
+
 // Window state accessors: an old creation time so the "recently created" guard
 // (which deliberately skips the whole change handler) never fires here.
 const makeDeps = (onSettingsChanged: Deps['onSettingsChanged']): Deps => ({
@@ -68,7 +73,7 @@ const makeDeps = (onSettingsChanged: Deps['onSettingsChanged']): Deps => ({
 
 // Drive one debounced change event through the watcher.
 const emitChange = async () => {
-    mockWatchHandlers.at(-1)!('change', 'settings.json');
+    mockWatchHandlers.at(-1)!('change', 'config.json');
     jest.advanceTimersByTime(500);
     await Promise.resolve();
 };
@@ -78,7 +83,7 @@ describe('watchSettingsFile onSettingsChanged', () => {
         jest.useFakeTimers();
         jest.clearAllMocks();
         mockWatchHandlers.length = 0;
-        settings.loadSettings.mockReturnValue(invalid({ autovoteRunning: false }));
+        settings.loadSettings.mockReturnValue(loaded({ autovoteRunning: false }));
     });
 
     afterEach(() => {
@@ -90,29 +95,29 @@ describe('watchSettingsFile onSettingsChanged', () => {
         const onSettingsChanged = jest.fn();
         watchSettingsFile(makeDeps(onSettingsChanged));
 
-        settings.loadSettings.mockReturnValue(invalid({ autovoteRunning: true }));
+        settings.loadSettings.mockReturnValue(loaded({ autovoteRunning: true }));
         await emitChange();
 
         expect(onSettingsChanged).toHaveBeenCalledTimes(1);
-        expect(onSettingsChanged).toHaveBeenCalledWith({ autovoteRunning: true });
+        expect(onSettingsChanged).toHaveBeenCalledWith(loaded({ autovoteRunning: true }));
     });
 
     test('still broadcasts to renderers after the observer runs', async () => {
         watchSettingsFile(makeDeps(jest.fn()));
 
-        settings.loadSettings.mockReturnValue(invalid({ autovoteRunning: true }));
+        settings.loadSettings.mockReturnValue(loaded({ autovoteRunning: true }));
         await emitChange();
 
-        expect(mockSend).toHaveBeenCalledWith('settings-changed', { autovoteRunning: true, hasToken: false });
+        expect(mockSend).toHaveBeenCalledWith('settings-changed', { app: { autovoteRunning: true }, hasToken: false });
     });
 
     test('broadcasts hasToken instead of the token itself', async () => {
         watchSettingsFile(makeDeps(jest.fn()));
 
-        settings.loadSettings.mockReturnValue(invalid({ token: 'secret', autovoteRunning: true }));
+        settings.loadSettings.mockReturnValue(loaded({ autovoteRunning: true }, { token: 'secret' }));
         await emitChange();
 
-        expect(mockSend).toHaveBeenCalledWith('settings-changed', { autovoteRunning: true, hasToken: true });
+        expect(mockSend).toHaveBeenCalledWith('settings-changed', { app: { autovoteRunning: true }, hasToken: true });
     });
 
     test('a throwing observer does not stop the broadcast', async () => {
@@ -121,10 +126,10 @@ describe('watchSettingsFile onSettingsChanged', () => {
         });
         watchSettingsFile(makeDeps(onSettingsChanged));
 
-        settings.loadSettings.mockReturnValue(invalid({ autovoteRunning: true }));
+        settings.loadSettings.mockReturnValue(loaded({ autovoteRunning: true }));
         await expect(emitChange()).resolves.toBeUndefined();
 
-        expect(mockSend).toHaveBeenCalledWith('settings-changed', { autovoteRunning: true, hasToken: false });
+        expect(mockSend).toHaveBeenCalledWith('settings-changed', { app: { autovoteRunning: true }, hasToken: false });
     });
 
     test('an unreadable settings file does not fire the observer (nor blame it)', async () => {
@@ -132,7 +137,7 @@ describe('watchSettingsFile onSettingsChanged', () => {
         watchSettingsFile(makeDeps(onSettingsChanged));
 
         settings.loadSettings.mockImplementation(() => {
-            throw new Error('settings.json unreadable');
+            throw new Error('config.json unreadable');
         });
 
         await expect(emitChange()).resolves.toBeUndefined();
@@ -148,10 +153,10 @@ describe('watchSettingsFile onSettingsChanged', () => {
             getMainWindowCreatedTime: () => Date.now() - 60_000,
         });
 
-        settings.loadSettings.mockReturnValue(invalid({ autovoteRunning: true }));
+        settings.loadSettings.mockReturnValue(loaded({ autovoteRunning: true }));
         await expect(emitChange()).resolves.toBeUndefined();
 
-        expect(mockSend).toHaveBeenCalledWith('settings-changed', { autovoteRunning: true, hasToken: false });
+        expect(mockSend).toHaveBeenCalledWith('settings-changed', { app: { autovoteRunning: true }, hasToken: false });
     });
 
     test('returns null (and never watches) when there is no settings file yet', () => {
@@ -177,10 +182,10 @@ describe('watchSettingsFile onSettingsChanged', () => {
             const onSettingsChanged = jest.fn();
             watchSettingsFile(makeYoungWindowDeps(onSettingsChanged));
 
-            settings.loadSettings.mockReturnValue(invalid({ autovoteRunning: true }));
+            settings.loadSettings.mockReturnValue(loaded({ autovoteRunning: true }));
             await emitChange();
 
-            expect(onSettingsChanged).toHaveBeenCalledWith({ autovoteRunning: true });
+            expect(onSettingsChanged).toHaveBeenCalledWith(loaded({ autovoteRunning: true }));
             // The guard's actual job is still done: nothing was broadcast and
             // no reload happened.
             expect(mockSend).not.toHaveBeenCalled();
@@ -191,7 +196,7 @@ describe('watchSettingsFile onSettingsChanged', () => {
             watchSettingsFile(makeYoungWindowDeps(onSettingsChanged));
 
             settings.loadSettings.mockImplementation(() => {
-                throw new Error('settings.json unreadable');
+                throw new Error('config.json unreadable');
             });
 
             await expect(emitChange()).resolves.toBeUndefined();
@@ -231,7 +236,7 @@ describe('watchSettingsFile change detection', () => {
     });
 
     test('watches the directory of the facade-owned settings path, which a rename-replace save keeps', () => {
-        settings.loadSettings.mockReturnValue(invalid({}));
+        settings.loadSettings.mockReturnValue(loaded({}));
         watchSettingsFile(deps());
         expect(fs.watch).toHaveBeenCalledWith('/tmp', expect.any(Function));
     });
@@ -247,20 +252,20 @@ describe('watchSettingsFile change detection', () => {
             mainWindow,
             invalid({ isDestroyed: () => false, webContents: { send: mockSend } }),
         ]);
-        settings.loadSettings.mockReturnValue(invalid({ ui: { theme: 'light' } }));
+        settings.loadSettings.mockReturnValue(loaded({ ui: { theme: 'light' } }));
         settings.isReloadRequired.mockImplementation((key) => key === 'ui');
         watchSettingsFile(deps({ getMainWindow: () => mainWindow }));
 
-        settings.loadSettings.mockReturnValue(invalid({ ui: { theme: 'dark' } }));
+        settings.loadSettings.mockReturnValue(loaded({ ui: { theme: 'dark' } }));
         await emitChange();
 
         expect(settings.isReloadRequired).toHaveBeenCalledWith('ui');
         expect(reload).toHaveBeenCalledTimes(1);
         expect(mainSend).not.toHaveBeenCalled();
-        expect(mockSend).toHaveBeenCalledWith('settings-changed', { ui: { theme: 'dark' }, hasToken: false });
+        expect(mockSend).toHaveBeenCalledWith('settings-changed', { app: { ui: { theme: 'dark' } }, hasToken: false });
         expect(infoLines()).toEqual([
             '🔄 Reload-required settings changed, reloading main window...',
-            '  • ui.theme: light → dark (reload required)',
+            '  • app.ui.theme: light → dark (reload required)',
         ]);
     });
 
@@ -270,34 +275,34 @@ describe('watchSettingsFile change detection', () => {
             invalid({ isDestroyed: () => true, webContents: { send: deadSend } }),
             invalid({ isDestroyed: () => false, webContents: { send: mockSend } }),
         ]);
-        settings.loadSettings.mockReturnValue(invalid({ language: 'en' }));
+        settings.loadSettings.mockReturnValue(loaded({ language: 'en' }));
         settings.isReloadRequired.mockReturnValue(true);
         windowDestroyed = true;
         watchSettingsFile(deps());
 
-        settings.loadSettings.mockReturnValue(invalid({ language: 'lv' }));
+        settings.loadSettings.mockReturnValue(loaded({ language: 'lv' }));
         await emitChange();
 
         expect(reload).not.toHaveBeenCalled();
         expect(deadSend).not.toHaveBeenCalled();
-        expect(mockSend).toHaveBeenCalledWith('settings-changed', { language: 'lv', hasToken: false });
+        expect(mockSend).toHaveBeenCalledWith('settings-changed', { app: { language: 'lv' }, hasToken: false });
     });
 
     test('logs null, object and array differences using a stable string form', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ a: null, b: null, c: { x: 1 }, list: [1], same: 'x' }));
+        settings.loadSettings.mockReturnValue(loaded({ a: null, b: null, c: { x: 1 }, list: [1], same: 'x' }));
         watchSettingsFile(deps());
 
         settings.loadSettings.mockReturnValue(
-            invalid({ a: 'set', b: null, c: null, list: [1, 2], same: 'x', added: { y: 2 } }),
+            loaded({ a: 'set', b: null, c: null, list: [1, 2], same: 'x', added: { y: 2 } }),
         );
         await emitChange();
 
         expect(infoLines()).toEqual([
             '🔄 Settings changed (no reload required):',
-            '  • a: null → set',
-            '  • c: {"x":1} → null',
-            '  • list: [1] → [1,2]',
-            '  • added: null → {"y":2}',
+            '  • app.a: null → set',
+            '  • app.c: {"x":1} → null',
+            '  • app.list: [1] → [1,2]',
+            '  • app.added: null → {"y":2}',
         ]);
         expect(reload).not.toHaveBeenCalled();
         expect(mockSend).toHaveBeenCalledTimes(1);
@@ -307,43 +312,43 @@ describe('watchSettingsFile change detection', () => {
         const loggedText = () => infoLines().join('\n');
 
         test('a changed token is masked on both sides', async () => {
-            settings.loadSettings.mockReturnValue(invalid({ token: 'oldABC' }));
+            settings.loadSettings.mockReturnValue(loaded({}, { token: 'oldABC' }));
             watchSettingsFile(deps());
 
-            settings.loadSettings.mockReturnValue(invalid({ token: 'newXYZ' }));
+            settings.loadSettings.mockReturnValue(loaded({}, { token: 'newXYZ' }));
             await emitChange();
 
-            expect(infoLines()).toContain('  • token: [REDACTED] → [REDACTED]');
+            expect(infoLines()).toContain('  • auth.token: [REDACTED] → [REDACTED]');
             expect(loggedText()).not.toMatch(/oldABC|newXYZ/);
         });
 
         test('a newly added apiHeaders object is masked', async () => {
-            settings.loadSettings.mockReturnValue(invalid({ theme: 'light' }));
+            settings.loadSettings.mockReturnValue(loaded({ theme: 'light' }));
             watchSettingsFile(deps());
 
-            settings.loadSettings.mockReturnValue(invalid({ theme: 'light', apiHeaders: { 'x-token': 'newXYZ' } }));
+            settings.loadSettings.mockReturnValue(loaded({ theme: 'light' }, { apiHeaders: { 'x-token': 'newXYZ' } }));
             await emitChange();
 
-            expect(infoLines()).toContain('  • apiHeaders: [REDACTED] → [REDACTED]');
+            expect(infoLines()).toContain('  • auth.apiHeaders: [REDACTED] → [REDACTED]');
             expect(loggedText()).not.toContain('newXYZ');
         });
 
         test('a nested apiHeaders value and a nested credential key are masked', async () => {
             settings.loadSettings.mockReturnValue(
-                invalid({ apiHeaders: { 'x-token': 'oldABC', ua: 'oldUA' }, auth: { password: 'oldPW' } }),
+                loaded({ network: { password: 'oldPW' } }, { apiHeaders: { 'x-token': 'oldABC', ua: 'oldUA' } }),
             );
             watchSettingsFile(deps());
 
             settings.loadSettings.mockReturnValue(
-                invalid({ apiHeaders: { 'x-token': 'newXYZ', ua: 'newUA' }, auth: { password: 'newPW' } }),
+                loaded({ network: { password: 'newPW' } }, { apiHeaders: { 'x-token': 'newXYZ', ua: 'newUA' } }),
             );
             await emitChange();
 
             expect(infoLines()).toEqual([
                 '🔄 Settings changed (no reload required):',
-                '  • apiHeaders.x-token: [REDACTED] → [REDACTED]',
-                '  • apiHeaders.ua: [REDACTED] → [REDACTED]',
-                '  • auth.password: [REDACTED] → [REDACTED]',
+                '  • app.network.password: [REDACTED] → [REDACTED]',
+                '  • auth.apiHeaders.x-token: [REDACTED] → [REDACTED]',
+                '  • auth.apiHeaders.ua: [REDACTED] → [REDACTED]',
             ]);
             expect(loggedText()).not.toMatch(/oldABC|newXYZ|oldUA|newUA|oldPW|newPW/);
         });
@@ -353,61 +358,60 @@ describe('watchSettingsFile change detection', () => {
         const loggedText = () => infoLines().join('\n');
 
         test('a chooser save logs the photo counts, never the ids', async () => {
-            settings.loadSettings.mockReturnValue(
-                invalid({ chosenPhotos: ['p-old-1'], challengeSettings: { perChallenge: {} } }),
-            );
+            settings.loadSettings.mockReturnValue(loaded({ chosenPhotos: ['p-old-1'] }, {}, { challenges: {} }));
             watchSettingsFile(deps());
 
             settings.loadSettings.mockReturnValue(
-                invalid({
-                    chosenPhotos: ['p-old-1', 'p-new-2', 'p-new-3'],
-                    challengeSettings: { perChallenge: { 7: { chosenPhotos: ['p-ch-1'] } } },
-                }),
+                loaded(
+                    { chosenPhotos: ['p-old-1', 'p-new-2', 'p-new-3'] },
+                    {},
+                    { challenges: { 7: { values: { chosenPhotos: ['p-ch-1'] } } } },
+                ),
             );
             await emitChange();
 
-            expect(infoLines()).toContain('  • chosenPhotos: 1 photo(s) → 3 photo(s)');
-            expect(infoLines()).toContain('  • challengeSettings.perChallenge.7: null → {"chosenPhotos":"1 photo(s)"}');
+            expect(infoLines()).toContain('  • app.chosenPhotos: 1 photo(s) → 3 photo(s)');
+            expect(infoLines()).toContain('  • challenges.7: null → {"values":{"chosenPhotos":"1 photo(s)"}}');
             expect(loggedText()).not.toMatch(/p-old|p-new|p-ch/);
         });
 
         test('a clear logs the counts going to zero', async () => {
             settings.loadSettings.mockReturnValue(
-                invalid({ challengeSettings: { perChallenge: { 7: { chosenPhotos: ['p-ch-1', 'p-ch-2'] } } } }),
+                loaded({}, {}, { challenges: { 7: { values: { chosenPhotos: ['p-ch-1', 'p-ch-2'] } } } }),
             );
             watchSettingsFile(deps());
 
             settings.loadSettings.mockReturnValue(
-                invalid({ challengeSettings: { perChallenge: { 7: { chosenPhotos: [] } } } }),
+                loaded({}, {}, { challenges: { 7: { values: { chosenPhotos: [] } } } }),
             );
             await emitChange();
 
-            expect(infoLines()).toContain('  • challengeSettings.perChallenge.7.chosenPhotos: 2 photo(s) → 0 photo(s)');
+            expect(infoLines()).toContain('  • challenges.7.values.chosenPhotos: 2 photo(s) → 0 photo(s)');
             expect(loggedText()).not.toContain('p-ch');
         });
 
         test('a username change and a new chooser owner are masked on both sides', async () => {
             settings.loadSettings.mockReturnValue(
-                invalid({ lastUsername: 'old@example.com', chosenPhotosMemberId: 'member-old' }),
+                loaded({}, { lastUsername: 'old@example.com', chosenPhotosMemberId: 'member-old' }),
             );
             watchSettingsFile(deps());
 
             settings.loadSettings.mockReturnValue(
-                invalid({ lastUsername: 'new@example.com', chosenPhotosMemberId: 'member-new' }),
+                loaded({}, { lastUsername: 'new@example.com', chosenPhotosMemberId: 'member-new' }),
             );
             await emitChange();
 
             expect(infoLines()).toEqual([
                 '🔄 Settings changed (no reload required):',
-                '  • lastUsername: [REDACTED] → [REDACTED]',
-                '  • chosenPhotosMemberId: [REDACTED] → [REDACTED]',
+                '  • auth.lastUsername: [REDACTED] → [REDACTED]',
+                '  • auth.chosenPhotosMemberId: [REDACTED] → [REDACTED]',
             ]);
             expect(loggedText()).not.toMatch(/example\.com|member-/);
         });
     });
 
     test('a write with no property differences neither reloads nor broadcasts', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ theme: 'light' }));
+        settings.loadSettings.mockReturnValue(loaded({ theme: 'light' }));
         watchSettingsFile(deps());
 
         await emitChange();
@@ -424,7 +428,7 @@ describe('watchSettingsFile change detection', () => {
         watchSettingsFile(deps());
         expect(mockLog.error).toHaveBeenCalledWith('Failed to load initial settings for comparison:', 'EACCES');
 
-        settings.loadSettings.mockReturnValue(invalid({ theme: 'dark' }));
+        settings.loadSettings.mockReturnValue(loaded({ theme: 'dark' }));
         await emitChange();
 
         expect(infoLines()).toEqual(['🔄 Settings file changed, reloading main window...']);
@@ -432,18 +436,18 @@ describe('watchSettingsFile change detection', () => {
     });
 
     test('debounces bursts into one handler run and ignores the other files of the directory', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ n: 1 }));
+        settings.loadSettings.mockReturnValue(loaded({ n: 1 }));
         watchSettingsFile(deps());
         settings.loadSettings.mockClear();
 
         // A save in progress (its temp file) and the other stores are not the settings.
-        mockWatchHandlers.at(-1)!('rename', 'settings.json.123.abcd1234.tmp');
+        mockWatchHandlers.at(-1)!('rename', 'config.json.123.abcd1234.tmp');
         mockWatchHandlers.at(-1)!('change', 'metadata.json');
         jest.advanceTimersByTime(1000);
         expect(settings.loadSettings).not.toHaveBeenCalled();
 
-        settings.loadSettings.mockReturnValue(invalid({ n: 2 }));
-        mockWatchHandlers.at(-1)!('change', 'settings.json');
+        settings.loadSettings.mockReturnValue(loaded({ n: 2 }));
+        mockWatchHandlers.at(-1)!('change', 'config.json');
         jest.advanceTimersByTime(200);
         await emitChange();
 
@@ -453,12 +457,12 @@ describe('watchSettingsFile change detection', () => {
 
     // The file is replaced by a rename on every save: the directory reports that as a rename of its name.
     test.each([
-        ['a rename of the settings file (the atomic save)', 'rename', 'settings.json'],
+        ['a rename of the settings file (the atomic save)', 'rename', 'config.json'],
         ['an event that names no file', 'change', null],
     ] as const)('reacts to %s', async (_name, event, fileName) => {
-        settings.loadSettings.mockReturnValue(invalid({ n: 1 }));
+        settings.loadSettings.mockReturnValue(loaded({ n: 1 }));
         watchSettingsFile(deps());
-        settings.loadSettings.mockReturnValue(invalid({ n: 2 }));
+        settings.loadSettings.mockReturnValue(loaded({ n: 2 }));
 
         mockWatchHandlers.at(-1)!(event, fileName);
         jest.advanceTimersByTime(500);
@@ -468,7 +472,7 @@ describe('watchSettingsFile change detection', () => {
     });
 
     test('a non-Error observer throw is reported by value', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ n: 1 }));
+        settings.loadSettings.mockReturnValue(loaded({ n: 1 }));
         watchSettingsFile(
             deps({
                 onSettingsChanged: () => {
@@ -477,14 +481,14 @@ describe('watchSettingsFile change detection', () => {
             }),
         );
 
-        settings.loadSettings.mockReturnValue(invalid({ n: 2 }));
+        settings.loadSettings.mockReturnValue(loaded({ n: 2 }));
         await emitChange();
 
         expect(mockLog.warning).toHaveBeenCalledWith('Settings observer failed: observer said no');
     });
 
     test('without an observer the young-window guard does not re-read the file', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ n: 1 }));
+        settings.loadSettings.mockReturnValue(loaded({ n: 1 }));
         watchSettingsFile(deps({ getMainWindowCreatedTime: () => Date.now() - 100 }));
         settings.loadSettings.mockClear();
 

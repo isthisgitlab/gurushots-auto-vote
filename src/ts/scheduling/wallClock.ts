@@ -9,7 +9,7 @@
  *
  * Failure posture (deliberate, mirrors the rest of the settings read path):
  *   - `parseTimeOfDay` type-guards its input and returns null for anything
- *     that is not a strict 'HH:MM' string — a hand-edited settings.json can
+ *     that is not a strict 'HH:MM' string — a hand-edited config.json can
  *     hold null/numbers/objects, and the voting loop must never throw on it.
  *   - `occurrencesOf` catches the RangeError Intl throws for unknown zone
  *     names and retries with 'UTC'. The guard lives HERE (not in callers)

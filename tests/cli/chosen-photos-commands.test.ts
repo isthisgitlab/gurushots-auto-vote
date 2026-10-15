@@ -43,7 +43,7 @@ const stored = (savedBy: string) =>
 beforeEach(() => {
     logger.__calls.length = 0;
     jest.clearAllMocks();
-    settings.loadSettings.mockReturnValue(invalid({ token: 'tok' }));
+    settings.loadSettings.mockReturnValue(invalid({ auth: { token: 'tok' } }));
     apiFactory.getApiStrategy.mockReturnValue(invalid({ getCurrentMemberProfile }));
     autoFill.resolveMemberId.mockResolvedValue('member-B');
     settings.getValidationError.mockReturnValue(null);
@@ -115,7 +115,7 @@ describe('beforeChosenPhotosWrite', () => {
     });
 
     test('a signed-out CLI leaves the owner unchanged', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ token: '' }));
+        settings.loadSettings.mockReturnValue(invalid({ auth: { token: '' } }));
         await stampAfterWrite('chosenPhotos', '["a"]');
         expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
         expect(settings.setSetting).not.toHaveBeenCalled();

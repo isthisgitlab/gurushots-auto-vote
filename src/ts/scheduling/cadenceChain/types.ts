@@ -10,7 +10,7 @@ import type {
     ResolveThreshold,
 } from '../thresholdWindow';
 import type { ResolveScheduledFill } from '../scheduledFill';
-import type { AppSettings } from '../../types/settings';
+import type { ConfigApp } from '../../types/config';
 
 /**
  * The host's single timer-handle slot value: Node's Timeout on Electron and the
@@ -26,9 +26,9 @@ export type CycleResult = Challenge[] | boolean | null | undefined;
 
 /**
  * The fields of a FRESH settings snapshot the chain reads (hosts hand over their
- * whole settings blob).
+ * whole `app` block).
  */
-type CadenceSettings = Pick<AppSettings, 'timezone' | 'checkFrequencyMin' | 'checkFrequencyMax'>;
+type CadenceSettings = Pick<ConfigApp, 'timezone' | 'checkFrequencyMin' | 'checkFrequencyMax'>;
 
 /**
  * The host transport `createCadenceChain` is built from (documented on the factory).

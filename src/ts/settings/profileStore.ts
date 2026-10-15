@@ -1,8 +1,8 @@
 /**
  * Pure helpers over the named challenge-settings profiles map
- * (`challengeSettings.profiles`): caps, name normalization and lookup, and
+ * (`profiles`): caps, name normalization and lookup, and
  * schema sanitization of a profile's values. No persistence — the callers in
- * profiles.ts / titleRules.ts / migrations.ts own the load/save.
+ * profiles.ts / titleRules.ts own the load/save.
  *
  * Profiles are stored as `{ [displayName]: { [settingKey]: value } }` —
  * name-keyed, NOT challenge-id-keyed, because ids rotate and id-keyed state
@@ -17,7 +17,7 @@ import { challengeValueSetIsValid } from './defaults';
 import { loggableSettingValue } from './logValue';
 import { isDroppedOffValue } from './ruleBehaviour';
 
-import type { AppSettings, ChallengeValues } from '../types/settings';
+import type { ChallengeValues } from '../types/settings';
 
 const MAX_CHALLENGE_PROFILES = 50;
 const MAX_PROFILE_NAME_LENGTH = 60;
@@ -38,15 +38,6 @@ const profileNameForLog = (name: unknown): string =>
     String(name)
         .replace(/[\r\n\t]/g, ' ')
         .slice(0, 80);
-
-/**
- * Returns the stored profiles map when it is a plain object, else `{}`.
- * Never returns arrays or primitives from a corrupted blob.
- */
-const readProfilesMap = (settings: AppSettings): Record<string, ChallengeValues> => {
-    const stored = settings.challengeSettings?.profiles;
-    return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
-};
 
 /**
  * Find the stored key of the profile matching a normalized name, skipping
@@ -149,7 +140,6 @@ export {
     RESERVED_PROFILE_NAMES,
     normalizeProfileName,
     profileNameForLog,
-    readProfilesMap,
     findProfileKey,
     sanitizeProfileValues,
 };

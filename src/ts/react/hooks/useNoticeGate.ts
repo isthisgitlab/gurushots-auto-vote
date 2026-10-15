@@ -34,7 +34,7 @@ export function useNoticeGate(
     updateSetting: (key: 'noticeAcknowledgedVersion', value: number) => Promise<void>,
 ): NoticeGate {
     const [state, setState] = useState<'checking' | 'open' | 'done'>('checking');
-    const acknowledged = settings?.noticeAcknowledgedVersion;
+    const acknowledged = settings?.app.noticeAcknowledgedVersion;
 
     useEffect(() => {
         if (settingsLoading) return;

@@ -31,8 +31,13 @@ export const listSettings = (challengeId: string | null = null) => {
             return;
         }
 
-        const userSettings = settings.loadSettings();
-        const defaultSettings = getDefaultSettings();
+        // The app settings and the sign-in state, by their keys: the challenge settings have listings of their own.
+        const flat = (config: ReturnType<typeof settings.loadSettings>): Record<string, unknown> => ({
+            ...config.app,
+            ...config.auth,
+        });
+        const userSettings = flat(settings.loadSettings());
+        const defaultSettings = flat(getDefaultSettings());
 
         logger.printLine('=== All Settings ===');
 
@@ -84,7 +89,7 @@ export const dumpSchema = () => {
  * or schema default). Shared by `pnpm settings:global-defaults`.
  */
 export const listGlobalDefaults = () => {
-    const stored = settings.loadSettings().challengeSettings?.globalDefaults || {};
+    const stored = settings.loadSettings().defaults;
     logger.printLine('Global Defaults for Schema Settings:');
     logger.printLine('===================================');
     Object.entries(settings.SETTINGS_SCHEMA).forEach(([key, config]) => {

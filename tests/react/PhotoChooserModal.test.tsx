@@ -1777,7 +1777,7 @@ describe('the cached listing, its preview and Refresh', () => {
         ['Europe/Riga', /^Photos as of 15\/11\/2023, 00:13$/],
         ['America/New_York', /^Photos as of 14\/11\/2023, 17:13$/],
     ])('the “as of” line is written in the timezone the settings name (%s)', async (timezone, line) => {
-        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ timezone }));
+        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { timezone } }));
         getLibrary().mockResolvedValue(listing([photo(1)], { readAtMs: 1_700_000_000_000 }));
         setup();
         expect(await screen.findByText(line)).toBeTruthy();
@@ -1786,13 +1786,13 @@ describe('the cached listing, its preview and Refresh', () => {
     test('the “as of” line falls back to the device’s time for “local” and for a timezone that is not valid, and to Riga when none is set', async () => {
         getLibrary().mockResolvedValue(listing([photo(1)], { readAtMs: 1_700_000_000_000 }));
         const pattern = /^Photos as of \d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}$/;
-        for (const settings of [{ timezone: 'local' }, { timezone: 'Not/AZone' }]) {
-            jest.mocked(window.api.getSettings).mockResolvedValue(invalid(settings));
+        for (const app of [{ timezone: 'local' }, { timezone: 'Not/AZone' }]) {
+            jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app }));
             const { unmount } = setup();
             expect(await screen.findByText(pattern)).toBeTruthy();
             unmount();
         }
-        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({}));
+        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: {} }));
         setup();
         expect(await screen.findByText(/^Photos as of 15\/11\/2023, 00:13$/)).toBeTruthy();
     });

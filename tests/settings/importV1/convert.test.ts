@@ -4,7 +4,7 @@
  * reported as blocked.
  */
 
-import { convertV1Blob } from '../../../src/ts/settings/importV1/convert';
+import { convertV1Blob, TOP_LEVEL_ONLY_KEYS } from '../../../src/ts/settings/importV1/convert';
 import { getV1Defaults } from '../../../src/ts/settings/importV1/defaults';
 import { V1_MIGRATION_FLAGS } from '../../../src/ts/settings/importV1/migrations';
 import { V1_REFUSED_KEY_PREFIX } from '../../../src/ts/settings/importV1/renames';
@@ -17,7 +17,8 @@ const blobWith = (challengeSettings: Values = {}, top: Values = {}): V1Blob => {
     const base = getV1Defaults();
     return { ...base, ...top, challengeSettings: { ...base.challengeSettings, ...challengeSettings } };
 };
-const convert = (challengeSettings: Values = {}, top: Values = {}) => convertV1Blob(blobWith(challengeSettings, top));
+const convert = (challengeSettings: Values = {}, top: Values = {}, mockStored = true) =>
+    convertV1Blob(blobWith(challengeSettings, top), { mockStored });
 const refs = (challengeSettings: Values = {}, top: Values = {}) => convert(challengeSettings, top).report.refsBlocked;
 
 describe('the sign-in state and the app preferences', () => {
@@ -69,6 +70,43 @@ describe('the sign-in state and the app preferences', () => {
         expect(config.app).not.toHaveProperty('challengeSettings');
         expect(config.version).toBe(2);
         expect(config).not.toHaveProperty('imported');
+    });
+
+    test('a mock value is carried only when the 1.x file held one, so the build default applies otherwise', () => {
+        expect(convert({}, { mock: true }, true).config.app.mock).toBe(true);
+        expect(convert({}, { mock: false }, true).config.app.mock).toBe(false);
+        const { config } = convert({}, { mock: true, theme: 'dark' }, false);
+        expect(config.app).not.toHaveProperty('mock');
+        expect(config.app.theme).toBe('dark');
+    });
+
+    test('the app-state flags 1.x read only from the top level have no copy among the defaults', () => {
+        expect([...TOP_LEVEL_ONLY_KEYS].sort()).toEqual([
+            'autovoteRunning',
+            'autovoteStartedLaunch',
+            'chosenPhotosClearedAt',
+            'chosenPhotosMemberId',
+            'noticeAcknowledgedVersion',
+            'skipUpdateVersion',
+        ]);
+        const { config } = convert(
+            {
+                globalDefaults: {
+                    ...getV1Defaults().challengeSettings.globalDefaults,
+                    exposure: 80,
+                    autovoteRunning: true,
+                },
+            },
+            { autovoteRunning: true, skipUpdateVersion: '2.0', noticeAcknowledgedVersion: 3 },
+        );
+        for (const key of TOP_LEVEL_ONLY_KEYS) expect(config.defaults).not.toHaveProperty(key);
+        expect(config.defaults).toMatchObject({ exposure: 80 });
+        // The top-level values themselves are the app's (and `chosenPhotosMemberId` the account's).
+        expect(config.app).toMatchObject({
+            autovoteRunning: true,
+            skipUpdateVersion: '2.0',
+            noticeAcknowledgedVersion: 3,
+        });
     });
 
     test('a top-level key to rename is renamed', () => {

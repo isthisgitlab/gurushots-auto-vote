@@ -1,5 +1,5 @@
 /**
- * The settings-recovery notice: a damaged settings file moved aside, or one that cannot be read or brought up to date.
+ * The settings-recovery notice: a damaged settings file moved aside, a file that cannot be read, or 1.x settings that could not be imported.
  * Each reads as what happened / why (with the file's path) / what next, and can be dismissed for the session.
  */
 
@@ -28,15 +28,15 @@ describe('SettingsRecoveryNotice', () => {
     test.each([
         ['settings-corrupt', 'Corrupt'],
         ['settings-unreadable', 'Unreadable'],
-        ['settings-migration-failed', 'Migration'],
+        ['settings-import-failed', 'Import'],
     ])('%s says what happened, why with the path, and what next', async (code, key) => {
         mockTranslator.t.mockImplementation((text) => (text === `notice.recovery${key}Why` ? 'Why at {path}' : text));
-        answer({ code, path: '/data/settings.json.corrupt-1' });
+        answer({ code, path: '/data/config.json.corrupt-1' });
         render(<SettingsRecoveryNotice />);
 
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toContain(`notice.recovery${key}What`);
-        expect(alert.textContent).toContain('Why at /data/settings.json.corrupt-1');
+        expect(alert.textContent).toContain('Why at /data/config.json.corrupt-1');
         expect(alert.textContent).toContain(`notice.recovery${key}Next`);
     });
 
@@ -48,7 +48,7 @@ describe('SettingsRecoveryNotice', () => {
         [undefined, 'recoveryDroppedWhyUnknown', 'recoveryDroppedNext'],
         ['constructor', 'recoveryDroppedWhyUnknown', 'recoveryDroppedNext'],
     ])('a dropped save with cause %s words its why (%s) and next (%s) by that cause', async (cause, why, next) => {
-        answer({ code: 'settings-save-dropped', path: 'gurushots-settings', cause });
+        answer({ code: 'settings-save-dropped', path: 'gurushots-config', cause });
         render(<SettingsRecoveryNotice />);
 
         const alert = await screen.findByRole('alert');
@@ -60,9 +60,9 @@ describe('SettingsRecoveryNotice', () => {
     });
 
     test.each([
-        ['settings-corrupt', 'Corrupt', 'gurushots-settings_corrupt'],
-        ['settings-unreadable', 'Unreadable', 'gurushots-settings'],
-        ['settings-migration-failed', 'Migration', 'gurushots-settings'],
+        ['settings-corrupt', 'Corrupt', 'gurushots-config_corrupt'],
+        ['settings-unreadable', 'Unreadable', 'gurushots-config'],
+        ['settings-import-failed', 'Import', 'gurushots-settings'],
     ])('%s on Android names no file and asks for no step on one', async (code, key, path) => {
         (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
         answer({ code, path });
@@ -77,7 +77,7 @@ describe('SettingsRecoveryNotice', () => {
 
     test('a dropped save words the same on Android as elsewhere', async () => {
         (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
-        answer({ code: 'settings-save-dropped', path: 'gurushots-settings', cause: 'storage' });
+        answer({ code: 'settings-save-dropped', path: 'gurushots-config', cause: 'storage' });
         render(<SettingsRecoveryNotice />);
 
         expect((await screen.findByRole('alert')).textContent).toContain('notice.recoveryDroppedWhyStorage');

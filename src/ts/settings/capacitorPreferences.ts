@@ -1,6 +1,6 @@
 /**
- * The @capacitor/preferences plugin, lazy-required so non-Capacitor bundles never resolve it, and the removal of the
- * keys the stores persisted under.
+ * The @capacitor/preferences plugin, lazy-required so non-Capacitor bundles never resolve it, and the listing and
+ * removal of the keys the stores persisted under.
  */
 
 import type { PreferencesPlugin } from '@capacitor/preferences';
@@ -23,4 +23,9 @@ const removePreferenceKeys = async (keys: readonly string[]): Promise<void> => {
     for (const key of keys) await preferences.remove({ key });
 };
 
-export { getCapacitorPreferences, removePreferenceKeys };
+/**
+ * The Preferences keys that exist (Capacitor), so the ones a store names with a time (its set-aside copies) can be found.
+ */
+const listPreferenceKeys = async (): Promise<string[]> => (await getCapacitorPreferences().keys()).keys;
+
+export { getCapacitorPreferences, listPreferenceKeys, removePreferenceKeys };

@@ -206,7 +206,7 @@ jest.mock('../../src/ts/settings', () => ({
     __esModule: true,
     getWindowBounds: jest.fn((kind) => ({ width: 800, height: 600, x: kind === 'main' ? 10 : 20, y: 30 })),
     saveWindowBounds: jest.fn(),
-    loadSettings: jest.fn(() => ({ token: 't' })),
+    loadSettings: jest.fn(() => ({ app: { stayLoggedIn: false }, auth: { token: 't' } })),
     getSetting: jest.fn(() => false),
     setSetting: jest.fn(),
     getUserDataPath: jest.fn(() => '/tmp/userData'),
@@ -415,7 +415,7 @@ describe('module bootstrap', () => {
         // before-quit is still registered, but told there is no lock.
         m.app.handlers['before-quit']({ preventDefault: jest.fn() });
         expect(m.lifecycle.clearTokenOnQuit).toHaveBeenCalledWith(false, m.settings);
-        // Nor does it ask about boosts — that would read the primary's settings.json.
+        // Nor does it ask about boosts — that would read the primary's config.json.
         expect(m.quitGuard.holdQuitForOpenBoosts).not.toHaveBeenCalled();
     });
 });
@@ -448,7 +448,7 @@ describe('startup (whenReady)', () => {
         // Prime the fresh registry's mocks before the entry point runs.
         jest.resetModules();
         const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
-        settings.loadSettings.mockReturnValue(invalid({ token: 't', stayLoggedIn: true }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { stayLoggedIn: true }, auth: { token: 't' } }));
         const AU = jest.mocked(
             require('../../src/ts/services/AutoUpdater') as typeof import('../../src/ts/services/AutoUpdater'),
         ).AutoUpdater;
@@ -476,7 +476,7 @@ describe('startup (whenReady)', () => {
     it('logs (and survives) a failing update check and a failing intent seed', async () => {
         jest.resetModules();
         const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
-        settings.loadSettings.mockReturnValue(invalid({ token: 't', stayLoggedIn: true }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { stayLoggedIn: true }, auth: { token: 't' } }));
         const seedErr = new Error('seed');
         settings.seedIntentProfiles.mockImplementation(() => {
             throw seedErr;
@@ -750,12 +750,12 @@ describe('main window', () => {
             expect(typeof deps.getMainWindowCreatedTime()).toBe('number');
 
             m.bg.syncBackgroundActivity.mockClear();
-            deps.onSettingsChanged!(invalid({ autovoteRunning: true }));
-            deps.onSettingsChanged!(invalid({ autovoteRunning: 'yes' }));
+            deps.onSettingsChanged!(invalid({ app: { autovoteRunning: true } }));
+            deps.onSettingsChanged!(invalid({ app: { autovoteRunning: 'yes' } }));
             expect(m.bg.syncBackgroundActivity.mock.calls).toEqual([[true], [false]]);
 
             win.destroyed = true;
-            deps.onSettingsChanged!(invalid({ autovoteRunning: true }));
+            deps.onSettingsChanged!(invalid({ app: { autovoteRunning: true } }));
             expect(m.bg.syncBackgroundActivity).toHaveBeenCalledTimes(2);
         });
 
@@ -770,7 +770,7 @@ describe('main window', () => {
             expect(m.bg.syncBackgroundActivity).toHaveBeenCalledWith(false);
             expect(deps.getMainWindow()).toBeNull();
 
-            deps.onSettingsChanged!(invalid({ autovoteRunning: true }));
+            deps.onSettingsChanged!(invalid({ app: { autovoteRunning: true } }));
             expect(m.bg.syncBackgroundActivity).toHaveBeenCalledTimes(1);
         });
 
@@ -894,7 +894,7 @@ describe('login-success IPC', () => {
     });
 
     it('does nothing without a login token', () => {
-        m.settings.loadSettings.mockReturnValue(invalid({ token: '' }));
+        m.settings.loadSettings.mockReturnValue(invalid({ auth: { token: '' } }));
         const login = loginWin()!;
         m.ipcMain.handlers['login-success']({});
         expect(login.close).not.toHaveBeenCalled();

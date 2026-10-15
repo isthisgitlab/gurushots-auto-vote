@@ -56,7 +56,7 @@ const buildChallenge = ({
 };
 
 const setToken = (token: string | null) => {
-    settings.loadSettings = jest.fn().mockReturnValue({ token });
+    settings.loadSettings = jest.fn().mockReturnValue({ auth: { token } });
 };
 
 const stubStrategy = (challenges: Challenge[] | null) => {

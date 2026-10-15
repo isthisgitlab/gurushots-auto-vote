@@ -78,7 +78,7 @@ beforeEach(() => {
             defaults: {},
         }),
     );
-    jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ token: 'tok' }));
+    jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: {} }));
     jest.mocked(window.api.getActiveChallenges).mockResolvedValue({ challenges: [invalid({ id: 7, title: 'Show' })] });
     window.api.saveScenario = invalid(
         jest.fn(async (draft: ScenarioDraft) => {

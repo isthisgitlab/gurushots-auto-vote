@@ -172,7 +172,7 @@ describe('storage — capacitor write-behind', () => {
         capStorage.writeRaw('B');
 
         await expect(flushPendingWrites()).resolves.toBeUndefined();
-        expect(mockPrefSet).toHaveBeenLastCalledWith({ key: 'gurushots-settings', value: 'B' });
+        expect(mockPrefSet).toHaveBeenLastCalledWith({ key: 'gurushots-config', value: 'B' });
     });
 
     test('a failed write is swallowed and does not break the chain for the next write', async () => {
@@ -183,7 +183,7 @@ describe('storage — capacitor write-behind', () => {
         await expect(flushPendingWrites()).resolves.toBeUndefined();
         // The second write carries its own change (b), not the first's, which was not saved.
         expect(mockPrefSet).toHaveBeenLastCalledWith({
-            key: 'gurushots-settings',
+            key: 'gurushots-config',
             value: JSON.stringify({ b: 2 }, null, 2),
         });
         expect(capStorage.readRaw()).toBe(JSON.stringify({ b: 2 }, null, 2));

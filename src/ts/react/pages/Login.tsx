@@ -15,6 +15,7 @@ import { useNoticeGate } from '@/hooks/useNoticeGate';
 import { UnofficialNoticeModal } from '@/components/app/UnofficialNoticeModal';
 import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice';
 import { ipcErrorText } from '@/api/ipcErrorText';
+import * as ipc from '@/api/ipc';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 
 /**
@@ -36,12 +37,15 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
 
     useEffect(() => {
         if (settings) {
-            setTheme(settings.theme || 'light');
-            setStayLoggedIn(settings.stayLoggedIn || false);
+            setTheme(settings.app.theme || 'light');
+            setStayLoggedIn(settings.app.stayLoggedIn || false);
 
-            // Pre-fill username if stay logged in is enabled
-            if (settings.stayLoggedIn && settings.lastUsername) {
-                setInitialUsername(settings.lastUsername);
+            // Pre-fill username if stay logged in is enabled. The saved name is part of the sign-in state, which the
+            // settings the renderer is handed leave out: it is read on its own.
+            if (settings.app.stayLoggedIn) {
+                void ipc.getSetting('lastUsername').then((saved) => {
+                    if (typeof saved === 'string' && saved !== '') setInitialUsername(saved);
+                });
             }
         }
     }, [settings]);
@@ -66,12 +70,8 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
     const handleStayLoggedInChange = useCallback(
         async (value: boolean) => {
             setStayLoggedIn(value);
+            // Turning it off also clears the saved username: the main process does that with the write.
             await updateSetting('stayLoggedIn', value);
-
-            // Clear saved username if toggling off
-            if (!value) {
-                await updateSetting('lastUsername', '');
-            }
         },
         [updateSetting],
     );
@@ -89,18 +89,14 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
             const result = await authenticate(username, password, mockMode);
 
             if (result.success) {
-                // Save username if stay logged in is enabled
-                if (stayLoggedIn) {
-                    await updateSetting('lastUsername', username);
-                }
-
+                // The main process saved the username when stay logged in is on, as part of the login.
                 await updateSetting('mock', mockMode);
 
                 // Transition to main window
                 await login();
             }
         },
-        [authenticate, login, mockMode, stayLoggedIn, updateSetting],
+        [authenticate, login, mockMode, updateSetting],
     );
 
     // A failure the shell reported before any login attempt shows until an attempt answers.

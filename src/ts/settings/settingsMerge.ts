@@ -1,13 +1,13 @@
 /**
- * Makes a settings change again on a settings blob that another writer (the Android app window or its background
+ * Makes a settings change again on a settings document that another writer (the Android app window or its background
  * service) saved meanwhile: a three-way merge of the text the change was made on (`base`), the changed text (`ours`)
  * and what is stored now (`theirs`). Only what `ours` changed against `base` is applied, so a setting the other
  * writer changed is kept; where both changed one value, `ours` wins.
  *
- * `ours` is the blob persistence writes: the stored values over the defaults, with the values a load rejects replaced
- * by their defaults. `base` and `theirs` are normalised the same way before they are compared, so a setting that is
- * absent from the stored text but filled by its default in `ours`, or a stored value the load replaced, is not a
- * change `ours` made.
+ * `ours` is the configuration persistence writes: the stored values over the defaults, with the values a load rejects
+ * replaced by their defaults. `base` and `theirs` are normalised the same way before they are compared (the file
+ * `rebaseConfigText` merges; the legacy settings file is merged as it is), so a setting that is absent from the stored
+ * text but filled by its default in `ours`, or a stored value the load replaced, is not a change `ours` made.
  */
 
 import { isPlainObject } from '../plainObject';
@@ -51,12 +51,23 @@ const parseObject = (text: string | null, what: string): Record<string, unknown>
     return parsed;
 };
 
-// A stored text as the load would have made of it: over the defaults, without the values it rejects, as the text `ours`
+// A stored config text as the load would have made of it: filled, without the values it rejects, as the text `ours`
 // was made from.
-const parseStored = (text: string | null, what: string): Record<string, unknown> => {
-    const settings = mergeWithDefaults(parseObject(text, what));
-    dropInvalidValues(settings);
-    return { ...settings };
+const parseConfig = (text: string | null, what: string): Record<string, unknown> => {
+    const config = mergeWithDefaults(parseObject(text, what));
+    dropInvalidValues(config);
+    return { ...config };
+};
+
+type Normalize = (text: string | null, what: string) => Record<string, unknown>;
+
+const rebase = (normalize: Normalize, base: string | null, ours: string, theirs: string | null): string => {
+    if (theirs === base) return ours;
+    return JSON.stringify(
+        merge(normalize(base, 'earlier'), parseObject(ours, 'new'), normalize(theirs, 'stored')),
+        null,
+        2,
+    );
 };
 
 /**
@@ -67,11 +78,9 @@ const parseStored = (text: string | null, what: string): Record<string, unknown>
  * @param theirs - what is stored now (null: nothing is)
  * @throws when `base` or `theirs` is not one JSON object: what is stored is unreadable, and is not overwritten
  */
-export const rebaseSettingsText = (base: string | null, ours: string, theirs: string | null): string => {
-    if (theirs === base) return ours;
-    return JSON.stringify(
-        merge(parseStored(base, 'earlier'), parseObject(ours, 'new'), parseStored(theirs, 'stored')),
-        null,
-        2,
-    );
-};
+export const rebaseConfigText = (base: string | null, ours: string, theirs: string | null): string =>
+    rebase(parseConfig, base, ours, theirs);
+
+/** `rebaseConfigText` for a JSON object that is merged as it is, with no defaults (the legacy settings file). */
+export const rebaseJsonText = (base: string | null, ours: string, theirs: string | null): string =>
+    rebase(parseObject, base, ours, theirs);

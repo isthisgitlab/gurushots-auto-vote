@@ -35,9 +35,9 @@ describe('pass-through wrappers', () => {
     });
 
     test('resolve the bridge at call time, not import time', async () => {
-        const getSettings = jest.fn().mockResolvedValue({ token: 'late' });
+        const getSettings = jest.fn().mockResolvedValue({ app: {} });
         window.api = invalid({ getSettings });
-        await expect(ipc.getSettings()).resolves.toEqual({ token: 'late' });
+        await expect(ipc.getSettings()).resolves.toEqual({ app: {} });
         expect(getSettings).toHaveBeenCalledTimes(1);
     });
 

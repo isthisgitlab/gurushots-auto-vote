@@ -167,7 +167,12 @@ describe('focusExistingWindow', () => {
 
 describe('clearTokenOnQuit', () => {
     const settingsFacade = (userSettings: { stayLoggedIn?: boolean; token: string }) => ({
-        loadSettings: jest.fn(() => invalid<ReturnType<typeof settingsModule.loadSettings>>(userSettings)),
+        loadSettings: jest.fn(() =>
+            invalid<ReturnType<typeof settingsModule.loadSettings>>({
+                app: { stayLoggedIn: userSettings.stayLoggedIn },
+                auth: { token: userSettings.token },
+            }),
+        ),
         setSetting: jest.fn(),
     });
 

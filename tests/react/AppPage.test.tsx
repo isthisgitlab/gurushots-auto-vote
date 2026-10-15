@@ -120,7 +120,9 @@ describe('App page', () => {
         originals = Object.fromEntries(API_METHODS.map((m) => [m, window.api[m]]));
         window.api.getSettings = jest
             .fn()
-            .mockResolvedValue({ onboardingCompleted: true, noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION });
+            .mockResolvedValue({
+                app: { onboardingCompleted: true, noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION },
+            });
         window.api.setSetting = jest.fn().mockResolvedValue(undefined);
         (window.api as { logout: WindowApi['logout'] }).logout = jest.fn().mockResolvedValue(undefined);
         window.api.logError = jest.fn().mockResolvedValue(undefined);
@@ -150,12 +152,14 @@ describe('App page', () => {
         mockChallenges.challenges = invalid([{ id: 1, close_time: 1 }]);
         jest.mocked(window.api.getSettings).mockResolvedValue(
             invalid({
-                theme: 'dark',
+                app: {
+                    theme: 'dark',
+                    mock: true,
+                    timezone: 'Europe/Riga',
+                    onboardingCompleted: true,
+                    noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION,
+                },
                 hasToken: true,
-                mock: true,
-                timezone: 'Europe/Riga',
-                onboardingCompleted: true,
-                noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION,
             }),
         );
         await renderReady();
@@ -180,7 +184,7 @@ describe('App page', () => {
 
     test('empty settings fall back to defaults and leave the theme untouched', async () => {
         jest.mocked(window.api.getSettings).mockResolvedValue(
-            invalid({ onboardingCompleted: true, noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION }),
+            invalid({ app: { onboardingCompleted: true, noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION } }),
         );
         await renderReady();
         expect(document.documentElement.getAttribute('data-theme')).toBeNull();
@@ -190,7 +194,7 @@ describe('App page', () => {
 
     test('first run opens the welcome once; closing persists onboardingCompleted', async () => {
         jest.mocked(window.api.getSettings).mockResolvedValue(
-            invalid({ noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION }),
+            invalid({ app: { noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION } }),
         );
         await renderReady();
         await waitFor(() => expect(mockProps.WelcomeModal.isOpen).toBe(true));
@@ -208,7 +212,7 @@ describe('App page', () => {
         [undefined, 'Failed to persist onboardingCompleted: undefined'],
     ])('a failed welcome persist is logged and does not reopen (%p)', async (err, logged) => {
         jest.mocked(window.api.getSettings).mockResolvedValue(
-            invalid({ noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION }),
+            invalid({ app: { noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION } }),
         );
         await renderReady();
         await waitFor(() => expect(mockProps.WelcomeModal.isOpen).toBe(true));
@@ -226,14 +230,14 @@ describe('App page', () => {
 
     describe('the unofficial-app notice', () => {
         const upgradedWithAutoLogin = (noticeAcknowledgedVersion?: number) =>
-            jest.mocked(window.api.getSettings).mockResolvedValue(
-                invalid({
-                    hasToken: true,
-                    stayLoggedIn: true,
-                    onboardingCompleted: true,
-                    noticeAcknowledgedVersion,
-                }),
-            );
+            jest
+                .mocked(window.api.getSettings)
+                .mockResolvedValue(
+                    invalid({
+                        app: { stayLoggedIn: true, onboardingCompleted: true, noticeAcknowledgedVersion },
+                        hasToken: true,
+                    }),
+                );
 
         test('an upgrade with auto-login still shows it, once, and acknowledging persists the version', async () => {
             upgradedWithAutoLogin(CURRENT_NOTICE_VERSION - 1);
@@ -258,7 +262,7 @@ describe('App page', () => {
         });
 
         test('a brand-new profile (no stored version) is shown it before the welcome', async () => {
-            jest.mocked(window.api.getSettings).mockResolvedValue(invalid({}));
+            jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: {} }));
             await renderReady();
             expect(screen.getByRole('dialog', { name: 'notice.title' })).toBeTruthy();
             expect(mockProps.WelcomeModal.isOpen).toBe(false);

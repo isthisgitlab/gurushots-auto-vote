@@ -4,7 +4,8 @@
 
 import type * as schemaModule from '../src/ts/settings/schema';
 import type * as settingsModule from '../src/ts/settings';
-import type { AndroidHeadlessStore } from '../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from './helpers/headlessStore';
+import type { MemoryStore } from './helpers/headlessStore';
 import { CURRENT_NOTICE_VERSION } from '../src/ts/noticeVersion';
 import { isRendererHiddenKey } from '../src/ts/ipc/rendererSettings';
 
@@ -42,30 +43,18 @@ describe('noticeAcknowledgedVersion', () => {
 });
 
 describe('noticeAcknowledgedVersion through the settings facade', () => {
-    const g = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let value: string | null;
+    let store: MemoryStore;
     let settings: typeof settingsModule;
 
     beforeEach(() => {
-        value = null;
-        g.__GS_HEADLESS__ = true;
-        g.AndroidHeadlessStore = {
-            read: () => value,
-            write: (data) => {
-                value = data;
-            },
-        };
+        store = installHeadlessStore();
         jest.isolateModules(() => {
             settings = require('../src/ts/settings') as typeof settingsModule;
         });
     });
 
     afterEach(() => {
-        delete g.__GS_HEADLESS__;
-        delete g.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
     test('is unset until acknowledged and set-setting records the version', () => {
@@ -80,18 +69,18 @@ describe('noticeAcknowledgedVersion through the settings facade', () => {
         settings.setSetting('noticeAcknowledgedVersion', 1);
 
         expect(settings.setSetting('noticeAcknowledgedVersion', bad)).toBe(false);
-        expect(settings.saveSettings({ noticeAcknowledgedVersion: bad })).toBe(false);
+        expect(settings.saveAppSettings({ noticeAcknowledgedVersion: bad })).toBe(false);
 
         expect(settings.getSetting('noticeAcknowledgedVersion')).toBe(1);
     });
 
     test('a stored value that is not a non-negative integer is dropped at load', () => {
-        value = JSON.stringify({ theme: 'dark', noticeAcknowledgedVersion: -3 });
+        store.value = JSON.stringify({ app: { theme: 'dark', noticeAcknowledgedVersion: -3 } });
 
-        const loaded = settings.loadSettings();
+        const { app } = settings.loadSettings();
 
-        expect(loaded.theme).toBe('dark');
-        expect(loaded.noticeAcknowledgedVersion).toBeUndefined();
+        expect(app.theme).toBe('dark');
+        expect(app.noticeAcknowledgedVersion).toBeUndefined();
     });
 
     test('set-global-default validates it too, and it never counts as a per-challenge setting', () => {

@@ -6,8 +6,9 @@
  */
 
 import { MAX_TITLE_RULES, MAX_TITLE_LENGTH } from './titleRuleSanitize';
+import { pinnedTitleFor } from './titlePins';
 
-import type { AppSettings, ChallengeFacts, RuleMatchChallenge } from '../types/settings';
+import type { ChallengeFacts, RuleMatchChallenge } from '../types/settings';
 import type { Challenge } from '../types/gurushots';
 
 // Current id→title observations are process-local. Real API responses also
@@ -61,10 +62,10 @@ const _observedFacts = (challenge: Partial<Challenge>): ChallengeFacts => {
  * scalar ids/titles/tags/numbers enter the cache and the first row for a
  * duplicate id wins.
  *
- * Facts live here rather than in the persisted `titlePins` blob on purpose: a
+ * Facts live here rather than in the persisted title pins on purpose: a
  * pin exists to defeat a server-side RENAME mid-challenge, while facts are only
  * needed to resolve a rule for a challenge in the current list. An in-memory
- * map costs no settings-file growth and cannot go stale across restarts.
+ * map costs no file growth and cannot go stale across restarts.
  */
 const rememberChallengeTitles = (challenges: ReadonlyArray<Partial<Challenge>> | null | undefined): boolean => {
     if (!Array.isArray(challenges)) return false;
@@ -93,28 +94,19 @@ const factsForChallengeId = (challengeId: string | number | null | undefined): C
     return (id && activeChallengeFacts.get(id)) || { tags: [] };
 };
 
-const _titleForChallengeId = (settings: AppSettings, challengeId: string | number | null | undefined): string => {
+const _titleForChallengeId = (challengeId: string | number | null | undefined): string => {
     const id = _challengeIdKey(challengeId);
     if (!id) return '';
     if (activeChallengeTitles.has(id)) return activeChallengeTitles.get(id) || '';
-    const pinned = settings.challengeSettings?.titlePins;
-    return pinned &&
-        Object.prototype.hasOwnProperty.call(pinned, id) &&
-        typeof pinned[id] === 'string' &&
-        pinned[id].length < MAX_TITLE_LENGTH
-        ? pinned[id]
-        : '';
+    return pinnedTitleFor(id);
 };
 
 /**
  * The rule-match target for an id-only caller: its title plus remembered facts.
  */
-const challengeTargetForId = (
-    settings: AppSettings,
-    challengeId: string | number | null | undefined,
-): RuleMatchChallenge => ({
+const challengeTargetForId = (challengeId: string | number | null | undefined): RuleMatchChallenge => ({
     ...factsForChallengeId(challengeId),
-    title: _titleForChallengeId(settings, challengeId),
+    title: _titleForChallengeId(challengeId),
 });
 
 /** Whether the id is in the latest active-challenge list (i.e. the challenge is joined). */

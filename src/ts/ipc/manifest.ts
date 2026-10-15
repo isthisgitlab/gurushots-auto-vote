@@ -31,6 +31,9 @@ const invokeChannels = [
     'save-settings',
     'get-environment-info',
     'get-settings-recovery',
+    'retry-settings-import',
+    'start-fresh-settings',
+    'reimport-settings-from-v1',
     'get-third-party-notices',
     'wipe-local-data',
     // Voting / strategy
@@ -74,7 +77,6 @@ const invokeChannels = [
     'apply-challenge-profile',
     'cleanup-stale-challenge-setting',
     'cleanup-stale-metadata',
-    'cleanup-obsolete-settings',
     'get-settings-schema',
     'get-validation-error',
     'clear-chosen-photos',

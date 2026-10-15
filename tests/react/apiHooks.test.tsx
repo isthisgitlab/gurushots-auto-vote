@@ -543,7 +543,7 @@ describe('useSwapBacks', () => {
 describe('useActiveChallenges unserialisable payload', () => {
     test('a payload JSON.stringify cannot encode is treated as changed and still applied', async () => {
         const weird = [{ id: 1, big: 10n }];
-        mockApi.getSettings.mockResolvedValue(invalid({ token: 'tok' }));
+        mockApi.getSettings.mockResolvedValue(invalid({ app: {} }));
         mockApi.getActiveChallenges.mockResolvedValue(invalid({ challenges: weird }));
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(result.current.loading).toBe(false));
@@ -560,7 +560,7 @@ describe('useActiveChallenges unserialisable payload', () => {
     });
 
     test('an identical payload is deduped: the data reference is kept', async () => {
-        mockApi.getSettings.mockResolvedValue(invalid({ token: 'tok' }));
+        mockApi.getSettings.mockResolvedValue(invalid({ app: {} }));
         mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ challenges: [{ id: 1 }] }));
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(result.current.loading).toBe(false));
@@ -576,7 +576,7 @@ describe('useActiveChallenges unserialisable payload', () => {
 
 describe('useActiveChallenges stale cleanup', () => {
     test('a refetch with skipCleanup applies the data without any cleanup', async () => {
-        mockApi.getSettings.mockResolvedValue(invalid({ token: 'tok' }));
+        mockApi.getSettings.mockResolvedValue(invalid({ app: {} }));
         mockApi.getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 7 }] }));
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(mockApi.cleanupStaleMetadata).toHaveBeenCalledTimes(1));
@@ -596,7 +596,7 @@ describe('useActiveChallenges stale cleanup', () => {
     });
 
     test('while autovote runs, stale-settings cleanup is skipped but metadata cleanup still runs', async () => {
-        mockApi.getSettings.mockResolvedValue(invalid({ token: 'tok' }));
+        mockApi.getSettings.mockResolvedValue(invalid({ app: {} }));
         mockApi.getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 7 }] }));
         const { result } = renderHook(() => useActiveChallenges(true));
         await waitFor(() => expect(mockApi.cleanupStaleMetadata).toHaveBeenCalledWith(['7']));

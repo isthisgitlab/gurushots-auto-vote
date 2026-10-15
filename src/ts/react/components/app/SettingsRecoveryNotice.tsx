@@ -7,7 +7,7 @@ import { interp } from '@/utils/interp';
 
 import type { IpcQueryTools } from '@/api/useIpcQuery';
 
-type RecoveryCode = 'settings-corrupt' | 'settings-unreadable' | 'settings-migration-failed' | 'settings-save-dropped';
+type RecoveryCode = 'settings-corrupt' | 'settings-unreadable' | 'settings-import-failed' | 'settings-save-dropped';
 // `cause` (a save the window gave up only): why the change was dropped — `conflict` (the background service wrote at
 // the same time), `too-large` (past the size the store takes) or `storage` (the store refused it). Any other value,
 // or none, is worded neutrally.
@@ -25,10 +25,10 @@ const RECOVERY_KEYS: Record<RecoveryCode, { what: string; why: string; next: str
         why: 'notice.recoveryUnreadableWhy',
         next: 'notice.recoveryUnreadableNext',
     },
-    'settings-migration-failed': {
-        what: 'notice.recoveryMigrationWhat',
-        why: 'notice.recoveryMigrationWhy',
-        next: 'notice.recoveryMigrationNext',
+    'settings-import-failed': {
+        what: 'notice.recoveryImportWhat',
+        why: 'notice.recoveryImportWhy',
+        next: 'notice.recoveryImportNext',
     },
     'settings-save-dropped': {
         what: 'notice.recoveryDroppedWhat',
@@ -48,10 +48,7 @@ const DROPPED_WHY = new Map([
 const NO_FILE_KEYS: Partial<Record<RecoveryCode, { why: string; next: string }>> = {
     'settings-corrupt': { why: 'notice.recoveryCorruptWhyAndroid', next: 'notice.recoveryCorruptNextAndroid' },
     'settings-unreadable': { why: 'notice.recoveryUnreadableWhyAndroid', next: 'notice.recoveryUnreadableNextAndroid' },
-    'settings-migration-failed': {
-        why: 'notice.recoveryMigrationWhyAndroid',
-        next: 'notice.recoveryMigrationNextAndroid',
-    },
+    'settings-import-failed': { why: 'notice.recoveryImportWhyAndroid', next: 'notice.recoveryImportNextAndroid' },
 };
 
 // The text keys of a notice: its code's, refined by what the platform and the cause make true. A dropped save is
@@ -80,7 +77,7 @@ const applyRecovery = (
 
 /**
  * Tells the user when their stored settings are not in use: a damaged file moved aside (with where the copy went), or
- * a file that cannot be read or brought up to date (saving is off until it can be), or a change the window could not
+ * a file that cannot be read, or 1.x settings that could not be imported (saving is off until they can be), or a change the window could not
  * save. What happened, why, what next; dismissable until the notice goes away. It reads again on every settings
  * change, which is how a save given up later (or one that lands after) reaches it.
  */

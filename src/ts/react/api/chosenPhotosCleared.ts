@@ -20,7 +20,7 @@ export const announceChosenPhotosCleared = (): void => {
  * Run `onCleared` whenever the saved lists are removed while this component is
  * mounted: by the chooser's removal button (announced directly), or by a removal
  * made elsewhere — the CLI, another window — which reaches this window through the
- * settings-changed broadcast (`chosenPhotosClearedAt` moves past the moment this
+ * settings-changed broadcast (`app.chosenPhotosClearedAt` moves past the moment this
  * component mounted). The latest callback is used, so it needs no stable identity.
  */
 export function useOnChosenPhotosCleared(onCleared: () => void): void {
@@ -32,7 +32,8 @@ export function useOnChosenPhotosCleared(onCleared: () => void): void {
         const mountedAt = Date.now();
         let announcedAt = 0;
         const unsubscribe = ipc.onSettingsChanged?.((settings: unknown) => {
-            const stamp = isPlainObject(settings) ? settings.chosenPhotosClearedAt : undefined;
+            const app = isPlainObject(settings) ? settings.app : undefined;
+            const stamp = isPlainObject(app) ? app.chosenPhotosClearedAt : undefined;
             const clearedAt = typeof stamp === 'string' ? Date.parse(stamp) : Number.NaN;
             if (clearedAt > mountedAt && clearedAt > announcedAt) {
                 announcedAt = clearedAt;

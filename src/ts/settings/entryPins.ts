@@ -1,8 +1,8 @@
 /**
  * The photo a challenge's Boost and Turbo are pinned to
- * (`challengeSettings.entryPins`, `{ [challengeId]: { boost?, turbo? } }`).
+ * (`challenges[id].pins`, `{ boost?, turbo? }`).
  *
- * A sibling container rather than two per-challenge schema settings: an image
+ * A sibling field of a challenge's record rather than two per-challenge schema settings: an image
  * id means nothing in a profile, a scenario phase or the per-challenge modal,
  * and a pin alone must not mark a challenge as customised. Sole owner of the
  * pin-cap warning latch.
@@ -14,6 +14,7 @@ import { isUnsafeChallengeKey } from '../metadata/validation';
 import { isPlainObject } from '../plainObject';
 import { loadSettings, saveSettings } from './persistence';
 
+import type { ConfigV2 } from '../types/config';
 import type { EntryPinKind, EntryPinRecord, EntryPinResult, EntryPins } from '../types/settings';
 
 // Defensive cap on the map size, like the title pins': real active lists are
@@ -63,13 +64,13 @@ const _validRecord = (stored: unknown): EntryPinRecord => {
 };
 
 /**
- * Own-property copy of the valid records in a stored map (never a prototype
+ * Own-property copy of the valid pin records of every challenge (never a prototype
  * member, whatever the ids are named).
  */
-const _validMap = (stored: Record<string, unknown>): Record<string, EntryPinRecord> => {
+const _validMap = (challenges: ConfigV2['challenges']): Record<string, EntryPinRecord> => {
     const map: Record<string, EntryPinRecord> = {};
-    for (const id of Object.keys(stored)) {
-        const record = _validRecord(stored[id]);
+    for (const id of Object.keys(challenges)) {
+        const record = _validRecord(challenges[id].pins);
         if (_keyOf(id) !== null && Object.keys(record).length > 0) map[id] = record;
     }
     return map;
@@ -81,9 +82,10 @@ const _validMap = (stored: Record<string, unknown>): Record<string, EntryPinReco
  */
 const getEntryPins = (challengeId: string | number): EntryPins => {
     const key = _keyOf(challengeId);
-    // loadSettings has already replaced a container that is not a plain object with the empty default.
-    const stored: Record<string, unknown> = loadSettings().challengeSettings.entryPins;
-    const record = key !== null && Object.hasOwn(stored, key) ? _validRecord(stored[key]) : {};
+    // loadSettings has already replaced a container that is not a plain object with the empty default, and a
+    // challenge record that is not an object is gone.
+    const { challenges } = loadSettings();
+    const record = key !== null && Object.hasOwn(challenges, key) ? _validRecord(challenges[key].pins) : {};
     return { boost: record.boost ?? null, turbo: record.turbo ?? null };
 };
 
@@ -94,6 +96,22 @@ const _warnPinCapOnce = (key: string) => {
     logger
         .withCategory('settings')
         .warning(`setEntryPin: pin cap of ${MAX_ENTRY_PINS} reached — not pinning challenge ${oneLine(key)}`, null);
+};
+
+/**
+ * Puts the pin records onto the challenge records: a challenge that has none loses its `pins`, and a record that holds
+ * nothing is dropped.
+ */
+const _storePins = (settings: ConfigV2, pins: Record<string, EntryPinRecord>) => {
+    for (const id of Object.keys(settings.challenges)) {
+        if (Object.hasOwn(pins, id)) continue;
+        delete settings.challenges[id].pins;
+        if (Object.keys(settings.challenges[id]).length === 0) delete settings.challenges[id];
+    }
+    for (const [id, record] of Object.entries(pins)) {
+        if (!Object.hasOwn(settings.challenges, id)) settings.challenges[id] = {};
+        settings.challenges[id].pins = record;
+    }
 };
 
 /**
@@ -109,7 +127,7 @@ const setEntryPin = (kind: EntryPinKind, challengeId: string | number, imageId: 
     if (!_isKind(kind) || key === null || (imageId !== null && !isPinnableImageId(imageId))) return 'invalid';
 
     const settings = loadSettings();
-    const pins = _validMap(settings.challengeSettings.entryPins);
+    const pins = _validMap(settings.challenges);
     const known = Object.hasOwn(pins, key);
     const next: EntryPinRecord = { ...(known ? pins[key] : {}) };
     if (imageId === null) {
@@ -131,7 +149,7 @@ const setEntryPin = (kind: EntryPinKind, challengeId: string | number, imageId: 
     }
     if (Object.keys(pins).length < MAX_ENTRY_PINS) entryPinCapWarned = false;
 
-    settings.challengeSettings.entryPins = pins;
+    _storePins(settings, pins);
     return saveSettings(settings) ? 'ok' : 'write-failed';
 };
 

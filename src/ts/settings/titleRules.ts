@@ -8,7 +8,7 @@
 import * as logger from '../logger';
 import { ruleConditions, matchingRules } from './challengeRules';
 import { loadSettings, saveSettings } from './persistence';
-import { readProfilesMap, profileNameForLog } from './profileStore';
+import { profileNameForLog } from './profileStore';
 import { factsForChallengeId } from './challengeFacts';
 import { MAX_TITLE_RULES, sanitizeTitleRule, titleRuleKey, ruleLogLabel } from './titleRuleSanitize';
 import {
@@ -19,7 +19,7 @@ import {
 } from './ruleResolution';
 import { getEffectiveSetting } from './challengeOverrides';
 
-import type { ChallengeValues, RuleMatchChallenge, SettingValueOf, TitleRule, TitleRuleInfo } from '../types/settings';
+import type { RuleMatchChallenge, SettingValueOf, TitleRule, TitleRuleInfo } from '../types/settings';
 import type { RuleLike } from './challengeRules';
 
 /**
@@ -48,7 +48,7 @@ const unionTags = (base: readonly string[], extra: unknown[]): string[] => {
 /**
  * Get the saved challenge rules.
  */
-const getTitleRules = (): TitleRule[] => loadSettings().challengeSettings.titleRules;
+const getTitleRules = (): TitleRule[] => loadSettings().rules;
 
 /**
  * Public per-setting resolver for callers holding a challenge payload (the join
@@ -88,10 +88,7 @@ const _titleForLog = (title: string): string => (title.length > 80 ? `${title.sl
  * first one's position. Returns the rule list, or null (logged) on the first
  * rejected rule.
  */
-const _sanitizedUniqueRules = (
-    rules: unknown[],
-    storedProfiles: Record<string, ChallengeValues>,
-): TitleRule[] | null => {
+const _sanitizedUniqueRules = (rules: unknown[], storedProfiles: Record<string, unknown>): TitleRule[] | null => {
     const byKey: Map<string, TitleRule> = new Map();
     for (const rule of rules) {
         const result = sanitizeTitleRule(rule as RuleLike, storedProfiles);
@@ -130,7 +127,7 @@ const setTitleRules = (rules: unknown): boolean => {
     }
 
     const settings = loadSettings();
-    const storedProfiles = readProfilesMap(settings);
+    const storedProfiles = settings.profiles;
     const sanitized = _sanitizedUniqueRules(rules, storedProfiles);
     if (sanitized === null) return false;
 
@@ -146,11 +143,8 @@ const setTitleRules = (rules: unknown): boolean => {
         }
     }
 
-    settings.challengeSettings.titleRules = sanitized;
-    // The list is saved in the order the user gave, which IS the precedence, so
-    // the one-time ordering migration must never re-sort it afterwards (a fresh
-    // install saves before any file exists for that migration to have flagged).
-    settings._challengeRulesOrderedV1 = true;
+    // The list is saved in the order the user gave, which IS the precedence.
+    settings.rules = sanitized;
     return saveSettings(settings);
 };
 
@@ -212,7 +206,7 @@ const getEffectiveTagSetting = <K extends string>(
     // of the challenge's own facts, and a joined challenge carries them in the
     // payload. The first matching rule that lists tags for this key wins.
     const settings = loadSettings();
-    const rule = matchingRules(settings.challengeSettings.titleRules, challenge, ruleTimeZone(settings)).find(
+    const rule = matchingRules(settings.rules, challenge, ruleTimeZone(settings)).find(
         (candidate) => Array.isArray(candidate?.[settingKey]) && candidate[settingKey].length > 0,
     );
     if (!rule) return base;

@@ -34,7 +34,7 @@ for (const method of Object.keys(eventMethods)) {
 
 Object.assign(mockApi, {
     // Settings
-    getSettings: jest.fn().mockResolvedValue({}),
+    getSettings: jest.fn().mockResolvedValue({ app: {} }),
     getSetting: jest.fn().mockResolvedValue(null),
     setSetting: jest.fn().mockResolvedValue(undefined),
     saveSettings: jest.fn().mockResolvedValue(undefined),

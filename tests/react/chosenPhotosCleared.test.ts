@@ -66,29 +66,30 @@ describe('useOnChosenPhotosCleared', () => {
             const onCleared = jest.fn();
             renderHook(() => useOnChosenPhotosCleared(onCleared));
             const stamp = after(1000);
-            act(() => fireSettingsChanged({ chosenPhotosClearedAt: stamp }));
+            act(() => fireSettingsChanged({ app: { chosenPhotosClearedAt: stamp } }));
             expect(onCleared).toHaveBeenCalledTimes(1);
             // The same removal arrives in every later broadcast: it is announced once.
-            act(() => fireSettingsChanged({ chosenPhotosClearedAt: stamp, theme: 'dark' }));
+            act(() => fireSettingsChanged({ app: { chosenPhotosClearedAt: stamp, theme: 'dark' } }));
             expect(onCleared).toHaveBeenCalledTimes(1);
             // A later removal is a new one.
-            act(() => fireSettingsChanged({ chosenPhotosClearedAt: after(5000) }));
+            act(() => fireSettingsChanged({ app: { chosenPhotosClearedAt: after(5000) } }));
             expect(onCleared).toHaveBeenCalledTimes(2);
         });
 
         test('a removal from before the editor opened is not news', () => {
             const onCleared = jest.fn();
             renderHook(() => useOnChosenPhotosCleared(onCleared));
-            act(() => fireSettingsChanged({ chosenPhotosClearedAt: after(-60_000) }));
+            act(() => fireSettingsChanged({ app: { chosenPhotosClearedAt: after(-60_000) } }));
             expect(onCleared).not.toHaveBeenCalled();
         });
 
         test.each([
             ['no payload', undefined],
-            ['a payload with no stamp', {}],
-            ['a stamp that is not a string', { chosenPhotosClearedAt: 123 }],
-            ['a stamp that is not a time', { chosenPhotosClearedAt: 'never' }],
-            ['an empty stamp (never removed)', { chosenPhotosClearedAt: '' }],
+            ['a payload with no stamp', { app: {} }],
+            ['a payload with no app block', {}],
+            ['a stamp that is not a string', { app: { chosenPhotosClearedAt: 123 } }],
+            ['a stamp that is not a time', { app: { chosenPhotosClearedAt: 'never' } }],
+            ['an empty stamp (never removed)', { app: { chosenPhotosClearedAt: '' } }],
         ])('%s is ignored', (_name, payload) => {
             const onCleared = jest.fn();
             renderHook(() => useOnChosenPhotosCleared(onCleared));
@@ -100,7 +101,7 @@ describe('useOnChosenPhotosCleared', () => {
             const onCleared = jest.fn();
             const { unmount } = renderHook(() => useOnChosenPhotosCleared(onCleared));
             unmount();
-            act(() => fireSettingsChanged({ chosenPhotosClearedAt: after(1000) }));
+            act(() => fireSettingsChanged({ app: { chosenPhotosClearedAt: after(1000) } }));
             expect(onCleared).not.toHaveBeenCalled();
         });
 

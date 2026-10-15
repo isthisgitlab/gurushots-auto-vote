@@ -1,11 +1,10 @@
 /**
- * The pieces the equivalence harness stands on: the random file generator and the mapping of an importer result back
- * to a 1.x blob.
+ * The pieces the equivalence harness stands on: the random file generator and the key names.
  */
 
 import { V1_SETTINGS_SCHEMA } from '../../../src/ts/settings/importV1/schema';
 import { importV1Settings } from '../../../src/ts/settings/importV1';
-import { liveKey, v1ViewOf } from './liveAdapter';
+import { liveKey } from './liveAdapter';
 import { drawFor, makeRng, parseSeeds, randomCase, SCHEMA_KEYS, valueFor } from './random';
 
 describe('the random file generator', () => {
@@ -40,43 +39,7 @@ describe('the random file generator', () => {
     });
 });
 
-describe('v1ViewOf', () => {
-    test('puts a converted file back in the 1.x shape', () => {
-        const raw = JSON.stringify({
-            theme: 'dark',
-            token: 'secret',
-            challengeSettings: {
-                globalDefaults: { autoFill: true },
-                perChallenge: { '1': { emergencyFill: 600 } },
-                titleRules: [{ title: 'Macro', profile: 'P', autoFill: true }],
-                profiles: { P: { boostFillNew: true }, Odd: 'x' },
-                scenarios: { S: { name: 'S', phases: { a: { settings: { autoFill: true } }, b: 'x' } }, T: 5 },
-                titlePins: { '1': 'Macro' },
-                entryPins: { '1': { boost: 'e1' } },
-                titleProfileSuppressions: { '1': true },
-            },
-        });
-        const result = importV1Settings(raw);
-        if (!result.ok) throw new Error(result.detail);
-        const view = v1ViewOf(result.config, result.titlePins);
-        expect(view).toMatchObject({
-            theme: 'dark',
-            token: 'secret',
-            _timeUnitMigratedV1: true,
-            _challengeRulesOrderedV1: true,
-            challengeSettings: {
-                globalDefaults: { autoFill: true },
-                perChallenge: { '1': { emergencyFill: 600 } },
-                titleRules: [{ title: 'Macro', profile: 'P', autoFill: true }],
-                profiles: { P: { boostFillNew: true }, Odd: 'x' },
-                scenarios: { S: { name: 'S', phases: { a: { settings: { autoFill: true } }, b: 'x' } }, T: 5 },
-                titlePins: { '1': 'Macro' },
-                entryPins: { '1': { boost: 'e1' } },
-                titleProfileSuppressions: { '1': true },
-            },
-        });
-    });
-
+describe('liveKey', () => {
     test('live names are the 2.x names of the renamed keys', () => {
         expect(liveKey('autoFill')).toBe('autoSubmit');
         expect(liveKey('boostFillNewOnConflict')).toBe('boostNewSubmitOnConflict');

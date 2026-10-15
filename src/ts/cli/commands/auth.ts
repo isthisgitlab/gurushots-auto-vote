@@ -34,7 +34,7 @@ const handleLogin = async (): Promise<boolean> => {
         logger.withCategory('ui').info('=== GuruShots Auto Voter - Login ===');
 
         const userSettings = settings.loadSettings();
-        const currentMockMode = userSettings.mock;
+        const currentMockMode = userSettings.app.mock;
 
         logger.withCategory('ui').info(`Current mode: ${currentMockMode ? 'MOCK' : 'REAL'}`);
 

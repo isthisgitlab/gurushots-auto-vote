@@ -1,12 +1,6 @@
-const {
-    validateSetting,
-    getValidationError,
-    SETTINGS_SCHEMA,
-    sanitizeTimeOfDayList,
-    sanitizeBeforeEndList,
-    MAX_SCHEDULED_FILL_ENTRIES,
-} = require('../../src/ts/settings/schema') as typeof schemaModule;
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+const { validateSetting, getValidationError, SETTINGS_SCHEMA, MAX_SCHEDULED_FILL_ENTRIES } =
+    require('../../src/ts/settings/schema') as typeof schemaModule;
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/settings');
 import type * as schemaModule from '../../src/ts/settings/schema';
 
@@ -129,66 +123,19 @@ describe('scheduled fill schema validation', () => {
     });
 });
 
-describe('scheduled fill list sanitizers', () => {
-    test('sanitizeTimeOfDayList: non-array yields null (left for the write path to reject)', () => {
-        for (const value of ['21:30', null, 7, true, {}]) {
-            expect(sanitizeTimeOfDayList(value)).toBeNull();
-        }
-    });
-
-    test('sanitizeTimeOfDayList: already-canonical list yields null (no rewrite)', () => {
-        expect(sanitizeTimeOfDayList(['09:00', '21:30'])).toBeNull();
-        expect(sanitizeTimeOfDayList([])).toBeNull();
-    });
-
-    test('sanitizeTimeOfDayList: strips bad entries, dedupes, sorts', () => {
-        expect(sanitizeTimeOfDayList(['21:30', '25:99', '09:00', '21:30', 7, ''])).toEqual(['09:00', '21:30']);
-    });
-
-    test('sanitizeTimeOfDayList: sorts THEN caps — the earliest entries survive', () => {
-        const over = ['23:00', '22:00', '21:00', '20:00', '19:00', '18:00', '01:00'];
-        expect(sanitizeTimeOfDayList(over)).toEqual(['01:00', '18:00', '19:00', '20:00', '21:00', '22:00']);
-    });
-
-    test('sanitizeBeforeEndList: strips out-of-range, dedupes, sorts ascending, caps to smallest', () => {
-        expect(sanitizeBeforeEndList([36000, -5, 14400, 36000, 0.5, 'x'])).toEqual([14400, 36000]);
-        const over = [700, 600, 500, 400, 300, 200, 100];
-        expect(sanitizeBeforeEndList(over)).toEqual([100, 200, 300, 400, 500, 600]);
-    });
-
-    test('sanitizeBeforeEndList: canonical or non-array yields null', () => {
-        expect(sanitizeBeforeEndList([14400, 36000])).toBeNull();
-        expect(sanitizeBeforeEndList(7200)).toBeNull();
-    });
-});
-
 describe('scheduled fill override auto-clear', () => {
     // Scalars auto-clear by strict equality; arrays clear via valuesEqual's
     // JSON.stringify comparison, which is ORDER SENSITIVE — an override equal
     // to the default but reordered does not auto-clear (same accepted caveat
-    // as autoSubmitSchedule; the UI/sanitizer emit canonical order, making it
+    // as autoSubmitSchedule; the UI emits canonical order, making it
     // nearly unobservable). Drives the in-memory headless-store seam.
-    const headlessGlobals = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let store: { value: string | null; read: jest.Mock<string | null, []>; write: jest.Mock<void, [string]> };
 
     beforeEach(() => {
-        headlessGlobals.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-        };
-        headlessGlobals.AndroidHeadlessStore = store;
+        installHeadlessStore();
     });
 
     afterEach(() => {
-        delete headlessGlobals.__GS_HEADLESS__;
-        delete headlessGlobals.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
     test('setting an override back to the [] default removes it', () => {

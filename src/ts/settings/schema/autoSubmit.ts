@@ -1,8 +1,6 @@
 /** Settings of the `autoSubmit` group (labelled "Auto-Submit" in the UI). */
 
 import { z } from 'zod';
-import { isInteger } from '../../numbers';
-import { isPlainObject } from '../../plainObject';
 import { CHOSEN_PHOTO_ID_RE, MAX_CHOSEN_PHOTOS, MAX_TAG_LENGTH } from '../limits';
 import { MAX_SCHEDULE_SECONDS, nonNegNumber, zBool } from './validators';
 import type { SettingsSchemaEntry } from './entry';
@@ -31,46 +29,6 @@ const fillSchedule = z
     .array(fillScheduleRow)
     .max(MAX_SCHEDULE_ROWS)
     .refine((rows) => new Set(rows.map((r) => r.count)).size === rows.length);
-
-/**
- * Clamp a persisted autoSubmitSchedule array to the current bounds. Used by the
- * load-time `_autoFillScheduleBoundsV1` sanitizer in settings/migrations/autoSubmitSchedule.ts: the Settings
- * modal resubmits EVERY persisted key on save, so a stored schedule that
- * violates the (tightened) validator would block saving unrelated settings
- * until repaired — this heals such data on load instead. Keeps only strict
- * { count, seconds } rows within bounds, dedupes by count (first wins), and
- * sorts by count. Returns the sanitized array when anything changed, or null
- * when the input already conforms or isn't an array at all (load-time
- * validation drops a non-array value).
- */
-export const sanitizeFillSchedule = (value: unknown): Array<{ count: number; seconds: number }> | null => {
-    if (!Array.isArray(value)) return null;
-    const seen: Set<number> = new Set();
-    const normalized = value
-        .filter((row): row is { count: number; seconds: number } => {
-            if (!isPlainObject(row)) return false;
-            const { count, seconds } = row;
-            if (!isInteger(count) || count < 2 || count > MAX_SCHEDULE_COUNT) return false;
-            if (!isInteger(seconds) || seconds < 0 || seconds > MAX_SCHEDULE_SECONDS) return false;
-            if (seen.has(count)) return false;
-            seen.add(count);
-            return true;
-        })
-        .sort((a, b) => a.count - b.count)
-        .map((row) => ({ count: row.count, seconds: row.seconds }));
-    const unchanged =
-        normalized.length === value.length &&
-        normalized.every((row, i) => {
-            const orig = value[i];
-            return (
-                isPlainObject(orig) &&
-                orig.count === row.count &&
-                orig.seconds === row.seconds &&
-                Object.keys(orig).length === 2
-            );
-        });
-    return unchanged ? null : normalized;
-};
 
 // Per-string and total-array caps for tag-list settings. A typical use is
 // a few words per tag, a handful of tags per challenge — the caps exist

@@ -7,11 +7,13 @@
  * title-pins.test.ts.
  */
 
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/settings');
-import { isAppSettings } from '../helpers/storedShapes';
+import { isConfig } from '../helpers/storedShapes';
 import { parseJsonAs } from '../helpers/parseJson';
+
+import type { MemoryStore } from '../helpers/headlessStore';
 
 const mockWarning = jest.fn<void, unknown[]>();
 
@@ -35,35 +37,32 @@ jest.mock('../../src/ts/logger', () => ({
 }));
 
 describe('settings facade — entry pins', () => {
-    const headlessGlobals = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let store: { value: string | null; read: jest.Mock<string | null, []>; write: jest.Mock<void, [string]> };
+    let store: MemoryStore;
 
     beforeEach(() => {
         mockWarning.mockClear();
-        headlessGlobals.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-        };
-        headlessGlobals.AndroidHeadlessStore = store;
+        store = installHeadlessStore();
     });
 
     afterEach(() => {
-        delete headlessGlobals.__GS_HEADLESS__;
-        delete headlessGlobals.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
-    // Edit the persisted blob behind the facade's back (a hand-edited file or a raw save-settings write).
+    // The pin records of the stored configuration, by challenge id.
+    const storedPins = (): Record<string, unknown> =>
+        Object.fromEntries(
+            Object.entries(parseJsonAs(store.value!, isConfig).challenges).map(([id, record]) => [id, record.pins]),
+        );
+
+    // Edit the pin records of the persisted configuration behind the facade's back (a hand-edited file).
     const tamper = (edit: (entryPins: Record<string, unknown>) => void) => {
         settings.setEntryPin('boost', 'seed', 'seedimg');
-        const blob = parseJsonAs(store.value!, isAppSettings);
-        edit(blob.challengeSettings.entryPins);
+        const blob = parseJsonAs(store.value!, isConfig);
+        const pins = storedPins();
+        edit(pins);
+        blob.challenges = Object.fromEntries(
+            Object.entries(pins).map(([id, record]) => [id, { ...blob.challenges[id], pins: record }]),
+        ) as typeof blob.challenges;
         store.value = JSON.stringify(blob);
     };
 
@@ -85,8 +84,14 @@ describe('settings facade — entry pins', () => {
     test('an emptied record is dropped from the map', () => {
         settings.setEntryPin('boost', '100', 'img_a');
         settings.setEntryPin('boost', '100', null);
-        const blob = parseJsonAs(store.value!, isAppSettings);
-        expect(blob.challengeSettings.entryPins).toEqual({});
+        expect(parseJsonAs(store.value!, isConfig).challenges).toEqual({});
+    });
+
+    test('clearing the last pin keeps the challenge record while it holds overrides', () => {
+        settings.setChallengeOverride('exposure', '100', 40);
+        settings.setEntryPin('boost', '100', 'img_a');
+        settings.setEntryPin('boost', '100', null);
+        expect(parseJsonAs(store.value!, isConfig).challenges).toEqual({ '100': { values: { exposure: 40 } } });
     });
 
     test('pinning a photo for one feature clears the other feature’s pin on it', () => {
@@ -152,7 +157,7 @@ describe('settings facade — entry pins', () => {
         });
         expect(settings.getEntryPins('seed')).toEqual({ boost: 'seedimg', turbo: null });
         expect(settings.setEntryPin('turbo', '100', 'img_b')).toBe('ok');
-        const saved = parseJsonAs(store.value!, isAppSettings).challengeSettings.entryPins;
+        const saved = storedPins();
         expect(Object.keys(saved).sort()).toEqual(['100', 'seed']);
     });
 
@@ -169,7 +174,7 @@ describe('settings facade — entry pins', () => {
         expect(settings.getEntryPins('numeric')).toEqual({ boost: null, turbo: null });
         // The next write keeps only the records that hold a valid pin.
         settings.setEntryPin('boost', '100', 'img_a');
-        const saved = parseJsonAs(store.value!, isAppSettings).challengeSettings.entryPins;
+        const saved = storedPins();
         expect(Object.keys(saved).sort()).toEqual(['100', 'bad', 'seed']);
         expect(saved.bad).toEqual({ turbo: 'good_id' });
     });
@@ -183,8 +188,8 @@ describe('settings facade — entry pins', () => {
 
     test('a corrupt container is replaced by the empty default on load', () => {
         settings.setEntryPin('boost', '100', 'img_a');
-        const blob = parseJsonAs(store.value!, isAppSettings);
-        blob.challengeSettings.entryPins = invalid(['not', 'a', 'map']);
+        const blob = parseJsonAs(store.value!, isConfig);
+        blob.challenges = invalid(['not', 'a', 'map']);
         store.value = JSON.stringify(blob);
         expect(settings.getEntryPins('100')).toEqual({ boost: null, turbo: null });
         expect(settings.setEntryPin('boost', '100', 'img_b')).toBe('ok');

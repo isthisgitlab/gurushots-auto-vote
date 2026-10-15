@@ -64,7 +64,6 @@ const thinRows = () =>
         ['save-challenge-profile', () => settings.saveChallengeProfile, false, 'saving challenge profile'],
         ['delete-challenge-profile', () => settings.deleteChallengeProfile, false, 'deleting challenge profile'],
         ['apply-challenge-profile', () => settings.applyChallengeProfile, false, 'applying challenge profile'],
-        ['cleanup-obsolete-settings', () => settings.cleanupObsoleteSettings, false, 'cleaning up obsolete settings'],
         ['reset-setting', () => settings.resetSetting, false, 'resetting setting'],
         ['reset-global-default', () => settings.resetGlobalDefault, false, 'resetting global default'],
         ['reset-all-global-defaults', () => settings.resetAllGlobalDefaults, false, 'resetting all global defaults'],

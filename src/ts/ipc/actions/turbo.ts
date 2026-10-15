@@ -106,7 +106,7 @@ const handlePlayAutoTurbo = (async (event: unknown, challengeId: string | number
     try {
         logger.withCategory('turbo').info(`▶️ Manual auto-turbo run requested for challenge ${safeId}`, null);
         const userSettings = settings.loadSettings();
-        if (!userSettings.token) {
+        if (!userSettings.auth.token) {
             return { success: false as const, error: 'No authentication token found' };
         }
 
@@ -118,7 +118,7 @@ const handlePlayAutoTurbo = (async (event: unknown, challengeId: string | number
             return { success: false as const, error: 'A turbo run is already in progress for this challenge' };
         }
         try {
-            return await runManualTurbo(challengeId, safeTitle, userSettings.token);
+            return await runManualTurbo(challengeId, safeTitle, userSettings.auth.token);
         } finally {
             releaseTurboRun(challengeId, 'manual');
         }

@@ -1547,14 +1547,14 @@ export const notice = {
         "The app could not read its stored settings. The device's storage may be busy or full.",
     recoveryUnreadableNextAndroid:
         'Restart the app. Nothing was overwritten, and saving settings stays off until they can be read. If this keeps happening, use "Delete all local data" under About and data to start with default settings.',
-    recoveryMigrationWhat:
-        'Your settings file comes from another version and could not be updated, so saving settings is turned off.',
-    recoveryMigrationWhy: 'The file at {path} could not be converted to the format this version uses.',
-    recoveryMigrationNext:
-        'Restart the app. If this keeps happening, move that file aside to start with default settings; the file is not overwritten.',
-    recoveryMigrationWhyAndroid: 'The stored settings could not be converted to the format this version uses.',
-    recoveryMigrationNextAndroid:
-        'Restart the app. If this keeps happening, use "Delete all local data" under About and data to start with default settings; nothing is overwritten until then.',
+    recoveryImportWhat:
+        'Your settings from the previous version could not be imported, so saving settings is turned off and the app uses default settings.',
+    recoveryImportWhy: 'The file at {path} could not be read or converted.',
+    recoveryImportNext:
+        'Restart the app to try again, or fix that file. Nothing was overwritten; the file stays where it is as a backup.',
+    recoveryImportWhyAndroid: "The previous version's stored settings could not be read or converted.",
+    recoveryImportNextAndroid:
+        'Restart the app to try again. Nothing was overwritten, and saving settings stays off until they can be imported. If this keeps happening, use "Delete all local data" under About and data to start with default settings.',
     recoveryDroppedWhat: 'A change to your settings could not be saved.',
     recoveryDroppedWhyConflict: 'The background service changed the settings at the same time.',
     recoveryDroppedWhyTooLarge: 'The settings are too large to save.',

@@ -52,7 +52,6 @@ const EXPECTED_THIN_HANDLERS: [string, string, string | boolean | null][] = [
     ['save-challenge-profile', 'saveChallengeProfile', false],
     ['delete-challenge-profile', 'deleteChallengeProfile', false],
     ['apply-challenge-profile', 'applyChallengeProfile', false],
-    ['cleanup-obsolete-settings', 'cleanupObsoleteSettings', false],
     ['reset-setting', 'resetSetting', false],
     ['reset-global-default', 'resetGlobalDefault', false],
     ['reset-all-global-defaults', 'resetAllGlobalDefaults', false],
@@ -125,7 +124,7 @@ describe('settings.handlers thin-handler rows', () => {
     test.each(CHANGE_BROADCAST_CHANNELS)('channel "%s" broadcasts a successful mutation', async (channel) => {
         const row = EXPECTED_THIN_HANDLERS.find(([candidate]) => candidate === channel);
         const method = row![1];
-        const snapshot = { token: 'secret', challengeSettings: { changed: true } };
+        const snapshot = { auth: { token: 'secret' }, defaults: { changed: true } };
         const broadcastSettingsChange = jest.fn();
         invalid<MockTable>(settings)[method] = jest.fn().mockReturnValue(true);
         settings.loadSettings.mockReturnValue(invalid(snapshot));
@@ -133,7 +132,7 @@ describe('settings.handlers thin-handler rows', () => {
         const handlers = buildHandlers({ broadcastSettingsChange });
         await invalid<HandlerTable>(handlers)[channel]({}, 'arg', 'arg');
 
-        expect(broadcastSettingsChange).toHaveBeenCalledWith({ challengeSettings: { changed: true }, hasToken: true });
+        expect(broadcastSettingsChange).toHaveBeenCalledWith({ defaults: { changed: true }, hasToken: true });
     });
 });
 
@@ -149,7 +148,7 @@ describe('settings.handlers hidden setting keys', () => {
 
     test.each(
         KEY_CHANNELS.flatMap(([channel, method]) =>
-            ['token', 'hasToken', 'apiHeaders'].map((key) => [channel, method, key] as const),
+            ['auth', 'token', 'hasToken', 'apiHeaders'].map((key) => [channel, method, key] as const),
         ),
     )('"%s" refuses the hidden key %s without touching settings.%s', async (channel, method, key) => {
         invalid<MockTable>(settings)[method] = jest.fn().mockReturnValue(true);

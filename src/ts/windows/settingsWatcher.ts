@@ -1,6 +1,6 @@
 /**
  * Settings-file watcher for the Electron main process. Watches the
- * directory of the settings.json the facade owns, for that file's name (the
+ * directory of the config.json the facade owns, for that file's name (the
  * file is replaced by a rename on every save, which ends a watch on the file
  * itself), and, on change, logs the diff, reloads the
  * main window when a reload-required key changed, and broadcasts a
@@ -20,7 +20,7 @@ import * as logger from '../logger';
 import { SENSITIVE_KEY_RE, REDACTED } from '../logger/sanitize';
 import { PRIVATE_SETTING_KEYS, maskSettingValue } from '../format/settingsLogMask';
 
-import type { AppSettings } from '../types/settings';
+import type { ConfigV2 } from '../types/config';
 import { errorMessage } from '../errorMessage';
 import { toRendererSettings } from '../ipc/rendererSettings';
 type SettingChange = { key: string; oldValue: string; newValue: string };
@@ -38,7 +38,7 @@ const stringify = (value: unknown) => {
     return String(value);
 };
 
-// A change under a credential key (token, ...), anywhere in apiHeaders, or in a setting that
+// A change anywhere under `auth`, under a credential key (token, ...), anywhere in apiHeaders, or in a setting that
 // names the account (lastUsername, chosenPhotosMemberId) is logged masked on both sides: the
 // log line's own redaction only scrubs the first value after `key:`, which would leave the
 // new credential in clear.
@@ -47,7 +47,10 @@ const isSensitivePath = (path: string) =>
         .split('.')
         .some(
             (segment) =>
-                segment === 'apiHeaders' || PRIVATE_SETTING_KEYS.has(segment) || SENSITIVE_KEY_RE.test(segment),
+                segment === 'auth' ||
+                segment === 'apiHeaders' ||
+                PRIVATE_SETTING_KEYS.has(segment) ||
+                SENSITIVE_KEY_RE.test(segment),
         );
 
 // A value as the log shows it. A whole object that appeared or vanished is stringified in
@@ -142,10 +145,10 @@ function watchSettingsFile({
 }: {
     getMainWindow: () => BrowserWindow | null;
     getMainWindowCreatedTime: () => number | null;
-    onSettingsChanged?: ((settings: AppSettings) => void) | null;
+    onSettingsChanged?: ((settings: ConfigV2) => void) | null;
 }): fs.FSWatcher | null {
     const settingsPath = settings.getSettingsPath();
-    let previousSettings: AppSettings | null = null;
+    let previousSettings: ConfigV2 | null = null;
 
     if (!fs.existsSync(settingsPath)) {
         return null;
@@ -163,7 +166,7 @@ function watchSettingsFile({
     // their broadcast. A falsy snapshot is a no-op — the load-failure path
     // below already logs the read error, and re-reporting it here as an
     // "observer failed" would name the wrong culprit.
-    const notifyObserver = (snapshot: AppSettings | undefined) => {
+    const notifyObserver = (snapshot: ConfigV2 | undefined) => {
         if (!onSettingsChanged || !snapshot) return;
         try {
             onSettingsChanged(snapshot);
@@ -222,7 +225,7 @@ function watchSettingsFile({
                 }
 
                 // Load new settings and compare with previous
-                let newSettings: AppSettings | undefined;
+                let newSettings: ConfigV2 | undefined;
                 let shouldReload = false;
                 let hasChanges = false;
                 try {
@@ -234,8 +237,9 @@ function watchSettingsFile({
                             hasChanges = true;
                             // Check if any of the changed settings require reload
                             const reloadRequiredChanges = changes.filter((change) => {
-                                const settingKey = change.key.split('.')[0]; // Get main setting key
-                                return settings.isReloadRequired(settingKey);
+                                // The setting a change is under: an `app` key, else the container it is in.
+                                const [container, appKey] = change.key.split('.');
+                                return settings.isReloadRequired(container === 'app' ? appKey : container);
                             });
 
                             if (reloadRequiredChanges.length > 0) {
@@ -296,7 +300,7 @@ function watchSettingsFile({
                     // A main window that is reloading re-reads everything
                     // anyway; the others (e.g. Logs) still have to follow a
                     // reload-required key such as the language.
-                    const rendererSettings = toRendererSettings(newSettings as AppSettings);
+                    const rendererSettings = toRendererSettings(newSettings as ConfigV2);
                     BrowserWindow.getAllWindows().forEach((win) => {
                         if (!win.isDestroyed() && !(reloadingMain && win === mainWindow)) {
                             win.webContents.send('settings-changed', rendererSettings);

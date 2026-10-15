@@ -1,5 +1,5 @@
 /**
- * Pruning of per-challenge settings for challenges that no longer exist.
+ * Pruning of the stored records of challenges that no longer exist.
  */
 
 import * as logger from '../logger';
@@ -23,8 +23,8 @@ const JOIN_KEPT_KEYS = ['chosenPhotos', 'chosenPhotosOnly', 'chosenPhotosInOrder
  * the open list alone cannot tell an upcoming challenge's entry from a stale one, so it is not
  * stale until the lists show the challenge is gone.
  */
-const isKeptForJoin = (challengeId: string, values: ChallengeValues): boolean => {
-    if (!JOIN_KEPT_KEYS.some((key) => Object.prototype.hasOwnProperty.call(values, key))) return false;
+const isKeptForJoin = (challengeId: string, values: ChallengeValues | undefined): boolean => {
+    if (!values || !JOIN_KEPT_KEYS.some((key) => Object.prototype.hasOwnProperty.call(values, key))) return false;
     const open = getOpenChallengeIds();
     const upcoming = getUpcomingChallengeIds();
     return open === null || upcoming === null || open.has(challengeId) || upcoming.has(challengeId);
@@ -47,15 +47,12 @@ const cleanupStaleChallengeSetting = (activeChallengeIds: Iterable<string>): boo
     if (known === null) return true; // The main process has no list of its own to judge by
     const settings = loadSettings();
     const activeIds = new Set([...activeChallengeIds, ...known]);
-    const { perChallenge, titleProfileSuppressions: suppressions, entryPins } = settings.challengeSettings;
-    const keptForJoin = new Set(
-        Object.keys(perChallenge).filter((id) => !activeIds.has(id) && isKeptForJoin(id, perChallenge[id])),
+    const { challenges } = settings;
+    const staleChallengeIds = Object.keys(challenges).filter(
+        (id) => !activeIds.has(id) && !isKeptForJoin(id, challenges[id].values),
     );
-    const staleChallengeIds = Object.keys(perChallenge).filter((id) => !activeIds.has(id) && !keptForJoin.has(id));
-    const staleSuppressionIds = Object.keys(suppressions).filter((id) => !activeIds.has(id) && !keptForJoin.has(id));
-    const stalePinIds = Object.keys(entryPins).filter((id) => !activeIds.has(id) && !keptForJoin.has(id));
 
-    if (staleChallengeIds.length === 0 && staleSuppressionIds.length === 0 && stalePinIds.length === 0) {
+    if (staleChallengeIds.length === 0) {
         return true; // Nothing to cleanup
     }
 
@@ -64,13 +61,7 @@ const cleanupStaleChallengeSetting = (activeChallengeIds: Iterable<string>): boo
         .debug(`Cleaning up settings for ${staleChallengeIds.length} stale challenges:`, staleChallengeIds);
 
     staleChallengeIds.forEach((challengeId) => {
-        delete perChallenge[challengeId];
-    });
-    staleSuppressionIds.forEach((challengeId) => {
-        delete suppressions[challengeId];
-    });
-    stalePinIds.forEach((challengeId) => {
-        delete entryPins[challengeId];
+        delete challenges[challengeId];
     });
 
     return saveSettings(settings);

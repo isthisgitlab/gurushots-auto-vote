@@ -8,7 +8,7 @@
  */
 
 jest.mock('../../src/ts/settings', () => ({
-    loadSettings: jest.fn(() => ({ checkFrequencyMin: 3, checkFrequencyMax: 3 })),
+    loadSettings: jest.fn(() => ({ app: { checkFrequencyMin: 3, checkFrequencyMax: 3 } })),
     getSetting: jest.fn(() => 3),
     getEffectiveSetting: jest.fn(() => 5),
 }));

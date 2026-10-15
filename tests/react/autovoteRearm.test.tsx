@@ -57,9 +57,8 @@ describe('AutovoteContext — rearmSchedule after a settings change', () => {
 
         jest.mocked(window.api.getSettings).mockImplementation(async () =>
             invalid({
+                app: { checkFrequencyMin: checkFrequencyMinutes, checkFrequencyMax: checkFrequencyMinutes },
                 hasToken: true,
-                checkFrequencyMin: checkFrequencyMinutes,
-                checkFrequencyMax: checkFrequencyMinutes,
             }),
         );
         jest.mocked(window.api.getSetting).mockResolvedValue(null); // no auto-resume on mount

@@ -108,9 +108,9 @@ if (gotSingleInstanceLock) {
 
 // Clear token when app is about to quit if stay logged in is not enabled.
 // Gated on the lock inside the helper — a losing second instance must not
-// touch the shared settings.json and wipe the primary's session.
+// touch the shared config.json and wipe the primary's session.
 app.on('before-quit', (event) => {
-    // Lock first: a losing second instance must not read settings.json either.
+    // Lock first: a losing second instance must not read config.json either.
     if (gotSingleInstanceLock && holdForOpenBoosts(event, () => app.quit())) return;
 
     // A throw here must never skip ensureExit — the force-exit net below is
@@ -156,7 +156,7 @@ ipcMain.on('login-success', (event) => {
     }
     // A login window is swapped for the main window only after a login has stored its token, and
     // never twice: a page that fires this without a login (or with a main window up) changes nothing.
-    if (!settings.loadSettings().token || appState.mainWindow) {
+    if (!settings.loadSettings().auth.token || appState.mainWindow) {
         logger
             .withCategory('api')
             .warning("Ignored IPC 'login-success': no login token, or a main window is open", null);

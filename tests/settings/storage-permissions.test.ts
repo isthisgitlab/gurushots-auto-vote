@@ -49,7 +49,7 @@ describePosix('userData JSON writers leave files owner-only', () => {
 
     test('settings writeRaw tightens a pre-existing 0o644 file to 0o600', () => {
         fs.mkdirSync(userData);
-        const file = path.join(userData, 'settings.json');
+        const file = path.join(userData, 'config.json');
         fs.writeFileSync(file, '{}', { mode: 0o644 });
         fs.chmodSync(file, 0o644);
         expect(modeOf(file)).toBe(0o644);
@@ -76,7 +76,7 @@ describePosix('userData JSON writers leave files owner-only', () => {
         storage.writeRaw('{}');
 
         expect(modeOf(userData)).toBe(0o700);
-        expect(modeOf(path.join(userData, 'settings.json'))).toBe(0o600);
+        expect(modeOf(path.join(userData, 'config.json'))).toBe(0o600);
     });
 
     test('a chmod the filesystem refuses still lets a plain store write land', () => {
@@ -98,7 +98,7 @@ describePosix('userData JSON writers leave files owner-only', () => {
 
     test('the settings file is replaced atomically and ends up 0o600 even when chmod is refused', () => {
         fs.mkdirSync(userData);
-        const file = path.join(userData, 'settings.json');
+        const file = path.join(userData, 'config.json');
         fs.writeFileSync(file, '{}', { mode: 0o644 });
         fs.chmodSync(file, 0o644);
         jest.spyOn(fs, 'chmodSync').mockImplementation(() => {
@@ -108,6 +108,6 @@ describePosix('userData JSON writers leave files owner-only', () => {
         expect(storage.writeRaw('{"token":"t"}')).toBe(true);
 
         expect(modeOf(file)).toBe(0o600);
-        expect(fs.readdirSync(userData)).toEqual(['settings.json']);
+        expect(fs.readdirSync(userData)).toEqual(['config.json']);
     });
 });

@@ -1,20 +1,15 @@
 /**
- * Shapes of the persisted settings blob (`settings.json` on Electron/CLI, the
- * `gurushots-settings` preference on Android). Type-only: nothing here exists
- * at runtime. Modules pull them in with
- * `import type { AppSettings } from '../types/settings'`.
+ * Setting-shaped types shared by the settings modules and the renderer. Type-only: nothing here exists at runtime. The
+ * shape of the persisted configuration itself is in ./config.
  *
- * loadSettings (settings/persistence.ts) merges the blob over
- * getDefaultSettings() and validates it: top-level values of the wrong type,
- * challengeSettings containers of the wrong kind, and setting values their
- * schema rejects are dropped for the defaults. So those are typed as the
- * defaults write them. Rules, profiles and scenarios are validated by the
- * modules that read them, so their contents are typed loosely here —
- * `unknown` values the reader narrows.
+ * loadSettings (settings/persistence.ts) validates the stored configuration: `app` and `auth` values of the wrong
+ * type, containers of the wrong kind, and setting values their schema rejects are dropped for the defaults, so those
+ * are typed as the defaults write them. Rules, profiles and scenarios are validated by the modules that read them, so
+ * their contents are typed loosely — `unknown` values the reader narrows.
  */
 
-import type { getUiDefaultSettings } from '../settings/uiDefaults';
 import type { SettingKey, SettingValues } from '../settings/schema';
+import type { ConfigAuthV2, ConfigV2 } from './config';
 
 /** A plain object whose values are not trusted yet (hand-edited file, IPC payload). */
 export type LooseRecord = { [key: string]: unknown };
@@ -130,51 +125,14 @@ export type EntryPinResult = 'ok' | 'invalid' | 'cap' | 'write-failed';
 /** A challenge's pins as read back: the pinned entry id per feature, null = no pin. */
 export type EntryPins = Record<EntryPinKind, string | null>;
 
-/** The `challengeSettings` container of the blob. */
-export interface ChallengeSettings {
-    globalDefaults: ChallengeValues;
-    /** Challenge id -> sparse override map. */
-    perChallenge: Record<string, ChallengeValues>;
-    titleRules: TitleRule[];
-    /** Challenge id -> true while a manually applied profile stands in for the title rule's profile. */
-    titleProfileSuppressions: Record<string, boolean>;
-    /** Challenge id -> the photos pinned for Boost and Turbo (not a schema setting: an image id means nothing in a profile or scenario). */
-    entryPins: Record<string, EntryPinRecord>;
-    /** Profile display name -> sparse values. */
-    profiles?: Record<string, ChallengeValues>;
-    /** Normalized names of the intent profiles already seeded once. */
-    seededProfiles?: string[];
-    /** Scenario name -> stored document (re-validated on every read). */
-    scenarios?: Record<string, unknown>;
-    /** Challenge id -> first-seen title. */
-    titlePins?: Record<string, string>;
-    /** Legacy category rules, folded into titleRules by a load-time migration. */
-    categoryRules?: unknown[];
-}
-
-/** The whole persisted settings blob. */
-export interface AppSettings extends ReturnType<typeof getUiDefaultSettings> {
-    lastUsername: string;
-    mock: boolean;
-    token: string;
-    onboardingCompleted: boolean;
-    windowBounds: Record<WindowType, WindowBounds>;
-    challengeSettings: ChallengeSettings;
-    apiHeaders: Record<string, string>;
-    /** Top-level keys written via setSetting, and the migrations' one-time flags. */
-    [key: string]: unknown;
-}
+/** The sign-in keys of the configuration: the only keys of `auth`, addressed by name through getSetting / setSetting. */
+export type AuthKey = keyof ConfigAuthV2;
 
 /**
- * The settings a renderer sees: the stored blob without its auth token and API headers, plus
- * whether a token exists. Neither the token nor the headers ever leave the main process.
+ * The settings a renderer sees: the configuration without its `auth` block (the token, the API headers, the last
+ * user name and the chosen-photos account never leave the main process), plus whether a token exists.
  */
-export type RendererSettings = RendererVisibleSettings & { token?: never; apiHeaders?: never; hasToken: boolean };
-
-/** The stored blob without the keys a renderer may not see. */
-export type RendererVisibleSettings = {
-    [K in keyof AppSettings as K extends 'token' | 'apiHeaders' ? never : K]: AppSettings[K];
-};
+export type RendererSettings = Omit<ConfigV2, 'auth'> & { hasToken: boolean };
 
 /** The Android headless-service bridge to the native settings store. */
 export interface AndroidHeadlessStore {

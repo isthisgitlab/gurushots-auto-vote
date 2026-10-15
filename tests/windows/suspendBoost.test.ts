@@ -89,7 +89,7 @@ beforeEach(() => {
     );
     settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 777 }));
     settings.getEffectiveSetting.mockReturnValue(true);
-    settings.loadSettings.mockReturnValue(invalid({ token: TOKEN, mock: false }));
+    settings.loadSettings.mockReturnValue(invalid({ app: { mock: false }, auth: { token: TOKEN } }));
     guard.rememberChallenges([boostChallenge(1, 'One'), boostChallenge(2, 'Two'), boostChallenge(3, 'Three')], false);
 });
 
@@ -136,14 +136,14 @@ describe('applyImminentBoostsOnSuspend — no-ops', () => {
     });
 
     test('does nothing without a token', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ token: '', mock: false }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { mock: false }, auth: { token: '' } }));
         await run();
         expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
         expect(cat.info).not.toHaveBeenCalled();
     });
 
     test('a list fetched under the other mock setting is not acted on, and says why (never the token)', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ token: TOKEN, mock: true }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { mock: true }, auth: { token: TOKEN } }));
         await run();
         expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
         expect(cat.info).toHaveBeenCalledWith(
@@ -162,7 +162,7 @@ describe('applyImminentBoostsOnSuspend — no-ops', () => {
 
     test('a mock-mode list is acted on in mock mode', async () => {
         guard.rememberChallenges([boostChallenge(1, 'One')], true);
-        settings.loadSettings.mockReturnValue(invalid({ token: TOKEN, mock: true }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { mock: true }, auth: { token: TOKEN } }));
         await run();
         expect(applyBoostsOnSuspend).toHaveBeenCalledTimes(1);
     });

@@ -70,7 +70,7 @@ export function ListingHeader({
 }) {
     const { t } = useTranslation();
     const { settings } = useSettings();
-    const timezone = settings?.timezone || DEFAULT_TIMEZONE;
+    const timezone = settings?.app.timezone || DEFAULT_TIMEZONE;
     return (
         <>
             <div className="flex items-center justify-between gap-2">

@@ -16,7 +16,7 @@ import { clearLibraryCache } from './libraryCache';
 import { bumpAccountGeneration } from './accountScope';
 import { forgetChosenPhotosMemory } from './autoFill/chosenPhotos';
 
-import type { AppSettings } from '../types/settings';
+import type { ConfigV2 } from '../types/config';
 
 /**
  * A raw authentication response: every token key and error field GuruShots
@@ -41,16 +41,16 @@ interface RawAuthResponse {
  */
 const requireAuthToken = (
     actionLabel: string,
-): { ok: true; token: string; settings: AppSettings } | { ok: false; response: { success: false; error: string } } => {
+): { ok: true; token: string; settings: ConfigV2 } | { ok: false; response: { success: false; error: string } } => {
     const userSettings = settings.loadSettings();
-    if (!userSettings.token) {
+    if (!userSettings.auth.token) {
         logger.withCategory('authentication').warning(`❌ No token found for ${actionLabel}`, null);
         return {
             ok: false,
             response: { success: false, error: 'No authentication token found' },
         };
     }
-    return { ok: true, token: userSettings.token, settings: userSettings };
+    return { ok: true, token: userSettings.auth.token, settings: userSettings };
 };
 
 /**

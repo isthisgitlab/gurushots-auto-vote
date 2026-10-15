@@ -1576,14 +1576,14 @@ export const notice = {
         'Lietotne nevarēja nolasīt saglabātos uzstādījumus. Iespējams, ierīces krātuve ir aizņemta vai pilna.',
     recoveryUnreadableNextAndroid:
         'Restartē lietotni. Nekas netika pārrakstīts, un uzstādījumu saglabāšana paliek izslēgta, kamēr tos nevar nolasīt. Ja tas atkārtojas, sadaļā „Par lietotni un datiem” izmanto „Dzēst visus vietējos datus”, lai sāktu ar noklusētajiem uzstādījumiem.',
-    recoveryMigrationWhat:
-        'Tavs uzstādījumu fails ir no citas versijas, un to neizdevās atjaunināt, tāpēc uzstādījumu saglabāšana ir izslēgta.',
-    recoveryMigrationWhy: 'Failu {path} neizdevās pārveidot formātā, ko izmanto šī versija.',
-    recoveryMigrationNext:
-        'Restartē lietotni. Ja tas atkārtojas, pārvieto šo failu citur, lai sāktu ar noklusētajiem uzstādījumiem; fails netiek pārrakstīts.',
-    recoveryMigrationWhyAndroid: 'Saglabātos uzstādījumus neizdevās pārveidot formātā, ko izmanto šī versija.',
-    recoveryMigrationNextAndroid:
-        'Restartē lietotni. Ja tas atkārtojas, sadaļā „Par lietotni un datiem” izmanto „Dzēst visus vietējos datus”, lai sāktu ar noklusētajiem uzstādījumiem; līdz tam nekas netiek pārrakstīts.',
+    recoveryImportWhat:
+        'Tavus iepriekšējās versijas uzstādījumus neizdevās importēt, tāpēc uzstādījumu saglabāšana ir izslēgta un lietotne izmanto noklusētos uzstādījumus.',
+    recoveryImportWhy: 'Failu {path} neizdevās nolasīt vai pārveidot.',
+    recoveryImportNext:
+        'Restartē lietotni, lai mēģinātu vēlreiz, vai salabo šo failu. Nekas netika pārrakstīts; fails paliek savā vietā kā rezerves kopija.',
+    recoveryImportWhyAndroid: 'Iepriekšējās versijas saglabātos uzstādījumus neizdevās nolasīt vai pārveidot.',
+    recoveryImportNextAndroid:
+        'Restartē lietotni, lai mēģinātu vēlreiz. Nekas netika pārrakstīts, un uzstādījumu saglabāšana paliek izslēgta, kamēr tos nevar importēt. Ja tas atkārtojas, sadaļā „Par lietotni un datiem” izmanto „Dzēst visus vietējos datus”, lai sāktu ar noklusētajiem uzstādījumiem.',
     recoveryDroppedWhat: 'Vienu no tavām izmaiņām uzstādījumos neizdevās saglabāt.',
     recoveryDroppedWhyConflict: 'Fona pakalpojums tajā pašā laikā mainīja uzstādījumus.',
     recoveryDroppedWhyTooLarge: 'Uzstādījumi ir pārāk lieli, lai tos varētu saglabāt.',

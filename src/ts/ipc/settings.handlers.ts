@@ -24,7 +24,12 @@ try {
 import * as settings from '../settings';
 import { registerHandlers, type IpcHandlerMap } from './registerHandlers';
 import { errorResult } from './errorResult';
-import { toRendererSettings, isRendererHiddenKey, withoutRendererHiddenKeys } from './rendererSettings';
+import {
+    toRendererSettings,
+    isRendererHiddenKey,
+    isRendererReadOnlyKey,
+    withoutRendererHiddenKeys,
+} from './rendererSettings';
 import { buildThinHandlers } from './settingsThinHandlers';
 import type { BroadcastSettingsChange } from './settingsThinHandlers';
 import * as logger from '../logger';
@@ -37,7 +42,8 @@ import { loadThirdPartyNotices } from '../thirdPartyNotices';
 
 import type { IpcMain } from 'electron';
 import type { SettingsSchemaEntry } from '../settings/schema';
-import type { AppSettings, EntryPinKind } from '../types/settings';
+import type { ConfigApp } from '../types/config';
+import type { EntryPinKind } from '../types/settings';
 import type * as electronModule from 'electron';
 
 /**
@@ -66,7 +72,7 @@ const handleGetSetting = async (key: string) => {
         logger.withCategory('settings').error(`Error handling get-setting request for key "${key}":`, error);
         // A non-string key reaches here too; indexing coerces it like any
         // property access (and misses, falling back to null).
-        const defaultSettings = settings.getDefaultSettings() as Record<string, unknown>;
+        const defaultSettings: Record<string, unknown> = settings.getDefaultSettings().app;
         return Object.hasOwn(defaultSettings, key) && defaultSettings[key] !== undefined ? defaultSettings[key] : null;
     }
 };
@@ -80,9 +86,12 @@ const handleSetSetting = async (
         if (typeof key !== 'string') {
             throw new Error('Invalid key type, expected string');
         }
-        // A renderer can neither plant a token nor persist the derived hasToken.
-        if (isRendererHiddenKey(key)) return false;
+        // A renderer can neither plant a token nor persist the derived hasToken, and the account keys are the main
+        // process's to write.
+        if (isRendererHiddenKey(key) || isRendererReadOnlyKey(key)) return false;
         const result = settings.setSetting(key, value);
+        // The saved username goes with the choice to stay logged in (the login form cannot write it itself).
+        if (result && key === 'stayLoggedIn' && value === false) settings.setSetting('lastUsername', '');
         if (result && typeof broadcastSettingsChange === 'function') {
             broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
         }
@@ -161,14 +170,14 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: SettingsHandlerOptio
     'set-entry-pin': (event: unknown, kind: EntryPinKind, challengeId: string | number, imageId: string | null) =>
         handleSetEntryPin(broadcastSettingsChange, kind, challengeId, imageId),
 
-    'save-settings': async (event: unknown, newSettings: Partial<AppSettings>) => {
+    'save-settings': async (event: unknown, newSettings: Partial<ConfigApp>) => {
         try {
             if (typeof newSettings !== 'object' || newSettings === null) {
                 throw new Error('Invalid settings type, expected object');
             }
             // Only the object shape is checked here; the facade validates each
-            // key. The token, its derived flag and the API headers are not renderer-writable.
-            const result = settings.saveSettings(withoutRendererHiddenKeys(newSettings));
+            // key. The sign-in state and the derived hasToken are not renderer-writable.
+            const result = settings.saveAppSettings(withoutRendererHiddenKeys(newSettings));
             if (result && typeof broadcastSettingsChange === 'function') {
                 broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
             }
@@ -247,13 +256,48 @@ const buildEnvironmentHandlers = () => ({
     },
 });
 
-const buildLocalDataHandlers = ({ afterWipe }: SettingsHandlerOptions) => ({
+// A recovery action of the stored settings (see settings/persistence.ts): what it did is announced to the windows, and a
+// failure answers with its code (the import is described in the log).
+const recoveryAction =
+    (broadcastSettingsChange: BroadcastSettingsChange | undefined, action: () => boolean, label: string) =>
+    async () => {
+        try {
+            if (!action()) return { success: false as const, error: 'settings-import-failed' };
+            if (typeof broadcastSettingsChange === 'function') {
+                broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
+            }
+            return { success: true as const };
+        } catch (error) {
+            logger.withCategory('settings').error(`Error handling the ${label} request:`, error);
+            return errorResult(error, 'Failed to recover the settings');
+        }
+    };
+
+const buildLocalDataHandlers = ({ afterWipe, broadcastSettingsChange }: SettingsHandlerOptions) => ({
     // Why the stored settings are not in use (a corrupt file moved aside, or one that cannot be read), or else that the
     // window's last change was not saved; null when neither.
     'get-settings-recovery': async () => ({
         success: true as const,
         recovery: settings.getSettingsRecovery() ?? settings.getSettingsSaveDropped(),
     }),
+
+    // Try the import of the 1.x settings again; begin with default settings (the 1.x file stays as a backup); import
+    // the 1.x file again over the settings in use (which are set aside).
+    'retry-settings-import': recoveryAction(
+        broadcastSettingsChange,
+        () => settings.retryImport(),
+        'retry-settings-import',
+    ),
+    'start-fresh-settings': recoveryAction(
+        broadcastSettingsChange,
+        () => settings.startFresh(),
+        'start-fresh-settings',
+    ),
+    'reimport-settings-from-v1': recoveryAction(
+        broadcastSettingsChange,
+        () => settings.reimportFromV1(),
+        'reimport-settings-from-v1',
+    ),
 
     'get-third-party-notices': async () => {
         try {

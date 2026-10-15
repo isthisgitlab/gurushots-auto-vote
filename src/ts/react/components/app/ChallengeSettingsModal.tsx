@@ -21,7 +21,7 @@ import type { Challenge } from '../../../types/gurushots';
 // to the defaults rather than blocking the modal.
 const fetchAppSettings = async () => {
     try {
-        return (await ipc.getSettings()) || {};
+        return (await ipc.getSettings())?.app ?? {};
     } catch {
         return {};
     }

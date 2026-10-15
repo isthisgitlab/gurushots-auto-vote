@@ -230,7 +230,7 @@ const holdsToken = (lockPath: string, token: string): boolean => {
  */
 const reportUnavailable = (
     caught: unknown,
-    lock: { id: string | number; lockPath: string; category: 'join' | 'scenario'; internal: boolean },
+    lock: { id: string | number; lockPath: string; category: 'join' | 'scenario' | 'settings'; internal: boolean },
 ): void => {
     const errno = isPlainObject(caught) && typeof caught.code === 'string' ? ` [${caught.code}]` : '';
     // The lock's file name, not its path: the path holds the user's home folder, and the log may be shared.
@@ -260,7 +260,7 @@ const reportUnavailable = (
  */
 const acquireUnlockLock = (
     id: string | number,
-    { category = 'join', internal = false }: { category?: 'join' | 'scenario'; internal?: boolean } = {},
+    { category = 'join', internal = false }: { category?: 'join' | 'scenario' | 'settings'; internal?: boolean } = {},
 ): UnlockLock => {
     // Only the real-fs platforms (Electron/CLI) can run two processes against one
     // account; on Android the claims are changed by the native compare-and-write instead (see joinStateFile).

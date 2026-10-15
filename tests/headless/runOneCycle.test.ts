@@ -58,7 +58,7 @@ describe('headless runOneCycle', () => {
         jest.spyOn(Date, 'now').mockReturnValue(FIXED_NOW_MS);
         onCycleComplete = jest.fn<void, [string]>();
         g.AndroidHeadlessBridge = { onCycleComplete };
-        settings.loadSettings.mockReturnValue(invalid({ checkFrequencyMin: 2, checkFrequencyMax: 2 }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { checkFrequencyMin: 2, checkFrequencyMax: 2 } }));
         settings.getEffectiveSetting.mockImplementation((key) => (key === 'lastMinuteThreshold' ? 10 : 1));
         settings.getSetting.mockImplementation((key) => (key === 'token' ? 'tok' : key === 'mock' ? false : undefined));
     });
@@ -75,7 +75,10 @@ describe('headless runOneCycle', () => {
 
     test('a cycle never clears the saved login, whatever "Stay Logged In" says (only the desktop start does)', async () => {
         settings.loadSettings.mockReturnValue(
-            invalid({ checkFrequencyMin: 2, checkFrequencyMax: 2, stayLoggedIn: false, token: 'tok' }),
+            invalid({
+                app: { checkFrequencyMin: 2, checkFrequencyMax: 2, stayLoggedIn: false },
+                auth: { token: 'tok' },
+            }),
         );
         const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true, message: 'done' });
         const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });

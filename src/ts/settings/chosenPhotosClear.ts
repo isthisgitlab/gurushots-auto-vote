@@ -38,32 +38,33 @@ const sum = (counts: number[]): number => counts.reduce((total, count) => total 
  */
 const clearChosenPhotos = (): number | null => {
     const settings = loadSettings();
-    const challengeSettings = settings.challengeSettings;
-    let removed = dropList(challengeSettings.globalDefaults);
+    let removed = dropList(settings.defaults);
 
-    for (const [challengeId, values] of Object.entries(challengeSettings.perChallenge)) {
-        removed += dropList(values);
+    for (const [challengeId, record] of Object.entries(settings.challenges)) {
+        removed += dropList(record.values);
         // An override map that held nothing else has nothing left to say.
-        if (isPlainObject(values) && Object.keys(values).length === 0)
-            delete challengeSettings.perChallenge[challengeId];
+        if (isPlainObject(record.values) && Object.keys(record.values).length === 0) {
+            delete record.values;
+            if (Object.keys(record).length === 0) delete settings.challenges[challengeId];
+        }
     }
-    removed += sum(Object.values(challengeSettings.profiles ?? {}).map(dropList));
+    removed += sum(Object.values(settings.profiles).map(dropList));
     // A rule whose only content was the list has no reason to stay.
-    challengeSettings.titleRules = challengeSettings.titleRules.filter((rule) => {
+    settings.rules = settings.rules.filter((rule) => {
         const held = isPlainObject(rule) && Object.prototype.hasOwnProperty.call(rule, LIST_KEY);
         removed += dropList(rule);
         return !held || ruleHasBehaviour(rule);
     });
-    for (const scenario of Object.values(challengeSettings.scenarios ?? {})) {
+    for (const scenario of Object.values(settings.scenarios)) {
         const phases = isPlainObject(scenario) ? scenario.phases : null;
         if (isPlainObject(phases))
             removed += sum(
                 Object.values(phases).map((phase) => dropList(isPlainObject(phase) ? phase.settings : null)),
             );
     }
-    settings.chosenPhotosMemberId = '';
+    settings.auth.chosenPhotosMemberId = '';
     // Announced to every open editor through the settings-changed broadcast (see the schema entry).
-    settings.chosenPhotosClearedAt = new Date().toISOString();
+    settings.app.chosenPhotosClearedAt = new Date().toISOString();
 
     if (!saveSettings(settings)) return null;
     logger

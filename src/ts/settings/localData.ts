@@ -1,7 +1,7 @@
 /**
  * Everything the app keeps on this device, and the wipe that deletes it ("Delete all local data").
  *
- * LOCAL_DATA_STORES lists every createJsonStore file and Preferences key plus the settings file: a store that is not
+ * LOCAL_DATA_STORES lists every createJsonStore file and Preferences key plus the configuration and the 1.x settings file: a store that is not
  * listed would survive a wipe, so tests/settings/localData.test.ts fails for any createJsonStore call site that is
  * missing here. Directories and marker files live beside them.
  */
@@ -16,10 +16,12 @@ import * as cancellation from '../voting/cancellation';
 import { APP_PARTITION } from '../index/session';
 import { isVotingPassRunning } from '../voting/passActivity';
 import {
+    CONFIG_KEY,
     CORRUPT_SUFFIX,
-    SETTINGS_KEY,
+    LEGACY_SETTINGS_KEY,
     discardPendingWrites,
     getUserDataPath,
+    listPreferenceKeys,
     removePreferenceKeys,
     resumeWrites,
 } from './storage';
@@ -30,7 +32,11 @@ import type { CapacitorGlobals } from '../types/capacitor';
 type LocalDataStore = { fileName: string; prefKey: string };
 
 const LOCAL_DATA_STORES: readonly LocalDataStore[] = [
-    { fileName: 'settings.json', prefKey: SETTINGS_KEY },
+    { fileName: 'config.json', prefKey: CONFIG_KEY },
+    // The 1.x file the configuration was imported from (it may still be there, with its sign-in state blanked).
+    { fileName: 'settings.json', prefKey: LEGACY_SETTINGS_KEY },
+    { fileName: 'v2-import.json', prefKey: 'gs_v2_import' },
+    { fileName: 'titlePins.json', prefKey: 'gs_title_pins' },
     { fileName: 'autoSpends.json', prefKey: 'gs_auto_spends' },
     { fileName: 'entryAges.json', prefKey: 'gs_entry_ages' },
     { fileName: 'joinState.json', prefKey: 'gs_join_state' },
@@ -49,7 +55,7 @@ const LOCAL_DATA_DIRECTORIES = ['logs', 'vision'] as const;
 const VISION_APP_NAME = 'gurushots-auto-vote';
 
 // Files that are not stores but sit beside them: the CLI session and desktop-app markers, and the lock files of the
-// join and scenario state; a lock file may have a ".stale-<token>" copy a takeover left (a crash mid-way).
+// join and scenario state and of the settings import; a lock file may have a ".stale-<token>" copy a takeover left (a crash mid-way).
 const LOCK_FILE_RE = /^(?:(?:statelock|joinlock)-.+\.lock(?:\.stale-.+)?|cli-session\.lock|desktop-app\.lock)$/;
 
 /**
@@ -169,7 +175,16 @@ const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeRes
         await discardPendingWrites();
 
         if (runtime.isCapacitor()) {
-            const keys = LOCAL_DATA_STORES.flatMap((store) => [store.prefKey, `${store.prefKey}${CORRUPT_SUFFIX}`]);
+            // The set-aside copies carry the time they were set aside: found by what exists, not by a fixed name.
+            const kept = await listPreferenceKeys();
+            const keys = [
+                ...new Set([
+                    ...LOCAL_DATA_STORES.flatMap((store) => [store.prefKey, `${store.prefKey}${CORRUPT_SUFFIX}`]),
+                    ...kept.filter((key) =>
+                        LOCAL_DATA_STORES.some((store) => key.startsWith(`${store.prefKey}${CORRUPT_SUFFIX}`)),
+                    ),
+                ]),
+            ];
             await removePreferenceKeys(keys);
             removed.push(...keys);
         } else {

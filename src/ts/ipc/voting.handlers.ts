@@ -63,14 +63,16 @@ const voteOnSingleChallenge = (async (
         .info(`${requestPrefix}: ID=${challengeId}, Title="${challengeTitle}"`, null);
 
     const userSettings = settings.loadSettings();
-    if (!userSettings.token) {
+    if (!userSettings.auth.token) {
         const noTokenMsg = manual ? '❌ No token found for manual voting' : '❌ No token found for voting';
         logger.withCategory('authentication').warning(noTokenMsg, null);
         return { success: false as const, error: 'No authentication token found' };
     }
 
     const strategy = apiFactory.getApiStrategy();
-    const challengesResponse: ActiveChallengesResponse | null = await strategy.getActiveChallenges(userSettings.token);
+    const challengesResponse: ActiveChallengesResponse | null = await strategy.getActiveChallenges(
+        userSettings.auth.token,
+    );
 
     if (!challengesResponse || !challengesResponse.challenges) {
         const fetchMsg = manual
@@ -113,7 +115,7 @@ const voteOnSingleChallenge = (async (
         : `🗳️ ${logger.challengeTag(challenge)} Starting voting process`;
     logger.withCategory('voting').info(startMsg, null);
 
-    const result = await submitVotesForChallenge(challenge, strategy, userSettings.token, now);
+    const result = await submitVotesForChallenge(challenge, strategy, userSettings.auth.token, now);
     if (result.outcome === 'not-eligible') {
         return { success: false as const, error: result.errorMessage };
     }
@@ -146,7 +148,7 @@ const handleVoteAllChallengesManual = (async () => {
         logger.withCategory('voting').info('🔄 Starting manual vote all challenges (bypass thresholds)...', null);
 
         const userSettings = settings.loadSettings();
-        if (!userSettings.token) {
+        if (!userSettings.auth.token) {
             logger.withCategory('authentication').warning('❌ No token found for manual voting', null);
             return { success: false as const, error: 'No authentication token found' };
         }
@@ -154,7 +156,7 @@ const handleVoteAllChallengesManual = (async () => {
         const strategy = apiFactory.getApiStrategy();
 
         const challengesResponse: ActiveChallengesResponse | null = await strategy.getActiveChallenges(
-            userSettings.token,
+            userSettings.auth.token,
         );
         if (!challengesResponse || !challengesResponse.challenges) {
             logger.withCategory('challenges').warning('❌ Failed to fetch challenges for manual vote all', null);
@@ -165,7 +167,7 @@ const handleVoteAllChallengesManual = (async () => {
 
         logger.withCategory('voting').info(`📋 Found ${challenges.length} challenges to process`, null);
 
-        const { voted, skipped, total } = await voteAllChallengesManual(challenges, strategy, userSettings.token, {
+        const { voted, skipped, total } = await voteAllChallengesManual(challenges, strategy, userSettings.auth.token, {
             onProgress: (current, totalCount, challenge) =>
                 logger
                     .withCategory('voting')
@@ -191,7 +193,7 @@ const buildHandlers = () =>
         'gui-vote': async () => {
             try {
                 const userSettings = settings.loadSettings();
-                if (!userSettings.token) {
+                if (!userSettings.auth.token) {
                     return { success: false as const, error: 'No authentication token found' };
                 }
                 const middleware = apiFactory.getMiddleware();

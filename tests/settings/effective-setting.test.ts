@@ -82,8 +82,9 @@ describe('settings facade re-exports the schema module', () => {
 });
 
 describe('settings facade re-exports the storage module', () => {
-    test('initializeAsync is the same function reference', () => {
-        expect(settings.initializeAsync).toBe(storageModule.initializeAsync);
+    test('initializeAsync hydrates the storage and the stores of the import, and resolves outside Capacitor', async () => {
+        await expect(settings.initializeAsync()).resolves.toBeUndefined();
+        expect(typeof storageModule.initializeAsync).toBe('function');
     });
 
     test('getUserDataPath is the same function reference', () => {

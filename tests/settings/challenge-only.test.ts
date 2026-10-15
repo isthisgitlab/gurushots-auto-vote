@@ -8,37 +8,25 @@
  * so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import type { MemoryStore } from '../helpers/headlessStore';
 import type { SettingsSchemaEntry } from '../../src/ts/settings/schema';
 import settings = require('../../src/ts/settings');
-import { isAppSettings } from '../helpers/storedShapes';
+import { isConfig } from '../helpers/storedShapes';
 import { parseJsonAs } from '../helpers/parseJson';
 
 describe('challengeOnly settings', () => {
     const { SETTINGS_SCHEMA } = settings;
     const challengeId = '4242';
-    const headlessGlobals = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let store: { value: string | null; read: jest.Mock<string | null, []>; write: jest.Mock<void, [string]> };
+    let store: MemoryStore;
     beforeEach(() => {
-        headlessGlobals.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-        };
-        headlessGlobals.AndroidHeadlessStore = store;
+        store = installHeadlessStore();
         settings.rememberChallengeTitles([]);
         (SETTINGS_SCHEMA.autoSwap as SettingsSchemaEntry).challengeOnly = true;
     });
     afterEach(() => {
         delete (SETTINGS_SCHEMA.autoSwap as SettingsSchemaEntry).challengeOnly;
-        delete headlessGlobals.__GS_HEADLESS__;
-        delete headlessGlobals.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
     test('setGlobalDefault refuses a challengeOnly key', () => {
@@ -49,8 +37,8 @@ describe('challengeOnly settings', () => {
 
     test('a stored global value (hand-edited / older build) is ignored everywhere', () => {
         settings.setGlobalDefault('exposure', 90);
-        const raw = parseJsonAs(store.value!, isAppSettings);
-        raw.challengeSettings.globalDefaults.autoSwap = true;
+        const raw = parseJsonAs(store.value!, isConfig);
+        raw.defaults.autoSwap = true;
         store.value = JSON.stringify(raw);
         expect(settings.getGlobalDefault('autoSwap')).toBe(false);
         expect(settings.getEffectiveSetting('autoSwap', challengeId)).toBe(false);

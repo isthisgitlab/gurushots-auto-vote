@@ -1,7 +1,7 @@
 import { isPlainObject } from '../../src/ts/plainObject';
 import type { PhotoStatsFile } from '../../src/ts/services/photoStats';
-import type { AppSettings } from '../../src/ts/types/settings';
-import { isBoolean, isNumber, isRecordOf, isShape, isString } from './parseJson';
+import type { ConfigV2 } from '../../src/ts/types/config';
+import { isNumber, isRecordOf, isShape, isString } from './parseJson';
 import type { Guard } from './parseJson';
 
 /** A persisted photo-stats cache file. */
@@ -17,26 +17,21 @@ const isPhotoStatsFile: Guard<PhotoStatsFile> = isShape<PhotoStatsFile>({
     ),
 });
 
-const hasOwnFields = isShape<Pick<AppSettings, 'lastUsername' | 'mock' | 'token' | 'onboardingCompleted'>>({
-    lastUsername: isString,
-    mock: isBoolean,
-    token: isString,
-    onboardingCompleted: isBoolean,
-});
-
 /**
- * A persisted settings blob: the keys `AppSettings` declares itself are checked;
- * the UI defaults it extends and the free-form top-level keys are left as saved.
+ * A persisted configuration: the containers every config carries are checked; the values inside them are left as
+ * saved.
  */
-const isAppSettings = (value: unknown): value is AppSettings => {
-    if (!isPlainObject(value)) return false;
-    const ownFieldsValid: boolean = hasOwnFields(value);
-    return (
-        ownFieldsValid &&
-        isPlainObject(value.challengeSettings) &&
-        isPlainObject(value.windowBounds) &&
-        isPlainObject(value.apiHeaders)
-    );
-};
+const isConfig = (value: unknown): value is ConfigV2 =>
+    isPlainObject(value) &&
+    value.version === 2 &&
+    isPlainObject(value.app) &&
+    isPlainObject(value.auth) &&
+    isString(value.auth.token) &&
+    isPlainObject(value.defaults) &&
+    isPlainObject(value.profiles) &&
+    Array.isArray(value.seededProfiles) &&
+    isPlainObject(value.scenarios) &&
+    Array.isArray(value.rules) &&
+    isPlainObject(value.challenges);
 
-export { isAppSettings, isPhotoStatsFile };
+export { isConfig, isPhotoStatsFile };

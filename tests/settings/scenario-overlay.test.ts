@@ -5,7 +5,8 @@
  * never touched.
  */
 
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import type { MemoryStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/settings');
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
 import { isNumber, isRecordOf, isShape, parseJsonAs } from '../helpers/parseJson';
@@ -37,42 +38,17 @@ const plan = {
 };
 
 describe('scenario phase-settings overlay', () => {
-    const headlessGlobals = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let store: {
-        value: string | null;
-        read: jest.Mock<string | null, []>;
-        write: jest.Mock<void, [string]>;
-        readKey: jest.Mock<string | null, [string]>;
-        writeKey: jest.Mock<void, [string, string]>;
-        keys: Record<string, string>;
-    };
+    let store: MemoryStore;
 
     beforeEach(() => {
-        headlessGlobals.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            keys: {},
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-            readKey: jest.fn((key) => store.keys[key] ?? null),
-            writeKey: jest.fn((key, data) => {
-                store.keys[key] = data;
-            }),
-        };
-        headlessGlobals.AndroidHeadlessStore = store;
+        store = installHeadlessStore();
         settings.rememberChallengeTitles([{ id: 7, title: 'Big show', type: 'exhibition' }]);
         settings.setGlobalDefault('exposure', 100);
         settings.setGlobalDefault('exposureTarget', 100);
     });
 
     afterEach(() => {
-        delete headlessGlobals.__GS_HEADLESS__;
-        delete headlessGlobals.AndroidHeadlessStore;
+        removeHeadlessStore();
         settings.rememberChallengeTitles([]);
     });
 
@@ -118,7 +94,7 @@ describe('scenario phase-settings overlay', () => {
         [
             'unreadable state',
             () => {
-                store.keys.gs_scenario_state = '{broken';
+                store.keys.set('gs_scenario_state', '{broken');
             },
         ],
     ])('no overlay with %s', (label, arrange) => {
@@ -140,13 +116,11 @@ describe('scenario phase-settings overlay', () => {
         scenarioStateLedger.set(7, initialState('Plan', 'buildup', 1));
         const blob = parseJsonAs(
             store.value!,
-            isShape<{ challengeSettings: { scenarios: Record<string, { version: number }> } }>({
-                challengeSettings: isShape<{ scenarios: Record<string, { version: number }> }>({
-                    scenarios: isRecordOf(isShape<{ version: number }>({ version: isNumber })),
-                }),
+            isShape<{ scenarios: Record<string, { version: number }> }>({
+                scenarios: isRecordOf(isShape<{ version: number }>({ version: isNumber })),
             }),
         );
-        blob.challengeSettings.scenarios.Plan.version = 99;
+        blob.scenarios.Plan.version = 99;
         store.value = JSON.stringify(blob);
         expect(settings.getEffectiveSetting('exposure', '7')).toBe(100);
     });

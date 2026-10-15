@@ -34,7 +34,7 @@ export function useSettings(): {
             try {
                 await window.api.setSetting(key, value);
                 // Optimistic update
-                setSettings((prev) => (prev ? { ...prev, [key]: value } : null));
+                setSettings((prev) => (prev ? { ...prev, app: { ...prev.app, [key]: value } } : null));
             } catch (err) {
                 setError(err as Error);
                 // Refetch to get actual state on error
@@ -47,7 +47,7 @@ export function useSettings(): {
 
     const getSetting = useCallback(
         (key: string) => {
-            return settings ? settings[key] : undefined;
+            return settings ? settings.app[key] : undefined;
         },
         [settings],
     );

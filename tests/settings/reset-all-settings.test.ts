@@ -1,7 +1,7 @@
 /**
  * Guards the credential-preservation invariant of the settings facade's
  * resetAllSettings(): it must reset everything to defaults EXCEPT the
- * user-essential keys token / mock / apiHeaders. The CLI `reset-all-settings`
+ * sign-in state and the mock mode. The CLI `reset-all-settings`
  * command and the GUI/IPC `reset-all-settings` handler both delegate here, so
  * this invariant is what stops a reset from silently logging the user out.
  *
@@ -9,9 +9,10 @@
  * so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import type { MemoryStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/settings');
-import { isAppSettings } from '../helpers/storedShapes';
+import { isConfig } from '../helpers/storedShapes';
 import { parseJsonAs } from '../helpers/parseJson';
 
 jest.mock('../../src/ts/logger', () => ({
@@ -37,48 +38,85 @@ jest.mock('../../src/ts/logger', () => ({
 }));
 
 describe('settings facade — resetAllSettings', () => {
-    const headlessGlobals = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let store: { value: string | null; read: jest.Mock<string | null, []>; write: jest.Mock<void, [string]> };
+    let store: MemoryStore;
 
     beforeEach(() => {
-        headlessGlobals.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-        };
-        headlessGlobals.AndroidHeadlessStore = store;
+        store = installHeadlessStore();
     });
 
     afterEach(() => {
-        delete headlessGlobals.__GS_HEADLESS__;
-        delete headlessGlobals.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
-    test('preserves token / mock / apiHeaders and resets other settings to defaults', () => {
+    const imported = { at: '2026-10-15T10:00:00.000Z', sha256: '', report: { refsBlocked: [] }, acknowledged: true };
+
+    test('keeps the whole sign-in state and the mock mode, and resets everything else to defaults', () => {
         store.value = JSON.stringify({
-            token: 'secret-token',
-            mock: true,
-            apiHeaders: { 'X-Test': '1' },
-            theme: 'dark', // non-preserved app setting, changed from default 'light'
-            apiTimeout: 99, // non-preserved app setting, changed from default 30
+            auth: {
+                token: 'secret-token',
+                apiHeaders: { 'X-Test': '1' },
+                lastUsername: 'me',
+                chosenPhotosMemberId: 'm1',
+            },
+            app: {
+                mock: true,
+                theme: 'dark', // changed from default 'light'
+                apiTimeout: 99, // changed from default 30
+                noticeAcknowledgedVersion: 4,
+            },
+            defaults: { exposure: 80 },
+            profiles: { P: { exposure: 70 } },
+            seededProfiles: ['p'],
+            scenarios: { S: { name: 'S' } },
+            rules: [{ title: 'Macro', profile: 'P' }],
+            challenges: { '7': { values: { exposure: 60 }, suppressRuleProfile: true, pins: { boost: 'e1' } } },
+            imported,
         });
 
         const ok = settings.resetAllSettings();
         expect(ok).toBe(true);
 
-        const after = parseJsonAs(store.value!, isAppSettings);
+        const after = parseJsonAs(store.value!, isConfig);
         // Essential user data survives the reset.
-        expect(after.token).toBe('secret-token');
-        expect(after.mock).toBe(true);
-        expect(after.apiHeaders).toEqual({ 'X-Test': '1' });
+        expect(after.auth).toEqual({
+            token: 'secret-token',
+            apiHeaders: { 'X-Test': '1' },
+            lastUsername: 'me',
+            chosenPhotosMemberId: 'm1',
+        });
+        expect(after.app.mock).toBe(true);
         // Everything else returns to its default.
-        expect(after.theme).toBe('light');
-        expect(after.apiTimeout).toBe(30);
+        expect(after.app.theme).toBe('light');
+        expect(after.app.apiTimeout).toBe(30);
+        expect(after.app.noticeAcknowledgedVersion).toBeUndefined();
+        expect(after.defaults).toEqual({});
+        expect(after.profiles).toEqual({});
+        expect(after.seededProfiles).toEqual([]);
+        expect(after.scenarios).toEqual({});
+        expect(after.rules).toEqual([]);
+        expect(after.challenges).toEqual({});
+        // The record of the import is no setting: it stays.
+        expect(after.imported).toEqual(imported);
+    });
+
+    test('forgets the title pins, as it always has', () => {
+        store.value = JSON.stringify({ app: { theme: 'dark' } });
+        settings.mergeTitlePins({ '7': 'Macro World' }, []);
+        expect(settings.getTitlePins()).toEqual({ '7': 'Macro World' });
+
+        expect(settings.resetAllSettings()).toBe(true);
+
+        expect(settings.getTitlePins()).toEqual({});
+    });
+
+    test('settings that cannot be saved keep the pins too', () => {
+        store.value = JSON.stringify({ app: { theme: 'dark' } });
+        settings.mergeTitlePins({ '7': 'Macro World' }, []);
+        // The service's store cannot set a damaged configuration aside, so saving is refused.
+        store.value = '{broken';
+
+        expect(settings.resetAllSettings()).toBe(false);
+
+        expect(settings.getTitlePins()).toEqual({ '7': 'Macro World' });
     });
 });

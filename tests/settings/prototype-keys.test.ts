@@ -25,51 +25,32 @@ jest.mock('../../src/ts/logger', () => {
 
 import settings = require('../../src/ts/settings');
 import type * as schemaModule from '../../src/ts/settings/schema';
-import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
+import type { ConfigV2 } from '../../src/ts/types/config';
 import { invalid } from '../helpers/invalid';
-import { isAppSettings } from '../helpers/storedShapes';
+import { isConfig } from '../helpers/storedShapes';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import type { MemoryStore } from '../helpers/headlessStore';
 import { parseJson, parseJsonAs } from '../helpers/parseJson';
 
 const { schemaEntry } = require('../../src/ts/settings/schema') as typeof schemaModule;
 
-const g = globalThis as typeof globalThis & {
-    __GS_HEADLESS__?: boolean;
-    AndroidHeadlessStore?: AndroidHeadlessStore;
-};
-
 const PROTOTYPE_KEYS = ['constructor', 'toString', '__proto__', 'hasOwnProperty'];
 
 describe('prototype-named keys', () => {
-    let value: string | null;
-    const saved = () => parseJsonAs(value!, isAppSettings);
+    let store: MemoryStore;
+    const saved = () => parseJsonAs(store.value!, isConfig);
     const seed = (obj: unknown) => {
-        value = JSON.stringify(obj);
+        store.value = JSON.stringify(obj);
         settings.loadSettings();
     };
 
-    beforeAll(() => {
-        // Burn the once-per-process obsolete-settings cleanup so it never rewrites a seeded blob.
-        const warmup = JSON.stringify({ challengeSettings: { globalDefaults: {} } });
-        g.__GS_HEADLESS__ = true;
-        g.AndroidHeadlessStore = { read: () => warmup, write: () => {} };
-        settings.loadSettings();
-    });
-
     beforeEach(() => {
-        value = null;
-        g.__GS_HEADLESS__ = true;
-        g.AndroidHeadlessStore = {
-            read: () => value,
-            write: (data) => {
-                value = data;
-            },
-        };
+        store = installHeadlessStore();
         jest.clearAllMocks();
     });
 
     afterAll(() => {
-        delete g.__GS_HEADLESS__;
-        delete g.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
     afterEach(() => {
@@ -92,56 +73,58 @@ describe('prototype-named keys', () => {
 
     describe.each(PROTOTYPE_KEYS)('%s', (key) => {
         test('setSetting refuses it and persists nothing', () => {
-            seed({ theme: 'dark' });
-            const before = value;
+            seed({ app: { theme: 'dark' } });
+            const before = store.value;
             expect(settings.setSetting(key, 1)).toBe(false);
-            expect(value).toBe(before);
+            expect(store.value).toBe(before);
         });
 
         test('setGlobalDefault refuses it', () => {
-            seed({ theme: 'dark' });
-            const before = value;
+            seed({ app: { theme: 'dark' } });
+            const before = store.value;
             expect(settings.setGlobalDefault(key, 1)).toBe(false);
-            expect(value).toBe(before);
+            expect(store.value).toBe(before);
         });
 
         test('setChallengeOverride refuses it as a setting key', () => {
-            seed({ theme: 'dark' });
-            const before = value;
+            seed({ app: { theme: 'dark' } });
+            const before = store.value;
             expect(settings.setChallengeOverride(key, '123', 1)).toBe(false);
-            expect(value).toBe(before);
+            expect(store.value).toBe(before);
         });
 
         test('setChallengeOverrides refuses it among the overrides', () => {
-            seed({ theme: 'dark' });
-            const before = value;
+            seed({ app: { theme: 'dark' } });
+            const before = store.value;
             expect(settings.setChallengeOverrides('123', JSON.parse(`{"${key}":1}`))).toBe(false);
-            expect(value).toBe(before);
+            expect(store.value).toBe(before);
         });
 
         test('saveSettings refuses a payload carrying it, whole', () => {
-            seed({ theme: 'dark' });
-            const before = value;
-            const payload = invalid<Partial<AppSettings>>(parseJson(`{"theme":"light","${key}":{"polluted":true}}`));
+            seed({ app: { theme: 'dark' } });
+            const before = store.value;
+            const payload = invalid<Partial<ConfigV2>>(
+                parseJson(`{"app":{"theme":"light","${key}":{"polluted":true}}}`),
+            );
             expect(settings.saveSettings(payload)).toBe(false);
-            expect(value).toBe(before);
+            expect(store.value).toBe(before);
         });
 
         test('a stored file holding it loads, drops it, and still saves', () => {
             // Written by hand (or by an older build): the load must not throw into the defaults fallback.
-            value = `{"theme":"dark","${key}":{"polluted":true},"challengeSettings":{"globalDefaults":{"${key}":1},"perChallenge":{}}}`;
+            store.value = `{"app":{"theme":"dark","${key}":{"polluted":true}},"defaults":{"${key}":1}}`;
 
             const loaded = settings.loadSettings();
 
-            expect(loaded.theme).toBe('dark');
-            expect(Object.hasOwn(loaded, key)).toBe(false);
-            expect(settings.saveSettings({ theme: 'light' })).toBe(true);
-            expect(saved().theme).toBe('light');
-            expect(Object.hasOwn(saved(), key)).toBe(false);
+            expect(loaded.app.theme).toBe('dark');
+            expect(Object.hasOwn(loaded.app, key)).toBe(false);
+            expect(settings.saveAppSettings({ theme: 'light' })).toBe(true);
+            expect(saved().app.theme).toBe('light');
+            expect(Object.hasOwn(saved().app, key)).toBe(false);
         });
 
         test('reading it back gives null / the default, never an Object member', () => {
-            seed({ theme: 'dark' });
+            seed({ app: { theme: 'dark' } });
             expect(settings.getGlobalDefault(key)).toBeUndefined();
             expect(settings.getChallengeOverride(key, '123')).toBeNull();
             expect(settings.isSettingModified(key)).toBe(false);
@@ -151,50 +134,50 @@ describe('prototype-named keys', () => {
 
     describe.each(['__proto__', 'constructor', 'prototype'])('the challenge id %s', (id) => {
         test('setChallengeOverride refuses it and never writes onto Object.prototype', () => {
-            seed({ theme: 'dark' });
-            const before = value;
+            seed({ app: { theme: 'dark' } });
+            const before = store.value;
             expect(settings.setChallengeOverride('exposure', id, 55)).toBe(false);
-            expect(value).toBe(before);
+            expect(store.value).toBe(before);
         });
 
         test('setChallengeOverrides refuses it', () => {
-            seed({ theme: 'dark' });
-            const before = value;
+            seed({ app: { theme: 'dark' } });
+            const before = store.value;
             expect(settings.setChallengeOverrides(id, { exposure: 55 })).toBe(false);
             expect(settings.setChallengeOverrides(` ${id} `, { exposure: 55 })).toBe(false);
-            expect(value).toBe(before);
+            expect(store.value).toBe(before);
         });
 
         test('replaceChallengeOverrides, removeChallengeOverride and applyChallengeProfile refuse it', () => {
-            seed({ theme: 'dark', challengeSettings: { globalDefaults: {}, profiles: { P: { exposure: 60 } } } });
-            const before = value;
+            seed({ app: { theme: 'dark' }, profiles: { P: { exposure: 60 } } });
+            const before = store.value;
             expect(settings.replaceChallengeOverrides(id, { exposure: 55 })).toBe(false);
             expect(settings.removeChallengeOverride('exposure', id)).toBe(false);
             expect(settings.applyChallengeProfile('P', id)).toBe(false);
-            expect(value).toBe(before);
+            expect(store.value).toBe(before);
         });
 
         test('reads answer as for an unknown challenge', () => {
-            seed({ theme: 'dark' });
+            seed({ app: { theme: 'dark' } });
             expect(settings.getChallengeOverride('exposure', id)).toBeNull();
             expect(settings.getChallengeOverrides(id)).toEqual({});
             expect(settings.getEffectiveSetting('exposure', id)).toBe(settings.getEffectiveSetting('exposure', null));
         });
 
         test('a stored file holding it loads without it', () => {
-            value = `{"theme":"dark","challengeSettings":{"globalDefaults":{},"perChallenge":{"${id}":{"exposure":55},"7":{"exposure":60}}}}`;
+            store.value = `{"app":{"theme":"dark"},"challenges":{"${id}":{"values":{"exposure":55}},"7":{"values":{"exposure":60}}}}`;
 
             const loaded = settings.loadSettings();
 
-            expect(Object.hasOwn(loaded.challengeSettings.perChallenge, id)).toBe(false);
-            expect(loaded.challengeSettings.perChallenge['7']).toEqual({ exposure: 60 });
+            expect(Object.hasOwn(loaded.challenges, id)).toBe(false);
+            expect(loaded.challenges['7'].values).toEqual({ exposure: 60 });
         });
     });
 
     test('hasOwnProperty as a challenge id is a plain id: its container is created as an own property', () => {
-        seed({ theme: 'dark' });
+        seed({ app: { theme: 'dark' } });
         expect(settings.setChallengeOverride('exposure', 'hasOwnProperty', 55)).toBe(true);
-        expect(Object.hasOwn(saved().challengeSettings.perChallenge, 'hasOwnProperty')).toBe(true);
+        expect(Object.hasOwn(saved().challenges, 'hasOwnProperty')).toBe(true);
         expect(settings.getChallengeOverride('exposure', 'hasOwnProperty')).toBe(55);
         expect(settings.getChallengeOverride('toString', 'hasOwnProperty')).toBeNull();
     });
@@ -218,12 +201,12 @@ describe('prototype-named keys', () => {
             ['checkFrequencyMax', 0.5],
             ['checkFrequencyMax', 61],
         ])('%s = %p is refused on write', (key, bad) => {
-            seed({ theme: 'dark' });
-            const before = value;
+            seed({ app: { theme: 'dark' } });
+            const before = store.value;
             expect(settings.setSetting(key, bad)).toBe(false);
-            expect(settings.saveSettings({ [key]: bad })).toBe(false);
-            expect(settings.saveSettings({ [key]: 'x' })).toBe(false);
-            expect(value).toBe(before);
+            expect(settings.saveAppSettings({ [key]: bad })).toBe(false);
+            expect(settings.saveAppSettings({ [key]: 'x' })).toBe(false);
+            expect(store.value).toBe(before);
         });
 
         test.each([
@@ -237,9 +220,9 @@ describe('prototype-named keys', () => {
             ['checkFrequencyMax', 60],
             ['checkFrequencyMax', 2.5],
         ])('%s = %p is accepted', (key, ok) => {
-            seed({ theme: 'dark' });
+            seed({ app: { theme: 'dark' } });
             expect(settings.setSetting(key, ok)).toBe(true);
-            expect(saved()[key]).toBe(ok);
+            expect(saved().app[key]).toBe(ok);
         });
 
         test.each([
@@ -254,10 +237,10 @@ describe('prototype-named keys', () => {
             ['checkFrequencyMax', 1000, 3],
             ['checkFrequencyMax', 0, 3],
         ])('a stored %s of %p is dropped for the default %p', (key, bad, fallback) => {
-            value = JSON.stringify({ theme: 'dark', [key]: bad });
+            store.value = JSON.stringify({ app: { theme: 'dark', [key]: bad } });
 
-            expect(settings.loadSettings()[key]).toBe(fallback);
-            expect(settings.loadSettings().theme).toBe('dark');
+            expect(settings.loadSettings().app[key]).toBe(fallback);
+            expect(settings.loadSettings().app.theme).toBe('dark');
         });
 
         test('an out-of-range value is said once, not on every read', () => {
@@ -269,7 +252,7 @@ describe('prototype-named keys', () => {
                         __cat: { warning: jest.Mock<void, [string, ...unknown[]]> };
                     }
                 ).__cat.warning;
-                value = JSON.stringify({ theme: 'dark', apiTimeout: 100000 });
+                installHeadlessStore({ config: JSON.stringify({ app: { theme: 'dark', apiTimeout: 100000 } }) });
                 isolated.loadSettings();
                 isolated.loadSettings();
                 isolated.loadSettings();
@@ -287,7 +270,7 @@ describe('a schema entry without a validator', () => {
     });
 
     test('is skipped by the load-time validation instead of throwing into the defaults fallback', () => {
-        let loaded: AppSettings | undefined;
+        let loaded: ConfigV2 | undefined;
         jest.isolateModules(() => {
             jest.doMock('../../src/ts/settings/schema', () => {
                 const actual = jest.requireActual<typeof schemaModule>('../../src/ts/settings/schema');
@@ -298,21 +281,14 @@ describe('a schema entry without a validator', () => {
                 };
             });
             const isolated = require('../../src/ts/settings') as typeof settings;
-            g.__GS_HEADLESS__ = true;
-            g.AndroidHeadlessStore = {
-                read: () =>
-                    JSON.stringify({
-                        theme: 'dark',
-                        challengeSettings: { globalDefaults: { hollow: 1, exposure: 70 }, perChallenge: {} },
-                    }),
-                write: () => {},
-            };
+            installHeadlessStore({
+                config: JSON.stringify({ app: { theme: 'dark' }, defaults: { hollow: 1, exposure: 70 } }),
+            });
             loaded = isolated.loadSettings();
         });
-        delete g.__GS_HEADLESS__;
-        delete g.AndroidHeadlessStore;
+        removeHeadlessStore();
 
-        expect(loaded?.theme).toBe('dark');
-        expect(loaded?.challengeSettings.globalDefaults).toEqual(expect.objectContaining({ hollow: 1, exposure: 70 }));
+        expect(loaded?.app.theme).toBe('dark');
+        expect(loaded?.defaults).toEqual(expect.objectContaining({ hollow: 1, exposure: 70 }));
     });
 });

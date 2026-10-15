@@ -158,7 +158,7 @@ describe('auth: login', () => {
         prompts.createReadlineInterface.mockReturnValue(invalid(rl));
         prompts.askInput.mockResolvedValue('me@x.io');
         prompts.askSecret.mockResolvedValue('pw');
-        settings.loadSettings.mockReturnValue(invalid({ mock: false }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { mock: false } }));
     });
     afterEach(() => {
         restore(process.stdin, ttyDesc.in);
@@ -196,7 +196,7 @@ describe('auth: login', () => {
     });
 
     test('switches from MOCK to REAL mode and reports a failed login', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ mock: true }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { mock: true } }));
         prompts.askYesNo.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
         apiFactory.__mw.cliLogin.mockResolvedValue({ success: false, error: 'bad creds' });
         await expect(handleLogin()).resolves.toBe(false);

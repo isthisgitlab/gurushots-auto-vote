@@ -4,9 +4,11 @@
  * makes it again on what the other saved meanwhile, so a toggle made on one side is not lost to the other.
  */
 
+// No test here may touch the real user-data folder: the path is a made-up one that does not exist.
 jest.mock('../../src/ts/runtime', () => ({
     __esModule: true,
     ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
+    getAppUserDataPath: () => '/nonexistent/gurushots-auto-vote-test-user-data',
 }));
 jest.mock('../../src/ts/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
@@ -21,6 +23,7 @@ const mockPreferences = {
     set: jest.fn<Promise<void>, [{ key: string; value: string }]>(() => Promise.resolve()),
     get: jest.fn<Promise<{ value: string | null }>, [{ key: string }]>(() => Promise.resolve({ value: null })),
     remove: jest.fn<Promise<void>, [{ key: string }]>(() => Promise.resolve()),
+    keys: jest.fn<Promise<{ keys: string[] }>, []>(() => Promise.resolve({ keys: [] })),
 };
 jest.mock('@capacitor/preferences', () => ({ Preferences: mockPreferences }), { virtual: true });
 
@@ -39,7 +42,7 @@ const g = globalThis as typeof globalThis & {
     AndroidHeadlessStore?: AndroidHeadlessStore;
 };
 const cat = invalid<{ __cat: { error: jest.Mock<void, [string, ...unknown[]]> } }>(loggerModule).__cat;
-const KEY = 'gurushots-settings';
+const KEY = 'gurushots-config';
 
 const loadStorage = () => {
     let mod: typeof storageModule | undefined;
@@ -85,7 +88,9 @@ describe('the app window saving the settings', () => {
             async ({ expected, value }) => native.compareAndSet(expected, value),
         );
         withPlugin(compareAndWrite);
-        mockPreferences.get.mockImplementation(() => Promise.resolve({ value: native.value }));
+        mockPreferences.get.mockImplementation(({ key }) =>
+            Promise.resolve({ value: key === KEY ? native.value : null }),
+        );
         return { native, compareAndWrite };
     };
 
@@ -207,7 +212,7 @@ describe('the app window saving the settings', () => {
 
     test('without the native plugin the text is put down in Preferences, against what was hydrated', async () => {
         g.Capacitor = { isNativePlatform: () => true };
-        mockPreferences.get.mockResolvedValue({ value: '{"a":1}' });
+        mockPreferences.get.mockImplementation(({ key }) => Promise.resolve({ value: key === KEY ? '{"a":1}' : null }));
         const { storage, initializeAsync, flushPendingWrites } = loadStorage();
         await initializeAsync();
 
@@ -381,9 +386,9 @@ describe('the background service saving the settings', () => {
 
     test('through the facade: a toggle that the window saved right after the service read is kept', () => {
         let settings: typeof settingsModule | undefined;
-        // setSetting reads, then reads again to merge: the window saves its toggle just after that second read.
-        const { native } = nativeService(json({ theme: 'dark' }), (reads) => {
-            if (reads === 2) native.value = json({ theme: 'dark', language: 'lv' });
+        // The save reads once, to make its change on what is stored: the window saves its toggle just after that read.
+        const { native } = nativeService(json({ app: { theme: 'dark' } }), (reads) => {
+            if (reads === 2) native.value = json({ app: { theme: 'dark', language: 'lv' } });
         });
         jest.isolateModules(() => {
             settings = require('../../src/ts/settings') as typeof settingsModule;
@@ -393,11 +398,11 @@ describe('the background service saving the settings', () => {
         const before = native.value;
         expect(before).not.toBeNull();
 
-        expect(settings!.saveSettings({ checkFrequencyMin: 7 })).toBe(true);
+        expect(settings!.saveAppSettings({ checkFrequencyMin: 7 })).toBe(true);
 
-        const saved = parse(native.value) as Record<string, unknown>;
-        expect(saved.checkFrequencyMin).toBe(7);
-        expect(saved.language).toBe('lv');
+        const { app } = parse(native.value) as { app: Record<string, unknown> };
+        expect(app.checkFrequencyMin).toBe(7);
+        expect(app.language).toBe('lv');
     });
 });
 
@@ -405,7 +410,7 @@ describe('setSetting on the background service', () => {
     test('hands over only the changed key, so what the window saved right after its one read is kept', () => {
         let armed = false;
         let windowText: string | null = null;
-        const storedBlob = (language: string) => json({ theme: 'dark', language });
+        const storedBlob = (language: string) => json({ app: { theme: 'dark', language } });
         const native = nativeStore(storedBlob('en'));
         let lastRead: string | null = null;
         const bridge = {
@@ -431,19 +436,17 @@ describe('setSetting on the background service', () => {
         jest.isolateModules(() => {
             settings = require('../../src/ts/settings') as typeof settingsModule;
         });
-        // The first load migrates the stored blob; what the window saves next is on top of the migrated one.
         settings!.loadSettings();
-        const migrated = parse(native.value) as Record<string, unknown>;
-        windowText = json({ ...migrated, language: 'lv' });
+        windowText = json({ app: { theme: 'dark', language: 'lv' } });
         armed = true;
         bridge.read.mockClear();
         bridge.write.mockClear();
 
         expect(settings!.setSetting('checkFrequencyMin', 7)).toBe(true);
 
-        const saved = parse(native.value) as Record<string, unknown>;
-        expect(saved.checkFrequencyMin).toBe(7);
-        expect(saved.language).toBe('lv');
+        const { app } = parse(native.value) as { app: Record<string, unknown> };
+        expect(app.checkFrequencyMin).toBe(7);
+        expect(app.language).toBe('lv');
         // One load, a write refused because the window moved, one read to make the change again, and its write.
         expect(bridge.read).toHaveBeenCalledTimes(2);
         expect(bridge.write).toHaveBeenCalledTimes(2);
@@ -474,7 +477,9 @@ describe('both writers saving different settings at once', () => {
                 },
             },
         };
-        mockPreferences.get.mockImplementation(() => Promise.resolve({ value: native.value }));
+        mockPreferences.get.mockImplementation(({ key }) =>
+            Promise.resolve({ value: key === KEY ? native.value : null }),
+        );
         const window = loadStorage();
         const service = loadStorage();
         await window.initializeAsync();
@@ -509,7 +514,9 @@ describe('the app window being told that a save was given up', () => {
             async ({ expected, value }) => native.compareAndSet(expected, value),
         );
         g.Capacitor = { isNativePlatform: () => true, Plugins: { AutoVoteBackground: { compareAndWrite } } };
-        mockPreferences.get.mockImplementation(() => Promise.resolve({ value: native.value }));
+        mockPreferences.get.mockImplementation(({ key }) =>
+            Promise.resolve({ value: key === KEY ? native.value : null }),
+        );
         return { native, compareAndWrite };
     };
     /** The service changing the blob under every attempt of one save. */
@@ -701,7 +708,7 @@ describe('the app window being told that a save was given up', () => {
     });
 
     test('through the facade the notice is a settings-save-dropped state at the preference key', async () => {
-        const { native, compareAndWrite } = nativeWindow('{"theme":"light"}');
+        const { native, compareAndWrite } = nativeWindow('{"app":{"theme":"light"}}');
         let facade: typeof settingsModule | undefined;
         jest.isolateModules(() => {
             facade = require('../../src/ts/settings') as typeof settingsModule;

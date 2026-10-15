@@ -7,6 +7,7 @@ import * as logger from '../../../src/ts/logger';
 import { V1_KEY_RENAMES, importV1Settings, renameV1ScenarioDocument } from '../../../src/ts/settings/importV1';
 import { getV1Defaults } from '../../../src/ts/settings/importV1/defaults';
 import { renameV1Keys } from '../../../src/ts/settings/importV1/renames';
+import { TOP_LEVEL_ONLY_KEYS } from '../../../src/ts/settings/importV1/convert';
 import { invalid } from '../../helpers/invalid';
 
 type Result = ReturnType<typeof importV1Settings>;
@@ -53,12 +54,23 @@ describe('importV1Settings', () => {
 
     test('an empty object is the defaults', () => {
         const result = okOf(importV1Settings('{}'));
-        expect(result.config.defaults).toEqual(
-            renameV1Keys(getV1Defaults().challengeSettings.globalDefaults, 'drop-targets'),
+        const resolvable = Object.fromEntries(
+            Object.entries(getV1Defaults().challengeSettings.globalDefaults).filter(
+                ([key]) => !TOP_LEVEL_ONLY_KEYS.has(key),
+            ),
         );
+        expect(result.config.defaults).toEqual(renameV1Keys(resolvable, 'drop-targets'));
         expect(result.config.challenges).toEqual({});
         expect(result.config.rules).toEqual([]);
         expect(result.report.refsBlocked).toEqual([]);
+    });
+
+    test('carries the mock mode only when the file held a valid one', () => {
+        expect(okOf(importV1Settings('{"mock":true}')).config.app.mock).toBe(true);
+        expect(okOf(importV1Settings('{"mock":false}')).config.app.mock).toBe(false);
+        expect(okOf(importV1Settings('{}')).config.app).not.toHaveProperty('mock');
+        // A value of the wrong type was replaced by the build default when 1.x loaded it: nothing to carry.
+        expect(okOf(importV1Settings('{"mock":"yes"}')).config.app).not.toHaveProperty('mock');
     });
 
     test('migrates and prunes in memory: legacy input is converted, obsolete keys are gone', () => {

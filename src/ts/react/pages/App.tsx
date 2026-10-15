@@ -49,7 +49,7 @@ function useWelcomeGate(
     const [welcomeOpen, setWelcomeOpen] = useState(false);
     const welcomeHandledRef = useRef(false);
     const settingsReady = !settingsLoading && Boolean(settings);
-    const onboardingCompleted = settings?.onboardingCompleted;
+    const onboardingCompleted = settings?.app.onboardingCompleted;
     useEffect(() => {
         if (welcomeHandledRef.current) return;
         if (settingsReady && !onboardingCompleted) {
@@ -192,7 +192,7 @@ function AppContent() {
     const notice = useNoticeGate(settings, settingsLoading, updateSetting);
     const { welcomeOpen, handleWelcomeClose } = useWelcomeGate(settings, settingsLoading, updateSetting);
 
-    useDocumentTheme(settings?.theme);
+    useDocumentTheme(settings?.app.theme);
 
     // After a join changes state, refresh balances + the active-challenge list.
     const handleJoined = useCallback(() => {
@@ -247,8 +247,8 @@ function AppContent() {
         return <PageLoader text={t('common.loading')} />;
     }
 
-    const timezone = settings?.timezone || DEFAULT_TIMEZONE;
-    const isMock = settings?.mock || false;
+    const timezone = settings?.app.timezone || DEFAULT_TIMEZONE;
+    const isMock = settings?.app.mock || false;
     const isLoggedIn = !!settings?.hasToken;
 
     return (

@@ -1,21 +1,22 @@
 /**
- * rebaseSettingsText: a settings change made again on the blob another writer saved meanwhile. Only what the change
- * altered against the text it was made from is applied; what the other writer altered is kept.
+ * rebaseJsonText / rebaseConfigText: a settings change made again on the document another writer saved meanwhile. Only
+ * what the change altered against the text it was made from is applied; what the other writer altered is kept. The
+ * configuration's own merge reads both sides as a load does first, so a default is no change.
  */
 
-import { rebaseSettingsText } from '../../src/ts/settings/settingsMerge';
+import { rebaseConfigText, rebaseJsonText } from '../../src/ts/settings/settingsMerge';
 import { isPlainObject } from '../../src/ts/plainObject';
 import { getDefaultSettings } from '../../src/ts/settings/defaults';
 
 const text = (value: unknown) => JSON.stringify(value, null, 2);
 const rebase = (base: unknown, ours: unknown, theirs: unknown) =>
-    JSON.parse(rebaseSettingsText(text(base), text(ours), text(theirs))) as unknown;
+    JSON.parse(rebaseJsonText(text(base), text(ours), text(theirs))) as unknown;
 
-describe('rebaseSettingsText', () => {
+describe('rebaseJsonText', () => {
     test('with nothing else saved since, the changed text is returned as it is', () => {
         const ours = '{"a":1,   "b":2}';
-        expect(rebaseSettingsText('{"a":1}', ours, '{"a":1}')).toBe(ours);
-        expect(rebaseSettingsText(null, ours, null)).toBe(ours);
+        expect(rebaseJsonText('{"a":1}', ours, '{"a":1}')).toBe(ours);
+        expect(rebaseJsonText(null, ours, null)).toBe(ours);
     });
 
     test('a setting each side changed, in different keys, survives', () => {
@@ -36,13 +37,12 @@ describe('rebaseSettingsText', () => {
     });
 
     test('nested objects merge key by key (one challenge override each)', () => {
-        const base = { challengeSettings: { perChallenge: { 1: { exposure: 50 } }, titleRules: [] } };
-        const ours = { challengeSettings: { perChallenge: { 1: { exposure: 70 } }, titleRules: [] } };
-        const theirs = {
-            challengeSettings: { perChallenge: { 1: { exposure: 50 }, 2: { exposure: 80 } }, titleRules: [] },
-        };
+        const base = { challenges: { 1: { values: { exposure: 50 } } }, rules: [] };
+        const ours = { challenges: { 1: { values: { exposure: 70 } } }, rules: [] };
+        const theirs = { challenges: { 1: { values: { exposure: 50 } }, 2: { values: { exposure: 80 } } }, rules: [] };
         expect(rebase(base, ours, theirs)).toEqual({
-            challengeSettings: { perChallenge: { 1: { exposure: 70 }, 2: { exposure: 80 } }, titleRules: [] },
+            challenges: { 1: { values: { exposure: 70 } }, 2: { values: { exposure: 80 } } },
+            rules: [],
         });
     });
 
@@ -66,22 +66,19 @@ describe('rebaseSettingsText', () => {
     });
 
     test('with no earlier text or nothing stored, the other side counts as empty', () => {
-        expect(JSON.parse(rebaseSettingsText(null, '{"a":1}', '{"b":2}'))).toEqual({ a: 1, b: 2 });
-        expect(JSON.parse(rebaseSettingsText('{"a":1}', '{"a":1,"c":3}', null))).toEqual({ c: 3 });
-        expect(JSON.parse(rebaseSettingsText('', '{"a":1}', '{"b":2}'))).toEqual({ a: 1, b: 2 });
+        expect(JSON.parse(rebaseJsonText(null, '{"a":1}', '{"b":2}'))).toEqual({ a: 1, b: 2 });
+        expect(JSON.parse(rebaseJsonText('{"a":1}', '{"a":1,"c":3}', null))).toEqual({ c: 3 });
+        expect(JSON.parse(rebaseJsonText('', '{"a":1}', '{"b":2}'))).toEqual({ a: 1, b: 2 });
     });
 
     test('is written as persistence writes it', () => {
-        expect(rebaseSettingsText('{"a":1}', '{"a":2}', '{"a":1,"b":1}')).toBe(text({ a: 2, b: 1 }));
+        expect(rebaseJsonText('{"a":1}', '{"a":2}', '{"a":1,"b":1}')).toBe(text({ a: 2, b: 1 }));
     });
 
     test('a __proto__ key stays data and never reaches the prototype', () => {
-        const merged: unknown = JSON.parse(
-            rebaseSettingsText('{}', '{"a":1}', '{"__proto__":{"polluted":true},"b":1}'),
-        );
+        const merged: unknown = JSON.parse(rebaseJsonText('{}', '{"a":1}', '{"__proto__":{"polluted":true},"b":1}'));
         if (!isPlainObject(merged)) throw new Error('not an object');
-        // A load drops such a key, so it is not carried over; either way it never becomes the prototype.
-        expect(Object.hasOwn(merged, '__proto__')).toBe(false);
+        expect(Object.hasOwn(merged, '__proto__')).toBe(true);
         expect(Object.getPrototypeOf(merged)).toBe(Object.prototype);
         expect(({} as Record<string, unknown>).polluted).toBeUndefined();
         expect(merged.a).toBe(1);
@@ -92,68 +89,96 @@ describe('rebaseSettingsText', () => {
         ['a stored text that is not an object', '{"a":1}', '{"a":2}', '[1]'],
         ['an unreadable earlier text', '{broken', '{"a":2}', '{"a":1}'],
     ])('%s is not overwritten: it throws', (_name, base, ours, theirs) => {
-        expect(() => rebaseSettingsText(base, ours, theirs)).toThrow();
+        expect(() => rebaseJsonText(base, ours, theirs)).toThrow();
     });
 
-    describe('defaults are not changes', () => {
+    describe('the configuration: defaults are not changes', () => {
         // What persistence writes: the stored values over the defaults.
-        const blob = (stored: Record<string, unknown>) => text({ ...getDefaultSettings(), ...stored });
-        const rebaseBlob = (base: string | null, ours: string, theirs: string | null): Record<string, unknown> => {
-            const merged: unknown = JSON.parse(rebaseSettingsText(base, ours, theirs));
+        const config = (stored: Record<string, unknown> = {}) => {
+            const defaults = getDefaultSettings();
+            return text({ ...defaults, ...stored });
+        };
+        const rebaseConfig = (base: string | null, ours: string, theirs: string | null): Record<string, unknown> => {
+            const merged: unknown = JSON.parse(rebaseConfigText(base, ours, theirs));
             if (!isPlainObject(merged)) throw new Error('not an object');
             return merged;
         };
+        const appOf = (merged: Record<string, unknown>): Record<string, unknown> => {
+            if (!isPlainObject(merged.app)) throw new Error('app missing');
+            return merged.app;
+        };
+        const authOf = (merged: Record<string, unknown>): Record<string, unknown> => {
+            if (!isPlainObject(merged.auth)) throw new Error('auth missing');
+            return merged.auth;
+        };
+
+        test('with nothing else saved since, the changed text is returned as it is', () => {
+            const ours = config({ auth: { ...getDefaultSettings().auth, token: 't2' } });
+            expect(rebaseConfigText('{}', ours, '{}')).toBe(ours);
+        });
 
         test('a key absent from the earlier text and set by the other writer survives', () => {
-            const base = '{"token":"t1"}';
-            const ours = blob({ token: 't2' });
-            const theirs = '{"token":"t1","noticeAcknowledgedVersion":9}';
-            const merged = rebaseBlob(base, ours, theirs);
-            expect(merged.noticeAcknowledgedVersion).toBe(9);
-            expect(merged.token).toBe('t2');
+            const base = '{"auth":{"token":"t1"}}';
+            const ours = config({ auth: { ...getDefaultSettings().auth, token: 't2' } });
+            const theirs = '{"auth":{"token":"t1"},"app":{"noticeAcknowledgedVersion":9}}';
+            const merged = rebaseConfig(base, ours, theirs);
+            expect(appOf(merged).noticeAcknowledgedVersion).toBe(9);
+            expect(authOf(merged).token).toBe('t2');
         });
 
         test('with no earlier text, only what this side changed from the defaults is applied', () => {
-            const ours = blob({ language: 'lv' });
-            const theirs = '{"token":"theirs-token","noticeAcknowledgedVersion":9}';
-            const merged = rebaseBlob(null, ours, theirs);
-            expect(merged.token).toBe('theirs-token');
-            expect(merged.noticeAcknowledgedVersion).toBe(9);
-            expect(merged.language).toBe('lv');
+            const ours = config({ app: { ...getDefaultSettings().app, language: 'lv' } });
+            const theirs = '{"auth":{"token":"theirs-token"},"app":{"noticeAcknowledgedVersion":9}}';
+            const merged = rebaseConfig(null, ours, theirs);
+            expect(authOf(merged).token).toBe('theirs-token');
+            expect(appOf(merged).noticeAcknowledgedVersion).toBe(9);
+            expect(appOf(merged).language).toBe('lv');
         });
 
         test('a nested container the other writer filled in is kept whatever the earlier text lacked', () => {
-            const ours = blob({ language: 'lv' });
-            const theirs = JSON.stringify({ challengeSettings: { globalDefaults: { exposure: 12 } } });
-            const merged = rebaseBlob('{}', ours, theirs);
-            const challengeSettings = merged.challengeSettings;
-            if (!isPlainObject(challengeSettings) || !isPlainObject(challengeSettings.globalDefaults)) {
-                throw new Error('challengeSettings missing');
-            }
-            expect(challengeSettings.globalDefaults.exposure).toBe(12);
-            expect(merged.language).toBe('lv');
+            const ours = config({ app: { ...getDefaultSettings().app, language: 'lv' } });
+            const theirs = JSON.stringify({ defaults: { exposure: 12 } });
+            const merged = rebaseConfig('{}', ours, theirs);
+            expect(merged.defaults).toEqual({ exposure: 12 });
+            expect(appOf(merged).language).toBe('lv');
         });
 
         test('a stored value the load replaced is not a change this side made', () => {
-            const { apiTimeout } = getDefaultSettings();
+            const { apiTimeout } = getDefaultSettings().app;
             // The earlier text holds an out-of-range value; the load turned it into the default in `ours`.
-            const base = JSON.stringify({ apiTimeout: -5, language: 'en' });
-            const ours = blob({ language: 'lv' });
-            const theirs = JSON.stringify({ apiTimeout: apiTimeout + 10, language: 'en' });
+            const base = JSON.stringify({ app: { apiTimeout: -5, language: 'en' } });
+            const ours = config({ app: { ...getDefaultSettings().app, language: 'lv' } });
+            const theirs = JSON.stringify({ app: { apiTimeout: apiTimeout + 10, language: 'en' } });
 
-            const merged = rebaseBlob(base, ours, theirs);
+            const merged = rebaseConfig(base, ours, theirs);
 
-            expect(merged.apiTimeout).toBe(apiTimeout + 10);
-            expect(merged.language).toBe('lv');
+            expect(appOf(merged).apiTimeout).toBe(apiTimeout + 10);
+            expect(appOf(merged).language).toBe('lv');
         });
 
         test('an invalid value the other writer stored is read as the default, as a load reads it', () => {
-            const { apiTimeout } = getDefaultSettings();
-            const base = JSON.stringify({ language: 'en' });
-            const ours = blob({ language: 'lv' });
-            const theirs = JSON.stringify({ apiTimeout: -5, language: 'en' });
+            const { apiTimeout } = getDefaultSettings().app;
+            const base = JSON.stringify({ app: { language: 'en' } });
+            const ours = config({ app: { ...getDefaultSettings().app, language: 'lv' } });
+            const theirs = JSON.stringify({ app: { apiTimeout: -5, language: 'en' } });
 
-            expect(rebaseBlob(base, ours, theirs).apiTimeout).toBe(apiTimeout);
+            expect(appOf(rebaseConfig(base, ours, theirs)).apiTimeout).toBe(apiTimeout);
+        });
+
+        test('an unreadable stored text is not overwritten: it throws', () => {
+            expect(() => rebaseConfigText('{}', config(), '{broken')).toThrow();
+        });
+
+        test('a __proto__ key in the app block is dropped by the read of the other side, and never reaches the prototype', () => {
+            const merged = rebaseConfig(
+                '{}',
+                config({ app: { ...getDefaultSettings().app, language: 'lv' } }),
+                '{"app":{"__proto__":{"polluted":true},"theme":"dark"}}',
+            );
+            expect(Object.hasOwn(appOf(merged), '__proto__')).toBe(false);
+            expect(Object.getPrototypeOf(appOf(merged))).toBe(Object.prototype);
+            expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+            expect(appOf(merged).theme).toBe('dark');
         });
     });
 });

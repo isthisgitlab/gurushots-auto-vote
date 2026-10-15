@@ -86,7 +86,7 @@ beforeEach(() => {
     mockTranslator.t.mockImplementation((key) => TEMPLATES[key] ?? key);
     mockApi.getTitleProfile.mockReset().mockResolvedValue(null);
     mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
-    mockApi.getSettings.mockReset().mockResolvedValue(invalid({ timezone: 'UTC', checkFrequencyMax: 30 }));
+    mockApi.getSettings.mockReset().mockResolvedValue(invalid({ app: { timezone: 'UTC', checkFrequencyMax: 30 } }));
     mockApi.getChallengeProfiles.mockReset().mockResolvedValue({});
     mockApi.replaceChallengeOverrides.mockReset().mockResolvedValue(true);
     mockApi.saveChallengeProfile.mockReset().mockResolvedValue(true);
@@ -517,7 +517,7 @@ describe('pre-boost fill hints', () => {
 
 describe('window time formatting', () => {
     test('an unknown app timezone falls back to a UTC HH:MM label', async () => {
-        mockApi.getSettings.mockResolvedValue(invalid({ timezone: 'Not/AZone', checkFrequencyMax: 0 }));
+        mockApi.getSettings.mockResolvedValue(invalid({ app: { timezone: 'Not/AZone', checkFrequencyMax: 0 } }));
         mockApi.getChallengeOverrides.mockResolvedValue({ useScheduledFill: true, scheduledFillBeforeEnd: [600] });
         renderModal();
         await loaded();

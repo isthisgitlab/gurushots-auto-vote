@@ -21,7 +21,7 @@ jest.mock('../../src/ts/logger', () => {
 });
 
 jest.mock('../../src/ts/settings', () => ({
-    loadSettings: jest.fn(() => ({ mock: true })),
+    loadSettings: jest.fn(() => ({ app: { mock: true }, auth: { token: '' }, challenges: {} })),
     getEffectiveSetting: jest.fn(),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     SETTINGS_SCHEMA: { chosenPhotos: { type: 'photos', perChallenge: true, default: [] } },
@@ -52,11 +52,20 @@ jest.mock('../../src/ts/ipc/voting.handlers', () => {
 });
 
 import { invalid } from '../helpers/invalid';
+import type { ConfigV2 } from '../../src/ts/types/config';
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
 );
 import settingsModule = require('../../src/ts/settings');
+// The configuration `loadSettings` answers: the app preferences, the sign-in state and the challenges' records.
+const config = (over: { app?: object; auth?: object; challenges?: object } = {}) =>
+    invalid<ConfigV2>({
+        app: { mock: true, ...over.app },
+        auth: { token: '', ...over.auth },
+        challenges: over.challenges ?? {},
+    });
+
 const settings = jest.mocked(settingsModule);
 import type * as apiFactoryModule from '../../src/ts/apiFactory';
 import type * as runSchedulerModule from '../../src/ts/scheduling/runScheduler';
@@ -100,13 +109,13 @@ beforeEach(() => {
     );
     mw.isAuthenticated.mockReturnValue(true);
     mw.getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 111, title: 'Sunset' }] }));
-    settings.loadSettings.mockReturnValue(invalid({ mock: true }));
+    settings.loadSettings.mockReturnValue(config());
     openBoostWindows.mockReturnValue([]);
 });
 
 describe('runVotingCycle', () => {
     test('defaults to strategy cycle 1 and reports REAL mode', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ mock: false }));
+        settings.loadSettings.mockReturnValue(config({ app: { mock: false } }));
         mw.cliVote.mockResolvedValue({ success: true, challenges: [] });
         await expect(runVotingCycle()).resolves.toEqual({ success: true, challenges: [] });
         expect(mw.cliVote).toHaveBeenCalledWith(null);
@@ -222,7 +231,7 @@ describe('startContinuousVoting', () => {
     });
 
     test('does nothing but warn when not authenticated', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ mock: false }));
+        settings.loadSettings.mockReturnValue(config({ app: { mock: false } }));
         mw.isAuthenticated.mockReturnValue(false);
         await startContinuousVoting();
         expect(msgs('info')[0]).toBe('=== Starting Continuous Voting Mode (REAL MODE) ===');
@@ -317,7 +326,9 @@ describe('startContinuousVoting', () => {
 
 describe('showStatus', () => {
     test('unauthenticated REAL mode: no token line and no boost-window fetch', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ mock: false, checkFrequencyMin: 3, checkFrequencyMax: 3 }));
+        settings.loadSettings.mockReturnValue(
+            config({ app: { mock: false, checkFrequencyMin: 3, checkFrequencyMax: 3 } }),
+        );
         settings.getEffectiveSetting.mockReturnValue(1);
         mw.isAuthenticated.mockReturnValue(false);
         await showStatus();
@@ -332,11 +343,9 @@ describe('showStatus', () => {
 
     test('authenticated without a token, random frequency and per-challenge settings', async () => {
         settings.loadSettings.mockReturnValue(
-            invalid({
-                mock: true,
-                checkFrequencyMin: 2,
-                checkFrequencyMax: 5,
-                challengeSettings: { 42: { exposure: 80 } },
+            config({
+                app: { checkFrequencyMin: 2, checkFrequencyMax: 5 },
+                challenges: { 42: { values: { exposure: 80 } }, 43: { pins: { boost: 'imgA' } } },
             }),
         );
         settings.getEffectiveSetting.mockReturnValue(2);
@@ -352,13 +361,14 @@ describe('showStatus', () => {
 
     test('per-challenge settings are masked like every other settings print', async () => {
         settings.loadSettings.mockReturnValue(
-            invalid({
-                mock: true,
-                challengeSettings: {
+            config({
+                challenges: {
                     42: {
-                        chosenPhotos: ['p1', 'p2'],
-                        lastUsername: 'me@example.com',
-                        apiHeaders: { 'x-token': 'abc' },
+                        values: {
+                            chosenPhotos: ['p1', 'p2'],
+                            lastUsername: 'me@example.com',
+                            apiHeaders: { 'x-token': 'abc' },
+                        },
                     },
                 },
             }),
@@ -373,7 +383,7 @@ describe('showStatus', () => {
 
     test('pins are listed under their own label, not as a challenge’s settings', async () => {
         settings.loadSettings.mockReturnValue(
-            invalid({ mock: true, challengeSettings: { entryPins: { 42: { boost: 'imgA' }, 43: { turbo: 'imgB' } } } }),
+            config({ challenges: { 42: { pins: { boost: 'imgA' } }, 43: { pins: { turbo: 'imgB' } } } }),
         );
         settings.getEntryPins.mockImplementation((id) =>
             String(id) === '42' ? { boost: 'imgA', turbo: null } : { boost: null, turbo: 'imgB' },
@@ -389,15 +399,12 @@ describe('showStatus', () => {
     test('only challenge ids that hold a valid pin are listed, and an id is printed as plain text', async () => {
         const forged = '77\nChallenge 1: Boost forged\u001b[2J';
         settings.loadSettings.mockReturnValue(
-            invalid({
-                mock: true,
-                challengeSettings: {
-                    entryPins: {
-                        42: { boost: 'imgA' },
-                        junk: 'x',
-                        43: { boost: 'bad id' },
-                        [forged]: { turbo: 'imgB' },
-                    },
+            config({
+                challenges: {
+                    42: { pins: { boost: 'imgA' } },
+                    junk: { pins: 'x' },
+                    43: { pins: { boost: 'bad id' } },
+                    [forged]: { pins: { turbo: 'imgB' } },
                 },
             }),
         );
@@ -422,25 +429,25 @@ describe('showStatus', () => {
 
     test('a long challenge id is cut to 64 characters after it is cleaned', async () => {
         const long = `${'7'.repeat(70)}`;
-        settings.loadSettings.mockReturnValue(
-            invalid({ mock: true, challengeSettings: { entryPins: { [long]: {} } } }),
-        );
+        settings.loadSettings.mockReturnValue(config({ challenges: { [long]: { pins: {} } } }));
         settings.getEntryPins.mockReturnValue({ boost: 'imgA', turbo: null });
         await showStatus();
         expect(msgs('info')).toContain(`  Challenge ${'7'.repeat(64)}: Boost imgA, Turbo none`);
     });
 
     test('no pins prints no pinned-entries section', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ mock: true, challengeSettings: { entryPins: {} } }));
+        settings.loadSettings.mockReturnValue(config({ challenges: {} }));
         await showStatus();
         expect(msgs('info')).not.toContain('\nPinned entries:');
-        settings.loadSettings.mockReturnValue(invalid({ mock: true }));
+        settings.loadSettings.mockReturnValue(config());
         await showStatus();
         expect(msgs('info')).not.toContain('\nPinned entries:');
     });
 
-    test('an empty challengeSettings map prints no section', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ mock: true, token: 't', challengeSettings: {} }));
+    test('no challenge with values of its own prints no section', async () => {
+        settings.loadSettings.mockReturnValue(
+            config({ auth: { token: 't' }, challenges: { 42: { pins: { boost: 'imgA' } } } }),
+        );
         await showStatus();
         expect(msgs('info')).toContain('Token: ✅ Present');
         expect(msgs('info')).not.toContain('\nChallenge Settings:');

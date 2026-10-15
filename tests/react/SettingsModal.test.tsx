@@ -86,7 +86,7 @@ const mockFormState: MockFormState = {
 };
 
 const mockSettingsState = {
-    settings: {},
+    settings: { app: {} },
     updateSetting: jest.fn(),
     refetch: jest.fn(),
 };

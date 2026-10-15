@@ -111,7 +111,7 @@ describe('AutovoteContext', () => {
         const now = Math.floor(Date.now() / 1000);
         const far = invalid<Challenge[]>([{ id: 1, title: 'Far', type: 'regular', close_time: now + 100_000 }]);
         jest.mocked(window.api.getSettings).mockResolvedValue(
-            invalid({ hasToken: true, checkFrequencyMin: 5, checkFrequencyMax: 5 }),
+            invalid({ app: { checkFrequencyMin: 5, checkFrequencyMax: 5 }, hasToken: true }),
         );
         jest.mocked(window.api.getSetting).mockResolvedValue(null);
         jest.mocked(window.api.setSetting).mockResolvedValue(invalid(undefined));
@@ -399,7 +399,7 @@ describe('AutovoteContext', () => {
         };
 
         it('reports the not-logged-in code when there is no token', async () => {
-            jest.mocked(window.api.getSettings).mockResolvedValue(invalid({}));
+            jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: {} }));
             renderProvider();
             expect(await startAndRead()).toEqual({ error: 'not-logged-in', status: 'Error', cycles: 0 });
             expect(window.api.runVotingCycle).not.toHaveBeenCalled();

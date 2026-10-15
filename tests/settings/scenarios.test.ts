@@ -11,11 +11,11 @@ import type * as templatesModule from '../../src/ts/scenarios/templates';
 import type * as scenariosModule from '../../src/ts/settings/scenarios';
 const { SCENARIO_TEMPLATES } = require('../../src/ts/scenarios/templates') as typeof templatesModule;
 import { invalid } from '../helpers/invalid';
-import type { AndroidHeadlessStore, ChallengeSettings } from '../../src/ts/types/settings';
-import { isAppSettings } from '../helpers/storedShapes';
+import type { ConfigV2 } from '../../src/ts/types/config';
+import { isConfig } from '../helpers/storedShapes';
 import { parseJsonAs } from '../helpers/parseJson';
-
-const g = globalThis as typeof globalThis & { __GS_HEADLESS__?: boolean; AndroidHeadlessStore?: AndroidHeadlessStore };
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import type { MemoryStore } from '../helpers/headlessStore';
 
 type SaveRefused = Extract<ReturnType<typeof settings.saveScenario>, { ok: false }>;
 type PreviewAccepted = Extract<ReturnType<typeof settings.previewScenarioImport>, { ok: true }>;
@@ -45,25 +45,16 @@ const simple = (name = 'Plan') => ({
 });
 
 describe('settings facade — scenarios', () => {
-    let store: AndroidHeadlessStore & { value: string | null };
+    let store: MemoryStore;
 
-    const storedMap = () => parseJsonAs(store.value!, isAppSettings).challengeSettings.scenarios!;
+    const storedMap = () => parseJsonAs(store.value!, isConfig).scenarios;
 
     beforeEach(() => {
-        g.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-        };
-        g.AndroidHeadlessStore = store;
+        store = installHeadlessStore();
     });
 
     afterEach(() => {
-        delete g.__GS_HEADLESS__;
-        delete g.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
     test('defaults to none', () => {
@@ -111,8 +102,8 @@ describe('settings facade — scenarios', () => {
 
     test('a stored document that no longer validates is skipped and logged', () => {
         settings.saveScenario(simple('Good'));
-        const blob = parseJsonAs(store.value!, isAppSettings);
-        blob.challengeSettings.scenarios!.Broken = { name: 'Broken', version: 99 };
+        const blob = parseJsonAs(store.value!, isConfig);
+        blob.scenarios.Broken = { name: 'Broken', version: 99 };
         store.value = JSON.stringify(blob);
         expect(Object.keys(settings.getScenarios())).toEqual(['Good']);
         expect(
@@ -129,8 +120,8 @@ describe('settings facade — scenarios', () => {
 
     test('a corrupted (non-object) scenarios map reads as empty', () => {
         settings.saveScenario(simple());
-        const blob = parseJsonAs(store.value!, isAppSettings);
-        blob.challengeSettings.scenarios = invalid(['not', 'a', 'map']);
+        const blob = parseJsonAs(store.value!, isConfig);
+        blob.scenarios = invalid(['not', 'a', 'map']);
         store.value = JSON.stringify(blob);
         expect(settings.getScenarios()).toEqual({});
     });
@@ -251,19 +242,11 @@ describe('settings facade — scenarios', () => {
 });
 
 describe('settings facade — scenario assignment', () => {
-    let store: AndroidHeadlessStore & { value: string | null };
-    const blob = (): ChallengeSettings => parseJsonAs(store.value!, isAppSettings).challengeSettings;
+    let store: MemoryStore;
+    const blob = (): ConfigV2 => parseJsonAs(store.value!, isConfig);
 
     beforeEach(() => {
-        g.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-        };
-        g.AndroidHeadlessStore = store;
+        store = installHeadlessStore();
         settings.rememberChallengeTitles([
             { id: 7, title: 'Big show', type: 'exhibition' },
             { id: 8, title: 'Other' },
@@ -272,8 +255,7 @@ describe('settings facade — scenario assignment', () => {
     });
 
     afterEach(() => {
-        delete g.__GS_HEADLESS__;
-        delete g.AndroidHeadlessStore;
+        removeHeadlessStore();
         settings.rememberChallengeTitles([]);
     });
 
@@ -310,22 +292,22 @@ describe('settings facade — scenario assignment', () => {
         assignEverywhere();
         expect(settings.renameScenario('Plan', 'Show plan').ok).toBe(true);
         const stored = blob();
-        expect(stored.perChallenge['8'].scenario).toBe('Show plan');
-        expect(stored.profiles!['Show tactic'].scenario).toBe('Show plan');
-        expect(stored.titleRules.map((r) => r.scenario)).toEqual(['Show plan', 'Show plan', 'Something else']);
+        expect(stored.challenges['8'].values?.scenario).toBe('Show plan');
+        expect(stored.profiles['Show tactic']).toMatchObject({ scenario: 'Show plan' });
+        expect(stored.rules.map((r) => r.scenario)).toEqual(['Show plan', 'Show plan', 'Something else']);
     });
 
     test('a delete clears every assignment and drops rules left with nothing to do', () => {
         assignEverywhere();
         expect(settings.deleteScenario('Plan')).toBe(true);
         const stored = blob();
-        expect(stored.perChallenge['8'].scenario).toBeUndefined();
-        expect(stored.profiles!['Show tactic']).toEqual({ autoFill: true });
-        expect(stored.titleRules).toEqual([
-            expect.objectContaining({ title: 'Other', autoFill: true }),
+        expect(stored.challenges['8']?.values?.scenario).toBeUndefined();
+        expect(stored.profiles['Show tactic']).toEqual({ autoSubmit: true });
+        expect(stored.rules).toEqual([
+            expect.objectContaining({ title: 'Other', autoSubmit: true }),
             expect.objectContaining({ title: 'Unrelated', scenario: 'Something else' }),
         ]);
-        expect(stored.titleRules[0].scenario).toBeUndefined();
+        expect(stored.rules[0].scenario).toBeUndefined();
     });
 
     test('a delete keeps a rule that still has a profile or tags', () => {
@@ -335,13 +317,13 @@ describe('settings facade — scenario assignment', () => {
             { title: 'Other', scenario: 'Plan', mustIncludeTags: ['sea'] },
         ]);
         settings.deleteScenario('Plan');
-        expect(blob().titleRules).toHaveLength(2);
+        expect(blob().rules).toHaveLength(2);
     });
 
     test('a delete copes with missing or corrupted assignment containers', () => {
-        const raw = parseJsonAs(store.value!, isAppSettings);
-        raw.challengeSettings.profiles = invalid({ Broken: null });
-        raw.challengeSettings.titleRules = invalid('not a list');
+        const raw = parseJsonAs(store.value!, isConfig);
+        raw.profiles = invalid({ Broken: null });
+        raw.rules = invalid('not a list');
         store.value = JSON.stringify(raw);
         expect(settings.deleteScenario('Plan')).toBe(true);
     });
@@ -375,7 +357,7 @@ describe('settings facade — scenarios when the save fails', () => {
                     '../../src/ts/settings/persistence',
                 );
                 const blob = actual.loadSettings();
-                blob.challengeSettings.scenarios = { Plan: simple() };
+                blob.scenarios = { Plan: simple() };
                 return { ...actual, loadSettings: () => structuredClone(blob), saveSettings: () => false };
             });
             const isolated = require('../../src/ts/settings/scenarios') as typeof scenariosModule;

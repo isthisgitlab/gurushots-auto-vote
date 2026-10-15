@@ -114,7 +114,7 @@ describe('formatSettingForLog', () => {
             ua: 'u',
         });
         expect(printed).not.toMatch(/k1|k2/);
-        expect(JSON.parse(printed)).toEqual({ apiHeaders: '[REDACTED]', auth: { token: '[REDACTED]' }, ua: 'u' });
+        expect(JSON.parse(printed)).toEqual({ apiHeaders: '[REDACTED]', auth: '[REDACTED]', ua: 'u' });
         expect(cmd.formatSettingForLog('apiHeaders', { 'x-api-key': 'k1' })).toBe('[REDACTED]');
         const account = cmd.formatSettingForLog('challengeSettings', { lastUsername: 'me@example.com', other: 1 });
         expect(JSON.parse(account)).toEqual({ lastUsername: '[REDACTED]', other: 1 });
@@ -296,8 +296,8 @@ describe('listSettings', () => {
     });
 
     test('global view marks modified vs default values over the union of keys', () => {
-        settings.loadSettings.mockReturnValue(invalid({ theme: 'dark', extra: 1 }));
-        settings.getDefaultSettings.mockReturnValue(invalid({ theme: 'light', language: 'en' }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { theme: 'dark', extra: 1 }, auth: {} }));
+        settings.getDefaultSettings.mockReturnValue(invalid({ app: { theme: 'light', language: 'en' }, auth: {} }));
         cmd.listSettings();
         const info = msgs('stdout');
         expect(info[0]).toBe('=== All Settings ===');
@@ -314,8 +314,8 @@ describe('listSettings', () => {
     });
 
     test('an unmodified value is marked default', () => {
-        settings.loadSettings.mockReturnValue(invalid({ theme: 'light' }));
-        settings.getDefaultSettings.mockReturnValue(invalid({ theme: 'light' }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { theme: 'light' }, auth: {} }));
+        settings.getDefaultSettings.mockReturnValue(invalid({ app: { theme: 'light' }, auth: {} }));
         cmd.listSettings(null);
         expect(msgs('stdout')).toContain('  Status:  Default ✅');
     });
@@ -340,14 +340,14 @@ describe('resetSetting', () => {
     });
 
     test('a global reset writes the default', () => {
-        settings.getDefaultSettings.mockReturnValue(invalid({ theme: 'light' }));
+        settings.getDefaultSettings.mockReturnValue(invalid({ app: { theme: 'light' }, auth: {} }));
         expect(cmd.resetSetting('theme')).toBe(true);
         expect(settings.setSetting).toHaveBeenCalledWith('theme', 'light');
         expect(msgs('success')).toEqual(['Reset theme to default: "light"']);
     });
 
     test('a key with no default is reported', () => {
-        settings.getDefaultSettings.mockReturnValue(invalid({}));
+        settings.getDefaultSettings.mockReturnValue(invalid({ app: {}, auth: {} }));
         expect(cmd.resetSetting('ghost')).toBe(false);
         expect(msgs('error')).toEqual(["Setting 'ghost' not found in defaults"]);
     });
@@ -424,7 +424,7 @@ describe('schema and global-default dumps', () => {
     });
 
     test('listGlobalDefaults prefers stored overrides over schema defaults', () => {
-        settings.loadSettings.mockReturnValue(invalid({ challengeSettings: { globalDefaults: { exposure: 70 } } }));
+        settings.loadSettings.mockReturnValue(invalid({ defaults: { exposure: 70 } }));
         cmd.listGlobalDefaults();
         expect(msgs('info')).toEqual([]);
         const info = msgs('stdout');
@@ -434,9 +434,7 @@ describe('schema and global-default dumps', () => {
 
     test('a photo list is counted in the dumps, never listed', () => {
         settings.SETTINGS_SCHEMA = invalid({ chosenPhotos: { type: 'photos', perChallenge: true, default: [] } });
-        settings.loadSettings.mockReturnValue(
-            invalid({ challengeSettings: { globalDefaults: { chosenPhotos: ['secret1', 'secret2'] } } }),
-        );
+        settings.loadSettings.mockReturnValue(invalid({ defaults: { chosenPhotos: ['secret1', 'secret2'] } }));
         cmd.listGlobalDefaults();
         cmd.dumpSchema();
         expect(msgs('stdout')).toContain('chosenPhotos: 2 photo(s)');
@@ -444,8 +442,8 @@ describe('schema and global-default dumps', () => {
         expect([...msgs('stdout'), ...msgs('info')].join('\n')).not.toContain('secret');
     });
 
-    test('listGlobalDefaults falls back to schema defaults with no stored map', () => {
-        settings.loadSettings.mockReturnValue(invalid({}));
+    test('listGlobalDefaults falls back to schema defaults with no stored default', () => {
+        settings.loadSettings.mockReturnValue(invalid({ defaults: {} }));
         cmd.listGlobalDefaults();
         expect(msgs('stdout')).toContain('exposure: 50');
     });
@@ -547,10 +545,10 @@ describe('help and window reset', () => {
     });
 
     test('resetWindows restores the default window bounds and saves', () => {
-        settings.loadSettings.mockReturnValue(invalid({ theme: 'dark', windowBounds: { x: 5 } }));
-        settings.getDefaultSettings.mockReturnValue(invalid({ windowBounds: { x: 0, y: 0 } }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { theme: 'dark', windowBounds: { x: 5 } } }));
+        settings.getDefaultSettings.mockReturnValue(invalid({ app: { windowBounds: { x: 0, y: 0 } } }));
         cmd.resetWindows();
-        expect(settings.saveSettings).toHaveBeenCalledWith({ theme: 'dark', windowBounds: { x: 0, y: 0 } });
+        expect(settings.saveSettings).toHaveBeenCalledWith({ app: { theme: 'dark', windowBounds: { x: 0, y: 0 } } });
         expect(msgs('success')).toEqual(['Window positions reset to default']);
     });
 

@@ -58,7 +58,7 @@ const log = (msg: string, data?: unknown) => logger.withCategory('voting').info(
  * must recover on the same beat.
  */
 const computeNextDelayMs = async (token: string, prefetched: Challenge[] | null = null): Promise<number> => {
-    const userSettings = settings.loadSettings();
+    const userSettings = settings.loadSettings().app;
     try {
         let list: Challenge[];
         let fetchFailedNow = false;
@@ -107,7 +107,7 @@ const reportComplete = (payload: object) => {
     }
 };
 
-const fallbackDelay = () => getRandomCheckFrequencyMs(settings.loadSettings());
+const fallbackDelay = () => getRandomCheckFrequencyMs(settings.loadSettings().app);
 
 const runOneCycle = async () => {
     try {

@@ -12,9 +12,10 @@ import type * as openChallengesModule from '../../src/ts/settings/openChallenges
 import type * as clearModule from '../../src/ts/settings/chosenPhotosClear';
 import type * as cliClearModule from '../../src/ts/cli/commands/settings/chosenPhotos';
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
-import { isAppSettings } from '../helpers/storedShapes';
+import { isConfig } from '../helpers/storedShapes';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { isRecordOf, isShape, isUnknown, parseJsonAs } from '../helpers/parseJson';
+import type { MemoryStore } from '../helpers/headlessStore';
 const { forgetOpenChallengeIds, getOpenChallengeIds, getUpcomingChallengeIds } =
     require('../../src/ts/settings/openChallenges') as typeof openChallengesModule;
 const { scenarioStateLedger, initialState } =
@@ -34,39 +35,18 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
-const g = globalThis as typeof globalThis & { __GS_HEADLESS__?: boolean; AndroidHeadlessStore?: AndroidHeadlessStore };
-
 describe('Chosen Photos settings', () => {
-    let store: AndroidHeadlessStore & {
-        value: string | null;
-        keys: Record<string, string>;
-        readKey: (key: string) => string | null;
-        writeKey: (key: string, data: string) => void;
-    };
-    const blob = () => parseJsonAs(store.value!, isAppSettings);
+    let store: MemoryStore;
+    const blob = () => parseJsonAs(store.value!, isConfig);
 
     beforeEach(() => {
-        g.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            keys: {},
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-            readKey: (key) => store.keys[key] ?? null,
-            writeKey: (key, data) => {
-                store.keys[key] = data;
-            },
-        };
-        g.AndroidHeadlessStore = store;
+        store = installHeadlessStore();
         settings.rememberChallengeTitles([]);
         forgetOpenChallengeIds();
     });
 
     afterEach(() => {
-        delete g.__GS_HEADLESS__;
-        delete g.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
     describe('validation', () => {
@@ -175,9 +155,13 @@ describe('Chosen Photos settings', () => {
         });
     });
 
-    describe('explicit per-challenge chosen keys', () => {
-        const perChallenge = () => blob().challengeSettings.perChallenge;
+    // Each challenge's own stored values, by id.
+    const perChallenge = () =>
+        Object.fromEntries(
+            Object.entries(blob().challenges).flatMap(([id, record]) => (record.values ? [[id, record.values]] : [])),
+        );
 
+    describe('explicit per-challenge chosen keys', () => {
         test('are stored even when they equal the inherited value; other keys are still dropped', () => {
             settings.setGlobalDefault('chosenPhotos', ['a']);
             settings.setGlobalDefault('chosenPhotosOnly', true);
@@ -269,7 +253,7 @@ describe('Chosen Photos settings', () => {
             settings.setChallengeOverride('chosenPhotos', '103', ['b']);
             settings.setChallengeOverride('chosenPhotos', '104', ['c']);
         };
-        const keys = () => Object.keys(blob().challengeSettings.perChallenge).sort();
+        const keys = () => Object.keys(blob().challenges).sort();
         // An upcoming challenge as the feed lists it: it starts `startsIn` seconds from now.
         const upcoming = (id: number, startsIn = 3600) => ({
             id,
@@ -553,7 +537,7 @@ describe('Chosen Photos settings', () => {
             settings.replaceChallengeOverrides('100', { chosenPhotos: ['a'] }, true);
             settings.rememberOpenChallengeIds([100]);
             settings.cleanupStaleChallengeSetting([]);
-            expect(blob().challengeSettings.titleProfileSuppressions).toEqual({ '100': true });
+            expect(blob().challenges['100']).toMatchObject({ suppressRuleProfile: true });
         });
     });
 
@@ -589,34 +573,45 @@ describe('Chosen Photos settings', () => {
         test('removes every list in every layer and forgets the owner; the Only flags stay', () => {
             seedEverywhere();
             expect(settings.clearChosenPhotos()).toBe(7);
-            const { challengeSettings } = blob();
-            expect(challengeSettings.globalDefaults).toEqual(
-                expect.not.objectContaining({ chosenPhotos: expect.anything() }),
-            );
-            expect(challengeSettings.globalDefaults.chosenPhotosOnly).toBe(true);
+            const config = blob();
+            expect(config.defaults).toEqual(expect.not.objectContaining({ chosenPhotos: expect.anything() }));
+            expect(config.defaults.chosenPhotosOnly).toBe(true);
             // A challenge that held only a list has nothing left; the rest keep what they had.
-            expect(challengeSettings.perChallenge).toEqual({ '1': { chosenPhotosOnly: true, exposure: 40 } });
-            expect(challengeSettings.profiles?.Mine).toEqual({ chosenPhotosOnly: true, exposure: 50 });
+            expect(perChallenge()).toEqual({ '1': { chosenPhotosOnly: true, exposure: 40 } });
+            expect(config.profiles.Mine).toEqual({ chosenPhotosOnly: true, exposure: 50 });
             // A rule keeps its row while it still says something, and goes when the list was all it had.
-            expect(challengeSettings.titleRules).toEqual([
+            expect(config.rules).toEqual([
                 expect.objectContaining({ title: 'Keeps tags', mustIncludeTags: ['Pink'] }),
                 expect.objectContaining({ title: 'Only flag', chosenPhotosOnly: true }),
             ]);
-            expect(challengeSettings.titleRules.some((rule) => 'chosenPhotos' in rule)).toBe(false);
+            expect(config.rules.some((rule) => 'chosenPhotos' in rule)).toBe(false);
             expect(settings.getScenario('Plan')!.phases.main.settings).toEqual({
                 chosenPhotosOnly: true,
                 exposure: 40,
                 exposureTarget: 50,
             });
-            expect(blob().chosenPhotosMemberId).toBe('');
+            expect(config.auth.chosenPhotosMemberId).toBe('');
+        });
+
+        test('a challenge whose override map held only a list keeps its pin', () => {
+            settings.setChallengeOverride('chosenPhotos', '5', ['c']);
+            settings.setEntryPin('boost', '5', 'img_a');
+            expect(settings.clearChosenPhotos()).toBe(1);
+            expect(blob().challenges['5']).toEqual({ pins: { boost: 'img_a' } });
+        });
+
+        test('a challenge that holds only a pin keeps it', () => {
+            settings.setEntryPin('boost', '4', 'img_a');
+            expect(settings.clearChosenPhotos()).toBe(0);
+            expect(settings.getEntryPins('4')).toEqual({ boost: 'img_a', turbo: null });
         });
 
         test('stamps when the lists were removed, for editors opened before it', () => {
             seedEverywhere();
-            expect(blob().chosenPhotosClearedAt).toBeUndefined();
+            expect(blob().app.chosenPhotosClearedAt).toBeUndefined();
             const before = Date.now();
             settings.clearChosenPhotos();
-            const stamp = blob().chosenPhotosClearedAt as string;
+            const stamp = blob().app.chosenPhotosClearedAt as string;
             expect(Date.parse(stamp)).toBeGreaterThanOrEqual(before);
             expect(new Date(stamp).toISOString()).toBe(stamp);
         });
@@ -624,13 +619,13 @@ describe('Chosen Photos settings', () => {
         test('a hand-edited blob with malformed scenarios, rules and profiles is walked without error', () => {
             seedEverywhere();
             const raw = blob();
-            raw.challengeSettings.scenarios = {
-                ...raw.challengeSettings.scenarios,
+            raw.scenarios = {
+                ...raw.scenarios,
                 NotADocument: 'x',
                 NoPhases: { phases: 'nope' },
                 NullPhase: { phases: { main: null, other: { settings: 'nope' } } },
             };
-            raw.challengeSettings.profiles = { ...raw.challengeSettings.profiles, Broken: invalid(null) };
+            raw.profiles = { ...raw.profiles, Broken: invalid(null) };
             store.value = JSON.stringify(raw);
             expect(settings.clearChosenPhotos()).toBe(7);
             expect(settings.getScenario('Plan')!.phases.main.settings).not.toHaveProperty('chosenPhotos');
@@ -655,7 +650,7 @@ describe('Chosen Photos settings', () => {
         test('with nothing saved it removes nothing and still clears the owner record', () => {
             settings.setSetting('chosenPhotosMemberId', 'member-A');
             expect(settings.clearChosenPhotos()).toBe(0);
-            expect(blob().chosenPhotosMemberId).toBe('');
+            expect(blob().auth.chosenPhotosMemberId).toBe('');
         });
 
         test('logs the count of removed lists and never a photo id', () => {

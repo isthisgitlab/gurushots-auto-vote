@@ -42,6 +42,7 @@ import {
 } from './commands/settings';
 import { showLogs } from './commands/logs';
 import { resetDataCmd, licensesCmd } from './commands/localData';
+import { settingsRecoveryCmd } from './commands/settingsRecovery';
 import * as scenarioCommands from './commands/scenarios';
 import { showHelp } from './help';
 import {
@@ -364,6 +365,7 @@ const COMMANDS: Record<string, CommandHandler> = {
     licenses: async () => licensesCmd(),
     'help-settings': exitsZero(helpSettings),
     'reset-windows': exitsZero(resetWindows),
+    'settings-recovery': async (argv) => settingsRecoveryCmd(argv),
     help: exitsZero(showHelp),
     '--help': exitsZero(showHelp),
     '-h': exitsZero(showHelp),

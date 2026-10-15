@@ -1,9 +1,9 @@
 /**
  * User-defined scenarios (see scenarios/vocabulary.ts): list, save, rename,
  * delete, and the JSON import/export players use to share them. Stored in the
- * settings blob as `challengeSettings.scenarios` — name-keyed like profiles,
- * because challenge ids rotate — so the Android background service, which
- * persists only the settings blob, has the definitions too.
+ * configuration as `scenarios` — name-keyed like profiles, because challenge
+ * ids rotate — so the Android background service, which persists only the
+ * configuration, has the definitions too.
  *
  * Every stored document is re-validated on read: the blob may be hand-edited
  * or older than the current vocabulary, and the engine must never run a
@@ -19,8 +19,10 @@ import { validateScenario, parseScenarioJson } from './scenarioSchema';
 import { ruleHasBehaviour as ruleHasBehaviourWith } from './ruleBehaviour';
 import { validateSetting } from './schema';
 import { isPlainObject } from '../plainObject';
+import { renameV1ScenarioDocument } from './importV1/renames';
 
-import type { AppSettings, ChallengeValues, TitleRule } from '../types/settings';
+import type { ConfigV2 } from '../types/config';
+import type { ChallengeValues, TitleRule } from '../types/settings';
 import type { ScenarioDocument, ScenarioIssue } from './scenarioSchema';
 
 type ScenarioSaveResult = { ok: true; name: string } | { ok: false; issues: ScenarioIssue[] };
@@ -39,14 +41,6 @@ const FLAGGED_PHASE_SETTINGS = ['chosenPhotos', 'chosenPhotosOnly'] as const;
 const EXPORT_OMITTED_SETTINGS: readonly string[] = ['chosenPhotos'];
 
 const log = () => logger.withCategory('settings');
-
-/**
- * The stored scenarios map when it is a plain object, else `{}`.
- */
-const readScenariosMap = (settings: AppSettings): Record<string, unknown> => {
-    const stored = settings.challengeSettings?.scenarios;
-    return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
-};
 
 // Read-side validation runs on every lookup (the engine resolves a scenario
 // per challenge per pass), so results are memoized by the stored document and
@@ -68,8 +62,8 @@ const validateStored = (raw: unknown, globalDefaults: ChallengeValues): ReturnTy
  * loaded settings object, or null. Not a copy — callers only read it. Used by
  * the phase-settings overlay, which must not load settings a second time.
  */
-const findStoredScenario = (settings: AppSettings, name: unknown): ScenarioDocument | null => {
-    const stored = readScenariosMap(settings);
+const findStoredScenario = (settings: ConfigV2, name: unknown): ScenarioDocument | null => {
+    const stored = settings.scenarios;
     const key = findProfileKey(stored, normalizeProfileName(name));
     if (key === null) return null;
     const result = validateStored(stored[key], globalChallengeValues(settings));
@@ -79,7 +73,7 @@ const findStoredScenario = (settings: AppSettings, name: unknown): ScenarioDocum
 /**
  * True when any scenario is stored at all — lets hot paths skip the overlay cheaply.
  */
-const hasStoredScenarios = (settings: AppSettings): boolean => Object.keys(readScenariosMap(settings)).length > 0;
+const hasStoredScenarios = (settings: ConfigV2): boolean => Object.keys(settings.scenarios).length > 0;
 
 /**
  * Valid stored scenarios as `{ [name]: document }` (defensive copies). A
@@ -90,7 +84,7 @@ const getScenarios = (): Record<string, ScenarioDocument> => {
     const settings = loadSettings();
     const globalDefaults = globalChallengeValues(settings);
     const scenarios: Record<string, ScenarioDocument> = {};
-    for (const [name, raw] of Object.entries(readScenariosMap(settings))) {
+    for (const [name, raw] of Object.entries(settings.scenarios)) {
         const result = validateStored(raw, globalDefaults);
         if (result.ok) {
             scenarios[result.scenario.name] = structuredClone(result.scenario);
@@ -114,8 +108,6 @@ const getScenario = (name: unknown): ScenarioDocument | null => {
 
 const failure = (issues: ScenarioIssue[]): { ok: false; issues: ScenarioIssue[] } => ({ ok: false, issues });
 
-const plainObject = (value: unknown): Record<string, unknown> => (isPlainObject(value) ? value : {});
-
 // A rule keeps its row only while it still contributes something: a profile,
 // tags, or a valid inline value.
 const ruleHasBehaviour = (rule: TitleRule): boolean => ruleHasBehaviourWith(rule, validateSetting);
@@ -126,22 +118,21 @@ const ruleHasBehaviour = (rule: TitleRule): boolean => ruleHasBehaviourWith(rule
  * ''. A deleted scenario must not linger as an assignment that silently runs
  * nothing, and a rename must not orphan its challenges.
  */
-const reassignScenario = (settings: AppSettings, fromName: string, toName: string) => {
+const reassignScenario = (settings: ConfigV2, fromName: string, toName: string) => {
     const from = normalizeProfileName(fromName);
     /** @param value */
     const assigned = (value: unknown) => typeof value === 'string' && normalizeProfileName(value) === from;
-    const challengeSettings = settings.challengeSettings;
     // Overrides are validated on load; stored profiles are checked here.
     const valueMaps = [
-        ...Object.values(challengeSettings.perChallenge),
-        ...Object.values(plainObject(challengeSettings.profiles)),
+        ...Object.values(settings.challenges).map((record) => record.values),
+        ...Object.values(settings.profiles),
     ];
     for (const values of valueMaps) {
         if (!isPlainObject(values) || !assigned(values.scenario)) continue;
         if (toName) values.scenario = toName;
         else delete values.scenario;
     }
-    challengeSettings.titleRules = challengeSettings.titleRules.flatMap((rule) => {
+    settings.rules = settings.rules.flatMap((rule) => {
         if (!assigned(rule?.scenario)) return [rule];
         if (toName) return [{ ...rule, scenario: toName }];
         const kept = { ...rule };
@@ -164,7 +155,7 @@ const storeScenario = (
     }: {
         overwrite: boolean;
         replaces?: string | null;
-        beforeSave?: ((settings: AppSettings, storedName: string) => void) | null;
+        beforeSave?: ((settings: ConfigV2, storedName: string) => void) | null;
     },
 ): ScenarioSaveResult => {
     const settings = loadSettings();
@@ -172,7 +163,7 @@ const storeScenario = (
     if (!result.ok) return failure(result.issues);
     const { scenario } = result;
 
-    const stored = readScenariosMap(settings);
+    const stored = settings.scenarios;
     const scenarios: Record<string, unknown> = {};
     const target = normalizeProfileName(scenario.name);
     const replaced = replaces === null ? null : normalizeProfileName(replaces);
@@ -193,7 +184,7 @@ const storeScenario = (
         return failure([{ path: '', message: `You already have ${MAX_SCENARIOS} scenarios — delete one first` }]);
     }
     scenarios[scenario.name] = scenario;
-    settings.challengeSettings.scenarios = scenarios;
+    settings.scenarios = scenarios;
     if (beforeSave) beforeSave(settings, scenario.name);
     if (!saveSettings(settings)) return failure([{ path: '', message: 'The settings file could not be saved' }]);
     log().info(`Scenario saved: "${profileNameForLog(scenario.name)}"`, null);
@@ -227,12 +218,12 @@ const renameScenario = (oldName: unknown, newName: unknown): ScenarioSaveResult 
  */
 const deleteScenario = (name: unknown): boolean => {
     const settings = loadSettings();
-    const stored = readScenariosMap(settings);
+    const stored = settings.scenarios;
     const key = findProfileKey(stored, normalizeProfileName(name));
     if (key === null) return false;
     const scenarios = { ...stored };
     delete scenarios[key];
-    settings.challengeSettings.scenarios = scenarios;
+    settings.scenarios = scenarios;
     reassignScenario(settings, key, '');
     if (!saveSettings(settings)) return false;
     log().info(`Scenario deleted: "${profileNameForLog(key)}"`, null);
@@ -289,7 +280,8 @@ const checkScenario = (doc: unknown) => validateScenario(doc, globalChallengeVal
 const previewScenarioImport = (text: unknown): ScenarioImportPreview => {
     const parsed = parseScenarioJson(text);
     if (!parsed.ok) return failure(parsed.issues);
-    const result = validateScenario(parsed.value, globalChallengeValues(loadSettings()));
+    // A shared file from a 1.x install names its settings by their 1.x keys.
+    const result = validateScenario(renameV1ScenarioDocument(parsed.value), globalChallengeValues(loadSettings()));
     if (!result.ok) return failure(result.issues);
     return {
         ok: true,
@@ -305,7 +297,7 @@ const previewScenarioImport = (text: unknown): ScenarioImportPreview => {
 const importScenario = (text: unknown, { overwrite = false }: { overwrite?: boolean } = {}): ScenarioSaveResult => {
     const parsed = parseScenarioJson(text);
     if (!parsed.ok) return failure(parsed.issues);
-    return storeScenario(parsed.value, { overwrite });
+    return storeScenario(renameV1ScenarioDocument(parsed.value), { overwrite });
 };
 
 /**

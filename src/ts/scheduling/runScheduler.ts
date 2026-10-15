@@ -62,7 +62,7 @@ const createScheduler = ({
         setTimer: (handle) => {
             timer = handle;
         },
-        loadSettings: () => settings.loadSettings(),
+        loadSettings: () => settings.loadSettings().app,
         fetchChallenges: () => getActiveChallenges(),
         resolveLastMinuteCheckMinutes: () => settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
         resolveThreshold,

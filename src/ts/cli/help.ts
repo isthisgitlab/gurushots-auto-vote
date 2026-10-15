@@ -3,7 +3,7 @@ import * as settings from '../settings';
 
 const showHelp = () => {
     const userSettings = settings.loadSettings();
-    const isMockMode = userSettings.mock;
+    const isMockMode = userSettings.app.mock;
 
     // The help is a block of text the user asked to read: printed whole, with its line breaks,
     // on the console only (the log file's one-line entries would flatten it).
@@ -93,6 +93,8 @@ Commands:
              the extracted vision runtime. It cannot be undone, so it does nothing without --yes. Quit the
              desktop app and stop any CLI session first: it refuses to delete while either is running.
   reset-windows  - Reset window positions to default
+  settings-recovery retry|start-fresh|reimport - When the saved settings are not in use: try importing your 1.x settings
+             again, begin with default settings (the 1.x file stays as a backup), or import the 1.x file over the settings in use
   help     - Show this help message
 
 Examples:

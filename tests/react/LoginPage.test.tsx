@@ -14,7 +14,7 @@ import type { RendererGlobals } from '../../src/ts/types/capacitor';
 import type { WindowApi } from '../../src/ts/types/ipc';
 import type * as LoginModule from '@/pages/Login';
 
-const API_METHODS = ['getSettings', 'getEnvironmentInfo', 'authenticate', 'setSetting', 'login'] as const;
+const API_METHODS = ['getSettings', 'getSetting', 'getEnvironmentInfo', 'authenticate', 'setSetting', 'login'] as const;
 
 let LoginPage: typeof LoginModule.default;
 let mountLogin: typeof LoginModule.mountLogin;
@@ -30,7 +30,8 @@ describe('Login page', () => {
 
     beforeEach(() => {
         originals = Object.fromEntries(API_METHODS.map((m) => [m, window.api[m]]));
-        window.api.getSettings = jest.fn().mockResolvedValue({});
+        window.api.getSettings = jest.fn().mockResolvedValue({ app: {} });
+        window.api.getSetting = jest.fn().mockResolvedValue('');
         window.api.getEnvironmentInfo = jest.fn().mockResolvedValue({ defaultMock: false });
         window.api.authenticate = jest.fn().mockResolvedValue({ success: true });
         window.api.setSetting = jest.fn().mockResolvedValue(undefined);
@@ -74,7 +75,11 @@ describe('Login page', () => {
 
     test('hydrates from settings and the environment default', async () => {
         jest.mocked(window.api.getSettings).mockResolvedValue(
-            invalid({ theme: 'dracula', stayLoggedIn: true, lastUsername: 'bob' }),
+            invalid({ app: { theme: 'dracula', stayLoggedIn: true } }),
+        );
+        // The saved user name is part of the sign-in state, which the settings the page is handed leave out.
+        jest.mocked(window.api.getSetting).mockImplementation((key) =>
+            Promise.resolve(key === 'lastUsername' ? 'bob' : null),
         );
         jest.mocked(window.api.getEnvironmentInfo).mockResolvedValue(invalid({ defaultMock: true }));
         await renderReady();
@@ -88,7 +93,7 @@ describe('Login page', () => {
     });
 
     test('remembered without a saved username leaves the field empty', async () => {
-        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ stayLoggedIn: true }));
+        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { stayLoggedIn: true } }));
         await renderReady();
         expect(checkboxes()[0].checked).toBe(true);
         expect((document.getElementById('username') as HTMLInputElement).value).toBe('');
@@ -106,7 +111,7 @@ describe('Login page', () => {
         expect(checkboxes()[1].checked).toBe(false);
     });
 
-    test('the theme picker and toggles persist theme, stay-logged-in (clearing the username when off) and mock', async () => {
+    test('the theme picker and toggles persist theme, stay-logged-in (the main process clears the username when off) and mock', async () => {
         await renderReady();
         const [stay, mock] = checkboxes();
 
@@ -116,12 +121,12 @@ describe('Login page', () => {
 
         fireEvent.click(stay);
         await waitFor(() => expect(window.api.setSetting).toHaveBeenCalledWith('stayLoggedIn', true));
-        expect(window.api.setSetting).not.toHaveBeenCalledWith('lastUsername', '');
         await waitFor(() => expect(checkboxes()[0].checked).toBe(true));
 
         fireEvent.click(checkboxes()[0]);
-        await waitFor(() => expect(window.api.setSetting).toHaveBeenCalledWith('lastUsername', ''));
-        expect(window.api.setSetting).toHaveBeenCalledWith('stayLoggedIn', false);
+        await waitFor(() => expect(window.api.setSetting).toHaveBeenCalledWith('stayLoggedIn', false));
+        // A renderer cannot write the sign-in state: the main process drops the saved name with this write.
+        expect(window.api.setSetting).not.toHaveBeenCalledWith('lastUsername', '');
 
         fireEvent.click(mock);
         await waitFor(() => expect(window.api.setSetting).toHaveBeenCalledWith('mock', true));
@@ -138,12 +143,19 @@ describe('Login page', () => {
         expect(window.api.setSetting).not.toHaveBeenCalledWith('lastUsername', 'alice');
     });
 
-    test('successful login remembers the username when stay-logged-in is on', async () => {
-        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ stayLoggedIn: true }));
+    test('successful login leaves remembering the username to the main process, even when stay-logged-in is on', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { stayLoggedIn: true } }));
         await renderReady();
         submit('alice', 'pw');
         await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
-        expect(window.api.setSetting).toHaveBeenCalledWith('lastUsername', 'alice');
+        expect(window.api.setSetting).not.toHaveBeenCalledWith('lastUsername', expect.anything());
+    });
+
+    test('without a saved username the field stays empty, and a failed read of it too', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { stayLoggedIn: true } }));
+        jest.mocked(window.api.getSetting).mockResolvedValue(5);
+        await renderReady();
+        expect((document.getElementById('username') as HTMLInputElement).value).toBe('');
     });
 
     test('failed auth shows a translated, announced error and does not transition', async () => {
@@ -168,7 +180,7 @@ describe('Login page', () => {
 
     test('an acknowledged notice is not shown again', async () => {
         jest.mocked(window.api.getSettings).mockResolvedValue(
-            invalid({ noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION }),
+            invalid({ app: { noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION } }),
         );
         await renderReady();
         expect(screen.queryByRole('dialog')).toBeNull();
@@ -176,7 +188,7 @@ describe('Login page', () => {
 
     test('a damaged settings file is explained on the login page too', async () => {
         jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(
-            invalid({ success: true, recovery: { code: 'settings-unreadable', path: '/data/settings.json' } }),
+            invalid({ success: true, recovery: { code: 'settings-unreadable', path: '/data/config.json' } }),
         );
         await renderReady();
         expect((await screen.findByRole('alert')).textContent).toContain('notice.recoveryUnreadableWhat');

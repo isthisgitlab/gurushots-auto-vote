@@ -4,15 +4,20 @@
  * Covers getTitlePins (defensive copy, prototype-key safety) and
  * mergeTitlePins (first-seen-wins merge, removals, length/count caps).
  *
- * Drives the in-memory headless-store seam (same one title-tag-rules.test.ts
- * uses) so the facade's loadSettings/saveSettings round-trip without touching fs.
+ * Drives the in-memory headless-store seam (tests/helpers/headlessStore.ts) so the pin store
+ * round-trips without touching fs.
  */
 
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
-import settings = require('../../src/ts/settings');
-import { isAppSettings } from '../helpers/storedShapes';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { isRecordOf, isString, parseJsonAs } from '../helpers/parseJson';
+
+import type * as settingsModule from '../../src/ts/settings';
+import type * as titlePinsModule from '../../src/ts/settings/titlePins';
+import type * as jsonStoreModule from '../../src/ts/settings/jsonStore';
+import type { MemoryStore } from '../helpers/headlessStore';
+
+const PINS_KEY = 'gs_title_pins';
 
 jest.mock('../../src/ts/logger', () => ({
     info: jest.fn(),
@@ -37,28 +42,23 @@ jest.mock('../../src/ts/logger', () => ({
 }));
 
 describe('settings facade — first-seen title pins', () => {
-    const headlessGlobals = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let store: { value: string | null; read: jest.Mock<string | null, []>; write: jest.Mock<void, [string]> };
+    let settings: typeof settingsModule;
+    let store: MemoryStore;
 
+    // The pins sit in a cache store of their own, which keeps what it last wrote in memory: a module of its own
+    // per test, so that one test's pins are not another's.
     beforeEach(() => {
-        headlessGlobals.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-        };
-        headlessGlobals.AndroidHeadlessStore = store;
+        jest.resetModules();
+        jest.doMock('electron', () => ({}));
+        store = installHeadlessStore();
+        settings = require('../../src/ts/settings') as typeof settingsModule;
     });
 
     afterEach(() => {
-        delete headlessGlobals.__GS_HEADLESS__;
-        delete headlessGlobals.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
+
+    const storedPins = () => parseJsonAs(store.keys.get(PINS_KEY) ?? '{}', isRecordOf(isString));
 
     test('defaults to an empty map', () => {
         expect(settings.getTitlePins()).toEqual({});
@@ -85,10 +85,49 @@ describe('settings facade — first-seen title pins', () => {
     });
 
     test('no-op call (empty adds and removes) does not write', () => {
-        const before = store.write.mock.calls.length;
         expect(settings.mergeTitlePins({}, [])).toBe(true);
         expect(settings.mergeTitlePins(invalid(null), invalid(null))).toBe(true);
-        expect(store.write.mock.calls.length).toBe(before);
+        expect(store.keys.has(PINS_KEY)).toBe(false);
+    });
+
+    test('the pins are in a store of their own, not in the configuration', () => {
+        settings.mergeTitlePins({ 1: 'Pink In Nature' }, []);
+        expect(storedPins()).toEqual({ 1: 'Pink In Nature' });
+        expect(store.value).toBeNull();
+    });
+
+    test('a pin store that cannot be written reports the merge as not saved', () => {
+        jest.resetModules();
+        jest.doMock('../../src/ts/settings/storage', () => ({
+            __esModule: true,
+            createJsonStore: () => ({
+                readRaw: () => null,
+                writeRaw: () => {
+                    throw new Error('disk full');
+                },
+            }),
+        }));
+        const isolated = require('../../src/ts/settings/titlePins') as typeof titlePinsModule;
+        expect(isolated.mergeTitlePins({ 1: 'Pink In Nature' }, [])).toBe(false);
+        jest.dontMock('../../src/ts/settings/storage');
+    });
+
+    test('a cache that is wiped after it was read holds no pins any more', () => {
+        settings.mergeTitlePins({ 1: 'One' }, []);
+        expect(settings.getTitlePins()).toEqual({ 1: 'One' });
+
+        // A local-data wipe: the key is gone from the native store and the store forgets what it last wrote.
+        store.keys.delete(PINS_KEY);
+        (require('../../src/ts/settings/jsonStore') as typeof jsonStoreModule).discardStores();
+
+        expect(settings.getTitlePins()).toEqual({});
+    });
+
+    test('a cache that is not JSON holds no pins and is rewritten by the next merge', () => {
+        store.keys.set(PINS_KEY, 'not json');
+        expect(settings.getTitlePins()).toEqual({});
+        expect(settings.mergeTitlePins({ 1: 'One' }, [])).toBe(true);
+        expect(settings.getTitlePins()).toEqual({ 1: 'One' });
     });
 
     test('getTitlePins returns a defensive copy', () => {
@@ -113,18 +152,14 @@ describe('settings facade — first-seen title pins', () => {
         settings.mergeTitlePins({ 1: 'Real' }, []);
         // Simulate external tampering: inject a whitespace-only pin directly
         // into the persisted blob, bypassing mergeTitlePins' validation.
-        const blob = parseJsonAs(store.value!, isAppSettings);
-        blob.challengeSettings.titlePins!['2'] = '   ';
-        store.value = JSON.stringify(blob);
+        store.keys.set(PINS_KEY, JSON.stringify({ ...storedPins(), 2: '   ' }));
 
         expect(settings.getTitlePins()).toEqual({ 1: 'Real' });
     });
 
     test('legacy boundary-length truncated pins are filtered on read', () => {
         settings.mergeTitlePins({ 1: 'Real' }, []);
-        const blob = parseJsonAs(store.value!, isAppSettings);
-        blob.challengeSettings.titlePins!['2'] = 'x'.repeat(settings.MAX_TITLE_LENGTH);
-        store.value = JSON.stringify(blob);
+        store.keys.set(PINS_KEY, JSON.stringify({ ...storedPins(), 2: 'x'.repeat(settings.MAX_TITLE_LENGTH) }));
 
         expect(settings.getTitlePins()).toEqual({ 1: 'Real' });
     });

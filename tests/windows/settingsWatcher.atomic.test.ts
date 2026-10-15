@@ -75,13 +75,13 @@ describe('watchSettingsFile over atomic saves (real directory)', () => {
 
     beforeEach(async () => {
         root = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-watch-'));
-        mockPaths.settingsFile = path.join(root, 'settings.json');
+        mockPaths.settingsFile = path.join(root, 'config.json');
         fs.writeFileSync(mockPaths.settingsFile, '{"n":0}');
         // Some platforms report a change made just before the watch started: let it pass.
         await new Promise((resolve) => setTimeout(resolve, 400));
         mockSend.mockClear();
         mockLoad.mockReset();
-        mockLoad.mockReturnValue(invalid({ n: 0 }));
+        mockLoad.mockReturnValue(invalid({ app: { n: 0 }, auth: { token: '' } }));
         watcher = null;
     });
 
@@ -95,12 +95,12 @@ describe('watchSettingsFile over atomic saves (real directory)', () => {
         await start();
 
         for (const n of [1, 2, 3]) {
-            mockLoad.mockReturnValue(invalid({ n }));
+            mockLoad.mockReturnValue(invalid({ app: { n }, auth: { token: '' } }));
             writeAtomicOwnerOnly(mockPaths.settingsFile, JSON.stringify({ n }));
             await until(() => mockSend.mock.calls.length >= n || failure !== null);
             if (failure) throw failure;
             expect(mockSend).toHaveBeenCalledTimes(n);
-            expect(mockSend).toHaveBeenLastCalledWith('settings-changed', { n, hasToken: false });
+            expect(mockSend).toHaveBeenLastCalledWith('settings-changed', { app: { n }, hasToken: false });
         }
     });
 

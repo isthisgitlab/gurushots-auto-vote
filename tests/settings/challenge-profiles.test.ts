@@ -15,10 +15,19 @@
  * uses) so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import type { MemoryStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/settings');
 import loggerModule = require('../../src/ts/logger');
+import { isPlainObject } from '../../src/ts/plainObject';
 const logger = jest.mocked(loggerModule);
+
+/** One stored profile of a loaded configuration, to edit it behind the facade's back. */
+const profileOf = (config: ReturnType<typeof settings.loadSettings>, name: string): Record<string, unknown> => {
+    const profile = config.profiles[name];
+    if (!isPlainObject(profile)) throw new Error(`no stored profile ${name}`);
+    return profile;
+};
 
 jest.mock('../../src/ts/logger', () => ({
     info: jest.fn(),
@@ -43,28 +52,15 @@ jest.mock('../../src/ts/logger', () => ({
 }));
 
 describe('settings facade — challenge profiles', () => {
-    const headlessGlobals = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let store: { value: string | null; read: jest.Mock<string | null, []>; write: jest.Mock<void, [string]> };
+    let store: MemoryStore;
 
     beforeEach(() => {
-        headlessGlobals.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-        };
-        headlessGlobals.AndroidHeadlessStore = store;
+        store = installHeadlessStore();
         settings.rememberChallengeTitles([]);
     });
 
     afterEach(() => {
-        delete headlessGlobals.__GS_HEADLESS__;
-        delete headlessGlobals.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
     describe('saveChallengeProfile / getChallengeProfiles', () => {
@@ -158,12 +154,12 @@ describe('settings facade — challenge profiles', () => {
         test('strips a hand-injected stale key from the read view without rewriting storage', () => {
             settings.saveChallengeProfile('p', { exposure: 80 });
             const raw = settings.loadSettings();
-            raw.challengeSettings.profiles!.p.removedLegacyKey = 'stale';
+            profileOf(raw, 'p').removedLegacyKey = 'stale';
             settings.saveSettings(raw);
 
             expect(settings.getChallengeProfiles()).toEqual({ p: { exposure: 80 } });
             // Storage still carries the stale key — reads never rewrite.
-            expect(settings.loadSettings().challengeSettings.profiles!.p.removedLegacyKey).toBe('stale');
+            expect(profileOf(settings.loadSettings(), 'p').removedLegacyKey).toBe('stale');
         });
     });
 
@@ -270,7 +266,8 @@ describe('settings facade — challenge profiles', () => {
 
             expect(settings.applyChallengeProfile('reset', '123')).toBe(true);
             expect(settings.getChallengeOverrides('123')).toEqual({});
-            expect(settings.loadSettings().challengeSettings.perChallenge['123']).toBeUndefined();
+            // Applying a profile stands it in for the rule's: the challenge keeps that, and no values of its own.
+            expect(settings.loadSettings().challenges['123']).toEqual({ suppressRuleProfile: true });
         });
 
         test('prunes profile values equal to the current global default', () => {
@@ -294,15 +291,14 @@ describe('settings facade — challenge profiles', () => {
             ).toBe(true);
 
             expect(settings.applyChallengeProfile('night tactic', '123')).toBe(true);
-            // The load-time bounds pass canonical-sorts lists (order carries
-            // no meaning), so the round-tripped arrays come back sorted.
+            // Order carries no meaning, and nothing re-sorts the lists: they come back as saved.
             expect(settings.getChallengeOverrides('123')).toEqual({
                 useScheduledFill: true,
-                scheduledFillTime: ['09:00', '21:30'],
+                scheduledFillTime: ['21:30', '09:00'],
                 scheduledFillBeforeEnd: [14400, 36000],
                 scheduledFillReplaces: true,
             });
-            expect(settings.getEffectiveSetting('scheduledFillTime', '123')).toEqual(['09:00', '21:30']);
+            expect(settings.getEffectiveSetting('scheduledFillTime', '123')).toEqual(['21:30', '09:00']);
         });
 
         test('rejects a profile carrying an invalid scheduledFillTime fail-closed', () => {
@@ -316,7 +312,7 @@ describe('settings facade — challenge profiles', () => {
             // And a profile corrupted in place after saving is rejected at apply.
             settings.saveChallengeProfile('was-fine', { scheduledFillTime: ['21:30'] });
             const raw = settings.loadSettings();
-            raw.challengeSettings.profiles!['was-fine'].scheduledFillTime = ['25:99'];
+            profileOf(raw, 'was-fine').scheduledFillTime = ['25:99'];
             settings.saveSettings(raw);
             expect(settings.applyChallengeProfile('was-fine', '123')).toBe(false);
             expect(settings.getChallengeOverrides('123')).toEqual({});
@@ -326,7 +322,7 @@ describe('settings facade — challenge profiles', () => {
             settings.setChallengeOverride('autoSubmit', '123', true);
             settings.saveChallengeProfile('p', { exposure: 80 });
             const raw = settings.loadSettings();
-            raw.challengeSettings.profiles!.p.exposure = 999; // corrupt in place
+            profileOf(raw, 'p').exposure = 999; // corrupt in place
             settings.saveSettings(raw);
 
             expect(settings.applyChallengeProfile('p', '123')).toBe(false);
@@ -487,7 +483,7 @@ describe('settings facade — challenge profiles', () => {
         test('fails closed when an assigned profile is corrupt instead of applying a valid subset', () => {
             settings.rememberChallengeTitles([{ id: 100, title: 'Weekly Theme' }]);
             const raw = settings.loadSettings();
-            raw.challengeSettings.profiles!['Recurring Tactic'].exposure = 'corrupt';
+            profileOf(raw, 'Recurring Tactic').exposure = 'corrupt';
             settings.saveSettings(raw);
             logger.withCategory.mockClear();
 

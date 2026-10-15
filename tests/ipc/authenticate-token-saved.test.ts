@@ -46,4 +46,18 @@ describe('authenticate with settings that cannot be written', () => {
 
         expect(result).toEqual({ success: true });
     });
+
+    test.each([
+        [true, 'user@example.com'],
+        [false, ''],
+    ])('with Stay logged in %p it keeps the user name %j for the login form', async (stayLoggedIn, kept) => {
+        settings.setSetting.mockReturnValue(true);
+        settings.getSetting.mockImplementation(
+            invalid((key: string) => (key === 'stayLoggedIn' ? stayLoggedIn : 'old-token')),
+        );
+
+        await buildHandlers().authenticate({}, 'user@example.com', 'pw', false);
+
+        expect(settings.setSetting).toHaveBeenCalledWith('lastUsername', kept);
+    });
 });

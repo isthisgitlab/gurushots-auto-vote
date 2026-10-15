@@ -1,7 +1,7 @@
 /**
  * Masking of settings values before they are printed or logged. A settings value can be a
  * whole nested object (the per-challenge map, a rule, a scenario), so the masking is
- * deep: credentials (and the request headers, which carry them) are redacted, the account the settings name is hidden, and chosen
+ * deep: the `auth` block as a whole, credentials (and the request headers, which carry them) are redacted, the account the settings name is hidden, and chosen
  * photo lists — whose ids belong to one account — are reduced to a count.
  */
 
@@ -30,7 +30,7 @@ function maskSettingValue(value: unknown, depth: number = 0): unknown {
     return Object.fromEntries(
         Object.entries(value).map(([key, item]) => [
             key,
-            key === 'apiHeaders' || SENSITIVE_KEY_RE.test(key) || PRIVATE_SETTING_KEYS.has(key)
+            key === 'auth' || key === 'apiHeaders' || SENSITIVE_KEY_RE.test(key) || PRIVATE_SETTING_KEYS.has(key)
                 ? REDACTED
                 : key === 'chosenPhotos' && Array.isArray(item)
                   ? photoCount(item)

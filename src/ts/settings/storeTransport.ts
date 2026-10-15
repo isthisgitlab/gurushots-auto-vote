@@ -8,7 +8,6 @@ import * as runtime from '../runtime';
 import type { PreferencesPlugin } from '@capacitor/preferences';
 import type { AndroidHeadlessStore } from '../types/settings';
 import type { RawJsonStore, ThroughResult } from '../types/stores';
-import { rebaseSettingsText } from './settingsMerge';
 
 /**
  * The Android headless-service bridge, read at call time (absent everywhere
@@ -188,21 +187,58 @@ export const saveThroughCas = async (
     throw new SaveConflictError('the key kept changing');
 };
 
+/** The native side of one settings key: read it (the text the next write is a change of), and save a change of it. */
+export type HeadlessSettingsBridge = Pick<AndroidHeadlessStore, 'read' | 'write' | 'lastWriteRefusal'>;
+
+// What each key reached through the keyed calls was last read as: the text its next write is a change of.
+const keyedReads = new Map<string, string | null>();
+
+/**
+ * One settings key reached through the bridge's keyed calls (`readKey` / `compareAndWriteKey`), with the semantics of
+ * the dedicated `read` / `write` pair: a write saves only while the key still holds what the latest read of it
+ * answered. Throws when the bridge has no keyed calls.
+ */
+export const keyedSettingsBridge = (prefKey: string): HeadlessSettingsBridge => {
+    const bridge = headlessStore();
+    if (!bridge?.readKey || !bridge.compareAndWriteKey) throw new Error('no bridge to read the settings through');
+    const { readKey, compareAndWriteKey } = bridge;
+    let refusal: ReturnType<NonNullable<AndroidHeadlessStore['lastWriteRefusal']>> = '';
+    return {
+        read: () => {
+            const text = readKey.call(bridge, prefKey);
+            keyedReads.set(prefKey, text);
+            return text;
+        },
+        write: (data) => {
+            const expected = keyedReads.get(prefKey) ?? '';
+            const saved = compareAndWriteKey.call(bridge, prefKey, expected, data);
+            if (saved) keyedReads.set(prefKey, data);
+            refusal = saved ? '' : readKey.call(bridge, prefKey) === expected ? 'refused' : 'conflict';
+            return saved;
+        },
+        lastWriteRefusal: () => refusal,
+    };
+};
+
 /**
  * Saves the settings text `ours`, made from `base` (what this context last read), through the bridge's `write`, which
  * the native side takes only while the settings still hold what the latest `read` answered. A blob the other writer
- * changed since is read again and `ours` made on it (see rebaseSettingsText), up to MAX_ATTEMPTS.
+ * changed since is read again and `ours` made on it (`rebase`), up to MAX_ATTEMPTS.
  *
  * @returns the text saved (`ours` when no bridge answers: there is nothing to refuse it); null when the bridge refused
  *   it, which trying again does not help
  * @throws when the bridge threw, the stored settings are unreadable, or they kept changing
  */
-export const headlessSettingsWrite = (base: string | null, ours: string): string | null => {
-    const bridge = headlessStore();
+export const headlessSettingsWrite = (
+    bridge: HeadlessSettingsBridge | undefined,
+    rebase: (base: string | null, ours: string, theirs: string | null) => string,
+    base: string | null,
+    ours: string,
+): string | null => {
     if (!bridge) return ours;
     let theirs = base;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        const text = rebaseSettingsText(base, ours, theirs);
+        const text = rebase(base, ours, theirs);
         if (bridge.write(text) !== false) return text;
         const now = bridge.read();
         // Nothing changed under it: the save itself was refused.

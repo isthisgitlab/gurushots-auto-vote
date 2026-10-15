@@ -10,9 +10,9 @@ import type * as templatesModule from '../../src/ts/scenarios/templates';
 import type * as scenarioSchemaModule from '../../src/ts/settings/scenarioSchema';
 import type * as defaultsModule from '../../src/ts/settings/defaults';
 const { validateScenario } = require('../../src/ts/settings/scenarioSchema') as typeof scenarioSchemaModule;
-const { getDefaultSettings } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
+const { schemaDefaults } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
 
-const globalDefaults = getDefaultSettings().challengeSettings.globalDefaults;
+const globalDefaults = schemaDefaults();
 
 describe('scenario templates', () => {
     test('ids and names are unique', () => {

@@ -7,9 +7,10 @@
 
 import settings = require('../../src/ts/settings');
 import type * as settingsResolutionModule from '../../src/ts/services/joinChallenges/settingsResolution';
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import type { MemoryStore } from '../helpers/headlessStore';
 import { hasPostJoinInlineValue, ruleHasBehaviour } from '../../src/ts/settings/ruleBehaviour';
-import { isAppSettings } from '../helpers/storedShapes';
+import { isConfig } from '../helpers/storedShapes';
 import { parseJsonAs } from '../helpers/parseJson';
 const { resolveJoinSetting } =
     require('../../src/ts/services/joinChallenges/settingsResolution') as typeof settingsResolutionModule;
@@ -28,11 +29,9 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
-const g = globalThis as typeof globalThis & { __GS_HEADLESS__?: boolean; AndroidHeadlessStore?: AndroidHeadlessStore };
-
 describe('Manual Photos Only setting', () => {
-    let store: AndroidHeadlessStore & { value: string | null };
-    const blob = () => parseJsonAs(store.value!, isAppSettings);
+    let store: MemoryStore;
+    const blob = () => parseJsonAs(store.value!, isConfig);
     const writeBlob = (edit: (raw: ReturnType<typeof blob>) => void) => {
         const raw = blob();
         edit(raw);
@@ -41,22 +40,13 @@ describe('Manual Photos Only setting', () => {
     const effective = (id: string) => settings.getEffectiveSetting('manualPhotosOnly', id);
 
     beforeEach(() => {
-        g.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-        };
-        g.AndroidHeadlessStore = store;
+        store = installHeadlessStore();
         settings.rememberChallengeTitles([]);
         settings.setGlobalDefault('exposure', 90); // writes the blob
     });
 
     afterEach(() => {
-        delete g.__GS_HEADLESS__;
-        delete g.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
     describe('the schema entry', () => {
@@ -69,7 +59,7 @@ describe('Manual Photos Only setting', () => {
         test('a global value is refused, and a stored one is ignored', () => {
             expect(settings.setGlobalDefault('manualPhotosOnly', true)).toBe(false);
             writeBlob((raw) => {
-                raw.challengeSettings.globalDefaults.manualPhotosOnly = true;
+                raw.defaults.manualPhotosOnly = true;
             });
             expect(effective('7')).toBe(false);
         });
@@ -104,7 +94,7 @@ describe('Manual Photos Only setting', () => {
                 ]),
             ).toBe(true);
             writeBlob((raw) => {
-                raw.challengeSettings.titleRules[0].manualPhotosOnly = false;
+                raw.rules[0].manualPhotosOnly = false;
             });
             expect(settings.resolveRuleSetting('manualPhotosOnly', 'Big show')).toEqual({ value: true });
         });
@@ -125,7 +115,7 @@ describe('Manual Photos Only setting', () => {
             expect(settings.setChallengeOverride('manualPhotosOnly', '7', false)).toBe(true);
             expect(effective('7')).toBe(false);
             expect(effective('8')).toBe(true);
-            expect(blob().challengeSettings.perChallenge['7']).toEqual({ manualPhotosOnly: false });
+            expect(blob().challenges['7'].values).toEqual({ manualPhotosOnly: false });
         });
     });
 
@@ -142,7 +132,7 @@ describe('Manual Photos Only setting', () => {
 
         test('a hand-edited stored `false` is dropped on read', () => {
             writeBlob((raw) => {
-                raw.challengeSettings.profiles = { Edited: { manualPhotosOnly: false, exposure: 50 } };
+                raw.profiles = { Edited: { manualPhotosOnly: false, exposure: 50 } };
             });
             expect(settings.getChallengeProfiles().Edited).toEqual({ exposure: 50 });
         });
@@ -204,7 +194,7 @@ describe('Manual Photos Only setting', () => {
             settings.rememberOpenChallengeIds([60]);
             settings.rememberUpcomingChallenges([]);
             expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
-            expect(Object.keys(blob().challengeSettings.perChallenge)).toEqual(['60']);
+            expect(Object.keys(blob().challenges)).toEqual(['60']);
         });
     });
 
@@ -234,10 +224,7 @@ describe('Manual Photos Only setting', () => {
             expect(settings.saveScenario(scenario({ exposure: 50, exposureTarget: 60 })).ok).toBe(true);
             expect(settings.getScenario('Plan')).not.toBeNull();
             writeBlob((raw) => {
-                const stored = raw.challengeSettings.scenarios as Record<
-                    string,
-                    { phases: { main: { settings: object } } }
-                >;
+                const stored = raw.scenarios as Record<string, { phases: { main: { settings: object } } }>;
                 stored.Plan.phases.main.settings = { manualPhotosOnly: false };
             });
             expect(settings.getScenario('Plan')).toBeNull();

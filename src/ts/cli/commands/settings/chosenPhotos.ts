@@ -25,7 +25,7 @@ export const beforeChosenPhotosWrite = async (key: string, value: string): Promi
     if (!writeCarriesChosenList([key, parsed])) return nothing;
     // A value the schema refuses is not going to be saved: no account lookup, no warning.
     if (settings.getValidationError(key, parsed) !== null) return nothing;
-    const { token } = settings.loadSettings();
+    const { token } = settings.loadSettings().auth;
     if (!token) return nothing;
     const memberId = await resolveMemberId(
         token,

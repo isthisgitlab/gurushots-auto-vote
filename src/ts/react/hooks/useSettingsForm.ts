@@ -119,7 +119,7 @@ export function useSettingsForm({
             // withFallback keeps each key's default shape (see above).
             const initialUiValues = {} as UiValues;
             for (const [key, defaultValue] of Object.entries(DEFAULT_UI_VALUES)) {
-                (initialUiValues as Record<string, unknown>)[key] = withFallback(settings[key], defaultValue);
+                (initialUiValues as Record<string, unknown>)[key] = withFallback(settings.app[key], defaultValue);
             }
             setUiValues(initialUiValues);
             setOriginalUiValues(initialUiValues);

@@ -15,7 +15,7 @@ import type * as joinChallengesModule from '../../src/ts/services/joinChallenges
 import type * as discoverChallengesModule from '../../src/ts/services/discoverChallenges';
 import type * as openChallengeCacheModule from '../../src/ts/services/openChallengeCache';
 import type * as cliJoinModule from '../../src/ts/cli/commands/join';
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
@@ -26,8 +26,6 @@ const { runJoinPass } = require('../../src/ts/services/joinChallenges') as typeo
 const { clearUpcomingCache } = require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
 const { clearOpenChallenges } = require('../../src/ts/services/openChallengeCache') as typeof openChallengeCacheModule;
 const { showDiscover } = require('../../src/ts/cli/commands/join') as typeof cliJoinModule;
-
-const g = globalThis as typeof globalThis & { __GS_HEADLESS__?: boolean; AndroidHeadlessStore?: AndroidHeadlessStore };
 
 // Mock endpoints answer after a simulated delay; give the whole story room.
 jest.setTimeout(30000);
@@ -54,20 +52,7 @@ const printed = () =>
 
 beforeEach(() => {
     jest.clearAllMocks();
-    g.__GS_HEADLESS__ = true;
-    const store: AndroidHeadlessStore & { value: string | null; keys: Record<string, string> } = {
-        value: null,
-        keys: {},
-        read: jest.fn(() => store.value),
-        write: jest.fn((d) => {
-            store.value = d;
-        }),
-        readKey: (key) => store.keys[key] ?? null,
-        writeKey: (key, data) => {
-            store.keys[key] = data;
-        },
-    };
-    g.AndroidHeadlessStore = store;
+    installHeadlessStore();
     settings.setSetting('mock', true);
     settings.setSetting('token', 'smoke-token');
     refreshApi();
@@ -79,8 +64,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-    delete g.__GS_HEADLESS__;
-    delete g.AndroidHeadlessStore;
+    removeHeadlessStore();
     settings.rememberChallengeTitles([]);
     settings.forgetOpenChallengeIds();
 });

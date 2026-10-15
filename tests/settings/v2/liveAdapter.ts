@@ -1,21 +1,18 @@
 /**
  * The live settings code behind the oracle's method surface (tests/helpers/v1Oracle), so the equivalence harness
  * compares the two call for call. A reader is built from the text of a 1.x `settings.json` and an environment (the
- * active challenge list, the scenario ledger) by one of two constructors:
+ * active challenge list, the scenario ledger) by `liveFromV1Raw`: the real upgrade path. The text is put where
+ * `settings.json` lives and there is no `config.json`, so the first read through the settings facade runs the
+ * one-time import (title pins, the configuration and the marker land in the stores) and every later read is of the
+ * configuration that made.
  *
- *   - `liveFromV1Raw`: the live app reading that `settings.json` today.
- *   - `liveViaImporter`: the same code reading what `importV1Settings` made of it, mapped back to a 1.x-shaped blob
- *     by `v1ViewOf`, so it proves the importer loses nothing resolution depends on.
- *
- * The live code is read through the settings facade and the live services, with the raw text in the in-memory
- * store the Android background service uses (so no file is touched), the scenario ledger replaced by the
- * environment's, and the modules reloaded for every reader (their caches would otherwise carry from one blob to the
- * next). Setting names go through `liveKey`.
+ * The live code is read through the settings facade and the live services, with the storage of the Android background
+ * service pointed at an in-memory bridge (so no file is touched), the scenario ledger replaced by the environment's,
+ * and the modules reloaded for every reader (their caches would otherwise carry from one blob to the next). Setting
+ * names go through `liveKey`.
  */
 
-import { isPlainObject } from '../../../src/ts/plainObject';
-import { importV1Settings, V1_KEY_RENAMES } from '../../../src/ts/settings/importV1';
-import { V1_MIGRATION_FLAGS } from '../../../src/ts/settings/importV1/migrations';
+import { V1_KEY_RENAMES } from '../../../src/ts/settings/importV1';
 import { invalid } from '../../helpers/invalid';
 
 import type * as joinModule from '../../../src/ts/services/joinChallenges/settingsResolution';
@@ -23,13 +20,45 @@ import type * as scenarioStatusModule from '../../../src/ts/services/scenarioSta
 import type * as settingsModule from '../../../src/ts/settings';
 import type * as challengeFactsModule from '../../../src/ts/settings/challengeFacts';
 import type * as ruleBehaviourModule from '../../../src/ts/settings/ruleBehaviour';
-import type { ConfigV2 } from '../../../src/ts/types/config';
 import type { AndroidHeadlessStore } from '../../../src/ts/types/settings';
 import type { ScenarioStateLedger } from '../../../src/ts/types/votingPass';
 import type { Customization, OracleEnv, V1Oracle } from '../../helpers/v1Oracle';
 
 /** The live name of a 1.x setting key: the harness always compares `live[liveKey(k)]` with `oracle[k]`. */
 const liveKey = (v1Key: string): string => (Object.hasOwn(V1_KEY_RENAMES, v1Key) ? V1_KEY_RENAMES[v1Key] : v1Key);
+
+/**
+ * The native side of the Android service, in memory: `settings.json` under its Preferences key, nothing else stored.
+ * `read` / `write` are the configuration's dedicated pair (a write saves only while the key holds what the latest read
+ * answered); the keyed calls are the legacy settings and the marker and pin stores.
+ */
+const memoryBridge = (legacyText: string): AndroidHeadlessStore => {
+    const keys = new Map<string, string>([['gurushots-settings', legacyText]]);
+    let lastRead: string | null = null;
+    return {
+        read: () => {
+            lastRead = keys.get('gurushots-config') ?? null;
+            return lastRead;
+        },
+        write: (data) => {
+            if ((keys.get('gurushots-config') ?? null) !== lastRead) return false;
+            keys.set('gurushots-config', data);
+            lastRead = data;
+            return true;
+        },
+        lastWriteRefusal: () => '',
+        readKey: (key) => keys.get(key) ?? null,
+        writeKey: (key, data) => {
+            keys.set(key, data);
+            return true;
+        },
+        compareAndWriteKey: (key, expected, data) => {
+            if ((keys.get(key) ?? '') !== expected) return false;
+            keys.set(key, data);
+            return true;
+        },
+    };
+};
 
 const headless = globalThis as typeof globalThis & {
     __GS_HEADLESS__?: boolean;
@@ -91,13 +120,7 @@ const releaseLive = () => {
 const openLive = (text: string, env: OracleEnv): V1Oracle => {
     jest.useFakeTimers({ now: env.now * 1000, doNotFake: ['performance', 'hrtime', 'nextTick', 'queueMicrotask'] });
     const { settings, join, scenarioStatus, ruleBehaviour, challengeFacts } = loadModules();
-    let stored: string | null = text;
-    const store: AndroidHeadlessStore = {
-        read: () => stored,
-        write: (data) => {
-            stored = data;
-        },
-    };
+    const store = memoryBridge(text);
     // Every call points the global storage and the ledger at this reader first: readers are used one at a time but
     // the globals are shared.
     const live = <A extends unknown[], R>(call: (...args: A) => R) => {
@@ -105,7 +128,11 @@ const openLive = (text: string, env: OracleEnv): V1Oracle => {
             headless.__GS_HEADLESS__ = true;
             headless.AndroidHeadlessStore = store;
             active.ledger = env.ledger;
-            return call(...args);
+            const result = call(...args);
+            // A fixture whose import failed silently would read defaults, and defaults can equal the oracle's answer.
+            const recovery = settings.getSettingsRecovery();
+            if (recovery) throw new Error(`the import of the fixture did not complete: ${JSON.stringify(recovery)}`);
+            return result;
         };
     };
     live(() => settings.rememberChallengeTitles(invalid(env.challenges)))();
@@ -156,7 +183,7 @@ const openLive = (text: string, env: OracleEnv): V1Oracle => {
         }),
         entryPin: live((challengeId) => settings.getEntryPins(challengeId)),
         titleOf: live((challengeId) => {
-            const title = challengeFacts.challengeTargetForId(settings.loadSettings(), challengeId).title;
+            const title = challengeFacts.challengeTargetForId(challengeId).title;
             return typeof title === 'string' ? title : '';
         }),
         scenarios: live(() =>
@@ -178,75 +205,7 @@ const openLive = (text: string, env: OracleEnv): V1Oracle => {
     };
 };
 
-/** The live app reading `raw` as its `settings.json`. */
+/** The live app upgrading from `raw`, a 1.x `settings.json`, and reading what it made of it. */
 const liveFromV1Raw = (raw: string, env: OracleEnv): V1Oracle => openLive(raw, env);
 
-// 2.x key -> 1.x key.
-const V1_KEY_OF: Readonly<Record<string, string>> = Object.fromEntries(
-    Object.entries(V1_KEY_RENAMES).map(([v1, v2]) => [v2, v1]),
-);
-
-const v1KeysOf = (values: Record<string, unknown>): Record<string, unknown> =>
-    Object.fromEntries(
-        Object.entries(values).map(([key, value]) => [Object.hasOwn(V1_KEY_OF, key) ? V1_KEY_OF[key] : key, value]),
-    );
-
-const v1ValueOf = (value: unknown): unknown => (isPlainObject(value) ? v1KeysOf(value) : value);
-
-const v1ScenarioOf = (doc: unknown): unknown => {
-    if (!isPlainObject(doc) || !isPlainObject(doc.phases)) return doc;
-    const phases = Object.fromEntries(
-        Object.entries(doc.phases).map(([name, phase]) => [
-            name,
-            isPlainObject(phase) && isPlainObject(phase.settings)
-                ? { ...phase, settings: v1KeysOf(phase.settings) }
-                : phase,
-        ]),
-    );
-    return { ...doc, phases };
-};
-
-const mapValues = (value: Record<string, unknown>, convert: (item: unknown) => unknown): Record<string, unknown> =>
-    Object.fromEntries(Object.entries(value).map(([key, item]) => [key, convert(item)]));
-
-/**
- * A 2.x configuration (and the title pins kept beside it) as the 1.x settings blob it came from: the keys renamed
- * back, `challenges` split again into `perChallenge`, `titleProfileSuppressions` and `entryPins`, the sign-in state
- * put back among the top-level keys, every migration marked done (the converted values are already migrated). Test
- * only: it exists to run the 1.x resolver over what the importer made.
- */
-const v1ViewOf = (config: ConfigV2, titlePins: Record<string, string>): Record<string, unknown> => {
-    const perChallenge: Record<string, unknown> = {};
-    const titleProfileSuppressions: Record<string, unknown> = {};
-    const entryPins: Record<string, unknown> = {};
-    for (const [id, record] of Object.entries(config.challenges)) {
-        if (record.values !== undefined) perChallenge[id] = v1KeysOf(record.values);
-        if (record.suppressRuleProfile) titleProfileSuppressions[id] = true;
-        if (record.pins !== undefined) entryPins[id] = record.pins;
-    }
-    return {
-        ...v1KeysOf(config.app),
-        ...config.auth,
-        ...Object.fromEntries(V1_MIGRATION_FLAGS.map((flag) => [flag, true])),
-        challengeSettings: {
-            globalDefaults: v1KeysOf(config.defaults),
-            perChallenge,
-            titleRules: config.rules.map(v1ValueOf),
-            titleProfileSuppressions,
-            entryPins,
-            profiles: mapValues(config.profiles, v1ValueOf),
-            seededProfiles: config.seededProfiles,
-            scenarios: mapValues(config.scenarios, v1ScenarioOf),
-            titlePins,
-        },
-    };
-};
-
-/** The live code reading what the importer made of `raw`, mapped back to a 1.x-shaped blob. Deleted in phase B. */
-const liveViaImporter = (raw: string, env: OracleEnv): V1Oracle => {
-    const result = importV1Settings(raw);
-    if (!result.ok) throw new Error(`the importer refused the file: ${result.code}: ${result.detail}`);
-    return openLive(JSON.stringify(v1ViewOf(result.config, result.titlePins)), env);
-};
-
-export { liveFromV1Raw, liveKey, liveViaImporter, releaseLive, v1ViewOf };
+export { liveFromV1Raw, liveKey, releaseLive };

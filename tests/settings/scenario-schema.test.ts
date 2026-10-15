@@ -9,9 +9,9 @@ import type * as defaultsModule from '../../src/ts/settings/defaults';
 
 const { validateScenario, parseScenarioJson, formatPath } =
     require('../../src/ts/settings/scenarioSchema') as typeof scenarioSchemaModule;
-const { getDefaultSettings } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
+const { schemaDefaults } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
 
-const globalDefaults = getDefaultSettings().challengeSettings.globalDefaults;
+const globalDefaults = schemaDefaults();
 
 type Accepted = Extract<ReturnType<typeof validateScenario>, { ok: true }>;
 type Refused = Extract<ReturnType<typeof validateScenario>, { ok: false }>;

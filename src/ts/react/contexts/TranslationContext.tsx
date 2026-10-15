@@ -61,14 +61,14 @@ export function TranslationProvider({ children }: { children?: ComponentChildren
     // Every successful settings write broadcasts settings-changed, so a
     // language saved in another window (or edited through the CLI) lands here
     // without a reload, straight from the payload: no refetch, so `ready`
-    // never flips back. A payload without `language` (a partial save-settings)
+    // never flips back. A payload without `app.language`
     // did not change it. This window's own setLanguage is echoed back too;
     // applying the same language again is a no-op.
     useLayoutEffect(
         () =>
-            ipc.onSettingsChanged((changed: { language?: unknown } | null | undefined) => {
-                if (changed?.language === undefined) return;
-                applyLanguage(changed.language, { setData });
+            ipc.onSettingsChanged((changed: { app?: { language?: unknown } } | null | undefined) => {
+                if (changed?.app?.language === undefined) return;
+                applyLanguage(changed.app.language, { setData });
             }),
         [setData],
     );

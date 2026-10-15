@@ -11,15 +11,13 @@ import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
 import type * as apiFactoryModule from '../../src/ts/apiFactory';
 import type * as authModule from '../../src/ts/services/auth';
 import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { invalid } from '../helpers/invalid';
 
 const { buildHandlers } = require('../../src/ts/ipc/actions.handlers') as typeof actionsHandlersModule;
 const { getApiStrategy, refreshApi } = require('../../src/ts/apiFactory') as typeof apiFactoryModule;
 const { clearAuthToken } = require('../../src/ts/services/auth') as typeof authModule;
 const { clearLibraryCache } = require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
-
-const g = globalThis as typeof globalThis & { __GS_HEADLESS__?: boolean; AndroidHeadlessStore?: AndroidHeadlessStore };
 
 // Mock endpoints answer after a simulated delay; give the whole story room.
 jest.setTimeout(30000);
@@ -39,20 +37,7 @@ const library = (challengeId: string | null, mode?: 'cached' | 'fresh') =>
     )({}, challengeId, undefined, mode);
 
 beforeEach(() => {
-    g.__GS_HEADLESS__ = true;
-    const store: AndroidHeadlessStore & { value: string | null; keys: Record<string, string> } = {
-        value: null,
-        keys: {},
-        read: jest.fn(() => store.value),
-        write: jest.fn((d) => {
-            store.value = d;
-        }),
-        readKey: (key) => store.keys[key] ?? null,
-        writeKey: (key, data) => {
-            store.keys[key] = data;
-        },
-    };
-    g.AndroidHeadlessStore = store;
+    installHeadlessStore();
     settings.setSetting('mock', true);
     settings.setSetting('token', 'smoke-token');
     refreshApi();
@@ -60,8 +45,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-    delete g.__GS_HEADLESS__;
-    delete g.AndroidHeadlessStore;
+    removeHeadlessStore();
 });
 
 test('the story of a chooser opened again, for another challenge, after a submit and after a logout', async () => {

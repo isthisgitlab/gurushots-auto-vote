@@ -5,7 +5,7 @@
 
 import settings = require('../../src/ts/settings');
 import type * as limitsModule from '../../src/ts/settings/limits';
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 
 const { DEFAULT_STARTUP_DELAY_SECONDS, MAX_STARTUP_DELAY_SECONDS } =
     require('../../src/ts/settings/limits') as typeof limitsModule;
@@ -24,25 +24,12 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
-const g = globalThis as typeof globalThis & { __GS_HEADLESS__?: boolean; AndroidHeadlessStore?: AndroidHeadlessStore };
-
 beforeEach(() => {
-    g.__GS_HEADLESS__ = true;
-    const store: AndroidHeadlessStore & { value: string | null } = {
-        value: null,
-        read: jest.fn(() => store.value),
-        write: jest.fn((d) => {
-            store.value = d;
-        }),
-        readKey: () => null,
-        writeKey: () => undefined,
-    };
-    g.AndroidHeadlessStore = store;
+    installHeadlessStore();
 });
 
 afterEach(() => {
-    delete g.__GS_HEADLESS__;
-    delete g.AndroidHeadlessStore;
+    removeHeadlessStore();
 });
 
 describe('autovoteStartupDelay', () => {

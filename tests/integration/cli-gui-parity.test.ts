@@ -109,19 +109,25 @@ describe('CLI-GUI Parity Tests', () => {
             const allSettings = settings.loadSettings();
 
             // Verify all expected settings are present
-            expect(allSettings).toHaveProperty('theme');
-            expect(allSettings).toHaveProperty('stayLoggedIn');
-            expect(allSettings).toHaveProperty('mock');
-            expect(allSettings).toHaveProperty('token');
-            expect(allSettings).toHaveProperty('timezone');
-            expect(allSettings).toHaveProperty('customTimezones');
-            expect(allSettings).toHaveProperty('language');
-            expect(allSettings).toHaveProperty('apiTimeout');
-            expect(allSettings).toHaveProperty('checkFrequencyMin');
-            expect(allSettings).toHaveProperty('checkFrequencyMax');
-            expect(allSettings).toHaveProperty('windowBounds');
-            expect(allSettings).toHaveProperty('challengeSettings');
-            expect(allSettings).toHaveProperty('apiHeaders');
+            for (const key of [
+                'theme',
+                'stayLoggedIn',
+                'mock',
+                'timezone',
+                'customTimezones',
+                'language',
+                'apiTimeout',
+                'checkFrequencyMin',
+                'checkFrequencyMax',
+                'windowBounds',
+            ]) {
+                expect(allSettings.app).toHaveProperty(key);
+            }
+            expect(allSettings.auth).toHaveProperty('token');
+            expect(allSettings.auth).toHaveProperty('apiHeaders');
+            for (const container of ['defaults', 'profiles', 'scenarios', 'rules', 'challenges']) {
+                expect(allSettings).toHaveProperty(container);
+            }
         });
 
         test('CLI can handle settings schema', async () => {

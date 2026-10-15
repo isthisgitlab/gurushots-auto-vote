@@ -56,7 +56,7 @@ const recordChosenPhotosOwner = (memberId: string | null): void => {
  */
 const stampChosenPhotosOwner = (args: readonly unknown[]): void => {
     if (!writeCarriesChosenList(args)) return;
-    const { token } = settings.loadSettings();
+    const { token } = settings.loadSettings().auth;
     recordChosenPhotosOwner(token ? peekMemberId(token) : null);
 };
 

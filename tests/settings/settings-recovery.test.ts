@@ -1,8 +1,7 @@
 /**
- * Corrupt, unreadable and un-migratable settings files, against a real temp
- * directory: a file that does not parse is set aside once and defaults apply
- * (saves then work); a file that cannot be read, or cannot be migrated, is never
- * overwritten while that lasts. Saves replace the file atomically.
+ * Corrupt and unreadable configuration files, against a real temp directory: a file that does not parse is set aside
+ * once and defaults apply (saves then work), and a 1.x settings.json beside it is never imported over that; a file
+ * that cannot be read is never overwritten while that lasts. Saves replace the file atomically.
  */
 
 // A partial mock of the real fs (a builtin's exports are not spy-able as is), so
@@ -13,10 +12,6 @@ jest.mock('node:fs', () => {
 });
 jest.unmock('path');
 jest.unmock('node:path');
-jest.mock('../../src/ts/runtime', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
-}));
 jest.mock('../../src/ts/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
@@ -48,47 +43,46 @@ describe('settings recovery (real fs)', () => {
     let root: string;
     let userData: string;
     let settingsFile: string;
+    let legacyFile: string;
     let settings: typeof settingsModule;
     let cat: CatDouble;
 
     // Each test gets its own module graph: the recovery state lives in the settings module.
-    const loadFresh = (migrationsOverride?: () => never) => {
+    const loadFresh = () => {
         jest.isolateModules(() => {
-            const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
-            jest.spyOn(runtime, 'getAppUserDataPath').mockReturnValue(userData);
-            if (migrationsOverride) {
-                jest.doMock('../../src/ts/settings/migrations', () => ({
-                    ...jest.requireActual<typeof import('../../src/ts/settings/migrations')>(
-                        '../../src/ts/settings/migrations',
-                    ),
-                    runMigrations: migrationsOverride,
-                }));
-            }
+            // A factory, not a spy: `jest.restoreAllMocks()` must not send the module back to the real user-data folder.
+            const actualRuntime = jest.requireActual<typeof runtimeModule>('../../src/ts/runtime');
+            jest.doMock('../../src/ts/runtime', () => ({
+                __esModule: true,
+                ...actualRuntime,
+                getAppUserDataPath: () => userData,
+            }));
             settings = require('../../src/ts/settings') as typeof settingsModule;
             cat = invalid<typeof loggerModule & { __cat: CatDouble }>(
                 require('../../src/ts/logger') as typeof loggerModule,
             ).__cat;
         });
-        jest.dontMock('../../src/ts/settings/migrations');
     };
 
-    const backups = () => fs.readdirSync(userData).filter((name) => name.startsWith('settings.json.corrupt-'));
+    const backups = () => fs.readdirSync(userData).filter((name) => name.startsWith('config.json.corrupt-'));
 
     beforeEach(() => {
         root = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-recovery-'));
         userData = path.join(root, 'userData');
         fs.mkdirSync(userData);
-        settingsFile = path.join(userData, 'settings.json');
+        settingsFile = path.join(userData, 'config.json');
+        legacyFile = path.join(userData, 'settings.json');
     });
 
     afterEach(() => {
         jest.restoreAllMocks();
+        jest.dontMock('../../src/ts/runtime');
         fs.rmSync(root, { recursive: true, force: true });
     });
 
     describe('a file that does not parse', () => {
         test('a truncated file is set aside once; defaults apply; the next save and a token write work', () => {
-            const truncated = '{"theme":"dark","token":"abc","challengeSettings":{"globalDefaults":{"expo';
+            const truncated = '{"app":{"theme":"dark"},"auth":{"token":"abc"},"defaults":{"expo';
             fs.writeFileSync(settingsFile, truncated);
             loadFresh();
 
@@ -111,12 +105,32 @@ describe('settings recovery (real fs)', () => {
             expect(settings.setSetting('token', 'new-token')).toBe(true);
             const saved = parseJsonAs(
                 fs.readFileSync(settingsFile, 'utf8'),
-                isShape<{ theme: string; token: string }>({ theme: isString, token: isString }),
+                isShape<{ app: { theme: string }; auth: { token: string } }>({
+                    app: isShape<{ theme: string }>({ theme: isString }),
+                    auth: isShape<{ token: string }>({ token: isString }),
+                }),
             );
-            expect(saved.theme).toBe('dark');
-            expect(saved.token).toBe('new-token');
-            expect(settings.loadSettings().token).toBe('new-token');
+            expect(saved.app.theme).toBe('dark');
+            expect(saved.auth.token).toBe('new-token');
+            expect(settings.loadSettings().auth.token).toBe('new-token');
             expect(backups()).toHaveLength(1);
+        });
+
+        test('a settings.json beside it is not imported over it, now or at the next start', () => {
+            const oneX = JSON.stringify({ theme: 'dark', timezone: 'UTC' });
+            fs.writeFileSync(legacyFile, oneX);
+            fs.writeFileSync(settingsFile, '{not json');
+            loadFresh();
+
+            expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
+            expect(settings.getSettingsRecovery()?.code).toBe('settings-corrupt');
+            expect(fs.existsSync(settingsFile)).toBe(false);
+
+            // A later start finds no configuration, only the set-aside copy: the glob keeps the import away.
+            loadFresh();
+            expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
+            expect(fs.existsSync(settingsFile)).toBe(false);
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(oneX);
         });
 
         test('reading it again does not make another backup or say it again', () => {
@@ -146,7 +160,7 @@ describe('settings recovery (real fs)', () => {
 
             expect(backups()).toHaveLength(1);
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('its root is not an object'));
-            expect(settings.saveSettings({ theme: 'dark' })).toBe(true);
+            expect(settings.saveAppSettings({ theme: 'dark' })).toBe(true);
         });
 
         test('a move that fails with no message is still reported', () => {
@@ -169,7 +183,7 @@ describe('settings recovery (real fs)', () => {
             });
 
             expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
-            expect(settings.saveSettings({ theme: 'dark' })).toBe(false);
+            expect(settings.saveAppSettings({ theme: 'dark' })).toBe(false);
 
             expect(fs.readFileSync(settingsFile, 'utf8')).toBe('{not json');
             expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-unreadable', path: settingsFile });
@@ -177,7 +191,7 @@ describe('settings recovery (real fs)', () => {
     });
 
     describe('a file that cannot be read', () => {
-        const original = JSON.stringify({ theme: 'dark', token: 'keep-me', challengeSettings: { globalDefaults: {} } });
+        const original = JSON.stringify({ app: { theme: 'dark' }, auth: { token: 'keep-me' } });
 
         test('a read error that carries no message is still reported', () => {
             fs.writeFileSync(settingsFile, original);
@@ -205,9 +219,8 @@ describe('settings recovery (real fs)', () => {
             );
 
             expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
-            expect(settings.saveSettings({ theme: 'light' })).toBe(false);
+            expect(settings.saveAppSettings({ theme: 'light' })).toBe(false);
             expect(settings.setSetting('token', 'planted')).toBe(false);
-            expect(settings.cleanupObsoleteSettings()).toBeUndefined();
 
             expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-unreadable', path: settingsFile });
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('EACCES'));
@@ -216,40 +229,12 @@ describe('settings recovery (real fs)', () => {
             expect(fs.readFileSync(settingsFile, 'utf8')).toBe(original);
 
             // The error is gone: the next load reads the file, drops the refusal, and saves work again.
-            expect(settings.loadSettings().token).toBe('keep-me');
+            expect(settings.loadSettings().auth.token).toBe('keep-me');
             expect(settings.getSettingsRecovery()).toBeNull();
-            expect(settings.saveSettings({ theme: 'light' })).toBe(true);
-            expect(parseJsonObject(fs.readFileSync(settingsFile, 'utf8')).token).toBe('keep-me');
-        });
-    });
-
-    describe('a file that parses but cannot be migrated', () => {
-        const original = JSON.stringify({ theme: 'dark', token: 'keep-me' });
-
-        test('is left as it is, not moved aside, and saves are refused', () => {
-            fs.writeFileSync(settingsFile, original);
-            loadFresh(() => {
-                throw new Error('migration exploded');
-            });
-
-            expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
-            expect(settings.saveSettings({ theme: 'light' })).toBe(false);
-
-            expect(fs.readFileSync(settingsFile, 'utf8')).toBe(original);
-            expect(backups()).toEqual([]);
-            expect(settings.getSettingsRecovery()).toEqual({ code: 'settings-migration-failed', path: settingsFile });
-            expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('migration exploded'));
-        });
-
-        test('a migration failure with no message is still reported', () => {
-            fs.writeFileSync(settingsFile, original);
-            loadFresh(() => {
-                throw null;
-            });
-
-            settings.loadSettings();
-
-            expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('unknown error'));
+            expect(settings.saveAppSettings({ theme: 'light' })).toBe(true);
+            expect(parseJsonObject(fs.readFileSync(settingsFile, 'utf8')).auth).toEqual(
+                expect.objectContaining({ token: 'keep-me' }),
+            );
         });
     });
 
@@ -261,9 +246,9 @@ describe('settings recovery (real fs)', () => {
 
             loadFresh();
 
-            expect(settings.loadSettings().token).toBe('cli-token');
+            expect(settings.loadSettings().auth.token).toBe('cli-token');
             expect(settings.getSetting('token')).toBe('cli-token');
-            expect(parseJsonObject(fs.readFileSync(settingsFile, 'utf8'))).toEqual(
+            expect(parseJsonObject(fs.readFileSync(settingsFile, 'utf8')).auth).toEqual(
                 expect.objectContaining({ token: 'cli-token' }),
             );
         });
@@ -278,15 +263,19 @@ describe('settings recovery (real fs)', () => {
             fs.linkSync(settingsFile, before);
             expect(settings.setSetting('theme', 'light')).toBe(true);
 
-            expect(fs.readdirSync(userData)).toEqual(['settings.json']);
-            expect(parseJsonObject(fs.readFileSync(before, 'utf8')).theme).toBe('dark');
+            expect(fs.readdirSync(userData).sort()).toEqual(['config.json', 'v2-import.json']);
+            expect(parseJsonObject(fs.readFileSync(before, 'utf8')).app).toEqual(
+                expect.objectContaining({ theme: 'dark' }),
+            );
             if (process.platform !== 'win32') expect(fs.statSync(settingsFile).mode & 0o777).toBe(0o600);
-            expect(parseJsonObject(fs.readFileSync(settingsFile, 'utf8')).theme).toBe('light');
+            expect(parseJsonObject(fs.readFileSync(settingsFile, 'utf8')).app).toEqual(
+                expect.objectContaining({ theme: 'light' }),
+            );
         });
 
         test('temp files an earlier crash left beside the settings are swept on the first write', () => {
             loadFresh();
-            const stale = path.join(userData, 'settings.json.123.deadbeef.tmp');
+            const stale = path.join(userData, 'config.json.123.deadbeef.tmp');
             fs.writeFileSync(stale, 'half');
             const old = new Date(Date.now() - 10 * 60_000);
             fs.utimesSync(stale, old, old);

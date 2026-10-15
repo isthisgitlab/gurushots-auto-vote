@@ -117,19 +117,19 @@ describe('apiFactory', () => {
 
     describe('getApiStrategy', () => {
         test('returns the mock surface when mock setting is true', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             expect(getApiStrategy()).toBe(mockApi);
             expect(mockLogger.info).toHaveBeenCalledWith('✅ Using MOCK API strategy for development/testing', null);
         });
 
         test('returns the real surface when mock setting is false', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: false, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: false }, auth: { token: 'tok' } }));
             expect(getApiStrategy()).toBe(realApi);
             expect(mockLogger.info).toHaveBeenCalledWith('🌐 Using REAL API strategy for production', null);
         });
 
         test('logs debug context on (re)selection', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             getApiStrategy();
             expect(mockLogger.debug).toHaveBeenCalledWith('=== API Factory Debug ===', null);
             expect(mockLogger.debug).toHaveBeenCalledWith('Mock setting: true');
@@ -137,13 +137,13 @@ describe('apiFactory', () => {
         });
 
         test('reports missing token as not present', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: false, token: null }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: false }, auth: { token: null } }));
             getApiStrategy();
             expect(mockLogger.debug).toHaveBeenCalledWith('Token exists: false');
         });
 
         test('caches the strategy across calls when the setting does not change', () => {
-            settings.loadSettings.mockReturnValue(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValue(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             const a = getApiStrategy();
             const b = getApiStrategy();
             expect(a).toBe(b);
@@ -151,9 +151,9 @@ describe('apiFactory', () => {
         });
 
         test('switches surface when the mock setting flips', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             const first = getApiStrategy();
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: false, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: false }, auth: { token: 'tok' } }));
             const second = getApiStrategy();
             expect(first).toBe(mockApi);
             expect(second).toBe(realApi);
@@ -167,7 +167,7 @@ describe('apiFactory', () => {
 
     describe('getMiddleware', () => {
         test('wraps the mock surface in a fresh middleware', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             const mw = getMiddleware();
             expect(BaseMiddleware).toHaveBeenCalledWith(mockApi);
             expect(invalid<{ mockMiddlewareInstance: boolean }>(mw).mockMiddlewareInstance).toBe(true);
@@ -175,7 +175,7 @@ describe('apiFactory', () => {
         });
 
         test('wraps the real surface in a fresh middleware', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: false, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: false }, auth: { token: 'tok' } }));
             const mw = getMiddleware();
             expect(BaseMiddleware).toHaveBeenCalledWith(realApi);
             expect(invalid<{ mockMiddlewareInstance: boolean }>(mw).mockMiddlewareInstance).toBe(true);
@@ -183,7 +183,7 @@ describe('apiFactory', () => {
         });
 
         test('returns the cached middleware on subsequent calls', () => {
-            settings.loadSettings.mockReturnValue(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValue(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             const a = getMiddleware();
             const b = getMiddleware();
             expect(a).toBe(b);
@@ -191,10 +191,10 @@ describe('apiFactory', () => {
         });
 
         test('rebuilds when the underlying strategy changes', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             const first = getMiddleware();
             refreshApi();
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: false, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: false }, auth: { token: 'tok' } }));
             const second = getMiddleware();
             expect(first).not.toBe(second);
             expect(BaseMiddleware).toHaveBeenCalledTimes(2);
@@ -203,7 +203,7 @@ describe('apiFactory', () => {
 
     describe('refreshApi', () => {
         test('clears strategy and middleware caches', () => {
-            settings.loadSettings.mockReturnValue(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValue(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             const s1 = getApiStrategy();
             const m1 = getMiddleware();
             refreshApi();
@@ -222,7 +222,7 @@ describe('apiFactory', () => {
 
     describe('integration scenarios', () => {
         test('treats an empty settings object as real mode', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({}));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: {}, auth: {} }));
             expect(getApiStrategy()).toBe(realApi);
             expect(mockLogger.debug).toHaveBeenCalledWith('Mock setting: undefined');
             expect(mockLogger.info).toHaveBeenCalledWith('🌐 Using REAL API strategy for production', null);
@@ -237,7 +237,7 @@ describe('apiFactory', () => {
         });
 
         test('does not disturb the cached settings-driven selection', () => {
-            settings.loadSettings.mockReturnValue(invalid({ mock: false, token: 'tok' }));
+            settings.loadSettings.mockReturnValue(invalid({ app: { mock: false }, auth: { token: 'tok' } }));
             expect(getApiStrategy()).toBe(realApi);
             expect(getApiStrategy({ mock: true })).toBe(mockApi);
             // The settings-driven path still returns the cached real surface.

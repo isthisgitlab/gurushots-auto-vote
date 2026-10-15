@@ -151,7 +151,7 @@ function createMainWindow() {
             // released the blocker — re-arming an assertion for a session with
             // no window and no cadence chain, which nothing would then release.
             if (!appState.mainWindow || appState.mainWindow.isDestroyed()) return;
-            syncBackgroundActivity(newSettings.autovoteRunning === true);
+            syncBackgroundActivity(newSettings.app.autovoteRunning === true);
         },
     });
 
@@ -161,7 +161,7 @@ function createMainWindow() {
     // watcher above would never fire for it.
     //
     // This is also the ONLY sync if watchSettingsFile returned null (no
-    // settings.json yet), so say so rather than leaving a silent pin — the
+    // config.json yet), so say so rather than leaving a silent pin — the
     // login flow writes settings before this window exists, which is why that
     // path is not expected in practice.
     syncBackgroundActivity(settings.getSetting('autovoteRunning') === true);
@@ -179,7 +179,7 @@ function checkAutoLogin() {
     const userSettings = settings.loadSettings();
 
     // If we have a token and stay logged in is enabled, auto-login
-    if (userSettings.token && userSettings.stayLoggedIn) {
+    if (userSettings.auth.token && userSettings.app.stayLoggedIn) {
         createMainWindow();
         return true;
     }

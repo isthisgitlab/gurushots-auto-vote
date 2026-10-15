@@ -44,14 +44,17 @@ const warnIfLegacyDevDir = (userDataPath: string) => {
     }
 };
 
-// Define the settings file path in the userData directory. Resolution lives
+// Define the configuration file path in the userData directory. Resolution lives
 // in runtime.getAppUserDataPath — the ONE implementation shared with the
 // logger, so logs and settings can never land in different directories.
 const getSettingsPath = () => {
     const userDataPath = runtime.getAppUserDataPath();
     warnIfLegacyDevDir(userDataPath);
-    return path.join(userDataPath, 'settings.json');
+    return path.join(userDataPath, 'config.json');
 };
+
+// The 1.x settings file the configuration is imported from, beside it.
+const getLegacySettingsPath = () => path.join(path.dirname(getSettingsPath()), 'settings.json');
 
 /**
  * Determine the default mock setting based on environment.
@@ -89,4 +92,11 @@ const getEnvironmentInfo = () => {
     };
 };
 
-export { electronApp, getSettingsPath, getDefaultMockSetting, getUserDataPath, getEnvironmentInfo };
+export {
+    electronApp,
+    getSettingsPath,
+    getLegacySettingsPath,
+    getDefaultMockSetting,
+    getUserDataPath,
+    getEnvironmentInfo,
+};

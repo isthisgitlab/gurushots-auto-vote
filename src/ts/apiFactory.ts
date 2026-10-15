@@ -126,12 +126,12 @@ const getApiStrategy = ({ mock }: { mock?: boolean } = {}): ApiStrategy => {
         return mock ? mockApi : realApi;
     }
     const userSettings = settings.loadSettings();
-    if (lastMockSetting !== userSettings.mock || !currentStrategy) {
+    if (lastMockSetting !== userSettings.app.mock || !currentStrategy) {
         logger.withCategory('api').debug('=== API Factory Debug ===', null);
-        logger.withCategory('settings').debug(`Mock setting: ${userSettings.mock}`);
-        logger.withCategory('settings').debug(`Token exists: ${!!userSettings.token}`);
+        logger.withCategory('settings').debug(`Mock setting: ${userSettings.app.mock}`);
+        logger.withCategory('settings').debug(`Token exists: ${!!userSettings.auth.token}`);
 
-        if (userSettings.mock) {
+        if (userSettings.app.mock) {
             logger.withCategory('api').info('✅ Using MOCK API strategy for development/testing', null);
             currentStrategy = mockApi;
         } else {
@@ -139,7 +139,7 @@ const getApiStrategy = ({ mock }: { mock?: boolean } = {}): ApiStrategy => {
             currentStrategy = realApi;
         }
 
-        lastMockSetting = userSettings.mock;
+        lastMockSetting = userSettings.app.mock;
         currentMiddleware = null;
     }
     return currentStrategy;

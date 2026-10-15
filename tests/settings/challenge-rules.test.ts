@@ -7,13 +7,14 @@
  * round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import type { MemoryStore } from '../helpers/headlessStore';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 import rules = require('../../src/ts/settings/challengeRules');
 import settings = require('../../src/ts/settings');
-import { isAppSettings } from '../helpers/storedShapes';
+import { isConfig } from '../helpers/storedShapes';
 import { parseJsonAs } from '../helpers/parseJson';
 
 jest.mock('../../src/ts/logger', () => {
@@ -323,37 +324,53 @@ describe('settings/challengeRules — pure matcher', () => {
 });
 
 describe('settings facade — class conditions and the rule cascade', () => {
-    const headlessGlobals = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let store: { value: string | null; read: jest.Mock<string | null, []>; write: jest.Mock<void, [string]> };
+    let store: MemoryStore;
     const seed = (obj: Record<string, unknown>) => {
-        store.value = JSON.stringify({ _challengeRulesOrderedV1: true, ...obj });
+        store.value = JSON.stringify(obj);
         settings.loadSettings();
         store.write.mockClear();
     };
-    const saved = () => parseJsonAs(store.value!, isAppSettings);
-    const base = (over = {}) => ({ challengeSettings: { globalDefaults: {}, ...over } });
+    const saved = () => parseJsonAs(store.value!, isConfig);
+    // A stored configuration with these layers: the global defaults, each challenge's own values by id, the profiles,
+    // the rules and the ids whose rule profile is suppressed.
+    const base = (
+        over: {
+            defaults?: Record<string, unknown>;
+            challenges?: Record<string, Record<string, unknown>>;
+            profiles?: Record<string, unknown>;
+            rules?: unknown[];
+            suppressed?: Record<string, boolean>;
+            scenarios?: Record<string, unknown>;
+        } = {},
+    ) => {
+        const ids = new Set([...Object.keys(over.challenges ?? {}), ...Object.keys(over.suppressed ?? {})]);
+        return {
+            version: 2,
+            defaults: over.defaults ?? {},
+            challenges: Object.fromEntries(
+                [...ids].map((id) => [
+                    id,
+                    {
+                        ...(over.challenges?.[id] ? { values: over.challenges[id] } : {}),
+                        ...(over.suppressed?.[id] ? { suppressRuleProfile: true } : {}),
+                    },
+                ]),
+            ),
+            profiles: over.profiles ?? {},
+            rules: over.rules ?? [],
+            scenarios: over.scenarios ?? {},
+        };
+    };
     const withTags = (rule: Record<string, unknown>) => ({ mustIncludeTags: [], shouldIncludeTags: [], ...rule });
 
     beforeEach(() => {
-        headlessGlobals.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-        };
-        headlessGlobals.AndroidHeadlessStore = store;
+        store = installHeadlessStore();
         settings.rememberChallengeTitles([]);
         jest.clearAllMocks();
     });
 
     afterAll(() => {
-        delete headlessGlobals.__GS_HEADLESS__;
-        delete headlessGlobals.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
     describe('setTitleRules — class conditions', () => {
@@ -365,10 +382,9 @@ describe('settings facade — class conditions and the rule cascade', () => {
                     { minHours: '', maxHours: '', pics: '', type: '', title: '', autoJoin: true },
                 ]),
             ).toBe(true);
-            expect(saved().challengeSettings.titleRules).toEqual([
+            expect(saved().rules).toEqual([
                 withTags({ title: '', type: 'flash', pics: 4, minHours: 24, maxHours: 168, autoJoin: true }),
             ]);
-            expect(saved()._challengeRulesOrderedV1).toBe(true);
         });
 
         test.each([
@@ -408,7 +424,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
                 base({
                     profiles: { P: { exposure: 70 } },
                     // A manual target below the profile's trigger: the pair is invalid.
-                    perChallenge: { c1: { exposureTarget: 60 } },
+                    challenges: { c1: { exposureTarget: 60 } },
                 }),
             );
             settings.rememberChallengeTitles([{ id: 'c1', ...challenge() }]);
@@ -425,7 +441,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
             seed(
                 base({
                     profiles: { Quad: { exposure: 70 }, Long: { exposure: 40, boostTime: 600 } },
-                    titleRules: [
+                    rules: [
                         withTags({ title: '', pics: 4, maxHours: 24, profile: 'Quad' }),
                         withTags({ title: '', pics: 4, profile: 'Long' }),
                     ],
@@ -444,9 +460,9 @@ describe('settings facade — class conditions and the rule cascade', () => {
             seed(
                 base({
                     profiles: { P: { autoJoinWithinHoursOfEnd: 12, exposure: 70 } },
-                    titleRules: [
+                    rules: [
                         withTags({ title: 'Seaside', autoJoinWithinHoursOfEnd: 2 }),
-                        withTags({ title: '', pics: 4, profile: 'P', autoFill: true }),
+                        withTags({ title: '', pics: 4, profile: 'P', autoSubmit: true }),
                     ],
                 }),
             );
@@ -457,7 +473,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
         });
 
         test('a hand-edited reserved profile name on a rule resolves to no profile', () => {
-            seed(base({ titleRules: [withTags({ title: 'Seaside', profile: '__proto__' })] }));
+            seed(base({ rules: [withTags({ title: 'Seaside', profile: '__proto__' })] }));
             expect(settings.getTitleProfile(challenge()).profile).toBeNull();
             expect(settings.resolveRuleSetting('exposure', challenge())).toBeNull();
         });
@@ -465,8 +481,8 @@ describe('settings facade — class conditions and the rule cascade', () => {
         test('photo tags come from the first matching rule that lists them for that key', () => {
             seed(
                 base({
-                    globalDefaults: { mustIncludeTags: [], shouldIncludeTags: [] },
-                    titleRules: [
+                    defaults: { mustIncludeTags: [], shouldIncludeTags: [] },
+                    rules: [
                         withTags({ title: 'Seaside', shouldIncludeTags: ['sea'] }),
                         withTags({ title: '', pics: 4, mustIncludeTags: ['quad'], shouldIncludeTags: ['x'] }),
                     ],
@@ -488,7 +504,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
         test('a rule-assigned scenario, auto-join and chosen photos are inline values with the rule that set them', () => {
             seed(
                 base({
-                    titleRules: [
+                    rules: [
                         withTags({ title: 'Seaside', scenario: 'Plan', autoJoin: true, chosenPhotos: ['p1', 'p2'] }),
                     ],
                 }),
@@ -505,7 +521,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
         });
 
         test('nothing matching gives empty layers and no profile', () => {
-            seed(base({ titleRules: [withTags({ title: 'Other', scenario: 'Plan' })] }));
+            seed(base({ rules: [withTags({ title: 'Other', scenario: 'Plan' })] }));
             expect(settings.getTitleProfile('Seaside')).toEqual({
                 profile: null,
                 suppressed: false,
@@ -519,9 +535,9 @@ describe('settings facade — class conditions and the rule cascade', () => {
         test('a rule matched only by tags or by type is read through the remembered facts, by id', () => {
             seed(
                 base({
-                    titleRules: [
+                    rules: [
                         withTags({ title: '', challengeTag: 'Exhibition', scenario: 'ByTag' }),
-                        withTags({ title: '', type: 'flash', autoFill: true }),
+                        withTags({ title: '', type: 'flash', autoSubmit: true }),
                     ],
                 }),
             );
@@ -544,7 +560,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
         test('with several matching rules the first wins per key, and each key names the rule that set it', () => {
             seed(
                 base({
-                    titleRules: [
+                    rules: [
                         withTags({ title: 'Seaside', scenario: 'First' }),
                         withTags({ title: 'Sea', match: 'contains', scenario: 'Second', autoJoin: true }),
                     ],
@@ -559,8 +575,8 @@ describe('settings facade — class conditions and the rule cascade', () => {
         test("the rule's profile and inline values are separate layers, inline winning in the combined one", () => {
             seed(
                 base({
-                    profiles: { Quad: { exposure: 70, autoFill: false } },
-                    titleRules: [withTags({ title: 'Seaside', profile: 'Quad', autoFill: true, scenario: 'Plan' })],
+                    profiles: { Quad: { exposure: 70, autoSubmit: false } },
+                    rules: [withTags({ title: 'Seaside', profile: 'Quad', autoSubmit: true, scenario: 'Plan' })],
                 }),
             );
             const seaside = rule('Seaside', 1);
@@ -578,10 +594,10 @@ describe('settings facade — class conditions and the rule cascade', () => {
         test("a key an earlier rule's profile supplies is not credited to a later rule that sets it inline; the other layer is", () => {
             seed(
                 base({
-                    profiles: { Quad: { autoFill: false } },
-                    titleRules: [
+                    profiles: { Quad: { autoSubmit: false } },
+                    rules: [
                         withTags({ title: 'Seaside', profile: 'Quad' }),
-                        withTags({ title: 'Sea', match: 'contains', autoFill: true, autoJoin: true }),
+                        withTags({ title: 'Sea', match: 'contains', autoSubmit: true, autoJoin: true }),
                     ],
                 }),
             );
@@ -595,13 +611,13 @@ describe('settings facade — class conditions and the rule cascade', () => {
         });
 
         test('a title of only spaces names nothing: the rule is untitled', () => {
-            seed(base({ titleRules: [withTags({ title: '   ', challengeTag: 'Comm', autoFill: true })] }));
+            seed(base({ rules: [withTags({ title: '   ', challengeTag: 'Comm', autoSubmit: true })] }));
             settings.rememberChallengeTitles([{ id: 3, title: 'Seaside', tags: ['Comm'] }]);
             expect(settings.getTitleProfile('Seaside', 3).ruleSources).toEqual({ autoSubmit: { index: 1 } });
         });
 
         test('a hand-edited title that is no text names nothing either', () => {
-            seed(base({ titleRules: [withTags({ title: 42, challengeTag: 'Comm', autoFill: true })] }));
+            seed(base({ rules: [withTags({ title: 42, challengeTag: 'Comm', autoSubmit: true })] }));
             settings.rememberChallengeTitles([{ id: 3, title: 'Seaside', tags: ['Comm'] }]);
             expect(settings.getTitleProfile('Seaside', 3).ruleSources).toEqual({ autoSubmit: { index: 1 } });
         });
@@ -610,8 +626,8 @@ describe('settings facade — class conditions and the rule cascade', () => {
             seed(
                 base({
                     profiles: { Quad: { exposure: 70 } },
-                    titleRules: [withTags({ title: 'Seaside', profile: 'Quad', scenario: 'Plan' })],
-                    titleProfileSuppressions: { '7': true },
+                    rules: [withTags({ title: 'Seaside', profile: 'Quad', scenario: 'Plan' })],
+                    suppressed: { '7': true },
                 }),
             );
             settings.rememberChallengeTitles([{ id: 7, title: 'Seaside' }]);
@@ -626,9 +642,9 @@ describe('settings facade — class conditions and the rule cascade', () => {
         test('an untitled rule is named by its place in the list, and a hand-edited invalid inline value contributes nothing', () => {
             seed(
                 base({
-                    titleRules: [
+                    rules: [
                         withTags({ title: 'Other', scenario: 'Unrelated' }),
-                        withTags({ title: '', challengeTag: 'Comm', autoFill: true }),
+                        withTags({ title: '', challengeTag: 'Comm', autoSubmit: true }),
                         withTags({ title: 'Seaside', autoJoin: 'not a boolean' }),
                     ],
                 }),
@@ -646,7 +662,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
         const rulesForQuad = () =>
             base({
                 profiles: { Quad: { exposure: 70 } },
-                titleRules: [withTags({ title: '', pics: 4, minHours: 24, profile: 'Quad', autoFill: true })],
+                rules: [withTags({ title: '', pics: 4, minHours: 24, profile: 'Quad', autoSubmit: true })],
             });
 
         test('a joined challenge resolves class rules by id, including the inline auto-submit', () => {
@@ -679,7 +695,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
             seed(rulesForQuad());
             settings.rememberChallengeTitles([{ id: 7, ...challenge() }]);
             expect(settings.setChallengeOverride('autoSubmit', '7', false)).toBe(true);
-            expect(saved().challengeSettings.perChallenge['7']).toEqual({ autoFill: false });
+            expect(saved().challenges['7']).toEqual({ values: { autoSubmit: false } });
             expect(settings.getEffectiveSetting('autoSubmit', '7')).toBe(false);
         });
 
@@ -695,7 +711,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
 
     describe('hasRuleJoinOptIn', () => {
         const optIn = (rule: Record<string, unknown>, target = challenge({ tags: ['Comm'] })) => {
-            seed(base({ profiles: { P: { exposure: 70 } }, titleRules: [withTags(rule)] }));
+            seed(base({ profiles: { P: { exposure: 70 } }, rules: [withTags(rule)] }));
             return settings.hasRuleJoinOptIn(target);
         };
 
@@ -718,7 +734,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
         seed(
             base({
                 profiles: { P: { exposure: 70 } },
-                titleRules: [
+                rules: [
                     withTags({ title: '', pics: 4, profile: 'P', autoJoin: true }),
                     withTags({ title: 'Only', profile: 'P' }),
                     withTags({ title: 'Broken', profile: 'P', autoJoin: 'yes' }),
@@ -726,6 +742,6 @@ describe('settings facade — class conditions and the rule cascade', () => {
             }),
         );
         expect(settings.deleteChallengeProfile('P')).toBe(true);
-        expect(saved().challengeSettings.titleRules).toEqual([withTags({ title: '', pics: 4, autoJoin: true })]);
+        expect(saved().rules).toEqual([withTags({ title: '', pics: 4, autoJoin: true })]);
     });
 });

@@ -523,7 +523,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
 
     beforeEach(() => {
         mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
-        mockApi.getSettings.mockReset().mockResolvedValue(invalid({ timezone: 'UTC', checkFrequencyMax: 3 }));
+        mockApi.getSettings.mockReset().mockResolvedValue(invalid({ app: { timezone: 'UTC', checkFrequencyMax: 3 } }));
         mockApi.getChallengeProfiles.mockReset().mockResolvedValue({});
         for (const [key, extra] of Object.entries(SF_SCHEMA)) {
             mockSchemaState.schema![key] = invalid({
@@ -543,7 +543,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
             delete mockSchemaState.defaults![key];
         }
         mockSchemaState.groups = mockSchemaState.groups!.filter((g) => g.id !== 'scheduledFill');
-        mockApi.getSettings.mockReset().mockResolvedValue(invalid({}));
+        mockApi.getSettings.mockReset().mockResolvedValue(invalid({ app: {} }));
     });
 
     const renderWithChallenge = (
@@ -663,7 +663,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
     });
 
     test('(d) window shorter than checkFrequencyMax → short-window hint', async () => {
-        mockApi.getSettings.mockResolvedValue(invalid({ timezone: 'UTC', checkFrequencyMax: 30 }));
+        mockApi.getSettings.mockResolvedValue(invalid({ app: { timezone: 'UTC', checkFrequencyMax: 30 } }));
         mockApi.getChallengeOverrides.mockResolvedValue({
             useScheduledFill: true,
             scheduledFillTime: ['21:30'],

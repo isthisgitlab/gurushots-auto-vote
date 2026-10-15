@@ -38,17 +38,15 @@ const { listSettings, listGlobalDefaults } =
 beforeEach(() => {
     consoleLines.length = 0;
     persisted.length = 0;
-    settings.getDefaultSettings.mockReturnValue(invalid({ token: '', lastUsername: '', chosenPhotosMemberId: '' }));
+    settings.getDefaultSettings.mockReturnValue(
+        invalid({ app: {}, auth: { token: '', lastUsername: '', chosenPhotosMemberId: '' } }),
+    );
     settings.loadSettings.mockReturnValue(
         invalid({
-            token: 'tok-secret',
-            lastUsername: 'me@example.com',
-            chosenPhotosMemberId: 'member-secret',
-            note: 'password: hunter2',
-            challengeSettings: {
-                globalDefaults: { chosenPhotos: ['photo-secret'] },
-                perChallenge: { '7': { chosenPhotos: ['photo-secret-2'] } },
-            },
+            app: { note: 'password: hunter2' },
+            auth: { token: 'tok-secret', lastUsername: 'me@example.com', chosenPhotosMemberId: 'member-secret' },
+            defaults: { chosenPhotos: ['photo-secret'] },
+            challenges: { '7': { values: { chosenPhotos: ['photo-secret-2'] } } },
         }),
     );
 });
@@ -80,7 +78,9 @@ test('list-global-defaults prints to the console only, photo lists as counts', (
 });
 
 test('an empty private setting reads "(not set)" rather than "[REDACTED]"', () => {
-    settings.loadSettings.mockReturnValue(invalid({ lastUsername: '', chosenPhotosMemberId: 'member-secret' }));
+    settings.loadSettings.mockReturnValue(
+        invalid({ auth: { lastUsername: '', chosenPhotosMemberId: 'member-secret' } }),
+    );
     listSettings();
     const lines = (key: string) =>
         consoleLines.slice(consoleLines.indexOf(`${key}:`) + 1, consoleLines.indexOf(`${key}:`) + 4);
@@ -89,7 +89,7 @@ test('an empty private setting reads "(not set)" rather than "[REDACTED]"', () =
 });
 
 test('control and format characters in a stored key or value never reach the terminal', () => {
-    settings.loadSettings.mockReturnValue(invalid({ 'ev\u001b[31mil\u2028key': 'a\u202Eb\u0085c' }));
+    settings.loadSettings.mockReturnValue(invalid({ app: { 'ev\u001b[31mil\u2028key': 'a\u202Eb\u0085c' } }));
     listSettings();
     const printed = consoleLines.join('\n');
     expect(printed).toContain('evil');

@@ -7,7 +7,8 @@
  * is wired before the invalid value is judged.
  */
 
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import type { MemoryStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/settings');
 import type * as schemaModule from '../../src/ts/settings/schema';
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
@@ -75,57 +76,35 @@ const validOtherValue = (key: string): number => {
 
 const defaultOf = (key: string): unknown => schemaEntry(key)!.default;
 
-const headlessGlobals = globalThis as typeof globalThis & {
-    __GS_HEADLESS__?: boolean;
-    AndroidHeadlessStore?: AndroidHeadlessStore;
-};
-let store: {
-    value: string | null;
-    keys: Record<string, string>;
-    read: () => string | null;
-    write: (data: string) => void;
-    readKey: (key: string) => string | null;
-    writeKey: (key: string, data: string) => void;
-};
+let store: MemoryStore;
 
-const seed = (challengeSettings: Record<string, unknown>) => {
+// The stored configuration with these layers: the global defaults, each challenge's own values by id, the profiles,
+// the rules and the scenarios.
+const seed = (layers: {
+    defaults?: Record<string, unknown>;
+    challenges?: Record<string, Record<string, unknown>>;
+    profiles?: Record<string, unknown>;
+    rules?: unknown[];
+    scenarios?: Record<string, unknown>;
+}) => {
     store.value = JSON.stringify({
-        theme: 'dark',
-        challengeSettings: { globalDefaults: {}, perChallenge: {}, titleRules: [], ...challengeSettings },
+        version: 2,
+        app: { theme: 'dark' },
+        defaults: layers.defaults ?? {},
+        challenges: Object.fromEntries(Object.entries(layers.challenges ?? {}).map(([id, values]) => [id, { values }])),
+        profiles: layers.profiles ?? {},
+        rules: layers.rules ?? [],
+        scenarios: layers.scenarios ?? {},
     });
 };
 
-beforeAll(() => {
-    // Burn the once-per-process obsolete-settings cleanup so it never rewrites a seeded blob.
-    headlessGlobals.__GS_HEADLESS__ = true;
-    headlessGlobals.AndroidHeadlessStore = {
-        read: () => JSON.stringify({ challengeSettings: { globalDefaults: {} } }),
-        write: () => {},
-    };
-    settings.loadSettings();
-});
-
 beforeEach(() => {
-    headlessGlobals.__GS_HEADLESS__ = true;
-    store = {
-        value: null,
-        keys: {},
-        read: () => store.value,
-        write: (data) => {
-            store.value = data;
-        },
-        readKey: (key) => store.keys[key] ?? null,
-        writeKey: (key, data) => {
-            store.keys[key] = data;
-        },
-    };
-    headlessGlobals.AndroidHeadlessStore = store;
+    store = installHeadlessStore();
     settings.rememberChallengeTitles([{ id: 7, title: 'Big show', type: 'exhibition' }]);
 });
 
 afterEach(() => {
-    delete headlessGlobals.__GS_HEADLESS__;
-    delete headlessGlobals.AndroidHeadlessStore;
+    removeHeadlessStore();
     settings.rememberChallengeTitles([]);
 });
 
@@ -165,20 +144,20 @@ describe.each(CHALLENGE_KEYS)('%s, whichever layer holds it', (key) => {
     const good = validOtherValue(key);
 
     test('global default', () => {
-        seed({ globalDefaults: { [key]: good } });
+        seed({ defaults: { [key]: good } });
         expect(settings.getEffectiveSetting(key, '7')).toBe(good);
         for (const bad of invalidValues(key)) {
-            seed({ globalDefaults: { [key]: bad } });
+            seed({ defaults: { [key]: bad } });
             expect(settings.getEffectiveSetting(key, '7')).toBe(defaultOf(key));
             expect(settings.getEffectiveSetting(key, null)).toBe(defaultOf(key));
         }
     });
 
     test('per-challenge override', () => {
-        seed({ perChallenge: { '7': { [key]: good } } });
+        seed({ challenges: { '7': { [key]: good } } });
         expect(settings.getEffectiveSetting(key, '7')).toBe(good);
         for (const bad of invalidValues(key)) {
-            seed({ globalDefaults: { [key]: good }, perChallenge: { '7': { [key]: bad } } });
+            seed({ defaults: { [key]: good }, challenges: { '7': { [key]: bad } } });
             // The bad override is dropped, so the layer below it answers.
             expect(settings.getEffectiveSetting(key, '7')).toBe(good);
         }
@@ -186,10 +165,10 @@ describe.each(CHALLENGE_KEYS)('%s, whichever layer holds it', (key) => {
 
     test('saved profile named by a rule', () => {
         const rule = { title: 'Big show', profile: 'P' };
-        seed({ profiles: { P: { [key]: good } }, titleRules: [rule] });
+        seed({ profiles: { P: { [key]: good } }, rules: [rule] });
         expect(settings.getEffectiveSetting(key, '7')).toBe(good);
         for (const bad of invalidValues(key)) {
-            seed({ profiles: { P: { [key]: bad } }, titleRules: [rule] });
+            seed({ profiles: { P: { [key]: bad } }, rules: [rule] });
             // A profile with an unusable value contributes nothing at all.
             expect(settings.getEffectiveSetting(key, '7')).toBe(defaultOf(key));
         }
@@ -200,11 +179,11 @@ describe.each(CHALLENGE_KEYS)('%s, whichever layer holds it', (key) => {
             Plan: { name: 'Plan', version: 1, start: 'p', phases: { p: { settings: { [key]: value } } } },
         });
         const assigned = { '7': { scenario: 'Plan' } };
-        seed({ scenarios: scenario(good), perChallenge: assigned });
+        seed({ scenarios: scenario(good), challenges: assigned });
         scenarioStateLedger.set(7, initialState('Plan', 'p', 1000));
         expect(settings.getEffectiveSetting(key, '7')).toBe(good);
         for (const bad of invalidValues(key)) {
-            seed({ scenarios: scenario(bad), perChallenge: assigned });
+            seed({ scenarios: scenario(bad), challenges: assigned });
             // A scenario holding an unusable value is not in use, so no overlay applies.
             expect(settings.getEffectiveSetting(key, '7')).toBe(defaultOf(key));
         }
@@ -214,10 +193,10 @@ describe.each(CHALLENGE_KEYS)('%s, whichever layer holds it', (key) => {
 describe.each(GLOBAL_KEYS)('%s, a global-only key', (key) => {
     test('a stored global default is returned only when valid', () => {
         const good = validOtherValue(key);
-        seed({ globalDefaults: { [key]: good } });
+        seed({ defaults: { [key]: good } });
         expect(settings.getEffectiveSetting(key, null)).toBe(good);
         for (const bad of invalidValues(key)) {
-            seed({ globalDefaults: { [key]: bad } });
+            seed({ defaults: { [key]: bad } });
             expect(settings.getEffectiveSetting(key, null)).toBe(defaultOf(key));
         }
     });
@@ -225,8 +204,8 @@ describe.each(GLOBAL_KEYS)('%s, a global-only key', (key) => {
 
 test('the headless loop reads lastMinuteCheckFrequency under the id "global" and gets the global default', () => {
     seed({
-        perChallenge: { global: { lastMinuteCheckFrequency: 0 } },
-        globalDefaults: { lastMinuteCheckFrequency: 3 },
+        challenges: { global: { lastMinuteCheckFrequency: 0 } },
+        defaults: { lastMinuteCheckFrequency: 3 },
     });
     expect(settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global')).toBe(3);
 });

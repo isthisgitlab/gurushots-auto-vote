@@ -86,7 +86,9 @@ const applyImminentBoostsOnSuspend = async ({
     // `running` is released in `finally`.
     try {
         if (!autovoteSessionLive()) return;
-        const { token, mock } = settings.loadSettings();
+        const { auth, app } = settings.loadSettings();
+        const { token } = auth;
+        const { mock } = app;
         if (!token) return;
         // The remembered list must be the one the current API surface would act on.
         const rememberedMock = rememberedChallengesMock();

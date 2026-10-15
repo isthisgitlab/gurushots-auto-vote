@@ -61,7 +61,7 @@ describe('extractAuthResult', () => {
 
 describe('requireAuthToken', () => {
     test('returns the token and the loaded settings when logged in', () => {
-        const userSettings = { token: 'tok', language: 'en' };
+        const userSettings = { auth: { token: 'tok' }, app: { language: 'en' } };
         settings.loadSettings.mockReturnValue(invalid(userSettings));
         expect(requireAuthToken('boost')).toEqual({ ok: true, token: 'tok', settings: userSettings });
     });
@@ -69,7 +69,7 @@ describe('requireAuthToken', () => {
     test('returns a ready-to-send early-return response and warns when there is no token', () => {
         const warning = jest.fn();
         logger.withCategory.mockReturnValueOnce(invalid({ warning }));
-        settings.loadSettings.mockReturnValue(invalid({ token: '' }));
+        settings.loadSettings.mockReturnValue(invalid({ auth: { token: '' } }));
         expect(requireAuthToken('turbo apply')).toEqual({
             ok: false,
             response: { success: false, error: 'No authentication token found' },

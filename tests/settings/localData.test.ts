@@ -34,6 +34,7 @@ const mockPreferences = {
     set: jest.fn<Promise<void>, [{ key: string; value: string }]>(() => Promise.resolve()),
     get: jest.fn<Promise<{ value: string | null }>, [{ key: string }]>(() => Promise.resolve({ value: null })),
     remove: jest.fn<Promise<void>, [{ key: string }]>(() => Promise.resolve()),
+    keys: jest.fn<Promise<{ keys: string[] }>, []>(() => Promise.resolve({ keys: [] })),
 };
 jest.mock('@capacitor/preferences', () => ({ Preferences: mockPreferences }), { virtual: true });
 const mockSession = {
@@ -64,10 +65,10 @@ const sourceFiles = (dir: string): string[] =>
         return /\.tsx?$/.test(entry.name) ? [full] : [];
     });
 
-/** The `{ ... }` argument of each `createJsonStore(` call of a source text. */
+/** The `{ ... }` argument of each `createJsonStore(` and `createSettingsFile(` call of a source text. */
 const callArguments = (text: string): string[] => {
     const found: string[] = [];
-    for (const match of text.matchAll(/createJsonStore\(\s*\{/g)) {
+    for (const match of text.matchAll(/(?:createJsonStore|createSettingsFile)\(\s*\{/g)) {
         let depth = 0;
         for (let i = match.index + match[0].length - 1; i < text.length; i++) {
             if (text[i] === '{') depth++;
@@ -91,21 +92,20 @@ const literalOrConstant = (value: string, text: string): string => {
 describe('the local-data registry', () => {
     const { LOCAL_DATA_STORES } = require('../../src/ts/settings/localData') as typeof localDataModule;
 
-    const callSites = sourceFiles(SRC_ROOT)
-        .filter((file) => !file.endsWith(path.join('settings', 'storage.ts')))
-        .flatMap((file) => {
-            const text = fs.readFileSync(file, 'utf8');
-            return callArguments(text).map((args) => {
-                const fileName = /fileName:\s*('[^']+')/.exec(args)?.[1];
-                const prefKey = /prefKey:\s*([A-Za-z_'][^,}\n]*)/.exec(args)?.[1];
-                if (!fileName || !prefKey) throw new Error(`cannot read a createJsonStore call in ${file}`);
-                return {
-                    file: path.relative(SRC_ROOT, file),
-                    fileName: literalOrConstant(fileName, text),
-                    prefKey: literalOrConstant(prefKey, text),
-                };
-            });
+    // Every store: the createJsonStore ones, and the two settings files storage.ts makes with createSettingsFile.
+    const callSites = sourceFiles(SRC_ROOT).flatMap((file) => {
+        const text = fs.readFileSync(file, 'utf8');
+        return callArguments(text).map((args) => {
+            const fileName = /fileName:\s*('[^']+')/.exec(args)?.[1];
+            const prefKey = /prefKey:\s*([A-Za-z_'][^,}\n]*)/.exec(args)?.[1];
+            if (!fileName || !prefKey) throw new Error(`cannot read a store call in ${file}`);
+            return {
+                file: path.relative(SRC_ROOT, file),
+                fileName: literalOrConstant(fileName, text),
+                prefKey: literalOrConstant(prefKey, text),
+            };
         });
+    });
 
     test('the scan finds the stores (so it cannot pass on an empty list)', () => {
         expect(callSites.length).toBeGreaterThanOrEqual(9);
@@ -118,10 +118,21 @@ describe('the local-data registry', () => {
         },
     );
 
-    test('the registry holds nothing the source does not create, plus the settings file', () => {
+    test('the registry holds nothing the source does not create', () => {
         const created = callSites.map((site) => `${site.fileName}|${site.prefKey}`);
         const listed = LOCAL_DATA_STORES.map((store) => `${store.fileName}|${store.prefKey}`);
-        expect(listed.filter((entry) => !created.includes(entry))).toEqual(['settings.json|gurushots-settings']);
+        expect(listed.filter((entry) => !created.includes(entry))).toEqual([]);
+    });
+
+    test('the configuration, the 1.x settings file, the import marker and the title pins are in it', () => {
+        expect(LOCAL_DATA_STORES).toEqual(
+            expect.arrayContaining([
+                { fileName: 'config.json', prefKey: 'gurushots-config' },
+                { fileName: 'settings.json', prefKey: 'gurushots-settings' },
+                { fileName: 'v2-import.json', prefKey: 'gs_v2_import' },
+                { fileName: 'titlePins.json', prefKey: 'gs_title_pins' },
+            ]),
+        );
     });
 
     test('names are unique', () => {
@@ -173,6 +184,9 @@ describe('wipeLocalData', () => {
             fs.writeFileSync(path.join(userData, fileName), '{"x":1}');
         }
         fs.writeFileSync(path.join(userData, 'settings.json.corrupt-2026-01-01T00-00-00-000Z'), 'broken');
+        fs.writeFileSync(path.join(userData, 'config.json.corrupt-2026-01-02T00-00-00-000Z'), 'broken');
+        fs.writeFileSync(path.join(userData, 'config.json.corrupt-2026-01-03T00-00-00-000Z'), 'broken');
+        fs.writeFileSync(path.join(userData, 'statelock-config-import.lock'), 'token');
         fs.writeFileSync(path.join(userData, 'settings.json.12.abcd1234.tmp'), 'half');
         fs.writeFileSync(path.join(userData, 'statelock-scenario.lock'), 'token');
         fs.writeFileSync(path.join(userData, 'joinlock-77.lock.stale-9'), 'token');
@@ -246,7 +260,13 @@ describe('wipeLocalData', () => {
             const { removed } = result as Extract<typeof result, { success: true }>;
             expect(removed).toEqual(
                 expect.arrayContaining([
+                    path.join(userData, 'config.json'),
+                    path.join(userData, 'config.json.corrupt-2026-01-02T00-00-00-000Z'),
+                    path.join(userData, 'config.json.corrupt-2026-01-03T00-00-00-000Z'),
                     path.join(userData, 'settings.json'),
+                    path.join(userData, 'v2-import.json'),
+                    path.join(userData, 'titlePins.json'),
+                    path.join(userData, 'statelock-config-import.lock'),
                     path.join(userData, 'metadata.json'),
                     path.join(userData, 'logs'),
                     path.join(visionParent, 'vision'),
@@ -552,6 +572,25 @@ describe('wipeLocalData', () => {
             wipeNative.mockResolvedValue({ ok: true });
         });
 
+        test('removes the copies of unusable settings set aside under their own keys, and nothing else it did not name', async () => {
+            const aside = [
+                'gurushots-config_corrupt-2026-01-02T00-00-00-000Z',
+                'gurushots-config_corrupt-2026-02-03T00-00-00-000Z',
+                'gurushots-settings_corrupt-2026-01-02T00-00-00-000Z',
+            ];
+            mockPreferences.keys.mockResolvedValueOnce({ keys: [...aside, 'someone-elses-key', 'gurushots-config'] });
+            load();
+
+            const result = await ctx.localData.wipeLocalData();
+
+            const removedKeys = mockPreferences.remove.mock.calls.map(([{ key }]) => key);
+            expect(result.success).toBe(true);
+            expect(removedKeys).toEqual(expect.arrayContaining(aside));
+            expect(removedKeys).not.toContain('someone-elses-key');
+            expect(removedKeys.filter((key) => key === 'gurushots-config')).toHaveLength(1);
+            expect(removedKeys).toHaveLength(ctx.localData.LOCAL_DATA_STORES.length * 2 + aside.length);
+        });
+
         test('asks the native plugin first, then removes every store key and the settings backup key', async () => {
             load();
 
@@ -562,8 +601,14 @@ describe('wipeLocalData', () => {
             const removedKeys = mockPreferences.remove.mock.calls.map(([{ key }]) => key);
             expect(removedKeys).toEqual(
                 expect.arrayContaining([
+                    'gurushots-config',
+                    'gurushots-config_corrupt',
                     'gurushots-settings',
                     'gurushots-settings_corrupt',
+                    'gs_v2_import',
+                    'gs_v2_import_corrupt',
+                    'gs_title_pins',
+                    'gs_title_pins_corrupt',
                     'gs_scenario_state',
                     'gs_join_state',
                     'gurushots-metadata',

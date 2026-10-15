@@ -43,6 +43,7 @@ type StorageCtx = {
 
 const mockPrefSet = jest.fn<Promise<void>, [SetOptions]>(() => Promise.resolve());
 const mockPrefGet = jest.fn<Promise<GetResult>, [GetOptions]>(() => Promise.resolve({ value: null }));
+const mockPrefKeys = jest.fn<Promise<{ keys: string[] }>, []>(() => Promise.resolve({ keys: [] }));
 jest.mock('../../src/ts/runtime', () => ({
     __esModule: true,
     ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
@@ -53,6 +54,7 @@ jest.mock(
         Preferences: {
             set: (...a: Parameters<typeof mockPrefSet>) => mockPrefSet(...a),
             get: (...a: Parameters<typeof mockPrefGet>) => mockPrefGet(...a),
+            keys: () => mockPrefKeys(),
         },
     }),
     { virtual: true },
@@ -95,6 +97,7 @@ const loadStorage = ({
 describe('settings storage — edge cases', () => {
     beforeEach(() => {
         mockPrefGet.mockReset();
+        mockPrefKeys.mockClear();
         mockPrefSet.mockReset();
         mockPrefSet.mockResolvedValue(undefined);
     });
@@ -122,18 +125,26 @@ describe('settings storage — edge cases', () => {
 
         test('hydrates the cache once from Preferences on Capacitor', async () => {
             g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
-            mockPrefGet.mockResolvedValue({ value: '{"token":"t"}' });
+            mockPrefGet.mockImplementation(({ key }) =>
+                Promise.resolve({ value: key === 'gurushots-config' ? '{"token":"t"}' : null }),
+            );
             const { mod } = loadStorage();
 
             expect(mod.storage.readRaw()).toBeNull();
             await mod.initializeAsync();
-            expect(mockPrefGet).toHaveBeenCalledWith({ key: 'gurushots-settings' });
+            // The configuration and the 1.x settings file; the copies set aside are found among the keys.
+            expect(mockPrefGet.mock.calls.map(([call]) => call.key).sort()).toEqual([
+                'gurushots-config',
+                'gurushots-settings',
+            ]);
+            expect(mockPrefKeys).toHaveBeenCalledTimes(2);
             expect(mod.storage.readRaw()).toBe('{"token":"t"}');
+            expect(mod.legacyStorage.readRaw()).toBeNull();
 
             // Second call must not re-hydrate (and so must not clobber a newer write).
             mod.storage.writeRaw('{"token":"newer"}');
             await mod.initializeAsync();
-            expect(mockPrefGet).toHaveBeenCalledTimes(1);
+            expect(mockPrefGet).toHaveBeenCalledTimes(2);
             expect(mod.storage.readRaw()).toBe('{"token":"newer"}');
         });
 
@@ -147,7 +158,8 @@ describe('settings storage — edge cases', () => {
             expect(mod.storage.readRaw()).toBeNull();
 
             await mod.initializeAsync();
-            expect(mockPrefGet).toHaveBeenCalledTimes(1);
+            // Each file's first read failed; neither is read again.
+            expect(mockPrefGet).toHaveBeenCalledTimes(2);
         });
     });
 
@@ -386,7 +398,7 @@ describe('settings storage — edge cases', () => {
             const { mod, fs, categoryLogger } = loadStorage({ electronApp });
             fs.existsSync.mockImplementation((p) => p === LEGACY_FILE);
 
-            expect(mod.getSettingsPath()).toBe(`${USER_DATA}/settings.json`);
+            expect(mod.getSettingsPath()).toBe(`${USER_DATA}/config.json`);
             expect(categoryLogger.warning).toHaveBeenCalledTimes(1);
             expect(categoryLogger.warning.mock.calls[0][0]).toContain('/apps/gurushots-auto-vote-dev');
 
@@ -418,7 +430,7 @@ describe('settings storage — edge cases', () => {
             fs.existsSync.mockImplementation(() => {
                 throw new Error('EACCES');
             });
-            expect(mod.getSettingsPath()).toBe(`${USER_DATA}/settings.json`);
+            expect(mod.getSettingsPath()).toBe(`${USER_DATA}/config.json`);
             expect(categoryLogger.warning).not.toHaveBeenCalled();
         });
 

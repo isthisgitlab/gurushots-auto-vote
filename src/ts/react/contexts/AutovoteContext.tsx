@@ -254,7 +254,7 @@ function createRendererCadenceChain({
         setTimer: (handle) => {
             cycleTimerRef.current = handle;
         },
-        loadSettings: () => ipc.getSettings(),
+        loadSettings: async () => (await ipc.getSettings()).app,
         fetchChallenges: () => ipc.getActiveChallenges(),
         // The key-agnostic channel is typed `unknown`; the main process resolves
         // the schema-validated (numeric) effective value.
