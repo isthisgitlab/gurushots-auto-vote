@@ -309,25 +309,111 @@ describe('TitleTagRulesEditor', () => {
 
     describe('closes at', () => {
         const rowWith = (over = {}) => [{ title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], ...over }];
+        const input = (n = 1) => screen.getByLabelText<HTMLInputElement>(`app.titleRuleClosesAtRow ${n}`);
+        const addButton = () => screen.getByRole('button', { name: /app\.addCloseTime/ });
 
-        test('the time input patches closesAt, and an empty value sends an empty string', () => {
+        test('the time input patches closesAt, an empty value sends an empty string, and one row keeps no list', () => {
             const onChange = jest.fn();
             const { rerender } = render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
-            const input = () => screen.getByLabelText<HTMLInputElement>('app.titleRuleClosesAt');
             expect(input().value).toBe('');
             fireEvent.change(input(), { target: { value: '17:10' } });
-            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ closesAt: '17:10' })]);
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.objectContaining({ closesAt: '17:10', closesAtTimes: undefined }),
+            ]);
             rerender(<TitleTagRulesEditor value={rowWith({ closesAt: '17:10' })} onChange={onChange} />);
             expect(input().value).toBe('17:10');
             fireEvent.change(input(), { target: { value: '' } });
             expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ closesAt: '' })]);
         });
 
+        test('Add time appends a blank row and starts the list; the first row stays in closesAt', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={rowWith({ closesAt: '17:10' })} onChange={onChange} />);
+            fireEvent.click(addButton());
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.objectContaining({ closesAt: '17:10', closesAtTimes: ['17:10', ''] }),
+            ]);
+        });
+
+        test('a stored list shows one row per time, editing one patches the list, and its first row mirrors into closesAt', () => {
+            const onChange = jest.fn();
+            render(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: '17:10', closesAtTimes: ['17:10', '18:10'] })}
+                    onChange={onChange}
+                />,
+            );
+            expect([input(1).value, input(2).value]).toEqual(['17:10', '18:10']);
+            fireEvent.change(input(2), { target: { value: '19:30' } });
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.objectContaining({ closesAt: '17:10', closesAtTimes: ['17:10', '19:30'] }),
+            ]);
+            fireEvent.change(input(1), { target: { value: '16:00' } });
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.objectContaining({ closesAt: '16:00', closesAtTimes: ['16:00', '18:10'] }),
+            ]);
+        });
+
+        test('Remove time drops that row, and cutting back to one leaves no stale list behind', () => {
+            const onChange = jest.fn();
+            const { rerender } = render(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: '17:10', closesAtTimes: ['17:10', '18:10', '19:10'] })}
+                    onChange={onChange}
+                />,
+            );
+            fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 1' }));
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.objectContaining({ closesAt: '18:10', closesAtTimes: ['18:10', '19:10'] }),
+            ]);
+            rerender(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: '18:10', closesAtTimes: ['18:10', '19:10'] })}
+                    onChange={onChange}
+                />,
+            );
+            fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 2' }));
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ closesAt: '18:10' })]);
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.not.objectContaining({ closesAtTimes: expect.anything() }),
+            ]);
+            rerender(<TitleTagRulesEditor value={rowWith({ closesAt: '18:10' })} onChange={onChange} />);
+            expect(screen.queryByRole('button', { name: /app\.removeCloseTime/ })).toBeNull();
+        });
+
+        test('Add time is held at 24 rows', () => {
+            const times = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
+            const { rerender } = render(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: times[0], closesAtTimes: times.slice(0, 23) })}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect(addButton().hasAttribute('disabled')).toBe(false);
+            rerender(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: times[0], closesAtTimes: times })}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect(addButton().hasAttribute('disabled')).toBe(true);
+        });
+
+        test('a new blank row shows no error', () => {
+            render(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: '17:10', closesAtTimes: ['17:10', ''] })}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect(input(2).classList.contains('input-error')).toBe(false);
+            expect(screen.queryByText('app.titleRuleClosesAtInvalid')).toBeNull();
+        });
+
         test('a stored value that is not a strict HH:MM is marked invalid; a valid or empty one is not', () => {
             const { rerender } = render(
                 <TitleTagRulesEditor value={rowWith({ closesAt: '7:10' })} onChange={jest.fn()} />,
             );
-            const input = () => screen.getByLabelText<HTMLInputElement>('app.titleRuleClosesAt');
             expect(input().classList.contains('input-error')).toBe(true);
             expect(input().getAttribute('aria-invalid')).toBe('true');
             const message = screen.getByText('app.titleRuleClosesAtInvalid');
@@ -340,6 +426,107 @@ describe('TitleTagRulesEditor', () => {
                 expect(input().hasAttribute('aria-describedby')).toBe(false);
                 expect(screen.queryByText('app.titleRuleClosesAtInvalid')).toBeNull();
             }
+        });
+
+        test('only the invalid rows of a list say so: a bad time, a non-text entry, and a padded valid one is fine', () => {
+            render(
+                <TitleTagRulesEditor
+                    value={rowWith({
+                        closesAt: '17:10',
+                        closesAtTimes: ['17:10', 'x', invalid<string>(17), ' 18:10 '],
+                    })}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect([1, 2, 3, 4].map((n) => input(n).classList.contains('input-error'))).toEqual([
+                false,
+                true,
+                true,
+                false,
+            ]);
+            expect(screen.getAllByText('app.titleRuleClosesAtInvalid')).toHaveLength(2);
+        });
+
+        test('a lone invalid row can be removed, which clears both fields; a lone valid or blank row has no Remove', () => {
+            const onChange = jest.fn();
+            const { rerender } = render(
+                <TitleTagRulesEditor value={rowWith({ closesAt: '7:10' })} onChange={onChange} />,
+            );
+            fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 1' }));
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ closesAt: undefined })]);
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.not.objectContaining({ closesAtTimes: expect.anything() }),
+            ]);
+            for (const closesAt of ['17:10', '']) {
+                rerender(<TitleTagRulesEditor value={rowWith({ closesAt })} onChange={onChange} />);
+                expect(screen.queryByRole('button', { name: /app\.removeCloseTime/ })).toBeNull();
+            }
+        });
+
+        test.each([
+            [
+                'a list of blanks falls back to closesAt, as the matcher does',
+                { closesAt: '17:10', closesAtTimes: ['', ''] },
+                ['17:10'],
+                [false],
+            ],
+            ['an empty list falls back to closesAt', { closesAt: '17:10', closesAtTimes: [] }, ['17:10'], [false]],
+            [
+                'an invalid closesAt behind a list of blanks is invalid',
+                { closesAt: 'x', closesAtTimes: [''] },
+                [''],
+                [true],
+            ],
+            ['a listed time is shown trimmed and is valid', { closesAtTimes: [' 18:10 '] }, ['18:10'], [false]],
+            [
+                'a list that is not a list marks the first row invalid, whatever closesAt says',
+                { closesAt: '17:10', closesAtTimes: '18:10' },
+                ['17:10'],
+                [true],
+            ],
+            [
+                'an object in place of the list marks the first row invalid',
+                { closesAtTimes: { 0: '18:10' } },
+                [''],
+                [true],
+            ],
+        ])('%s', (_name, over, values, invalids) => {
+            render(<TitleTagRulesEditor value={rowWith(over)} onChange={jest.fn()} />);
+            expect(values.map((_, i) => input(i + 1).value)).toEqual(values);
+            expect(values.map((_, i) => input(i + 1).classList.contains('input-error'))).toEqual(invalids);
+        });
+
+        test('only the first row of a malformed list is marked, and a null list is no list', () => {
+            const { rerender } = render(
+                <TitleTagRulesEditor value={rowWith({ closesAt: '17:10', closesAtTimes: 7 })} onChange={jest.fn()} />,
+            );
+            expect(screen.getAllByText('app.titleRuleClosesAtInvalid')).toHaveLength(1);
+            rerender(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: '17:10', closesAtTimes: null })}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect(screen.queryByText('app.titleRuleClosesAtInvalid')).toBeNull();
+            expect(input().value).toBe('17:10');
+        });
+
+        test('a rule that lists only several times (no closesAt) is a broad-spending rule when it auto-joins', () => {
+            render(
+                <TitleTagRulesEditor
+                    value={[
+                        {
+                            title: '',
+                            closesAtTimes: ['17:10', '18:10'],
+                            autoJoin: true,
+                            mustIncludeTags: [],
+                            shouldIncludeTags: [],
+                        },
+                    ]}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect(screen.getByText('app.titleRuleBroadWarning')).toBeTruthy();
         });
     });
 

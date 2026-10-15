@@ -15,7 +15,7 @@
 
 import type { AndroidHeadlessStore, RuleMatchChallenge } from '../../src/ts/types/settings';
 import settings = require('../../src/ts/settings');
-import { ruleLogLabel } from '../../src/ts/settings/titleRuleSanitize';
+import { ruleLogLabel, MAX_CLOSE_TIMES_PER_RULE } from '../../src/ts/settings/titleRuleSanitize';
 
 jest.mock('../../src/ts/logger', () => ({
     info: jest.fn(),
@@ -583,6 +583,80 @@ describe('settings facade — title-keyed tag rules', () => {
             expect(settings.getTitleRules()).toEqual([]);
         });
 
+        test.each([
+            ['a list with a blank', ['17:10', ''], { closesAt: '17:10' }],
+            ['a list that repeats a time', ['17:10', '17:10'], { closesAt: '17:10' }],
+            ['a list whose first entry is blank', ['', '18:10'], { closesAt: '18:10' }],
+            ['padded entries', [' 17:10 ', '18:10 '], { closesAt: '17:10', closesAtTimes: ['17:10', '18:10'] }],
+        ])(
+            'stores %s as the first time, and the list only when two or more remain',
+            (_name, closesAtTimes, expected) => {
+                expect(save({ autoJoin: false, closesAtTimes })).toBe(true);
+                expect(settings.getTitleRules()).toEqual([
+                    { ...expected, autoJoin: false, title: '', mustIncludeTags: [], shouldIncludeTags: [] },
+                ]);
+            },
+        );
+
+        test('a non-empty list replaces closesAt, which then mirrors its first time', () => {
+            expect(save({ autoJoin: false, closesAt: '09:00', closesAtTimes: ['17:10', '18:10'] })).toBe(true);
+            expect(settings.getTitleRules()[0]).toMatchObject({ closesAt: '17:10', closesAtTimes: ['17:10', '18:10'] });
+            // An empty list leaves the single time alone, and no list is written.
+            expect(save({ autoJoin: false, closesAt: '09:00', closesAtTimes: [] })).toBe(true);
+            expect(settings.getTitleRules()[0]).toMatchObject({ closesAt: '09:00' });
+            expect(settings.getTitleRules()[0]).not.toHaveProperty('closesAtTimes');
+        });
+
+        test('refuses a list with an invalid time, a non-text entry or a list that is not one, and one over the cap', () => {
+            for (const bad of [['17:10', 'x'], ['17:10', 7], [null], '17:10', { 0: '17:10' }]) {
+                expect(save({ autoJoin: false, closesAtTimes: bad })).toBe(false);
+            }
+            const times = (count: number) =>
+                Array.from({ length: count }, (_, i) => `${String(i).padStart(2, '0')}:00`);
+            expect(MAX_CLOSE_TIMES_PER_RULE).toBe(24);
+            expect(save({ autoJoin: false, closesAtTimes: times(24) })).toBe(true);
+            expect(settings.getTitleRules()[0].closesAtTimes).toHaveLength(24);
+            expect(save({ autoJoin: false, closesAtTimes: [...times(24), '23:59'] })).toBe(false);
+            // Repeats do not count against the cap: they are dropped first.
+            expect(save({ autoJoin: false, closesAtTimes: [...times(24), ...times(24)] })).toBe(true);
+        });
+
+        test('the same set of times is one rule, whatever its order or whether it is a list or a single time', () => {
+            save({ closesAt: '17:10', autoJoin: false }, { closesAtTimes: ['17:10'], autoJoin: true });
+            expect(settings.getTitleRules()).toHaveLength(1);
+            expect(settings.getTitleRules()[0].autoJoin).toBe(true);
+            save(
+                { closesAtTimes: ['17:10', '18:10'], autoJoin: false },
+                { closesAtTimes: ['18:10', '17:10'], autoJoin: true },
+            );
+            expect(settings.getTitleRules()).toHaveLength(1);
+            save(
+                { closesAtTimes: ['17:10', '18:10'], autoJoin: false },
+                { closesAtTimes: ['17:10', '19:10'], autoJoin: false },
+            );
+            expect(settings.getTitleRules()).toHaveLength(2);
+        });
+
+        test('a listed time makes a malformed closesAt irrelevant: the matcher uses the list and the sanitizer stores it', () => {
+            settings.setSetting('timezone', 'UTC');
+            expect(save({ autoJoin: false, closesAt: '25:00', closesAtTimes: ['17:10'] })).toBe(true);
+            expect(settings.getTitleRules()[0]).toMatchObject({ closesAt: '17:10' });
+            expect(settings.getTitleRules()[0]).not.toHaveProperty('closesAtTimes');
+            expect(overridesFor(UTC_1710)).toEqual({ autoJoin: false });
+            // With no time listed the malformed closesAt is refused, as ever.
+            expect(save({ autoJoin: false, closesAt: '25:00', closesAtTimes: [''] })).toBe(false);
+        });
+
+        test('a rule closing at any listed time resolves at each of them', () => {
+            settings.setSetting('timezone', 'UTC');
+            save({ closesAtTimes: ['17:10', '18:10'], autoJoin: false });
+            const at1810 = { title: 'x', close_time: Date.UTC(2026, 5, 15, 18, 10, 0) / 1000 };
+            const at1910 = { title: 'x', close_time: Date.UTC(2026, 5, 15, 19, 10, 0) / 1000 };
+            expect(overridesFor(UTC_1710)).toEqual({ autoJoin: false });
+            expect(overridesFor(at1810)).toEqual({ autoJoin: false });
+            expect(overridesFor(at1910)).toEqual({});
+        });
+
         test('different close times are different rules; the same one de-duplicates', () => {
             save(skip, { ...skip, closesAt: '17:20' });
             expect(settings.getTitleRules().map((rule) => rule.closesAt)).toEqual(['17:10', '17:20']);
@@ -597,6 +671,13 @@ describe('settings facade — title-keyed tag rules', () => {
             expect(ruleLogLabel({ closesAt: '17:10' }, 'Hats')).toBe('Hats');
             expect(ruleLogLabel({ closesAt: 'evil\nlog line' }, undefined)).toBe('(untitled rule)');
             expect(ruleLogLabel({ closesAt: '25:00' }, undefined)).toBe('(untitled rule)');
+            expect(ruleLogLabel({ closesAtTimes: ['17:10', '18:10'] }, undefined)).toBe('closes 17:10, 18:10');
+            expect(ruleLogLabel({ closesAtTimes: ['17:10', 'evil\nlog line'] }, undefined)).toBe('(untitled rule)');
+            // A long list is one short line: the first three, then an ellipsis.
+            const times = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
+            expect(ruleLogLabel({ closesAtTimes: times.slice(0, 3) }, undefined)).toBe('closes 00:00, 01:00, 02:00');
+            expect(ruleLogLabel({ closesAtTimes: times.slice(0, 4) }, undefined)).toBe('closes 00:00, 01:00, 02:00, …');
+            expect(ruleLogLabel({ closesAtTimes: times }, undefined)).toBe('closes 00:00, 01:00, 02:00, …');
         });
 
         test('resolves in the app timezone, not the device clock', () => {

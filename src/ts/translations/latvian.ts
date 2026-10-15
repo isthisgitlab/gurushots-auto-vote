@@ -941,7 +941,7 @@ export const app = {
     titleRuleMatchContains: 'Satur',
     titleRuleConditionsLabel: 'Atbilst, ja',
     titleRuleConditionsHint:
-        'Jāatbilst katram aizpildītajam laukam; tukšus laukus neņem vērā. Izaicinājuma tags ir paša izaicinājuma tags (Exhibition, Comm, …), nevis foto tags. Ilgums ir izaicinājuma garums no sākuma līdz beigām: 24 h = 1 diena, 168 h = 7 dienas. Beigu laiks ir laiks, kāds redzams izaicinājuma kartītē (lietotnes laika joslā), neatkarīgi no datuma.',
+        'Jāatbilst katram aizpildītajam laukam; tukšus laukus neņem vērā. Izaicinājuma tags ir paša izaicinājuma tags (Exhibition, Comm, …), nevis foto tags. Ilgums ir izaicinājuma garums no sākuma līdz beigām: 24 h = 1 diena, 168 h = 7 dienas. Beigu laiks ir laiks, kāds redzams izaicinājuma kartītē (lietotnes laika joslā), neatkarīgi no datuma; ja norādīti vairāki laiki, pietiek ar vienu.',
     titleRuleChallengeTag: 'Izaicinājuma tags',
     titleRuleChallengeTagPlaceholder: 'piem., Exhibition',
     titleRuleType: 'Izaicinājuma veids',
@@ -950,9 +950,12 @@ export const app = {
     titleRuleAnyPics: 'Jebkāds skaits',
     titleRuleMinHours: 'Ilgst vismaz',
     titleRuleMaxHours: 'Ilgst ne vairāk kā',
-    titleRuleClosesAt: 'Beigu laiks',
+    titleRuleClosesAt: 'Beigu laiki (pietiek ar vienu)',
+    titleRuleClosesAtRow: 'Beigu laiks',
+    addCloseTime: 'Pievienot laiku',
+    removeCloseTime: 'Noņemt laiku',
     titleRuleClosesAtInvalid:
-        'Šis saglabātais laiks nav derīgs (jāizmanto HH:MM), tāpēc noteikums neatbilst nevienam izaicinājumam. Izvēlies laiku vai ieraksti kādu un notīri to, lai noņemtu nosacījumu.',
+        'Šis saglabātais laiks nav derīgs (jāizmanto HH:MM), tāpēc noteikums neatbilst nevienam izaicinājumam. Izvēlies citu laiku vai noņem šo.',
     titleRuleAnyLength: 'jebkāds',
     titleRuleProfile: 'Automātiskais profils',
     titleRuleInherit: 'Noklusējums',

@@ -308,6 +308,76 @@ describe('discover', () => {
         expect(info.some((l) => l.includes('list-photos'))).toBe(false);
     });
 
+    test('shows the type or the badge, the photo count and the tags that add something', async () => {
+        handlers['get-member-challenges'].mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    { id: 1, title: 'A', type: 'flash', join_coins: 5, max_photo_submits: 3, tags: ['Exhibition'] },
+                    { id: 2, title: 'B', badge: 'Team match', join_coins: 0, max_photo_submits: 1 },
+                    { id: 3, title: 'C', type: 'default', tags: ['Default', '2 photos', 'No comm', 'Comm'] },
+                    { id: 4, title: 'D', type: 'default', max_photo_submits: '4', join_coins: 0 },
+                ],
+            }),
+        );
+        await showDiscover();
+        const info = msgs('info');
+        expect(info).toContain('  • [1] A (flash) — 3 photos — 5 coins — tags: Exhibition');
+        // No type: the badge stands in. One photo is not worth a count.
+        expect(info).toContain('  • [2] B (Team match) — free');
+        // A tag that repeats the type or says the photo count shows nothing new.
+        expect(info).toContain('  • [3] C (default) — free — tags: No comm, Comm');
+        expect(info).toContain('  • [4] D (default) — 4 photos — free');
+    });
+
+    test('strips terminal control from a tag and from the badge, and a tags value that is no list still prints the line', async () => {
+        const esc = String.fromCharCode(27);
+        handlers['get-member-challenges'].mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    { id: 1, title: 'A', badge: `Sp${esc}[31mecial\n`, tags: [`Ex${esc}[2Jh\nib\r`, 'Plain'] },
+                    { id: 2, title: 'B', type: 'default', tags: 'Exhibition' },
+                    { id: 3, title: 'C', type: 'default', tags: { 0: 'Exhibition' } },
+                    { id: 4, title: 'D', type: 'default', tags: [7, null, ''] },
+                    { id: 5, title: 'E', type: 'default', tags: [`${esc}[31m${esc}[0m`, '\n', 'Kept'] },
+                ],
+            }),
+        );
+        await showDiscover();
+        const info = msgs('info');
+        expect(info).toContain('  • [1] A (Special) — free — tags: Exh ib, Plain');
+        expect(info).toContain('  • [2] B (default) — free');
+        expect(info).toContain('  • [3] C (default) — free');
+        expect(info).toContain('  • [4] D (default) — free');
+        // A tag that is nothing but control characters is empty once stripped: it is not listed, not even as a comma.
+        expect(info).toContain('  • [5] E (default) — free — tags: Kept');
+        expect(all()).not.toContain(esc);
+        expect(all()).not.toContain('\r');
+    });
+
+    test('an upcoming challenge shows its tags before the start', async () => {
+        handlers['get-member-challenges'].mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    {
+                        id: 9,
+                        title: 'Soon',
+                        type: 'flash',
+                        join_coins: 0,
+                        status: 'upcoming',
+                        start_time: Date.now() / 1000 + 3600,
+                        max_photo_submits: 2,
+                        tags: ['Comm'],
+                    },
+                ],
+            }),
+        );
+        await showDiscover();
+        expect(msgs('info').some((l) => /\(flash\) — 2 photos — free — tags: Comm — starts in/.test(l))).toBe(true);
+    });
+
     test('prints the cost as a number, whatever the server sent', async () => {
         const esc = String.fromCharCode(27);
         handlers['get-member-challenges'].mockResolvedValue(

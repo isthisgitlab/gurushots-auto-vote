@@ -10,11 +10,12 @@ import { costOf } from '@/utils/discoverCost';
 import { outcomeMeta } from '@/utils/discoverOutcome';
 import type { OutcomeVariant } from '@/utils/discoverOutcome';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import { interp } from '@/utils/interp';
 import { formatDuration } from '@/utils/formatters';
 import * as ipc from '@/api/ipc';
 import { ipcErrorText } from '@/api/ipcErrorText';
+import { listedTags } from '../../../format/challengeListing';
+import { ChallengeKindBadges, ChallengeTagBadges } from './ChallengeKindBadges';
 import { PhotoChooserModal } from './PhotoChooserModal';
 import { ForgetPaymentModal } from './ForgetPaymentModal';
 import { JoinConfirmModal } from './JoinConfirmModal';
@@ -318,8 +319,9 @@ function DiscoverRow({
         <li className="flex flex-wrap items-center justify-between gap-2 rounded border border-base-200 px-2 py-1.5">
             <div className="min-w-0">
                 <div className="truncate font-medium">{name}</div>
-                <div className="flex items-center gap-2 text-xs text-base-content/60">
-                    {c.type && <StatusBadge variant="ghost">{c.type}</StatusBadge>}
+                <div className="flex flex-wrap items-center gap-1 text-xs text-base-content/60">
+                    <ChallengeKindBadges challenge={c} />
+                    <ChallengeTagBadges tags={listedTags(c)} />
                     <span>
                         {cost > 0 ? interp(t('app.discoverCostPaid'), { coins: cost }) : t('app.discoverCostFree')}
                     </span>

@@ -18,11 +18,15 @@ type OpenChallengeRow = [
     closesIn: number,
     entries: number,
     players: number,
+    extras?: ListingExtras,
 ];
+
+/** What a listing shows besides the title: the challenge's own tags and badge, and how many photos it takes. */
+type ListingExtras = { tags: string[]; badge?: string; max_photo_submits: number };
 
 /** An open challenge whose start and close are offsets (seconds) from `nowSec`. */
 const openChallenge = (nowSec: number, row: OpenChallengeRow) => {
-    const [id, type, join_coins, title, url, startedAgo, closesIn, entries, players] = row;
+    const [id, type, join_coins, title, url, startedAgo, closesIn, entries, players, extras] = row;
     return {
         id,
         type,
@@ -33,12 +37,35 @@ const openChallenge = (nowSec: number, row: OpenChallengeRow) => {
         close_time: nowSec + closesIn,
         entries,
         players,
+        ...extras,
     };
 };
 
 const OPEN_CHALLENGE_ROWS: OpenChallengeRow[] = [
-    [900001, 'default', 0, 'Mock Free Challenge', 'mock-free', 5 * DAY, 3 * HOUR, 40, 25],
-    [900002, 'flash', 100, 'Mock Flash Challenge', 'mock-flash', DAY, 2 * DAY, 80, 50],
+    [
+        900001,
+        'default',
+        0,
+        'Mock Free Challenge',
+        'mock-free',
+        5 * DAY,
+        3 * HOUR,
+        40,
+        25,
+        { tags: ['Exhibition'], max_photo_submits: 1 },
+    ],
+    [
+        900002,
+        'flash',
+        100,
+        'Mock Flash Challenge',
+        'mock-flash',
+        DAY,
+        2 * DAY,
+        80,
+        50,
+        { tags: ['No comm', '3 photos'], max_photo_submits: 3 },
+    ],
     [900003, 'default', 250, 'Mock Paid Challenge', 'mock-paid', 2 * DAY, 5 * DAY, 120, 75],
     [900004, 'flash', 100, 'Mock Unlock-Fails Challenge', 'mock-fail', 3 * DAY, 3 * DAY, 160, 100],
     // 900005: unlock succeeds but submit fails → exercises the
@@ -50,8 +77,31 @@ const OPEN_CHALLENGE_ROWS: OpenChallengeRow[] = [
 // open fixtures (the join path must never mistake one for the other). 900103 starts after the
 // default 24 h look-ahead, so the window is exercisable too.
 const UPCOMING_CHALLENGE_ROWS: OpenChallengeRow[] = [
-    [900101, 'default', 0, 'Mock Upcoming Free Challenge', 'mock-upcoming-free', -2 * HOUR, 3 * DAY, 0, 0],
-    [900102, 'default', 150, 'Mock Upcoming Paid Challenge', 'mock-upcoming-paid', -20 * HOUR, 4 * DAY, 0, 0],
+    [
+        900101,
+        'default',
+        0,
+        'Mock Upcoming Free Challenge',
+        'mock-upcoming-free',
+        -2 * HOUR,
+        3 * DAY,
+        0,
+        0,
+        { tags: ['Exhibition', 'Default'], max_photo_submits: 2 },
+    ],
+    // No type: the listing shows the badge instead.
+    [
+        900102,
+        '',
+        150,
+        'Mock Upcoming Paid Challenge',
+        'mock-upcoming-paid',
+        -20 * HOUR,
+        4 * DAY,
+        0,
+        0,
+        { tags: ['Comm'], badge: 'Team match', max_photo_submits: 4 },
+    ],
     [900103, 'flash', 100, 'Mock Upcoming Later Challenge', 'mock-upcoming-later', -3 * DAY, 5 * DAY, 0, 0],
 ];
 

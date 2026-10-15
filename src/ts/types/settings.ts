@@ -55,8 +55,10 @@ export interface TitleRule {
     pics?: number;
     minHours?: number;
     maxHours?: number;
-    /** Strict 'HH:MM': the end time the challenge card shows, in the app timezone, any date. */
+    /** Strict 'HH:MM': the end time the challenge card shows, in the app timezone, any date. With `closesAtTimes`, the first of them. */
     closesAt?: string;
+    /** Every end time a rule closing at any one of matches, written only when there are two or more; `closesAt` is the first. */
+    closesAtTimes?: string[];
     profile?: string;
     mustIncludeTags?: string[];
     shouldIncludeTags?: string[];

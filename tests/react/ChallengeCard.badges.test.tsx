@@ -19,6 +19,7 @@ import { render } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { ChallengeBadgeRow } from '@/components/app/ChallengeBadgeRow';
 import { buildChallenge } from '../helpers/challengeFixtures';
+import { invalid } from '../helpers/invalid';
 import type { Challenge } from '../../src/ts/types/gurushots';
 
 const mockChallengeSettings = {
@@ -171,6 +172,130 @@ describe('ChallengeCard badge row — logical/state badges', () => {
     test('photo-count badge is hidden for single-submission challenges', () => {
         const { container } = renderCard(makeChallenge({ maxPhotos: 1 }));
         expect(badgeByText(container, '🖼 1 app.photos')).toBeFalsy();
+    });
+});
+
+describe('ChallengeCard badge row — shared with the Discover rows', () => {
+    test('the detail card lists every tag as given, repeats of the type and photo-count tags included', () => {
+        const challenge = { ...makeChallenge(), tags: ['FLASH', '4 photos', 'Comm'] };
+        const { container } = renderCard(challenge);
+        expect([...container.querySelectorAll('span.badge-ghost')].map((el) => el.textContent)).toEqual([
+            'FLASH',
+            '4 photos',
+            'Comm',
+        ]);
+    });
+
+    test('the compact tile leaves the photo count out, where the entries cell already reads N/max', () => {
+        const { container } = render(
+            <ChallengeBadgeRow
+                challenge={makeChallenge()}
+                boostOpen={false}
+                boostTimeLeft={null}
+                lowExposure={false}
+                exposureFactor={0}
+                showAutoFillBadge={false}
+                showManualPhotosBadge={false}
+                hasCustomSettings={false}
+                showPhotoCount={false}
+            />,
+        );
+        expect(badgeByText(container, '🏁 FLASH')).toBeTruthy();
+        expect(badgeByText(container, '🖼 4 app.photos')).toBeFalsy();
+    });
+
+    test.each([
+        ['a string', 'Exhibition', []],
+        ['an object', { 0: 'Exhibition' }, []],
+        [
+            'a list with text, blanks and objects among it',
+            ['Comm', '', '  ', { a: 1 }, 7, null, 'No comm'],
+            ['Comm', 'No comm'],
+        ],
+    ])(
+        'the detail card draws only the text tags of a tags value that is %s, and does not crash',
+        (_name, tags, shown) => {
+            const { container } = renderCard({ ...makeChallenge(), tags: invalid<string[]>(tags) });
+            expect([...container.querySelectorAll('span.badge-ghost')].map((el) => el.textContent)).toEqual(shown);
+        },
+    );
+
+    test.each([
+        ['a blank type', '  '],
+        ['a numeric type', invalid<string>(7)],
+    ])('%s with custom settings draws neither an orphan divider nor an empty row', (_name, type) => {
+        mockChallengeSettings.hasCustomSettings = true;
+        const challenge = { ...makeChallenge({ maxPhotos: 1 }), type: invalid<string>(type), badge: undefined };
+        const { container } = render(
+            <ChallengeBadgeRow
+                challenge={challenge}
+                boostOpen={false}
+                boostTimeLeft={null}
+                lowExposure={false}
+                exposureFactor={0}
+                showAutoFillBadge={false}
+                showManualPhotosBadge={false}
+                hasCustomSettings
+            />,
+        );
+        expect(container.querySelector('[data-testid="badge-divider"]')).toBeNull();
+        // Only the custom-settings badge is there.
+        expect([...container.querySelectorAll('span.badge')].map((el) => el.textContent)).toEqual([
+            '⚙️ app.customBadge',
+        ]);
+    });
+
+    test.each([
+        ['a blank type, no badge, no custom settings', '  '],
+        ['a numeric type, no badge, no custom settings', invalid<string>(7)],
+    ])('%s draws no row at all', (_name, type) => {
+        const challenge = { ...makeChallenge({ maxPhotos: 1 }), type: invalid<string>(type), badge: undefined };
+        const { container } = render(
+            <ChallengeBadgeRow
+                challenge={challenge}
+                boostOpen={false}
+                boostTimeLeft={null}
+                lowExposure={false}
+                exposureFactor={0}
+                showAutoFillBadge={false}
+                showManualPhotosBadge={false}
+                hasCustomSettings={false}
+            />,
+        );
+        expect(container.innerHTML).toBe('');
+    });
+
+    test('a photo count that is not a whole number above one is not shown, nor counted for the divider', () => {
+        mockChallengeSettings.hasCustomSettings = true;
+        for (const count of [2.5, Infinity]) {
+            const challenge = { ...makeChallenge({ type: null }), max_photo_submits: count };
+            const { container, unmount } = render(
+                <ChallengeBadgeRow
+                    challenge={challenge}
+                    boostOpen={false}
+                    boostTimeLeft={null}
+                    lowExposure={false}
+                    exposureFactor={0}
+                    showAutoFillBadge={false}
+                    showManualPhotosBadge={false}
+                    hasCustomSettings
+                />,
+            );
+            expect(container.querySelector('[data-testid="badge-divider"]')).toBeNull();
+            expect([...container.querySelectorAll('span.badge')].some((el) => el.textContent?.startsWith('🖼'))).toBe(
+                false,
+            );
+            unmount();
+        }
+    });
+
+    test('a type, badge or photo count of the wrong kind draws no kind badge and does not crash', () => {
+        const odd = { ...makeChallenge(), type: invalid<string>(7), badge: invalid<string>({ a: 1 }) };
+        const { container } = renderCard({ ...odd, max_photo_submits: invalid<number>('many') });
+        expect(badgeByText(container, '🏁 FLASH')).toBeFalsy();
+        expect([...container.querySelectorAll('span.badge')].some((el) => el.textContent?.startsWith('🏁'))).toBe(
+            false,
+        );
     });
 });
 

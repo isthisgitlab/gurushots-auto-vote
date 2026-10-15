@@ -3,7 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { RuleNumberField } from './RuleFields';
 import { normalizeRuleClosesAt } from '../../../settings/challengeRules';
 
-import type { TitleRule } from '../../../types/settings';
+import type { LooseRecord, TitleRule } from '../../../types/settings';
 import type { RulePatchHandler } from './RuleFields';
 
 /**
@@ -29,30 +29,118 @@ const RUNTIME_FIELDS = [
     max: MAX_RUNTIME_HOURS,
 }));
 
-// The end time the challenge card shows (app timezone, any date); blank = any time.
-function RuleClosesAtField({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchHandler }) {
+// Mirrors MAX_CLOSE_TIMES_PER_RULE in settings/titleRuleSanitize.ts; the sanitizer is the real gate.
+const MAX_CLOSE_TIMES = 24;
+
+// The editable end-time list of a rule, read the way the matcher reads it (normalizeRuleCloseTimes): the list
+// when it holds an entry that is not blank (a non-text entry counts, and shows as an invalid row), else
+// `closesAt`. Stored rules carry `closesAtTimes` only when they list more than one, `closesAt` mirroring the
+// first. Always at least one row so a fresh rule shows an input.
+const closeTimeRows = (rule: TitleRule): { rows: unknown[]; fromList: boolean } => {
+    const list: unknown = rule.closesAtTimes;
+    const fromList = Array.isArray(list) && list.some((entry) => typeof entry !== 'string' || entry.trim() !== '');
+    return { rows: fromList ? list : [rule.closesAt ?? ''], fromList };
+};
+
+// A `closesAtTimes` that is present but not a list makes the rule match nothing, whatever `closesAt` says.
+const hasMalformedList = (rule: TitleRule): boolean => {
+    const list: unknown = rule.closesAtTimes;
+    return list !== undefined && list !== null && !Array.isArray(list);
+};
+
+// Patch for a new time list. `closesAt` follows the first row so the saved shape stays readable by single-time
+// code; the list is only kept for two or more rows, so cutting back to one leaves none behind, and no rows
+// leaves neither field. The sanitizer drops blank rows.
+const closeTimesPatch = (times: string[]): LooseRecord => ({
+    closesAt: times[0],
+    closesAtTimes: times.length > 1 ? times : undefined,
+});
+
+// A saved row that is not a strict HH:MM (a hand-edited file) renders blank in a time input, while the rule
+// matches nothing and saving is rejected: the row says so in text, not only colour. A blank row is a new one.
+const isInvalidTime = (row: unknown, trimmed: boolean): boolean =>
+    normalizeRuleClosesAt(trimmed && typeof row === 'string' ? row.trim() : row) === false;
+
+function CloseTimeRow({
+    value,
+    invalid,
+    index,
+    count,
+    onChange,
+    onRemove,
+}: {
+    value: string;
+    invalid: boolean;
+    index: number;
+    count: number;
+    onChange: (time: string) => void;
+    onRemove: () => void;
+}) {
     const { t } = useTranslation();
-    // A hand-edited stored value that is not a strict HH:MM renders blank in a time input,
-    // while the rule matches nothing and saving is rejected: say so in text, not only colour.
-    const invalidStored = normalizeRuleClosesAt(rule.closesAt) === false;
     const messageId = useId();
     return (
         <div className="flex flex-col gap-1">
-            <span className="text-sm">{t('app.titleRuleClosesAt')}</span>
-            <input
-                type="time"
-                className={`input input-sm w-full ${invalidStored ? 'input-error' : ''}`}
-                aria-invalid={invalidStored ? 'true' : undefined}
-                aria-describedby={invalidStored ? messageId : undefined}
-                aria-label={t('app.titleRuleClosesAt')}
-                value={rule.closesAt ?? ''}
-                onChange={(e) => onPatch({ closesAt: e.currentTarget.value })}
-            />
-            {invalidStored && (
+            <div className="flex items-center gap-2">
+                <input
+                    type="time"
+                    className={`input input-sm min-w-32 flex-1 ${invalid ? 'input-error' : ''}`}
+                    aria-invalid={invalid ? 'true' : undefined}
+                    aria-describedby={invalid ? messageId : undefined}
+                    aria-label={`${t('app.titleRuleClosesAtRow')} ${index + 1}`}
+                    value={value}
+                    onChange={(e) => onChange(e.currentTarget.value)}
+                />
+                {(count > 1 || invalid) && (
+                    <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        title={t('app.removeCloseTime')}
+                        aria-label={`${t('app.removeCloseTime')} ${index + 1}`}
+                        onClick={onRemove}
+                    >
+                        ×
+                    </button>
+                )}
+            </div>
+            {invalid && (
                 <span id={messageId} className="text-error text-xs">
                     {t('app.titleRuleClosesAtInvalid')}
                 </span>
             )}
+        </div>
+    );
+}
+
+// The end times the challenge card shows (app timezone, any date); closing at any one is enough; blank = any time.
+function RuleClosesAtField({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchHandler }) {
+    const { t } = useTranslation();
+    const { rows, fromList } = closeTimeRows(rule);
+    // The matcher trims a listed time, and reads the single one as it is.
+    const times = rows.map((row) => (typeof row === 'string' ? (fromList ? row.trim() : row) : ''));
+    const malformedList = hasMalformedList(rule);
+    return (
+        <div className="flex flex-col gap-1">
+            <span className="text-sm">{t('app.titleRuleClosesAt')}</span>
+            {rows.map((row, index) => (
+                // Index key: rows are only appended or removed, and the input is controlled.
+                <CloseTimeRow
+                    key={index}
+                    value={times[index]}
+                    invalid={isInvalidTime(row, fromList) || (malformedList && index === 0)}
+                    index={index}
+                    count={rows.length}
+                    onChange={(next) => onPatch(closeTimesPatch(times.map((time, i) => (i === index ? next : time))))}
+                    onRemove={() => onPatch(closeTimesPatch(times.filter((_, i) => i !== index)))}
+                />
+            ))}
+            <button
+                type="button"
+                className="btn btn-outline btn-sm self-start"
+                disabled={rows.length >= MAX_CLOSE_TIMES}
+                onClick={() => onPatch(closeTimesPatch([...times, '']))}
+            >
+                + {t('app.addCloseTime')}
+            </button>
         </div>
     );
 }

@@ -10,6 +10,7 @@ import * as logger from '../../logger';
 import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
 import { stripTerminalControl } from '../../format/logSafe';
 import { formatDuration } from '../../format/duration';
+import { challengeKind, challengePhotoCount, listedTags } from '../../format/challengeListing';
 
 import type { NullEventHandlers } from '../../types/cli';
 import type { ForgetStatus } from '../../types/join';
@@ -22,7 +23,10 @@ const handlers = (): ActionHandlers =>
         require('../../ipc/actions.handlers') as typeof import('../../ipc/actions.handlers')
     ).buildHandlers());
 
-type DiscoverItem = Pick<OpenChallenge, 'id' | 'title' | 'url' | 'type' | 'status' | 'join_coins' | 'start_time'>;
+type DiscoverItem = Pick<
+    OpenChallenge,
+    'id' | 'title' | 'url' | 'type' | 'badge' | 'tags' | 'max_photo_submits' | 'status' | 'join_coins' | 'start_time'
+>;
 
 /** One row of the listing. Everything that came from the server is stripped of terminal control. */
 const discoverLine = (c: DiscoverItem, nowSec: number): string => {
@@ -30,9 +34,16 @@ const discoverLine = (c: DiscoverItem, nowSec: number): string => {
     const coins = Number(c?.join_coins);
     const cost = coins > 0 ? `${coins} coins` : 'free';
     const name = stripTerminalControl(c?.title || c?.url || 'untitled');
-    const type = stripTerminalControl(c?.type || '?');
+    const type = stripTerminalControl(challengeKind(c)?.label || '?');
+    const photoCount = challengePhotoCount(c);
+    const photos = photoCount === null ? '' : ` — ${photoCount} photos`;
+    // Stripped first: a tag that is nothing but control characters is then empty, and not listed.
+    const tags = listedTags(c)
+        .map((tag) => stripTerminalControl(tag).trim())
+        .filter(Boolean);
+    const tagList = tags.length > 0 ? ` — tags: ${tags.join(', ')}` : '';
     const timing = c?.status === 'upcoming' ? ` — starts in ${formatDuration(Number(c.start_time) - nowSec)}` : '';
-    return `  • [${stripTerminalControl(String(c?.id))}] ${name} (${type}) — ${cost}${timing}`;
+    return `  • [${stripTerminalControl(String(c?.id))}] ${name} (${type})${photos} — ${cost}${tagList}${timing}`;
 };
 
 const showDiscover = async () => {

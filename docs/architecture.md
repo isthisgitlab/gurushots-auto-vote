@@ -153,16 +153,21 @@ Domain terms used throughout, in reader's terms:
 - **Challenge rules match on conditions; the LIST ORDER is the precedence.** A rule in
   `challengeSettings.titleRules` carries any mix of conditions — titles (one `match` mode for all of them:
   `exact`, the default, `starts`, or `contains`), `challengeTag`, `type`, `pics` (`max_photo_submits`) and a
-  runtime range `minHours`/`maxHours` over `close_time` - `start_time`, and `closesAt` (strict `HH:MM`, any
+  runtime range `minHours`/`maxHours` over `close_time` - `start_time`, and close times (strict `HH:MM`, any
   date) — and every condition present must hold (AND); a rule with none matches nothing, and a runtime
-  condition fails closed when either time is unreadable. `closesAt` compares against the end time the
+  condition fails closed when either time is unreadable. The close times are `closesAt`, the first, and
+  `closesAtTimes`, written only when there are two or more (at most 24; a repeat or blank entry is dropped on
+  save). One normalizer, `normalizeRuleCloseTimes`, reads both into `RuleConditions.closeTimes`: a non-empty
+  `closesAtTimes` wins over `closesAt`, and an empty list (or one of blanks) falls back to it; the rule matches
+  when the challenge closes at **any** of them. A close time compares against the end time the
   challenge card shows: `close_time` read in the app's `timezone` setting (`timeOfDayIn` in
   `scheduling/wallClock.ts`; `'local'` and an unknown zone read the device clock, like `formatEndTime`),
   minute floored. It fails closed both ways: an unreadable `close_time` matches nothing, and a stored
-  `closesAt` that is present but not strict `HH:MM` (hand-edited) makes the rule match nothing and is not
+  `closesAt` or `closesAtTimes` that is present but malformed (a list that is not an array, a non-text entry,
+  or a non-blank entry that is not strict `HH:MM`; hand-edited) makes the rule match nothing and is not
   counted as a condition (the sanitizer rejects it on save) — so a skip rule keyed on it falls through to
   global auto-join when a payload lacks `close_time`. The matcher formats the close time only when some rule
-  carries a valid `closesAt`. The pure matcher and the default order live in the dependency-free
+  carries valid close times. The pure matcher and the default order live in the dependency-free
   `settings/challengeRules.ts` so the renderer can use them too. Runtime exists because entry timing and
   tactics really track how long a challenge runs, and photo count is only an **imperfect proxy** for it: on
   the live account 4-photo defaults run 24h, 2-photo ones 48h and 3-photo ones 72h, yet 4-photo challenges

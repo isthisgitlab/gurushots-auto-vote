@@ -8,8 +8,8 @@
  *
  * A rule carries any mix of conditions — a title (with a match mode), a
  * challenge tag, the challenge type, the photo count, a runtime range in
- * hours, and a close time of day ('HH:MM' as the challenge card shows it, in
- * the app's timezone, any date) — and every condition it carries must hold. A rule with no condition
+ * hours, and close times of day ('HH:MM' as the challenge card shows them, in
+ * the app's timezone, any date; closing at any one listed is enough) — and every condition it carries must hold. A rule with no condition
  * matches nothing. The rules LIST ORDER is the precedence: for each setting,
  * the first matching rule that sets it wins.
  */
@@ -25,8 +25,8 @@ import type { LooseRecord, RuleMatchChallenge } from '../types/settings';
 export type RuleLike = LooseRecord | null | undefined;
 
 /**
- * A rule's conditions, normalized. `null` / '' / [] = not set; `closesAt` is
- * `false` when a value is present but not a strict 'HH:MM' (matches nothing).
+ * A rule's conditions, normalized. `null` / '' / [] = not set; `closeTimes` is
+ * `false` when a value is present but malformed (matches nothing).
  */
 interface RuleConditions {
     patterns: string[];
@@ -36,7 +36,7 @@ interface RuleConditions {
     pics: number | null;
     minHours: number | null;
     maxHours: number | null;
-    closesAt: string | null | false;
+    closeTimes: string[] | null | false;
 }
 
 /**
@@ -133,6 +133,30 @@ const normalizeRuleClosesAt = (raw: unknown): string | null | false => {
 };
 
 /**
+ * A rule's close-time condition: the strict 'HH:MM' entries of `closesAtTimes` (trimmed, blanks and repeats
+ * dropped) when it lists at least one, else `closesAt`. `null` when no time is set. `false` when `closesAtTimes`
+ * is malformed — not an array, a non-string entry, or a non-blank entry that is not a strict 'HH:MM' — or, when
+ * it lists no time, when `closesAt` is malformed; the rule then matches nothing, as dropping it would widen the
+ * rule to every challenge. A listed time makes `closesAt` irrelevant, even a malformed one. An empty list, or one
+ * of blanks, falls back to `closesAt`.
+ */
+const normalizeRuleCloseTimes = (rule: RuleLike): string[] | null | false => {
+    const raw = rule?.closesAtTimes;
+    if (raw !== undefined && raw !== null && !Array.isArray(raw)) return false;
+    const times = new Set<string>();
+    for (const entry of (raw ?? []) as unknown[]) {
+        if (typeof entry !== 'string') return false;
+        const time = entry.trim();
+        if (time === '') continue;
+        if (!parseTimeOfDay(time)) return false;
+        times.add(time);
+    }
+    if (times.size > 0) return [...times];
+    const single = normalizeRuleClosesAt(rule?.closesAt);
+    return single === null || single === false ? single : [single];
+};
+
+/**
  * How long a challenge runs, in hours (`close_time` - `start_time`, both epoch
  * seconds), or null when either is unreadable. A runtime condition fails closed
  * on null, so a payload missing the times never matches a runtime rule.
@@ -159,7 +183,7 @@ const challengeCloseTimeOfDay = (challenge: RuleMatchChallenge | null | undefine
  * the keys the conditions compare against. `timeZone` is the app's timezone
  * setting, which the close-time key is read in; pass `withCloseTime: false`
  * when no rule needs it to skip the formatting. A target built with `false`
- * must only be matched against rules carrying no valid `closesAt`
+ * must only be matched against rules carrying no valid close times
  * (`matchingRules` guarantees this through `needsCloseTime`).
  */
 const ruleMatchTarget = (
@@ -189,7 +213,7 @@ const ruleConditions = (rule: RuleLike): RuleConditions => ({
     pics: normalizeRulePics(rule?.pics),
     minHours: normalizeRuleHours(rule?.minHours),
     maxHours: normalizeRuleHours(rule?.maxHours),
-    closesAt: normalizeRuleClosesAt(rule?.closesAt),
+    closeTimes: normalizeRuleCloseTimes(rule),
 });
 
 /** @param conditions */
@@ -204,7 +228,7 @@ const classConditionCount = (conditions: RuleConditions): number =>
     (conditions.type ? 1 : 0) +
     (conditions.pics !== null ? 1 : 0) +
     (hasRuntimeCondition(conditions) ? 1 : 0) +
-    (typeof conditions.closesAt === 'string' ? 1 : 0);
+    (Array.isArray(conditions.closeTimes) ? 1 : 0);
 
 /**
  * True when the rule carries at least one condition.
@@ -242,8 +266,8 @@ const ruleMatches = (rule: RuleLike, target: RuleMatchTarget): boolean => {
     if (conditions.tag && !target.tagKeys.includes(conditions.tag)) return false;
     if (conditions.type && target.typeKey !== conditions.type) return false;
     if (conditions.pics !== null && target.pics !== conditions.pics) return false;
-    if (conditions.closesAt === false) return false;
-    if (conditions.closesAt !== null && target.closeTimeOfDay !== conditions.closesAt) return false;
+    if (conditions.closeTimes === false) return false;
+    if (conditions.closeTimes !== null && !conditions.closeTimes.includes(target.closeTimeOfDay ?? '')) return false;
     return !hasRuntimeCondition(conditions) || runtimeMatches(conditions, target.runtimeHours);
 };
 
@@ -259,7 +283,7 @@ const matchingRules = <R extends RuleLike>(
     timeZone: string,
 ): R[] => {
     if (!Array.isArray(rules) || rules.length === 0) return [];
-    const needsCloseTime = rules.some((rule) => typeof normalizeRuleClosesAt(rule?.closesAt) === 'string');
+    const needsCloseTime = rules.some((rule) => Array.isArray(normalizeRuleCloseTimes(rule)));
     const target = ruleMatchTarget(challenge, timeZone, needsCloseTime);
     return rules.filter((rule) => ruleMatches(rule, target));
 };
@@ -293,7 +317,7 @@ const defaultOrderKey = (rule: RuleLike): number[] => {
         Math.max(0, ...conditions.patterns.map((pattern) => pattern.length)),
         conditions.pics !== null ? 1 : 0,
         hasRuntimeCondition(conditions) ? 1 : 0,
-        typeof conditions.closesAt === 'string' ? 1 : 0,
+        Array.isArray(conditions.closeTimes) ? 1 : 0,
         conditions.type ? 1 : 0,
         conditions.tag ? 1 : 0,
     ];
@@ -325,6 +349,7 @@ export {
     normalizeRulePics,
     normalizeRuleHours,
     normalizeRuleClosesAt,
+    normalizeRuleCloseTimes,
     challengeRuntimeHours,
     challengeCloseTimeOfDay,
     ruleMatchTarget,

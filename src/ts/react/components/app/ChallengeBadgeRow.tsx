@@ -1,6 +1,8 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { StatusBadge } from '../ui/StatusBadge';
 import { PulseDot } from '../ui/PulseDot';
+import { ChallengeKindBadges } from './ChallengeKindBadges';
+import { challengeKind, challengePhotoCount } from '../../../format/challengeListing';
 
 import type { Challenge } from '../../../types/gurushots';
 import type { ChallengeCardView } from './ChallengeCard';
@@ -42,12 +44,11 @@ export function ChallengeBadgeRow({
     showPhotoCount = true,
 }: ChallengeBadgeRowProps) {
     const { t } = useTranslation();
-    const showPhotos = showPhotoCount && (challenge.max_photo_submits ?? 0) > 1;
+    const showPhotos = showPhotoCount && challengePhotoCount(challenge) !== null;
     const hasLogicalBadge = Boolean(
         boostOpen ||
         lowExposure ||
-        challenge.type ||
-        challenge.badge ||
+        challengeKind(challenge) ||
         showPhotos ||
         showAutoFillBadge ||
         showManualPhotosBadge,
@@ -70,13 +71,7 @@ export function ChallengeBadgeRow({
                     👁 {t('app.exposure')} {exposureFactor}%
                 </StatusBadge>
             )}
-            {challenge.type && <StatusBadge variant="warning">🏁 {challenge.type.toUpperCase()}</StatusBadge>}
-            {!challenge.type && challenge.badge && <StatusBadge variant="info">🏁 {challenge.badge}</StatusBadge>}
-            {showPhotos && (
-                <StatusBadge variant="warning">
-                    🖼 {challenge.max_photo_submits} {t('app.photos')}
-                </StatusBadge>
-            )}
+            <ChallengeKindBadges challenge={challenge} showPhotoCount={showPhotoCount} />
             {showAutoFillBadge && <StatusBadge variant="success">📥 {t('app.autoFillBadge')}</StatusBadge>}
             {showManualPhotosBadge && <StatusBadge variant="info">✋ {t('app.manualPhotosBadge')}</StatusBadge>}
             {hasLogicalBadge && hasCustomSettings && (

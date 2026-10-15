@@ -13,7 +13,7 @@ import {
     normalizeTag,
     normalizeRulePics,
     normalizeRuleHours,
-    normalizeRuleClosesAt,
+    normalizeRuleCloseTimes,
     titleRuleTitles,
     ruleConditions,
 } from './challengeRules';
@@ -33,6 +33,15 @@ const MAX_TITLE_LENGTH = 200;
 // One rule may list several titles that share the same behaviour, so the user
 // doesn't have to duplicate a whole rule per recurring challenge.
 const MAX_TITLES_PER_RULE = 50;
+// Likewise for the end times of one rule.
+const MAX_CLOSE_TIMES_PER_RULE = 24;
+// A rule's close times in a log line: the first few, so a long list stays one short line.
+const MAX_LOGGED_CLOSE_TIMES = 3;
+
+type ClassConditions = Pick<
+    TitleRule,
+    'challengeTag' | 'type' | 'pics' | 'minHours' | 'maxHours' | 'closesAt' | 'closesAtTimes'
+>;
 
 /**
  * Pull the inline overrides off one rule, validated against the schema. Returns
@@ -81,7 +90,7 @@ const titleRuleKey = (rule: RuleLike): string => {
         conditions.pics ?? '',
         conditions.minHours ?? '',
         conditions.maxHours ?? '',
-        conditions.closesAt || '',
+        Array.isArray(conditions.closeTimes) ? [...conditions.closeTimes].sort().join('\u0001') : '',
     ].join('\u0000');
 };
 
@@ -124,43 +133,44 @@ const _ruleNumberCondition = (raw: unknown, normalize: (value: unknown) => numbe
 
 /**
  * The non-title conditions of a rule, sanitized for storage: challenge tag,
- * challenge type, photo count, runtime range and close time. Returns null when
- * any supplied value is invalid.
+ * challenge type, photo count, runtime range and close times (`closesAt` is the first, `closesAtTimes` is
+ * written only when there are two or more). Returns null when any supplied value is invalid.
  */
-const _sanitizeRuleClassConditions = (
-    rule: RuleLike,
-): Pick<TitleRule, 'challengeTag' | 'type' | 'pics' | 'minHours' | 'maxHours' | 'closesAt'> | null => {
+const _sanitizeRuleClassConditions = (rule: RuleLike): ClassConditions | null => {
     const challengeTag = typeof rule?.challengeTag === 'string' ? rule.challengeTag.trim() : '';
     const type = normalizeTag(rule?.type);
     const pics = _ruleNumberCondition(rule?.pics, normalizeRulePics);
     const minHours = _ruleNumberCondition(rule?.minHours, normalizeRuleHours);
     const maxHours = _ruleNumberCondition(rule?.maxHours, normalizeRuleHours);
-    const closesAt = normalizeRuleClosesAt(rule?.closesAt);
-    if (pics === false || minHours === false || maxHours === false || closesAt === false) return null;
+    const closeTimes = normalizeRuleCloseTimes(rule);
+    if (pics === false || minHours === false || maxHours === false || closeTimes === false) return null;
+    if (closeTimes !== null && closeTimes.length > MAX_CLOSE_TIMES_PER_RULE) return null;
     if (challengeTag.length > MAX_TITLE_LENGTH || type.length > MAX_TITLE_LENGTH) return null;
     // An inverted range can never match; refuse it rather than store a dead rule.
     if (minHours !== null && maxHours !== null && minHours > maxHours) return null;
-    const out: Pick<TitleRule, 'challengeTag' | 'type' | 'pics' | 'minHours' | 'maxHours' | 'closesAt'> = {};
+    const out: ClassConditions = {};
     if (challengeTag) out.challengeTag = challengeTag;
     if (type) out.type = type;
     if (pics !== null) out.pics = pics;
     if (minHours !== null) out.minHours = minHours;
     if (maxHours !== null) out.maxHours = maxHours;
-    if (closesAt !== null) out.closesAt = closesAt;
+    if (closeTimes !== null) out.closesAt = closeTimes[0];
+    if (closeTimes !== null && closeTimes.length > 1) out.closesAtTimes = closeTimes;
     return out;
 };
 
 // What a rejected rule is called in the log: its first title, else its tag or
-// type, else its close time (only when it is a strict 'HH:MM', so renderer input
+// type, else its close times (only strict 'HH:MM' values, so renderer input
 // never reaches the log), else a generic marker (a photo-count/runtime-only
 // rule has no name).
 const ruleLogLabel = (rule: RuleLike, title: string | undefined): string => {
-    const closesAt = normalizeRuleClosesAt(rule?.closesAt);
+    const closeTimes = normalizeRuleCloseTimes(rule);
     return (
         title ||
         (typeof rule?.challengeTag === 'string' && rule.challengeTag.trim()) ||
         (typeof rule?.type === 'string' && rule.type.trim()) ||
-        (closesAt && `closes ${closesAt}`) ||
+        (closeTimes &&
+            `closes ${closeTimes.slice(0, MAX_LOGGED_CLOSE_TIMES).join(', ')}${closeTimes.length > MAX_LOGGED_CLOSE_TIMES ? ', …' : ''}`) ||
         '(untitled rule)'
     );
 };
@@ -244,6 +254,7 @@ const sanitizeTitleRule = (
 export {
     MAX_TITLE_RULES,
     MAX_TITLE_LENGTH,
+    MAX_CLOSE_TIMES_PER_RULE,
     TITLE_RULE_INLINE_KEYS,
     sanitizeTitleRuleInline,
     sanitizeTitleRule,

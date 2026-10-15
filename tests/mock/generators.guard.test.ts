@@ -117,7 +117,21 @@ describe('generated mock payload guards', () => {
         `);
     });
 
-    test('getMemberChallenges() open rows are unchanged', async () => {
+    test('getMemberChallenges() upcoming rows carry the tags, badge and photo count a listing shows', async () => {
+        jest.useFakeTimers({ now: PINNED_NOW_MS });
+        const pending = getMemberChallenges('token', 'upcoming');
+        await jest.advanceTimersByTimeAsync(400);
+        const rows = (await pending) ?? [];
+        expect(
+            rows.map(({ id, type, badge, tags, max_photo_submits }) => ({ id, type, badge, tags, max_photo_submits })),
+        ).toStrictEqual([
+            { id: 900101, type: 'default', badge: undefined, tags: ['Exhibition', 'Default'], max_photo_submits: 2 },
+            { id: 900102, type: '', badge: 'Team match', tags: ['Comm'], max_photo_submits: 4 },
+            { id: 900103, type: 'flash', badge: undefined, tags: undefined, max_photo_submits: undefined },
+        ]);
+    });
+
+    test('getMemberChallenges() open rows are unchanged but for the tags and photo counts a listing shows', async () => {
         jest.useFakeTimers({ now: PINNED_NOW_MS });
         const pending = getMemberChallenges('token', 'open');
         await jest.advanceTimersByTimeAsync(400);
@@ -132,6 +146,8 @@ describe('generated mock payload guards', () => {
                 close_time: 1768489200,
                 entries: 40,
                 players: 25,
+                tags: ['Exhibition'],
+                max_photo_submits: 1,
             },
             {
                 id: 900002,
@@ -143,6 +159,8 @@ describe('generated mock payload guards', () => {
                 close_time: 1768651200,
                 entries: 80,
                 players: 50,
+                tags: ['No comm', '3 photos'],
+                max_photo_submits: 3,
             },
             {
                 id: 900003,

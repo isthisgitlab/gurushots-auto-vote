@@ -9,6 +9,8 @@ import { DeadlineTimeline } from './DeadlineTimeline';
 import { ScenarioStatusPanel } from './ScenarioStatusPanel';
 import { EntryBadge } from './EntryBadge';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
+import { ChallengeTagBadges } from './ChallengeKindBadges';
+import { stringTags } from '../../../format/challengeListing';
 import { CardDensityToggle } from './CardDensityToggle';
 import { FillButtons } from './ChallengeCardActions';
 import { InlineError } from '@/components/ui/InlineError';
@@ -437,6 +439,7 @@ export function ChallengeCardDetail({
 }) {
     const { t } = useTranslation();
     const { userProgress } = view;
+    const cardTags = stringTags(challenge);
 
     return (
         <div className="space-y-2">
@@ -477,13 +480,9 @@ export function ChallengeCardDetail({
             />
 
             {/* Challenge Tags */}
-            {challenge.tags && challenge.tags.length > 0 && (
+            {cardTags.length > 0 && (
                 <div className="flex flex-wrap gap-1">
-                    {challenge.tags.map((tag, index) => (
-                        <span key={index} className="badge badge-ghost badge-sm">
-                            {tag}
-                        </span>
-                    ))}
+                    <ChallengeTagBadges tags={cardTags} />
                 </div>
             )}
 

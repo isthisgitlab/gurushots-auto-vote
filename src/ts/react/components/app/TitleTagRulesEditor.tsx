@@ -141,7 +141,7 @@ function RuleCard({
  * with a new array on every edit. Each rule is
  * `{ title: string, titles?: string[], match?: 'exact'|'starts'|'contains', challengeTag?: string,
  *    type?: string, pics?: number, minHours?: number, maxHours?: number,
- *    closesAt?: string,
+ *    closesAt?: string, closesAtTimes?: string[],
  *    profile?: string, mustIncludeTags: string[], shouldIncludeTags: string[],
  *    autoJoin?: boolean, autoFill?: boolean, autoJoinWithinHoursOfEnd?: number,
  *    autoJoinAfterPercentElapsed?: number, chosenPhotos?: string[],

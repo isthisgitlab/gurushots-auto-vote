@@ -930,7 +930,7 @@ export const app = {
     titleRuleMatchContains: 'Contains',
     titleRuleConditionsLabel: 'Match when',
     titleRuleConditionsHint:
-        "Every filled field must match; leave a field empty to ignore it. The challenge tag is the challenge's own tag (Exhibition, Comm, …), not a photo tag. Length is how long the challenge runs from start to end: 24 h = 1 day, 168 h = 7 days. Closes at is the end time shown on the challenge card, in the Timezone from Settings, on any date.",
+        "Every filled field must match; leave a field empty to ignore it. The challenge tag is the challenge's own tag (Exhibition, Comm, …), not a photo tag. Length is how long the challenge runs from start to end: 24 h = 1 day, 168 h = 7 days. Closes at is the end time shown on the challenge card, in the Timezone from Settings, on any date; with several times, any one is enough.",
     titleRuleChallengeTag: 'Challenge tag',
     titleRuleChallengeTagPlaceholder: 'e.g. Exhibition',
     titleRuleType: 'Challenge type',
@@ -939,9 +939,12 @@ export const app = {
     titleRuleAnyPics: 'Any',
     titleRuleMinHours: 'Runs at least',
     titleRuleMaxHours: 'Runs at most',
-    titleRuleClosesAt: 'Closes at',
+    titleRuleClosesAt: 'Closes at (any one matches)',
+    titleRuleClosesAtRow: 'Closes at',
+    addCloseTime: 'Add time',
+    removeCloseTime: 'Remove time',
     titleRuleClosesAtInvalid:
-        "This saved time isn't valid (use HH:MM), so the rule matches nothing. Pick a time, or type one and clear it to remove the condition.",
+        "This saved time isn't valid (use HH:MM), so the rule matches nothing. Pick another time or remove this one.",
     titleRuleAnyLength: 'any',
     titleRuleProfile: 'Automatic profile',
     titleRuleInherit: 'Inherit',

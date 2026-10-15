@@ -307,3 +307,72 @@ test('the "Starts in" text counts down as time passes', async () => {
     await advance(31 * 60 * 1000);
     expect(screen.getByText('Starts in 1h 29m — opens for joining then')).toBeTruthy();
 });
+
+describe('what a row says about its challenge: type, photos and tags', () => {
+    const tagBadges = () => [...document.querySelectorAll('span.badge.badge-ghost')].map((el) => el.textContent);
+    const kindBadges = () =>
+        [...document.querySelectorAll('span.badge-warning, span.badge-info')].map((el) => el.textContent);
+
+    test('every row, open and upcoming, shows its type as on the cards, and its photo count from two photos', async () => {
+        renderSection([
+            open(1, 'Open Flash', { type: 'flash', max_photo_submits: 3 }),
+            upcoming(2, 'Soon Default', 3600, { type: 'default', max_photo_submits: 1 }),
+            open(3, 'Open Two', { type: 'flash', max_photo_submits: 2 }),
+        ]);
+        await settle();
+        expect(kindBadges()).toEqual(['🏁 FLASH', '🖼 3 photos', '🏁 FLASH', '🖼 2 photos', '🏁 DEFAULT']);
+    });
+
+    test('a challenge with no type shows its badge instead, and one with neither shows no kind badge', async () => {
+        renderSection([
+            open(1, 'Badge Only', { type: '', badge: 'Team match' }),
+            upcoming(2, 'Nothing', 3600, { type: undefined }),
+        ]);
+        await settle();
+        expect(kindBadges()).toEqual(['🏁 Team match']);
+        expect(document.querySelector('span.badge-info')?.className).toContain('badge-info');
+    });
+
+    test('its tags show as small badges, without a repeat of the type or badge shown or a photo-count tag', async () => {
+        renderSection([
+            open(1, 'Tagged', { type: 'default', tags: ['Exhibition', 'Default', '3 photos', 'No comm'] }),
+            upcoming(2, 'Badged', 3600, { type: '', badge: 'Team match', tags: ['team match', 'Comm', '1 Photo'] }),
+        ]);
+        await settle();
+        expect(tagBadges()).toEqual(['Exhibition', 'No comm', 'Comm']);
+        expect(document.querySelector('span.badge-ghost')?.className).toContain('badge-sm');
+    });
+
+    test.each([
+        ['missing', undefined],
+        ['empty', []],
+        ['not a list', 'Exhibition'],
+        ['an object', { 0: 'Exhibition' }],
+        ['only non-text or blank entries', [7, null, '', '  ', { a: 1 }]],
+    ])('tags that are %s show nothing, and the row is still there', async (_name, tags) => {
+        renderSection([open(1, 'Plain', { tags }), upcoming(2, 'Soon', 3600, { tags })]);
+        await settle();
+        expect(tagBadges()).toEqual([]);
+        expect(screen.getByText('Plain')).toBeTruthy();
+        expect(screen.getByText('Soon')).toBeTruthy();
+    });
+
+    test('a type, badge or photo count of the wrong kind cannot crash the panel', async () => {
+        renderSection([
+            open(1, 'Odd', { type: 7, badge: { a: 1 }, max_photo_submits: 'many', tags: [1] }),
+            open(2, 'Odd Two', { type: ['x'], badge: 'Fine', max_photo_submits: { n: 3 } }),
+        ]);
+        await settle();
+        expect(screen.getByText('Odd')).toBeTruthy();
+        expect(kindBadges()).toEqual(['🏁 Fine']);
+    });
+
+    test('the badge line wraps, so a row with many tags stays inside a narrow window', async () => {
+        renderSection([open(1, 'Wide', { type: 'default', tags: ['One', 'Two', 'Three'] })]);
+        await settle();
+        const line = screen.getByText('One').parentElement!;
+        expect(line.className).toContain('flex-wrap');
+        // The cost sits on the same line, after the badges.
+        expect(line.textContent).toContain('free');
+    });
+});

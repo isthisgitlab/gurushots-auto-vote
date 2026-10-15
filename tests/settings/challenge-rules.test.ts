@@ -142,6 +142,77 @@ describe('settings/challengeRules — pure matcher', () => {
         expect(rules.ruleMatches({ closesAt: '17:10', title: 'Seaside', type: 'default' }, hit)).toBe(true);
     });
 
+    describe('several close times', () => {
+        const at1710 = () => target({ close_time: CLOSE_1710_UTC });
+        const at1810 = () => target({ close_time: CLOSE_1710_UTC + 3600 });
+        const at1910 = () => target({ close_time: CLOSE_1710_UTC + 7200 });
+
+        test('closing at any listed time is enough, and nothing else matches', () => {
+            const rule = { closesAtTimes: ['17:10', '18:10'] };
+            expect(rules.ruleMatches(rule, at1710())).toBe(true);
+            expect(rules.ruleMatches(rule, at1810())).toBe(true);
+            expect(rules.ruleMatches(rule, at1910())).toBe(false);
+            expect(rules.ruleMatches(rule, target({ close_time: undefined }))).toBe(false);
+        });
+
+        test('a list-only rule is a condition, turns the close time on, and sorts as a close-time rule', () => {
+            const list = { closesAtTimes: ['17:10', '18:10'] };
+            expect(rules.hasRuleCondition(list)).toBe(true);
+            const close = challenge({ close_time: CLOSE_1710_UTC });
+            expect(rules.matchingRules([list], close, 'UTC')).toEqual([list]);
+            expect(rules.matchingRules([list], close, 'Europe/Riga')).toEqual([]);
+            const runtime = { minHours: 168 };
+            const type = { type: 'flash' };
+            expect(rules.sortRulesByDefaultOrder([type, list, runtime])).toEqual([runtime, list, type]);
+        });
+
+        test('a non-empty list wins over closesAt; an empty one or one of blanks falls back to it', () => {
+            expect(rules.ruleMatches({ closesAt: '17:10', closesAtTimes: ['18:10'] }, at1710())).toBe(false);
+            expect(rules.ruleMatches({ closesAt: '17:10', closesAtTimes: ['18:10'] }, at1810())).toBe(true);
+            for (const empty of [[], [''], ['  ', ''], null, undefined]) {
+                const rule = { closesAt: '17:10', closesAtTimes: empty };
+                expect(rules.ruleMatches(rule, at1710())).toBe(true);
+                expect(rules.ruleMatches(rule, at1810())).toBe(false);
+            }
+        });
+
+        test('a malformed stored list matches nothing, alone or next to a valid closesAt', () => {
+            for (const bad of ['17:10', 17, {}, [17], ['17:10', 'x'], ['17:10', null], ['7:10'], ['17:10:00']]) {
+                expect(rules.ruleMatches({ closesAt: '17:10', closesAtTimes: bad }, at1710())).toBe(false);
+                expect(rules.ruleMatches({ closesAtTimes: bad, type: 'default' }, at1710())).toBe(false);
+                expect(rules.hasRuleCondition({ closesAtTimes: bad })).toBe(false);
+            }
+            // A bad single time beside an empty list is still a bad single time.
+            expect(rules.ruleMatches({ closesAt: '25:00', closesAtTimes: [''] }, at1710())).toBe(false);
+        });
+
+        test('a listed time wins over a malformed closesAt, which only counts when no time is listed', () => {
+            const rule = { closesAt: '25:00', closesAtTimes: ['17:10'] };
+            expect(rules.normalizeRuleCloseTimes(rule)).toEqual(['17:10']);
+            expect(rules.ruleMatches(rule, at1710())).toBe(true);
+            expect(rules.ruleMatches(rule, at1810())).toBe(false);
+            expect(rules.hasRuleCondition(rule)).toBe(true);
+            expect(rules.normalizeRuleCloseTimes({ closesAt: '25:00', closesAtTimes: [''] })).toBe(false);
+        });
+
+        test('entries are trimmed, blanks and repeats are dropped', () => {
+            expect(rules.normalizeRuleCloseTimes({ closesAtTimes: [' 17:10 ', '', '17:10', '18:10'] })).toEqual([
+                '17:10',
+                '18:10',
+            ]);
+            expect(rules.normalizeRuleCloseTimes({ closesAt: '17:10' })).toEqual(['17:10']);
+            expect(rules.normalizeRuleCloseTimes({})).toBeNull();
+            expect(rules.normalizeRuleCloseTimes(null)).toBeNull();
+            expect(rules.normalizeRuleCloseTimes({ closesAt: '25:00' })).toBe(false);
+        });
+
+        test('the other conditions still have to hold', () => {
+            const rule = { closesAtTimes: ['17:10', '18:10'], type: 'flash' };
+            expect(rules.ruleMatches(rule, target({ close_time: CLOSE_1710_UTC, type: 'flash' }))).toBe(true);
+            expect(rules.ruleMatches(rule, target({ close_time: CLOSE_1710_UTC, type: 'default' }))).toBe(false);
+        });
+    });
+
     test('a title condition needs a title; a rule with no condition matches nothing', () => {
         expect(rules.ruleMatches({ title: 'Seaside' }, rules.ruleMatchTarget({ tags: ['x'] }, ZONE))).toBe(false);
         expect(rules.ruleMatches({ autoJoin: true }, target())).toBe(false);
