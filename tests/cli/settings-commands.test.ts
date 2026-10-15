@@ -77,6 +77,7 @@ describe('CLI settings commands — per-challenge support', () => {
         // apiTimeout is deliberately absent from the schema mocked in beforeEach — app-level
         // keys live outside SETTINGS_SCHEMA and must not be redirected to a global default.
         settings.setSetting.mockReturnValue(true);
+        settings.getDefaultSettings.mockReturnValue(invalid({ app: { apiTimeout: 30 }, auth: {} }));
 
         setSetting('apiTimeout', '45');
 

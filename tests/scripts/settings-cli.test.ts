@@ -10,12 +10,15 @@
  * module registry, and flushes the async main() before asserting.
  */
 
+// The shape of a stored configuration: app preferences and the sign-in state sit under their containers, and a bare
+// name is read through getSetting (the facade looks it up in either).
 jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(() => ({
-        token: 'super-secret-token',
-        theme: 'dark',
-        apiHeaders: { authorization: 'Bearer abc' },
+        version: 2,
+        app: { theme: 'dark' },
+        auth: { token: 'super-secret-token', apiHeaders: { authorization: 'Bearer abc' } },
     })),
+    getSetting: jest.fn((key: string) => ({ token: 'super-secret-token', theme: 'dark' })[key as 'token' | 'theme']),
     SETTINGS_SCHEMA: {},
 }));
 
@@ -254,9 +257,23 @@ describe('settings-cli get formatting and lookup', () => {
     });
 
     test('get of a nested path prints the leaf value', async () => {
-        const { output } = await runScript('get', 'apiHeaders.authorization');
+        const { output } = await runScript('get', 'auth.apiHeaders.authorization');
 
-        expect(output).toBe('apiHeaders.authorization: "[REDACTED]"');
+        expect(output).toBe('auth.apiHeaders.authorization: "[REDACTED]"');
+    });
+
+    test('a bare name of an app or sign-in setting is read through the facade', async () => {
+        const { output } = await runScript('get', 'theme');
+
+        expect(output).toBe('theme: "dark"');
+        expect(settings.getSetting).toHaveBeenCalledWith('theme');
+    });
+
+    test('a container of the configuration is read as a path, not through the facade', async () => {
+        const { output } = await runScript('get', 'app');
+
+        expect(output).toContain('theme: "dark"');
+        expect(settings.getSetting).not.toHaveBeenCalled();
     });
 
     test('an unknown key exits 1 with a not-found error', async () => {

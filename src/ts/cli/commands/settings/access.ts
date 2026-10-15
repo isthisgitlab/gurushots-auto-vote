@@ -70,6 +70,13 @@ export const setSetting = (key: string, value: string, challengeId: string | nul
             return setGlobalDefault(key, value);
         }
 
+        // A name that is neither a schema key nor an app or sign-in key is not a setting: the facade would keep it
+        // as an `app` value nothing reads, and the command would report that as set.
+        const known = settings.getDefaultSettings();
+        if (!Object.hasOwn(known.app, key) && !Object.hasOwn(known.auth, key)) {
+            logger.withCategory('settings').error(`Unknown setting '${key}'`);
+            return false;
+        }
         if (!settings.setSetting(key, parsedValue)) {
             logger.withCategory('settings').error(`Failed to save setting '${key}' - validation failed`);
             return false;

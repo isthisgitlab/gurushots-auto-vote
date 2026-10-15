@@ -53,6 +53,11 @@ const settings = jest.mocked(settingsModule);
 import cmd = require('../../src/ts/cli/commands/settings');
 
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
+// The app and sign-in names `set` accepts: the keys of the default configuration.
+const knownApp = () =>
+    settings.getDefaultSettings.mockReturnValue(
+        invalid({ app: { theme: 'light', mock: false }, auth: { token: '', apiHeaders: {} } }),
+    );
 const boom = () => {
     throw new Error('facade exploded');
 };
@@ -198,6 +203,7 @@ describe('setSetting', () => {
         expect(msgs('error').join('\n')).not.toContain('secret1');
         expect(msgs('error')).toContain('Value 2 photo(s) is invalid for this setting');
         logger.__calls.length = 0;
+        knownApp();
         settings.setSetting.mockReturnValue(true);
         cmd.setSetting('token', 'abc123');
         expect(msgs('success')).toEqual(['Set token = [REDACTED]']);
@@ -237,13 +243,22 @@ describe('setSetting', () => {
         ]);
     });
 
+    test('a name that is no schema, app or sign-in setting is refused, not stored', () => {
+        settings.getDefaultSettings.mockReturnValue(invalid({ app: { theme: 'light' }, auth: { token: '' } }));
+        expect(cmd.setSetting('autoFill', 'true')).toBe(false);
+        expect(msgs('error')).toEqual(["Unknown setting 'autoFill'"]);
+        expect(settings.setSetting).not.toHaveBeenCalled();
+    });
+
     test('an app-level key that fails validation is reported', () => {
+        knownApp();
         settings.setSetting.mockReturnValue(false);
         expect(cmd.setSetting('theme', 'purple')).toBe(false);
         expect(msgs('error')).toEqual(["Failed to save setting 'theme' - validation failed"]);
     });
 
     test('an app-level key success is confirmed with the parsed value', () => {
+        knownApp();
         settings.setSetting.mockReturnValue(true);
         expect(cmd.setSetting('mock', 'true')).toBe(true);
         expect(settings.setSetting).toHaveBeenCalledWith('mock', true);
@@ -251,6 +266,7 @@ describe('setSetting', () => {
     });
 
     test('a throwing facade is reported, not thrown', () => {
+        knownApp();
         settings.setSetting.mockImplementation(boom);
         expect(cmd.setSetting('theme', 'dark')).toBe(false);
         expect(msgs('error')).toEqual(["Error setting 'theme'"]);

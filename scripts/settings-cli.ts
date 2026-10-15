@@ -147,7 +147,9 @@ function runGet() {
         console.log(formatValue(forDisplay(allSettings)));
     } else {
         // Show specific setting
-        const value = getNestedProperty(allSettings, key);
+        // A bare name that is not a container of the configuration is an app or sign-in setting, as `set` takes it.
+        const nested = getNestedProperty(allSettings, key);
+        const value = nested === undefined && !key.includes('.') ? settings.getSetting(key) : nested;
         if (value === undefined) {
             console.error(`Setting '${key}' not found`);
             process.exit(1);
