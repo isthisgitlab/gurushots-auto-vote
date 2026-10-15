@@ -20,45 +20,93 @@ class AutoVoteSettingsTest {
         context = ApplicationProvider.getApplicationContext()
     }
 
+    private fun config(app: String) = TestSupport.writeConfig(context, """{"version":2,"app":$app}""")
+
     @Test
-    fun missingBlobFallsBackToDefaults() {
-        TestSupport.writeSettings(context, null)
+    fun nothingStoredFallsBackToDefaults() {
         assertEquals(defaults, AutoVoteSettings.read(context))
     }
 
     @Test
-    fun emptyBlobFallsBackToDefaults() {
-        TestSupport.writeSettings(context, "")
+    fun emptyConfigurationAndEmptyOneXBlobFallBackToDefaults() {
+        TestSupport.writeConfig(context, "")
+        TestSupport.writeLegacySettings(context, "")
         assertEquals(defaults, AutoVoteSettings.read(context))
     }
 
     @Test
-    fun malformedJsonFallsBackToDefaults() {
-        TestSupport.writeSettings(context, "{not json")
+    fun malformedConfigurationFallsBackToDefaults() {
+        TestSupport.writeConfig(context, "{not json")
         assertEquals(defaults, AutoVoteSettings.read(context))
     }
 
     @Test
-    fun minimalObjectUsesPerFieldDefaults() {
-        TestSupport.writeSettings(context, "{}")
+    fun aConfigurationWithoutAnAppObjectUsesTheDefaults() {
+        TestSupport.writeConfig(context, "{}")
+        assertEquals(defaults, AutoVoteSettings.read(context))
+        TestSupport.writeConfig(context, """{"app":"lv"}""")
+        assertEquals(defaults, AutoVoteSettings.read(context))
+        TestSupport.writeConfig(context, """{"app":[5]}""")
+        assertEquals(defaults, AutoVoteSettings.read(context))
+        // The values of the 1.x layout, at the top level, are not the configuration's.
+        TestSupport.writeConfig(context, """{"checkFrequencyMin":9,"language":"lv"}""")
         assertEquals(defaults, AutoVoteSettings.read(context))
     }
 
     @Test
-    fun parsesCheckFrequency() {
-        TestSupport.writeSettings(context, """{"token": "tok", "checkFrequencyMin": 5}""")
+    fun anEmptyAppObjectUsesPerFieldDefaults() {
+        config("{}")
+        assertEquals(defaults, AutoVoteSettings.read(context))
+    }
+
+    @Test
+    fun parsesCheckFrequencyFromTheAppObject() {
+        config("""{"checkFrequencyMin": 5, "theme": "dark"}""")
         assertEquals(AutoVoteSettings.Snapshot(normalIntervalSeconds = 300L), AutoVoteSettings.read(context))
     }
 
     @Test
     fun readsTheAppLanguageAndFallsBackToEnglishForAnythingElse() {
-        TestSupport.writeSettings(context, """{"language": "lv"}""")
+        config("""{"language": "lv"}""")
         assertEquals("lv", AutoVoteSettings.read(context).language)
-        TestSupport.writeSettings(context, """{"language": "en"}""")
+        config("""{"language": "en"}""")
         assertEquals("en", AutoVoteSettings.read(context).language)
-        for (raw in listOf("""{"language": "de"}""", """{"language": ""}""", """{"language": 7}""", "{}", null)) {
-            TestSupport.writeSettings(context, raw)
-            assertEquals(raw, "en", AutoVoteSettings.read(context).language)
+        for (app in listOf("""{"language": "de"}""", """{"language": ""}""", """{"language": 7}""", "{}")) {
+            config(app)
+            assertEquals(app, "en", AutoVoteSettings.read(context).language)
         }
+    }
+
+    @Test
+    fun theConfigurationIsReadWhereverItsAppObjectSits() {
+        TestSupport.writeConfig(context, """{"token":"x","auth":{"token":"t"},"app":{"language":"lv","checkFrequencyMin":4},"defaults":{}}""")
+        assertEquals(AutoVoteSettings.Snapshot(normalIntervalSeconds = 240L, language = "lv"), AutoVoteSettings.read(context))
+    }
+
+    @Test
+    fun theOneXBlobIsReadAtItsTopLevelWhileThereIsNoConfiguration() {
+        TestSupport.writeLegacySettings(context, """{"token": "tok", "checkFrequencyMin": 5, "language": "lv"}""")
+        assertEquals(AutoVoteSettings.Snapshot(normalIntervalSeconds = 300L, language = "lv"), AutoVoteSettings.read(context))
+        // An empty configuration is none.
+        TestSupport.writeConfig(context, "")
+        assertEquals(AutoVoteSettings.Snapshot(normalIntervalSeconds = 300L, language = "lv"), AutoVoteSettings.read(context))
+    }
+
+    @Test
+    fun theOneXBlobFallsBackToDefaultsWhenItIsNotJson() {
+        TestSupport.writeLegacySettings(context, "{not json")
+        assertEquals(defaults, AutoVoteSettings.read(context))
+        TestSupport.writeLegacySettings(context, "{}")
+        assertEquals(defaults, AutoVoteSettings.read(context))
+    }
+
+    @Test
+    fun onceTheConfigurationExistsTheOneXBlobIsNeverRead() {
+        TestSupport.writeLegacySettings(context, """{"checkFrequencyMin": 9, "language": "lv"}""")
+        config("""{"checkFrequencyMin": 2}""")
+        assertEquals(AutoVoteSettings.Snapshot(normalIntervalSeconds = 120L), AutoVoteSettings.read(context))
+        // Not even when the configuration is unusable: the import has run, and the blob is a backup.
+        TestSupport.writeConfig(context, "{not json")
+        assertEquals(defaults, AutoVoteSettings.read(context))
     }
 }

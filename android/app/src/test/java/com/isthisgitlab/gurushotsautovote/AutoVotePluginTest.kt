@@ -135,7 +135,7 @@ class AutoVotePluginTest {
     @Test
     fun compareAndWriteSavesTheSettingsBlobOnlyWhileItHoldsWhatTheWindowRead() {
         fun settingsWrite(expected: String?, value: String) = resolved {
-            every { it.getString("key") } returns "gurushots-settings"
+            every { it.getString("key") } returns "gurushots-config"
             every { it.getString("expected") } returns expected
             every { it.getString("value") } returns value
             plugin.compareAndWrite(it)
@@ -143,25 +143,49 @@ class AutoVotePluginTest {
         assertTrue(settingsWrite(null, """{"theme":"dark"}""").getBoolean("saved"))
         // The service saved a different key meanwhile: the window's write built on the old text is not saved.
         assertTrue(
-            SideStores.compareAndSet(app, "gurushots-settings", """{"theme":"dark"}""", """{"theme":"dark","token":"t"}""")
+            SideStores.compareAndSet(app, "gurushots-config", """{"theme":"dark"}""", """{"theme":"dark","token":"t"}""")
                 .outcome == SideStores.Outcome.SAVED
         )
         val lost = settingsWrite("""{"theme":"dark"}""", """{"theme":"light"}""")
         assertFalse(lost.getBoolean("saved"))
         assertEquals("""{"theme":"dark","token":"t"}""", lost.getString("current"))
-        assertEquals("""{"theme":"dark","token":"t"}""", TestSupport.readSettings(app))
+        assertEquals("""{"theme":"dark","token":"t"}""", TestSupport.readConfig(app))
         // It carries the settings cap, not the side stores': past the side-store cap is saved, past its own is not.
         val past = """{"k":"${"x".repeat(SideStores.MAX_BYTES * 4)}"}"""
         assertTrue(settingsWrite("""{"theme":"dark","token":"t"}""", past).getBoolean("saved"))
         val call = mockk<PluginCall>(relaxed = true)
-        every { call.getString("key") } returns "gurushots-settings"
+        every { call.getString("key") } returns "gurushots-config"
         every { call.getString("expected") } returns past
         every { call.getString("value") } returns """{"k":"${"x".repeat(SideStores.MAX_SETTINGS_BYTES)}"}"""
         plugin.compareAndWrite(call)
         // An oversize blob is rejected with its own code, which a conflict (resolved as saved:false) never carries.
         verify(exactly = 1) { call.reject("too large", "too-large") }
         verify(exactly = 0) { call.reject(any<String>()) }
-        assertEquals(past, TestSupport.readSettings(app))
+        assertEquals(past, TestSupport.readConfig(app))
+    }
+
+    @Test
+    fun compareAndWriteTakesTheConfigurationAndTheKeysOfTheImportButNotTheSetAsideCopies() {
+        fun write(key: String, value: String) = resolved {
+            every { it.getString("key") } returns key
+            every { it.getString("expected") } returns null
+            every { it.getString("value") } returns value
+            plugin.compareAndWrite(it)
+        }
+        for (key in listOf("gurushots-config", "gurushots-settings", "gs_v2_import", "gs_title_pins")) {
+            assertTrue(key, write(key, """{"a":1}""").getBoolean("saved"))
+        }
+        // The window sets a corrupt copy aside through Preferences itself; the plugin is not a way to write one.
+        val call = mockk<PluginCall>(relaxed = true)
+        every { call.getString("key") } returns "gurushots-config_corrupt-2026-10-16T08-00-00-000Z"
+        every { call.getString("expected") } returns null
+        every { call.getString("value") } returns """{"a":1}"""
+        plugin.compareAndWrite(call)
+        verify(exactly = 1) { call.reject("not a side store") }
+        assertNull(
+            app.getSharedPreferences(SideStores.PREFS_FILE, Context.MODE_PRIVATE)
+                .getString("gurushots-config_corrupt-2026-10-16T08-00-00-000Z", null)
+        )
     }
 
     @Test
@@ -226,9 +250,18 @@ class AutoVotePluginTest {
         ServiceState.setEnabled(app, true)
         ServiceState.record(app, 5, 77L, "x")
         AutoVoteService.isRunning = true
-        TestSupport.writeSettings(app, """{"token":"secret"}""")
+        TestSupport.writeConfig(app, """{"token":"secret"}""")
         val prefs = app.getSharedPreferences(SideStores.PREFS_FILE, Context.MODE_PRIVATE)
-        prefs.edit().putString("gs_join_state", "{}").putString("gs_scenario_state", "{}").putString("photoStats", "{}").commit()
+        prefs.edit()
+            .putString("gs_join_state", "{}")
+            .putString("gs_scenario_state", "{}")
+            .putString("photoStats", "{}")
+            .putString("gurushots-settings", """{"token":"old"}""")
+            .putString("gs_v2_import", "{}")
+            .putString("gs_title_pins", "{}")
+            .putString("gurushots-config_corrupt-2026-10-16T08-00-00-000Z", "{")
+            .putString("gurushots-settings_corrupt-2026-10-16T08-00-00-000Z", "{")
+            .commit()
         val updates = File(app.cacheDir, "updates").apply { mkdirs() }
         File(updates, "update.apk").writeText("apk")
 
@@ -267,12 +300,12 @@ class AutoVotePluginTest {
         mockkStatic(WebStorage::class)
         try {
             every { WebStorage.getInstance() } throws RuntimeException("no WebView provider")
-            TestSupport.writeSettings(app, """{"token":"secret"}""")
+            TestSupport.writeConfig(app, """{"token":"secret"}""")
 
             assertFalse(wiped().getBoolean("ok"))
 
             // The rest is still wiped.
-            assertNull(TestSupport.readSettings(app))
+            assertNull(TestSupport.readConfig(app))
         } finally {
             unmockkStatic(WebStorage::class)
         }

@@ -162,7 +162,7 @@ class AutoVoteServiceTest {
     private fun systemService(name: String, service: Any) =
         Shadow.extract<ShadowContextImpl>(app.baseContext).setSystemService(name, service)
 
-    private fun settings(json: String) = TestSupport.writeSettings(app, json)
+    private fun settings(json: String) = TestSupport.writeConfig(app, """{"app":$json}""")
 
     private fun httpResolution(svc: AutoVoteService, id: Int): JSONObject {
         val prefix = "window.__gsResolveHeadlessHttp && window.__gsResolveHeadlessHttp($id, "
@@ -532,6 +532,118 @@ class AutoVoteServiceTest {
             ),
             ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
         )
+    }
+
+    @Test
+    fun theImportMarkerAndTheTitlePinsAreSideStoresTheServiceWritesPlainly() {
+        val store = newService().HeadlessStore()
+        ShadowLog.clear()
+        // Neither is shared with the window by compare-and-set: the service reads and writes each as it is.
+        assertNull(store.readKey("gs_v2_import"))
+        assertTrue(store.writeKey("gs_v2_import", """{"importedAt":"2026-10-16T00:00:00.000Z"}"""))
+        assertEquals("""{"importedAt":"2026-10-16T00:00:00.000Z"}""", store.readKey("gs_v2_import"))
+        assertTrue(store.writeKey("gs_title_pins", """{"7":"Sunsets"}"""))
+        assertEquals("""{"7":"Sunsets"}""", store.readKey("gs_title_pins"))
+        // Both are held to the shape and the side stores' cap.
+        assertFalse(store.writeKey("gs_v2_import", "invalid JSON"))
+        assertFalse(store.writeKey("gs_title_pins", """{"7":"${"x".repeat(SideStores.MAX_BYTES)}"}"""))
+        assertEquals("""{"importedAt":"2026-10-16T00:00:00.000Z"}""", store.readKey("gs_v2_import"))
+        assertEquals("""{"7":"Sunsets"}""", store.readKey("gs_title_pins"))
+        assertEquals(
+            listOf(
+                "Refusing to persist non-JSON import marker blob",
+                "Refusing to persist oversized title pins blob"
+            ),
+            ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
+        )
+        // The window changes them by compare-and-set too (its plugin call takes the same lock).
+        assertTrue(store.compareAndWriteKey("gs_title_pins", """{"7":"Sunsets"}""", """{"7":"Sunsets","8":"Dusk"}"""))
+        assertFalse(store.compareAndWriteKey("gs_title_pins", """{"7":"Sunsets"}""", """{"7":"Other"}"""))
+    }
+
+    @Test
+    fun theConfigurationIsReadAndSavedThroughTheBridgeByCompareAndSetOnly() {
+        val store = newService().HeadlessStore()
+        ShadowLog.clear()
+        // The keyed calls reach it like any side store...
+        assertNull(store.readKey("gurushots-config"))
+        assertTrue(store.compareAndWriteKey("gurushots-config", null, """{"version":2}"""))
+        assertEquals("""{"version":2}""", store.readKey("gurushots-config"))
+        assertEquals("""{"version":2}""", TestSupport.readConfig(app))
+        assertFalse(store.compareAndWriteKey("gurushots-config", "", """{"version":2,"x":1}"""))
+        // ...but a plain write would replace what the window saved, so none is taken.
+        assertFalse(store.writeKey("gurushots-config", """{"version":2,"x":2}"""))
+        assertEquals("""{"version":2}""", TestSupport.readConfig(app))
+        assertEquals(
+            listOf("Refusing a plain write of config blob: it is changed by compare-and-set only"),
+            ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
+        )
+        // It carries the settings cap (2 MiB), not the side stores' (256 KiB).
+        val past = """{"k":"${"x".repeat(SideStores.MAX_BYTES * 4)}"}"""
+        assertTrue(store.compareAndWriteKey("gurushots-config", """{"version":2}""", past))
+        val over = """{"k":"${"x".repeat(SideStores.MAX_SETTINGS_BYTES)}"}"""
+        assertEquals(SideStores.Outcome.TOO_LARGE, SideStores.compareAndSet(app, "gurushots-config", past, over).outcome)
+        assertEquals(past, TestSupport.readConfig(app))
+    }
+
+    @Test
+    fun theDedicatedReadAndWriteAreTheConfigurationsAndNeverTheOneXBlobs() {
+        val store = newService().HeadlessStore()
+        TestSupport.writeLegacySettings(app, """{"token":"old"}""")
+        TestSupport.writeConfig(app, null)
+        assertNull(store.read())
+        assertTrue(store.write("""{"version":2}"""))
+        assertEquals("""{"version":2}""", TestSupport.readConfig(app))
+        assertEquals("""{"token":"old"}""", TestSupport.readLegacySettings(app))
+        TestSupport.writeConfig(app, """{"version":2,"x":1}""")
+        assertEquals("""{"version":2,"x":1}""", store.read())
+    }
+
+    @Test
+    fun theOneXSettingsAreReachableThroughTheKeyedCallsByCompareAndSetOnly() {
+        val store = newService().HeadlessStore()
+        ShadowLog.clear()
+        TestSupport.writeLegacySettings(app, """{"token":"t","language":"lv"}""")
+        assertEquals("""{"token":"t","language":"lv"}""", store.readKey("gurushots-settings"))
+        // A plain write would replace what the window blanked (or the import read).
+        assertFalse(store.writeKey("gurushots-settings", """{"language":"lv"}"""))
+        assertEquals("""{"token":"t","language":"lv"}""", TestSupport.readLegacySettings(app))
+        assertEquals(
+            listOf("Refusing a plain write of settings blob: it is changed by compare-and-set only"),
+            ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
+        )
+        // The blanking of the sign-in state is a change of what was read.
+        assertFalse(store.compareAndWriteKey("gurushots-settings", """{"token":"other"}""", """{"token":"","language":"lv"}"""))
+        assertTrue(store.compareAndWriteKey("gurushots-settings", """{"token":"t","language":"lv"}""", """{"token":"","language":"lv"}"""))
+        assertEquals("""{"token":"","language":"lv"}""", TestSupport.readLegacySettings(app))
+        assertNull(TestSupport.readConfig(app))
+        // It keeps the settings cap.
+        val past = """{"k":"${"x".repeat(SideStores.MAX_BYTES * 4)}"}"""
+        assertTrue(store.compareAndWriteKey("gurushots-settings", """{"token":"","language":"lv"}""", past))
+        val over = """{"k":"${"x".repeat(SideStores.MAX_SETTINGS_BYTES)}"}"""
+        assertEquals(SideStores.Outcome.TOO_LARGE, SideStores.compareAndSet(app, "gurushots-settings", past, over).outcome)
+        assertEquals(past, TestSupport.readLegacySettings(app))
+    }
+
+    @Test
+    fun theSetAsideCopiesOfAnUnusableConfigurationAreNotKeysTheBridgeTakes() {
+        // They are written and removed by the app window through Preferences itself, and the service never reads them.
+        val store = newService().HeadlessStore()
+        val prefs = app.getSharedPreferences(SideStores.PREFS_FILE, Context.MODE_PRIVATE)
+        for (key in listOf(
+            "gurushots-config_corrupt-2026-10-16T08-00-00-000Z",
+            "gurushots-settings_corrupt-2026-10-16T08-00-00-000Z",
+            "gurushots-config_corrupt",
+            "gurushots-config-extra",
+            "gs_v2_import_extra"
+        )) {
+            prefs.edit().putString(key, """{"a":1}""").commit()
+            assertFalse(key, SideStores.isAllowed(key))
+            assertNull(key, store.readKey(key))
+            assertFalse(key, store.writeKey(key, """{"a":2}"""))
+            assertFalse(key, store.compareAndWriteKey(key, """{"a":1}""", """{"a":2}"""))
+            assertEquals(key, """{"a":1}""", prefs.getString(key, null))
+        }
     }
 
     @Test
@@ -1041,16 +1153,16 @@ class AutoVoteServiceTest {
     fun storeReadsAndWritesTheSharedSettingsBlob() {
         val svc = newService()
         val store = svc.HeadlessStore()
-        TestSupport.writeSettings(app, null)
+        TestSupport.writeConfig(app, null)
         assertNull(store.read())
 
         assertTrue(store.write("""{"token":"abc"}"""))
-        assertEquals("""{"token":"abc"}""", TestSupport.readSettings(app))
+        assertEquals("""{"token":"abc"}""", TestSupport.readConfig(app))
         assertEquals("""{"token":"abc"}""", store.read())
 
         // Non-JSON is refused so the token-bearing blob can't be corrupted.
         assertFalse(store.write("{oops"))
-        assertEquals("""{"token":"abc"}""", TestSupport.readSettings(app))
+        assertEquals("""{"token":"abc"}""", TestSupport.readConfig(app))
     }
 
     @Test
@@ -1062,26 +1174,26 @@ class AutoVoteServiceTest {
         for (bad in listOf("[1]", "42", "\"x\"", "null", """{"token":"abc"} trailing""", """{}{}""", "")) {
             assertFalse(bad, store.write(bad))
         }
-        assertEquals("""{"token":"abc"}""", TestSupport.readSettings(app))
+        assertEquals("""{"token":"abc"}""", TestSupport.readConfig(app))
 
         // The cap is the settings one (2 MiB), not the side stores' (256 KiB).
         val beyondSideStoreCap = """{"k":"${"x".repeat(SideStores.MAX_BYTES * 4)}"}"""
         assertTrue(store.write(beyondSideStoreCap))
-        assertEquals(beyondSideStoreCap, TestSupport.readSettings(app))
+        assertEquals(beyondSideStoreCap, TestSupport.readConfig(app))
         val exactlyAtCap = """{"k":"${"x".repeat(SideStores.MAX_SETTINGS_BYTES - 8)}"}"""
         assertEquals(SideStores.MAX_SETTINGS_BYTES, exactlyAtCap.toByteArray().size)
         assertTrue(store.write(exactlyAtCap))
         val overCap = """{"k":"${"x".repeat(SideStores.MAX_SETTINGS_BYTES - 7)}"}"""
         assertFalse(store.write(overCap))
-        assertEquals(exactlyAtCap, TestSupport.readSettings(app))
+        assertEquals(exactlyAtCap, TestSupport.readConfig(app))
 
         // The reason a write was not saved is told apart: an oversize blob is not a conflict.
         assertEquals("too-large", store.lastWriteRefusal())
 
         // A refusal says which blob and why, never what it held.
         val logged = ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
-        assertEquals("Refusing to persist oversized settings blob", logged.last())
-        assertTrue(logged.dropLast(1).all { it == "Refusing to persist non-JSON settings blob" })
+        assertEquals("Refusing to persist oversized config blob", logged.last())
+        assertTrue(logged.dropLast(1).all { it == "Refusing to persist non-JSON config blob" })
         assertTrue(logged.none { it.contains("trailing") || it.contains("token") })
 
         assertFalse(store.write("[1]"))
@@ -1100,9 +1212,9 @@ class AutoVoteServiceTest {
     @Test
     fun aSettingsWriteOnABlobTheWindowChangedIsReportedAsAConflictNotTooLarge() {
         val store = newService().HeadlessStore()
-        TestSupport.writeSettings(app, """{"a":1}""")
+        TestSupport.writeConfig(app, """{"a":1}""")
         assertEquals("""{"a":1}""", store.read())
-        TestSupport.writeSettings(app, """{"a":2}""")
+        TestSupport.writeConfig(app, """{"a":2}""")
         assertFalse(store.write("""{"a":3}"""))
         assertEquals("conflict", store.lastWriteRefusal())
     }
@@ -1131,18 +1243,18 @@ class AutoVoteServiceTest {
         val prefs = mockk<android.content.SharedPreferences>()
         val editor = mockk<android.content.SharedPreferences.Editor>()
         every { ctx.getSharedPreferences(SideStores.PREFS_FILE, Context.MODE_PRIVATE) } returns prefs
-        every { prefs.getString("gurushots-settings", null) } returns """{"token":"old"}"""
+        every { prefs.getString("gurushots-config", null) } returns """{"token":"old"}"""
         every { prefs.edit() } returns editor
         every { editor.putString(any(), any()) } returns editor
         every { editor.commit() } returnsMany listOf(false, true)
 
-        val result = SideStores.compareAndSet(ctx, "gurushots-settings", """{"token":"old"}""", """{"token":"new"}""")
+        val result = SideStores.compareAndSet(ctx, "gurushots-config", """{"token":"old"}""", """{"token":"new"}""")
         assertEquals(SideStores.Outcome.REFUSED, result.outcome)
 
         verifyOrder {
-            editor.putString("gurushots-settings", """{"token":"new"}""")
+            editor.putString("gurushots-config", """{"token":"new"}""")
             editor.commit()
-            editor.putString("gurushots-settings", """{"token":"old"}""")
+            editor.putString("gurushots-config", """{"token":"old"}""")
             editor.commit()
         }
     }
@@ -1150,41 +1262,41 @@ class AutoVoteServiceTest {
     @Test
     fun aSettingsWriteFromAnOlderReadIsNotSavedAndTheNextReadSeesWhatTheWindowSaved() {
         val store = newService().HeadlessStore()
-        TestSupport.writeSettings(app, """{"theme":"dark"}""")
+        TestSupport.writeConfig(app, """{"theme":"dark"}""")
         assertEquals("""{"theme":"dark"}""", store.read())
 
         // The window saved another setting after the service read.
-        TestSupport.writeSettings(app, """{"theme":"dark","language":"lv"}""")
+        TestSupport.writeConfig(app, """{"theme":"dark","language":"lv"}""")
         assertFalse(store.write("""{"theme":"dark","token":"abc"}"""))
-        assertEquals("""{"theme":"dark","language":"lv"}""", TestSupport.readSettings(app))
+        assertEquals("""{"theme":"dark","language":"lv"}""", TestSupport.readConfig(app))
 
         // Read again, make the change on what is there: saved, and a following write builds on it.
         assertEquals("""{"theme":"dark","language":"lv"}""", store.read())
         assertTrue(store.write("""{"theme":"dark","language":"lv","token":"abc"}"""))
         assertTrue(store.write("""{"theme":"dark","language":"lv","token":"abc","x":1}"""))
-        assertEquals("""{"theme":"dark","language":"lv","token":"abc","x":1}""", TestSupport.readSettings(app))
+        assertEquals("""{"theme":"dark","language":"lv","token":"abc","x":1}""", TestSupport.readConfig(app))
     }
 
     @Test
     fun aSettingsWriteBeforeAnyReadIsSavedOnlyWhereNothingIsStored() {
         val store = newService().HeadlessStore()
-        TestSupport.writeSettings(app, null)
+        TestSupport.writeConfig(app, null)
         assertTrue(store.write("""{"token":"abc"}"""))
 
         val other = newService().HeadlessStore()
         assertFalse(other.write("""{"token":"zzz"}"""))
-        assertEquals("""{"token":"abc"}""", TestSupport.readSettings(app))
+        assertEquals("""{"token":"abc"}""", TestSupport.readConfig(app))
     }
 
     @Test
     fun theSettingsBlobIsNeverReplacedByAPlainWrite() {
         val ctx = sideStoreContext()
-        TestSupport.writeSettings(app, """{"theme":"dark"}""")
+        TestSupport.writeConfig(app, """{"theme":"dark"}""")
         ShadowLog.clear()
-        assertFalse(SideStores.write(ctx, "gurushots-settings", """{"theme":"light"}"""))
-        assertEquals("""{"theme":"dark"}""", TestSupport.readSettings(app))
+        assertFalse(SideStores.write(ctx, "gurushots-config", """{"theme":"light"}"""))
+        assertEquals("""{"theme":"dark"}""", TestSupport.readConfig(app))
         assertEquals(
-            listOf("Refusing a plain write of settings blob: it is changed by compare-and-set only"),
+            listOf("Refusing a plain write of config blob: it is changed by compare-and-set only"),
             ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
         )
     }
@@ -1193,13 +1305,13 @@ class AutoVoteServiceTest {
     fun theWindowAndTheServiceChangingTheSettingsFromTheSameReadSaveExactlyOne() {
         val ctx = sideStoreContext()
         repeat(40) { round ->
-            TestSupport.writeSettings(app, "{}")
+            TestSupport.writeConfig(app, "{}")
             val saved = java.util.concurrent.atomic.AtomicInteger(0)
             val start = java.util.concurrent.CountDownLatch(1)
             val threads = listOf("service", "window").map { who ->
                 Thread {
                     start.await()
-                    val outcome = SideStores.compareAndSet(ctx, "gurushots-settings", "{}", "{\"$who\":$round}").outcome
+                    val outcome = SideStores.compareAndSet(ctx, "gurushots-config", "{}", "{\"$who\":$round}").outcome
                     if (outcome == SideStores.Outcome.SAVED) saved.incrementAndGet()
                 }
             }

@@ -93,7 +93,7 @@ class AutoVoteService : Service() {
         private const val MAX_DELAY_MS = 6L * 60L * 60L * 1000L
         // @capacitor/preferences store the JS settings module reads/writes (the side stores live in it too: SideStores).
         private const val PREFS_FILE = SideStores.PREFS_FILE
-        private const val SETTINGS_KEY = SideStores.SETTINGS_KEY
+        private const val CONFIG_KEY = SideStores.CONFIG_KEY
         // The one origin the headless WebView may load from or talk to: the asset loader's.
         private const val ASSET_HOST = "appassets.androidplatform.net"
         private const val HEADLESS_URL = "https://$ASSET_HOST/assets/public/headless.html"
@@ -501,7 +501,7 @@ class AutoVoteService : Service() {
 
         @android.webkit.JavascriptInterface
         fun read(): String? =
-            getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(SETTINGS_KEY, null).also { lastRead = it }
+            getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(CONFIG_KEY, null).also { lastRead = it }
 
         @android.webkit.JavascriptInterface
         fun readKey(key: String): String? = SideStores.read(this@AutoVoteService, key)
@@ -534,7 +534,7 @@ class AutoVoteService : Service() {
          */
         @android.webkit.JavascriptInterface
         fun write(data: String): Boolean {
-            val result = SideStores.compareAndSet(this@AutoVoteService, SETTINGS_KEY, lastRead, data)
+            val result = SideStores.compareAndSet(this@AutoVoteService, CONFIG_KEY, lastRead, data)
             val saved = result.outcome == SideStores.Outcome.SAVED
             if (saved) lastRead = data
             writeRefusal = when (result.outcome) {
@@ -711,18 +711,25 @@ internal object SideStores {
     /** The most a store may hold: they are small ledgers, and a value past this is a bug or an attack. */
     const val MAX_BYTES = 256 * 1024
 
-    /** The settings blob (what `@capacitor/preferences` stores for the JS settings module). */
-    const val SETTINGS_KEY = "gurushots-settings"
+    /** The configuration (what `@capacitor/preferences` stores for the JS settings module: `config.json` on a desktop). */
+    const val CONFIG_KEY = "gurushots-config"
 
-    /** The most the settings blob may hold: every challenge's overrides and profiles live in it, so it dwarfs a side store. */
+    /** The 1.x settings blob: read for the one-time import, and blanked of its sign-in state by it (`settings.json` on a desktop). */
+    const val LEGACY_SETTINGS_KEY = "gurushots-settings"
+
+    /** The most the configuration and the 1.x settings blob may hold: every challenge's overrides and profiles live in them, so they dwarf a side store. */
     const val MAX_SETTINGS_BYTES = 2 * 1024 * 1024
 
     // Lexicon diagnostics; the scenario state and the resets of it the app asks for; the fills spent (what
     // autoExposureFillMax counts against: a service that started from an empty one after every restart would spend
     // past the cap) and the swap-back offers; the paid-join claims (an unlock that was charged and not yet submitted:
-    // forgotten on a restart, it would be charged again).
+    // forgotten on a restart, it would be charged again); the marker that the 1.x import has run (the service reads it to
+    // know not to import again) and the title pins the import seeds.
     private val names = mapOf(
-        SETTINGS_KEY to "settings",
+        CONFIG_KEY to "config",
+        LEGACY_SETTINGS_KEY to "settings",
+        "gs_v2_import" to "import marker",
+        "gs_title_pins" to "title pins",
         "gs_lexicon_diagnostics" to "lexicon diagnostics",
         "gs_scenario_state" to "scenario state",
         "gs_scenario_resets" to "scenario resets",
@@ -741,7 +748,7 @@ internal object SideStores {
 
     fun isAllowed(key: String): Boolean = key in names
 
-    private fun maxBytes(key: String): Int = if (key == SETTINGS_KEY) MAX_SETTINGS_BYTES else MAX_BYTES
+    private fun maxBytes(key: String): Int = if (key == CONFIG_KEY || key == LEGACY_SETTINGS_KEY) MAX_SETTINGS_BYTES else MAX_BYTES
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
 
@@ -780,7 +787,7 @@ internal object SideStores {
     // Stores that are changed only by `compareAndSet`: a plain write would replace what another context saved (a spend
     // or a claim that one context recorded and the other, writing from an older read, then lost; a setting one context
     // toggled and the other, writing the whole blob from an older read, then undid).
-    private val compareAndSetOnly = setOf("gs_join_state", "gs_auto_spends", SETTINGS_KEY)
+    private val compareAndSetOnly = setOf("gs_join_state", "gs_auto_spends", CONFIG_KEY, LEGACY_SETTINGS_KEY)
 
     @Synchronized
     fun write(context: Context, key: String, data: String): Boolean {

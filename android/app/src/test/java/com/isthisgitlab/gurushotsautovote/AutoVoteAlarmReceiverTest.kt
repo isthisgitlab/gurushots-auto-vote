@@ -48,7 +48,7 @@ class AutoVoteAlarmReceiverTest {
     fun aServiceStartTheSystemRefusesIsRetriedAtTheNextAlarmAndRecorded() {
         ServiceState.setEnabled(app, true)
         ServiceState.record(app, 4, 99L, null)
-        TestSupport.writeSettings(app, """{"checkFrequencyMin":5}""")
+        TestSupport.writeConfig(app, """{"app":{"checkFrequencyMin":5}}""")
         val refusing = object : ContextWrapper(app) {
             override fun startForegroundService(service: Intent?): ComponentName? =
                 throw IllegalStateException("not allowed to start service Intent")

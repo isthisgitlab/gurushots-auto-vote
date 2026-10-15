@@ -18,17 +18,28 @@ import java.io.IOException
 /** Shared fixtures for the JVM unit tests. */
 internal object TestSupport {
     const val PREFS_FILE = "CapacitorStorage"
-    const val SETTINGS_KEY = "gurushots-settings"
+    const val CONFIG_KEY = "gurushots-config"
+    const val LEGACY_SETTINGS_KEY = "gurushots-settings"
 
-    fun writeSettings(context: Context, raw: String?) {
+    private fun write(context: Context, key: String, raw: String?) {
         context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
             .edit()
-            .apply { if (raw == null) remove(SETTINGS_KEY) else putString(SETTINGS_KEY, raw) }
+            .apply { if (raw == null) remove(key) else putString(key, raw) }
             .commit()
     }
 
-    fun readSettings(context: Context): String? =
-        context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(SETTINGS_KEY, null)
+    private fun read(context: Context, key: String): String? =
+        context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(key, null)
+
+    /** The configuration, as the app window and the service store it. */
+    fun writeConfig(context: Context, raw: String?) = write(context, CONFIG_KEY, raw)
+
+    fun readConfig(context: Context): String? = read(context, CONFIG_KEY)
+
+    /** The 1.x settings blob an upgrade leaves behind. */
+    fun writeLegacySettings(context: Context, raw: String?) = write(context, LEGACY_SETTINGS_KEY, raw)
+
+    fun readLegacySettings(context: Context): String? = read(context, LEGACY_SETTINGS_KEY)
 
     /**
      * A client that keeps the request path/query/headers but sends every call
