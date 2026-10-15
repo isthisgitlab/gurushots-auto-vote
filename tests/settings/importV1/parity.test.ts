@@ -7,8 +7,10 @@
 
 import { interpretV1Settings, parseV1Settings } from '../../../src/ts/settings/importV1';
 import { pruneV1Obsolete } from '../../../src/ts/settings/importV1/loadValidation';
+import { V1_SETTINGS_SCHEMA } from '../../../src/ts/settings/importV1/schema';
 import { parseJsonObject } from '../../helpers/parseJson';
 import type * as settingsModule from '../../../src/ts/settings';
+import type * as liveSchemaModule from '../../../src/ts/settings/schema';
 import type { AndroidHeadlessStore, AppSettings } from '../../../src/ts/types/settings';
 
 // The live loader looks for an Electron app; none exists here, and the real package would try to fetch its binary.
@@ -281,5 +283,27 @@ describe('the frozen pipeline against the live loader', () => {
     ])('%s is no settings object in both', (_name, raw) => {
         expect(parseV1Settings(raw).ok).toBe(false);
         expect(loadLive(raw).recovery?.code).toMatch(/^settings-(corrupt|unreadable)$/);
+    });
+});
+
+describe('the frozen schema flags against the live schema', () => {
+    const live = require('../../../src/ts/settings/schema') as typeof liveSchemaModule;
+    const keys = Object.keys(V1_SETTINGS_SCHEMA);
+
+    test.each(keys)('%s has the live resolver flags', (key) => {
+        const frozen: { perChallenge: boolean; challengeOnly?: true; dependsOn?: readonly string[] } =
+            V1_SETTINGS_SCHEMA[key as keyof typeof V1_SETTINGS_SCHEMA];
+        const entry = live.schemaEntry(key);
+        expect([key, frozen.perChallenge]).toEqual([key, entry?.perChallenge]);
+        expect([key, frozen.challengeOnly === true]).toEqual([key, entry?.challengeOnly === true]);
+        expect([key, frozen.dependsOn ?? []]).toEqual([key, entry?.dependsOn ?? []]);
+    });
+
+    test('the keys with a cross-field check are the keys with dependencies', () => {
+        const withCheck = keys.filter((key) => live.schemaEntry(key)?.contextValidation !== undefined);
+        const withDependencies = keys.filter(
+            (key) => 'dependsOn' in V1_SETTINGS_SCHEMA[key as keyof typeof V1_SETTINGS_SCHEMA],
+        );
+        expect(withCheck).toEqual(withDependencies);
     });
 });

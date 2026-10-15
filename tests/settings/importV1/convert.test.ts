@@ -7,6 +7,7 @@
 import { convertV1Blob } from '../../../src/ts/settings/importV1/convert';
 import { getV1Defaults } from '../../../src/ts/settings/importV1/defaults';
 import { V1_MIGRATION_FLAGS } from '../../../src/ts/settings/importV1/migrations';
+import { V1_REFUSED_KEY_PREFIX } from '../../../src/ts/settings/importV1/renames';
 
 import type { V1Blob } from '../../../src/ts/settings/importV1/types';
 
@@ -87,6 +88,58 @@ describe('the sign-in state and the app preferences', () => {
     });
 });
 
+describe('a key named like a rename target in a 1.x file', () => {
+    // 1.x never read such a key, so it must not start to act in 2.x: it goes from every map the importer renames.
+    test('is dropped from the app preferences, defaults, profiles, rules and challenge values', () => {
+        const { config } = convert(
+            {
+                globalDefaults: { autoSubmit: true, exposure: 80 },
+                profiles: { P: { autoSubmit: true, emergencySubmit: 5, exposure: 60 } },
+                titleRules: [{ title: 'a', autoSubmit: true, autoJoin: true }],
+                perChallenge: { '1': { autoSubmit: true, exposure: 70 } },
+            },
+            { notifyOnAutoSubmit: true, theme: 'dark' },
+        );
+        expect(config.app).toEqual(expect.not.objectContaining({ notifyOnAutoSubmit: expect.anything() }));
+        expect(config.app.theme).toBe('dark');
+        expect(config.defaults).toMatchObject({ exposure: 80 });
+        expect(config.defaults).not.toHaveProperty('autoSubmit', true);
+        expect(config.profiles).toEqual({ P: { exposure: 60 } });
+        expect(config.rules).toEqual([{ title: 'a', autoJoin: true }]);
+        expect(config.challenges).toEqual({ '1': { values: { exposure: 70 } } });
+    });
+
+    test('also goes beside its 1.x counterpart: the 1.x value is kept under the 2.x name', () => {
+        const { config } = convert({
+            profiles: { P: { autoFill: true, autoSubmit: false } },
+            titleRules: [{ title: 'a', autoFill: true, autoSubmit: false }],
+        });
+        expect(config.profiles).toEqual({ P: { autoSubmit: true } });
+        expect(config.rules).toEqual([{ title: 'a', autoSubmit: true }]);
+    });
+
+    test('keeps a scenario that 1.x refused refused: the key stays, under a name no setting answers to', () => {
+        const { config } = convert({
+            scenarios: {
+                Plan: {
+                    name: 'Plan',
+                    version: 1,
+                    start: 'a',
+                    phases: { a: { settings: { autoSubmit: true, exposure: 80 } } },
+                },
+            },
+        });
+        expect(config.scenarios).toEqual({
+            Plan: {
+                name: 'Plan',
+                version: 1,
+                start: 'a',
+                phases: { a: { settings: { exposure: 80, [`${V1_REFUSED_KEY_PREFIX}autoSubmit`]: true } } },
+            },
+        });
+    });
+});
+
 describe('defaults, profiles, scenarios, rules', () => {
     test('defaults are the global defaults with renamed keys', () => {
         const { config } = convert({ globalDefaults: { autoFill: true, exposure: 80, boostFillNewOnConflict: true } });
@@ -158,10 +211,29 @@ describe('defaults, profiles, scenarios, rules', () => {
         expect(titlePins).toEqual({ '1': 'Macro', '3': 'Night' });
         expect(JSON.stringify(config)).not.toContain('Macro');
         expect(convert().titlePins).toEqual({});
-        expect(convert({ titlePins: 'junk' }).titlePins).toEqual({});
+        expect(convert({ titlePins: 5 }).titlePins).toEqual({});
+        expect(convert({ titlePins: null }).titlePins).toEqual({});
         expect(convert({ titlePins: JSON.parse('{"__proto__":"x","constructor":"y","7":"z"}') }).titlePins).toEqual({
             '7': 'z',
         });
+    });
+});
+
+describe('a title-pin container of the wrong kind', () => {
+    // 1.x looks a title up as `pinned[id]` when the value has `id` as an own property: an array's elements and a
+    // string's characters are found by index.
+    test('an array gives its string elements by index', () => {
+        expect(convert({ titlePins: ['Macro', 5, 'Night'] }).titlePins).toEqual({ '0': 'Macro', '2': 'Night' });
+    });
+
+    test('a string gives its characters by index', () => {
+        expect(convert({ titlePins: 'ab' }).titlePins).toEqual({ '0': 'a', '1': 'b' });
+        expect(convert({ titlePins: '' }).titlePins).toEqual({});
+    });
+
+    test('a number or a boolean has no own properties to read', () => {
+        expect(convert({ titlePins: 0 }).titlePins).toEqual({});
+        expect(convert({ titlePins: true }).titlePins).toEqual({});
     });
 });
 
@@ -244,7 +316,7 @@ describe('references 1.x could not resolve', () => {
         ).toEqual(['rules[0].profile: "constructor"', 'rules[1].profile: " __PROTO__ "']);
     });
 
-    test('a scenario value naming a scenario that is not stored is listed in defaults, profiles, rules and challenges', () => {
+    test('a scenario value naming a scenario that is not stored is listed in profiles, rules and challenges, not in the defaults', () => {
         expect(
             refs({
                 globalDefaults: { scenario: 'Plan B' },
@@ -257,7 +329,6 @@ describe('references 1.x could not resolve', () => {
                 scenarios: { 'plan a': { name: 'Plan A' } },
             }),
         ).toEqual([
-            'defaults.scenario: "Plan B"',
             'profiles["Night"].scenario: "plan b"',
             'profiles["Odd \\"name\\""].scenario: "Gone"',
             'rules[1].scenario: "Gone"',

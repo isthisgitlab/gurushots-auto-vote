@@ -25,6 +25,16 @@ const stringEntries = (value: unknown): Array<[string, string]> =>
         ? Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
         : [];
 
+/**
+ * The `[id, title]` pairs 1.x's title lookup finds in a stored `titlePins`. It reads `pinned[id]` of whatever the file
+ * holds, for an id the value has as an own property: an object's entries, but also an array's elements by index and
+ * a string's characters by index.
+ */
+const pinnedTitles = (stored: unknown): Array<[string, string]> =>
+    stored === null || stored === undefined
+        ? []
+        : Object.entries(stored).filter((entry): entry is [string, string] => typeof entry[1] === 'string');
+
 const mapValues = (value: unknown, convert: (item: unknown) => unknown): Record<string, unknown> =>
     isPlainObject(value) ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, convert(item)])) : {};
 
@@ -50,7 +60,7 @@ const convertChallenges = (blob: V1Blob): Record<string, ChallengeRecordV2> => {
     for (const id of ids) {
         if (isReservedChallengeId(id)) continue;
         const record: ChallengeRecordV2 = {};
-        if (Object.hasOwn(perChallenge, id)) record.values = renameV1Keys(perChallenge[id]);
+        if (Object.hasOwn(perChallenge, id)) record.values = renameV1Keys(perChallenge[id], 'drop-targets');
         if (suppressed.includes(id)) record.suppressRuleProfile = true;
         if (Object.hasOwn(entryPins, id)) record.pins = pinsOf(entryPins[id]);
         challenges[id] = record;
@@ -62,7 +72,8 @@ const quoted = (name: string): string => JSON.stringify(name.slice(0, 80));
 
 /**
  * The references 1.x could not resolve, which stay as stored and block as in 1.x: a rule naming a profile that is
- * missing or reserved, and a `scenario` value naming a scenario that is not stored.
+ * missing or reserved, and a `scenario` value naming a scenario that is not stored. A `scenario` among the defaults
+ * is no reference: it is challenge-only, so 1.x never applied a global value.
  */
 const unresolvedRefs = (config: ConfigV2): string[] => {
     const refs: string[] = [];
@@ -73,7 +84,6 @@ const unresolvedRefs = (config: ConfigV2): string[] => {
             refs.push(`${path}.scenario: ${quoted(name)}`);
         }
     };
-    unresolvedScenario('defaults', config.defaults);
     for (const [name, values] of Object.entries(config.profiles)) {
         unresolvedScenario(`profiles[${JSON.stringify(name)}]`, values);
     }
@@ -105,24 +115,24 @@ const convertV1Blob = (blob: V1Blob): ConvertedV1 => {
     const moved = new Set(['challengeSettings', ...AUTH_KEYS, ...V1_MIGRATION_FLAGS]);
     const config: ConfigV2 = {
         version: 2,
-        app: renameV1Keys(Object.fromEntries(Object.entries(blob).filter(([key]) => !moved.has(key)))),
+        app: renameV1Keys(Object.fromEntries(Object.entries(blob).filter(([key]) => !moved.has(key))), 'drop-targets'),
         auth: {
             token: stringOrEmpty(blob.token),
             apiHeaders: Object.fromEntries(stringEntries(blob.apiHeaders)),
             lastUsername: stringOrEmpty(blob.lastUsername),
             chosenPhotosMemberId: stringOrEmpty(blob.chosenPhotosMemberId),
         },
-        defaults: renameV1Keys(challengeSettings.globalDefaults),
-        profiles: mapValues(challengeSettings.profiles, renameV1Value),
+        defaults: renameV1Keys(challengeSettings.globalDefaults, 'drop-targets'),
+        profiles: mapValues(challengeSettings.profiles, (values) => renameV1Value(values, 'drop-targets')),
         seededProfiles: Array.isArray(challengeSettings.seededProfiles)
             ? challengeSettings.seededProfiles.filter((name): name is string => typeof name === 'string')
             : [],
-        scenarios: mapValues(challengeSettings.scenarios, renameV1ScenarioDocument),
-        rules: challengeSettings.titleRules.map(renameV1Value),
+        scenarios: mapValues(challengeSettings.scenarios, (doc) => renameV1ScenarioDocument(doc, 'drop-targets')),
+        rules: challengeSettings.titleRules.map((rule) => renameV1Value(rule, 'drop-targets')),
         challenges: convertChallenges(blob),
     };
     const titlePins = Object.fromEntries(
-        stringEntries(challengeSettings.titlePins).filter(([id]) => !isReservedChallengeId(id)),
+        pinnedTitles(challengeSettings.titlePins).filter(([id]) => !isReservedChallengeId(id)),
     );
     return { config, titlePins, report: { refsBlocked: unresolvedRefs(config) } };
 };

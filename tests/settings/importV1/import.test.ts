@@ -53,7 +53,9 @@ describe('importV1Settings', () => {
 
     test('an empty object is the defaults', () => {
         const result = okOf(importV1Settings('{}'));
-        expect(result.config.defaults).toEqual(renameV1Keys(getV1Defaults().challengeSettings.globalDefaults));
+        expect(result.config.defaults).toEqual(
+            renameV1Keys(getV1Defaults().challengeSettings.globalDefaults, 'drop-targets'),
+        );
         expect(result.config.challenges).toEqual({});
         expect(result.config.rules).toEqual([]);
         expect(result.report.refsBlocked).toEqual([]);

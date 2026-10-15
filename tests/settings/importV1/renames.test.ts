@@ -4,6 +4,7 @@
 
 import {
     V1_KEY_RENAMES,
+    V1_REFUSED_KEY_PREFIX,
     renameV1Keys,
     renameV1ScenarioDocument,
     renameV1Value,
@@ -57,7 +58,7 @@ describe('the rename table', () => {
     });
 });
 
-describe('renameV1Keys', () => {
+describe.each(['drop-targets', 'keep-lone-targets'] as const)('renameV1Keys (%s)', (mode) => {
     test('renames the keys, leaves the values and every other key alone, and keeps the order', () => {
         const values = {
             exposure: 90,
@@ -66,7 +67,7 @@ describe('renameV1Keys', () => {
             autoFillSchedule: [{ count: 2, seconds: 60 }],
             scenario: 'Plan',
         };
-        const renamed = renameV1Keys(values);
+        const renamed = renameV1Keys(values, mode);
         expect(Object.keys(renamed)).toEqual([
             'exposure',
             'autoSubmit',
@@ -84,24 +85,46 @@ describe('renameV1Keys', () => {
         expect(values).toHaveProperty('autoFill', true);
     });
 
-    test('the 1.x key wins over a leftover 2.x-named key, which 1.x never read', () => {
-        expect(renameV1Keys({ autoSubmit: false, autoFill: true })).toEqual({ autoSubmit: true });
-        expect(renameV1Keys({ autoFill: true, autoSubmit: false })).toEqual({ autoSubmit: true });
+    test('the 1.x key wins over a 2.x-named key beside it, which 1.x never read', () => {
+        expect(renameV1Keys({ autoSubmit: false, autoFill: true }, mode)).toEqual({ autoSubmit: true });
+        expect(renameV1Keys({ autoFill: true, autoSubmit: false }, mode)).toEqual({ autoSubmit: true });
     });
 
     test('a key named like a prototype member stays an ordinary key', () => {
-        const renamed = renameV1Keys(parseJsonObject('{"__proto__":{"x":1},"constructor":2,"autoFill":true}'));
+        const renamed = renameV1Keys(parseJsonObject('{"__proto__":{"x":1},"constructor":2,"autoFill":true}'), mode);
         expect(Object.keys(renamed)).toEqual(['__proto__', 'constructor', 'autoSubmit']);
         expect(Object.getPrototypeOf(renamed)).toBe(Object.prototype);
         expect(({} as Record<string, unknown>).x).toBeUndefined();
     });
 });
 
+describe('a 2.x-named key with no 1.x counterpart', () => {
+    const lone = { exposure: 90, autoSubmit: false, boostNewSubmit: true };
+
+    test('is dropped from a 1.x settings map, where 1.x never read it', () => {
+        expect(renameV1Keys(lone, 'drop-targets')).toEqual({ exposure: 90 });
+    });
+
+    test('stays in a map from outside, which a 2.x install may have written already renamed', () => {
+        expect(renameV1Keys(lone, 'keep-lone-targets')).toEqual(lone);
+    });
+
+    test('every rename target is treated alike', () => {
+        const targets = Object.fromEntries(Object.values(V1_KEY_RENAMES).map((key) => [key, 1]));
+        expect(renameV1Keys(targets, 'drop-targets')).toEqual({});
+        expect(renameV1Keys(targets, 'keep-lone-targets')).toEqual(targets);
+    });
+});
+
 describe('renameV1Value', () => {
     test('renames a plain object and returns anything else as it is', () => {
-        expect(renameV1Value({ autoFill: true })).toEqual({ autoSubmit: true });
+        expect(renameV1Value({ autoFill: true }, 'drop-targets')).toEqual({ autoSubmit: true });
+        expect(renameV1Value({ autoSubmit: true }, 'drop-targets')).toEqual({});
+        expect(renameV1Value({ autoSubmit: true }, 'keep-lone-targets')).toEqual({ autoSubmit: true });
         const list = [{ autoFill: true }];
-        for (const other of [list, 'text', 4, null, undefined]) expect(renameV1Value(other)).toBe(other);
+        for (const other of [list, 'text', 4, null, undefined]) {
+            expect(renameV1Value(other, 'drop-targets')).toBe(other);
+        }
     });
 });
 
@@ -131,6 +154,34 @@ describe('renameV1ScenarioDocument', () => {
                     rules: [{ do: [{ type: 'fillExposure' }] }],
                 },
             },
+        });
+    });
+
+    test('a lone 2.x name survives in a file from outside (the default), as a file exported by 2.x is renamed already', () => {
+        const exported = { name: 'Plan', phases: { a: { settings: { autoSubmit: true, autoFill: false } } } };
+        expect(renameV1ScenarioDocument(exported)).toEqual({
+            name: 'Plan',
+            phases: { a: { settings: { autoSubmit: false } } },
+        });
+        const renamed = { name: 'Plan', phases: { a: { settings: { autoSubmit: true, exposure: 80 } } } };
+        expect(renameV1ScenarioDocument(renamed)).toEqual(renamed);
+        expect(renameV1ScenarioDocument(renamed, 'keep-lone-targets')).toEqual(renamed);
+    });
+
+    test('in a 1.x settings file a 2.x name is kept refused: under a name no setting answers to, never dropped', () => {
+        const stray = {
+            name: 'Plan',
+            phases: { a: { settings: { autoSubmit: true, autoFill: false, exposure: 80 } } },
+        };
+        expect(renameV1ScenarioDocument(stray, 'drop-targets')).toEqual({
+            name: 'Plan',
+            phases: {
+                a: { settings: { exposure: 80, autoSubmit: false, [`${V1_REFUSED_KEY_PREFIX}autoSubmit`]: true } },
+            },
+        });
+        const lone = { phases: { a: { settings: { boostNewSubmit: 1 } } } };
+        expect(renameV1ScenarioDocument(lone, 'drop-targets')).toEqual({
+            phases: { a: { settings: { [`${V1_REFUSED_KEY_PREFIX}boostNewSubmit`]: 1 } } },
         });
     });
 

@@ -37,7 +37,7 @@ export interface ChallengeRecordV2 {
 /**
  * What the 1.x import found that it could not resolve. Key paths and names only, never values other than the name
  * a reference points at. Each entry reads `<path>: <the unresolved name as a JSON string>`, for example
- * `rules[2].profile: "Night owl"`, `profiles["Night"].scenario: "Plan B"`, `defaults.scenario: "Plan B"` or
+ * `rules[2].profile: "Night owl"`, `profiles["Night"].scenario: "Plan B"` or
  * `challenges.123.values.scenario: "Plan B"`: rule indexes count from 0 in the stored order, profile names are
  * JSON-quoted in brackets, a challenge id is bracketed and JSON-quoted too when it is not made of letters, digits,
  * `_` and `-`.
