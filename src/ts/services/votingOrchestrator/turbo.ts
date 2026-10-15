@@ -51,14 +51,14 @@ const resolveFillNewTurboTarget = async (
 /**
  * fill-new was requested but no fresh photo could be submitted, so the target
  * never resolved. The two ways to land here need different logs: in the
- * on-conflict (or always-blocked) path an entry DOES exist — it just already
- * has Boost, so turbo cannot go on it and there is no valid fallback; only in
- * always mode on an empty challenge is there genuinely no entry at all.
+ * on-conflict (or always-blocked) path an entry DOES exist — it has Boost or is
+ * pinned for Boost, so turbo cannot go on it and there is no valid fallback; only
+ * in always mode on an empty challenge is there genuinely no entry at all.
  */
 const logTurboWithoutTarget = (challenge: Challenge) => {
     const hasExistingEntry = (challenge?.member?.ranking?.entries?.length ?? 0) > 0;
     const skipReason = hasExistingEntry
-        ? 'only entry already has Boost — turbo skipped'
+        ? 'every entry has Boost or is pinned for Boost — turbo skipped'
         : 'could not submit a fresh photo and there is no existing entry — turbo skipped';
     logger.withCategory('turbo').info(`${logger.challengeTag(challenge)} turbo fill-new ${skipReason}`, null);
 };

@@ -284,7 +284,7 @@ describe('shouldApplyTurbo', () => {
             const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
             expect(result.apply).toBe(false);
             expect(result.fillNew).toBe(false);
-            expect(result.reason).toBe('only entry already has Boost applied');
+            expect(result.reason).toBe('every entry has Boost or is pinned for Boost');
         });
     });
 

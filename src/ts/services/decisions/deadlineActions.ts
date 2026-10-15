@@ -13,7 +13,13 @@ import { getNextScheduleThresholdSec, evaluateEmergencyFill, getSlotsRemaining }
 import { boostApplyThreshold } from '../../voting/boostWindow';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
 import { isBoostWindowOpen } from './boostTurbo';
-import { pickBoostEntry, resolveBoostFillNewMode } from './entryPick';
+import {
+    pickBoostEntry,
+    pickTurboEntry,
+    pinReleaseAt,
+    resolveBoostFillNewMode,
+    resolveTurboFillNewMode,
+} from './entryPick';
 import { isManualPhotosOnly } from '../manualPhotosOnly';
 
 /**
@@ -101,10 +107,61 @@ const orderDeadlineActions = (
 };
 
 /**
+ * The boost/turbo conflict flags and the instant a blocking pin gives way.
+ *
+ * Boost/turbo conflict: a boost is available to place, there IS an entry to
+ * place it on, but every candidate entry already carries turbo or is the photo
+ * pinned for Turbo. The entries.length >= 1 guard is required — pickBoostEntry
+ * also returns null when there are simply no entries yet (a freshly joined
+ * challenge before auto-fill), which is NOT a conflict. The caller computes it
+ * before the row gating so the boost row can be suppressed when it can't actually
+ * be placed — otherwise the timeline would show a "Boost" row that directly
+ * contradicts the conflict warning rendered right beside it. turboBlocked is
+ * the mirror: a won Turbo with every entry boosted or pinned for Boost.
+ *
+ * A fill-new mode (always or the narrower on-conflict) resolves the conflict
+ * by using a freshly submitted photo instead — but only when there is a
+ * free slot to submit into, so the warning still shows for a truly full,
+ * conflicted challenge. The free-slot count comes from autoFill's own
+ * getSlotsRemaining (this module already imports that module — there is no
+ * cycle) so the fill paths and this view can never disagree on "full".
+ *
+ * A pin blocks only until the blocked spend nears its deadline, and nothing else
+ * the renderer fingerprints moves then — so the view carries the instant for it to
+ * refetch at (`pinReleaseAt`, null when nothing blocked gives way).
+ *
+ * @param now - Unix timestamp in seconds
+ */
+const describeConflicts = (
+    challenge: Challenge,
+    challengeId: string,
+    now: number,
+): { boostBlocked: boolean; turboBlocked: boolean; pinReleaseAt: number | null } => {
+    const entries = challenge?.member?.ranking?.entries;
+    const hasEntries = Array.isArray(entries) && entries.length >= 1;
+    const hasFreeSlot = getSlotsRemaining(challenge) > 0;
+    const boostBlocked =
+        isBoostWindowOpen(challenge, now) &&
+        hasEntries &&
+        pickBoostEntry(challenge, challengeId, now) === null &&
+        !(hasFreeSlot && resolveBoostFillNewMode(challenge, challengeId, now) !== 'no');
+    const turboBlocked =
+        challenge?.member?.turbo?.state === 'WON' &&
+        hasEntries &&
+        pickTurboEntry(challenge, challengeId, now) === null &&
+        !(hasFreeSlot && resolveTurboFillNewMode(challenge, challengeId, now) !== 'no');
+    const releases = [
+        boostBlocked ? pinReleaseAt(challenge, challengeId, 'turbo', now) : null,
+        turboBlocked ? pinReleaseAt(challenge, challengeId, 'boost', now) : null,
+    ].filter((at): at is number => at !== null);
+    return { boostBlocked, turboBlocked, pinReleaseAt: releases.length > 0 ? Math.min(...releases) : null };
+};
+
+/**
  * Read-only, renderer-facing description of a challenge's upcoming deadline
  * actions: the ordered actions that will ACTUALLY fire (gated on the same
  * conditions the runner uses, not merely on a positive threshold) plus each
- * one's absolute due instant, and the boost/turbo conflict flag.
+ * one's absolute due instant, the boost/turbo conflict flags, and when a blocking pin gives way.
  *
  * Gating matters because several threshold getters stay positive even when the
  * feature is off or the resource isn't held:
@@ -132,7 +189,12 @@ const orderDeadlineActions = (
 const describeDeadlineActions = (
     challenge: Challenge,
     now: number,
-): { actions: Array<{ action: string; thresholdSec: number; dueAt: number | null }>; boostBlocked: boolean } => {
+): {
+    actions: Array<{ action: string; thresholdSec: number; dueAt: number | null }>;
+    boostBlocked: boolean;
+    turboBlocked: boolean;
+    pinReleaseAt: number | null;
+} => {
     const challengeId = challenge?.id?.toString?.() || '';
     const closeTime = Number(challenge?.close_time);
     const boost = challenge?.member?.boost || {};
@@ -140,40 +202,24 @@ const describeDeadlineActions = (
     const boostTimerBranch = boost.state === 'AVAILABLE' && boostHasTimeout;
     const turboState = challenge?.member?.turbo?.state;
 
-    // Boost/turbo conflict: a boost is available to place, there IS an entry to
-    // place it on, but every candidate entry is already turboed. The
-    // entries.length >= 1 guard is required — pickBoostEntry also returns null
-    // when there are simply no entries yet (a freshly joined challenge before
-    // auto-fill), which is NOT a conflict. Computed before the row gating below
-    // so the boost row can be suppressed when it can't actually be placed —
-    // otherwise the timeline would show a "Boost" row that directly contradicts
-    // the conflict warning rendered right beside it.
-    //
-    // A fill-new mode (always or the narrower on-conflict) resolves the conflict
-    // by boosting a freshly submitted photo instead — but only when there is a
-    // free slot to submit into, so the warning still shows for a truly full,
-    // conflicted challenge. The free-slot count comes from autoFill's own
-    // getSlotsRemaining (this module already imports that module — there is no
-    // cycle) so the fill paths and this view can never disagree on "full".
-    const entries = challenge?.member?.ranking?.entries;
-    const hasFreeSlot = getSlotsRemaining(challenge) > 0;
-    const fillNewWillResolve = hasFreeSlot && resolveBoostFillNewMode(challenge, challengeId) !== 'no';
-    const boostBlocked =
-        isBoostWindowOpen(challenge, now) &&
-        Array.isArray(entries) &&
-        entries.length >= 1 &&
-        pickBoostEntry(challenge, challengeId) === null &&
-        !fillNewWillResolve;
+    const conflicts = describeConflicts(challenge, challengeId, now);
+    const { boostBlocked, turboBlocked } = conflicts;
 
     const isVisible = (action: string, thresholdSec: number): boolean => {
         if (!Number.isFinite(thresholdSec) || thresholdSec <= 0) return false;
         switch (action) {
             case 'turbo':
-                return turboState === 'WON' && settings.getEffectiveSetting('useTurbo', challengeId) === true;
+                // A turbo that can't be placed must not appear as an upcoming action either.
+                return (
+                    turboState === 'WON' &&
+                    settings.getEffectiveSetting('useTurbo', challengeId) === true &&
+                    !turboBlocked
+                );
             case 'boost':
                 if (settings.getEffectiveSetting('autoBoost', challengeId) !== true) return false;
-                // A boost that can't be placed (only entry already turboed) must
-                // not appear as an upcoming action — the conflict warning owns it.
+                // A boost that can't be placed (every entry turboed or pinned for
+                // Turbo) must not appear as an upcoming action — the conflict
+                // warning owns it.
                 if (boostBlocked) return false;
                 // Timer branch stays positive at boostTime=0 (off); key-unlocked
                 // branch already resolves to 0 when off and is dropped above.
@@ -209,7 +255,7 @@ const describeDeadlineActions = (
             dueAt: Number.isFinite(closeTime) ? closeTime - thresholdSec : null,
         }));
 
-    return { actions, boostBlocked };
+    return { actions, ...conflicts };
 };
 
 export { getAutoFillThresholdSec, getBoostThresholdSec, orderDeadlineActions, describeDeadlineActions };

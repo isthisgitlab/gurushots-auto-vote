@@ -166,7 +166,7 @@ describe('runSuspendBoosts — target rule', () => {
         );
     });
 
-    test('no usable entry (the only entry has Turbo): skipped with a reason, applyBoost never called', async () => {
+    test('no usable entry (every entry has Turbo or is pinned for Turbo): skipped with a reason, applyBoost never called', async () => {
         votingLogic.resolveBoostFillNewMode.mockReturnValue('conflict');
         votingLogic.pickBoostEntry.mockReturnValue(null);
         const api = makeApi();
@@ -174,7 +174,7 @@ describe('runSuspendBoosts — target rule', () => {
         expect(api.applyBoost).not.toHaveBeenCalled();
         expect(api.applyBoostToEntry).not.toHaveBeenCalled();
         expect(messages('info').join()).toContain(
-            '[Challenge 101: Orchestrated] no entry can take the boost (only entry already has Turbo) — boost skipped',
+            '[Challenge 101: Orchestrated] no entry can take the boost (every entry has Turbo or is pinned for Turbo) — boost skipped',
         );
     });
 

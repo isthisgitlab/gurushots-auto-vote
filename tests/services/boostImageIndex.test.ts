@@ -32,6 +32,8 @@ import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type * as autoFillModule from '../../src/ts/services/autoFill';
 import type { Challenge, RankingEntry } from '../../src/ts/types/gurushots';
+import type { CategoryLogger } from '../../src/ts/logger';
+import logger = require('../../src/ts/logger');
 import { invalid } from '../helpers/invalid';
 const { buildChallenge: buildBaseChallenge } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
@@ -241,15 +243,48 @@ describe('pickEntryAvoidingConflict helper (direct unit tests)', () => {
         expect(pickEntryAvoidingConflict(entries, 1, 'turbo')).toEqual({ id: 'c' });
     });
 
-    test('returns null when both primary slot and backward-fallback slot are conflicted', () => {
+    test('walks past every conflicted slot to the first free one', () => {
         const entries = [{ id: 'a', turbo: true }, { id: 'b' }, { id: 'c', turbo: true }];
-        // Slot 0 (entry 1) is turboed → wraps to slot 2 (entry 3) which is also turboed → null
+        // Slot 0 (entry 1) is turboed → wraps to slot 2 (entry 3), also turboed → slot 1 (entry 2). A real
+        // challenge holds at most one flag per feature; the walk is what lets a pinned photo be avoided as well.
+        expect(pickEntryAvoidingConflict(entries, 1, 'turbo')).toEqual({ id: 'b' });
+    });
+
+    test('returns null when every slot is conflicted', () => {
+        const entries = [
+            { id: 'a', turbo: true },
+            { id: 'b', turbo: true },
+        ];
         expect(pickEntryAvoidingConflict(entries, 1, 'turbo')).toBeNull();
     });
 
     test('single-entry challenge with that entry conflicted returns null', () => {
         expect(pickEntryAvoidingConflict([{ id: 'only', turbo: true }], 1, 'turbo')).toBeNull();
         expect(pickEntryAvoidingConflict([{ id: 'only', boosted: true }], 0, 'boosted')).toBeNull();
+    });
+});
+
+describe('applyBoost - a photo pinned for Turbo', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        apiClient.makePostRequest.mockResolvedValue({ success: true });
+        setBoostIndex(1);
+        settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'only' });
+    });
+    afterEach(() => settings.getEntryPins.mockReturnValue({ boost: null, turbo: null }));
+
+    test('a single pin-blocked entry sends nothing and tells the CLI user how to proceed', async () => {
+        await expect(applyBoost(buildChallenge([{ id: 'only' }]), 'tok')).resolves.toBeNull();
+        expect(apiClient.makePostRequest).not.toHaveBeenCalled();
+        const errors = jest
+            .mocked(logger.withCategory)
+            .mock.results.flatMap((r) => jest.mocked(r.value as CategoryLogger).error.mock.calls.map((c) => c[0]));
+        expect(errors).toEqual([expect.stringContaining('Pass an image id, or unpin the photo')]);
+    });
+
+    test('with a second entry the boost steps off the pinned photo', async () => {
+        await applyBoost(buildChallenge([{ id: 'only' }, { id: 'other' }]), 'tok');
+        expect(lastBoostedImageId()).toBe('other');
     });
 });
 

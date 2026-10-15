@@ -71,6 +71,7 @@ export function ChallengeCardCompact({
     hasCompactOverride,
     onToggleCompact,
     boostBlocked,
+    turboBlocked,
     deadlineActions,
     scenarioStatus,
     actions,
@@ -87,6 +88,7 @@ export function ChallengeCardCompact({
     hasCompactOverride: boolean;
     onToggleCompact: () => void | Promise<void>;
     boostBlocked: boolean;
+    turboBlocked: boolean;
     deadlineActions: DeadlineAction[];
     scenarioStatus: ReturnType<typeof useScenarioStatusModule.useScenarioStatus>;
     actions: ComponentChildren;
@@ -187,6 +189,11 @@ export function ChallengeCardCompact({
             {boostBlocked && (
                 <div className="text-xs text-warning line-clamp-2" role="alert">
                     ⚠ {t('app.boostConflictWarning')}
+                </div>
+            )}
+            {turboBlocked && (
+                <div className="text-xs text-warning line-clamp-2" role="alert">
+                    ⚠ {t('app.turboConflictWarning')}
                 </div>
             )}
 

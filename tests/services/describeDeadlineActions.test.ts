@@ -113,6 +113,33 @@ describe('describeDeadlineActions — row gating', () => {
         expect(result.boostBlocked).toBe(true);
     });
 
+    test('boost row suppressed when a pin for Turbo blocks the only entry', () => {
+        mockSettings({ autoBoost: true, keyUnlockedBoostTime: 900, emergencyFill: 0 });
+        settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
+        const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } });
+        const result = VotingLogic.describeDeadlineActions(challenge, NOW);
+        expect(result.actions.map((a) => a.action)).not.toContain('boost');
+        expect(result).toMatchObject({ boostBlocked: true, turboBlocked: false });
+    });
+
+    test('turbo row suppressed when a pin for Boost blocks the only entry', () => {
+        mockSettings({ useTurbo: true, emergencyFill: 0 });
+        settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
+        const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' } });
+        const result = VotingLogic.describeDeadlineActions(challenge, NOW);
+        expect(result.actions.map((a) => a.action)).not.toContain('turbo');
+        expect(result).toMatchObject({ boostBlocked: false, turboBlocked: true });
+    });
+
+    test('turbo is not blocked while a turbo is not held, or while an entry is free', () => {
+        mockSettings({ emergencyFill: 0 });
+        settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
+        const notHeld = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'NONE' } });
+        expect(VotingLogic.describeDeadlineActions(notHeld, NOW).turboBlocked).toBe(false);
+        const spare = build({ turbo: { state: 'WON' }, entries: [{ id: 'e1' }, { id: 'e2' }] });
+        expect(VotingLogic.describeDeadlineActions(spare, NOW).turboBlocked).toBe(false);
+    });
+
     test('autoFill row hidden when autoFill is off', () => {
         mockSettings({ autoFill: false });
         expect(actionsOf(build())).not.toContain('autoFill');
@@ -285,39 +312,39 @@ describe('resolveBoostFillNewMode', () => {
 
     test("'always' when boostFillNew is on, regardless of conflict", () => {
         mockSettings({ boostFillNew: true });
-        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('always');
-        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('always');
+        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42', NOW)).toBe('always');
+        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42', NOW)).toBe('always');
     });
 
     test("'no' while Manual Photos Only is on, whichever fill-new option is set", () => {
         mockSettings({ boostFillNew: true, boostFillNewOnConflict: true, manualPhotosOnly: true });
-        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('no');
-        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('no');
+        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42', NOW)).toBe('no');
+        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42', NOW)).toBe('no');
     });
 
     test("'conflict' when only boostFillNewOnConflict is on AND the sole entry is turboed", () => {
         mockSettings({ boostFillNewOnConflict: true });
-        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('conflict');
+        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42', NOW)).toBe('conflict');
     });
 
     test("'no' when boostFillNewOnConflict is on but there is no conflict", () => {
         mockSettings({ boostFillNewOnConflict: true });
-        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('no');
+        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42', NOW)).toBe('no');
     });
 
     test("'no' when boostFillNewOnConflict is on but there are no entries (not a conflict)", () => {
         mockSettings({ boostFillNewOnConflict: true });
         const empty = build({ entries: [], maxSubmits: 2 });
-        expect(VotingLogic.resolveBoostFillNewMode(empty, '42')).toBe('no');
+        expect(VotingLogic.resolveBoostFillNewMode(empty, '42', NOW)).toBe('no');
     });
 
     test("'no' when neither fill-new setting is on", () => {
         mockSettings();
-        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('no');
+        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42', NOW)).toBe('no');
     });
 
     test('boostFillNew takes precedence over on-conflict', () => {
         mockSettings({ boostFillNew: true, boostFillNewOnConflict: true });
-        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('always');
+        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42', NOW)).toBe('always');
     });
 });

@@ -4,6 +4,8 @@ export const logMessages = {
     m00a400fe1b87: 'Lai iztērētu uzpildi, palaid vēlreiz: fill-exposure --challenge={0} --yes',
     m00a78f312ea3: 'Boost nav pieejams',
     m01a2b02c3145: 'Boost izmantošanai izvēlētajam foto nav ID',
+    m01d04360b779:
+        'Neizdevās izmantot Boost — katram foto ir Turbo vai tas ir piesprausts Turbo (Boost un Turbo nevar būt vienam foto). Norādi foto ID vai noņem piespraudi',
     m023f74a53afc: 'Noraidīts openExternalUrl izsaukums URL bez HTTPS: {0}',
     m02544b9276d8: 'neizdevās ielādēt izaicinājumus',
     m0281e86079e7: 'setTitleRules noraidīts: noteikumu skaits {0} pārsniedz ierobežojumu {1}',
@@ -156,7 +158,6 @@ export const logMessages = {
     m3a0e8532ed26:
         'mergeTitlePins: sasniegts piesprausto nosaukumu ierobežojums {0} — izaicinājums {1} netiks piesprausts',
     m3a16ebc435c9: '  Laika josla: {0}',
-    m3a2793ba5c9f: '{0} Nevienam foto nevar izmantot Boost (vienīgajam foto jau ir Turbo) — Boost izlaists',
     m3a9d5c139fbf: '🔄 Ielādē aktīvos izaicinājumus',
     m3abf610fa77b: 'Nav piemērota foto, ko iesniegt izaicinājumā {0}. Monētas netika iekasētas.',
     m3b38c04119ef: 'Kļūda {0}:',
@@ -289,6 +290,7 @@ export const logMessages = {
     m6db86e0c6306: 'Nospied Ctrl+C, lai apturētu',
     m6de905385e30: 'Balsošana veiksmīgi pabeigta',
     m6e1f23ece4fd: 'Kļūda, atiestatot uzstādījumu "{0}"',
+    m6e42ae84d74f: 'Nevienam foto nevar izmantot Boost',
     m6ef8752f2541: '🔐 Autentificēšanās neizdevās',
     m70218b69341a: '🔐 Saņemts pieteikšanās pieprasījums — testa režīms: {0}, lietotājvārds: {1}',
     m707dcaed3e57: 'Iziešana apstiprināta, lai gan pienācis laiks izmantot Boost ({0})',
@@ -314,6 +316,8 @@ export const logMessages = {
     m7a9c24377032: 'Norādīts nederīgs laika zīmogs',
     m7b84a5a43ff4: '{0} Jauna foto iesniegšana Turbo izmantošanai: {1}',
     m7c1b039279a0: '⚠️ Nav foto manuālai balsošanai',
+    m7c8a6b6fc65b:
+        '{0} Nevar iesniegt jaunu foto Boost izmantošanai ({1}); nevienam foto nevar izmantot Boost — Boost izlaists',
     m7c925c2d5736: '  Pārbaudes biežums: {0}',
     m7d0ae87bd933: 'izlaižamās versijas migrācija neizdevās:',
     m7d3e94594cb5: 'Neizdevās ielādēt izaicinājumus manuālai balsošanai',
@@ -452,13 +456,13 @@ export const logMessages = {
     ma55da53ffbe9: '  (nav pieejams — {0})',
     ma60994855a5b: '❌ Nav atrasts pieteikšanās tokens balsošanai',
     ma630257923b5: 'stopForegroundService neizdevās',
-    ma6358d9930c1:
-        'Neizdevās izmantot Boost — tavam vienīgajam foto jau ir Turbo (Boost un Turbo nevar būt vienam foto)',
     ma65ff12b5dc3: '  Izaicinājums {0}:',
     ma66172fbf6a9: 'Ģenerēti vienas sesijas laikā nemainīgi balsošanas foto izaicinājumam {0}: {1}',
     ma74b7d44e5d6: 'Kļūda, apstrādājot get-member-challenges pieprasījumu:',
     ma7843a2f8271: 'Atsakās saglabāt entryIds izaicinājumam {0}: {1}',
     ma9133ae7775d: 'Profils nav atrasts: "{0}"',
+    maa2d3401e212:
+        '{0} Nevienam foto nevar izmantot Boost (katram foto ir Turbo vai tas ir piesprausts Turbo) — Boost izlaists',
     maad546889f09: 'Starpprocesu pievienošanās bloķēšana nav pieejama izaicinājumam {0}: {1}',
     mab0d071c4537: 'Tīra metadatus vairs neaktīviem izaicinājumiem ({0}):',
     mab1353939468:
@@ -581,8 +585,6 @@ export const logMessages = {
     md3ecc51d18dd: 'Kļūda, saglabājot uzstādījumus:',
     md40e1203cec9: '✅ Pievienojies izaicinājumam {0}.',
     md4271709ebbe: 'CLI modulis ielādēts, sāk inicializāciju',
-    md43778e90a8c:
-        '{0} Nevar iesniegt jaunu foto Boost izmantošanai ({1}); vienīgajam foto jau ir Turbo — Boost izlaists',
     md58389c8dc34: 'Paziņojumu cikls pirms termiņa neizdevās',
     md5b6bfa1bf6f: 'setTitleRules paredz masīvu',
     md5e4ff0306a8: 'Nākamais cikls pēc {0} min (mērķis: {1} min starp sākumiem; diapazons: {2}–{3})',

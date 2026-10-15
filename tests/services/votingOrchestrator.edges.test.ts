@@ -22,7 +22,7 @@ jest.mock('../../src/ts/services/VotingLogic', () => ({
     isWithinEmergencyWindow: jest.fn(() => false),
     isBoostDueForMission: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
-    pickBoostEntry: jest.fn(() => null),
+    pickBoostEntry: jest.fn(() => ({ id: 'e1' })),
     getBoostHoldUntil: jest.fn(() => null),
     shouldApplyTurbo: jest.fn(() => ({ apply: false })),
     getEffectiveBoostTime: jest.fn(() => 600),
@@ -115,7 +115,7 @@ beforeEach(() => {
     votingLogic.isWithinEmergencyWindow.mockReturnValue(false);
     votingLogic.isBoostDueForMission.mockReturnValue(false);
     votingLogic.resolveBoostFillNewMode.mockReturnValue('no');
-    votingLogic.pickBoostEntry.mockReturnValue(null);
+    votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1' }));
     votingLogic.resolvePin.mockReturnValue({ state: 'none' });
     votingLogic.pinFallbackOf.mockReturnValue(null);
     votingLogic.describePinFallback.mockReturnValue('');
@@ -346,6 +346,7 @@ describe('runBoost — fill-new fallbacks', () => {
 
     test('conflict mode with no fresh photo skips the boost entirely', async () => {
         votingLogic.resolveBoostFillNewMode.mockReturnValue('conflict');
+        votingLogic.pickBoostEntry.mockReturnValue(null);
         autoFill.submitNewEntryForAction.mockResolvedValue(invalid({ ok: false, reason: 'no-eligible' }));
         const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]);
         await run(api);
@@ -354,7 +355,53 @@ describe('runBoost — fill-new fallbacks', () => {
         expect(messages('info')).toEqual(
             expect.arrayContaining([
                 expect.stringContaining(
-                    'boost fill-new unavailable (no-eligible); only entry already has Turbo — boost skipped',
+                    'boost fill-new unavailable (no-eligible); no entry can take the boost — boost skipped',
+                ),
+            ]),
+        );
+    });
+
+    test('no entry can take the boost (every entry has Turbo or is pinned for Turbo): skipped, applyBoost never called', async () => {
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        const api = makeApi([
+            withBoost(
+                { state: 'AVAILABLE', timeout: NOW + 60 },
+                { member: { boost: { state: 'AVAILABLE', timeout: NOW + 60 }, ranking: { entries: [{ id: 'e1' }] } } },
+            ),
+        ]);
+        await run(api);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(log.startOperation).not.toHaveBeenCalledWith('boost-101', expect.anything());
+        expect(messages('info')).toEqual(
+            expect.arrayContaining([
+                expect.stringContaining(
+                    'no entry can take the boost (every entry has Turbo or is pinned for Turbo) — boost skipped',
+                ),
+            ]),
+        );
+    });
+
+    test('no entry at all: skipped as "no entry to boost yet"', async () => {
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]);
+        await run(api);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(messages('info')).toEqual(
+            expect.arrayContaining([expect.stringContaining('no entry to boost yet — boost skipped')]),
+        );
+    });
+
+    test('always mode with no fresh photo and no entry that can take the boost skips it', async () => {
+        votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        autoFill.submitNewEntryForAction.mockResolvedValue(invalid({ ok: false, reason: 'no-slots' }));
+        const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]);
+        await run(api);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(messages('info')).toEqual(
+            expect.arrayContaining([
+                expect.stringContaining(
+                    'boost fill-new unavailable (no-slots); no entry can take the boost — boost skipped',
                 ),
             ]),
         );
@@ -446,13 +493,12 @@ describe('runBoost — fresh-entry hold', () => {
         expect(entryAges.pending('101')).toBeNull();
     });
 
-    test('no target entry, or no ledger, never holds', async () => {
+    test('no ledger never holds', async () => {
         votingLogic.getBoostHoldUntil.mockReturnValue(NOW + 150);
         const api = makeApi([withEntries(['e1'])]);
-        await run(api, { entryAges: createMemoryEntryAgeLedger() });
         await run(api);
         expect(votingLogic.getBoostHoldUntil).not.toHaveBeenCalled();
-        expect(api.applyBoost).toHaveBeenCalledTimes(2);
+        expect(api.applyBoost).toHaveBeenCalledTimes(1);
     });
 });
 

@@ -14,7 +14,7 @@ import type { Challenge, SuccessResponse } from '../../types/gurushots';
  *
  * Boosts increase the visibility of your photo in a challenge.
  * Picks the entry via `boostImageIndex`, walking backward past any
- * turboed entry until a non-turboed one is found.
+ * turboed entry and the photo pinned for Turbo until a free one is found.
  *
  * @param challenge - Challenge object containing id and member data
  * @param token - Authentication token
@@ -28,13 +28,14 @@ const applyBoost = async (challenge: Challenge, token: string): Promise<SuccessR
         logger.withCategory('voting').error('No entries available for boosting', { challengeId });
         return null;
     }
-    const picked = pickBoostEntry(challenge, challengeId);
+    const picked = pickBoostEntry(challenge, challengeId, Math.floor(Date.now() / 1000));
     if (!picked) {
         logger
             .withCategory('voting')
-            .error("Couldn't apply Boost — your only entry already has Turbo (Boost and Turbo can't share an entry)", {
-                challengeId,
-            });
+            .error(
+                "Couldn't apply Boost — every entry has Turbo or is pinned for Turbo (Boost and Turbo can't share an entry). Pass an image id, or unpin the photo",
+                { challengeId },
+            );
         return null;
     }
     const boostImageId = picked.id;

@@ -117,7 +117,7 @@ Continuous mode rolls a random delay in `[checkFrequencyMin, checkFrequencyMax]`
 
 ### Boost
 
-When `autoBoost` is on, the app applies an available boost to the entry at `boostImageIndex` (1 = first photo, `0` = last; it steps back one slot if that entry is already turboed):
+When `autoBoost` is on, the app applies an available boost to the entry at `boostImageIndex` (1 = first photo, `0` = last; it steps back past an entry that already has Turbo and past the photo pinned for Turbo — a pin blocks Boost while Turbo can still fire, and gives way only once the boost is within `emergencyFill` seconds of its deadline with that Turbo still not won; with Emergency Submit off it never does). When no entry can take the boost it is skipped, or goes on a fresh photo with `boostFillNewOnConflict`:
 
 - **Timer-based boost** — applied once the boost has `boostTime` seconds or less left on its own timer.
 - **Key-unlocked boost** (no timer) — `boostTime` doesn't apply, because there is no timer to count down. It uses its own `keyUnlockedBoostTime` window (default 15 min) measured against the challenge's close time. Since a key-unlocked boost never expires, the default spends it as late as possible for maximum effect.
@@ -325,21 +325,22 @@ All of these support per-challenge overrides except where noted.
 | `autoBoost`              | `true`        | bool           | Auto-apply boost near the deadline.                                                                                                                                                                              |
 | `boostTime`              | `3600` s (1h) | ≥ 0            | Apply a timer-based boost when this much time (or less) remains **on the boost's own timer**. Entered as h+m in the GUI.                                                                                         |
 | `keyUnlockedBoostTime`   | `900` s (15m) | ≥ 0            | Separate window for a **key-unlocked** boost, which has no timer of its own — measured against the challenge close time. `boostTime` does not apply to these. `0` = never auto-apply. Entered as h+m in the GUI. |
-| `boostImageIndex`        | `1`           | `0`–`4`        | Entry slot to boost (1 = first, `0` = last; a challenge holds at most 4 entries). Steps back if that slot is already turboed.                                                                                    |
+| `boostImageIndex`        | `1`           | `0`–`4`        | Entry slot to boost (1 = first, `0` = last; a challenge holds at most 4 entries). Steps back past an entry that has Turbo or is pinned for Turbo.                                                                |
 | `boostFreshEntryWait`    | `180` s (3m)  | ≥ 0            | Hold a due boost until the photo it lands on has been in the challenge this long. Never holds past the boost's own deadline. `0` = boost straight away. Entered as h+m in the GUI.                               |
 | `boostOnSleep`           | `true`        | bool           | Desktop app: when the computer goes to sleep while auto-vote runs, send a boost due within 30 min right away (cutting short `boostFreshEntryWait`). `false` = keep it at its set time, even if that loses it.    |
 | `boostFillNew`           | `false`       | bool           | Submit a fresh photo and boost that new entry once `boostFreshEntryWait` has passed.                                                                                                                             |
-| `boostFillNewOnConflict` | `false`       | bool           | Submit a new photo and boost it only when your only entry already has Turbo (Boost cannot go there). With no free slot or eligible photo, Boost is skipped. Ignored when `boostFillNew` is on.                   |
+| `boostFillNewOnConflict` | `false`       | bool           | Submit a new photo and boost it only when every entry has Turbo or is pinned for Turbo (Boost cannot go there). With no free slot or eligible photo, Boost is skipped. Ignored when `boostFillNew` is on.        |
 
 **Turbo**
 
-| Setting           | Default       | Range / values | Description                                                                                                                   |
-| ----------------- | ------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `useTurbo`        | `false`       | bool           | Auto-apply a held turbo before the deadline.                                                                                  |
-| `autoTurbo`       | `true`        | bool           | Auto-play the mini-game to earn turbo when none is held.                                                                      |
-| `turboTime`       | `7200` s (2h) | ≥ 0            | Apply turbo when this much time (or less) remains. Entered as h+m in the GUI.                                                 |
-| `turboImageIndex` | `1`           | `0`–`4`        | Entry slot to turbo (1 = first, `0` = last; a challenge holds at most 4 entries). Steps back if that slot is already boosted. |
-| `turboFillNew`    | `false`       | bool           | Submit a fresh photo and immediately turbo that new entry.                                                                    |
+| Setting                  | Default       | Range / values | Description                                                                                                                                                                                               |
+| ------------------------ | ------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useTurbo`               | `false`       | bool           | Auto-apply a held turbo before the deadline.                                                                                                                                                              |
+| `autoTurbo`              | `true`        | bool           | Auto-play the mini-game to earn turbo when none is held.                                                                                                                                                  |
+| `turboTime`              | `7200` s (2h) | ≥ 0            | Apply turbo when this much time (or less) remains. Entered as h+m in the GUI.                                                                                                                             |
+| `turboImageIndex`        | `1`           | `0`–`4`        | Entry slot to turbo (1 = first, `0` = last; a challenge holds at most 4 entries). Steps back past an entry that has Boost or is pinned for Boost.                                                         |
+| `turboFillNew`           | `false`       | bool           | Submit a fresh photo and immediately turbo that new entry.                                                                                                                                                |
+| `turboFillNewOnConflict` | `false`       | bool           | Submit a new photo and turbo it only when every entry has Boost or is pinned for Boost (Turbo cannot go there). With no free slot or eligible photo, Turbo is skipped. Ignored when `turboFillNew` is on. |
 
 **Final window**
 

@@ -25,6 +25,26 @@ const isBoostWindowOpen = (boost: MemberBoost | null | undefined, now: number): 
 };
 
 /**
+ * The instant a boost stops being usable (Unix seconds): its own timeout for a
+ * timer-based boost (AVAILABLE with a positive timeout), else the challenge close.
+ */
+const boostDeadline = (challenge: Challenge | null | undefined): number => {
+    const boost = challenge?.member?.boost;
+    const timeout = boost?.timeout;
+    return boost?.state === 'AVAILABLE' && typeof timeout === 'number' && timeout > 0
+        ? timeout
+        : Number(challenge?.close_time);
+};
+
+/**
+ * Seconds to the boost timeout (timer-based) or the challenge end (key-unlocked).
+ *
+ * @param now - Current time (Unix seconds)
+ */
+const secondsToBoostDeadline = (challenge: Challenge | null | undefined, now: number): number =>
+    boostDeadline(challenge) - now;
+
+/**
  * Challenges whose boost window is open right now, as display entries sorted
  * soonest-expiring first. Shared by the CLI status view and the GUI banner.
  *
@@ -105,4 +125,4 @@ const boostApplyThreshold = (
     return { thresholdSec: -Infinity, branch: null };
 };
 
-export { isBoostWindowOpen, openBoostWindows, boostApplyThreshold };
+export { isBoostWindowOpen, boostDeadline, secondsToBoostDeadline, openBoostWindows, boostApplyThreshold };

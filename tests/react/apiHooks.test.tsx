@@ -190,7 +190,13 @@ describe('useDeadlineActions', () => {
         mockApi.getDeadlineActions.mockResolvedValueOnce(invalid({ success: true, actions: 'x', boostBlocked: true }));
         const { result } = renderHook(() => useDeadlineActions(challenge));
         await waitFor(() => expect(result.current.loading).toBe(false));
-        expect(result.current).toEqual({ actions: [], boostBlocked: true, loading: false, error: false });
+        expect(result.current).toEqual({
+            actions: [],
+            boostBlocked: true,
+            turboBlocked: false,
+            loading: false,
+            error: false,
+        });
     });
 
     test('an unsuccessful response sets error; a success passes actions through', async () => {
@@ -205,14 +211,26 @@ describe('useDeadlineActions', () => {
     });
 
     test('a new settingsVersion refetches with the same challenge content', async () => {
-        mockApi.getDeadlineActions.mockResolvedValueOnce({ success: true, actions: [], boostBlocked: false });
+        mockApi.getDeadlineActions.mockResolvedValueOnce({
+            success: true,
+            actions: [],
+            boostBlocked: false,
+            turboBlocked: false,
+            pinReleaseAt: null,
+        });
         const { result, rerender } = renderHook(({ v }) => useDeadlineActions(challenge, v), {
             initialProps: { v: 0 },
         });
         await waitFor(() => expect(result.current.loading).toBe(false));
         expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(1);
 
-        mockApi.getDeadlineActions.mockResolvedValueOnce({ success: true, actions: [], boostBlocked: true });
+        mockApi.getDeadlineActions.mockResolvedValueOnce({
+            success: true,
+            actions: [],
+            boostBlocked: true,
+            turboBlocked: false,
+            pinReleaseAt: null,
+        });
         rerender({ v: 1 });
         await waitFor(() => expect(result.current.boostBlocked).toBe(true));
         expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
@@ -220,6 +238,90 @@ describe('useDeadlineActions', () => {
         // A re-render with the same version and content does not refetch.
         rerender({ v: 1 });
         expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+    });
+
+    test('turboBlocked passes through from the response', async () => {
+        mockApi.getDeadlineActions.mockResolvedValueOnce({
+            success: true,
+            actions: [],
+            boostBlocked: false,
+            turboBlocked: true,
+            pinReleaseAt: null,
+        });
+        const { result } = renderHook(() => useDeadlineActions(challenge));
+        await waitFor(() => expect(result.current.turboBlocked).toBe(true));
+    });
+
+    test('refetches once when a blocking pin is due to give way, then stops', async () => {
+        jest.useFakeTimers();
+        try {
+            const releaseAt = Math.floor(Date.now() / 1000) + 60;
+            mockApi.getDeadlineActions.mockClear();
+            mockApi.getDeadlineActions.mockResolvedValueOnce({
+                success: true,
+                actions: [],
+                boostBlocked: true,
+                turboBlocked: false,
+                pinReleaseAt: releaseAt,
+            });
+            mockApi.getDeadlineActions.mockResolvedValueOnce({
+                success: true,
+                actions: [],
+                boostBlocked: false,
+                turboBlocked: false,
+                pinReleaseAt: null,
+            });
+            const { result } = renderHook(() => useDeadlineActions(challenge));
+            await waitFor(() => expect(result.current.boostBlocked).toBe(true));
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(1);
+
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(30_000);
+            });
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(1);
+
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(32_000);
+            });
+            await waitFor(() => expect(result.current.boostBlocked).toBe(false));
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(600_000);
+            });
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('a release instant already past, or too far for one timer, still arms a valid refetch', async () => {
+        jest.useFakeTimers();
+        try {
+            mockApi.getDeadlineActions.mockClear();
+            const answer = (pinReleaseAt: number | null) => ({
+                success: true as const,
+                actions: [],
+                boostBlocked: true,
+                turboBlocked: false,
+                pinReleaseAt,
+            });
+            mockApi.getDeadlineActions.mockResolvedValueOnce(answer(1));
+            mockApi.getDeadlineActions.mockResolvedValueOnce(answer(2 ** 40));
+            const { result } = renderHook(() => useDeadlineActions(challenge));
+            await waitFor(() => expect(result.current.boostBlocked).toBe(true));
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(1500);
+            });
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+            // The far instant waits out the longest single timer instead of firing at once.
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(60_000);
+            });
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     test('a rejection sets error; a late rejection after unmount is ignored', async () => {
@@ -244,7 +346,13 @@ describe('useDeadlineActions', () => {
             initialProps: { c: null as Challenge | null | undefined },
         });
         await waitFor(() => expect(result.current.loading).toBe(false));
-        expect(result.current).toEqual({ actions: [], boostBlocked: false, loading: false, error: false });
+        expect(result.current).toEqual({
+            actions: [],
+            boostBlocked: false,
+            turboBlocked: false,
+            loading: false,
+            error: false,
+        });
         rerender({ c: undefined });
         expect(mockApi.getDeadlineActions).not.toHaveBeenCalled();
     });

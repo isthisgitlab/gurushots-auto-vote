@@ -1,8 +1,7 @@
 /**
  * The photo pinned for Boost or Turbo on the decision layer: how a pin resolves
- * against the live entries, what it beats, how each feature's slot pick steers
- * clear of the other feature's live pin without ever stranding a spend, and the
- * deadline preview that reads the same pick.
+ * against the live entries, what it beats, how it blocks the other feature's
+ * spend (and when it gives way), and the deadline preview that reads the same pick.
  */
 
 jest.mock('../../src/ts/settings');
@@ -10,11 +9,13 @@ jest.mock('../../src/ts/settings');
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
+import type * as entryPickModule from '../../src/ts/services/decisions/entryPick';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type { Challenge, RankingEntry } from '../../src/ts/types/gurushots';
 import type { EntryPins } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
 const VotingLogic = require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule;
+const { pinReleaseAt } = require('../../src/ts/services/decisions/entryPick') as typeof entryPickModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const CLOSE = 1_000_000;
@@ -99,38 +100,38 @@ describe('pickBoostEntry with a pin', () => {
             [B, C, A],
             [A, C, B],
         ]) {
-            expect(VotingLogic.pickBoostEntry(build(order), '42')?.id).toBe('ccc');
+            expect(VotingLogic.pickBoostEntry(build(order), '42', NOW)?.id).toBe('ccc');
         }
     });
 
     test('a pin beats boostImageIndex', () => {
         setup({ boost: 'bbb' }, { boostImageIndex: 3 });
-        expect(VotingLogic.pickBoostEntry(build([A, B, C]), '42')?.id).toBe('bbb');
+        expect(VotingLogic.pickBoostEntry(build([A, B, C]), '42', NOW)?.id).toBe('bbb');
     });
 
     test('a gone pin falls back to the slot pick', () => {
         setup({ boost: 'zzz' }, { boostImageIndex: 2 });
-        expect(VotingLogic.pickBoostEntry(build([A, B, C]), '42')?.id).toBe('bbb');
+        expect(VotingLogic.pickBoostEntry(build([A, B, C]), '42', NOW)?.id).toBe('bbb');
     });
 
     test('a conflicting pin falls back to the slot pick', () => {
         setup({ boost: 'aaa' }, { boostImageIndex: 1 });
         const entries = [{ id: 'aaa', turbo: true }, B];
-        expect(VotingLogic.pickBoostEntry(build(entries), '42')?.id).toBe('bbb');
+        expect(VotingLogic.pickBoostEntry(build(entries), '42', NOW)?.id).toBe('bbb');
     });
 
     test('no entries is still null', () => {
         setup({ boost: 'aaa' });
-        expect(VotingLogic.pickBoostEntry(build([]), '42')).toBeNull();
+        expect(VotingLogic.pickBoostEntry(build([]), '42', NOW)).toBeNull();
     });
 
     test('null still means every candidate carries Turbo', () => {
         setup({ turbo: 'aaa' });
-        expect(VotingLogic.pickBoostEntry(build([{ id: 'aaa', turbo: true }]), '42')).toBeNull();
+        expect(VotingLogic.pickBoostEntry(build([{ id: 'aaa', turbo: true }]), '42', NOW)).toBeNull();
     });
 });
 
-describe('the slot pick avoids the other feature’s live pin', () => {
+describe('the slot pick avoids the photo the other feature is pinned to', () => {
     test('Turbo steers off the photo pinned for Boost (default turboImageIndex=1)', () => {
         setup({ boost: 'aaa' });
         const decision = VotingLogic.shouldApplyTurbo(build([A, B]), NOW);
@@ -139,7 +140,7 @@ describe('the slot pick avoids the other feature’s live pin', () => {
 
     test('Boost steers off the photo pinned for Turbo (default boostImageIndex=1)', () => {
         setup({ turbo: 'aaa' });
-        expect(VotingLogic.pickBoostEntry(build([A, B]), '42')?.id).toBe('bbb');
+        expect(VotingLogic.pickBoostEntry(build([A, B]), '42', NOW)?.id).toBe('bbb');
     });
 
     test('pickEntryAvoidingConflict walks past the flagged entry and the avoided photo', () => {
@@ -148,14 +149,14 @@ describe('the slot pick avoids the other feature’s live pin', () => {
         expect(VotingLogic.pickEntryAvoidingConflict(entries, 1, 'boosted')?.id).toBe('aaa');
     });
 
-    test('an avoided photo that leaves no candidate is dropped from the preference', () => {
-        expect(VotingLogic.pickEntryAvoidingConflict([A], 1, 'boosted', 'aaa')?.id).toBe('aaa');
-        expect(VotingLogic.pickEntryAvoidingConflict([A, { id: 'bbb', boosted: true }], 1, 'boosted', 'aaa')?.id).toBe(
-            'aaa',
-        );
+    test('an avoided photo with no other candidate leaves null — the pin is a hard exclusion', () => {
+        expect(VotingLogic.pickEntryAvoidingConflict([A], 1, 'boosted', 'aaa')).toBeNull();
+        expect(
+            VotingLogic.pickEntryAvoidingConflict([A, { id: 'bbb', boosted: true }], 1, 'boosted', 'aaa'),
+        ).toBeNull();
     });
 
-    test('null still means every candidate carries the flag, avoided photo or not', () => {
+    test('null also means every candidate carries the flag, avoided photo or not', () => {
         expect(VotingLogic.pickEntryAvoidingConflict([{ id: 'aaa', boosted: true }], 1, 'boosted', 'aaa')).toBeNull();
     });
 
@@ -169,37 +170,154 @@ describe('the slot pick avoids the other feature’s live pin', () => {
     });
 });
 
-describe('a pin never strands a spend', () => {
-    test('two entries, Boost pinned on A and spent on B: Turbo still lands on A', () => {
+describe('a live pin blocks the other feature’s spend', () => {
+    test('two entries, Boost pinned on A and spent on B: Turbo lands on A (the pin is inert once spent)', () => {
         setup({ boost: 'aaa' });
         const challenge = build([A, { id: 'bbb', boosted: true }], { boost: { state: 'USED' } });
         expect(VotingLogic.shouldApplyTurbo(challenge, NOW)).toMatchObject({ apply: true, imageId: 'aaa' });
     });
 
-    test('two entries, Turbo pinned on A and applied to B: Boost still lands on A', () => {
+    test('two entries, Turbo pinned on A and applied to B: Boost lands on A (the pin is inert once spent)', () => {
         setup({ turbo: 'aaa' });
         const challenge = build([A, { id: 'bbb', turbo: true }], { turbo: { state: 'USED' } });
-        expect(VotingLogic.pickBoostEntry(challenge, '42')?.id).toBe('aaa');
+        expect(VotingLogic.pickBoostEntry(challenge, '42', NOW)?.id).toBe('aaa');
     });
 
-    test('one entry with a Turbo pin and Turbo never won: Boost still lands on it', () => {
+    test('one entry with a Turbo pin and Turbo never won: Boost is blocked and resolves to a conflict', () => {
+        setup({ turbo: 'aaa' }, { boostFillNewOnConflict: true });
+        const challenge = build([A], { turbo: { state: 'LOCKED' } });
+        expect(VotingLogic.pickBoostEntry(challenge, '42', NOW)).toBeNull();
+        expect(VotingLogic.resolveBoostFillNewMode(challenge, '42', NOW)).toBe('conflict');
+    });
+
+    test('one entry with a Boost pin: Turbo is blocked and resolves to a conflict', () => {
+        setup({ boost: 'aaa' }, { turboFillNewOnConflict: true });
+        const challenge = build([A]);
+        expect(VotingLogic.pickTurboEntry(challenge, '42', NOW)).toBeNull();
+        expect(VotingLogic.resolveTurboFillNewMode(challenge, '42', NOW)).toBe('conflict');
+        expect(VotingLogic.shouldApplyTurbo(challenge, NOW)).toMatchObject({
+            apply: true,
+            fillNew: true,
+            imageId: null,
+            reason: 'eligible (fill-new on conflict)',
+        });
+    });
+
+    test('without the conflict option the blocked spend is a noop, never landing on the pinned photo', () => {
+        setup({ boost: 'aaa' });
+        expect(VotingLogic.shouldApplyTurbo(build([A]), NOW)).toMatchObject({
+            apply: false,
+            imageId: null,
+            reason: 'every entry has Boost or is pinned for Boost',
+        });
         setup({ turbo: 'aaa' });
         const challenge = build([A], { turbo: { state: 'LOCKED' } });
-        expect(VotingLogic.pickBoostEntry(challenge, '42')?.id).toBe('aaa');
+        expect(VotingLogic.pickBoostEntry(challenge, '42', NOW)).toBeNull();
+        expect(VotingLogic.resolveBoostFillNewMode(challenge, '42', NOW)).toBe('no');
     });
 
-    test('one entry with a Boost pin: Turbo still lands on it', () => {
+    test('Manual Photos Only never fills a fresh photo to resolve the conflict', () => {
+        setup({ turbo: 'aaa' }, { boostFillNewOnConflict: true, turboFillNewOnConflict: true, manualPhotosOnly: true });
+        expect(VotingLogic.resolveBoostFillNewMode(build([A], { turbo: { state: 'LOCKED' } }), '42', NOW)).toBe('no');
+        setup({ boost: 'aaa' }, { turboFillNewOnConflict: true, manualPhotosOnly: true });
+        expect(VotingLogic.resolveTurboFillNewMode(build([A]), '42', NOW)).toBe('no');
+    });
+
+    test('with a second entry the pick steps off the pinned photo', () => {
+        setup({ turbo: 'aaa' });
+        expect(VotingLogic.pickBoostEntry(build([A, B], { turbo: { state: 'LOCKED' } }), '42', NOW)?.id).toBe('bbb');
         setup({ boost: 'aaa' });
-        expect(VotingLogic.shouldApplyTurbo(build([A]), NOW)).toMatchObject({ apply: true, imageId: 'aaa' });
+        expect(VotingLogic.pickTurboEntry(build([A, B]), '42', NOW)?.id).toBe('bbb');
     });
 
-    test('the only entry already carrying the other flag is still a noop with its existing reason', () => {
+    test('a gone pin and a spent pin block nothing', () => {
+        setup({ turbo: 'zzz' });
+        expect(VotingLogic.pickBoostEntry(build([A]), '42', NOW)?.id).toBe('aaa');
+        setup({ turbo: 'aaa' });
+        expect(VotingLogic.pickBoostEntry(build([A], { turbo: { state: 'USED' } }), '42', NOW)?.id).toBe('aaa');
+        setup({ boost: 'zzz' });
+        expect(VotingLogic.pickTurboEntry(build([A]), '42', NOW)?.id).toBe('aaa');
+        setup({ boost: 'aaa' });
+        expect(VotingLogic.pickTurboEntry(build([A], { boost: { state: 'USED' } }), '42', NOW)?.id).toBe('aaa');
+    });
+
+    test('two entries pinned for different features each get their own', () => {
+        setup({ boost: 'aaa', turbo: 'bbb' });
+        const challenge = build([A, B]);
+        expect(VotingLogic.pickBoostEntry(challenge, '42', NOW)?.id).toBe('aaa');
+        expect(VotingLogic.pickTurboEntry(challenge, '42', NOW)?.id).toBe('bbb');
+    });
+
+    test('the only entry already carrying the other flag is a noop with the blocked-spend reason', () => {
         setup({ boost: 'aaa' });
         const challenge = build([{ id: 'aaa', boosted: true }]);
         expect(VotingLogic.shouldApplyTurbo(challenge, NOW)).toMatchObject({
             apply: false,
-            reason: 'only entry already has Boost applied',
+            reason: 'every entry has Boost or is pinned for Boost',
         });
+    });
+});
+
+describe('a blocking pin gives way at the buzzer', () => {
+    const turboNotWon = { turbo: { state: 'LOCKED' } };
+    const insideWindow = CLOSE - 100;
+    const outsideWindow = CLOSE - 1000;
+
+    test('Boost lands on the Turbo-pinned photo once inside Emergency Fill with Turbo not won', () => {
+        setup({ turbo: 'aaa' }, { emergencyFill: 300 });
+        const challenge = build([A], turboNotWon);
+        expect(VotingLogic.pickBoostEntry(challenge, '42', insideWindow)?.id).toBe('aaa');
+        expect(VotingLogic.pickBoostEntry(challenge, '42', outsideWindow)).toBeNull();
+    });
+
+    test('a ready pin (Turbo WON) keeps blocking inside the window', () => {
+        setup({ turbo: 'aaa' }, { emergencyFill: 300 });
+        expect(VotingLogic.pickBoostEntry(build([A]), '42', insideWindow)).toBeNull();
+    });
+
+    test('with Emergency Fill off the pin never gives way', () => {
+        setup({ turbo: 'aaa' }, { emergencyFill: 0 });
+        expect(VotingLogic.pickBoostEntry(build([A], turboNotWon), '42', CLOSE - 1)).toBeNull();
+        expect(pinReleaseAt(build([A], turboNotWon), '42', 'turbo', outsideWindow)).toBeNull();
+    });
+
+    test('a timer Boost releases by its own timeout, not the challenge close', () => {
+        setup({ turbo: 'aaa' }, { emergencyFill: 300 });
+        const timer = (timeout: number) => build([A], { boost: { state: 'AVAILABLE', timeout }, ...turboNotWon });
+        const timeout = CLOSE - 5000;
+        // 1000 s to the timeout: still blocked, though the challenge is far from over either way.
+        expect(VotingLogic.pickBoostEntry(timer(timeout), '42', timeout - 1000)).toBeNull();
+        // 200 s to the timeout: inside Emergency Fill although the close is 5200 s away.
+        expect(VotingLogic.pickBoostEntry(timer(timeout), '42', timeout - 200)?.id).toBe('aaa');
+        expect(pinReleaseAt(timer(timeout), '42', 'turbo', timeout - 1000)).toBe(timeout - 300);
+    });
+
+    test('Turbo lands on the Boost-pinned photo once inside Emergency Fill with Boost not ready', () => {
+        setup({ boost: 'aaa' }, { emergencyFill: 300 });
+        const boostLocked = { boost: { state: 'LOCKED' } };
+        expect(VotingLogic.pickTurboEntry(build([A], boostLocked), '42', insideWindow)?.id).toBe('aaa');
+        expect(VotingLogic.pickTurboEntry(build([A], boostLocked), '42', outsideWindow)).toBeNull();
+        expect(VotingLogic.shouldApplyTurbo(build([A], boostLocked), insideWindow, { emergency: true })).toMatchObject({
+            apply: true,
+            imageId: 'aaa',
+        });
+    });
+
+    test('a ready Boost pin (window open) keeps blocking Turbo inside the window', () => {
+        setup({ boost: 'aaa' }, { emergencyFill: 300 });
+        expect(VotingLogic.pickTurboEntry(build([A]), '42', insideWindow)).toBeNull();
+    });
+
+    test('pinReleaseAt names the instant it gives way, and nothing when nothing blocks or it never does', () => {
+        setup({ turbo: 'aaa' }, { emergencyFill: 300 });
+        const challenge = build([A], turboNotWon);
+        expect(pinReleaseAt(challenge, '42', 'turbo', outsideWindow)).toBe(CLOSE - 300);
+        // already released, no pin for the kind, a ready pin, a missing close time, a deadline already past
+        expect(pinReleaseAt(challenge, '42', 'turbo', insideWindow)).toBeNull();
+        expect(pinReleaseAt(challenge, '42', 'boost', outsideWindow)).toBeNull();
+        expect(pinReleaseAt(build([A]), '42', 'turbo', outsideWindow)).toBeNull();
+        expect(pinReleaseAt(invalid({ ...challenge, close_time: undefined }), '42', 'turbo', NOW)).toBeNull();
+        expect(pinReleaseAt(challenge, '42', 'turbo', CLOSE + 10)).toBeNull();
     });
 });
 
@@ -219,7 +337,7 @@ describe('a spent feature’s pin is inert', () => {
         ['Turbo already on an entry', {}, [A, { id: 'bbb', turbo: true }]],
     ])('Turbo pin: %s does not steer Boost', (_name, states, entries) => {
         setup({ turbo: 'aaa' });
-        expect(VotingLogic.pickBoostEntry(build(entries, states), '42')?.id).toBe('aaa');
+        expect(VotingLogic.pickBoostEntry(build(entries, states), '42', NOW)?.id).toBe('aaa');
     });
 
     test('livePinnedIds lists only the pins whose feature can still fire', () => {
@@ -261,14 +379,34 @@ describe('a pin for a feature that can never fire on the challenge protects noth
 describe('resolveBoostFillNewMode', () => {
     test('a usable pin makes it no, over both fill-new modes', () => {
         setup({ boost: 'aaa' }, { boostFillNew: true, boostFillNewOnConflict: true });
-        expect(VotingLogic.resolveBoostFillNewMode(build([A, B]), '42')).toBe('no');
+        expect(VotingLogic.resolveBoostFillNewMode(build([A, B]), '42', NOW)).toBe('no');
     });
 
     test('an unusable pin leaves the fill-new modes as they were', () => {
         setup({ boost: 'zzz' }, { boostFillNew: true });
-        expect(VotingLogic.resolveBoostFillNewMode(build([A]), '42')).toBe('always');
+        expect(VotingLogic.resolveBoostFillNewMode(build([A]), '42', NOW)).toBe('always');
         setup({ boost: 'zzz' }, { boostFillNewOnConflict: true });
-        expect(VotingLogic.resolveBoostFillNewMode(build([{ id: 'aaa', turbo: true }]), '42')).toBe('conflict');
+        expect(VotingLogic.resolveBoostFillNewMode(build([{ id: 'aaa', turbo: true }]), '42', NOW)).toBe('conflict');
+    });
+});
+
+describe('resolveTurboFillNewMode', () => {
+    test('a usable pin makes it no, over both fill-new modes', () => {
+        setup({ turbo: 'aaa' }, { turboFillNew: true, turboFillNewOnConflict: true });
+        expect(VotingLogic.resolveTurboFillNewMode(build([A, B]), '42', NOW)).toBe('no');
+    });
+
+    test('an unusable pin leaves the fill-new modes as they were', () => {
+        setup({ turbo: 'zzz' }, { turboFillNew: true });
+        expect(VotingLogic.resolveTurboFillNewMode(build([A]), '42', NOW)).toBe('always');
+        setup({ turbo: 'zzz' }, { turboFillNewOnConflict: true });
+        expect(VotingLogic.resolveTurboFillNewMode(build([{ id: 'aaa', boosted: true }]), '42', NOW)).toBe('conflict');
+    });
+
+    test('the on-conflict mode needs a conflict: a free entry, or no entries at all, is no', () => {
+        setup({}, { turboFillNewOnConflict: true });
+        expect(VotingLogic.resolveTurboFillNewMode(build([A]), '42', NOW)).toBe('no');
+        expect(VotingLogic.resolveTurboFillNewMode(build([]), '42', NOW)).toBe('no');
     });
 });
 
@@ -354,9 +492,31 @@ describe('describeDeadlineActions reads the pinned pick', () => {
         expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(true);
     });
 
-    test('a Turbo pin on the single entry does not block Boost', () => {
+    test('a Turbo pin on the single entry blocks Boost, and a Boost pin on it blocks Turbo', () => {
         setup({ turbo: 'aaa' });
+        const boostSide = build([A], { boost: open, turbo: { state: 'LOCKED' } });
+        expect(VotingLogic.describeDeadlineActions(boostSide, NOW)).toMatchObject({
+            boostBlocked: true,
+            turboBlocked: false,
+        });
+        setup({ boost: 'aaa' });
+        expect(VotingLogic.describeDeadlineActions(build([A], { boost: open }), NOW)).toMatchObject({
+            boostBlocked: false,
+            turboBlocked: true,
+        });
+    });
+
+    test('a free slot with the on-conflict option resolves the block', () => {
+        setup({ boost: 'aaa' }, { turboFillNewOnConflict: true });
+        expect(VotingLogic.describeDeadlineActions(build([A], { boost: open }), NOW).turboBlocked).toBe(false);
+    });
+
+    test('a block that gives way inside Emergency Fill reports the release instant', () => {
+        setup({ turbo: 'aaa' }, { emergencyFill: 300 });
         const challenge = build([A], { boost: open, turbo: { state: 'LOCKED' } });
-        expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(false);
+        const outside = VotingLogic.describeDeadlineActions(challenge, CLOSE - 1000);
+        expect(outside).toMatchObject({ boostBlocked: true, pinReleaseAt: CLOSE - 300 });
+        const inside = VotingLogic.describeDeadlineActions(challenge, CLOSE - 100);
+        expect(inside).toMatchObject({ boostBlocked: false, pinReleaseAt: null });
     });
 });

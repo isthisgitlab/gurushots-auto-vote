@@ -750,6 +750,8 @@ describe('entries, tags and alerts', () => {
             success: true,
             actions: [],
             boostBlocked: true,
+            turboBlocked: false,
+            pinReleaseAt: null,
         });
         rerender(
             <ChallengeCard
@@ -770,9 +772,45 @@ describe('entries, tags and alerts', () => {
     });
 
     test('shows the boost/turbo conflict warning from the deadline preview', async () => {
-        window.api.getDeadlineActions = jest.fn().mockResolvedValue({ success: true, actions: [], boostBlocked: true });
+        window.api.getDeadlineActions = jest.fn().mockResolvedValue({
+            success: true,
+            actions: [],
+            boostBlocked: true,
+            turboBlocked: false,
+            pinReleaseAt: null,
+        });
         renderCard(makeChallenge());
         await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('app.boostConflictWarning'));
+    });
+
+    test('shows the turbo conflict warning from the deadline preview', async () => {
+        window.api.getDeadlineActions = jest.fn().mockResolvedValue({
+            success: true,
+            actions: [],
+            boostBlocked: false,
+            turboBlocked: true,
+            pinReleaseAt: null,
+        });
+        renderCard(makeChallenge());
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('app.turboConflictWarning'));
+    });
+
+    test('the compact tile shows both conflict notes', async () => {
+        window.api.getEffectiveSetting = jest.fn(async (key) => key === 'compactCards');
+        window.api.getDeadlineActions = jest.fn().mockResolvedValue({
+            success: true,
+            actions: [],
+            boostBlocked: true,
+            turboBlocked: true,
+            pinReleaseAt: null,
+        });
+        renderCard(makeChallenge());
+        await waitFor(() =>
+            expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([
+                '⚠ app.boostConflictWarning',
+                '⚠ app.turboConflictWarning',
+            ]),
+        );
     });
 
     test('low exposure turns the border and exposure figure red; an open boost adds a ring', () => {

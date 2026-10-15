@@ -412,6 +412,7 @@ export function ChallengeCardDetail({
     hasCompactOverride,
     onToggleCompact,
     boostBlocked,
+    turboBlocked,
     deadlineActions,
     scenarioStatus,
     swapBacks,
@@ -429,6 +430,7 @@ export function ChallengeCardDetail({
     hasCompactOverride: boolean;
     onToggleCompact: () => void | Promise<void>;
     boostBlocked: boolean;
+    turboBlocked: boolean;
     deadlineActions: DeadlineAction[];
     scenarioStatus: ReturnType<typeof useScenarioStatusModule.useScenarioStatus>;
     swapBacks: SwapBackOffers;
@@ -499,12 +501,17 @@ export function ChallengeCardDetail({
                 />
             )}
 
-            {/* Boost/turbo conflict — a boost is available but the only entry
-                already has Turbo, so it can't be placed. The compact tile
-                shows the same state as a one-line note. */}
+            {/* Boost/turbo conflict — a boost (or won turbo) is available but every
+                entry has the other feature or is pinned for it, so it can't be
+                placed. The compact tile shows the same state as a one-line note. */}
             {boostBlocked && (
                 <div className="alert alert-warning py-2 text-xs" role="alert">
                     <span>{t('app.boostConflictWarning')}</span>
+                </div>
+            )}
+            {turboBlocked && (
+                <div className="alert alert-warning py-2 text-xs" role="alert">
+                    <span>{t('app.turboConflictWarning')}</span>
                 </div>
             )}
 

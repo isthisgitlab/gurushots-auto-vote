@@ -121,7 +121,7 @@ describe('shouldApplyTurbo entry selection', () => {
         const challenge = buildChallenge([{ id: 'e1', boosted: true }]);
         const result = VotingLogic.shouldApplyTurbo(challenge, now);
         expect(result.apply).toBe(false);
-        expect(result.reason).toBe('only entry already has Boost applied');
+        expect(result.reason).toBe('every entry has Boost or is pinned for Boost');
     });
 
     test('2-entry challenge with primary boosted wraps to entry 2 (the only other entry)', () => {

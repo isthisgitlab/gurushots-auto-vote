@@ -4,7 +4,7 @@ import * as votingLogic from '../VotingLogic';
 import * as autoFill from '../autoFill';
 import { formatDuration } from '../../format/duration';
 import { failureText, oneLine } from '../../format/logSafe';
-import { finiteOr } from '../../numbers';
+import { secondsToBoostDeadline } from '../../voting/boostWindow';
 import { consumeMission } from '../missions';
 import { buildFillDeps } from './context';
 
@@ -14,9 +14,7 @@ import type { VotingPassApi } from '../../types/votingPass';
 import type { EntryAgeLedger } from '../../types/stores';
 
 // `pinned`: the photo the user pinned for Boost, which counts as their confirmation of it.
-type BoostTarget = { imageId: string | null; fresh: boolean; pinned?: boolean };
-type SuspendBoostTarget = { imageId: string; fresh: boolean; pinned?: boolean };
-type BoostAvailability = ReturnType<typeof readBoostAvailability>;
+type BoostTarget = { imageId: string; fresh: boolean; pinned?: boolean };
 
 /** What a boost sent on device sleep came to. */
 export type SuspendBoostOutcome = 'applied' | 'unconfirmed' | 'skipped';
@@ -79,7 +77,7 @@ const logBoostTarget = (challenge: Challenge, message: string) => {
  * The photo pinned for Boost when it is usable. It beats a pending fill-new
  * photo and both fill-new modes, so it is the first thing a target resolves to.
  */
-const pinnedBoostTarget = (challenge: Challenge): (BoostTarget & { imageId: string }) | null => {
+const pinnedBoostTarget = (challenge: Challenge): BoostTarget | null => {
     const pin = votingLogic.resolvePin(challenge, challenge.id.toString(), 'boost');
     return pin.state === 'hit' ? { imageId: String(pin.entry.id), fresh: false, pinned: true } : null;
 };
@@ -93,12 +91,26 @@ const pendingBoostTarget = ({ challenge, entryAges }: ActionContext): BoostTarge
 };
 
 /**
- * The configured Boost Entry; its imageId is null when no entry can take a boost.
+ * The configured Boost Entry, or null when no entry can take a boost (none yet,
+ * or every entry has Turbo or is pinned for Turbo).
  */
-const existingBoostTarget = (challenge: Challenge): BoostTarget => ({
-    imageId: votingLogic.pickBoostEntry(challenge, challenge.id.toString())?.id ?? null,
-    fresh: false,
-});
+const existingBoostTarget = (challenge: Challenge, now: number): BoostTarget | null => {
+    const imageId = votingLogic.pickBoostEntry(challenge, challenge.id.toString(), now)?.id;
+    return imageId ? { imageId, fresh: false } : null;
+};
+
+/**
+ * Log why no entry can take the boost, so the boost is skipped rather than sent to fail.
+ */
+const logNoBoostEntry = (challenge: Challenge) => {
+    const entries = challenge?.member?.ranking?.entries;
+    logBoostTarget(
+        challenge,
+        Array.isArray(entries) && entries.length > 0
+            ? 'no entry can take the boost (every entry has Turbo or is pinned for Turbo) — boost skipped'
+            : 'no entry to boost yet — boost skipped',
+    );
+};
 
 /**
  * The entry a due boost lands on: the photo pinned for Boost; else the photo an earlier
@@ -106,19 +118,23 @@ const existingBoostTarget = (challenge: Challenge): BoostTarget => ({
  * submitted now (remembered as pending, so a held boost reuses it instead of submitting
  * another); else the configured Boost Entry.
  *
- * @returns null when
- *   fill-new found no valid target and the boost is skipped (already logged)
+ * @returns null when no valid target exists — fill-new found none, or no entry can take
+ *   the boost (every entry has Turbo or is pinned for Turbo) — and the boost is skipped (already logged)
  */
 const resolveBoostTarget = async (ctx: ActionContext): Promise<BoostTarget | null> => {
     const { challenge, token, now, fillDeps, entryAges } = ctx;
     const cid = challenge.id.toString();
     const named = pinnedBoostTarget(challenge) ?? pendingBoostTarget(ctx);
     if (named) return named;
-    const existing = () => existingBoostTarget(challenge);
-    // 'always' = boostFillNew; 'conflict' = boostFillNewOnConflict when
-    // the only existing entry is turboed; 'no' = boost an existing entry.
-    const fillMode = votingLogic.resolveBoostFillNewMode(challenge, cid);
-    if (fillMode === 'no') return existing();
+    const existing = () => existingBoostTarget(challenge, now);
+    // 'always' = boostFillNew; 'conflict' = boostFillNewOnConflict when every
+    // entry has Turbo or is pinned for Turbo; 'no' = boost an existing entry.
+    const fillMode = votingLogic.resolveBoostFillNewMode(challenge, cid, now);
+    if (fillMode === 'no') {
+        const target = existing();
+        if (!target) logNoBoostEntry(challenge);
+        return target;
+    }
     const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
     if (filled.ok) {
         // An ok fill always carries the submitted imageId.
@@ -133,20 +149,20 @@ const resolveBoostTarget = async (ctx: ActionContext): Promise<BoostTarget | nul
         logBoostTarget(challenge, 'challenge left the active list — boost skipped');
         return null;
     }
-    if (fillMode === 'conflict') {
-        // On-conflict mode only fires when the single existing entry is already
-        // turboed, so there is no valid fallback target — skip instead of an
-        // applyBoost that would fail with "only entry already has Turbo".
+    // 'always' mode falls back to the configured Boost Entry when no fresh
+    // photo can be submitted (full / none / failed). With none that can take
+    // the boost either — the only case in 'conflict' mode — the boost is skipped
+    // instead of an applyBoost that would only fail.
+    const fallback = existing();
+    if (!fallback) {
         logBoostTarget(
             challenge,
-            `boost fill-new unavailable (${filled.reason}); only entry already has Turbo — boost skipped`,
+            `boost fill-new unavailable (${filled.reason}); no entry can take the boost — boost skipped`,
         );
         return null;
     }
-    // 'always' mode falls back to the configured Boost Entry when no fresh
-    // photo can be submitted (full / none / failed).
     logBoostTarget(challenge, `boost fill-new unavailable (${filled.reason}); boosting existing entry`);
-    return existing();
+    return fallback;
 };
 
 /**
@@ -184,7 +200,7 @@ const applyAvailableBoost = async (
 
     try {
         const boostResult = target.fresh
-            ? await boostFreshEntry(ctx, challenge.id.toString(), target.imageId as string)
+            ? await boostFreshEntry(ctx, challenge.id.toString(), target.imageId)
             : await api.applyBoost(challenge, token);
         if (boostResult) {
             ctx.entryAges?.clearPending(challenge.id, ctx.now);
@@ -231,8 +247,8 @@ const logBoostNotReady = (
  * @param imageId - the entry the boost would land on
  * @returns the release instant, or null when the boost is not held
  */
-const freshEntryHoldUntil = ({ challenge, now, entryAges }: ActionContext, imageId: string | null): number | null => {
-    if (!imageId || !entryAges) return null;
+const freshEntryHoldUntil = ({ challenge, now, entryAges }: ActionContext, imageId: string): number | null => {
+    if (!entryAges) return null;
     return votingLogic.getBoostHoldUntil(challenge, entryAges.enteredAt(challenge.id, imageId), now);
 };
 
@@ -244,7 +260,7 @@ const freshEntryHoldUntil = ({ challenge, now, entryAges }: ActionContext, image
  * @param imageId - the entry the boost would land on
  * @returns true when the boost waits this pass
  */
-const holdBoostForFreshEntry = (ctx: ActionContext, imageId: string | null): boolean => {
+const holdBoostForFreshEntry = (ctx: ActionContext, imageId: string): boolean => {
     const holdUntil = freshEntryHoldUntil(ctx, imageId);
     if (holdUntil === null) return false;
     const { challenge, now } = ctx;
@@ -266,7 +282,6 @@ const holdBoostForFreshEntry = (ctx: ActionContext, imageId: string | null): boo
 const skipForUncertainPhoto = (ctx: ActionContext, target: BoostTarget, isTimerBasedAvailable: boolean): boolean => {
     const { challenge, now } = ctx;
     if (
-        !target.imageId ||
         target.pinned ||
         isTimerBasedAvailable ||
         votingLogic.isWithinEmergencyWindow(challenge, now) ||
@@ -279,19 +294,12 @@ const skipForUncertainPhoto = (ctx: ActionContext, target: BoostTarget, isTimerB
     return true;
 };
 
-/**
- * Seconds to the boost timeout (timer-based) or the challenge end (key-unlocked).
- */
-const secondsToBoostDeadline = (challenge: Challenge, now: number, availability: BoostAvailability): number =>
-    availability.isTimerBasedAvailable ? finiteOr(availability.boost.timeout, 0) - now : challenge.close_time - now;
-
 export const runBoost = async (ctx: ActionContext) => {
     const { challenge, now } = ctx;
     // Every pass, so an entry's first-seen time is as close to its real entry
     // time as the cadence allows — including entries this pass just reflected.
     ctx.entryAges?.observe(challenge, now);
-    const availability = readBoostAvailability(challenge);
-    const { isTimerBasedAvailable, isKeyUnlockedAvailable } = availability;
+    const { isTimerBasedAvailable, isKeyUnlockedAvailable } = readBoostAvailability(challenge);
     if (!isTimerBasedAvailable && !isKeyUnlockedAvailable) return;
 
     logger.withCategory('voting').info(`${logger.challengeTag(challenge)} Boost available`, null);
@@ -301,7 +309,7 @@ export const runBoost = async (ctx: ActionContext) => {
     // near the deadline even if autoBoost is off for this challenge.
     const shouldApplyBoost = votingLogic.shouldApplyBoost(challenge, now, { emergency: true });
     const effectiveBoostTime = votingLogic.getEffectiveBoostTime(challenge.id.toString());
-    const timeUntilDisplayBase = secondsToBoostDeadline(challenge, now, availability);
+    const timeUntilDisplayBase = secondsToBoostDeadline(challenge, now);
 
     if (!shouldApplyBoost) {
         // A "Use a boost" mission still needing one pulls an already-free boost forward.
@@ -334,32 +342,26 @@ export const runBoost = async (ctx: ActionContext) => {
  *
  * @returns null when no entry can take the boost (already logged)
  */
-const resolveSuspendBoostTarget = (ctx: ActionContext): SuspendBoostTarget | null => {
+const resolveSuspendBoostTarget = (ctx: ActionContext): BoostTarget | null => {
     const { challenge } = ctx;
     const pinned = pinnedBoostTarget(challenge);
     if (pinned) return pinned;
     const pending = pendingBoostTarget(ctx);
-    if (pending?.imageId) return { imageId: pending.imageId, fresh: true };
-    const { imageId, fresh } = existingBoostTarget(challenge);
-    if (!imageId) {
-        // Only reachable with no entry yet or every entry turboed (the conflict row
-        // describeDeadlineActions keeps); applyBoost would only fail.
-        const entries = challenge?.member?.ranking?.entries;
-        logBoostTarget(
-            challenge,
-            Array.isArray(entries) && entries.length > 0
-                ? 'no entry can take the boost (only entry already has Turbo) — boost skipped'
-                : 'no entry to boost yet — boost skipped',
-        );
+    if (pending) return pending;
+    const existing = existingBoostTarget(challenge, ctx.now);
+    if (!existing) {
+        // Only reachable with no entry yet or every entry turboed or pinned for Turbo (the
+        // conflict row describeDeadlineActions keeps); applyBoost would only fail.
+        logNoBoostEntry(challenge);
         return null;
     }
-    if (votingLogic.resolveBoostFillNewMode(challenge, challenge.id.toString()) !== 'no') {
+    if (votingLogic.resolveBoostFillNewMode(challenge, challenge.id.toString(), ctx.now) !== 'no') {
         logBoostTarget(
             challenge,
             'boost fill-new is on, but a new photo cannot be submitted before sleep; boosting existing entry',
         );
     }
-    return { imageId, fresh };
+    return existing;
 };
 
 /**
@@ -379,8 +381,7 @@ const resolveSuspendBoostTarget = (ctx: ActionContext): SuspendBoostTarget | nul
  */
 export const runSuspendBoost = async (ctx: ActionContext): Promise<SuspendBoostOutcome> => {
     const { challenge, now } = ctx;
-    const availability = readBoostAvailability(challenge);
-    const { isTimerBasedAvailable, isKeyUnlockedAvailable } = availability;
+    const { isTimerBasedAvailable, isKeyUnlockedAvailable } = readBoostAvailability(challenge);
     if (!isTimerBasedAvailable && !isKeyUnlockedAvailable) {
         logBoostTarget(challenge, 'boost no longer available — nothing to send before sleep');
         return 'skipped';
@@ -397,7 +398,7 @@ export const runSuspendBoost = async (ctx: ActionContext): Promise<SuspendBoostO
         ctx,
         target,
         isTimerBasedAvailable,
-        secondsToBoostDeadline(challenge, now, availability),
+        secondsToBoostDeadline(challenge, now),
     );
     return landed ? 'applied' : 'unconfirmed';
 };

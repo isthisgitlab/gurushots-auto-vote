@@ -398,13 +398,22 @@ describe('mock/index', () => {
             test('should apply boost successfully when available', async () => {
                 const challenge = invalid<Challenge>({
                     title: 'Test Challenge',
-                    member: { boost: { state: 'AVAILABLE' } },
+                    member: { boost: { state: 'AVAILABLE' }, ranking: { entries: [{ id: 'e1' }] } },
                 });
 
                 const result = await mockIndex.mockApiClient.applyBoost(challenge, 'test-token');
 
                 expect(result).toEqual(boost.mockBoostSuccess);
                 expect(logger.__mockApiFn).toHaveBeenCalledWith('Mock applyBoost', null);
+            });
+
+            test('fails without a boost when no entry can take it', async () => {
+                const challenge = invalid<Challenge>({
+                    title: 'Test Challenge',
+                    member: { boost: { state: 'AVAILABLE' }, ranking: { entries: [{ id: 'e1', turbo: true }] } },
+                });
+
+                await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).resolves.toBeNull();
             });
 
             test('should return error when boost already used', async () => {

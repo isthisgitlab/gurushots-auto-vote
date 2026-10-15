@@ -31,13 +31,21 @@ const applyBoost: typeof applyBoostModule.applyBoost = mockMethod(
     async (challenge) => {
         const boostState = challenge.member?.boost?.state;
         if (boostState === 'AVAILABLE' || boostState === 'AVAILABLE_KEY') {
+            // Mirror the real surface: resolve the same entry via the shared picker, fail
+            // when none can take the boost, and raise its conflict flag, so a turbo later
+            // in this same mock pass avoids it. Without this the "boost and turbo never
+            // share an entry" rule held only on the real surface and mock runs diverged.
+            const picked = votingLogic.pickBoostEntry(
+                challenge,
+                challenge.id?.toString?.() || '',
+                Math.floor(Date.now() / 1000),
+            );
+            if (!picked) {
+                logger.withCategory('voting').info('No entry can take the boost', null);
+                return null;
+            }
             logger.withCategory('voting').debug('Applying boost successfully', null);
-            // Mirror the real surface's side effect: resolve the same entry via the
-            // shared picker and raise its conflict flag, so a turbo later in this same
-            // mock pass avoids it. Without this the "boost and turbo never share an
-            // entry" rule held only on the real surface and mock runs diverged.
-            const picked = votingLogic.pickBoostEntry(challenge, challenge.id?.toString?.() || '');
-            if (picked) autoFill.reflectEntryFlag(challenge, picked.id, 'boosted');
+            autoFill.reflectEntryFlag(challenge, picked.id, 'boosted');
             return simulateApiResponse(boost.mockBoostSuccess, 1500);
         } else if (boostState === 'USED') {
             logger.withCategory('voting').info('Boost already used', null);

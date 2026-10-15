@@ -39,7 +39,7 @@ jest.mock('../../src/ts/services/VotingLogic', () => ({
     getEffectiveBoostTime: jest.fn(() => 3600),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
     shouldPlayAutoTurbo: jest.fn(() => false),
-    pickBoostEntry: jest.fn(() => null),
+    pickBoostEntry: jest.fn(() => ({ id: 'e1' })),
     getBoostHoldUntil: jest.fn(() => null),
     shouldApplyTurbo: jest.fn(() => ({ apply: false, imageId: null, fillNew: false, reason: 'noop' })),
     evaluateVotingDecision: jest.fn(() => ({ shouldVote: false })),
@@ -130,6 +130,8 @@ describe('fetchChallengesAndVote — boost fill-new', () => {
         getActiveChallenges.mockResolvedValue({ challenges: [challenge] });
         votingLogic.shouldApplyBoost.mockReturnValue(true);
         votingLogic.resolveBoostFillNewMode.mockReturnValue(mode);
+        // Conflict mode only resolves when no existing entry can take the boost.
+        votingLogic.pickBoostEntry.mockReturnValue(mode === 'conflict' ? null : { id: 'e1' });
         return challenge;
     };
 

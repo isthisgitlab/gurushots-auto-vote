@@ -61,7 +61,7 @@ describe('applyBoost guards', () => {
 
         await expect(applyBoost(invalid(challenge), 'tok')).resolves.toBeNull();
 
-        expect(pickBoostEntry).toHaveBeenCalledWith(challenge, '9');
+        expect(pickBoostEntry).toHaveBeenCalledWith(challenge, '9', expect.any(Number));
         expect(makePostRequest).not.toHaveBeenCalled();
         expect(scopedErrors()).toEqual([['Selected boost entry has no id', { challengeId: '9' }]]);
         expect(challenge.member.ranking.entries[0].boosted).toBeUndefined();

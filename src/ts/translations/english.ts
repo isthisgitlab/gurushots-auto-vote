@@ -193,7 +193,9 @@ export const app = {
     deadlineActionTurbo: 'Turbo',
     deadlineActionEmergencyFill: 'Emergency submit',
     boostConflictWarning:
-        "Boost can't apply: your only entry already has Turbo (they can't share an entry). Add a second entry to use both.",
+        "Boost can't apply: every entry has Turbo or is pinned for Turbo (they can't share an entry). Unpin the photo or add another entry to use both. A pin whose Turbo isn't won yet gives way once Boost is inside the Emergency Submit window; with Emergency Submit off it never does.",
+    turboConflictWarning:
+        "Turbo can't apply: every entry has Boost or is pinned for Boost (they can't share an entry). Unpin the photo or add another entry to use both. A pin whose Boost isn't ready yet gives way once Turbo is inside the Emergency Submit window; with Emergency Submit off it never does.",
     pinForBoost: 'Pin for Boost',
     pinForTurbo: 'Pin for Turbo',
     pinnedForBoost: 'Pinned for Boost',
@@ -276,22 +278,22 @@ export const app = {
         'Time-before-close at which an earned Turbo is applied. Set to 0 to turn timed Turbo apply off. Like the other time settings, 0 here means "off" — not "follow a trigger".',
     turboImageIndex: 'Turbo Entry',
     turboImageIndexDesc:
-        "Which entry gets Turbo: 1 = first, 2 = second, etc. Use 0 for the last entry. If Boost is already on that entry, Turbo moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry. A photo pinned on the challenge card takes precedence over this setting and over the other feature's entry slot.",
+        'Which entry gets Turbo: 1 = first, 2 = second, etc. Use 0 for the last entry. If Boost is already on that entry, or the photo is pinned for Boost, Turbo moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry. A photo pinned for Turbo on the challenge card takes precedence over this setting. A photo pinned for Boost never gets Turbo while its pin blocks: until Boost is ready, that holds until Turbo is inside the Emergency Submit window (never with Emergency Submit off).',
     boostImageIndex: 'Boost Entry',
     boostImageIndexDesc:
-        "Which entry gets Boost: 1 = first, 2 = second, etc. Use 0 for the last entry. If Turbo is already on that entry, Boost moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry. A photo pinned on the challenge card takes precedence over this setting and over the other feature's entry slot.",
+        'Which entry gets Boost: 1 = first, 2 = second, etc. Use 0 for the last entry. If Turbo is already on that entry, or the photo is pinned for Turbo, Boost moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry. A photo pinned for Boost on the challenge card takes precedence over this setting. A photo pinned for Turbo never gets Boost while its pin blocks: until Turbo is won, that holds until Boost is inside the Emergency Submit window (never with Emergency Submit off).',
     boostFillNew: 'Boost a Freshly Submitted Photo',
     boostFillNewDesc:
         'When on, this submits a new photo (using your Auto-Submit tag rules) just before boosting and boosts that new entry instead of an existing one. If there is no free slot or no eligible photo, it falls back to boosting your configured Boost Entry.',
     boostFillNewOnConflict: 'Boost a Freshly Submitted Photo Only on Conflict',
     boostFillNewOnConflictDesc:
-        'When on, a new photo is submitted and boosted only when your single existing entry already has Turbo on it (so Boost cannot go there). In the normal case Boost still goes to your existing entry. If there is no free slot or no eligible photo to submit, Boost is skipped this cycle — there is no fallback, since your only entry already has Turbo. Ignored when the option above is on, since that always submits a new photo.',
+        'When on, a new photo is submitted and boosted only when Boost cannot go on any existing entry — each has Turbo or is pinned for Turbo (a photo pinned for the other feature counts as a conflict). In the normal case Boost still goes to your existing entry. If there is no free slot or no eligible photo to submit, Boost is skipped this cycle — there is no fallback, since Boost never lands on an entry with Turbo or on the photo pinned for Turbo. Ignored when the option above is on, since that always submits a new photo.',
     turboFillNew: 'Turbo a Freshly Submitted Photo',
     turboFillNewDesc:
         'When on, this submits a new photo (using your Auto-Submit tag rules) just before applying Turbo and applies Turbo to that new entry instead of an existing one. If there is no free slot or no eligible photo, it falls back to your configured Turbo Entry; if you have no entry yet, Turbo is skipped this cycle.',
     turboFillNewOnConflict: 'Turbo a Freshly Submitted Photo Only on Conflict',
     turboFillNewOnConflictDesc:
-        'When on, a new photo is submitted and given Turbo only when your single existing entry already has Boost on it (so Turbo cannot go there). In the normal case Turbo still goes to your existing entry. If there is no free slot or no eligible photo to submit, Turbo is skipped this cycle — there is no fallback, since your only entry already has Boost. Ignored when the option above is on, since that always submits a new photo.',
+        'When on, a new photo is submitted and given Turbo only when Turbo cannot go on any existing entry — each has Boost or is pinned for Boost (a photo pinned for the other feature counts as a conflict). In the normal case Turbo still goes to your existing entry. If there is no free slot or no eligible photo to submit, Turbo is skipped this cycle — there is no fallback, since Turbo never lands on an entry with Boost or on the photo pinned for Boost. Ignored when the option above is on, since that always submits a new photo.',
     playAutoTurbo: 'Play the Turbo mini-game now to earn Turbo',
     autoTurboRunsWithAutovote: 'Auto-vote already plays the Turbo mini-game on each cycle',
     earnTurbo: 'Earn Turbo',

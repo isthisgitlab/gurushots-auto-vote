@@ -102,6 +102,27 @@ describe('imminentBoostChallenges with the real describeDeadlineActions', () => 
         expect(selectedIds()).toEqual([]);
     });
 
+    test('a boost blocked by the photo pinned for Turbo is not selected, and the sleep boost skips it', async () => {
+        mockSettings({ emergencyFill: 0 });
+        settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
+        const blocked = challenge(1);
+        quitGuard.rememberChallenges([blocked], false);
+        expect(selectedIds()).toEqual([]);
+
+        jest.mocked(logger.withCategory).mockImplementation(() => invalid({ info: jest.fn() }));
+        const api = { applyBoost: jest.fn(), applyBoostToEntry: jest.fn() };
+        const outcome = await runSuspendBoost({
+            challenge: blocked,
+            token: 'tok',
+            now: NOW,
+            api: invalid<VotingPassApi>(api),
+            fillDeps: invalid(null),
+            entryAges: null,
+        });
+        expect(outcome).toBe('skipped');
+        expect(api.applyBoost).not.toHaveBeenCalled();
+    });
+
     test('only the selectable challenge is picked out of a mixed list', () => {
         mockSettings();
         quitGuard.rememberChallenges(
@@ -150,7 +171,7 @@ describe('imminentBoostChallenges with the real describeDeadlineActions', () => 
         expect(api.applyBoost).not.toHaveBeenCalled();
         expect(api.applyBoostToEntry).not.toHaveBeenCalled();
         expect(info).toHaveBeenCalledWith(
-            '[Challenge 1: Challenge] no entry can take the boost (only entry already has Turbo) — boost skipped',
+            '[Challenge 1: Challenge] no entry can take the boost (every entry has Turbo or is pinned for Turbo) — boost skipped',
             null,
         );
     });

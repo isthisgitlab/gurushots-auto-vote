@@ -7,8 +7,7 @@ import type { Challenge } from '../../types/gurushots';
 import * as settings from '../../settings';
 import { isBoostWindowOpen as boostWindowOpen } from '../../voting/boostWindow';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
-import { livePinnedId, pickEntryAvoidingConflict, resolvePin } from './entryPick';
-import { isManualPhotosOnly } from '../manualPhotosOnly';
+import { isWithinEmergencyWindow, pickTurboEntry, resolvePin, resolveTurboFillNewMode } from './entryPick';
 
 interface TurboDecision {
     apply: boolean;
@@ -20,29 +19,6 @@ interface TurboDecision {
     /** A pin exists but is unusable, so the pick fell back to the slot rules. */
     pinFallback?: 'gone' | 'conflict';
 }
-
-/**
- * True when the per-challenge Emergency Fill window is enabled (> 0) and the
- * challenge is currently inside it (closing within that many seconds). Mirrors
- * the window check in autoFill.maybeEmergencyFillChallenge.
- *
- * Used by the boost/turbo APPLY paths so that at the buzzer an available boost
- * or won turbo gets used even when its own auto-apply toggle is off — an unused
- * boost/turbo on a closing challenge is simply wasted. Returns false (no
- * override) when Emergency Fill is disabled, so a user can opt out by setting it
- * to 0.
- * @param now - Unix timestamp in seconds
- */
-const isWithinEmergencyWindow = (challenge: Challenge, now: number): boolean => {
-    if (!challenge) return false;
-    const challengeId = challenge.id?.toString?.() || '';
-    const emergencySeconds = settings.getEffectiveSetting('emergencyFill', challengeId);
-    if (!Number.isFinite(emergencySeconds) || emergencySeconds <= 0) return false;
-    const closeTime = Number(challenge.close_time);
-    if (!Number.isFinite(closeTime)) return false;
-    const secondsRemaining = closeTime - now;
-    return secondsRemaining > 0 && secondsRemaining <= emergencySeconds;
-};
 
 /**
  * Check if boost should be applied to a challenge
@@ -216,7 +192,9 @@ const isTurboEarnSaved = (challenge: Challenge, now: number): boolean => {
  *
  * A usable pinned photo is the target and beats both fill-new modes; an unusable
  * pin (gone, or already boosted) falls back to the rules below and is reported
- * as `pinFallback`. The slot pick prefers an entry other than the photo pinned for Boost.
+ * as `pinFallback`. The slot pick never lands on the photo pinned for Boost while that
+ * pin blocks (pickTurboEntry); with every candidate taken, `turboFillNewOnConflict`
+ * submits a fresh photo, else the turbo is skipped.
  *
  * When `turboFillNew` is on the caller will submit a fresh photo and Turbo
  * that instead of an existing entry, so the "no entries" guard is relaxed
@@ -242,7 +220,7 @@ const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergenc
     //
     // Turbo does not wait for an open boost window: the two are independent, and
     // the only rule between them — never on the same entry — is enforced by the
-    // entry pick below (pickEntryAvoidingConflict).
+    // entry pick below (pickTurboEntry).
     const emergency = options.emergency === true && isWithinEmergencyWindow(challenge, now);
     if (!emergency && !settings.getEffectiveSetting('useTurbo', challengeId)) return noop('useTurbo disabled');
 
@@ -273,51 +251,37 @@ const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergenc
     const applyWith = (decision: TurboDecision): TurboDecision =>
         pinFallback ? { ...decision, pinFallback } : decision;
 
-    // Manual Photos Only turns both fresh-photo options off: the turbo goes on an entry already there.
-    const manualOnly = isManualPhotosOnly(settings, challengeId);
-    const fillNew = !manualOnly && settings.getEffectiveSetting('turboFillNew', challengeId) === true;
-    // Narrower opt-in: fill a fresh photo ONLY to break a boost/turbo conflict
-    // (the single existing entry already has Boost, so Turbo cannot go there).
-    // `turboFillNew` (always) takes precedence and is handled first below.
-    const fillNewOnConflict =
-        !manualOnly && settings.getEffectiveSetting('turboFillNewOnConflict', challengeId) === true;
-
-    // Resolve the existing-entry pick. With fill-new on it is only the
-    // fallback target (used when no fresh photo can be submitted), so an
-    // empty/conflicting entry list is fine — fill-new creates a new entry.
-    const entries = challenge.member?.ranking?.entries;
-    const hasEntries = Array.isArray(entries) && entries.length > 0;
-    const requestedIndex = settings.getEffectiveSetting('turboImageIndex', challengeId);
-    const picked = hasEntries
-        ? pickEntryAvoidingConflict(entries, requestedIndex, 'boosted', livePinnedId(challenge, challengeId, 'boost'))
-        : null;
+    // The pick and the fill-new mode (Manual Photos Only turns both fresh-photo options off) are
+    // shared with the deadline view, so the two never disagree on what a Turbo does.
+    const fillMode = resolveTurboFillNewMode(challenge, challengeId, now);
+    // With fill-new on, an existing entry is only the fallback target (used when no fresh photo can be
+    // submitted), so an empty/conflicting entry list is fine — fill-new creates a new entry.
+    const picked = pickTurboEntry(challenge, challengeId, now);
     const existingImageId = picked?.id || null;
 
-    if (fillNew) {
+    if (fillMode === 'always') {
         return applyWith({ apply: true, imageId: existingImageId, fillNew: true, reason: 'eligible (fill-new)' });
     }
 
-    if (!hasEntries) {
+    const entries = challenge.member?.ranking?.entries;
+    if (!Array.isArray(entries) || entries.length === 0) {
         return noop('no entries to apply turbo to');
     }
     if (!picked) {
-        // The invariant (≤1 boost per challenge) means picker-null is only
-        // reachable when entries.length === 1 and that entry has Boost.
-        if (fillNewOnConflict) {
-            // Submit and Turbo a fresh entry instead. imageId stays null: there
-            // is no safe fallback target (the only existing entry is boosted), so
-            // if the fresh submit can't happen the turbo runner skips this cycle
-            // rather than turboing the boosted entry.
+        // Every entry already has Boost or is pinned for Boost.
+        if (fillMode === 'conflict') {
+            // Submit and Turbo a fresh entry instead. imageId stays null: there is no
+            // safe fallback target, so if the fresh submit can't happen the turbo
+            // runner skips this cycle rather than turboing the boosted or pinned entry.
             return applyWith({ apply: true, imageId: null, fillNew: true, reason: 'eligible (fill-new on conflict)' });
         }
-        return noop('only entry already has Boost applied');
+        return noop('every entry has Boost or is pinned for Boost');
     }
     if (!existingImageId) return noop('selected entry has no id');
     return applyWith({ apply: true, imageId: existingImageId, fillNew: false, reason: 'eligible' });
 };
 
 export {
-    isWithinEmergencyWindow,
     shouldApplyBoost,
     getBoostHoldUntil,
     isBoostWindowOpen,

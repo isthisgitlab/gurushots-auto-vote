@@ -59,10 +59,10 @@ export function ChallengeCard({
 }) {
     const { hasCustomSettings, autoFillEnabled, manualPhotosOnly, isCompact, hasCompactOverride, toggleCompact } =
         useChallengeSettings(challenge.id, defaultCompact, settingsVersion);
-    // Advisory deadline-action preview + boost/turbo conflict flag (read-only,
+    // Advisory deadline-action preview + boost/turbo conflict flags (read-only,
     // computed main-side). Failure yields empty actions / false — the card just
     // renders without them, never an error surface.
-    const { actions: deadlineActions, boostBlocked } = useDeadlineActions(challenge, settingsVersion);
+    const { actions: deadlineActions, boostBlocked, turboBlocked } = useDeadlineActions(challenge, settingsVersion);
     const swapBacks = useSwapBacks(challenge);
     // Read once per card: the detailed layout toggles pins, the compact tile shows them.
     const entryPins = useEntryPins(challenge.id, settingsVersion);
@@ -128,6 +128,7 @@ export function ChallengeCard({
                 hasCompactOverride={hasCompactOverride}
                 onToggleCompact={toggleCompact}
                 boostBlocked={boostBlocked}
+                turboBlocked={turboBlocked}
                 deadlineActions={deadlineActions}
                 scenarioStatus={scenarioStatus}
                 actions={buildCompactActionRow({ actions, canFill: view.canFill, enabled: compactActions })}
@@ -146,6 +147,7 @@ export function ChallengeCard({
                 hasCompactOverride={hasCompactOverride}
                 onToggleCompact={toggleCompact}
                 boostBlocked={boostBlocked}
+                turboBlocked={turboBlocked}
                 deadlineActions={deadlineActions}
                 scenarioStatus={scenarioStatus}
                 swapBacks={swapBacks}

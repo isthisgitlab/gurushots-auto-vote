@@ -194,7 +194,9 @@ export const app = {
     deadlineActionTurbo: 'Turbo',
     deadlineActionEmergencyFill: 'Ārkārtas iesniegšana',
     boostConflictWarning:
-        'Boost nevar izmantot: tavam vienīgajam foto jau ir Turbo, bet abi nevar būt vienam foto. Pievieno otru foto, lai izmantotu abus.',
+        'Boost nevar izmantot: visiem foto ir Turbo vai tie ir piesprausti Turbo, bet abi nevar būt vienam foto. Noņem piespraudi vai pievieno vēl vienu foto, lai izmantotu abus. Piespraude, kuras Turbo vēl nav iegūts, atkāpjas, kad Boost nonāk ārkārtas iesniegšanas laikā; ja ārkārtas iesniegšana ir izslēgta, tā neatkāpjas nekad.',
+    turboConflictWarning:
+        'Turbo nevar izmantot: visiem foto ir Boost vai tie ir piesprausti Boost, bet abi nevar būt vienam foto. Noņem piespraudi vai pievieno vēl vienu foto, lai izmantotu abus. Piespraude, kuras Boost vēl nav pieejams, atkāpjas, kad Turbo nonāk ārkārtas iesniegšanas laikā; ja ārkārtas iesniegšana ir izslēgta, tā neatkāpjas nekad.',
     pinForBoost: 'Piespraust Boost',
     pinForTurbo: 'Piespraust Turbo',
     pinnedForBoost: 'Piesprausts Boost',
@@ -279,22 +281,22 @@ export const app = {
         'Laiks līdz beigām, kad lietotne izmanto iegūto Turbo. Uzstādi 0, lai izslēgtu Turbo izmantošanu pēc laika. Tāpat kā citos laika uzstādījumos, 0 šeit nozīmē „izslēgts”, nevis „sekot slieksnim”.',
     turboImageIndex: 'Turbo foto',
     turboImageIndexDesc:
-        'Kuram foto izmantot Turbo: 1 = pirmajam, 2 = otrajam utt. 0 = pēdējam foto. Ja šim foto jau ir Boost, Turbo pāriet uz iepriekšējo foto (no 1. pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusējuma vērtība ir 1, tāpēc, ja abi automātiskie režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto. Foto, kas piesprausts izaicinājuma kartītē, ir svarīgāks par šo uzstādījumu un par otras darbības foto izvēli.',
+        'Kuram foto izmantot Turbo: 1 = pirmajam, 2 = otrajam utt. 0 = pēdējam foto. Ja šim foto jau ir Boost vai tas ir piesprausts Boost, Turbo pāriet uz iepriekšējo foto (no 1. pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusējuma vērtība ir 1, tāpēc, ja abi automātiskie režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto. Foto, kas izaicinājuma kartītē piesprausts Turbo, ir svarīgāks par šo uzstādījumu. Foto, kas piesprausts Boost, Turbo nesaņem, kamēr piespraude bloķē: ja Boost vēl nav gatavs, tas ilgst, līdz Turbo nonāk ārkārtas iesniegšanas laikā (ja tā izslēgta, nekad nebeidzas).',
     boostImageIndex: 'Boost foto',
     boostImageIndexDesc:
-        'Kuram foto izmantot Boost: 1 = pirmajam, 2 = otrajam utt. 0 = pēdējam foto. Ja šim foto jau ir Turbo, Boost pāriet uz iepriekšējo foto (no 1. pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusējuma vērtība ir 1, tāpēc, ja abi automātiskie režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto. Foto, kas piesprausts izaicinājuma kartītē, ir svarīgāks par šo uzstādījumu un par otras darbības foto izvēli.',
+        'Kuram foto izmantot Boost: 1 = pirmajam, 2 = otrajam utt. 0 = pēdējam foto. Ja šim foto jau ir Turbo vai tas ir piesprausts Turbo, Boost pāriet uz iepriekšējo foto (no 1. pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusējuma vērtība ir 1, tāpēc, ja abi automātiskie režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto. Foto, kas izaicinājuma kartītē piesprausts Boost, ir svarīgāks par šo uzstādījumu. Foto, kas piesprausts Turbo, Boost nesaņem, kamēr piespraude bloķē: ja Turbo vēl nav iegūts, tas ilgst, līdz Boost nonāk ārkārtas iesniegšanas laikā (ja tā izslēgta, nekad nebeidzas).',
     boostFillNew: 'Boost jaunam iesniegtam foto',
     boostFillNewDesc:
         'Ja ieslēgts, lietotne tieši pirms Boost iesniedz jaunu foto (pēc taviem automātiskās iesniegšanas tagu noteikumiem) un izmanto Boost šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai piemērota foto, Boost saņem tavs norādītais Boost foto.',
     boostFillNewOnConflict: 'Boost jaunam iesniegtam foto tikai konflikta gadījumā',
     boostFillNewOnConflictDesc:
-        'Ja ieslēgts, lietotne iesniedz jaunu foto un izmanto tam Boost tikai tad, ja tavam vienīgajam esošajam foto jau ir Turbo (tāpēc Boost tam nevar piešķirt). Parasti Boost joprojām saņem tavs esošais foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Boost šajā ciklā izlaiž — rezerves varianta nav, jo tavam vienīgajam foto jau ir Turbo. Ja ieslēgta iepriekšējā opcija, šo neņem vērā, jo tā vienmēr iesniedz jaunu foto.',
+        'Ja ieslēgts, lietotne iesniedz jaunu foto un izmanto tam Boost tikai tad, ja Boost nevar piešķirt nevienam esošajam foto — katram ir Turbo vai tas ir piesprausts Turbo (otrai darbībai piesprausts foto ir konflikts). Parasti Boost joprojām saņem tavs esošais foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Boost šajā ciklā izlaiž — rezerves varianta nav, jo Boost nekad netiek piešķirts foto ar Turbo vai Turbo piespraustajam foto. Ja ieslēgta iepriekšējā opcija, šo neņem vērā, jo tā vienmēr iesniedz jaunu foto.',
     turboFillNew: 'Turbo jaunam iesniegtam foto',
     turboFillNewDesc:
         'Ja ieslēgts, lietotne tieši pirms Turbo iesniedz jaunu foto (pēc taviem automātiskās iesniegšanas tagu noteikumiem) un izmanto Turbo šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai piemērota foto, Turbo saņem tavs norādītais Turbo foto; ja vēl nav neviena foto, Turbo šajā ciklā izlaiž.',
     turboFillNewOnConflict: 'Turbo jaunam iesniegtam foto tikai konflikta gadījumā',
     turboFillNewOnConflictDesc:
-        'Ja ieslēgts, lietotne iesniedz jaunu foto un izmanto tam Turbo tikai tad, ja tavam vienīgajam esošajam foto jau ir Boost (tāpēc Turbo tam nevar piešķirt). Parasti Turbo joprojām saņem tavs esošais foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Turbo šajā ciklā izlaiž — rezerves varianta nav, jo tavam vienīgajam foto jau ir Boost. Ja ieslēgta iepriekšējā opcija, šo neņem vērā, jo tā vienmēr iesniedz jaunu foto.',
+        'Ja ieslēgts, lietotne iesniedz jaunu foto un izmanto tam Turbo tikai tad, ja Turbo nevar piešķirt nevienam esošajam foto — katram ir Boost vai tas ir piesprausts Boost (otrai darbībai piesprausts foto ir konflikts). Parasti Turbo joprojām saņem tavs esošais foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Turbo šajā ciklā izlaiž — rezerves varianta nav, jo Turbo nekad netiek piešķirts foto ar Boost vai Boost piespraustajam foto. Ja ieslēgta iepriekšējā opcija, šo neņem vērā, jo tā vienmēr iesniedz jaunu foto.',
     playAutoTurbo: 'Spēlēt Turbo minispēli, lai iegūtu Turbo',
     autoTurboRunsWithAutovote: 'Automātiskā balsošana jau spēlē Turbo minispēli katrā ciklā',
     earnTurbo: 'Iegūt Turbo',

@@ -138,8 +138,8 @@ describe('shouldApplyBoost', () => {
 
 describe('pickBoostEntry', () => {
     test('returns null when the challenge has no entries', () => {
-        expect(VotingLogic.pickBoostEntry(regular(), '42')).toBeNull();
-        expect(VotingLogic.pickBoostEntry(invalid({ member: {} }), '42')).toBeNull();
+        expect(VotingLogic.pickBoostEntry(regular(), '42', NOW)).toBeNull();
+        expect(VotingLogic.pickBoostEntry(invalid({ member: {} }), '42', NOW)).toBeNull();
     });
 });
 
