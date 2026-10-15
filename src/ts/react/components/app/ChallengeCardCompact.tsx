@@ -70,8 +70,8 @@ export function ChallengeCardCompact({
     pins,
     hasCompactOverride,
     onToggleCompact,
-    boostBlocked,
-    turboBlocked,
+    boostWarning,
+    turboWarning,
     deadlineActions,
     scenarioStatus,
     actions,
@@ -87,8 +87,8 @@ export function ChallengeCardCompact({
     pins: EntryPins;
     hasCompactOverride: boolean;
     onToggleCompact: () => void | Promise<void>;
-    boostBlocked: boolean;
-    turboBlocked: boolean;
+    boostWarning: string | null;
+    turboWarning: string | null;
     deadlineActions: DeadlineAction[];
     scenarioStatus: ReturnType<typeof useScenarioStatusModule.useScenarioStatus>;
     actions: ComponentChildren;
@@ -186,15 +186,14 @@ export function ChallengeCardCompact({
 
             {/* Boost/turbo conflict is state worth seeing even in the tile —
                 a one-line note instead of the detailed card's alert box. */}
-            {boostBlocked && (
-                <div className="text-xs text-warning line-clamp-2" role="alert">
-                    ⚠ {t('app.boostConflictWarning')}
-                </div>
-            )}
-            {turboBlocked && (
-                <div className="text-xs text-warning line-clamp-2" role="alert">
-                    ⚠ {t('app.turboConflictWarning')}
-                </div>
+            {[boostWarning, turboWarning].map(
+                (warning) =>
+                    warning && (
+                        // line-clamp-2 cuts a long sentence off; the title carries it whole.
+                        <div key={warning} className="text-xs text-warning line-clamp-2" role="alert" title={warning}>
+                            ⚠ {warning}
+                        </div>
+                    ),
             )}
 
             <DeadlineTimeline actions={deadlineActions} compact />

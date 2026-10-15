@@ -39,11 +39,25 @@ const buildHandlers = () =>
                     return { success: false as const, error: 'invalid challenge id' };
                 }
                 const now = Math.floor(Date.now() / 1000);
-                const { actions, boostBlocked, turboBlocked, pinReleaseAt } = votingLogic.describeDeadlineActions(
-                    challenge,
-                    now,
-                );
-                return { success: true as const, actions, boostBlocked, turboBlocked, pinReleaseAt };
+                const {
+                    actions,
+                    boostBlocked,
+                    turboBlocked,
+                    boostBlockedBy,
+                    turboBlockedBy,
+                    boostReleaseAt,
+                    turboReleaseAt,
+                } = votingLogic.describeDeadlineActions(challenge, now);
+                return {
+                    success: true as const,
+                    actions,
+                    boostBlocked,
+                    turboBlocked,
+                    boostBlockedBy,
+                    turboBlockedBy,
+                    boostReleaseAt,
+                    turboReleaseAt,
+                };
             } catch (error) {
                 logger.withCategory('voting').error('Error computing deadline actions:', error);
                 return { success: false as const, error: 'Failed to compute deadline actions' };

@@ -15,6 +15,8 @@ jest.mock('../../src/ts/services/VotingLogic', () => ({
     describePinFallback: jest.fn(() => ''),
     isWithinEmergencyWindow: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
+    pinReleaseAt: jest.fn<number | null, unknown[]>(() => null),
+    isBoostBlocked: jest.fn<boolean, unknown[]>(() => false),
     pickBoostEntry: jest.fn(() => null),
     getBoostHoldUntil: jest.fn(() => null),
 }));
@@ -97,6 +99,8 @@ beforeEach(() => {
     votingLogic.resolvePin.mockReturnValue({ state: 'none' });
     votingLogic.pinFallbackOf.mockReturnValue(null);
     votingLogic.getBoostHoldUntil.mockReturnValue(null);
+    votingLogic.pinReleaseAt.mockReturnValue(null);
+    votingLogic.isBoostBlocked.mockReturnValue(false);
     autoFill.submitNewEntryForAction.mockResolvedValue(invalid({ ok: false, reason: 'none' }));
 });
 
@@ -169,6 +173,7 @@ describe('runSuspendBoosts — target rule', () => {
     test('no usable entry (every entry has Turbo or is pinned for Turbo): skipped with a reason, applyBoost never called', async () => {
         votingLogic.resolveBoostFillNewMode.mockReturnValue('conflict');
         votingLogic.pickBoostEntry.mockReturnValue(null);
+        votingLogic.isBoostBlocked.mockReturnValue(true);
         const api = makeApi();
         expect(await run([timed()], api)).toEqual([{ status: 'fulfilled', value: 'skipped' }]);
         expect(api.applyBoost).not.toHaveBeenCalled();
@@ -176,6 +181,58 @@ describe('runSuspendBoosts — target rule', () => {
         expect(messages('info').join()).toContain(
             '[Challenge 101: Orchestrated] no entry can take the boost (every entry has Turbo or is pinned for Turbo) — boost skipped',
         );
+    });
+
+    test('a Turbo pin that gives way later: the boost takes the pick the release gives it and goes by id', async () => {
+        const release = NOW + 600;
+        votingLogic.pinReleaseAt.mockReturnValue(release);
+        votingLogic.isBoostBlocked.mockReturnValue(true);
+        // Blocked now; free once the pin has given way.
+        votingLogic.pickBoostEntry.mockImplementation((_challenge, _id, at) =>
+            invalid(at >= release ? { id: 'pinned' } : null),
+        );
+        const api = makeApi();
+        const challenge = timed();
+        expect(await run([challenge], api)).toEqual([{ status: 'fulfilled', value: 'applied' }]);
+        expect(votingLogic.pinReleaseAt).toHaveBeenCalledWith(challenge, '101', 'turbo', expect.any(Number));
+        // applyBoost would pick at the clock and find nothing, so the entry is named.
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(api.applyBoostToEntry).toHaveBeenCalledWith('101', 'pinned', 'tok');
+        expect(autoFill.reflectEntryFlag).toHaveBeenCalledWith(challenge, 'pinned', 'boosted');
+    });
+
+    test('a free entry now is boosted through applyBoost even when a pin will give way later', async () => {
+        votingLogic.pinReleaseAt.mockReturnValue(NOW + 600);
+        const api = makeApi();
+        expect(await run([timed()], api)).toEqual([{ status: 'fulfilled', value: 'applied' }]);
+        expect(api.applyBoost).toHaveBeenCalledTimes(1);
+        expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+    });
+
+    test('fill-new on with a free slot: the Turbo-pinned photo is not boosted early, though a release exists', async () => {
+        // Not blocked (a fresh photo would resolve it), so the deadline view keeps the row at the boost's own time.
+        votingLogic.isBoostBlocked.mockReturnValue(false);
+        votingLogic.resolveBoostFillNewMode.mockReturnValue('conflict');
+        votingLogic.pinReleaseAt.mockReturnValue(NOW + 3000);
+        votingLogic.pickBoostEntry.mockImplementation((_challenge, _id, at) =>
+            invalid(at >= NOW + 3000 ? { id: 'pinned' } : null),
+        );
+        const api = makeApi();
+        expect(await run([timed()], api)).toEqual([{ status: 'fulfilled', value: 'skipped' }]);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+        expect(messages('info').join()).toContain(
+            'every entry has Turbo or is pinned for Turbo, and a new photo cannot be submitted before sleep — boost skipped',
+        );
+    });
+
+    test('a pin that gives way to nothing usable is still skipped', async () => {
+        votingLogic.isBoostBlocked.mockReturnValue(true);
+        votingLogic.pinReleaseAt.mockReturnValue(NOW + 600);
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        const api = makeApi();
+        expect(await run([timed()], api)).toEqual([{ status: 'fulfilled', value: 'skipped' }]);
+        expect(api.applyBoostToEntry).not.toHaveBeenCalled();
     });
 
     test('no entry at all: skipped as "no entry to boost yet", not as a Turbo conflict', async () => {

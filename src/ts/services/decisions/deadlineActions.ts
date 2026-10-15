@@ -14,6 +14,7 @@ import { boostApplyThreshold } from '../../voting/boostWindow';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
 import { isBoostWindowOpen } from './boostTurbo';
 import {
+    livePinnedId,
     pickBoostEntry,
     pickTurboEntry,
     pinReleaseAt,
@@ -21,6 +22,15 @@ import {
     resolveTurboFillNewMode,
 } from './entryPick';
 import { isManualPhotosOnly } from '../manualPhotosOnly';
+
+const tieOrder: Record<string, number> = { autoFill: 0, emergencyFill: 1, boost: 2, turbo: 3 };
+
+/** Run order of two deadline actions: the larger threshold first, ties by `tieOrder`. */
+const compareDeadlineActions = (
+    a: { action: string; thresholdSec: number },
+    b: { action: string; thresholdSec: number },
+): number =>
+    b.thresholdSec !== a.thresholdSec ? b.thresholdSec - a.thresholdSec : tieOrder[a.action] - tieOrder[b.action];
 
 /**
  * Effective seconds-before-close at which the next auto-fill becomes due:
@@ -93,17 +103,46 @@ const orderDeadlineActions = (
     challenge: Challenge,
 ): Array<{ action: 'autoFill' | 'turbo' | 'emergencyFill' | 'boost'; thresholdSec: number }> => {
     const challengeId = challenge?.id?.toString?.() || '';
-    const tieOrder: Record<string, number> = { autoFill: 0, emergencyFill: 1, boost: 2, turbo: 3 };
     const actions: Array<{ action: 'autoFill' | 'turbo' | 'emergencyFill' | 'boost'; thresholdSec: number }> = [
         { action: 'autoFill', thresholdSec: getAutoFillThresholdSec(challenge, challengeId) },
         { action: 'turbo', thresholdSec: getEffectiveTurboTime(challengeId) },
         { action: 'emergencyFill', thresholdSec: getEmergencyFillThresholdSec(challengeId) },
         { action: 'boost', thresholdSec: getBoostThresholdSec(challenge, challengeId) },
     ];
-    return actions.sort((a, b) => {
-        if (b.thresholdSec !== a.thresholdSec) return b.thresholdSec - a.thresholdSec;
-        return tieOrder[a.action] - tieOrder[b.action];
-    });
+    return actions.sort(compareDeadlineActions);
+};
+
+/**
+ * The boost/turbo conflict flags, what blocks each, and when a blocking pin gives way.
+ */
+type Conflicts = {
+    boostBlocked: boolean;
+    turboBlocked: boolean;
+    /** `flag`: every entry carries the other feature; `pin`: the photo pinned for it is in the way. */
+    boostBlockedBy: 'flag' | 'pin' | null;
+    turboBlockedBy: 'flag' | 'pin' | null;
+    /** Unix seconds the blocking pin gives way; null when not blocked or the block never gives way. */
+    boostReleaseAt: number | null;
+    turboReleaseAt: number | null;
+};
+
+/**
+ * Whether a Boost is blocked at `now`: it is available to place, there is an entry to place it on,
+ * every candidate carries Turbo or is the photo pinned for Turbo, and no fill-new mode with a free
+ * slot resolves it. The deadline view and the sleep boost share this one rule.
+ *
+ * @param now - Unix timestamp in seconds
+ */
+const isBoostBlocked = (challenge: Challenge, challengeId: string, now: number): boolean => {
+    const entries = challenge?.member?.ranking?.entries;
+    const hasEntries = Array.isArray(entries) && entries.length >= 1;
+    const hasFreeSlot = getSlotsRemaining(challenge) > 0;
+    return (
+        isBoostWindowOpen(challenge, now) &&
+        hasEntries &&
+        pickBoostEntry(challenge, challengeId, now) === null &&
+        !(hasFreeSlot && resolveBoostFillNewMode(challenge, challengeId) !== 'no')
+    );
 };
 
 /**
@@ -127,41 +166,44 @@ const orderDeadlineActions = (
  * cycle) so the fill paths and this view can never disagree on "full".
  *
  * A pin blocks only until the blocked spend nears its deadline, and nothing else
- * the renderer fingerprints moves then — so the view carries the instant for it to
- * refetch at (`pinReleaseAt`, null when nothing blocked gives way).
+ * the renderer fingerprints moves then — so the view carries the instant for each
+ * block (`boostReleaseAt` / `turboReleaseAt`, null when the block never gives way).
+ * A block with no pin in it is a flag: the warning differs, because unpinning cannot help.
  *
  * @param now - Unix timestamp in seconds
  */
-const describeConflicts = (
-    challenge: Challenge,
-    challengeId: string,
-    now: number,
-): { boostBlocked: boolean; turboBlocked: boolean; pinReleaseAt: number | null } => {
+const describeConflicts = (challenge: Challenge, challengeId: string, now: number): Conflicts => {
     const entries = challenge?.member?.ranking?.entries;
     const hasEntries = Array.isArray(entries) && entries.length >= 1;
     const hasFreeSlot = getSlotsRemaining(challenge) > 0;
-    const boostBlocked =
-        isBoostWindowOpen(challenge, now) &&
-        hasEntries &&
-        pickBoostEntry(challenge, challengeId, now) === null &&
-        !(hasFreeSlot && resolveBoostFillNewMode(challenge, challengeId, now) !== 'no');
+    const boostBlocked = isBoostBlocked(challenge, challengeId, now);
     const turboBlocked =
         challenge?.member?.turbo?.state === 'WON' &&
         hasEntries &&
         pickTurboEntry(challenge, challengeId, now) === null &&
-        !(hasFreeSlot && resolveTurboFillNewMode(challenge, challengeId, now) !== 'no');
-    const releases = [
-        boostBlocked ? pinReleaseAt(challenge, challengeId, 'turbo', now) : null,
-        turboBlocked ? pinReleaseAt(challenge, challengeId, 'boost', now) : null,
-    ].filter((at): at is number => at !== null);
-    return { boostBlocked, turboBlocked, pinReleaseAt: releases.length > 0 ? Math.min(...releases) : null };
+        !(hasFreeSlot && resolveTurboFillNewMode(challenge, challengeId) !== 'no');
+    // A Boost is blocked by the photo pinned for Turbo, and a Turbo by the one pinned for Boost.
+    const causeOf = (blocked: boolean, blocker: 'boost' | 'turbo') =>
+        blocked
+            ? livePinnedId(challenge, challengeId, blocker) !== null
+                ? ('pin' as const)
+                : ('flag' as const)
+            : null;
+    return {
+        boostBlocked,
+        turboBlocked,
+        boostBlockedBy: causeOf(boostBlocked, 'turbo'),
+        turboBlockedBy: causeOf(turboBlocked, 'boost'),
+        boostReleaseAt: boostBlocked ? pinReleaseAt(challenge, challengeId, 'turbo', now) : null,
+        turboReleaseAt: turboBlocked ? pinReleaseAt(challenge, challengeId, 'boost', now) : null,
+    };
 };
 
 /**
  * Read-only, renderer-facing description of a challenge's upcoming deadline
  * actions: the ordered actions that will ACTUALLY fire (gated on the same
  * conditions the runner uses, not merely on a positive threshold) plus each
- * one's absolute due instant, the boost/turbo conflict flags, and when a blocking pin gives way.
+ * one's absolute due instant, the boost/turbo conflict flags (and their cause), and when a blocking pin gives way.
  *
  * Gating matters because several threshold getters stay positive even when the
  * feature is off or the resource isn't held:
@@ -189,12 +231,7 @@ const describeConflicts = (
 const describeDeadlineActions = (
     challenge: Challenge,
     now: number,
-): {
-    actions: Array<{ action: string; thresholdSec: number; dueAt: number | null }>;
-    boostBlocked: boolean;
-    turboBlocked: boolean;
-    pinReleaseAt: number | null;
-} => {
+): { actions: Array<{ action: string; thresholdSec: number; dueAt: number | null }> } & Conflicts => {
     const challengeId = challenge?.id?.toString?.() || '';
     const closeTime = Number(challenge?.close_time);
     const boost = challenge?.member?.boost || {};
@@ -203,7 +240,10 @@ const describeDeadlineActions = (
     const turboState = challenge?.member?.turbo?.state;
 
     const conflicts = describeConflicts(challenge, challengeId, now);
-    const { boostBlocked, turboBlocked } = conflicts;
+    const { boostBlocked, turboBlocked, boostReleaseAt, turboReleaseAt } = conflicts;
+    // A blocked spend whose pin will give way is still coming, just later: its row stays.
+    const boostRowHidden = boostBlocked && boostReleaseAt === null;
+    const turboRowHidden = turboBlocked && turboReleaseAt === null;
 
     const isVisible = (action: string, thresholdSec: number): boolean => {
         if (!Number.isFinite(thresholdSec) || thresholdSec <= 0) return false;
@@ -213,14 +253,14 @@ const describeDeadlineActions = (
                 return (
                     turboState === 'WON' &&
                     settings.getEffectiveSetting('useTurbo', challengeId) === true &&
-                    !turboBlocked
+                    !turboRowHidden
                 );
             case 'boost':
                 if (settings.getEffectiveSetting('autoBoost', challengeId) !== true) return false;
                 // A boost that can't be placed (every entry turboed or pinned for
-                // Turbo) must not appear as an upcoming action — the conflict
-                // warning owns it.
-                if (boostBlocked) return false;
+                // Turbo, the pin never giving way) must not appear as an upcoming
+                // action — the conflict warning owns it.
+                if (boostRowHidden) return false;
                 // Timer branch stays positive at boostTime=0 (off); key-unlocked
                 // branch already resolves to 0 when off and is dropped above.
                 if (boostTimerBranch && !(getEffectiveBoostTime(challengeId) > 0)) return false;
@@ -249,13 +289,22 @@ const describeDeadlineActions = (
 
     const actions = orderDeadlineActions(challenge)
         .filter(({ action, thresholdSec }) => isVisible(action, thresholdSec))
-        .map(({ action, thresholdSec }) => ({
-            action,
-            thresholdSec,
-            dueAt: Number.isFinite(closeTime) ? closeTime - thresholdSec : null,
-        }));
+        .map(({ action, thresholdSec }) => {
+            const dueAt = Number.isFinite(closeTime) ? closeTime - thresholdSec : null;
+            const releaseAt = action === 'boost' ? boostReleaseAt : action === 'turbo' ? turboReleaseAt : null;
+            // A held-back spend is due once its pin has given way, if that is later than its own time.
+            return releaseAt === null || dueAt === null
+                ? { action, thresholdSec, dueAt }
+                : {
+                      action,
+                      thresholdSec: Math.min(thresholdSec, closeTime - releaseAt),
+                      dueAt: Math.max(dueAt, releaseAt),
+                  };
+        })
+        // A moved row can now sit out of order; order it by its adjusted threshold.
+        .sort(compareDeadlineActions);
 
     return { actions, ...conflicts };
 };
 
-export { getAutoFillThresholdSec, getBoostThresholdSec, orderDeadlineActions, describeDeadlineActions };
+export { getAutoFillThresholdSec, getBoostThresholdSec, isBoostBlocked, orderDeadlineActions, describeDeadlineActions };

@@ -193,8 +193,9 @@ const isTurboEarnSaved = (challenge: Challenge, now: number): boolean => {
  * A usable pinned photo is the target and beats both fill-new modes; an unusable
  * pin (gone, or already boosted) falls back to the rules below and is reported
  * as `pinFallback`. The slot pick never lands on the photo pinned for Boost while that
- * pin blocks (pickTurboEntry); with every candidate taken, `turboFillNewOnConflict`
- * submits a fresh photo, else the turbo is skipped.
+ * pin is live (pickTurboEntry); with every candidate taken, `turboFillNewOnConflict`
+ * submits a fresh photo, else the turbo is skipped. Once that pin has given way, a fresh photo is
+ * still preferred and the pinned one is the target only when nothing else can take the turbo.
  *
  * When `turboFillNew` is on the caller will submit a fresh photo and Turbo
  * that instead of an existing entry, so the "no entries" guard is relaxed
@@ -253,7 +254,7 @@ const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergenc
 
     // The pick and the fill-new mode (Manual Photos Only turns both fresh-photo options off) are
     // shared with the deadline view, so the two never disagree on what a Turbo does.
-    const fillMode = resolveTurboFillNewMode(challenge, challengeId, now);
+    const fillMode = resolveTurboFillNewMode(challenge, challengeId);
     // With fill-new on, an existing entry is only the fallback target (used when no fresh photo can be
     // submitted), so an empty/conflicting entry list is fine — fill-new creates a new entry.
     const picked = pickTurboEntry(challenge, challengeId, now);
@@ -262,21 +263,24 @@ const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergenc
     if (fillMode === 'always') {
         return applyWith({ apply: true, imageId: existingImageId, fillNew: true, reason: 'eligible (fill-new)' });
     }
+    if (fillMode === 'conflict') {
+        // Every entry has Boost or is pinned for Boost: submit and Turbo a fresh entry instead. The
+        // fallback target is the photo pinned for Boost once that pin has given way, else null — then
+        // there is no safe one, and if the fresh submit can't happen the turbo runner skips this cycle
+        // rather than turboing the boosted or pinned entry.
+        return applyWith({
+            apply: true,
+            imageId: existingImageId,
+            fillNew: true,
+            reason: 'eligible (fill-new on conflict)',
+        });
+    }
 
     const entries = challenge.member?.ranking?.entries;
     if (!Array.isArray(entries) || entries.length === 0) {
         return noop('no entries to apply turbo to');
     }
-    if (!picked) {
-        // Every entry already has Boost or is pinned for Boost.
-        if (fillMode === 'conflict') {
-            // Submit and Turbo a fresh entry instead. imageId stays null: there is no
-            // safe fallback target, so if the fresh submit can't happen the turbo
-            // runner skips this cycle rather than turboing the boosted or pinned entry.
-            return applyWith({ apply: true, imageId: null, fillNew: true, reason: 'eligible (fill-new on conflict)' });
-        }
-        return noop('every entry has Boost or is pinned for Boost');
-    }
+    if (!picked) return noop('every entry has Boost or is pinned for Boost');
     if (!existingImageId) return noop('selected entry has no id');
     return applyWith({ apply: true, imageId: existingImageId, fillNew: false, reason: 'eligible' });
 };

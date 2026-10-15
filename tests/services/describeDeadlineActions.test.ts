@@ -110,7 +110,7 @@ describe('describeDeadlineActions — row gating', () => {
         const result = VotingLogic.describeDeadlineActions(challenge, NOW);
         // The conflict owns this case — the timeline must not also show a boost row.
         expect(result.actions.map((a) => a.action)).not.toContain('boost');
-        expect(result.boostBlocked).toBe(true);
+        expect(result).toMatchObject({ boostBlocked: true, boostBlockedBy: 'flag', boostReleaseAt: null });
     });
 
     test('boost row suppressed when a pin for Turbo blocks the only entry', () => {
@@ -119,7 +119,13 @@ describe('describeDeadlineActions — row gating', () => {
         const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } });
         const result = VotingLogic.describeDeadlineActions(challenge, NOW);
         expect(result.actions.map((a) => a.action)).not.toContain('boost');
-        expect(result).toMatchObject({ boostBlocked: true, turboBlocked: false });
+        expect(result).toMatchObject({
+            boostBlocked: true,
+            turboBlocked: false,
+            boostBlockedBy: 'pin',
+            turboBlockedBy: null,
+            boostReleaseAt: null,
+        });
     });
 
     test('turbo row suppressed when a pin for Boost blocks the only entry', () => {
@@ -128,7 +134,102 @@ describe('describeDeadlineActions — row gating', () => {
         const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' } });
         const result = VotingLogic.describeDeadlineActions(challenge, NOW);
         expect(result.actions.map((a) => a.action)).not.toContain('turbo');
-        expect(result).toMatchObject({ boostBlocked: false, turboBlocked: true });
+        expect(result).toMatchObject({
+            boostBlocked: false,
+            turboBlocked: true,
+            turboBlockedBy: 'pin',
+            turboReleaseAt: null,
+        });
+    });
+
+    test('a Turbo blocked by a boosted sole entry is blocked by a flag', () => {
+        mockSettings({ useTurbo: true });
+        const challenge = build({
+            boost: { state: 'USED' },
+            turbo: { state: 'WON' },
+            entries: [{ id: 'e1', boosted: true }],
+        });
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW)).toMatchObject({
+            turboBlocked: true,
+            turboBlockedBy: 'flag',
+            turboReleaseAt: null,
+        });
+    });
+
+    describe('a block whose pin is due to give way keeps its row, due at the release', () => {
+        const FAR = CLOSE - 5000;
+        const rowOf = (challenge: Challenge, action: string) =>
+            VotingLogic.describeDeadlineActions(challenge, FAR).actions.find((a) => a.action === action);
+
+        test('a key-unlocked Boost blocked by a Turbo pin is due at the release, later than its own time', () => {
+            mockSettings({ keyUnlockedBoostTime: 900, emergencyFill: 300 });
+            settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
+            const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } });
+            expect(VotingLogic.describeDeadlineActions(challenge, FAR)).toMatchObject({
+                boostBlocked: true,
+                boostBlockedBy: 'pin',
+                boostReleaseAt: CLOSE - 300,
+            });
+            expect(rowOf(challenge, 'boost')).toEqual({ action: 'boost', thresholdSec: 300, dueAt: CLOSE - 300 });
+        });
+
+        test('a timer Boost releases by its own timeout: due at min(close - release, its own threshold)', () => {
+            mockSettings({ boostTime: 3600, emergencyFill: 300 });
+            settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
+            const timeout = CLOSE - 2000;
+            const challenge = build({ boost: { state: 'AVAILABLE', timeout }, turbo: { state: 'LOCKED' } });
+            // Its own threshold is 2000 + 3600 s before close; the pin gives way 300 s before the timeout.
+            expect(rowOf(challenge, 'boost')).toEqual({
+                action: 'boost',
+                thresholdSec: 2300,
+                dueAt: timeout - 300,
+            });
+        });
+
+        test('a Turbo blocked by a Boost pin is due at the release', () => {
+            mockSettings({ turboTime: 7200, useTurbo: true, emergencyFill: 300 });
+            settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
+            const challenge = build({ boost: { state: 'LOCKED' }, turbo: { state: 'WON' } });
+            expect(VotingLogic.describeDeadlineActions(challenge, FAR)).toMatchObject({
+                turboBlocked: true,
+                turboBlockedBy: 'pin',
+                turboReleaseAt: CLOSE - 300,
+            });
+            expect(rowOf(challenge, 'turbo')).toEqual({ action: 'turbo', thresholdSec: 300, dueAt: CLOSE - 300 });
+        });
+
+        test('a held row is listed by its adjusted time: a Turbo held by a Boost pin follows an Auto-fill row now due earlier', () => {
+            mockSettings({ turboTime: 7200, useTurbo: true, emergencyFill: 300, autoFill: true });
+            settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
+            const challenge = build({ boost: { state: 'LOCKED' }, turbo: { state: 'WON' } });
+            // Turbo ordered first on its own 7200 s, then moved to the release 300 s before close.
+            expect(VotingLogic.describeDeadlineActions(challenge, FAR).actions).toEqual([
+                { action: 'autoFill', thresholdSec: 900, dueAt: CLOSE - 900 },
+                { action: 'turbo', thresholdSec: 300, dueAt: CLOSE - 300 },
+            ]);
+        });
+
+        test('a release earlier than the row’s own time leaves the row where it was', () => {
+            mockSettings({ keyUnlockedBoostTime: 900, emergencyFill: 3600 });
+            settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
+            const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } });
+            expect(rowOf(challenge, 'boost')).toEqual({ action: 'boost', thresholdSec: 900, dueAt: CLOSE - 900 });
+        });
+
+        test('a pin that never gives way (ready, or Emergency Submit off) hides the row', () => {
+            mockSettings({ keyUnlockedBoostTime: 900, emergencyFill: 300 });
+            settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
+            const ready = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' } });
+            expect(VotingLogic.describeDeadlineActions(ready, FAR)).toMatchObject({
+                boostBlocked: true,
+                boostReleaseAt: null,
+            });
+            expect(rowOf(ready, 'boost')).toBeUndefined();
+            mockSettings({ keyUnlockedBoostTime: 900, emergencyFill: 0 });
+            settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
+            const off = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } });
+            expect(rowOf(off, 'boost')).toBeUndefined();
+        });
     });
 
     test('turbo is not blocked while a turbo is not held, or while an entry is free', () => {
@@ -312,39 +413,39 @@ describe('resolveBoostFillNewMode', () => {
 
     test("'always' when boostFillNew is on, regardless of conflict", () => {
         mockSettings({ boostFillNew: true });
-        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42', NOW)).toBe('always');
-        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42', NOW)).toBe('always');
+        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('always');
+        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('always');
     });
 
     test("'no' while Manual Photos Only is on, whichever fill-new option is set", () => {
         mockSettings({ boostFillNew: true, boostFillNewOnConflict: true, manualPhotosOnly: true });
-        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42', NOW)).toBe('no');
-        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42', NOW)).toBe('no');
+        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('no');
+        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('no');
     });
 
     test("'conflict' when only boostFillNewOnConflict is on AND the sole entry is turboed", () => {
         mockSettings({ boostFillNewOnConflict: true });
-        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42', NOW)).toBe('conflict');
+        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('conflict');
     });
 
     test("'no' when boostFillNewOnConflict is on but there is no conflict", () => {
         mockSettings({ boostFillNewOnConflict: true });
-        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42', NOW)).toBe('no');
+        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('no');
     });
 
     test("'no' when boostFillNewOnConflict is on but there are no entries (not a conflict)", () => {
         mockSettings({ boostFillNewOnConflict: true });
         const empty = build({ entries: [], maxSubmits: 2 });
-        expect(VotingLogic.resolveBoostFillNewMode(empty, '42', NOW)).toBe('no');
+        expect(VotingLogic.resolveBoostFillNewMode(empty, '42')).toBe('no');
     });
 
     test("'no' when neither fill-new setting is on", () => {
         mockSettings();
-        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42', NOW)).toBe('no');
+        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('no');
     });
 
     test('boostFillNew takes precedence over on-conflict', () => {
         mockSettings({ boostFillNew: true, boostFillNewOnConflict: true });
-        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42', NOW)).toBe('always');
+        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('always');
     });
 });

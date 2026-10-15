@@ -13,8 +13,9 @@ import type { ActionContext } from './context';
 import type { VotingPassApi } from '../../types/votingPass';
 import type { EntryAgeLedger } from '../../types/stores';
 
+// `explicit`: sent by id (boostEntryById), not left to applyBoost's own pick.
 // `pinned`: the photo the user pinned for Boost, which counts as their confirmation of it.
-type BoostTarget = { imageId: string; fresh: boolean; pinned?: boolean };
+type BoostTarget = { imageId: string; explicit: boolean; pinned?: boolean };
 
 /** What a boost sent on device sleep came to. */
 export type SuspendBoostOutcome = 'applied' | 'unconfirmed' | 'skipped';
@@ -37,22 +38,19 @@ const readBoostAvailability = (
     };
 };
 
-/**
- * Close the outer boost-<id> operation as a failure/skip with `reason`.
- */
+/** Close the outer boost-<id> operation as a failure/skip with `reason`. */
 const endBoostOperation = (challenge: Challenge, reason: string) => {
     logger.withCategory('boost').endOperation(`boost-${challenge.id}`, null, reason);
 };
 
 /**
- * Boost the entry fill-new submitted. applyBoost raises the `boosted` flag
- * itself (it owns the entry pick); the explicit-entry call cannot, so reflect it
- * here.
+ * Boost a named entry. applyBoost raises the `boosted` flag itself (it owns the
+ * entry pick); the explicit-entry call cannot, so reflect it here.
  *
- * @param imageId - the entry fill-new submitted
+ * @param imageId - the entry to boost
  * @returns the boost result; falsy once the operation is closed
  */
-const boostFreshEntry = async (
+const boostEntryById = async (
     { challenge, token, api }: ActionContext,
     cid: string,
     imageId: string,
@@ -63,8 +61,8 @@ const boostFreshEntry = async (
     } else {
         // applyBoostToEntry logs its own apply-boost-entry-* operation,
         // but the outer boost-<id> operation opened by applyAvailableBoost would
-        // dangle open on failure (the applyBoost fallback path closes its own).
-        endBoostOperation(challenge, 'boost apply to fresh entry failed');
+        // dangle open on failure (the applyBoost path closes its own).
+        endBoostOperation(challenge, 'boost apply to entry failed');
     }
     return boostResult;
 };
@@ -79,15 +77,13 @@ const logBoostTarget = (challenge: Challenge, message: string) => {
  */
 const pinnedBoostTarget = (challenge: Challenge): BoostTarget | null => {
     const pin = votingLogic.resolvePin(challenge, challenge.id.toString(), 'boost');
-    return pin.state === 'hit' ? { imageId: String(pin.entry.id), fresh: false, pinned: true } : null;
+    return pin.state === 'hit' ? { imageId: String(pin.entry.id), explicit: false, pinned: true } : null;
 };
 
-/**
- * The photo an earlier fill-new submitted that its boost is still waiting on.
- */
+/** The photo an earlier fill-new submitted that its boost is still waiting on. */
 const pendingBoostTarget = ({ challenge, entryAges }: ActionContext): BoostTarget | null => {
     const pending = entryAges?.pending(challenge.id.toString());
-    return pending ? { imageId: pending, fresh: true } : null;
+    return pending ? { imageId: pending, explicit: true } : null;
 };
 
 /**
@@ -96,20 +92,31 @@ const pendingBoostTarget = ({ challenge, entryAges }: ActionContext): BoostTarge
  */
 const existingBoostTarget = (challenge: Challenge, now: number): BoostTarget | null => {
     const imageId = votingLogic.pickBoostEntry(challenge, challenge.id.toString(), now)?.id;
-    return imageId ? { imageId, fresh: false } : null;
+    return imageId ? { imageId, explicit: false } : null;
 };
 
-/**
- * Log why no entry can take the boost, so the boost is skipped rather than sent to fail.
- */
-const logNoBoostEntry = (challenge: Challenge) => {
+const hasEntries = (challenge: Challenge): boolean => {
     const entries = challenge?.member?.ranking?.entries;
+    return Array.isArray(entries) && entries.length > 0;
+};
+
+/** Log why no entry can take the boost, so it is skipped rather than sent to fail. */
+const logNoBoostEntry = (challenge: Challenge) => {
     logBoostTarget(
         challenge,
-        Array.isArray(entries) && entries.length > 0
+        hasEntries(challenge)
             ? 'no entry can take the boost (every entry has Turbo or is pinned for Turbo) — boost skipped'
             : 'no entry to boost yet — boost skipped',
     );
+};
+
+/**
+ * A boost the photo pinned for Turbo blocks waits for that pin to give way: record the instant in
+ * the field a fresh-entry hold uses, so the next cycle lands on it (nothing for a block that never does).
+ */
+const wakeAtPinRelease = ({ challenge, now }: ActionContext) => {
+    const releaseAt = votingLogic.pinReleaseAt(challenge, challenge.id.toString(), 'turbo', now);
+    if (releaseAt !== null) challenge.boostHoldUntil = releaseAt;
 };
 
 /**
@@ -129,10 +136,13 @@ const resolveBoostTarget = async (ctx: ActionContext): Promise<BoostTarget | nul
     const existing = () => existingBoostTarget(challenge, now);
     // 'always' = boostFillNew; 'conflict' = boostFillNewOnConflict when every
     // entry has Turbo or is pinned for Turbo; 'no' = boost an existing entry.
-    const fillMode = votingLogic.resolveBoostFillNewMode(challenge, cid, now);
+    const fillMode = votingLogic.resolveBoostFillNewMode(challenge, cid);
     if (fillMode === 'no') {
         const target = existing();
-        if (!target) logNoBoostEntry(challenge);
+        if (!target) {
+            logNoBoostEntry(challenge);
+            wakeAtPinRelease(ctx);
+        }
         return target;
     }
     const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
@@ -141,7 +151,7 @@ const resolveBoostTarget = async (ctx: ActionContext): Promise<BoostTarget | nul
         const imageId = String(filled.imageId);
         autoFill.reflectNewEntry(challenge, imageId);
         entryAges?.markPending(challenge, imageId, now);
-        return { imageId, fresh: true };
+        return { imageId, explicit: true };
     }
     if (filled.reason === 'challenge-gone') {
         // The live re-check confirmed the challenge left the active list —
@@ -149,16 +159,15 @@ const resolveBoostTarget = async (ctx: ActionContext): Promise<BoostTarget | nul
         logBoostTarget(challenge, 'challenge left the active list — boost skipped');
         return null;
     }
-    // 'always' mode falls back to the configured Boost Entry when no fresh
-    // photo can be submitted (full / none / failed). With none that can take
-    // the boost either — the only case in 'conflict' mode — the boost is skipped
-    // instead of an applyBoost that would only fail.
+    // 'always' mode falls back to the configured Boost Entry when no fresh photo can be submitted
+    // (full / none / failed); with none that can take the boost either, it is skipped, not sent to fail.
     const fallback = existing();
     if (!fallback) {
         logBoostTarget(
             challenge,
             `boost fill-new unavailable (${filled.reason}); no entry can take the boost — boost skipped`,
         );
+        wakeAtPinRelease(ctx);
         return null;
     }
     logBoostTarget(challenge, `boost fill-new unavailable (${filled.reason}); boosting existing entry`);
@@ -199,8 +208,8 @@ const applyAvailableBoost = async (
     logger.withCategory('boost').startOperation(`boost-${challenge.id}`, applyingMsg);
 
     try {
-        const boostResult = target.fresh
-            ? await boostFreshEntry(ctx, challenge.id.toString(), target.imageId)
+        const boostResult = target.explicit
+            ? await boostEntryById(ctx, challenge.id.toString(), target.imageId)
             : await api.applyBoost(challenge, token);
         if (boostResult) {
             ctx.entryAges?.clearPending(challenge.id, ctx.now);
@@ -338,24 +347,38 @@ export const runBoost = async (ctx: ActionContext) => {
  * The entry a boost sent on device sleep lands on. Same rule as
  * resolveBoostTarget, except a new photo is never submitted — a submit cannot
  * finish before the device sleeps — so a boost fill-new would have put on a
- * fresh photo goes to the existing entry instead.
+ * fresh photo goes to the existing entry instead, and a photo pinned for Turbo that
+ * would give way to the boost before its deadline is taken as already given way.
  *
  * @returns null when no entry can take the boost (already logged)
  */
 const resolveSuspendBoostTarget = (ctx: ActionContext): BoostTarget | null => {
     const { challenge } = ctx;
-    const pinned = pinnedBoostTarget(challenge);
-    if (pinned) return pinned;
-    const pending = pendingBoostTarget(ctx);
-    if (pending) return pending;
-    const existing = existingBoostTarget(challenge, ctx.now);
+    const named = pinnedBoostTarget(challenge) ?? pendingBoostTarget(ctx);
+    if (named) return named;
+    const cid = challenge.id.toString();
+    // The device cannot come back for a Turbo pin's release, so a boost that pin blocks now takes the
+    // pick the release gives it — sent by id, since applyBoost would pick at the clock and find none.
+    // Only a boost the deadline view holds at the release (same rule) is due then; any other is due now.
+    const blocked = votingLogic.isBoostBlocked(challenge, cid, ctx.now);
+    const releaseAt = blocked ? votingLogic.pinReleaseAt(challenge, cid, 'turbo', ctx.now) : null;
+    const released = releaseAt === null ? null : existingBoostTarget(challenge, releaseAt);
+    const existing = existingBoostTarget(challenge, ctx.now) ?? (released && { ...released, explicit: true });
     if (!existing) {
-        // Only reachable with no entry yet or every entry turboed or pinned for Turbo (the
-        // conflict row describeDeadlineActions keeps); applyBoost would only fail.
-        logNoBoostEntry(challenge);
+        if (!blocked && hasEntries(challenge) && votingLogic.resolveBoostFillNewMode(challenge, cid) !== 'no') {
+            // Fill-new would have put the boost on a fresh photo, and the pin keeps the existing one.
+            logBoostTarget(
+                challenge,
+                'every entry has Turbo or is pinned for Turbo, and a new photo cannot be submitted before sleep — boost skipped',
+            );
+        } else {
+            // No entry yet, or every entry turboed or pinned for Turbo with the pin never giving way
+            // (the conflict row describeDeadlineActions keeps); applyBoost would only fail.
+            logNoBoostEntry(challenge);
+        }
         return null;
     }
-    if (votingLogic.resolveBoostFillNewMode(challenge, challenge.id.toString(), ctx.now) !== 'no') {
+    if (votingLogic.resolveBoostFillNewMode(challenge, challenge.id.toString()) !== 'no') {
         logBoostTarget(
             challenge,
             'boost fill-new is on, but a new photo cannot be submitted before sleep; boosting existing entry',

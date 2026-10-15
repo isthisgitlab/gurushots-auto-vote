@@ -10,6 +10,7 @@ import { signal } from '@preact/signals';
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
+import { formatEndTime } from '@/utils/formatters';
 import { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } from '@/utils/levelBadge';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import type { EntryBadge as RealEntryBadge } from '@/components/app/EntryBadge';
@@ -35,6 +36,17 @@ jest.mock('@/components/app/EntryBadge', () => ({
 }));
 
 const nowSec = () => Math.floor(Date.now() / 1000);
+
+// A get-deadline-actions answer's block fields: each feature blocked by a flag or a pin (and when the pin gives way).
+type Block = { by: 'flag' | 'pin'; releaseAt?: number };
+const blocked = ({ boost, turbo }: { boost?: Block; turbo?: Block }) => ({
+    boostBlocked: boost !== undefined,
+    turboBlocked: turbo !== undefined,
+    boostBlockedBy: boost?.by ?? null,
+    turboBlockedBy: turbo?.by ?? null,
+    boostReleaseAt: boost?.releaseAt ?? null,
+    turboReleaseAt: turbo?.releaseAt ?? null,
+});
 
 const makeChallenge = (overrides = {}) =>
     buildChallenge({
@@ -749,9 +761,7 @@ describe('entries, tags and alerts', () => {
         jest.mocked(window.api.getDeadlineActions).mockResolvedValue({
             success: true,
             actions: [],
-            boostBlocked: true,
-            turboBlocked: false,
-            pinReleaseAt: null,
+            ...blocked({ boost: { by: 'flag' } }),
         });
         rerender(
             <ChallengeCard
@@ -766,51 +776,101 @@ describe('entries, tags and alerts', () => {
             />,
         );
 
-        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('app.boostConflictWarning'));
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('app.conflictFlag'));
         expect(window.api.getDeadlineActions).toHaveBeenCalledTimes(2);
         expect(container.firstChild).toBe(root);
     });
 
-    test('shows the boost/turbo conflict warning from the deadline preview', async () => {
-        window.api.getDeadlineActions = jest.fn().mockResolvedValue({
-            success: true,
-            actions: [],
-            boostBlocked: true,
-            turboBlocked: false,
-            pinReleaseAt: null,
-        });
-        renderCard(makeChallenge());
-        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('app.boostConflictWarning'));
-    });
+    describe('the conflict warning names its cause', () => {
+        const releaseAt = nowSec() + 1800;
+        const when = formatEndTime(releaseAt, 'local');
+        const answer = (blockedBy: Parameters<typeof blocked>[0]) => {
+            window.api.getDeadlineActions = jest
+                .fn()
+                .mockResolvedValue({ success: true, actions: [], ...blocked(blockedBy) });
+        };
+        const alerts = () => screen.getAllByRole('alert').map((alert) => alert.textContent);
+        const english = (key: string) =>
+            key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
 
-    test('shows the turbo conflict warning from the deadline preview', async () => {
-        window.api.getDeadlineActions = jest.fn().mockResolvedValue({
-            success: true,
-            actions: [],
-            boostBlocked: false,
-            turboBlocked: true,
-            pinReleaseAt: null,
-        });
-        renderCard(makeChallenge());
-        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('app.turboConflictWarning'));
-    });
+        beforeEach(() => mockTranslator.t.mockImplementation(english));
+        afterEach(() => mockTranslator.t.mockImplementation((key) => key));
 
-    test('the compact tile shows both conflict notes', async () => {
-        window.api.getEffectiveSetting = jest.fn(async (key) => key === 'compactCards');
-        window.api.getDeadlineActions = jest.fn().mockResolvedValue({
-            success: true,
-            actions: [],
-            boostBlocked: true,
-            turboBlocked: true,
-            pinReleaseAt: null,
+        test.each([
+            [
+                'Boost',
+                { boost: { by: 'flag' as const } },
+                "Boost can't apply: your only entry already has Turbo (they can't share an entry). Add another entry to use both.",
+            ],
+            [
+                'Turbo',
+                { turbo: { by: 'flag' as const } },
+                "Turbo can't apply: your only entry already has Boost (they can't share an entry). Add another entry to use both.",
+            ],
+        ])('%s blocked by a flag asks for another entry', async (_name, blockedBy, text) => {
+            answer(blockedBy);
+            renderCard(makeChallenge());
+            await waitFor(() => expect(alerts()).toEqual([text]));
         });
-        renderCard(makeChallenge());
-        await waitFor(() =>
-            expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([
-                '⚠ app.boostConflictWarning',
-                '⚠ app.turboConflictWarning',
-            ]),
-        );
+
+        test.each([
+            [
+                'Boost',
+                { boost: { by: 'pin' as const, releaseAt } },
+                `Boost is waiting: the photo is pinned for Turbo. If Turbo isn't ready by ${when}, Boost goes on that photo. Unpin it or add another entry to use Boost sooner.`,
+            ],
+            [
+                'Turbo',
+                { turbo: { by: 'pin' as const, releaseAt } },
+                `Turbo is waiting: the photo is pinned for Boost. If Boost isn't ready by ${when}, Turbo goes on that photo. Unpin it or add another entry to use Turbo sooner.`,
+            ],
+        ])('%s blocked by a pin that gives way names the time', async (_name, blockedBy, text) => {
+            answer(blockedBy);
+            renderCard(makeChallenge());
+            await waitFor(() => expect(alerts()).toEqual([text]));
+        });
+
+        test.each([
+            [
+                'Boost',
+                { boost: { by: 'pin' as const } },
+                "Boost won't apply: the photo is pinned for Turbo. Unpin it or add another entry.",
+            ],
+            [
+                'Turbo',
+                { turbo: { by: 'pin' as const } },
+                "Turbo won't apply: the photo is pinned for Boost. Unpin it or add another entry.",
+            ],
+        ])('%s blocked by a pin that never gives way says to unpin', async (_name, blockedBy, text) => {
+            answer(blockedBy);
+            renderCard(makeChallenge());
+            await waitFor(() => expect(alerts()).toEqual([text]));
+        });
+
+        test('the compact tile shows both notes, each carrying its whole text as a title', async () => {
+            window.api.getEffectiveSetting = jest.fn(async (key) => key === 'compactCards');
+            answer({ boost: { by: 'pin', releaseAt }, turbo: { by: 'flag' } });
+            renderCard(makeChallenge());
+            await waitFor(() => expect(screen.getAllByRole('alert')[0].textContent).toMatch(/^⚠ /));
+            const [boost, turbo] = screen.getAllByRole('alert');
+            expect(boost.textContent).toBe(
+                `⚠ ${app.conflictPinReleases
+                    .replace(/\{kind\}/g, 'Boost')
+                    .replace(/\{other\}/g, 'Turbo')
+                    .replace('{time}', when)}`,
+            );
+            expect(boost.getAttribute('title')).toBe(boost.textContent?.slice(2));
+            expect(turbo.textContent).toBe(
+                "⚠ Turbo can't apply: your only entry already has Boost (they can't share an entry). Add another entry to use both.",
+            );
+        });
+
+        test('nothing is shown while nothing is blocked', async () => {
+            answer({});
+            renderCard(makeChallenge());
+            await waitFor(() => expect(window.api.getDeadlineActions).toHaveBeenCalled());
+            expect(screen.queryByRole('alert')).toBeNull();
+        });
     });
 
     test('low exposure turns the border and exposure figure red; an open boost adds a ring', () => {

@@ -27,7 +27,17 @@ jest.mock('@/api/useDeadlineActions', () => ({
     // Called once per card render: the count is how often the card renders.
     useDeadlineActions: () => {
         mockRenders.count += 1;
-        return { actions: [], boostBlocked: false, turboBlocked: false, loading: false, error: false };
+        return {
+            actions: [],
+            boostBlocked: false,
+            turboBlocked: false,
+            boostBlockedBy: null,
+            turboBlockedBy: null,
+            boostReleaseAt: null,
+            turboReleaseAt: null,
+            loading: false,
+            error: false,
+        };
     },
 }));
 jest.mock('@/api/useTurbo', () => ({

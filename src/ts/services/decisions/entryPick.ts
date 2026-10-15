@@ -140,11 +140,12 @@ const describePinFallback = (kind: EntryPinKind, fallback: 'gone' | 'conflict'):
  * different entries. So when boost is picking an entry it must avoid the
  * turboed one (conflictField='turbo'); when turbo is picking it must avoid
  * the boosted one (conflictField='boosted'). `avoidId` is the photo the other
- * feature is pinned to (blockingPinnedId): it is as unavailable as a flagged one.
+ * feature is pinned to (livePinnedId): it is as unavailable as a flagged one.
  * Null means every entry is flagged or avoided. A live pin is inert once any entry
  * carries the other feature's flag, so a flag and a live pin never coexist: only a
  * single flagged entry, or a single entry pinned for the other feature, leaves no
- * candidate — which a fill-new mode resolves.
+ * candidate — which a fill-new mode resolves, or, once that pin has given way,
+ * a pick without `avoidId` (pickFor).
  */
 const pickEntryAvoidingConflict = (
     entries: readonly RankingEntry[] | null | undefined,
@@ -163,9 +164,107 @@ const pickEntryAvoidingConflict = (
 };
 
 /**
+ * What differs between Boost and Turbo in the entry pick: the flag on an entry that rules it out
+ * for this feature, the feature whose pin may block it, and the settings that steer it.
+ */
+type FeatureSpec = {
+    kind: EntryPinKind;
+    other: EntryPinKind;
+    conflictField: 'turbo' | 'boosted';
+    imageIndex: 'boostImageIndex' | 'turboImageIndex';
+    fillNew: 'boostFillNew' | 'turboFillNew';
+    fillNewOnConflict: 'boostFillNewOnConflict' | 'turboFillNewOnConflict';
+};
+
+const BOOST: FeatureSpec = {
+    kind: 'boost',
+    other: 'turbo',
+    conflictField: 'turbo',
+    imageIndex: 'boostImageIndex',
+    fillNew: 'boostFillNew',
+    fillNewOnConflict: 'boostFillNewOnConflict',
+};
+
+const TURBO: FeatureSpec = {
+    kind: 'turbo',
+    other: 'boost',
+    conflictField: 'boosted',
+    imageIndex: 'turboImageIndex',
+    fillNew: 'turboFillNew',
+    fillNewOnConflict: 'turboFillNewOnConflict',
+};
+
+/**
+ * The slot pick for a feature: its configured entry, walking off entries carrying the other
+ * feature and off `avoidId`.
+ */
+const slotPick = (spec: FeatureSpec, challenge: Challenge, challengeId: string, avoidId: string | null) =>
+    pickEntryAvoidingConflict(
+        challenge?.member?.ranking?.entries,
+        settings.getEffectiveSetting(spec.imageIndex, challengeId),
+        spec.conflictField,
+        avoidId,
+    );
+
+/**
+ * The pick that never lands on the other feature's live pin, released or not: the photo pinned
+ * for this feature when usable, else the slot pick off flagged entries and that pin. Null when
+ * every candidate is flagged or that pin.
+ */
+const strictPick = (spec: FeatureSpec, challenge: Challenge, challengeId: string): RankingEntry | null => {
+    const pin = resolvePin(challenge, challengeId, spec.kind);
+    return pin.state === 'hit'
+        ? pin.entry
+        : slotPick(spec, challenge, challengeId, livePinnedId(challenge, challengeId, spec.other));
+};
+
+/**
+ * The entry a spend lands on: the strict pick; failing that, once the other feature's live pin has
+ * given way (blockingPinnedId), the slot pick without that exclusion — flagged entries stay out. A
+ * released pin is a preference, so its photo takes the spend only when nothing else can.
+ */
+const pickFor = (spec: FeatureSpec, challenge: Challenge, challengeId: string, now: number): RankingEntry | null => {
+    const entries = challenge?.member?.ranking?.entries;
+    if (!Array.isArray(entries) || entries.length === 0) return null;
+    const strict = strictPick(spec, challenge, challengeId);
+    if (strict) return strict;
+    const released =
+        livePinnedId(challenge, challengeId, spec.other) !== null &&
+        blockingPinnedId(challenge, challengeId, spec.other, now) === null;
+    return released ? slotPick(spec, challenge, challengeId, null) : null;
+};
+
+/**
+ * How a spend sources its target entry:
+ * - `'always'`  — the feature's fill-new setting is on: always submit a fresh photo and spend on it.
+ * - `'conflict'` — its fill-new-on-conflict setting is on AND the strict pick finds nothing (every
+ *   entry carries the other feature or is its live pin, released or not): submit a fresh photo for
+ *   the spend, so a pin that has given way still prefers a fresh photo to its own.
+ * - `'no'` — spend on an existing entry the normal way (always the case while the photo pinned
+ *   for this feature is usable: the pin names the target, and while Manual Photos Only is on: no
+ *   fresh photo is ever submitted by itself).
+ *
+ * The always setting takes precedence, and the conflict mode only engages when the conflict
+ * actually exists.
+ */
+const fillNewModeFor = (spec: FeatureSpec, challenge: Challenge, challengeId: string): 'always' | 'conflict' | 'no' => {
+    if (isManualPhotosOnly(settings, challengeId)) return 'no';
+    if (resolvePin(challenge, challengeId, spec.kind).state === 'hit') return 'no';
+    if (settings.getEffectiveSetting(spec.fillNew, challengeId) === true) return 'always';
+    if (settings.getEffectiveSetting(spec.fillNewOnConflict, challengeId) === true) {
+        const entries = challenge?.member?.ranking?.entries;
+        if (Array.isArray(entries) && entries.length >= 1 && strictPick(spec, challenge, challengeId) === null) {
+            return 'conflict';
+        }
+    }
+    return 'no';
+};
+
+/**
  * Pick the entry a boost should land on: the photo pinned for Boost when it is usable, else
  * `boostImageIndex` (1-indexed, 0 = last), stepping off any entry that already carries turbo and
- * off the photo pinned for Turbo while that pin blocks (blockingPinnedId). Symmetric to
+ * off the photo pinned for Turbo while that pin is live. Once that pin has given way
+ * (blockingPinnedId) and nothing else can take the boost, the pinned photo can. Symmetric to
  * pickTurboEntry, which avoids boosted entries.
  *
  * Lives here rather than privately inside api/boost.ts so the mock boost surface resolves the
@@ -177,97 +276,34 @@ const pickEntryAvoidingConflict = (
  * @param now - Unix timestamp in seconds
  * @returns the entry to boost, or null when every candidate is turboed or pinned for Turbo
  */
-const pickBoostEntry = (challenge: Challenge, challengeId: string, now: number): RankingEntry | null => {
-    const entries = challenge?.member?.ranking?.entries;
-    if (!Array.isArray(entries) || entries.length === 0) return null;
-    const pin = resolvePin(challenge, challengeId, 'boost');
-    if (pin.state === 'hit') return pin.entry;
-    const requestedIndex = settings.getEffectiveSetting('boostImageIndex', challengeId);
-    return pickEntryAvoidingConflict(
-        entries,
-        requestedIndex,
-        'turbo',
-        blockingPinnedId(challenge, challengeId, 'turbo', now),
-    );
-};
+const pickBoostEntry = (challenge: Challenge, challengeId: string, now: number): RankingEntry | null =>
+    pickFor(BOOST, challenge, challengeId, now);
 
 /**
- * Resolves how a boost should source its target entry for a challenge:
- * - `'always'`  — `boostFillNew` is on: always submit a fresh photo and boost it.
- * - `'conflict'` — `boostFillNewOnConflict` is on AND every existing entry is
- *   turboed or pinned for Turbo (so Boost cannot be placed on any existing entry):
- *   submit a fresh photo purely to break that boost/turbo conflict.
- * - `'no'` — boost an existing entry the normal way (always the case while the photo pinned
- *   for Boost is usable: the pin names the target, and while Manual Photos Only is on: no
- *   fresh photo is ever submitted by itself).
- *
- * `boostFillNew` (always) takes precedence over `boostFillNewOnConflict`, and the
- * conflict mode only engages when the conflict actually exists — mirroring
- * {@link resolveTurboFillNewMode}.
- *
- * @param now - Unix timestamp in seconds
+ * How a boost sources its target entry (see fillNewModeFor): `boostFillNew` / `boostFillNewOnConflict`,
+ * the conflict being every entry turboed or pinned for Turbo.
  */
-const resolveBoostFillNewMode = (
-    challenge: Challenge,
-    challengeId: string,
-    now: number,
-): 'always' | 'conflict' | 'no' => {
-    if (isManualPhotosOnly(settings, challengeId)) return 'no';
-    if (resolvePin(challenge, challengeId, 'boost').state === 'hit') return 'no';
-    if (settings.getEffectiveSetting('boostFillNew', challengeId) === true) return 'always';
-    if (settings.getEffectiveSetting('boostFillNewOnConflict', challengeId) === true) {
-        const entries = challenge?.member?.ranking?.entries;
-        if (Array.isArray(entries) && entries.length >= 1 && pickBoostEntry(challenge, challengeId, now) === null) {
-            return 'conflict';
-        }
-    }
-    return 'no';
-};
+const resolveBoostFillNewMode = (challenge: Challenge, challengeId: string): 'always' | 'conflict' | 'no' =>
+    fillNewModeFor(BOOST, challenge, challengeId);
 
 /**
  * Pick the entry a won Turbo should land on: the photo pinned for Turbo when it is usable, else
  * `turboImageIndex`, stepping off any entry that already carries boost and off the photo pinned
- * for Boost while that pin blocks (blockingPinnedId). Mirror of {@link pickBoostEntry}.
+ * for Boost while that pin is live, with the same fallback once it has given way. Mirror of
+ * {@link pickBoostEntry}.
  *
  * @param now - Unix timestamp in seconds
  * @returns the entry to turbo, or null when every candidate is boosted or pinned for Boost
  */
-const pickTurboEntry = (challenge: Challenge, challengeId: string, now: number): RankingEntry | null => {
-    const entries = challenge?.member?.ranking?.entries;
-    if (!Array.isArray(entries) || entries.length === 0) return null;
-    const pin = resolvePin(challenge, challengeId, 'turbo');
-    if (pin.state === 'hit') return pin.entry;
-    const requestedIndex = settings.getEffectiveSetting('turboImageIndex', challengeId);
-    return pickEntryAvoidingConflict(
-        entries,
-        requestedIndex,
-        'boosted',
-        blockingPinnedId(challenge, challengeId, 'boost', now),
-    );
-};
+const pickTurboEntry = (challenge: Challenge, challengeId: string, now: number): RankingEntry | null =>
+    pickFor(TURBO, challenge, challengeId, now);
 
 /**
- * How a Turbo sources its target entry — {@link resolveBoostFillNewMode}'s mirror, with
- * `turboFillNew` / `turboFillNewOnConflict`, and the conflict being every entry boosted or pinned for Boost.
- *
- * @param now - Unix timestamp in seconds
+ * How a Turbo sources its target entry (see fillNewModeFor): `turboFillNew` / `turboFillNewOnConflict`,
+ * the conflict being every entry boosted or pinned for Boost.
  */
-const resolveTurboFillNewMode = (
-    challenge: Challenge,
-    challengeId: string,
-    now: number,
-): 'always' | 'conflict' | 'no' => {
-    if (isManualPhotosOnly(settings, challengeId)) return 'no';
-    if (resolvePin(challenge, challengeId, 'turbo').state === 'hit') return 'no';
-    if (settings.getEffectiveSetting('turboFillNew', challengeId) === true) return 'always';
-    if (settings.getEffectiveSetting('turboFillNewOnConflict', challengeId) === true) {
-        const entries = challenge?.member?.ranking?.entries;
-        if (Array.isArray(entries) && entries.length >= 1 && pickTurboEntry(challenge, challengeId, now) === null) {
-            return 'conflict';
-        }
-    }
-    return 'no';
-};
+const resolveTurboFillNewMode = (challenge: Challenge, challengeId: string): 'always' | 'conflict' | 'no' =>
+    fillNewModeFor(TURBO, challenge, challengeId);
 
 export {
     pickEntryAvoidingConflict,

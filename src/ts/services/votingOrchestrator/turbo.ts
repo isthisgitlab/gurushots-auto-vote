@@ -56,11 +56,18 @@ const resolveFillNewTurboTarget = async (
  * in always mode on an empty challenge is there genuinely no entry at all.
  */
 const logTurboWithoutTarget = (challenge: Challenge) => {
-    const hasExistingEntry = (challenge?.member?.ranking?.entries?.length ?? 0) > 0;
-    const skipReason = hasExistingEntry
-        ? 'every entry has Boost or is pinned for Boost — turbo skipped'
-        : 'could not submit a fresh photo and there is no existing entry — turbo skipped';
-    logger.withCategory('turbo').info(`${logger.challengeTag(challenge)} turbo fill-new ${skipReason}`, null);
+    const log = logger.withCategory('turbo');
+    if ((challenge?.member?.ranking?.entries?.length ?? 0) > 0) {
+        log.info(
+            `${logger.challengeTag(challenge)} turbo fill-new: every entry has Boost or is pinned for Boost — turbo skipped`,
+            null,
+        );
+        return;
+    }
+    log.info(
+        `${logger.challengeTag(challenge)} turbo fill-new: could not submit a fresh photo and there is no existing entry — turbo skipped`,
+        null,
+    );
 };
 
 const applyTurboToEntry = async (

@@ -186,6 +186,9 @@ describe('useDeadlineActions', () => {
         member: { boost: { state: 'AVAILABLE' }, ranking: { entries: [{ id: 'a', turbo: true }, null] } },
     });
 
+    // The block fields of an answer with nothing blocked.
+    const calm = { boostBlockedBy: null, turboBlockedBy: null, boostReleaseAt: null, turboReleaseAt: null };
+
     test('a success with a non-array actions field yields an empty list', async () => {
         mockApi.getDeadlineActions.mockResolvedValueOnce(invalid({ success: true, actions: 'x', boostBlocked: true }));
         const { result } = renderHook(() => useDeadlineActions(challenge));
@@ -194,6 +197,7 @@ describe('useDeadlineActions', () => {
             actions: [],
             boostBlocked: true,
             turboBlocked: false,
+            ...calm,
             loading: false,
             error: false,
         });
@@ -216,7 +220,7 @@ describe('useDeadlineActions', () => {
             actions: [],
             boostBlocked: false,
             turboBlocked: false,
-            pinReleaseAt: null,
+            ...calm,
         });
         const { result, rerender } = renderHook(({ v }) => useDeadlineActions(challenge, v), {
             initialProps: { v: 0 },
@@ -229,7 +233,7 @@ describe('useDeadlineActions', () => {
             actions: [],
             boostBlocked: true,
             turboBlocked: false,
-            pinReleaseAt: null,
+            ...calm,
         });
         rerender({ v: 1 });
         await waitFor(() => expect(result.current.boostBlocked).toBe(true));
@@ -246,7 +250,7 @@ describe('useDeadlineActions', () => {
             actions: [],
             boostBlocked: false,
             turboBlocked: true,
-            pinReleaseAt: null,
+            ...calm,
         });
         const { result } = renderHook(() => useDeadlineActions(challenge));
         await waitFor(() => expect(result.current.turboBlocked).toBe(true));
@@ -262,14 +266,16 @@ describe('useDeadlineActions', () => {
                 actions: [],
                 boostBlocked: true,
                 turboBlocked: false,
-                pinReleaseAt: releaseAt,
+                ...calm,
+                boostBlockedBy: 'pin',
+                boostReleaseAt: releaseAt,
             });
             mockApi.getDeadlineActions.mockResolvedValueOnce({
                 success: true,
                 actions: [],
                 boostBlocked: false,
                 turboBlocked: false,
-                pinReleaseAt: null,
+                ...calm,
             });
             const { result } = renderHook(() => useDeadlineActions(challenge));
             await waitFor(() => expect(result.current.boostBlocked).toBe(true));
@@ -295,16 +301,65 @@ describe('useDeadlineActions', () => {
         }
     });
 
-    test('a release instant already past, or too far for one timer, still arms a valid refetch', async () => {
+    test('after the first release refetch, the later release instant is armed again', async () => {
         jest.useFakeTimers();
         try {
+            const first = Math.floor(Date.now() / 1000) + 60;
             mockApi.getDeadlineActions.mockClear();
-            const answer = (pinReleaseAt: number | null) => ({
+            const blocked = (boostReleaseAt: number) => ({
                 success: true as const,
                 actions: [],
                 boostBlocked: true,
                 turboBlocked: false,
-                pinReleaseAt,
+                ...calm,
+                boostBlockedBy: 'pin' as const,
+                boostReleaseAt,
+            });
+            mockApi.getDeadlineActions.mockResolvedValueOnce(blocked(first));
+            mockApi.getDeadlineActions.mockResolvedValueOnce(blocked(first + 600));
+            mockApi.getDeadlineActions.mockResolvedValueOnce({
+                success: true,
+                actions: [],
+                boostBlocked: false,
+                turboBlocked: false,
+                ...calm,
+            });
+            const { result } = renderHook(() => useDeadlineActions(challenge));
+            await waitFor(() => expect(result.current.boostBlocked).toBe(true));
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(62_000);
+            });
+            await waitFor(() => expect(result.current.boostReleaseAt).toBe(first + 600));
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+
+            // Not yet at the later instant: still blocked, no third fetch.
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(300_000);
+            });
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(302_000);
+            });
+            await waitFor(() => expect(result.current.boostBlocked).toBe(false));
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(3);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('a release instant already past, or too far for one timer, still arms a valid refetch', async () => {
+        jest.useFakeTimers();
+        try {
+            mockApi.getDeadlineActions.mockClear();
+            const answer = (boostReleaseAt: number | null) => ({
+                success: true as const,
+                actions: [],
+                boostBlocked: true,
+                turboBlocked: false,
+                ...calm,
+                boostBlockedBy: 'pin' as const,
+                boostReleaseAt,
             });
             mockApi.getDeadlineActions.mockResolvedValueOnce(answer(1));
             mockApi.getDeadlineActions.mockResolvedValueOnce(answer(2 ** 40));
@@ -318,6 +373,46 @@ describe('useDeadlineActions', () => {
             await act(async () => {
                 await jest.advanceTimersByTimeAsync(60_000);
             });
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('the one refetch waits for the sooner of the two release instants, and the state carries both causes', async () => {
+        jest.useFakeTimers();
+        try {
+            const soon = Math.floor(Date.now() / 1000) + 60;
+            mockApi.getDeadlineActions.mockClear();
+            mockApi.getDeadlineActions.mockResolvedValueOnce({
+                success: true,
+                actions: [],
+                boostBlocked: true,
+                turboBlocked: true,
+                boostBlockedBy: 'pin',
+                turboBlockedBy: 'pin',
+                boostReleaseAt: soon + 600,
+                turboReleaseAt: soon,
+            });
+            mockApi.getDeadlineActions.mockResolvedValueOnce({
+                success: true,
+                actions: [],
+                boostBlocked: false,
+                turboBlocked: false,
+                ...calm,
+            });
+            const { result } = renderHook(() => useDeadlineActions(challenge));
+            await waitFor(() => expect(result.current.boostBlocked).toBe(true));
+            expect(result.current).toMatchObject({
+                boostBlockedBy: 'pin',
+                turboBlockedBy: 'pin',
+                boostReleaseAt: soon + 600,
+                turboReleaseAt: soon,
+            });
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(62_000);
+            });
+            await waitFor(() => expect(result.current.boostBlocked).toBe(false));
             expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
         } finally {
             jest.useRealTimers();
@@ -350,6 +445,7 @@ describe('useDeadlineActions', () => {
             actions: [],
             boostBlocked: false,
             turboBlocked: false,
+            ...calm,
             loading: false,
             error: false,
         });

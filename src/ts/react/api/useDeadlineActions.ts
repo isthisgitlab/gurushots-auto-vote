@@ -15,6 +15,12 @@ export type DeadlineActionsState = {
     actions: DeadlineAction[];
     boostBlocked: boolean;
     turboBlocked: boolean;
+    /** What blocks the spend: every entry carrying the other feature (`flag`) or the photo pinned for it (`pin`). */
+    boostBlockedBy: 'flag' | 'pin' | null;
+    turboBlockedBy: 'flag' | 'pin' | null;
+    /** Unix seconds the blocking pin gives way; null when the block never does. */
+    boostReleaseAt: number | null;
+    turboReleaseAt: number | null;
     loading: boolean;
     error: boolean;
 };
@@ -29,6 +35,10 @@ const settledEmpty = (error: boolean): DeadlineActionsState => ({
     actions: [],
     boostBlocked: false,
     turboBlocked: false,
+    boostBlockedBy: null,
+    turboBlockedBy: null,
+    boostReleaseAt: null,
+    turboReleaseAt: null,
     loading: false,
     error,
 });
@@ -36,10 +46,16 @@ const settledEmpty = (error: boolean): DeadlineActionsState => ({
 /**
  * The state a successful get-deadline-actions response settles to.
  */
-const settledFrom = (res: Extract<Awaited<ReturnType<typeof window.api.getDeadlineActions>>, { success: true }>) => ({
+const settledFrom = (
+    res: Extract<Awaited<ReturnType<typeof window.api.getDeadlineActions>>, { success: true }>,
+): DeadlineActionsState => ({
     actions: Array.isArray(res.actions) ? res.actions : [],
     boostBlocked: res.boostBlocked === true,
     turboBlocked: res.turboBlocked === true,
+    boostBlockedBy: res.boostBlockedBy ?? null,
+    turboBlockedBy: res.turboBlockedBy ?? null,
+    boostReleaseAt: res.boostReleaseAt ?? null,
+    turboReleaseAt: res.turboReleaseAt ?? null,
     loading: false,
     error: false,
 });
@@ -48,8 +64,8 @@ const settledFrom = (res: Extract<Awaited<ReturnType<typeof window.api.getDeadli
  * How long until a refetch after a pin's release instant (Unix seconds): +1 s so it lands after
  * the release second, never just before it, and no more than one timer can wait.
  */
-const releaseDelayMs = (pinReleaseAt: number): number =>
-    Math.min(Math.max(pinReleaseAt * 1000 - Date.now(), 0) + 1000, MAX_TIMER_MS);
+const releaseDelayMs = (releaseAt: number): number =>
+    Math.min(Math.max(releaseAt * 1000 - Date.now(), 0) + 1000, MAX_TIMER_MS);
 
 /**
  * Fetches the read-only deadline-action preview + boost/turbo conflict flags for
@@ -64,8 +80,8 @@ const releaseDelayMs = (pinReleaseAt: number): number =>
  * `settingsVersion`, which ChallengesSection bumps once per settings-changed
  * broadcast — one refetch per card per settings change, without a remount.
  * A photo pinned for the other feature blocks a spend only until Emergency Fill takes
- * over, and no fingerprint field moves then, so the fetch that reports that instant
- * (`pinReleaseAt`) also arms one refetch for it.
+ * over, and no fingerprint field moves then, so the fetch that reports those instants
+ * (`boostReleaseAt` / `turboReleaseAt`) also arms one refetch, for the sooner of them.
  *
  * @param settingsVersion - bumped when settings change
  */
@@ -73,13 +89,7 @@ export function useDeadlineActions(
     challenge: Challenge | null | undefined,
     settingsVersion: number = 0,
 ): DeadlineActionsState {
-    const [state, setState] = useState({
-        actions: [],
-        boostBlocked: false,
-        turboBlocked: false,
-        loading: true,
-        error: false,
-    } as DeadlineActionsState);
+    const [state, setState] = useState<DeadlineActionsState>({ ...settledEmpty(false), loading: true });
 
     const boost = challenge?.member?.boost;
     const turbo = challenge?.member?.turbo;
@@ -126,11 +136,15 @@ export function useDeadlineActions(
                 const res = await window.api.getDeadlineActions(current);
                 if (cancelled) return;
                 if (res && res.success) {
-                    setState(settledFrom(res));
-                    if (typeof res.pinReleaseAt === 'number') {
+                    const settled = settledFrom(res);
+                    setState(settled);
+                    const releases = [settled.boostReleaseAt, settled.turboReleaseAt].filter(
+                        (at): at is number => typeof at === 'number',
+                    );
+                    if (releases.length > 0) {
                         releaseTimer = setTimeout(
                             () => setReleaseTick((tick) => tick + 1),
-                            releaseDelayMs(res.pinReleaseAt),
+                            releaseDelayMs(Math.min(...releases)),
                         );
                     }
                 } else {

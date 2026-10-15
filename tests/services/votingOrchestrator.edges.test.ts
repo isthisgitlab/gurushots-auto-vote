@@ -22,6 +22,7 @@ jest.mock('../../src/ts/services/VotingLogic', () => ({
     isWithinEmergencyWindow: jest.fn(() => false),
     isBoostDueForMission: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
+    pinReleaseAt: jest.fn<number | null, unknown[]>(() => null),
     pickBoostEntry: jest.fn(() => ({ id: 'e1' })),
     getBoostHoldUntil: jest.fn(() => null),
     shouldApplyTurbo: jest.fn(() => ({ apply: false })),
@@ -120,6 +121,7 @@ beforeEach(() => {
     votingLogic.pinFallbackOf.mockReturnValue(null);
     votingLogic.describePinFallback.mockReturnValue('');
     votingLogic.getBoostHoldUntil.mockReturnValue(null);
+    votingLogic.pinReleaseAt.mockReturnValue(null);
     votingLogic.shouldApplyTurbo.mockReturnValue(invalid({ apply: false }));
     votingLogic.shouldPlayAutoTurbo.mockReturnValue(false);
     votingLogic.evaluateVotingDecision.mockReturnValue(
@@ -332,7 +334,7 @@ describe('runBoost — fill-new fallbacks', () => {
         expect(autoFill.reflectNewEntry).toHaveBeenCalledWith(expect.anything(), 'new1');
         expect(autoFill.reflectEntryFlag).not.toHaveBeenCalled();
         expect(api.applyBoost).not.toHaveBeenCalled();
-        expect(log.endOperation).toHaveBeenCalledWith('boost-101', null, 'boost apply to fresh entry failed');
+        expect(log.endOperation).toHaveBeenCalledWith('boost-101', null, 'boost apply to entry failed');
     });
 
     test('fresh entry boosted → flag reflected on it', async () => {
@@ -379,6 +381,31 @@ describe('runBoost — fill-new fallbacks', () => {
                 ),
             ]),
         );
+    });
+
+    test('a boost blocked by a Turbo pin that gives way later wakes the scheduler at the release', async () => {
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        votingLogic.pinReleaseAt.mockReturnValue(NOW + 1200);
+        const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]);
+        const result = await run(api);
+        expect(votingLogic.pinReleaseAt).toHaveBeenCalledWith(expect.anything(), '101', 'turbo', NOW);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(result.challenges![0].boostHoldUntil).toBe(NOW + 1200);
+    });
+
+    test('the same wake is set when conflict mode finds no fresh photo either', async () => {
+        votingLogic.resolveBoostFillNewMode.mockReturnValue('conflict');
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        votingLogic.pinReleaseAt.mockReturnValue(NOW + 1200);
+        autoFill.submitNewEntryForAction.mockResolvedValue(invalid({ ok: false, reason: 'no-slots' }));
+        const result = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]));
+        expect(result.challenges![0].boostHoldUntil).toBe(NOW + 1200);
+    });
+
+    test('a block that never gives way sets no wake', async () => {
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        const result = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]));
+        expect(result.challenges![0].boostHoldUntil).toBeUndefined();
     });
 
     test('no entry at all: skipped as "no entry to boost yet"', async () => {

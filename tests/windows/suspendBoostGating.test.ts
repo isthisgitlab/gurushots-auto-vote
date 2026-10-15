@@ -123,6 +123,55 @@ describe('imminentBoostChallenges with the real describeDeadlineActions', () => 
         expect(api.applyBoost).not.toHaveBeenCalled();
     });
 
+    test('a boost blocked by a Turbo pin that gives way inside the horizon is selected, and the sleep boost lands on that photo', async () => {
+        // Closes in 30 min; Emergency Submit 300 s: the pin gives way 25 min from now.
+        mockSettings({ emergencyFill: 300 });
+        settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
+        const pinned = buildChallenge({
+            id: 7,
+            close_time: NOW + 1800,
+            max_photo_submits: 2,
+            member: {
+                boost: { state: 'AVAILABLE_KEY' },
+                turbo: { state: 'LOCKED' },
+                ranking: { entries: [{ id: 'e1' }] },
+            },
+        });
+        quitGuard.rememberChallenges([pinned], false);
+        expect(selectedIds()).toEqual([7]);
+        expect(
+            quitGuard
+                .imminentBoostChallenges(NOW, VotingLogic.describeDeadlineActions, quitGuard.SUSPEND_BOOST_HORIZON_SEC)
+                .map(({ dueAt }) => dueAt),
+        ).toEqual([NOW + 1500]);
+
+        jest.mocked(logger.withCategory).mockImplementation(() =>
+            invalid({ info: jest.fn(), startOperation: jest.fn(), endOperation: jest.fn() }),
+        );
+        const api = { applyBoost: jest.fn(), applyBoostToEntry: jest.fn(async () => ({ success: true })) };
+        const outcome = await runSuspendBoost({
+            challenge: pinned,
+            token: 'tok',
+            now: NOW,
+            api: invalid<VotingPassApi>(api),
+            fillDeps: invalid(null),
+            entryAges: null,
+        });
+        expect(outcome).toBe('applied');
+        // applyBoost would pick at the clock, where the pin still blocks; the entry is named instead.
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(api.applyBoostToEntry).toHaveBeenCalledWith('7', 'e1', 'tok');
+    });
+
+    test('a block with no release inside the horizon (Emergency Submit off) is neither selected nor boosted', async () => {
+        mockSettings({ emergencyFill: 0 });
+        settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
+        const pinned = keyChallenge(8);
+        pinned.member!.turbo = { state: 'LOCKED' };
+        quitGuard.rememberChallenges([pinned], false);
+        expect(selectedIds()).toEqual([]);
+    });
+
     test('only the selectable challenge is picked out of a mixed list', () => {
         mockSettings();
         quitGuard.rememberChallenges(
@@ -171,7 +220,7 @@ describe('imminentBoostChallenges with the real describeDeadlineActions', () => 
         expect(api.applyBoost).not.toHaveBeenCalled();
         expect(api.applyBoostToEntry).not.toHaveBeenCalled();
         expect(info).toHaveBeenCalledWith(
-            '[Challenge 1: Challenge] no entry can take the boost (every entry has Turbo or is pinned for Turbo) — boost skipped',
+            '[Challenge 1: Challenge] every entry has Turbo or is pinned for Turbo, and a new photo cannot be submitted before sleep — boost skipped',
             null,
         );
     });

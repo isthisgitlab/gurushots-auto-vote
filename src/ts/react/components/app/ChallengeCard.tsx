@@ -5,18 +5,52 @@ import { useEntryPins } from '@/api/useEntryPins';
 import { useScenarioStatus } from '@/api/useScenarioStatus';
 import { useChallengeSettings } from '@/hooks/useChallengeSettings';
 import { useTick, useRerenderAt } from '@/hooks/useTick';
+import { useTranslation } from '@/contexts/TranslationContext';
+import { formatEndTime } from '@/utils/formatters';
+import { interp } from '@/utils/interp';
 import { ChallengeCardCompact } from './ChallengeCardCompact';
 import { ChallengeCardDetail } from './ChallengeCardDetail';
 import type { TimeRemaining } from './Countdown';
 import { useChallengeCardActions, buildCompactActionRow } from './ChallengeCardActions';
 
 import type { Bankroll, Challenge } from '../../../types/gurushots';
+import type { DeadlineActionsState } from '@/api/useDeadlineActions';
 
 /**
  * Everything the card derives from its challenge at one tick (see
  * utils/challengeCardView), shared by the detailed and compact layouts.
  */
 export type ChallengeCardView = ReturnType<typeof deriveChallengeCardView>;
+
+/**
+ * Why a boost or turbo can't be placed, in words for what blocks it — null when nothing does. A flag
+ * (every entry carries the other feature) asks for another entry; a pin asks to unpin, and says when
+ * the pin gives way when it will.
+ *
+ * @param kind - the blocked feature
+ * @param blockedBy - what blocks it (useDeadlineActions)
+ * @param releaseAt - when the pin gives way (Unix seconds), or null
+ */
+const conflictWarning = (
+    t: (key: string) => string,
+    timezone: string,
+    kind: 'boost' | 'turbo',
+    blockedBy: DeadlineActionsState['boostBlockedBy'],
+    releaseAt: number | null,
+): string | null => {
+    if (blockedBy === null) return null;
+    const key =
+        blockedBy === 'flag'
+            ? 'app.conflictFlag'
+            : releaseAt === null
+              ? 'app.conflictPinNever'
+              : 'app.conflictPinReleases';
+    return interp(t(key), {
+        kind: t(kind === 'boost' ? 'app.boost' : 'app.turbo'),
+        other: t(kind === 'boost' ? 'app.turbo' : 'app.boost'),
+        time: releaseAt === null ? '' : formatEndTime(releaseAt, timezone),
+    });
+};
 
 /**
  * Challenge card. Renders either the full detailed card (every stat and every
@@ -62,7 +96,10 @@ export function ChallengeCard({
     // Advisory deadline-action preview + boost/turbo conflict flags (read-only,
     // computed main-side). Failure yields empty actions / false — the card just
     // renders without them, never an error surface.
-    const { actions: deadlineActions, boostBlocked, turboBlocked } = useDeadlineActions(challenge, settingsVersion);
+    const deadline = useDeadlineActions(challenge, settingsVersion);
+    const { t } = useTranslation();
+    const boostWarning = conflictWarning(t, timezone, 'boost', deadline.boostBlockedBy, deadline.boostReleaseAt);
+    const turboWarning = conflictWarning(t, timezone, 'turbo', deadline.turboBlockedBy, deadline.turboReleaseAt);
     const swapBacks = useSwapBacks(challenge);
     // Read once per card: the detailed layout toggles pins, the compact tile shows them.
     const entryPins = useEntryPins(challenge.id, settingsVersion);
@@ -127,9 +164,9 @@ export function ChallengeCard({
                 pins={entryPins.pins}
                 hasCompactOverride={hasCompactOverride}
                 onToggleCompact={toggleCompact}
-                boostBlocked={boostBlocked}
-                turboBlocked={turboBlocked}
-                deadlineActions={deadlineActions}
+                boostWarning={boostWarning}
+                turboWarning={turboWarning}
+                deadlineActions={deadline.actions}
                 scenarioStatus={scenarioStatus}
                 actions={buildCompactActionRow({ actions, canFill: view.canFill, enabled: compactActions })}
             />
@@ -146,9 +183,9 @@ export function ChallengeCard({
                 actions={actions}
                 hasCompactOverride={hasCompactOverride}
                 onToggleCompact={toggleCompact}
-                boostBlocked={boostBlocked}
-                turboBlocked={turboBlocked}
-                deadlineActions={deadlineActions}
+                boostWarning={boostWarning}
+                turboWarning={turboWarning}
+                deadlineActions={deadline.actions}
                 scenarioStatus={scenarioStatus}
                 swapBacks={swapBacks}
                 entryPins={entryPins}

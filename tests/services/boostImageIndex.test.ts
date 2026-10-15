@@ -279,7 +279,7 @@ describe('applyBoost - a photo pinned for Turbo', () => {
         const errors = jest
             .mocked(logger.withCategory)
             .mock.results.flatMap((r) => jest.mocked(r.value as CategoryLogger).error.mock.calls.map((c) => c[0]));
-        expect(errors).toEqual([expect.stringContaining('Pass an image id, or unpin the photo')]);
+        expect(errors).toEqual([expect.stringContaining('Add another entry, unpin the photo, or pass --image=<id>')]);
     });
 
     test('with a second entry the boost steps off the pinned photo', async () => {
