@@ -403,11 +403,28 @@ describe('version bump type', () => {
 describe('test workflow', () => {
     test('checks that the committed third-party notices are up to date', () => {
         const step = stepNamed(testWorkflow.jobs.test, 'Verify third-party notices are up to date');
-        expect(step.run).toBe('pnpm build:notices && git diff --exit-code src/assets/THIRD_PARTY_NOTICES.txt');
+        expect(step.run).toContain('pnpm build:notices');
+        expect(step.run).toContain('git diff --quiet -- src/assets/THIRD_PARTY_NOTICES.txt');
+    });
+
+    test('tells a contributor with stale notices how to fix them', () => {
+        const step = stepNamed(testWorkflow.jobs.test, 'Verify third-party notices are up to date');
+        expect(step.run).toMatch(/::error::.*pnpm build:notices.*src\/assets\/THIRD_PARTY_NOTICES\.txt/);
+        expect(step.run).toContain('exit 1');
     });
 
     test('points at pnpm-workspace.yaml for the audit exceptions that live there', () => {
         expect(text('.github/workflows/test.yml')).not.toContain('`auditConfig` in package.json');
         expect(text('pnpm-workspace.yaml')).toMatch(/^auditConfig:/m);
+    });
+});
+
+describe('CLI build Node version', () => {
+    test('both CLI build jobs pin the Node whose LICENSE the notices vendor', () => {
+        const { NODE_LICENSE_VERSION } =
+            require('../scripts/build-notices') as typeof import('../scripts/build-notices');
+        const pinned = (job: Job, name: string) => stepNamed(job, name).with?.['node-version'];
+        expect(pinned(build.jobs.build, 'Setup Node.js 26 for CLI builds')).toBe(NODE_LICENSE_VERSION);
+        expect(pinned(build.jobs['build-cli-arm'], 'Setup Node.js 26 for CLI build')).toBe(NODE_LICENSE_VERSION);
     });
 });

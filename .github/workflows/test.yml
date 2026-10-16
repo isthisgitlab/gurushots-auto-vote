@@ -91,7 +91,13 @@ jobs:
             # dependency bump that changes the shipped set fails here until the
             # notices are regenerated and committed.
             - name: Verify third-party notices are up to date
-              run: pnpm build:notices && git diff --exit-code src/assets/THIRD_PARTY_NOTICES.txt
+              run: |
+                  pnpm build:notices
+                  if ! git diff --quiet -- src/assets/THIRD_PARTY_NOTICES.txt; then
+                    echo "::error::The third-party notices are out of date: run 'pnpm build:notices' and commit src/assets/THIRD_PARTY_NOTICES.txt"
+                    git diff --stat -- src/assets/THIRD_PARTY_NOTICES.txt
+                    exit 1
+                  fi
 
             - name: Bundle size budget (renderer bundles)
               run: pnpm size

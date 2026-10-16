@@ -37,15 +37,19 @@ const digestVisionRuntime = (root: string) => {
  * Compares the extracted runtime's code digest with the one embedded in the
  * binary at build time (never one stored beside the extracted files, which
  * whoever can edit the files can edit too). A copy that fails is removed so
- * the next run extracts a clean one.
+ * the next run extracts a clean one. Only a digest mismatch or a missing file or
+ * directory counts as a failed check; any other error is rethrown and the copy stays.
  */
 const verifyVisionRuntime = (root: string) => {
     const embedded = sea.getAsset('vision-runtime.code.sha256', 'utf8').trim();
     let actual: string | undefined;
     try {
         actual = digestVisionRuntime(root);
-    } catch {
-        // An unreadable or incomplete tree fails the comparison below.
+    } catch (error) {
+        // A missing file or directory is an incomplete tree and fails the comparison below; any other error (too many
+        // open files, say) says nothing about the copy, so it is not a reason to delete it.
+        const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+        if (code !== 'ENOENT' && code !== 'ENOTDIR') throw error;
     }
     if (actual !== embedded) {
         fs.rmSync(root, { recursive: true, force: true });
@@ -63,6 +67,8 @@ const extractVisionCliAssets = () => {
     const ready = path.join(root, '.ready');
     if (!fs.existsSync(ready)) {
         fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+        // mkdir leaves a directory an older CLI made with the default mode as it is.
+        if (process.platform !== 'win32') fs.chmodSync(parent, 0o700);
         const temporary = `${root}.${process.pid}`;
         const archive = `${temporary}.tar.gz`;
         try {

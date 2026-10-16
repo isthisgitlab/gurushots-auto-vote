@@ -60,6 +60,8 @@ interface NoticeInputs {
     android: AndroidComponent[];
     androidVersions: Record<string, string>;
     onnxruntimeVersion: string;
+    /** The locked onnxruntime-web, which the Android app runs as WebAssembly. */
+    onnxruntimeWebVersion: string;
     /** The vendored NOTICE file (its text id) of each shipped Android artifact, by `group:artifact`. */
     notices: Record<string, string>;
     readText: (id: string) => string;
@@ -205,7 +207,13 @@ const renderLgplSection = (libvips: string[]) => [
     '',
 ];
 
-const renderRuntimesSection = ({ readText, onnxruntimeVersion }: NoticeInputs) => [
+/** `1.31.0-dev.20260914-8d85527a0` → `a development build of the onnxruntime-web 1.31 line`. */
+const describeOnnxruntimeWeb = (version: string) => {
+    const line = version.split('.').slice(0, 2).join('.');
+    return `${version.includes('-dev') ? 'a development build of the ' : 'the '}onnxruntime-web ${line} line`;
+};
+
+const renderRuntimesSection = ({ readText, onnxruntimeVersion, onnxruntimeWebVersion }: NoticeInputs) => [
     ...heading('5. Runtimes, models and data'),
     '5.1 Node.js',
     '',
@@ -219,7 +227,7 @@ const renderRuntimesSection = ({ readText, onnxruntimeVersion }: NoticeInputs) =
     '5.2 ONNX Runtime',
     '',
     `The local photo check runs on ONNX Runtime (onnxruntime-node ${onnxruntimeVersion} in the desktop app and the CLI,`,
-    'a development build of the onnxruntime-web 1.31 line as WebAssembly in the Android app),',
+    `${describeOnnxruntimeWeb(onnxruntimeWebVersion)} as WebAssembly in the Android app),`,
     `Copyright (c) Microsoft Corporation, under the MIT license. The LICENSE and ThirdPartyNotices of`,
     `ONNX Runtime ${ONNXRUNTIME_TEXTS_VERSION} follow.`,
     '',
@@ -346,6 +354,9 @@ const main = ({
                 `${onnxruntime?.version ?? 'no onnxruntime-node'}: vendor that release's LICENSE and ThirdPartyNotices.`,
         );
     }
+    const onnxruntimeWeb = packages.find((pkg) => pkg.name === 'onnxruntime-web');
+    if (!onnxruntimeWeb)
+        throw new Error('The lockfile has no onnxruntime-web: the Android runtime notice names its version.');
     const textsDir = path.join(licensesDir, 'texts');
     const notices = Object.fromEntries(
         Object.entries(loadNoticeFiles(path.join(licensesDir, 'notices.json'))).map(([coordinate, file]) => [
@@ -369,6 +380,7 @@ const main = ({
         android: loadAndroidComponents(path.join(licensesDir, 'android.json')),
         androidVersions: parseGradleVariables(fs.readFileSync(androidVariablesPath, 'utf8')),
         onnxruntimeVersion: onnxruntime.version,
+        onnxruntimeWebVersion: onnxruntimeWeb.version,
         notices,
         readText: (id) => readLicenseText(id, textsDir),
     });

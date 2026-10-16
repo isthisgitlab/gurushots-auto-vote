@@ -329,13 +329,15 @@ jobs:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   NODE_ENV: production
 
-            # Second setup-node ensures Node 26 is on PATH for the SEA injection step.
+            # Second setup-node ensures the exact Node the notices vendor the LICENSE of
+            # (NODE_LICENSE_VERSION in scripts/build-notices.ts) is on PATH for the SEA injection
+            # step: build-cli.ts embeds process.versions.node and refuses any other version.
             # No `cache:` here — the composite already restored the pnpm cache earlier in this job.
             - name: Setup Node.js 26 for CLI builds
               if: matrix.platform != 'win'
               uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
-                  node-version: '26'
+                  node-version: '26.10.0'
 
             # Cache the official nodejs.org tarball that build-cli.ts pulls into
             # .cache/node-binaries (see the build-cli-arm job for the rationale).
@@ -405,7 +407,7 @@ jobs:
             - name: Setup Node.js 26 for CLI build
               uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
-                  node-version: '26'
+                  node-version: '26.10.0'
 
             # build-cli.ts downloads the official nodejs.org tarball for
             # TARGET_NODE_VERSION (= process.versions.node) into

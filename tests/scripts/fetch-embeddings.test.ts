@@ -374,12 +374,15 @@ describe('fetch-embeddings', () => {
             expect(errors()).toContain('1 authored stem collision(s) across clusters');
         });
 
-        test('treats a concepts file without a concepts list as no authored words', async () => {
-            setup({ concepts: [], expectedZipSha256: 'f'.repeat(64) });
-            await expect(main(opts)).rejects.toThrow('exit 1');
-            expect(errors()).not.toContain('authored stem collision');
-            expect(errors()).toContain('SHA-256 mismatch for the archive');
-        });
+        test.each([[[]], [{}], [{ concepts: 'cat' }]])(
+            'fails on a concepts file without a concepts list (%j) instead of treating it as empty',
+            async (concepts) => {
+                setup({ concepts, expectedZipSha256: 'f'.repeat(64) });
+                await expect(main(opts)).rejects.toThrow('exit 1');
+                expect(errors()).toContain('lexicon-concepts.json must be a JSON object with a `concepts` list');
+                expect(errors()).not.toContain('SHA-256 mismatch for the archive');
+            },
+        );
 
         test('fails on an archive whose SHA-256 does not match the pin', async () => {
             setup({ expectedZipSha256: 'f'.repeat(64) });
@@ -457,7 +460,7 @@ describe('fetch-embeddings', () => {
         });
 
         test('handles an empty scan and skips centering when disabled', async () => {
-            setup({ concepts: {}, lines: ["o'neil 1 2"] });
+            setup({ concepts: { concepts: [] }, lines: ["o'neil 1 2"] });
             await main({ ...opts, meanCenter: false });
             const out = parseJsonAs(fs.readFileSync(opts.outPath, 'utf8'), isWrittenIntermediate);
             expect(out).toMatchObject({ meanCentered: false, packed: {}, scale: 1 / 127 });
@@ -466,7 +469,7 @@ describe('fetch-embeddings', () => {
         });
 
         test('mean-centering copes with an empty scan', async () => {
-            setup({ concepts: {}, lines: [] });
+            setup({ concepts: { concepts: [] }, lines: [] });
             await main(opts);
             expect(parseJsonAs(fs.readFileSync(opts.outPath, 'utf8'), isWrittenIntermediate).packed).toEqual({});
             expect(logs()).toContain('0 stems stored');
@@ -480,7 +483,7 @@ describe('fetch-embeddings', () => {
             const zipPath = path.join(cacheDir, 'glove.zip');
             fs.mkdirSync(zipPath, { recursive: true });
             const conceptsPath = path.join(tmp, 'concepts.json');
-            fs.writeFileSync(conceptsPath, '{}');
+            fs.writeFileSync(conceptsPath, '{"concepts":[]}');
             await expect(run({ conceptsPath, cacheDir, zipPath })).rejects.toThrow('exit 1');
             expect(errors()).toContain('❌ Error: EISDIR');
         });

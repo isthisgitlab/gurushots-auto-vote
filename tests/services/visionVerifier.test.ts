@@ -317,6 +317,25 @@ describe('rankVisually', () => {
         expect(mockTransformers.pipeline).not.toHaveBeenCalled();
     });
 
+    test('a failed integrity check is not kept: the next call extracts and loads again', async () => {
+        mockRuntime.isCli.mockReturnValue(true);
+        mockRuntime.isElectron.mockReturnValue(false);
+        mockSea.isSea.mockReturnValue(true);
+        mockExtract.mockImplementationOnce(() => {
+            throw new Error('Vision runtime failed its integrity check');
+        });
+        logitsBy({ a: [-2, -2] });
+        const logger = makeLogger();
+
+        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger });
+        expect(logger.scoped.warning).toHaveBeenCalled();
+        expect(mockSeaTransformers.pipeline).not.toHaveBeenCalled();
+
+        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger });
+        expect(mockExtract).toHaveBeenCalledTimes(2);
+        expect(mockSeaTransformers.pipeline).toHaveBeenCalledTimes(1);
+    });
+
     test.each([
         [
             'a source-run CLI',

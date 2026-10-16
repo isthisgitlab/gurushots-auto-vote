@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import packageJson from '../package.json';
 import { runIfMain } from './lib/run-if-main';
 import { ensureVisionModel } from './fetch-vision-model';
+import { NODE_LICENSE_VERSION } from './build-notices';
 import { digestVisionRuntime } from '../src/ts/services/visionCliAssets';
 
 const { version } = packageJson;
@@ -311,6 +312,14 @@ async function main() {
     ensureDir(BUILD_DIR);
 
     try {
+        // The binary embeds this Node, and the third-party notices carry the LICENSE of NODE_LICENSE_VERSION.
+        if (TARGET_NODE_VERSION !== NODE_LICENSE_VERSION) {
+            throw new Error(
+                `The CLI would embed Node.js ${TARGET_NODE_VERSION}, but the third-party notices carry the LICENSE of ` +
+                    `Node.js ${NODE_LICENSE_VERSION}: build with Node.js ${NODE_LICENSE_VERSION}, or vendor the LICENSE ` +
+                    `of ${TARGET_NODE_VERSION} and update NODE_LICENSE_VERSION in scripts/build-notices.ts, then run pnpm build:notices.`,
+            );
+        }
         const targets = platformArg ? platforms.filter((p) => p.input === platformArg) : platforms;
         if (platformArg && targets.length === 0) throw new Error(`Unknown platform: ${platformArg}`);
         await bundleCli();

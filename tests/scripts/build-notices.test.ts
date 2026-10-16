@@ -880,7 +880,7 @@ describe('main failures and rendering', () => {
         fs.rmSync(directory, { recursive: true, force: true });
     });
 
-    const fixture = (onnxruntimeVersion: string | null) => {
+    const fixture = (onnxruntimeVersion: string | null, webVersion: string | null = '1.2.0-dev.20260101-abc') => {
         const dir = (...segments: string[]) => {
             const target = path.join(directory, ...segments);
             fs.mkdirSync(target, { recursive: true });
@@ -914,10 +914,14 @@ describe('main failures and rendering', () => {
         fs.writeFileSync(path.join(directory, 'licenses', 'notices.json'), JSON.stringify({}));
         fs.writeFileSync(path.join(directory, 'variables.gradle'), "ext {\n  v = '7.1'\n}\n");
         fs.writeFileSync(path.join(directory, 'NOTICE'), 'Fake Project\nCopyright (c) test\n\n');
-        const dependencies = onnxruntimeVersion
-            ? `    dependencies:\n      onnxruntime-node:\n        version: ${onnxruntimeVersion}\n      plain:\n        version: 1.0.0\n`
-            : '    dependencies:\n      plain:\n        version: 1.0.0\n';
-        const snapshots = `snapshots:\n  plain@1.0.0: {}\n${onnxruntimeVersion ? `  onnxruntime-node@${onnxruntimeVersion}: {}\n` : ''}`;
+        const dependencies =
+            '    dependencies:\n      plain:\n        version: 1.0.0\n' +
+            (onnxruntimeVersion ? `      onnxruntime-node:\n        version: ${onnxruntimeVersion}\n` : '') +
+            (webVersion ? `      onnxruntime-web:\n        version: ${webVersion}\n` : '');
+        const snapshots =
+            'snapshots:\n  plain@1.0.0: {}\n' +
+            (onnxruntimeVersion ? `  onnxruntime-node@${onnxruntimeVersion}: {}\n` : '') +
+            (webVersion ? `  onnxruntime-web@${webVersion}: {}\n` : '');
         fs.writeFileSync(
             path.join(directory, 'pnpm-lock.yaml'),
             `importers:\n  .:\n${dependencies}    devDependencies:\n      daisyui:\n        version: 1.0.0\n      tailwindcss:\n        version: 1.0.0\n${snapshots}  daisyui@1.0.0: {}\n  tailwindcss@1.0.0: {}\n`,
@@ -926,6 +930,7 @@ describe('main failures and rendering', () => {
             path.join(directory, 'licenses', 'packages.json'),
             JSON.stringify({
                 'onnxruntime-node': { license: 'MIT', texts: ['MIT'], copyright: ['Copyright MS'] },
+                'onnxruntime-web': { license: 'MIT', texts: ['MIT'], copyright: ['Copyright MS'] },
                 plain: {
                     license: 'MIT',
                     texts: ['MIT'],
@@ -954,7 +959,7 @@ describe('main failures and rendering', () => {
         expect(text).toContain(
             '1. GuruShotsAutoVote\n--------------------\n\nFake Project\nCopyright (c) test\n\nThe text of the Apache License 2.0 is in section 7.\n\n2.',
         );
-        expect(text).toContain('3. npm packages (4)');
+        expect(text).toContain('3. npm packages (5)');
         expect(text).toContain('plain 1.0.0\n  License: MIT\n  Copyright P\n  Source: https://example.test/1.0.0\n');
         expect(text).toContain('Versioned 7.1\n  License: Apache-2.0\n  C1\n  u1\n');
         expect(text).toContain('Plain\n  License: Apache-2.0\n  C2\n  u2\n');
@@ -1026,6 +1031,23 @@ describe('main failures and rendering', () => {
         );
     });
 
+    test('names the locked onnxruntime-web line in the Android runtime note', () => {
+        const dev = fixture(ONNXRUNTIME_TEXTS_VERSION, '1.2.0-dev.20260101-abc');
+        main(dev);
+        expect(fs.readFileSync(dev.outPath, 'utf8')).toContain(
+            'a development build of the onnxruntime-web 1.2 line as WebAssembly in the Android app),',
+        );
+        const release = fixture(ONNXRUNTIME_TEXTS_VERSION, '1.3.4');
+        main(release);
+        expect(fs.readFileSync(release.outPath, 'utf8')).toContain(
+            'the onnxruntime-web 1.3 line as WebAssembly in the Android app),',
+        );
+    });
+
+    test('fails when the lockfile has no onnxruntime-web', () => {
+        expect(() => main(fixture(ONNXRUNTIME_TEXTS_VERSION, null))).toThrow('The lockfile has no onnxruntime-web');
+    });
+
     test('fails when the lockfile has no onnxruntime-node', () => {
         expect(() => main(fixture(null))).toThrow('but the lockfile has no onnxruntime-node');
     });
@@ -1039,6 +1061,7 @@ describe('main failures and rendering', () => {
                 android: [],
                 androidVersions: {},
                 onnxruntimeVersion: '1.0.0',
+                onnxruntimeWebVersion: '1.2.0-dev.1',
                 notices: {},
                 readText: () => '',
             }),
@@ -1066,6 +1089,7 @@ describe('main failures and rendering', () => {
                 ],
                 androidVersions: {},
                 onnxruntimeVersion: '1.0.0',
+                onnxruntimeWebVersion: '1.2.0-dev.1',
                 notices,
                 readText: (id) => (id.startsWith('NOTICE-') ? noticeText : `text of ${id}`),
             });
@@ -1105,6 +1129,7 @@ describe('main failures and rendering', () => {
                 ],
                 androidVersions: {},
                 onnxruntimeVersion: '1.0.0',
+                onnxruntimeWebVersion: '1.2.0-dev.1',
                 notices: { 'com.a-b:c': 'NOTICE-first', 'com.a:b-c': 'NOTICE-second' },
                 readText: (id) => `text of ${id}`,
             });

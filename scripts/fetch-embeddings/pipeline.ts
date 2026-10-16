@@ -69,8 +69,10 @@ export const main = async ({
     meanCenter = MEAN_CENTER,
 }: MainOptions = {}): Promise<void> => {
     const parsedConcepts: unknown = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
-    const concepts = isConceptsConfig(parsedConcepts) ? parsedConcepts : null;
-    const { bySurface: authored, collisions } = collectAuthoredWords(concepts);
+    if (!isConceptsConfig(parsedConcepts)) {
+        fail(['scripts/lexicon-concepts.json must be a JSON object with a `concepts` list.']);
+    }
+    const { bySurface: authored, collisions } = collectAuthoredWords(parsedConcepts);
     if (collisions.length) {
         fail([
             `${collisions.length} authored stem collision(s) across clusters:`,

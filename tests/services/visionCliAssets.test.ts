@@ -14,6 +14,7 @@ import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
 import crypto = require('node:crypto');
 import tar = require('tar');
+import childProcess = require('node:child_process');
 
 const mockSea = { getAsset: jest.fn<string | Buffer, [key: string, encoding?: string]>() };
 jest.mock('node:sea', () => mockSea, { virtual: true });
@@ -162,6 +163,65 @@ describe('extraction failure paths', () => {
         expect(staging()).toEqual([]);
     });
 
+    test('a vision directory an older CLI left world-readable is restricted to the owner', () => {
+        mockSea.getAsset.mockImplementation(assets);
+        const vision = path.join(directory, 'userdata', 'vision');
+        fs.mkdirSync(vision, { recursive: true, mode: 0o755 });
+        fs.chmodSync(vision, 0o755);
+        extractVisionCliAssets();
+        expect(fs.statSync(vision).mode & 0o777).toBe(0o700);
+    });
+
+    test('on Windows the directory mode is left alone', () => {
+        mockSea.getAsset.mockImplementation(assets);
+        const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+        const chmod = jest.spyOn(fs, 'chmodSync');
+        Object.defineProperty(process, 'platform', { value: 'win32' });
+        try {
+            extractVisionCliAssets();
+        } finally {
+            Object.defineProperty(process, 'platform', platform);
+        }
+        expect(chmod).not.toHaveBeenCalled();
+    });
+
+    test('a copy whose node_modules became a file is refused and removed', () => {
+        mockSea.getAsset.mockImplementation(assets);
+        const { root } = extractVisionCliAssets();
+        fs.rmSync(path.join(root, 'node_modules'), { recursive: true });
+        fs.writeFileSync(path.join(root, 'node_modules'), 'not a directory');
+        expect(() => extractVisionCliAssets()).toThrow('Vision runtime failed its integrity check');
+        expect(staging()).toEqual([]);
+    });
+
+    test('a hashing error that is not a missing file (too many open files) is rethrown and the copy is kept', () => {
+        mockSea.getAsset.mockImplementation(assets);
+        const { root } = extractVisionCliAssets();
+        const read = fs.readFileSync;
+        jest.spyOn(fs, 'readFileSync').mockImplementation(((file: fsModule.PathOrFileDescriptor, ...rest: never[]) => {
+            if (String(file).endsWith('index.js')) throw Object.assign(new Error('EMFILE'), { code: 'EMFILE' });
+            return (read as (...args: unknown[]) => unknown)(file, ...rest);
+        }) as typeof fs.readFileSync);
+        expect(() => extractVisionCliAssets()).toThrow('EMFILE');
+        jest.restoreAllMocks();
+        expect(fs.existsSync(path.join(root, 'node_modules', 'example', 'index.js'))).toBe(true);
+        expect(extractVisionCliAssets().root).toBe(root);
+    });
+
+    test.each([
+        ['a string', 'unreadable'],
+        ['an error with no code', new Error('odd')],
+    ])('a hashing failure that is %s carries no missing-file code: it is rethrown, the copy kept', (_label, thrown) => {
+        mockSea.getAsset.mockImplementation(assets);
+        const { root } = extractVisionCliAssets();
+        jest.spyOn(fs, 'readdirSync').mockImplementation(() => {
+            throw thrown;
+        });
+        expect(() => extractVisionCliAssets()).toThrow();
+        jest.restoreAllMocks();
+        expect(fs.existsSync(root)).toBe(true);
+    });
+
     test('a digest stored beside the extracted files is never consulted', () => {
         mockSea.getAsset.mockImplementation(assets);
         const { root } = extractVisionCliAssets();
@@ -219,3 +279,53 @@ describe('digestVisionRuntime', () => {
         expect(digestVisionRuntime(one)).not.toBe(digestVisionRuntime(two));
     });
 });
+
+// scripts/build-cli.ts archives the runtime with the system tar (bsdtar on macOS, GNU tar on Linux), and the binary
+// re-hashes what node-tar extracts from it, so the archive must come from that tool.
+const systemTar = childProcess.spawnSync('tar', ['--version']);
+(systemTar.status === 0 ? describe : describe.skip)(
+    'an archive made by the system tar, as the CLI build makes it',
+    () => {
+        let directory: string;
+        beforeEach(() => {
+            directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vision-system-tar-'));
+        });
+        afterEach(() => {
+            jest.restoreAllMocks();
+            fs.rmSync(directory, { recursive: true, force: true });
+        });
+
+        test('extracts to the digest the build embedded, symlinks and hardlinks included', () => {
+            const source = path.join(directory, 'source');
+            const pkg = path.join(source, 'node_modules', '.pnpm', 'example@1.0.0', 'node_modules', 'example');
+            fs.mkdirSync(pkg, { recursive: true });
+            fs.mkdirSync(path.join(source, 'vision-model'), { recursive: true });
+            fs.writeFileSync(path.join(pkg, 'index.js'), 'module.exports = 1');
+            fs.writeFileSync(path.join(pkg, 'addon.node'), 'native');
+            fs.linkSync(path.join(pkg, 'addon.node'), path.join(pkg, 'addon-copy.node'));
+            fs.symlinkSync('.pnpm/example@1.0.0/node_modules/example', path.join(source, 'node_modules', 'example'));
+            fs.writeFileSync(path.join(source, 'vision-model', 'config.json'), '{}');
+            const archive = path.join(directory, 'runtime.tar.gz');
+            childProcess.execFileSync('tar', ['-czf', archive, '-C', source, 'node_modules', 'vision-model'], {
+                env: { ...process.env, COPYFILE_DISABLE: '1' },
+            });
+            const bytes = fs.readFileSync(archive);
+            const digest = crypto.createHash('sha256').update(bytes).digest('hex');
+            const codeDigest = digestVisionRuntime(source);
+            runtime.getUserDataDir.mockReturnValue(path.join(directory, 'userdata'));
+            mockSea.getAsset.mockImplementation((name) =>
+                name === 'vision-runtime.code.sha256' ? codeDigest : name.endsWith('.sha256') ? digest : bytes,
+            );
+
+            const { root } = extractVisionCliAssets();
+
+            expect(digestVisionRuntime(root)).toBe(codeDigest);
+            expect(fs.readlinkSync(path.join(root, 'node_modules', 'example'))).toBe(
+                '.pnpm/example@1.0.0/node_modules/example',
+            );
+            expect(fs.readFileSync(path.join(root, 'node_modules', 'example', 'addon-copy.node'), 'utf8')).toBe(
+                'native',
+            );
+        });
+    },
+);

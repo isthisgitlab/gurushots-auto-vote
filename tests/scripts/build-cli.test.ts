@@ -19,6 +19,14 @@ jest.mock('../../scripts/fetch-vision-model', () => ({
     ensureVisionModel: jest.fn().mockResolvedValue('/mock/vision-model'),
 }));
 
+// The Node whose LICENSE the notices vendor: the running Node unless a test says otherwise.
+let mockLicenseVersion = process.versions.node;
+jest.mock('../../scripts/build-notices', () => ({
+    get NODE_LICENSE_VERSION() {
+        return mockLicenseVersion;
+    },
+}));
+
 jest.mock('../../src/ts/services/visionCliAssets', () => ({ digestVisionRuntime: jest.fn(() => 'code-digest') }));
 
 import fsModule = require('node:fs');
@@ -515,6 +523,23 @@ describe('build-cli', () => {
             expect(errorSpy).toHaveBeenCalledWith('❌ Build failed:', new Error('Unknown platform: gurucli-bogus'));
             expect(exitSpy).toHaveBeenCalledWith(1);
             expect(fs.copyFileSync).not.toHaveBeenCalled();
+        });
+
+        test('refuses to embed a Node other than the one the notices carry the LICENSE of', async () => {
+            process.argv = ['node', 'build-cli.ts'];
+            mockLicenseVersion = '1.2.3';
+            try {
+                await buildCli.main();
+            } finally {
+                mockLicenseVersion = process.versions.node;
+            }
+            const [label, failure] = errorSpy.mock.calls[0] as [string, Error];
+            expect(label).toBe('❌ Build failed:');
+            expect(failure.message).toContain(
+                `would embed Node.js ${NODE_VER}, but the third-party notices carry the LICENSE of Node.js 1.2.3`,
+            );
+            expect(exitSpy).toHaveBeenCalledWith(1);
+            expect(build).not.toHaveBeenCalled();
         });
 
         test('fails with exit 1 when bundling throws', async () => {

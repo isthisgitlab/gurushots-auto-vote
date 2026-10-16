@@ -118,7 +118,13 @@ const loadClassifier = async (): Promise<ZeroShotImageClassificationPipeline> =>
 };
 
 const getClassifier = () => {
-    if (!classifierPromise) classifierPromise = loadClassifier();
+    if (!classifierPromise) {
+        classifierPromise = loadClassifier();
+        // A failed load is not kept: the next call extracts and loads again.
+        classifierPromise.catch(() => {
+            classifierPromise = undefined;
+        });
+    }
     return classifierPromise;
 };
 
