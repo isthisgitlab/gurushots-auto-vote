@@ -99,6 +99,11 @@ export interface EntryAgeRecord {
     memberId: string | null;
     /** False for a record a submit created before any fetch had seen the challenge. */
     observed: boolean;
+    /**
+     * Unix seconds of the first fetch that showed this record's entries (0: not yet, or a file from before it was
+     * kept). An entry whose `entered` time is 0 was there by then, which is the time the UI shows for it ("or earlier").
+     */
+    firstSeen: number;
 }
 
 /** Per challenge id, per entry id: the entry's recorded time (only entries whose time is known). */

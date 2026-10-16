@@ -32,6 +32,7 @@ const isEntryAgeRecord = isShape<EntryAgeRecord>({
     exact: isArrayOf(isString),
     memberId: nullable(isString),
     observed: isBoolean,
+    firstSeen: isNumber,
 });
 
 const rawStore = (initial: string | null) => {
@@ -275,27 +276,38 @@ describe('entry times: exact and approximate', () => {
         ledger.markSubmitted(1, ['x'], NOW);
         expect(ledger.enteredAt(1, 'x')).toBe(NOW);
         const times = ledger.observeAll([listing(1, ['a', 'x'])], NOW + 60);
-        expect(times).toEqual({ '1': { x: { at: NOW, exact: true } } });
-        expect(store.peek()['1'].observed).toBe(true);
+        // The submit is exact; the other entry was there by this first fetch.
+        expect(times).toEqual({
+            '1': { x: { at: NOW, exact: true }, a: { at: NOW + 60, exact: false } },
+        });
+        expect(store.peek()['1']).toMatchObject({ observed: true, firstSeen: NOW + 60 });
     });
 
-    test('an entry first shown by a later fetch gets that fetch time, approximately; an old one stays unknown', () => {
+    test('an entry first shown by a later fetch gets that fetch time; one already there is shown as first seen, with its age unknown', () => {
         const ledger = createMemoryEntryAgeLedger();
-        expect(ledger.observeAll([listing(1, ['a'])], NOW)).toEqual({});
+        expect(ledger.observeAll([listing(1, ['a'])], NOW)).toEqual({ '1': { a: { at: NOW, exact: false } } });
+        expect(ledger.enteredAt(1, 'a')).toBe(0);
         expect(ledger.observeAll([listing(1, ['a', 'b'])], NOW + 60)).toEqual({
-            '1': { b: { at: NOW + 60, exact: false } },
+            '1': { a: { at: NOW, exact: false }, b: { at: NOW + 60, exact: false } },
         });
         expect(ledger.observeAll([listing(1, ['a', 'b'])], NOW + 120)).toEqual({
-            '1': { b: { at: NOW + 60, exact: false } },
+            '1': { a: { at: NOW, exact: false }, b: { at: NOW + 60, exact: false } },
         });
+        // The age that holds a boost is unchanged: unknown for the old entry, the sighting for the new one.
+        expect(ledger.enteredAt(1, 'a')).toBe(0);
+        expect(ledger.enteredAt(1, 'b')).toBe(NOW + 60);
     });
 
-    test('the only entry of a challenge first seen stays unknown: the join time says nothing of a photo swapped in since', () => {
+    test('the only entry of a challenge first seen is shown as first seen: the join time says nothing of a photo swapped in since', () => {
         const ledger = createMemoryEntryAgeLedger();
-        expect(ledger.observeAll([listing(1, ['a'], { joined: NOW - 500 })], NOW)).toEqual({});
+        expect(ledger.observeAll([listing(1, ['a'], { joined: NOW - 500 })], NOW)).toEqual({
+            '1': { a: { at: NOW, exact: false } },
+        });
         expect(ledger.enteredAt(1, 'a')).toBe(0);
-        // Seen again, it still is: the first fetch that showed it is not the time it went in.
-        expect(ledger.observeAll([listing(1, ['a'], { joined: NOW - 500 })], NOW + 60)).toEqual({});
+        // Seen again, the first sighting stays: it is not moved to a later fetch.
+        expect(ledger.observeAll([listing(1, ['a'], { joined: NOW - 500 })], NOW + 60)).toEqual({
+            '1': { a: { at: NOW, exact: false } },
+        });
     });
 
     test('a record a submit made before any fetch leaves the other entries unknown and its placeholder close time is replaced', () => {
@@ -304,8 +316,15 @@ describe('entry times: exact and approximate', () => {
         ledger.markSubmitted(1, ['x'], NOW);
         expect(store.peek()['1']).toMatchObject({ observed: false, memberId: null, closeTime: NOW + 31 * 86400 });
         const times = ledger.observeAll([listing(1, ['a', 'b', 'x'], { closeTime: NOW + 3600 })], NOW + 60);
-        expect(times).toEqual({ '1': { x: { at: NOW, exact: true } } });
-        expect(store.peek()['1']).toMatchObject({ observed: true, closeTime: NOW + 3600 });
+        expect(times).toEqual({
+            '1': {
+                x: { at: NOW, exact: true },
+                a: { at: NOW + 60, exact: false },
+                b: { at: NOW + 60, exact: false },
+            },
+        });
+        // Their ages are unknown, though they are shown: the first fetch is their time, "or earlier".
+        expect(store.peek()['1']).toMatchObject({ observed: true, closeTime: NOW + 3600, firstSeen: NOW + 60 });
         expect(ledger.enteredAt(1, 'a')).toBe(0);
     });
 
@@ -381,17 +400,17 @@ describe('entry times: exact and approximate', () => {
         const ledger = createMemoryEntryAgeLedger();
         ledger.observe(listing(1, ['a']), NOW);
         ledger.markSubmitted(1, ['x'], NOW + 10);
-        expect(ledger.observeAll([listing(1, ['a'])], NOW + 100)).toEqual({});
+        expect(ledger.observeAll([listing(1, ['a'])], NOW + 100)).toEqual({ '1': { a: { at: NOW, exact: false } } });
         expect(ledger.enteredAt(1, 'x')).toBe(NOW + 10);
         expect(ledger.observeAll([listing(1, ['a', 'x'])], NOW + 200)).toEqual({
-            '1': { x: { at: NOW + 10, exact: true } },
+            '1': { a: { at: NOW, exact: false }, x: { at: NOW + 10, exact: true } },
         });
         ledger.observe(listing(1, ['a']), NOW + 300);
         ledger.observe(listing(1, ['a']), NOW + 700);
         expect(ledger.enteredAt(1, 'x')).toBeNull();
         // Back after the grace it is an entry like any other: first seen now, not exact.
         expect(ledger.observeAll([listing(1, ['a', 'x'])], NOW + 800)).toEqual({
-            '1': { x: { at: NOW + 800, exact: false } },
+            '1': { a: { at: NOW, exact: false }, x: { at: NOW + 800, exact: false } },
         });
     });
 
@@ -403,7 +422,7 @@ describe('entry times: exact and approximate', () => {
         ledger.markSubmitted(1, ['c'], NOW + 60);
         ledger.markSubmitted(1, ['b'], NOW + 120);
         expect(ledger.observeAll([listing(1, ['a', 'b'])], NOW + 130)).toEqual({
-            '1': { b: { at: NOW + 120, exact: true } },
+            '1': { a: { at: NOW, exact: false }, b: { at: NOW + 120, exact: true } },
         });
     });
 
@@ -431,7 +450,9 @@ describe('entry times: exact and approximate', () => {
         ledger.markUncertain(listing(2, []), 'u', NOW);
         expect(store.peek()['1']).toMatchObject({ observed: false, exact: ['p'], pending: 'p' });
         expect(store.peek()['2']).toMatchObject({ observed: false, exact: [], uncertain: ['u'] });
-        expect(ledger.observeAll([listing(1, ['a', 'p'])], NOW + 5)).toEqual({ '1': { p: { at: NOW, exact: true } } });
+        expect(ledger.observeAll([listing(1, ['a', 'p'])], NOW + 5)).toEqual({
+            '1': { p: { at: NOW, exact: true }, a: { at: NOW + 5, exact: false } },
+        });
     });
 
     test('a file from before the exact times reads with the fields it lacks', () => {
@@ -440,7 +461,45 @@ describe('entry times: exact and approximate', () => {
         );
         const ledger = createEntryAgeLedger(store);
         expect(ledger.observeAll([listing(1, ['a'])], NOW + 60)).toEqual({ '1': { a: { at: NOW, exact: false } } });
-        expect(store.writeRaw).not.toHaveBeenCalled();
+        // Its entries were there by this fetch: the record takes it as the first sighting, once.
+        expect(store.writeRaw).toHaveBeenCalledTimes(1);
+        expect(store.peek()['1'].firstSeen).toBe(NOW + 60);
+        ledger.observeAll([listing(1, ['a'])], NOW + 120);
+        expect(store.writeRaw).toHaveBeenCalledTimes(1);
+        expect(store.peek()['1'].firstSeen).toBe(NOW + 60);
+    });
+
+    test('an old record whose entry has no known age is shown from the first fetch after the file was read', () => {
+        const store = rawStore(JSON.stringify({ 1: { closeTime: NOW + 3600, entered: { a: 0 }, pending: null } }));
+        const ledger = createEntryAgeLedger(store);
+        expect(ledger.observeAll([listing(1, ['a'])], NOW + 60)).toEqual({
+            '1': { a: { at: NOW + 60, exact: false } },
+        });
+        expect(ledger.enteredAt(1, 'a')).toBe(0);
+    });
+
+    test('the record of another account starts again: its entries are shown from the new first sighting', () => {
+        const store = rawStore(null);
+        const ledger = createEntryAgeLedger(store);
+        ledger.observe(listing(1, [{ id: 'a', member_id: 'me' }]), NOW);
+        expect(store.peek()['1'].firstSeen).toBe(NOW);
+        ledger.observe(listing(1, [{ id: 'z', member_id: 'other' }]), NOW + 90);
+        expect(store.peek()['1'].firstSeen).toBe(NOW + 90);
+        expect(ledger.observeAll([listing(1, [{ id: 'z', member_id: 'other' }])], NOW + 100)).toEqual({
+            '1': { z: { at: NOW + 90, exact: false } },
+        });
+    });
+
+    test('an entry the record does not hold shows no time: the record is held to 64 entries', () => {
+        const ledger = createMemoryEntryAgeLedger();
+        const many = Array.from({ length: 70 }, (_, index) => `m${index}`);
+        const times = ledger.observeAll([listing(1, many)], NOW);
+        expect(Object.keys(times['1'])).toHaveLength(64);
+        expect(times['1'].m0).toEqual({ at: NOW, exact: false });
+    });
+
+    test('a first sighting at time 0 has nothing to show', () => {
+        expect(createMemoryEntryAgeLedger().observeAll([listing(1, ['a'])], 0)).toEqual({});
     });
 
     test('bounds and validates persisted exact ids', () => {
@@ -625,16 +684,16 @@ describe('entry-age ledger on the Android app window', () => {
     test('an earlier write failing while a later one saves keeps both changes in memory, and only the later is saved', async () => {
         const store = windowStore(null);
         const ledger = createEntryAgeLedger(store);
-        ledger.markSubmitted(1, ['first'], NOW);
-        ledger.markSubmitted(1, ['second'], NOW + 1);
+        ledger.markSubmitted(1, ['early'], NOW);
+        ledger.markSubmitted(1, ['late'], NOW + 1);
         store.land(0, 'failed');
         await flush();
         store.land(1);
         await flush();
-        expect(ledger.enteredAt(1, 'first')).toBe(NOW);
-        expect(ledger.enteredAt(1, 'second')).toBe(NOW + 1);
-        expect(store.stored()).not.toContain('first');
-        expect(store.stored()).toContain('second');
+        expect(ledger.enteredAt(1, 'early')).toBe(NOW);
+        expect(ledger.enteredAt(1, 'late')).toBe(NOW + 1);
+        expect(store.stored()).not.toContain('early');
+        expect(store.stored()).toContain('late');
     });
 
     test('a failed write stays applied until a refresh that succeeds; the caller never throws', async () => {

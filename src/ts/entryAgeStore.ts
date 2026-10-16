@@ -9,12 +9,13 @@
  * (`pending`), so the next pass boosts that photo instead of submitting another.
  *
  * Shape, keyed by challenge id:
- *   { "<challengeId>": { closeTime, entered: { "<imageId>": unixSec }, pending, uncertain, exact, memberId, observed } }
+ *   { "<challengeId>": { closeTime, entered: { "<imageId>": unixSec }, pending, uncertain, exact, memberId, observed, firstSeen } }
  * An `entered` time of 0 means "already there when the app first saw the
  * challenge" (or its submit time was never recorded) — its age is unknown, so it never holds a boost. An id in `exact`
  * went in through the app (its time is the submit); any other time is the first
  * fetch that showed the entry, so the entry went in at or before it. The UI
- * shows both (observeAll, services/entryTimes).
+ * shows both, and shows an entry of unknown age (0) as the record's `firstSeen`, the first fetch that showed the
+ * challenge's entries, also "or earlier" (observeAll, services/entryTimes).
  *
  * Same platform-aware transport as currencyAutoStore, so on Capacitor its cache
  * MUST be hydrated at boot (initializeEntryAgesAsync, wired in Capacitor.tsx).
@@ -100,6 +101,7 @@ const sameRecord = (a: StoredEntryAgeRecord, b: StoredEntryAgeRecord): boolean =
     a.closeTime === b.closeTime &&
     a.memberId === b.memberId &&
     a.observed === b.observed &&
+    a.firstSeen === b.firstSeen &&
     a.pending === b.pending &&
     sameIds(a.exact, b.exact) &&
     sameIds(a.uncertain, b.uncertain) &&
@@ -181,6 +183,9 @@ const observedRecord = (
         exact: kept.exact,
         memberId: listingMember ?? known?.memberId ?? null,
         observed: true,
+        // Kept once a fetch has shown the record; set by the first sighting, and by the next observation of a record
+        // that has none (a file from before it was kept: its entries were there by now).
+        firstSeen: known?.observed && known.firstSeen > 0 ? known.firstSeen : now,
     };
     return known && sameRecord(known, record) ? null : record;
 };
@@ -204,7 +209,11 @@ const observeChallenges = (state: State, challenges: readonly Challenge[], now: 
     return changed ? next : null;
 };
 
-/** Per challenge and entry of `challenges`, the entries whose time `state` knows. */
+/**
+ * Per challenge and entry of `challenges`, when `state` has each entry going in: its recorded time, exact when the app
+ * submitted it; or, for a recorded entry of unknown age (0), the first fetch that showed the record — it was there by
+ * then. An entry the record does not hold is left out.
+ */
 const knownTimes = (state: State, challenges: readonly Challenge[]): EntryTimes => {
     const times: EntryTimes = {};
     for (const challenge of challenges) {
@@ -213,8 +222,10 @@ const knownTimes = (state: State, challenges: readonly Challenge[]): EntryTimes 
         if (!record) continue;
         const known: EntryTimes[string] = {};
         for (const id of entryIdsOf(challenge)) {
-            const at = finiteOr(record.entered[id], 0);
-            if (at > 0) known[id] = { at, exact: record.exact.includes(id) };
+            const entered = finiteOr(record.entered[id], null);
+            if (entered === null) continue;
+            const at = entered > 0 ? entered : record.firstSeen;
+            if (at > 0) known[id] = { at, exact: entered > 0 && record.exact.includes(id) };
         }
         if (Object.keys(known).length > 0) times[challengeId] = known;
     }
@@ -230,6 +241,7 @@ const blankRecord = (closeTime: number): StoredEntryAgeRecord => ({
     exact: [],
     memberId: null,
     observed: false,
+    firstSeen: 0,
 });
 
 /** The ids a write that has no listing keeps first when a record is full: the pending photo and the exact ones. */

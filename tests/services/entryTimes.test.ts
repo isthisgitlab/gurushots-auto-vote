@@ -45,7 +45,7 @@ beforeEach(() => {
 });
 
 describe('annotateEntryTimes', () => {
-    test('puts the recorded time on each entry: exact for a submit, approximate for a first sighting, none when unknown', async () => {
+    test('puts the recorded time on each entry: exact for a submit, approximate for a first sighting, and the first fetch that showed an entry of unknown age', async () => {
         const ledger = createMemoryEntryAgeLedger();
         ledger.observe(challenge(1, ['old']), NOW - 100);
         ledger.markSubmitted(1, ['mine'], NOW - 50);
@@ -55,7 +55,8 @@ describe('annotateEntryTimes', () => {
 
         const entries = response.challenges[0].member?.ranking?.entries ?? [];
         expect(entries.map((entry) => entry.appEntered)).toEqual([
-            undefined,
+            // There when the first fetch showed the challenge: its age is unknown, and this is its latest time.
+            { at: NOW - 100, exact: false },
             { at: NOW - 50, exact: true },
             { at: NOW, exact: false },
         ]);
@@ -65,7 +66,7 @@ describe('annotateEntryTimes', () => {
         const forged = { at: 1, exact: true };
         const fine: ActiveChallengesResponse = { challenges: [challenge(1, ['a'], { appEntered: forged })] };
         await annotateEntryTimes(fine, createMemoryEntryAgeLedger(), NOW);
-        expect(fine.challenges[0].member?.ranking?.entries?.[0]).not.toHaveProperty('appEntered');
+        expect(fine.challenges[0].member?.ranking?.entries?.[0]?.appEntered).toEqual({ at: NOW, exact: false });
 
         const failing: ActiveChallengesResponse = { challenges: [challenge(1, ['a'], { appEntered: forged })] };
         await expect(annotateEntryTimes(failing, brokenLedger(), NOW)).resolves.toBeUndefined();
@@ -141,7 +142,7 @@ describe('annotateEntryTimes and a ledger refresh that does not come back', () =
             ledgerWith(async () => false),
             NOW,
         );
-        expect(timeOf(fetched, 0)).toBeUndefined();
+        expect(timeOf(fetched, 0)).toEqual({ at: NOW - 100, exact: false });
         expect(timeOf(fetched, 1)).toEqual({ at: NOW - 50, exact: true });
     });
 
@@ -195,7 +196,7 @@ describe('annotateEntryTimes and a ledger refresh that does not come back', () =
         await done;
         // The fetch went on with the cache: its observation is in flight (the third write).
         expect(queued).toHaveLength(3);
-        expect(timeOf(fetched, 0)).toBeUndefined();
+        expect(timeOf(fetched, 0)).toEqual({ at: NOW, exact: false });
         await jest.advanceTimersByTimeAsync(1000);
         // The late refresh made both marks again, after the observation.
         expect(queued).toHaveLength(5);

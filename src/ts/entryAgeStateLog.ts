@@ -27,6 +27,7 @@ import * as logger from './logger';
 import { throughStore } from './settings/storeTransport';
 import { isPlainObject } from './plainObject';
 import { errorKind } from './errorMessage';
+import { finiteOr } from './numbers';
 
 // How many entry ids (and exact / uncertain ids) one record keeps.
 export const MAX_IDS = 64;
@@ -77,6 +78,7 @@ const parseState = (raw: string | null): State => {
                     exact: idList(record.exact),
                     memberId: typeof record.memberId === 'string' ? record.memberId : null,
                     observed: record.observed !== false,
+                    firstSeen: finiteOr(record.firstSeen, 0) > 0 ? Number(record.firstSeen) : 0,
                 };
             }
         }
