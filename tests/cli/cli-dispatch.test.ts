@@ -723,7 +723,9 @@ describe('settings commands', () => {
     });
 
     test('set-setting with key, value and challenge', async () => {
-        const m = await run(['set-setting', '--challenge', '5', 'exposure', '80']);
+        const m = await run(['set-setting', '--challenge', '5', 'exposure', '80'], (mods) =>
+            mods.cmd.setSetting.mockReturnValue(true),
+        );
         expect(m.cmd.setSetting).toHaveBeenCalledWith('exposure', '80', '5');
         expect(m.exitCodes).toEqual([0]);
     });
@@ -743,8 +745,21 @@ describe('settings commands', () => {
             m.cmd.setSetting.mock.invocationCallOrder[0],
         );
         expect(stamp).toHaveBeenCalledTimes(stamped);
-        expect(m.exitCodes).toEqual([0]);
+        expect(m.exitCodes).toEqual([saved ? 0 : 1]);
     });
+
+    test.each([
+        [true, 0],
+        [false, 1],
+    ])(
+        'set-setting exit code follows the result: a name that is no setting or a value it refuses fails (%p → %p)',
+        async (saved, code) => {
+            const m = await run(['set-setting', 'exposure', '999'], (mods) =>
+                mods.cmd.setSetting.mockReturnValue(saved),
+            );
+            expect(m.exitCodes).toEqual([code]);
+        },
+    );
 
     test.each([[['--challenge=5']], [['5']], [['--yes']]])(
         'clear-chosen-photos %p is refused, since it clears every list',
@@ -794,9 +809,18 @@ describe('settings commands', () => {
     });
 
     test('set-global-default with key and value', async () => {
-        const m = await run(['set-global-default', 'exposure', '80']);
+        const m = await run(['set-global-default', 'exposure', '80'], (mods) =>
+            mods.cmd.setGlobalDefault.mockReturnValue(true),
+        );
         expect(m.cmd.setGlobalDefault).toHaveBeenCalledWith('exposure', '80');
         expect(m.exitCodes).toEqual([0]);
+    });
+
+    test('set-global-default of a name that is no setting, or a refused value, exits 1', async () => {
+        const m = await run(['set-global-default', 'nope', '80'], (mods) =>
+            mods.cmd.setGlobalDefault.mockReturnValue(false),
+        );
+        expect(m.exitCodes).toEqual([1]);
     });
 
     test.each([

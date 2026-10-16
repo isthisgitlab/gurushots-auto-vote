@@ -638,8 +638,11 @@ repeated six times is one that gets forgotten at one of them.
       `settings.json` is the app's own output. A logout clears the token and API headers from that copy as well, and
       from every copy set aside of a settings file that parses (`config.json.corrupt-<time>`,
       `settings.json.unimportable-<time>`, and the Android `gurushots-config_corrupt-…` /
-      `gurushots-settings_unimportable-…` keys): `scrubCopiesSync` / `scrubCopiesQueued`, run whenever the mirror sees a
-      signed-out configuration (a logout, and the start that clears the token when Stay Logged In is off). The last user
+      `gurushots-settings_unimportable-…` keys): `scrubCopiesSync` / `scrubCopiesQueued`, run only for a sign-out that was
+      saved (a token that was stored and is cleared: a logout, the start that clears the token when Stay Logged In is
+      off and one is stored, a sign-out adopted from an older build; `signOutPending` in `persistence.ts`, told to the
+      mirror once), never because the configuration merely holds no token, as the defaults of a damaged one do: the
+      sign-in in the copy the user is fixing is not theirs to lose. The last user
       name and the chosen-photos account go out of the copies too (never out of the configuration or the live mirror: the
       login form is prefilled from them). A copy that does not parse is left as it is.
     - **The one thing taken back is the sign-in, at every mirror write.** The marker keeps two fingerprints of the sign-in
@@ -666,8 +669,13 @@ repeated six times is one that gets forgotten at one of them.
       first, then mirrors; the notice says where it went (`settingsSetAside`; in the Android window only once the queued
       set-aside has landed). If it cannot be set aside nothing is written over it, and the next save tries again. The
       background service cannot set a file aside and leaves it as it is, quietly, for the window to do. That copy is
-      the file the user fixes in place, so a Re-import in this state imports from that copy (the one
-      of this episode, `legacySetAside`; never an older one in the folder), or from `settings.json` until there is one.
+      the file the user fixes in place, so a Re-import imports from that copy, or from `settings.json` until there is one. The copy
+      is the one of the last episode only (`legacySetAside`; never an older one in the folder), and where it was set
+      aside is recorded in the import marker (`unimportableCopy`, written when the set-aside lands, by compare-and-write
+      like the rest of it; the Android key on Android), so that a re-import in another process (the CLI) or after a
+      restart of the app finds it again. It is forgotten when a re-import, Start fresh or a retry succeeds, when another
+      episode begins, and when the copy is gone (settings.json is imported then). Until one of those, a later re-import
+      takes that copy, even if the user left the episode alone.
 - **Import and recovery (`settings/legacyImport.ts`, `persistence.ts`).** With no `config.json`, the first load imports
   `settings.json` under the import lock (Android has none: the native compare-and-write of the configuration decides
   which context is first) and writes the marker (`v2-import.json`, kept outside `config.json`, so setting the

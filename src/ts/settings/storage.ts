@@ -515,6 +515,8 @@ const createSettingsFile = (options: SettingsFileOptions) => {
         },
         /** The text of a copy kept of this file (a desktop), by its path; throws when it cannot be read. */
         readCopy: (copy: string): string => fs.readFileSync(copy, 'utf8'),
+        /** Whether a copy kept of this file (a desktop) is still there. */
+        hasCopy: (copy: string): boolean => fs.existsSync(copy),
         /**
          * Changes the copies set aside beside this file (`<file>.corrupt-<time>`, `<file>.unimportable-<time>`) where
          * the files can be read and written at once (a desktop): `change` gets each copy's text and answers the text to

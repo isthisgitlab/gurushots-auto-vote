@@ -279,12 +279,10 @@ describe('the import in the Android background service', () => {
         expect(settings.getSettingsRecovery()).toBeNull();
         expect(store.keys.has('gs_v2_import')).toBe(false);
         expect(parseJsonObject(store.legacy ?? 'null')).toMatchObject({ theme: 'light' });
-        // The file is kept, and the configuration holds no login, so the copy holds none either.
-        expect(parseJsonObject(store.keys.get('gurushots-settings_original') ?? 'null')).toEqual({
-            ...parseJsonObject(ONE_X),
-            token: '',
-            apiHeaders: {},
-        });
+        // The file is kept as it was: a configuration that merely holds no login is no sign-out.
+        expect(parseJsonObject(store.keys.get('gurushots-settings_original') ?? 'null')).toEqual(
+            parseJsonObject(ONE_X),
+        );
     });
 });
 

@@ -1705,7 +1705,7 @@ export const about = {
     deleteDoneWeb:
         'Visi vietējie dati ir dzēsti. Tīmekļa serveris ir apstājies. Palaid pnpm web vēlreiz un atver adresi, ko tas izvada.',
     importTitle: 'Uzstādījumu imports',
-    importAt: 'Tavi uzstādījumi no settings.json tika importēti {date}.',
+    importAt: 'Tavi uzstādījumi no settings.json tika importēti {date}',
     importNone: 'Nekas nebija jālabo.',
     importSome:
         'Šīs atsauces uz profiliem un scenārijiem ir paturētas, un tās joprojām netiek piemērotas, tāpat kā pirms importa. Izveido vai salabo profilu vai scenāriju, ko katra no tām nosauc:',

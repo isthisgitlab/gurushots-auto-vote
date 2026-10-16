@@ -423,8 +423,8 @@ describe('Start fresh in the Android app window', () => {
         settings.loadSettings();
         await settings.flushPendingWrites();
 
-        // The configuration holds no login, so the original holds none either; it is the same file.
-        expect(stored(ORIGINAL)).toEqual({ theme: 'dark', token: '', lastUsername: '', apiHeaders: {} });
+        // The original is the file as it was: a configuration that merely holds no login is no sign-out.
+        expect(prefs.get(ORIGINAL)).toBe(USER_FILE);
         expect(unimportable()).toHaveLength(1);
         expect(prefs.get(unimportable()[0])).toBe('{broken');
         expect(stored(MIRROR)).toMatchObject({ token: '' });

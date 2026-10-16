@@ -30,7 +30,10 @@ export const resetSetting = (key: string, challengeId: string | null = null) => 
             return false;
         }
 
-        settings.setSetting(key, defaultValue);
+        if (!settings.setSetting(key, defaultValue)) {
+            logger.withCategory('settings').error(`Could not reset ${key} to its default`);
+            return false;
+        }
         logger.withCategory('settings').success(`Reset ${key} to default: ${formatSettingForLog(key, defaultValue)}`);
         return true;
     } catch (error) {

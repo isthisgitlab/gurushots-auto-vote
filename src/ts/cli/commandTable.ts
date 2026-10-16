@@ -226,8 +226,10 @@ const runSetSetting: CommandHandler = async (argv) => {
     }
     // The warning about another account's lists comes before the write, the owner stamp after it.
     const stampOwner = await beforeChosenPhotosWrite(rest[0], rest[1]);
-    if (setSetting(rest[0], rest[1], challengeId)) stampOwner();
-    return 0;
+    // A name that is no setting, or a value it refuses, is a failure: the exit code says so to a script.
+    const saved = setSetting(rest[0], rest[1], challengeId);
+    if (saved) stampOwner();
+    return saved ? 0 : 1;
 };
 
 const runResetSetting: CommandHandler = async (argv) => {
@@ -245,8 +247,9 @@ const runSetGlobalDefault: CommandHandler = async ([key, value]) => {
         );
     }
     const stampOwner = await beforeChosenPhotosWrite(key, value);
-    if (setGlobalDefault(key, value)) stampOwner();
-    return 0;
+    const saved = setGlobalDefault(key, value);
+    if (saved) stampOwner();
+    return saved ? 0 : 1;
 };
 
 // It takes no arguments on purpose: a --challenge would suggest it clears one challenge, but it

@@ -370,9 +370,18 @@ describe('resetSetting', () => {
 
     test('a global reset writes the default', () => {
         settings.getDefaultSettings.mockReturnValue(invalid({ app: { theme: 'light' }, auth: {} }));
+        settings.setSetting.mockReturnValue(true);
         expect(cmd.resetSetting('theme')).toBe(true);
         expect(settings.setSetting).toHaveBeenCalledWith('theme', 'light');
         expect(msgs('success')).toEqual(['Reset theme to default: "light"']);
+    });
+
+    test('a global reset the settings refuse is a failure, not a success', () => {
+        settings.getDefaultSettings.mockReturnValue(invalid({ app: { theme: 'light' }, auth: {} }));
+        settings.setSetting.mockReturnValue(false);
+        expect(cmd.resetSetting('theme')).toBe(false);
+        expect(msgs('error')).toEqual(['Could not reset theme to its default']);
+        expect(msgs('success')).toEqual([]);
     });
 
     test('a key with no default is reported', () => {

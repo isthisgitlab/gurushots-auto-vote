@@ -596,6 +596,22 @@ describe('the settings.json the configuration could not be restored from, in the
         expect(calls.map((call) => call.key).indexOf(MIRROR)).toBeGreaterThan(-1);
     });
 
+    test('the key the copy was written under is recorded beside the import marker once it has landed, and forgotten when the episode ends', async () => {
+        const settings = await damaged();
+        expect(stored(MARKER)).not.toHaveProperty('unimportableCopy');
+
+        expect(settings.setSetting('theme', 'light')).toBe(true);
+        await drain(settings);
+
+        expect(stored(MARKER).unimportableCopy).toBe(unimportable()[0]);
+
+        // The window can import settings.json (the mirror of what it saved) and so ends the episode.
+        expect(settings.reimportFromV1()).toBe(true);
+        await drain(settings);
+
+        expect(stored(MARKER)).not.toHaveProperty('unimportableCopy');
+    });
+
     test('a file that could not be set aside is not written over, and the next save sets it aside', async () => {
         const settings = await damaged();
         const set = mockPreferences.set.getMockImplementation();

@@ -80,6 +80,27 @@ const isMirrorStarted = (): boolean => typeof readMarker()?.mirrorStartedAt === 
 const isMirrorStartedNow = async (): Promise<boolean> =>
     typeof parseMarker(await importMarkerStore.peekStored())?.mirrorStartedAt === 'string';
 
+/**
+ * Where the `settings.json` that did not import was set aside in the last episode of a damaged configuration (a path; the
+ * preference key on Android): the file the user is told to fix, which a re-import in another process, or after a
+ * restart, must find again. Null when none is recorded.
+ */
+const keptUnimportableCopy = (): string | null => {
+    const location = readMarker()?.unimportableCopy;
+    return typeof location === 'string' ? location : null;
+};
+
+/** Records where the unimportable `settings.json` was set aside; nothing when there is no marker to record it in. */
+const rememberUnimportableCopy = (location: string): void =>
+    changeMarker((marker) => (marker === null ? null : { ...marker, unimportableCopy: location }));
+
+/** Forgets the recorded copy (the episode is over: it was re-imported, a fresh start was made, or another began). */
+const forgetUnimportableCopy = (): void =>
+    changeMarker((marker) => {
+        if (marker === null || !Object.hasOwn(marker, 'unimportableCopy')) return null;
+        return Object.fromEntries(Object.entries(marker).filter(([key]) => key !== 'unimportableCopy'));
+    });
+
 /** The fingerprints a marker holds of the sign-in this build wrote to `settings.json`: the one it was about to write, and the last that landed. */
 const signInsOf = (marker: Record<string, unknown> | null): string[] =>
     [marker?.signInPending, marker?.signInConfirmed].filter((fingerprint) => typeof fingerprint === 'string');
@@ -153,13 +174,16 @@ export {
     importMarkerStore,
     isImportMarked,
     isMirrorStarted,
+    forgetUnimportableCopy,
     isMirrorStartedNow,
     keepImportedRecord,
+    keptUnimportableCopy,
     keptImportedRecord,
     markImportDone,
     markMirrored,
     markMirrorPending,
     markMirrorPendingQueued,
     mirroredSignIns,
+    rememberUnimportableCopy,
     mirroredSignInsNow,
 };

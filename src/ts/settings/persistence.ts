@@ -27,6 +27,7 @@ import { importWhenAbsent, reimportLegacyFile, retryLegacyImport, startFreshConf
 import type { ImportFailure, ImportOutcome } from './legacyImport';
 import { updateImported } from './importedRecord';
 import { mirrorSettings, setAsideLegacy } from './formatOneMirror';
+import { forgetUnimportableCopy, keptUnimportableCopy, rememberUnimportableCopy } from './importMarker';
 import type { SignInAdoption } from './formatOneMirror';
 import { onTitlePinsChange } from './titlePins';
 import { isPlainObject } from '../plainObject';
@@ -101,6 +102,10 @@ let legacyUnusable = false;
 // Where the unusable `settings.json` was set aside (a path; the preference key where there is no file), once it was
 // (in the Android window, once the queued write that does it has landed).
 let legacySetAside: string | null = null;
+// Whether a sign-out was saved (a token that was stored and is cleared) that the copies kept of the settings files have
+// not been cleared of yet: told to the mirror once (see MirrorHooks.takeSignOut). A configuration that merely holds no
+// token, as the defaults of a damaged one do, is not a sign-out.
+let signOutPending = false;
 // Whether the mirror adopted a sign-in an older build changed while _verifyMirror's own mirror ran, which makes the load
 // that is answering out of date (set by _adoptSignIn, read and cleared by _verifyMirror; where the mirror is queued
 // the answer is never out of date this way, the next read has it).
@@ -168,6 +173,7 @@ const _recoverCorrupt = (raw: string, reason: string): ConfigV2 => {
     restoredFromMirror = false;
     // A new episode: the copy an earlier one set aside is not this one's.
     legacySetAside = null;
+    forgetUnimportableCopy();
     blocked = null;
     logger
         .withCategory('settings')
@@ -347,7 +353,11 @@ const _setAsideUnusableLegacy = (): boolean => {
     }
     legacyUnusable = false;
     // Where the write is only queued, the notice says where it went once it has (see _mirror).
-    if (!aside.queued) legacySetAside = aside.kept ?? null;
+    if (!aside.queued) {
+        legacySetAside = aside.kept ?? null;
+        // Remembered beside the import marker too, so that a re-import in another process, or after a restart, finds it.
+        if (legacySetAside !== null) rememberUnimportableCopy(legacySetAside);
+    }
     return true;
 };
 
@@ -384,6 +394,12 @@ const _mirror = (landed?: Promise<QueuedWriteOutcome | undefined>) => {
         adoptSignIn: _adoptSignIn,
         onSetAside: (key) => {
             legacySetAside = key;
+            rememberUnimportableCopy(key);
+        },
+        takeSignOut: () => {
+            const pending = signOutPending;
+            signOutPending = false;
+            return pending;
         },
     });
 };
@@ -466,8 +482,14 @@ const _saveChangeDetailed = (change: (current: ConfigV2) => Partial<ConfigV2>, w
             logger.withCategory('settings').error(`Invalid setting not saved: ${oneLine(refused)}`, null);
             return { ok: false };
         }
+        const next = { ...current, ...changed };
+        // A token that was stored and is cleared is a sign-out, which the copies kept of the settings files are cleared of.
+        const signingOut = current.auth.token !== '' && next.auth.token === '';
+        if (signingOut) signOutPending = true;
         // Write via storage adapter (sync fs on Electron/CLI; cache + async write-behind on Capacitor)
-        return _persist({ ...current, ...changed }, withMirror);
+        const saved = _persist(next, withMirror);
+        if (signingOut && !saved.ok) signOutPending = false;
+        return saved;
     } catch (error) {
         logger.withCategory('settings').error('Error saving settings:', error);
         return { ok: false };
@@ -553,6 +575,8 @@ const _recovered = (run: () => ImportOutcome): boolean => {
     try {
         const outcome = run();
         if (outcome.ok) {
+            // The episode of a damaged configuration is over (or none was): no copy is the one to fix any more.
+            forgetUnimportableCopy();
             importFailure = null;
             importSettled = false;
             mirrorVerified = false;
@@ -607,6 +631,20 @@ const startFreshDetailed = (): { ok: boolean; keptAt: string | null; landed?: Pr
 const startFresh = (): boolean => startFreshDetailed().ok;
 
 /**
+ * The file to fix, when settings.json did not import: the copy kept of it in the last episode of a damaged configuration,
+ * once there is one: this process's, or the one the marker remembers (another process, or an earlier run of the app, set
+ * it aside). Where there are no files the key of one is not a path to read, and a copy that is gone is no longer the one
+ * to fix. Null without one: settings.json itself is imported.
+ */
+const _copyToFix = (): string | null => {
+    const copy = runtime.isCapacitor() ? null : (legacySetAside ?? keptUnimportableCopy());
+    if (copy === null || legacyStorage.hasCopy(copy)) return copy;
+    forgetUnimportableCopy();
+    legacySetAside = null;
+    return null;
+};
+
+/**
  * Import `settings.json` again on request: the configuration in use is set aside the way a damaged one is
  * (`config.json.corrupt-<time>`) and the import is saved in its place, the sign-in included. `settings.json` is the
  * mirror of what was in use, unless an older build changed it since.
@@ -615,16 +653,13 @@ const startFresh = (): boolean => startFreshDetailed().ok;
  */
 const reimportFromV1Detailed = (): { ok: boolean; setAside: string | null } => {
     let setAside: string | null = null;
-    // In the damaged-configuration state the file to fix is the copy kept of the unusable settings.json in this episode,
-    // once there is one (a file: where there are none, the key of one is not a path to read), else settings.json itself.
-    const copy = corruptBackupPath !== null && !restoredFromMirror && !runtime.isCapacitor() ? legacySetAside : null;
     const ok = _recovered(() =>
         reimportLegacyFile(
             _importFailedLater,
             (path) => {
                 setAside = path;
             },
-            copy,
+            _copyToFix(),
         ),
     );
     // The damaged configuration the notice was about is not the one in use any more.

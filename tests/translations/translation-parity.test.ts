@@ -106,3 +106,16 @@ describe('the chooser is named as the chooser, not as "this window" (the app has
         expect(latvian.app[key]).toContain(`„${latvian.app.photoChooserTitle}”`);
     });
 });
+
+describe('the import date sentence ends in one full stop', () => {
+    // lv-LV writes a date with its own trailing full stop ("16.10.2026."), so the Latvian sentence must not add another.
+    test.each([
+        ['en-GB', english.about.importAt],
+        ['lv-LV', latvian.about.importAt],
+    ])('%s: the sentence after the date ends in a single full stop', (locale, sentence) => {
+        const date = new Date('2026-10-16T03:18:00Z').toLocaleDateString(locale);
+        const text = sentence.replace('{date}', date);
+        expect(text.endsWith('.')).toBe(true);
+        expect(text.endsWith('..')).toBe(false);
+    });
+});

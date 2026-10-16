@@ -362,20 +362,25 @@ describe('the sign-in in the mirror (real fs)', () => {
             expect(stored(legacyFile)).toMatchObject({ lastUsername: 'me@example.com', chosenPhotosMemberId: 'm-1' });
         });
 
-        test('a start that finds the configuration signed out clears the copies left by an earlier session', () => {
+        test("a configuration that merely holds no token is no sign-out: starts and saves leave the copies' sign-in alone", () => {
             signedIn();
             settings.setSetting('token', '');
             arrangeCopies();
+            // (The copies were made after the logout; they hold the sign-in of the account that was signed out.)
 
+            loadFresh();
+            settings.loadSettings();
+            settings.setSetting('theme', 'light');
+            // A second "sign-out" of a token that is not stored is none either.
+            settings.setSetting('token', '');
             loadFresh();
             settings.loadSettings();
 
             expect(stored(setAside('config.json.corrupt-2026-10-16T08-00-00-000Z')).auth).toMatchObject({
-                token: '',
-                apiHeaders: {},
+                token: 'tok-old',
             });
             expect(stored(setAside('settings.json.unimportable-2026-10-16T08-00-00-000Z'))).toMatchObject({
-                token: '',
+                token: 'tok-unimportable',
             });
         });
 
@@ -546,6 +551,30 @@ describe('the sign-in in the mirror (real fs)', () => {
             expect(settings.getSettingsRecovery()).not.toHaveProperty('settingsSetAside');
         });
 
+        test('the sign-in in the copy of the episode survives several starts and saves, and a real logout still scrubs it', () => {
+            damaged(JSON.stringify({ theme: 'dark', token: 'tok-keep', lastUsername: 'me@example.com' }));
+            failing('migration-failed');
+            settings.loadSettings();
+            settings.setSetting('theme', 'light');
+            const [copy] = unimportable();
+            // (The configuration of that episode held no token, which is not a sign-out.)
+            for (let start = 0; start < 3; start++) {
+                loadFresh();
+                settings.loadSettings();
+                settings.setSetting('theme', start % 2 === 0 ? 'dark' : 'light');
+            }
+            expect(stored(path.join(userData, copy))).toMatchObject({
+                token: 'tok-keep',
+                lastUsername: 'me@example.com',
+            });
+
+            // The user signs in and out again: a real sign-out clears every copy.
+            settings.setSetting('token', 'tok-new');
+            settings.setSetting('token', '');
+
+            expect(stored(path.join(userData, copy))).toMatchObject({ token: '', lastUsername: '' });
+        });
+
         test('a Re-import after the first save imports the copy of this episode that the user fixed in place, never another one in the folder', () => {
             damaged();
             loadFresh();
@@ -597,10 +626,65 @@ describe('the sign-in in the mirror (real fs)', () => {
 
             expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt' });
             expect(settings.getSettingsRecovery()).not.toHaveProperty('settingsSetAside');
+            // (Nor does the marker point at it any more.)
+            expect(stored(markerFile)).not.toHaveProperty('unimportableCopy');
             // Re-import reads settings.json, which the user fixes now, not the first copy.
             fs.writeFileSync(legacyFile, JSON.stringify({ theme: 'dark', token: 'tok-fixed' }));
             expect(settings.reimportFromV1()).toBe(true);
             expect(settings.loadSettings()).toMatchObject({ app: { theme: 'dark' }, auth: { token: 'tok-fixed' } });
+        });
+
+        test('a Re-import in another process (the CLI) finds the copy the first process set aside, and the freshly mirrored defaults are not what it imports', () => {
+            damaged();
+            loadFresh();
+            settings.loadSettings();
+            settings.setSetting('theme', 'light');
+            const [copy] = unimportable();
+            expect(stored(markerFile).unimportableCopy).toBe(path.join(userData, copy));
+            // The user fixes the copy in place; settings.json is the mirror of the defaults by now.
+            fs.writeFileSync(path.join(userData, copy), JSON.stringify({ theme: 'dark', token: 'tok-fixed' }));
+
+            // A new process: nothing of the episode is in its memory.
+            loadFresh();
+            const result = settings.reimportFromV1Detailed();
+
+            expect(result.ok).toBe(true);
+            expect(settings.loadSettings()).toMatchObject({ app: { theme: 'dark' }, auth: { token: 'tok-fixed' } });
+            // The episode is over: the pointer is gone, and the next re-import reads settings.json again.
+            expect(stored(markerFile)).not.toHaveProperty('unimportableCopy');
+            expect(stored(legacyFile)).toMatchObject({ theme: 'dark', token: 'tok-fixed' });
+        });
+
+        test('with no marker to record it in, the set-aside is made all the same, and a re-import then reads settings.json', () => {
+            damaged();
+            loadFresh();
+            settings.loadSettings();
+            fs.rmSync(markerFile);
+
+            expect(settings.setSetting('theme', 'light')).toBe(true);
+
+            expect(unimportable()).toHaveLength(1);
+            expect(fs.existsSync(markerFile)).toBe(false);
+            fs.writeFileSync(legacyFile, JSON.stringify({ theme: 'dark', token: 'tok-fixed' }));
+            loadFresh();
+            expect(settings.reimportFromV1()).toBe(true);
+            expect(settings.loadSettings().auth.token).toBe('tok-fixed');
+        });
+
+        test('the same after a restart of the app: a re-import with no notice (nothing is wrong now) still takes the fixed copy', () => {
+            damaged();
+            loadFresh();
+            settings.loadSettings();
+            settings.setSetting('theme', 'light');
+            const [copy] = unimportable();
+            fs.writeFileSync(path.join(userData, copy), JSON.stringify({ token: 'tok-fixed' }));
+            loadFresh();
+            settings.loadSettings();
+            expect(settings.getSettingsRecovery()).toBeNull();
+
+            expect(settings.reimportFromV1()).toBe(true);
+
+            expect(settings.loadSettings().auth.token).toBe('tok-fixed');
         });
 
         test('with no copy of this episode, a stale one in the folder is not taken: the settings.json fixed in place is', () => {
@@ -643,7 +727,7 @@ describe('the sign-in in the mirror (real fs)', () => {
             },
         );
 
-        test('a copy of this episode that is gone cannot be imported: nothing changes, and it says it did not work', () => {
+        test('a copy of this episode that is gone is forgotten: settings.json is imported instead', () => {
             damaged();
             loadFresh();
             settings.loadSettings();
@@ -652,10 +736,10 @@ describe('the sign-in in the mirror (real fs)', () => {
             fs.rmSync(path.join(userData, copy));
             fs.writeFileSync(legacyFile, JSON.stringify({ theme: 'dark', token: 'tok-fixed' }));
 
-            expect(settings.reimportFromV1Detailed()).toEqual({ ok: false, setAside: null });
+            expect(settings.reimportFromV1()).toBe(true);
 
-            expect(settings.getSettingsRecovery()?.code).toBe('settings-corrupt');
-            expect(stored(configFile).app).toMatchObject({ theme: 'light' });
+            expect(settings.loadSettings()).toMatchObject({ app: { theme: 'dark' }, auth: { token: 'tok-fixed' } });
+            expect(stored(markerFile)).not.toHaveProperty('unimportableCopy');
         });
 
         test('a copy that still does not import leaves everything as it is, and says it did not work', () => {
@@ -946,6 +1030,20 @@ describe('the sign-in in the mirror (real fs)', () => {
             expect(result.ok).toBe(true);
             expect(result.keptAt).toBe(path.join(userData, unimportable()[0]));
             expect(fs.readFileSync(path.join(userData, unimportable()[0]), 'utf8')).toBe('{broken again');
+        });
+
+        test('ends the episode: the copy the marker pointed at is forgotten', () => {
+            fs.writeFileSync(legacyFile, '{broken');
+            loadFresh();
+            settings.loadSettings();
+            fs.writeFileSync(
+                markerFile,
+                JSON.stringify({ importedAt: '2026-10-01T00:00:00.000Z', unimportableCopy: '/old/copy' }),
+            );
+
+            expect(settings.startFresh()).toBe(true);
+
+            expect(stored(markerFile)).not.toHaveProperty('unimportableCopy');
         });
 
         test('says nothing was kept when there was no settings.json', () => {

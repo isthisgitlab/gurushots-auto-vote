@@ -143,7 +143,7 @@ const toFormatOne = (config: ConfigV2, titlePins: Record<string, string>): Recor
 const mirrorOf = (
     configText: string | null,
     titlePins: Record<string, string>,
-): { text: string; signedOut: boolean; signIn: string; auth: ConfigAuthV2 } | null => {
+): { text: string; signIn: string; auth: ConfigAuthV2 } | null => {
     if (!configText) return null;
     let parsed: unknown;
     try {
@@ -156,7 +156,6 @@ const mirrorOf = (
     dropInvalidValues(config);
     return {
         text: JSON.stringify(toFormatOne(config, titlePins), null, 2),
-        signedOut: config.auth.token === '',
         signIn: signInFingerprint(config.auth),
         auth: config.auth,
     };
@@ -220,6 +219,8 @@ const keepOriginalQueued = async (current: string): Promise<boolean> =>
 /**
  * A logout takes the sign-in state out of every copy kept of a settings file that holds one: the user's own file
  * (`settings.json.original`) and the files set aside (`config.json.corrupt-<time>`, `settings.json.unimportable-<time>`).
+ * Only a sign-out that was saved does (a token that was stored and is cleared): a configuration that merely holds no
+ * token, as the defaults of a damaged one do, is no reason to take the sign-in out of the copy the user is fixing.
  * A copy that does not parse is left as it is. Where the files are read and written in one step.
  */
 const scrubCopiesSync = (): void => {
@@ -337,6 +338,8 @@ type SignInAdoption = { outcome: 'adopted'; landed?: Promise<QueuedWriteOutcome>
 type MirrorHooks = {
     adoptSignIn: (found: Partial<ConfigAuthV2>) => SignInAdoption;
     onSetAside: (key: string) => void;
+    /** Whether a sign-out was saved that the copies kept of the settings files have not been cleared of yet (told once). */
+    takeSignOut: () => boolean;
 };
 
 // settings.json is read before the configuration it is made from: a mirror the other process or context writes between
@@ -345,8 +348,7 @@ type MirrorHooks = {
 // follow this order (an import) is not interleaved with it either. Each time, before the write, a sign-in that
 // `settings.json` holds and this build did not write (a logout or an account switch in an older build, while this one
 // ran) is adopted into the configuration first, so the write does not undo it.
-const mirrorSync = ({ adoptSignIn }: MirrorHooks): MirrorOutcome => {
-    let signedOut = false;
+const mirrorSync = ({ adoptSignIn, takeSignOut }: MirrorHooks): MirrorOutcome => {
     const outcome = ((): MirrorOutcome => {
         // Nothing is stored to mirror (a fresh install, or the configuration was set aside): no lock is taken for it
         // (the service has no lock to take).
@@ -359,7 +361,6 @@ const mirrorSync = ({ adoptSignIn }: MirrorHooks): MirrorOutcome => {
                 const current = legacyStorage.readRaw();
                 const made = mirrorOf(storage.peekRaw(), storedTitlePins());
                 if (made === null) return 'skipped';
-                signedOut = made.signedOut;
                 const found = adopted ? null : signInChangedByOlderBuild(current, mirroredSignIns());
                 if (found !== null) {
                     const taken = adoptSignIn(found);
@@ -381,13 +382,13 @@ const mirrorSync = ({ adoptSignIn }: MirrorHooks): MirrorOutcome => {
             lock.release();
         }
     })();
-    if (signedOut) scrubCopiesSync();
+    if (takeSignOut()) scrubCopiesSync();
     return outcome;
 };
 
 const mirrorQueued = (
     landed: Promise<QueuedWriteOutcome | undefined> | undefined,
-    { adoptSignIn, onSetAside }: MirrorHooks,
+    { adoptSignIn, onSetAside, takeSignOut }: MirrorHooks,
 ): Promise<MirrorOutcome> =>
     legacyStorage.enqueue<MirrorOutcome>(async () => {
         if ((await landed) === 'failed') return 'skipped';
@@ -397,7 +398,6 @@ const mirrorQueued = (
             if (key === null) return 'failed';
             if (owed.asCopy) onSetAside(key);
         }
-        let signedOut = false;
         const outcome = await (async (): Promise<MirrorOutcome> => {
             let adopted = false;
             for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
@@ -405,7 +405,6 @@ const mirrorQueued = (
                 // What is stored, the title pins and the marker included: the service writes them too.
                 const made = mirrorOf(await storage.peekStored(), await storedTitlePinsNow());
                 if (made === null) return 'skipped';
-                signedOut = made.signedOut;
                 const found = adopted ? null : signInChangedByOlderBuild(current, await mirroredSignInsNow());
                 if (found !== null) {
                     const taken = adoptSignIn(found);
@@ -425,7 +424,7 @@ const mirrorQueued = (
             }
             return 'gave-up';
         })();
-        if (signedOut) await scrubCopiesQueued();
+        if (takeSignOut()) await scrubCopiesQueued();
         return outcome;
     }, 'failed');
 

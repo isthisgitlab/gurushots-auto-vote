@@ -63,13 +63,6 @@ const ONE_X = {
     },
 };
 const RAW = `${JSON.stringify(ONE_X, null, 2)}\n`;
-// The same file once its sign-in state is cleared (the configuration that was adopted holds no login).
-// A copy kept of the file, cleared by a logout: the token, the headers, the last user name and the chosen-photos account.
-const RAW_SIGNED_OUT = JSON.stringify(
-    { ...ONE_X, token: '', apiHeaders: {}, lastUsername: '', chosenPhotosMemberId: '' },
-    null,
-    2,
-);
 
 describe('the import of a settings.json (real fs)', () => {
     let root: string;
@@ -224,7 +217,7 @@ describe('the import of a settings.json (real fs)', () => {
             expect(fs.existsSync(markerFile)).toBe(false);
             expect(fs.existsSync(pinsFile)).toBe(false);
             expect(stored(legacyFile)).toMatchObject({ theme: 'light', token: '' });
-            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW_SIGNED_OUT);
+            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW);
         });
 
         test('with the marker there and no configuration, before the mirror has written: defaults, and settings.json stays as it is', () => {
@@ -611,7 +604,7 @@ describe('the import of a settings.json (real fs)', () => {
 
             expect(settings.loadSettings().app.theme).toBe('light');
 
-            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW_SIGNED_OUT);
+            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW);
             expect(fs.existsSync(markerFile)).toBe(false);
         });
 
@@ -652,7 +645,7 @@ describe('the import of a settings.json (real fs)', () => {
 
             expect(settings.getSettingsRecovery()).toBeNull();
             expect(fs.existsSync(markerFile)).toBe(false);
-            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW_SIGNED_OUT);
+            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW);
         });
 
         test('that is empty cannot be adopted: the import fails and says so', () => {
@@ -783,7 +776,8 @@ describe('the import of a settings.json (real fs)', () => {
             expect(fs.readFileSync(legacyFile, 'utf8')).toBe(RAW);
             jest.restoreAllMocks();
             expect(settings.saveAppSettings({ theme: 'dark' })).toBe(true);
-            expect(fs.readFileSync(originalFile, 'utf8')).toContain('"token": ""');
+            // (A configuration that merely holds no login is no sign-out: the copy keeps the file as it was.)
+            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW);
             expect(stored(legacyFile)).toMatchObject({ theme: 'dark' });
         });
 
@@ -813,7 +807,7 @@ describe('the import of a settings.json (real fs)', () => {
             }
             // The first file the user had is still the one kept as the original (the default configuration holds no login,
             // so the copy holds none); the mirror has written over the other.
-            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW_SIGNED_OUT);
+            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW);
             expect(stored(legacyFile)).toMatchObject({ theme: 'light' });
         });
 
