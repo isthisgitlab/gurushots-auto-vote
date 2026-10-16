@@ -576,6 +576,30 @@ class AutoVoteServiceTest {
     }
 
     @Test
+    fun theEntryAgeLedgerIsASideStoreChangedByCompareAndSetOnly() {
+        val store = newService().HeadlessStore()
+        ShadowLog.clear()
+        assertTrue(SideStores.isAllowed("gs_entry_ages"))
+        assertNull(store.readKey("gs_entry_ages"))
+        // Both contexts record entries, so each change rests on what its writer read: a plain write is refused.
+        assertFalse(store.writeKey("gs_entry_ages", """{"7":{"closeTime":1}}"""))
+        assertNull(store.readKey("gs_entry_ages"))
+        assertTrue(store.compareAndWriteKey("gs_entry_ages", null, """{"7":{"closeTime":1}}"""))
+        assertEquals("""{"7":{"closeTime":1}}""", store.readKey("gs_entry_ages"))
+        // A change made on what the other context has since replaced is refused, and what is stored stays.
+        assertFalse(store.compareAndWriteKey("gs_entry_ages", """{"7":{"closeTime":0}}""", """{"7":{"closeTime":2}}"""))
+        assertFalse(store.compareAndWriteKey("gs_entry_ages", """{"7":{"closeTime":1}}""", "invalid JSON"))
+        assertEquals("""{"7":{"closeTime":1}}""", store.readKey("gs_entry_ages"))
+        assertEquals(
+            listOf(
+                "Refusing a plain write of entry-age ledger blob: it is changed by compare-and-set only",
+                "Refusing to persist non-JSON entry-age ledger blob"
+            ),
+            ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
+        )
+    }
+
+    @Test
     fun theImportMarkerAndTheTitlePinsAreChangedByCompareAndSetOnly() {
         val store = newService().HeadlessStore()
         ShadowLog.clear()

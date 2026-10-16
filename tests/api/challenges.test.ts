@@ -8,6 +8,7 @@ import type * as activeChallengesModule from '../../src/ts/strategies/real/activ
 import type * as api_clientModule from '../../src/ts/api/api-client';
 import type * as challengeTitlePinModule from '../../src/ts/services/challengeTitlePin';
 import type * as loggerModule from '../../src/ts/logger';
+import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 
@@ -224,6 +225,40 @@ describe('challenges', () => {
 
             expect(result).toEqual({ challenges: [], fetchFailed: true });
             // The logger module handles the error message, not console.error
+        });
+
+        test('a successful fetch carries the time each entry went in, from the entry-age ledger', async () => {
+            const { entryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+            const observeAll = jest.spyOn(entryAgeLedger, 'observeAll').mockReturnValue({
+                '12345': { e1: { at: 1_800_000_000, exact: true } },
+            });
+            const refresh = jest.spyOn(entryAgeLedger, 'refresh').mockResolvedValue(undefined);
+            makePostRequest.mockResolvedValueOnce({
+                challenges: [
+                    { id: '12345', title: 'T', member: { ranking: { entries: [{ id: 'e1' }, { id: 'e2' }] } } },
+                ],
+            });
+
+            const result = await getActiveChallenges(mockToken);
+
+            const entries = result.challenges[0].member?.ranking?.entries ?? [];
+            expect(entries[0].appEntered).toEqual({ at: 1_800_000_000, exact: true });
+            expect(entries[1].appEntered).toBeUndefined();
+            expect(refresh).toHaveBeenCalledTimes(1);
+            expect(observeAll).toHaveBeenCalledWith(result.challenges, expect.any(Number));
+            observeAll.mockRestore();
+            refresh.mockRestore();
+        });
+
+        test('failed fetch never reaches the entry-age ledger', async () => {
+            const { entryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+            const observeAll = jest.spyOn(entryAgeLedger, 'observeAll');
+            makePostRequest.mockResolvedValueOnce(null);
+
+            await getActiveChallenges(mockToken);
+
+            expect(observeAll).not.toHaveBeenCalled();
+            observeAll.mockRestore();
         });
 
         test('failed fetch never reaches the title-pin hook', async () => {

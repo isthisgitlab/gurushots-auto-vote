@@ -4,6 +4,8 @@
  * here exists at runtime.
  */
 
+import type { EntryEnteredTime } from './gurushots';
+
 /** What `updateThrough` came to: saved, left alone because `update` declined (answered null), or not saved. */
 export type ThroughResult = 'saved' | 'aborted' | 'failed';
 
@@ -15,6 +17,14 @@ export interface RawJsonStore {
     /** Raw JSON string, or null when never written. */
     readRaw(): string | null;
     writeRaw(data: string): void;
+    /** Calls `listener` when the store's data is discarded (a wipe of local data). Absent on a store that is not wiped. */
+    onDiscard?(listener: () => void): void;
+    /**
+     * `updateThrough` where the store is read and written in one step (a desktop, the background service): its outcome
+     * is the answer. Null where the write is only queued (the Android app window): use `updateThrough`. Absent where
+     * a write is made before `writeRaw` returns.
+     */
+    updateNow?(update: (current: string | null) => string | null): ThroughResult | null;
     /**
      * Writes a value made from the current one that nothing reads before it is saved (the Android app, whose writes
      * go behind a cache, puts it in the cache only once it is): `saved`; `failed` (it was not, and nothing changed); or
@@ -83,7 +93,16 @@ export interface EntryAgeRecord {
     pending: string | null;
     /** Auto-submitted entries without a theme match; never inferred for manual entries. */
     uncertain?: string[];
+    /** Ids whose `entered` time is the app's own submit time (exact), not the time a fetch first showed them. */
+    exact: string[];
+    /** The account the entries belong to (from the entries' `member_id`); null until a listing says. */
+    memberId: string | null;
+    /** False for a record a submit created before any fetch had seen the challenge. */
+    observed: boolean;
 }
+
+/** Per challenge id, per entry id: the entry's recorded time (only entries whose time is known). */
+export type EntryTimes = Record<string, Record<string, EntryEnteredTime>>;
 
 /** The entry-age ledger a voting pass reads and writes (entryAgeStore). */
 export type EntryAgeLedger = ReturnType<typeof import('../entryAgeStore').createEntryAgeLedger>;

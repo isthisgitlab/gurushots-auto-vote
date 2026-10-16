@@ -13,15 +13,21 @@ import { applyBoost } from './applyBoost';
 import { getVoteImages, submitVotes } from '../../api/voting';
 import { applyBoostToEntry } from '../../api/boost';
 import { getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS } from '../../api/turbo';
-import { getEligiblePhotos, getEligiblePhotosWalk, getImageData, submitToChallenge } from '../../api/submissions';
+import {
+    getEligiblePhotos,
+    getEligiblePhotosWalk,
+    getImageData,
+    submitToChallenge as submitToChallengeRaw,
+} from '../../api/submissions';
 import { getCurrentMemberProfile, searchTagAutocomplete } from '../../api/tags';
 import { getMemberChallenges, getBankroll, coinsUnlock } from '../../api/join';
 import { getMyCompletedChallenges, claimChallengeResources, getMyMissions, claimMissionPrize } from '../../api/rewards';
-import { keyUnlock, swapPhoto, exposureAutofill } from '../../api/currency';
+import { keyUnlock, swapPhoto as swapPhotoRaw, exposureAutofill } from '../../api/currency';
 import { cleanupStaleMetadata } from '../../metadata';
 import { swapBackLedger } from '../../swapBackStore';
 import { autoSpendLedger } from '../../currencyAutoStore';
 import { entryAgeLedger } from '../../entryAgeStore';
+import { withEntryTimes } from '../../services/entryTimes';
 import {
     scenarioStateLedger,
     scenarioStateLoaded,
@@ -47,6 +53,16 @@ import { joinStateStore, acquireUnlockLock, refreshJoinStateAsync } from '../../
 
 import type { Challenge, TurboMiniGameResult } from '../../types/gurushots';
 import { errorMessage } from '../../errorMessage';
+
+// The submit and swap every real caller goes through: a photo that went in is recorded at its exact time (the ledger
+// the UI's "Submitted …" reads). Late-bound to the api module, so a replaced endpoint is the one that is called.
+const { submitToChallenge, swapPhoto } = withEntryTimes(
+    {
+        submitToChallenge: (...args) => submitToChallengeRaw(...args),
+        swapPhoto: (...args) => swapPhotoRaw(...args),
+    },
+    entryAgeLedger,
+);
 
 // One instance for the process: the tracker is stateless (it reads and writes
 // metadata.json on each call), but building it per pass would be pointless churn.
@@ -335,4 +351,6 @@ export {
     runTurboMiniGame,
     joinChallenge,
     forgetUnconfirmedPayment,
+    submitToChallenge,
+    swapPhoto,
 };

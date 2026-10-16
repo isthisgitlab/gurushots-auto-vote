@@ -52,8 +52,7 @@ const {
     refreshChallengeState,
 } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
-const { createEntryAgeLedger, createMemoryEntryAgeLedger } =
-    require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
 
 // Mirrors the schema default: "have ≥2 entries at T-30m, ≥3 at T-20m, ≥4 at
 // T-10m" for a 4-slot challenge.
@@ -130,12 +129,14 @@ describe('uncertain auto-submit tracking', () => {
             getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', ['Car'])]),
             submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
             rankVisually: jest.fn(async (_challenge, ids, _eligible, wantCount) => ids.slice(0, wantCount)),
-            entryAges: createEntryAgeLedger({
-                readRaw: () => null,
-                writeRaw: () => {
+            // The ledger itself never throws (its writes are logged and kept in memory); a ledger that did must still
+            // not fail the submission.
+            entryAges: {
+                ...createMemoryEntryAgeLedger(),
+                markUncertain: () => {
                     throw new Error('disk full');
                 },
-            }),
+            },
         });
         expect(result).toBe('submitted');
     });

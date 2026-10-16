@@ -28,8 +28,9 @@ jest.mock('@/components/app/EntryBadge', () => ({
         swapAvailable,
         boostAvailable,
         turboAvailable,
+        timezone,
     }: Parameters<typeof RealEntryBadge>[0]) => (
-        <span data-testid={`entry-${entry.id}`}>
+        <span data-testid={`entry-${entry.id}`} data-timezone={timezone}>
             {JSON.stringify({ swapBack, swapAvailable, boostAvailable, turboAvailable })}
         </span>
     ),
@@ -769,6 +770,11 @@ describe('entries, tags and alerts', () => {
             turboAvailable: true,
         });
         expect(parseJsonObject(screen.getByTestId('entry-1').textContent).swapBack).toBeNull();
+    });
+
+    test('hands each entry the timezone its submit time is written in', () => {
+        renderCard(makeChallenge({ member: { ranking: { entries: [{ id: 1 }] } } }), { timezone: 'Europe/Riga' });
+        expect(screen.getByTestId('entry-1').getAttribute('data-timezone')).toBe('Europe/Riga');
     });
 
     test('a settings change refreshes the deadline preview in place, without remounting the card', async () => {

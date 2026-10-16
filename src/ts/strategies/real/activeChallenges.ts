@@ -5,11 +5,14 @@
 
 import { fetchActiveChallenges } from '../../api/challenges';
 import { pinChallengeTitles } from '../../services/challengeTitlePin';
+import { annotateEntryTimes } from '../../services/entryTimes';
+import { entryAgeLedger } from '../../entryAgeStore';
 
 import type { ActiveChallengesResponse } from '../../types/gurushots';
 
 /**
- * One fetch, then pin first-seen titles onto a successful response. A failed
+ * One fetch, then pin first-seen titles onto a successful response and put the
+ * time each entry went in on it (services/entryTimes). A failed
  * fetch (flagged `fetchFailed`) must never reach the pin/prune logic — a
  * network blip would wipe pins. The server mutates `title` while an event
  * (turbo) is active; pinning keeps display and title-rule matching stable
@@ -19,6 +22,7 @@ const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => 
     const response = await fetchActiveChallenges(token);
     if (!response.fetchFailed && Array.isArray(response.challenges)) {
         pinChallengeTitles(response.challenges);
+        await annotateEntryTimes(response, entryAgeLedger);
     }
     return response;
 };

@@ -673,6 +673,22 @@ describe('createJsonStore', () => {
                 resumeWrites();
             });
 
+            test('a listener registered with onDiscard is told when the stores are discarded (local data deleted)', async () => {
+                const { discardPendingWrites, resumeWrites } =
+                    require('../../src/ts/settings/storage') as typeof storageModule;
+                delete g.Capacitor;
+                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const file = createJsonStore({ fileName: 'entryAges.json', prefKey: 'gs_entry_ages' });
+                const told = jest.fn();
+                file.onDiscard(told);
+                expect(told).not.toHaveBeenCalled();
+
+                await discardPendingWrites();
+
+                expect(told).toHaveBeenCalledTimes(1);
+                resumeWrites();
+            });
+
             test('peekStored reads what Preferences holds in the app window, which the cache may be behind', async () => {
                 const strict = strictStore();
                 await strict.initializeAsync();

@@ -23,6 +23,8 @@ jest.mock('../src/ts/strategies/real', () => ({
     applyBoost: jest.fn(),
     joinChallenge: jest.fn(),
     forgetUnconfirmedPayment: jest.fn(),
+    submitToChallenge: jest.fn(),
+    swapPhoto: jest.fn(),
 }));
 jest.mock('../src/ts/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
 jest.mock('../src/ts/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
@@ -30,11 +32,9 @@ jest.mock('../src/ts/api/turbo', () => ({ applyTurbo: jest.fn() }));
 jest.mock('../src/ts/api/submissions', () => ({
     getEligiblePhotos: jest.fn(),
     getImageData: jest.fn(),
-    submitToChallenge: jest.fn(),
 }));
 jest.mock('../src/ts/api/currency', () => ({
     keyUnlock: jest.fn(),
-    swapPhoto: jest.fn(),
     exposureAutofill: jest.fn(),
 }));
 jest.mock('../src/ts/mock', () => ({
@@ -107,6 +107,7 @@ import type * as apiFactoryModule from '../src/ts/apiFactory';
 import type { CategoryLogger } from '../src/ts/logger';
 import type * as BaseMiddlewareModule from '../src/ts/services/BaseMiddleware';
 import type * as mockModule from '../src/ts/mock';
+import type * as realStrategyModule from '../src/ts/strategies/real';
 import { invalid } from './helpers/invalid';
 
 describe('apiFactory', () => {
@@ -157,6 +158,12 @@ describe('apiFactory', () => {
             const second = getApiStrategy();
             expect(first).toBe(mockApi);
             expect(second).toBe(realApi);
+        });
+
+        test('the real surface submits and swaps through the strategy, which records the time the photo went in', () => {
+            const real = jest.mocked(require('../src/ts/strategies/real') as typeof realStrategyModule);
+            expect(realApi.submitToChallenge).toBe(real.submitToChallenge);
+            expect(realApi.swapPhoto).toBe(real.swapPhoto);
         });
 
         test('exposes a getStrategyType label on each surface', () => {

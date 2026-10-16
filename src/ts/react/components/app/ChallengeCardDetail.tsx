@@ -294,6 +294,7 @@ function EntryDetails({
     onVoteComplete,
     onCurrencySpent,
     onChooseSwap,
+    timezone,
 }: {
     challenge: Challenge;
     view: ChallengeCardView;
@@ -303,6 +304,7 @@ function EntryDetails({
     onVoteComplete: () => void;
     onCurrencySpent: () => void;
     onChooseSwap: OpenSwapPick;
+    timezone: string;
 }) {
     const { t } = useTranslation();
     const { pins, togglePin, setPin, loading: pinBusy, error: pinError, clearError: clearPinError } = entryPins;
@@ -392,6 +394,7 @@ function EntryDetails({
                             busy: pinBusy,
                             onToggle: togglePin,
                         }}
+                        timezone={timezone}
                     />
                 ))}
             </div>
@@ -515,6 +518,7 @@ export function ChallengeCardDetail({
                     onVoteComplete={onVoteComplete}
                     onCurrencySpent={onCurrencySpent}
                     onChooseSwap={actions.openSwapPick}
+                    timezone={timezone}
                 />
             )}
 

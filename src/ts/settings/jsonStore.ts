@@ -120,6 +120,7 @@ const createJsonStore = ({
         shared ? (expected, data) => compareAndWrite(prefKey, expected, data) : undefined,
     );
     let swept = false;
+    const discardListeners: Array<() => void> = [];
 
     const filePath = () => path.join(path.dirname(getSettingsPath()), fileName);
     // The first read or write of an atomic store's file clears the temp files an earlier crash left beside it.
@@ -232,11 +233,16 @@ const createJsonStore = ({
         flushPendingWrites: () => writes.flush(),
         /** fs path (Electron/CLI) — for debug/info surfaces. */
         getFilePath: filePath,
+        /** Calls `listener` whenever the store is discarded (local data deleted), for a ledger holding changes in memory. */
+        onDiscard: (listener: () => void) => {
+            discardListeners.push(listener);
+        },
     };
     createdStores.push({
         discard: () => {
             writes.discard();
             cachedJson = null;
+            for (const listener of discardListeners) listener();
         },
         // A flush that reports a write which did not persist is of no interest to a store being deleted.
         settled: () => writes.flush().catch(() => undefined),

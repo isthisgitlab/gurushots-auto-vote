@@ -22,14 +22,16 @@ import {
     runTurboMiniGame,
     joinChallenge,
     forgetUnconfirmedPayment,
+    submitToChallenge,
+    swapPhoto,
 } from './strategies/real';
 import { getVoteImages, submitVotes } from './api/voting';
 import { applyBoostToEntry } from './api/boost';
 import { applyTurbo } from './api/turbo';
-import { getEligiblePhotos, getEligiblePhotosWalk, getImageData, submitToChallenge } from './api/submissions';
+import { getEligiblePhotos, getEligiblePhotosWalk, getImageData } from './api/submissions';
 import { getMemberChallenges, getBankroll } from './api/join';
 import { getCurrentMemberProfile, searchTagAutocomplete } from './api/tags';
-import { keyUnlock, swapPhoto, exposureAutofill } from './api/currency';
+import { keyUnlock, exposureAutofill } from './api/currency';
 import { mockApiClient } from './mock';
 
 const realApi = {

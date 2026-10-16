@@ -12,6 +12,7 @@ import { InlineError } from '@/components/ui/InlineError';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
 
 import { EntryPhoto } from './EntryPhoto';
+import { EntryTime } from './EntryTime';
 import { SwapEntryButton, SwapBackButton } from './SwapEntryButton';
 
 /**
@@ -122,6 +123,7 @@ function PinToggles({
  * @param props.onChooseSwap - opens the card's swap picker for this entry
  * @param props.swapBack - Swap-back offer for this slot (the original was swapped out while boosted/turbo'd)
  * @param props.pin - the pin toggles (absent = none shown)
+ * @param props.timezone - the timezone setting the entry's submit time is written in
  */
 export function EntryBadge({
     entry,
@@ -136,6 +138,7 @@ export function EntryBadge({
     onChooseSwap,
     swapBack = null,
     pin,
+    timezone = 'local',
 }: {
     entry: RankingEntry;
     challengeId: Challenge['id'];
@@ -149,6 +152,7 @@ export function EntryBadge({
     onChooseSwap: OpenSwapPick;
     swapBack?: SwapBackOffer | null;
     pin?: EntryPinControls;
+    timezone?: string;
 }) {
     const { t } = useTranslation();
     const { applyBoost, loading: boosting, error: boostError, clearError: clearBoostError } = useBoost();
@@ -196,6 +200,7 @@ export function EntryBadge({
             <span>
                 {t('app.rank')} {entry.rank} ({entry.votes} {t('app.votes')})
             </span>
+            <EntryTime time={entry.appEntered} timezone={timezone} />
             {showBoostButton && (
                 <ActionButton
                     variant="success"

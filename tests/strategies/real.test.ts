@@ -26,6 +26,11 @@ jest.mock('../../src/ts/api/submissions', () => ({
     getImageData: jest.fn(),
     submitToChallenge: jest.fn(),
 }));
+jest.mock('../../src/ts/api/currency', () => ({
+    keyUnlock: jest.fn(),
+    swapPhoto: jest.fn(),
+    exposureAutofill: jest.fn(),
+}));
 jest.mock('../../src/ts/api/tags', () => ({ getCurrentMemberProfile: jest.fn(), searchTagAutocomplete: jest.fn() }));
 jest.mock('../../src/ts/api/join', () => ({
     getMemberChallenges: jest.fn(),
@@ -73,6 +78,8 @@ import metadataModule = require('../../src/ts/metadata');
 const metadata = jest.mocked(metadataModule);
 import joinModule = require('../../src/ts/api/join');
 const join = jest.mocked(joinModule);
+import currencyModule = require('../../src/ts/api/currency');
+const currency = jest.mocked(currencyModule);
 import tagsModule = require('../../src/ts/api/tags');
 const tags = jest.mocked(tagsModule);
 import submissionsModule = require('../../src/ts/api/submissions');
@@ -93,6 +100,7 @@ const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
 import rewardsModule = require('../../src/ts/api/rewards');
 const rewards = jest.mocked(rewardsModule);
 import main = require('../../src/ts/strategies/real');
+import entryAgeStoreModule = require('../../src/ts/entryAgeStore');
 import type * as joinStateStoreModule from '../../src/ts/joinStateStore';
 import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
 import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
@@ -268,6 +276,45 @@ describe('runTurboMiniGame', () => {
     });
 });
 
+describe('submit and swap record when the photo went in', () => {
+    const landed = { ok: true, raw: { success: true } };
+
+    test('a submit that landed is recorded exactly, and the endpoint’s result is returned as it came', async () => {
+        const mark = jest
+            .spyOn(entryAgeStoreModule.entryAgeLedger, 'markSubmitted')
+            .mockImplementation(() => undefined);
+        submissions.submitToChallenge.mockResolvedValueOnce(landed);
+
+        await expect(main.submitToChallenge(7, ['a', 'b'], 'tok')).resolves.toBe(landed);
+
+        expect(submissions.submitToChallenge).toHaveBeenCalledWith(7, ['a', 'b'], 'tok');
+        expect(mark).toHaveBeenCalledWith(7, ['a', 'b'], expect.any(Number));
+        mark.mockRestore();
+    });
+
+    test('a swap that landed records the photo swapped in; one that failed records nothing', async () => {
+        const mark = jest
+            .spyOn(entryAgeStoreModule.entryAgeLedger, 'markSubmitted')
+            .mockImplementation(() => undefined);
+        currency.swapPhoto.mockResolvedValueOnce(landed);
+        await main.swapPhoto(7, 'old', 'new', 'tok');
+        expect(currency.swapPhoto).toHaveBeenCalledWith(7, 'old', 'new', 'tok');
+        expect(mark).toHaveBeenCalledWith(7, ['new'], expect.any(Number));
+
+        mark.mockClear();
+        currency.swapPhoto.mockResolvedValueOnce({ ok: false, raw: null });
+        await main.swapPhoto(7, 'old', 'new', 'tok');
+        expect(mark).not.toHaveBeenCalled();
+        mark.mockRestore();
+    });
+
+    test('the voting pass and the join submit through the recording ones', async () => {
+        await fetchChallengesAndVote('tok');
+        expect(runVotingPass.mock.calls[0][2].api.submitToChallenge).toBe(main.submitToChallenge);
+        expect(runVotingPass.mock.calls[0][2].currency?.strategy.swapPhoto).toBe(main.swapPhoto);
+    });
+});
+
 describe('joinChallenge', () => {
     test('passes the confirmed cost on, and only when there is one', async () => {
         joinChallengeSingle.mockResolvedValue(invalid({ status: 'needs-confirm' }));
@@ -293,7 +340,8 @@ describe('joinChallenge', () => {
                 getMemberChallenges: join.getMemberChallenges,
                 getBankroll: join.getBankroll,
                 coinsUnlock: join.coinsUnlock,
-                submitToChallenge: submissions.submitToChallenge,
+                // the recording one (services/entryTimes), not the raw endpoint
+                submitToChallenge: main.submitToChallenge,
                 getEligiblePhotos: submissions.getEligiblePhotos,
                 getEligiblePhotosWalk: submissions.getEligiblePhotosWalk,
                 getCurrentMemberProfile: tags.getCurrentMemberProfile,

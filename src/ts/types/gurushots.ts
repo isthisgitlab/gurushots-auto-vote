@@ -12,6 +12,15 @@
 /** Unix time in seconds, as the API sends it. */
 type UnixSeconds = number;
 
+/**
+ * When an entry went into its challenge, as the app recorded it: `exact` for a photo the app submitted itself, else the
+ * time a challenge fetch first showed it (it went in at or before then).
+ */
+export interface EntryEnteredTime {
+    at: UnixSeconds;
+    exact: boolean;
+}
+
 /** One of the member's own photos entered in a challenge. */
 export interface RankingEntry {
     id: string;
@@ -26,6 +35,8 @@ export interface RankingEntry {
     turbo?: boolean;
     boosting?: boolean;
     boosted?: boolean;
+    /** App-set, never from the API: when this entry went in (see EntryEnteredTime). Any server field of this name is discarded. */
+    appEntered?: EntryEnteredTime;
 }
 
 export interface RankingTotal {

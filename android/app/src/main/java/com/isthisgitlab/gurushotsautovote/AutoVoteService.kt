@@ -744,7 +744,9 @@ internal object SideStores {
     // past the cap) and the swap-back offers; the paid-join claims (an unlock that was charged and not yet submitted:
     // forgotten on a restart, it would be charged again); the marker that the settings import has run (the service reads
     // it to know not to import again, and it records what the mirror of settings.json last wrote) and the title pins
-    // (the import seeds them, and both contexts pin titles).
+    // (the import seeds them, and both contexts pin titles); the entry-age ledger (when each entry went into a
+    // challenge: the window records the photos it submits, the service the ones it submits and what it first sees, and
+    // the boost hold and the fill-new `pending` photo must outlast a cycle).
     private val names = mapOf(
         CONFIG_KEY to "config",
         LEGACY_SETTINGS_KEY to "settings",
@@ -756,7 +758,8 @@ internal object SideStores {
         "gs_scenario_resets" to "scenario resets",
         "gs_auto_spends" to "auto-spend ledger",
         "gs_swap_backs" to "swap-back ledger",
-        "gs_join_state" to "join-state"
+        "gs_join_state" to "join-state",
+        "gs_entry_ages" to "entry-age ledger"
     )
 
     /** The `code` a plugin call rejects with, and the reason [HeadlessStore.lastWriteRefusal] answers, for a value past its cap. */
@@ -816,6 +819,7 @@ internal object SideStores {
         setOf(
             "gs_join_state",
             "gs_auto_spends",
+            "gs_entry_ages",
             "gs_v2_import",
             "gs_title_pins",
             CONFIG_KEY,

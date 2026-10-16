@@ -41,6 +41,7 @@ const mockEntryTracker = createMemoryEntryTracker();
 
 // In-memory automatic-fill counter for the mock pass (process lifetime).
 const mockAutoSpendLedger = createMemoryAutoSpendLedger();
+// Shared with the mock endpoints (mock/apiClient.ts), so a fetch sees what the pass and a manual submit recorded.
 const mockEntryAgeLedger = createMemoryEntryAgeLedger();
 
 // Endpoints runVotingPass reads off `api`.
@@ -259,4 +260,4 @@ const createMockStrategy = (client: MockEndpoints) => {
     };
 };
 
-export { createMockStrategy };
+export { createMockStrategy, mockEntryAgeLedger };

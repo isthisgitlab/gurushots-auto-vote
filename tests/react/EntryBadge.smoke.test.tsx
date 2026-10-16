@@ -45,4 +45,37 @@ describe('EntryBadge — smoke', () => {
         expect(screen.getByText(/app\.rank/)).toBeTruthy();
         expect(screen.getByText(/3.*42.*app\.votes/)).toBeTruthy();
     });
+
+    test('shows when the entry went in, from the time the app recorded', () => {
+        render(
+            <EntryBadge
+                entry={{ id: 'e1', rank: 3, votes: 42, appEntered: { at: 1_792_420_000, exact: true } }}
+                challengeId={777}
+                boostAvailable={false}
+                turboAvailable={false}
+                onBoostApplied={() => {}}
+                onTurboApplied={() => {}}
+                onSwapped={() => {}}
+                onChooseSwap={() => {}}
+                timezone="UTC"
+            />,
+        );
+        expect(screen.getByText('app.entrySubmitted')).toBeTruthy();
+    });
+
+    test('shows no submit time for an entry the app has none for', () => {
+        render(
+            <EntryBadge
+                entry={{ id: 'e1', rank: 3, votes: 42 }}
+                challengeId={777}
+                boostAvailable={false}
+                turboAvailable={false}
+                onBoostApplied={() => {}}
+                onTurboApplied={() => {}}
+                onSwapped={() => {}}
+                onChooseSwap={() => {}}
+            />,
+        );
+        expect(screen.queryByText(/app\.entrySubmitted/)).toBeNull();
+    });
 });
