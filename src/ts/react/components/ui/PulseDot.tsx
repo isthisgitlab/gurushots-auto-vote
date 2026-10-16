@@ -1,8 +1,10 @@
 /**
  * Small coloured status dot (DaisyUI `status`), optionally with a ping halo so
  * it catches the eye in a long list — used to mark an open boost (info) and
- * low exposure (error). `variant` is a DaisyUI status colour name. Decorative:
- * callers carry the meaning in text (visible or sr-only).
+ * low exposure (error). The halo pings a few times when the dot appears, then
+ * rests under the dot (an endless animation keeps the renderer compositing).
+ * `variant` is a DaisyUI status colour name. Decorative: callers carry the
+ * meaning in text (visible or sr-only).
  */
 const VARIANT_CLASS = {
     info: 'status-info',
@@ -32,7 +34,9 @@ export function PulseDot({
             aria-hidden="true"
             data-testid={`pulse-dot-${variant}`}
         >
-            {pulse && <span className={`status ${size} ${colour} motion-safe:animate-ping`} />}
+            {pulse && (
+                <span className={`status ${size} ${colour} motion-safe:animate-[ping_1s_cubic-bezier(0,0,0.2,1)_3]`} />
+            )}
             <span className={`status ${size} ${colour}`} />
         </span>
     );

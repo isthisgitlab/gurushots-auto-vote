@@ -90,7 +90,9 @@ describe('PulseDot', () => {
         expect(container.querySelector('[data-testid="pulse-dot-info"]')).not.toBeNull();
         const dots = container.querySelectorAll('.status');
         expect(dots).toHaveLength(2);
-        expect(dots[0].className).toBe('status status-md status-info motion-safe:animate-ping');
+        expect(dots[0].className).toBe(
+            'status status-md status-info motion-safe:animate-[ping_1s_cubic-bezier(0,0,0.2,1)_3]',
+        );
     });
 
     test('an unknown variant falls back to the info colour; pulse=false drops the halo', () => {
