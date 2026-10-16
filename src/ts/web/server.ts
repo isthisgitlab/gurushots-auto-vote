@@ -35,7 +35,8 @@ import * as scenariosHandlers from '../ipc/scenarios.handlers';
 import { buildReleaseUpdateHandlers } from '../ipc/releaseUpdates';
 import { invokeHandler } from '../ipc/registerHandlers';
 import * as updateChecker from '../services/UpdateChecker';
-import { clearAuthToken } from '../services/auth';
+import { clearAuthToken, LogoutNotSavedError } from '../services/auth';
+import { LOGOUT_NOT_SAVED } from '../ipc/logoutCode';
 import { initializeHeaders } from '../api/randomizer';
 import * as settings from '../settings';
 import * as logger from '../logger';
@@ -211,6 +212,11 @@ const logout = async (res: ServerResponse) => {
         await clearAuthToken();
     } catch (err) {
         logger.withCategory('authentication').error('Logout failed to clear token', err);
+        // A logout the settings refused did not log anyone out: say so, and leave the mock flag as it is.
+        if (err instanceof LogoutNotSavedError) {
+            sendJson(res, 200, { result: { success: false, error: LOGOUT_NOT_SAVED } });
+            return;
+        }
     }
     settings.setSetting('mock', settings.getEnvironmentInfo().defaultMock);
     sendJson(res, 200, { result: { success: true } });

@@ -12,7 +12,8 @@ import { usageError } from '../commandKit';
 
 import type { SettingsRecovery } from '../../settings';
 
-const SETTINGS_RECOVERY_USAGE = 'Usage: settings-recovery retry | start-fresh | reimport | report | acknowledge';
+const SETTINGS_RECOVERY_USAGE =
+    'Usage: settings-recovery retry | start-fresh [--force] | reimport | report | acknowledge';
 
 /**
  * The notice for one recovery state: what happened, why, and what comes next.
@@ -21,7 +22,9 @@ const describeSettingsRecovery = ({
     code,
     path,
     settingsSetAside,
-}: Pick<SettingsRecovery, 'code' | 'path' | 'settingsSetAside'>): string => {
+    damagedAt,
+    signInKept,
+}: Pick<SettingsRecovery, 'code' | 'path' | 'settingsSetAside' | 'damagedAt' | 'signInKept'>): string => {
     switch (code) {
         case 'settings-restored':
             return `The saved settings could not be read (config.json was damaged), so they were restored from settings.json. The damaged file was moved to ${path}; keep it if you want to look at it, or delete it.`;
@@ -33,6 +36,16 @@ const describeSettingsRecovery = ({
             }`;
         case 'settings-unreadable':
             return `The saved settings at ${path} cannot be read, or cannot be moved aside, so nothing will be saved until that is fixed. The default settings are in use. Check that the file belongs to this account and can be read and written.`;
+        case 'settings-import-retrying':
+            return `${
+                damagedAt === undefined
+                    ? `The settings.json at ${path} could not be read just now (another program may be using it)`
+                    : `config.json was damaged and moved to ${damagedAt}, and the settings.json at ${path}, the copy to restore the settings from, could not be read just now (another program may be using it)`
+            }, so nothing will be saved and the default settings are in use for now. Nothing was overwritten. The next run tries again by itself; run "settings-recovery retry" to try now.${
+                damagedAt === undefined || signInKept === false
+                    ? ''
+                    : ' The damaged copy still holds the sign-in it had, until you next log out.'
+            }`;
         case 'settings-import-failed':
             return `The settings.json at ${path} could not be imported, so nothing will be saved and the default settings are in use. The file was left as it is. Fix it and run "settings-recovery retry", or run "settings-recovery start-fresh" to begin with default settings (a copy of the file is kept beside it, as settings.json.original or, when that name is taken, as settings.json.unimportable-<timestamp>).`;
     }
@@ -50,10 +63,11 @@ const reportSettingsRecovery = (): void => {
  * What a re-import came to: it replaces the settings in use, the sign-in included, with what settings.json holds, after
  * setting the settings in use aside (when there were any).
  */
-const reimport = (): { ok: boolean; done: string } => {
+const reimport = (): { ok: boolean; done: string; failed: string } => {
     const { ok, setAside, source } = settings.reimportFromV1Detailed();
     return {
         ok,
+        failed: `The re-import did not work: ${source} is missing, could not be read or converted, or the settings could not be saved. Nothing was changed; see the log for why (logs --settings)`,
         done:
             setAside === null
                 ? `${source} was imported again.`
@@ -63,14 +77,16 @@ const reimport = (): { ok: boolean; done: string } => {
 
 /** What Start fresh came to: where settings.json was kept, or that there was none to keep. */
 const startFresh = (): { ok: boolean; done: string } => {
-    const { ok, keptAt, adopted } = settings.startFreshDetailed();
+    const { ok, keptAt, adopted, unreadable } = settings.startFreshDetailed();
     return {
         ok,
         done: adopted
             ? 'Nothing was reset: the settings were already in place (restored or imported meanwhile), and they are in use.'
-            : keptAt === null
-              ? 'Started with default settings; there was no settings.json, so no copy was kept.'
-              : `Started with default settings; a copy of settings.json was kept at ${keptAt}.`,
+            : unreadable
+              ? 'Started with default settings; settings.json could not be read, so it was left as it is and no copy was kept.'
+              : keptAt === null
+                ? 'Started with default settings; there was no settings.json, so no copy was kept.'
+                : `Started with default settings; a copy of settings.json was kept at ${keptAt}.`,
     };
 };
 
@@ -101,9 +117,11 @@ const printImportReport = (): number => {
 };
 
 // The exit code of an action, and its words.
-const finish = ({ ok, done }: { ok: boolean; done: string }): number => {
+const finish = ({ ok, done, failed }: { ok: boolean; done: string; failed?: string }): number => {
     if (!ok) {
-        logger.withCategory('settings').error('The recovery did not work; see the log for why (logs --settings)');
+        logger
+            .withCategory('settings')
+            .error(failed ?? 'The recovery did not work; see the log for why (logs --settings)');
         return 1;
     }
     logger.withCategory('settings').success(done);
@@ -121,7 +139,19 @@ const settingsRecoveryCmd = async (argv: string[]): Promise<number> => {
     const [action, ...extra] = argv;
     if (action === 'report' && extra.length === 0) return printImportReport();
     if (action === 'reimport' && extra.length === 0) return finish(reimport());
-    if (action === 'start-fresh' && extra.length === 0) return finish(startFresh());
+    if (action === 'start-fresh' && (extra.length === 0 || (extra.length === 1 && extra[0] === '--force'))) {
+        // While settings.json could not be read just now and may pass, giving the import up is not offered: it is asked for.
+        settings.loadSettings();
+        if (extra.length === 0 && settings.getSettingsRecovery()?.code === 'settings-import-retrying') {
+            logger
+                .withCategory('settings')
+                .error(
+                    'settings.json could not be read just now, and the import is tried again by itself, so starting fresh is not offered. Run "settings-recovery retry" to try now, or "settings-recovery start-fresh --force" to start with default settings anyway.',
+                );
+            return 1;
+        }
+        return finish(startFresh());
+    }
     if (action === undefined || extra.length > 0 || !Object.hasOwn(ACTIONS, action)) {
         return usageError('Please name the recovery action', SETTINGS_RECOVERY_USAGE);
     }

@@ -259,6 +259,18 @@ describe('web bridge — login / logout', () => {
         expect(mockFetch).not.toHaveBeenCalled();
     });
 
+    test('a logout the settings refused does not log out: no event, and the caller is told', async () => {
+        const heard = jest.fn();
+        bridge.onShellEvent('logout', heard);
+        mockFetch.mockResolvedValueOnce(
+            invalid({ ok: true, json: async () => ({ result: { success: false, error: 'logout-not-saved' } }) }),
+        );
+
+        await expect(api.logout()).rejects.toThrow('logout-not-saved');
+
+        expect(heard).not.toHaveBeenCalled();
+    });
+
     test('logout clears the token on the server, then emits even if that fails', async () => {
         const heard = jest.fn();
         bridge.onShellEvent('logout', heard);

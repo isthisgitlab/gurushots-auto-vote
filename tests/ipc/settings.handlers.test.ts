@@ -538,6 +538,15 @@ describe('the recovery of the stored settings', () => {
         });
     });
 
+    test('start-fresh-settings says settings.json could not be read, so it was left as it is', async () => {
+        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null, unreadable: true });
+
+        await expect(handlers['start-fresh-settings']()).resolves.toEqual({
+            success: true,
+            kept: { kind: 'unreadable' },
+        });
+    });
+
     test('start-fresh-settings says there was nothing to keep', async () => {
         settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null });
 

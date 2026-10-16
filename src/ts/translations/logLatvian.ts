@@ -125,6 +125,8 @@ export const logMessages = {
     m289db73f62af: '  🧩 Uzpildes: {0}',
     m29a4a27aabbd:
         '⏰ Tuvojas redzamības uzpilde pirms beigu loga izaicinājumā "{0}" — nākamais cikls pēc {1} s (ne vēlāk kā {2} min pirms beigu loga)',
+    m29dd239731c5:
+        'Failu settings.json šobrīd neizdevās nolasīt, un importu mēģina vēlreiz pats, tāpēc „sākt no jauna” netiek piedāvāts. Palaid „settings-recovery retry”, lai mēģinātu tagad, vai „settings-recovery start-fresh --force”, lai tik un tā sāktu ar noklusētajiem uzstādījumiem.',
     m29e6f639d64d: 'Kļūda, apstrādājot preview-swap-photo pieprasījumu:',
     m2a0067d71800: 'Lai iztērētu apmaiņu, palaid vēlreiz: swap-back --challenge={0} --image={1} --yes',
     m2ab1aff25c5d: '{0} (iesniegti: {1}, izlaisti: {2})',
@@ -214,6 +216,8 @@ export const logMessages = {
     m4f653f002d6c: 'ielādēti foto: {0}',
     m4fbfc26aa499: 'Informācija par Main() izsaukuma kļūdu:',
     m4fd075672867: '=== API izvēles diagnostika ===',
+    m5015fe021abd:
+        'Sākts ar noklusētajiem uzstādījumiem; failu settings.json neizdevās nolasīt, tāpēc tas palika, kāds bija, un kopija netika paturēta.',
     m508c16d160a0: 'Nav versijas, ko izlaist',
     m50a824cabfb6: 'Atbloķējamā izaicinājuma ID: {0}',
     m50ad0ce53100: 'Lūdzu, norādi profila nosaukumu',
@@ -222,6 +226,8 @@ export const logMessages = {
     m5227d0d02e0e: 'Saņemts SIGINT signāls. Beidz darbu...',
     m52a7d2a250a6: 'Saņemts pieteikšanās tokens: {0}',
     m532adbd169db: 'Neizdevās saglabāt piesprausto izaicinājumu nosaukumus:',
+    m533f45aaffc8:
+        'Atkārtota importēšana neizdevās: {0} trūkst, to neizdevās nolasīt vai pārveidot, vai arī uzstādījumus neizdevās saglabāt. Nekas netika mainīts; kāpēc, skaties žurnālā (logs --settings)',
     m5353dba0a2a1: 'Neizdevās nolasīt {0} bezlogu režīmā:',
     m54885b4ee6c8: 'CLI balsošanas process{0}',
     m54a0e8c17ebb: 'Kļūda',

@@ -44,17 +44,30 @@ const settleStores = async (): Promise<void> => {
     await Promise.all(createdStores.map((store) => store.settled()));
 };
 
-/** Writes a value made from a store's current one at once (not behind a cache); `failed` when the write threw. */
+// How many times a change is made again on what another process wrote while it was being made.
+const WRITE_ATTEMPTS = 3;
+
+/**
+ * Writes a value made from a store's current one at once (not behind a cache); `failed` when the write threw. The value
+ * is written only if the store still holds what it was made from (read again just before the write): when another
+ * process changed it meanwhile, the change is made again on that, so neither process's change is erased.
+ */
 const writeNow = (
     prefKey: string,
     store: { readRaw: () => string | null; writeRaw: (data: string) => void },
     update: (current: string | null) => string | null,
 ): ThroughResult => {
     try {
-        const data = update(store.readRaw());
-        if (data === null) return 'aborted';
-        store.writeRaw(data);
-        return 'saved';
+        for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
+            const current = store.readRaw();
+            const data = update(current);
+            if (data === null) return 'aborted';
+            if (store.readRaw() !== current) continue;
+            store.writeRaw(data);
+            return 'saved';
+        }
+        logger.withCategory('settings').error(`${prefKey} kept changing under the write, so it was not made`, null);
+        return 'failed';
     } catch (err) {
         logger.withCategory('settings').error(`${prefKey} write failed:`, err);
         return 'failed';

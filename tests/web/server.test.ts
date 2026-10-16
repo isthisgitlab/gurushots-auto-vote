@@ -68,7 +68,10 @@ jest.mock('../../src/ts/services/UpdateChecker', () => ({
     checkForUpdates: jest.fn(),
     getReleasesUrl: jest.fn(() => 'https://example.com/releases'),
 }));
-jest.mock('../../src/ts/services/auth', () => ({ clearAuthToken: jest.fn(async () => true) }));
+jest.mock('../../src/ts/services/auth', () => {
+    class LogoutNotSavedError extends Error {}
+    return { clearAuthToken: jest.fn(async () => true), LogoutNotSavedError };
+});
 jest.mock('../../src/ts/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
 jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(() => ''),
@@ -506,6 +509,16 @@ describe('logout', () => {
         expect(parsed(reply)).toEqual({ result: { success: true } });
         expect(auth.clearAuthToken).toHaveBeenCalled();
         expect(settings.setSetting).toHaveBeenCalledWith('mock', false);
+    });
+
+    test('a logout the settings refused is answered as refused, and the mock flag is left alone', async () => {
+        auth.clearAuthToken.mockRejectedValueOnce(new auth.LogoutNotSavedError());
+        settings.setSetting.mockClear();
+
+        const reply = await request('POST', '/api/logout', { headers: JSON_HEADERS, body: '' });
+
+        expect(parsed(reply)).toEqual({ result: { success: false, error: 'logout-not-saved' } });
+        expect(settings.setSetting).not.toHaveBeenCalled();
     });
 
     test('a failed token flush is logged and the logout still completes', async () => {

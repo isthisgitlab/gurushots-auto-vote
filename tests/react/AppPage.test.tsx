@@ -357,6 +357,57 @@ describe('App page', () => {
         expect(mockAutovote.stop).not.toHaveBeenCalled();
     });
 
+    test('a logout the settings refused keeps the screen and says the user is still logged in', async () => {
+        await renderReady();
+        jest.mocked(window.api.logout).mockRejectedValueOnce(new Error('logout-not-saved'));
+
+        fireEvent.click(screen.getByTitle('app.logout'));
+
+        const alert = await screen.findByText('errors.logoutNotSavedTitle');
+        expect(alert.closest('[role="alert"]')?.textContent).toContain('errors.logoutNotSavedDetail');
+        fireEvent.click(
+            within(alert.closest('[role="alert"]') as HTMLElement).getByRole('button', { name: 'errors.dismiss' }),
+        );
+        expect(screen.queryByText('errors.logoutNotSavedTitle')).toBeNull();
+    });
+
+    test('a logout the settings refused, after auto-vote was stopped, says so; it points at the settings only for that cause', async () => {
+        mockAutovote.running = true;
+        await renderReady();
+        jest.mocked(window.api.logout).mockRejectedValueOnce(new Error('logout-not-saved'));
+
+        fireEvent.click(screen.getByTitle('app.logout'));
+
+        const alert = (await screen.findByText('errors.logoutNotSavedTitle')).closest('[role="alert"]') as HTMLElement;
+        expect(alert.textContent).toContain('errors.logoutNotSavedDetail');
+        expect(alert.textContent).toContain('errors.logoutNotSavedStopped');
+    });
+
+    test('a logout that failed for another reason does not blame the settings, and still says auto-vote was stopped', async () => {
+        mockAutovote.running = true;
+        await renderReady();
+        jest.mocked(window.api.logout).mockRejectedValueOnce(new Error('boom'));
+
+        fireEvent.click(screen.getByTitle('app.logout'));
+
+        const alert = (await screen.findByText('errors.logoutFailedTitle')).closest('[role="alert"]') as HTMLElement;
+        expect(alert.textContent).toContain('errors.logoutFailedDetail');
+        expect(alert.textContent).toContain('errors.logoutNotSavedStopped');
+        expect(alert.textContent).not.toContain('errors.logoutNotSavedDetail');
+    });
+
+    test('a logout that failed before auto-vote could be stopped does not say it was', async () => {
+        mockAutovote.running = true;
+        mockAutovote.stop.mockRejectedValueOnce(new Error('stop failed'));
+        await renderReady();
+
+        fireEvent.click(screen.getByTitle('app.logout'));
+
+        const alert = (await screen.findByText('errors.logoutFailedTitle')).closest('[role="alert"]') as HTMLElement;
+        expect(alert.textContent).not.toContain('errors.logoutNotSavedStopped');
+        expect(window.api.logout).not.toHaveBeenCalled();
+    });
+
     test('logout while autovote runs stops it first', async () => {
         mockAutovote.running = true;
         await renderReady();

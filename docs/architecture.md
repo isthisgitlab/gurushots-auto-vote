@@ -642,13 +642,19 @@ repeated six times is one that gets forgotten at one of them.
       was saved (a token that was stored and is cleared: a logout, the start that clears the token when Stay Logged In
       is off and one is stored, a sign-out adopted from an older build), not whenever the mirror next runs, which it may
       not, or may find busy; the Android window waits for the configuration's write to land and clears nothing when it
-      did not. The background service can reach none of the copies in Preferences it cannot list, so after saving a
-      sign-out it records `signOutScrubPending` (a value of its own for each sign-out) in the import marker, and the app window clears them when it next starts
+      did not. Every sign-out is recorded (`signOutScrubPending`, a value of its own for each, in the import marker; a missing
+      marker is made for it) and the record is cleared only when every copy was rewritten (the rewrites report whether each
+      landed): a copy that could not be is tried again at the next start or save (`finishDeferredScrub`; a desktop looks
+      again at each save only after a rewrite failed). The background service can reach none of the copies in Preferences
+      it cannot list, so it leaves its record, and the app window clears them when it next starts
       and again at each change it saves (`finishDeferredScrub`), since the service may sign out while the window is open; a look asked for while one runs is
       made when it ends, and only the record a look has seen to is cleared, against what is stored (a sign-out recorded since stays owed). Never because the configuration merely holds no token, as the defaults of a damaged one do: the
       sign-in in the copy the user is fixing is not theirs to lose. The last user
       name and the chosen-photos account go out of the copies too (never out of the configuration or the live mirror: the
       login form is prefilled from them). A copy that does not parse is left as it is.
+      At each start (`scrubOldCopies`) the copies set aside more than 14 days ago (the time is in their name; one without a
+      time counts as old; not `settings.json.original`) also lose the sign-in they hold, a logout that never came
+      having left it there, and keep their settings for recovery.
     - **The one thing taken back is the sign-in, at every mirror write.** The marker keeps two fingerprints of the sign-in
       this build wrote — the hashes of the token, the API headers, the last user name and the chosen-photos account, each
       of its own (53-bit non-cryptographic hashes, not secrets: a low-entropy field such as the user name can be found
@@ -693,15 +699,23 @@ repeated six times is one that gets forgotten at one of them.
   line. A restore keeps the `imported` record the marker holds, so the import report is not shown again. The load
   answers a recovery state, which a window shows as a notice and the CLI prints (`getSettingsRecovery`):
   `settings-restored` and `settings-corrupt` (notices; saves work), `settings-unreadable` (`config.json` cannot be read
-  or set aside) and `settings-import-failed` (no `config.json`, and `settings.json` cannot be imported) block saves
-  until fixed. A damaged `config.json` that `settings.json` cannot restore because the file itself cannot be imported
-  (`corrupt`, `migration-failed`) is `settings-corrupt` for the rest of the process, however often it is read: the
+  or set aside), `settings-import-failed` (no `config.json`, and `settings.json` cannot be imported) and
+  `settings-import-retrying` (the same, for a reason that may pass: see below) block saves until fixed. A damaged `config.json` that `settings.json` cannot restore because the file itself cannot be imported
+  (`corrupt`, `migration-failed`, or `inaccessible`: a read error that retrying does not cure, such as no permission, as
+  against the transient EBUSY, EAGAIN, EINTR, EMFILE, ENFILE, ETIMEDOUT and EIO) is `settings-corrupt` for the rest of the process, however often it is read: the
   failed restore is remembered (`importFailure`), so a later read does not turn it into the blocking
   `settings-import-failed`. A new process that finds the configuration still missing and the mirror unimportable reports
   `settings-import-failed`. A restore that could not be tried just now (the import lock held by another process, a read
-  or a write that failed once) says nothing of the file: saves are refused (`settings-import-failed`, blocking), nothing
-  is mirrored over it, and a later read tries again after a wait that doubles from one second up to five minutes
-  (`retryNotBefore`), the failure logged once per distinct failure, with no title-pin rewrite in between. A file that
+  or a write that failed once) says nothing of the file: it is the retrying state (`settings-import-retrying`, blocking;
+  `damagedAt` is where the damaged `config.json` went, when there was one) with wording of its own in the GUI (both
+  languages, an Android variant), the CLI and the usage docs (the file could not be read just now, the app tries again by
+  itself, nothing was overwritten) and Retry as its only action, not Start fresh; saves are refused, nothing is mirrored over it, and a later read tries again after a wait that doubles from one second up to five minutes
+  (`retryNotBefore`), the failure logged once per distinct failure, with no title-pin rewrite in between. While a window listens for recoveries
+  (`onRecoveryChange`) the read that tries again is made by a timer once the wait is over (`_scheduleRetry`, unref'd), so
+  the user is told when it comes through; a restore that still fails 8.5 minutes after the first failure (counted in time, not in tries, so that pressing
+  Retry does not bring it nearer; the wait is at its ceiling by then) is given up as one that will not pass: `_settleUnusable`, the same state as a damaged `settings.json`
+  (`settings-corrupt`, saves allowed, the file set aside before the first save mirrors over it, or left as it is when it
+  cannot be read). A file that
   turns out damaged on a retry settles like one found damaged at the first try (`settings-corrupt`, not blocking). On
   Android a configuration the window only holds in its cache until the queued write lands (`storage.isPersisted`
   false) is no proof of anything: a read of it leaves the block, the wait, the log and the notice as they are and
@@ -714,16 +728,64 @@ repeated six times is one that gets forgotten at one of them.
   state now. A restore that fails late is a restore that did not happen, and is tried again like any other, so a
   `settings.json` found unusable then settles like a first-try failure (`restoreRetryPending`, which only a restore
   still to be retried sets, never a Start fresh or a re-import that fails late: a configuration that goes missing
-  later, with an unimportable `settings.json`, is a blocked import). A damaged configuration the window could not move aside (the copy in Preferences was refused) is handled as a failed
+  later, with an unimportable `settings.json`, is a blocked import). Retry, and Start fresh that finds the configuration restored meanwhile, end the episode as the
+  automatic path does (`_finishRestore`: the restore they put in place counts as restored once it has landed, so a later
+  sign-out an older build made is adopted again), and so does a retried restore that finds another process restored it
+  (`adopted`). A restore whose `settings.json` holds no sign-in (a sign-out an older build made) clears the sign-in out of
+  the copies kept of the settings files, as after any sign-out. A sign-out made while a restore is on its way or waiting
+  is recorded in the import marker (`signOutOwed`, a missing marker made for it) as `{ id, at, fingerprints }`: the
+  fingerprints (`signInFingerprint`, one hash per field, never a value) are those of the sign-in the mirror last wrote to
+  `settings.json` and of the sign-in `settings.json` holds when the logout is made. The record signs out that sign-in and
+  no other: `_applyOwedSignOut` (looked at when a process starts and when a restore lands) blanks the token and the API
+  headers only where the token in use is one of the named (`tokenInSignIns`), in the configuration and the mirror, and
+  clears the copies kept of the settings files by the same match (`scrubCopiesAfterSignOut(…, fingerprints)`). A later
+  login has another token and never matches, so no login path touches the record, and the order in which the stores land
+  (the Android window's separate queues, another process) cannot make the record undo it. A logout made when no sign-in can
+  be named is refused while `settings.json` cannot be read, and recorded as nothing to sign out otherwise. The record is
+  removed (`_settleOwedSignOut`) once nothing that holds the sign-in remains to be cleared: not while a `settings.json` is
+  still to be set aside (a copy to come, cleared at the moment it is set aside by `_scrubAsideIfOwed`), and at the latest
+  after the 14 days the copies set aside keep their sign-in (`scrubOldCopies`). A removal that is refused or fails is
+  harmless and is not replayed: the record applies to nothing once the sign-in it names is gone. Once the copies were
+  cleared the notice stops saying they hold the sign-in (`signInKept: false`, from `copiesScrubbedAt` in the marker, or an
+  owed sign-out). A record the Android window queued and could not store is logged and shown as a change not saved, and
+  still holds in that process (`owedMemory`) until it is applied.
+  On a desktop the marker is changed under the settings lock (`underSettingsLock`, re-entrant within a process, so the
+  mirror's and the import's own changes do not wait for themselves; `writeNow` also reads again before it writes, as a
+  second guard). Every change of the marker has one contract (`changeMarker`): it waits for the lock, answers
+  `done`, `queued` or `failed`, and a change that failed is kept in memory and made again with the next save or start
+  while the app runs (said in the log once per change; it is not kept if the app is closed first). A replayed change
+  guards itself by the condition it served and makes no change once that has gone (a copy is forgotten only while it is
+  still the one recorded, a set-aside owed is cleared only while it is still the same record, the time the copies were
+  cleared is the time of the clearing). A change a caller is refused is never kept: an owed sign-out that cannot be
+  recorded is refused, and one that cannot be removed stays, harmless. A refused sign-out makes `clearAuthToken` throw
+  `LogoutNotSavedError`, and each shell tells the user truthfully (the CLI exits 1 saying they are still logged in, or
+  prints that the logout is recorded; Electron's main process shows a dialog and keeps the window; the web shell answers
+  `logout-not-saved` and Capacitor rethrows, and the App shows an alert instead of the login screen, saying whether the settings refused it or something else failed, and that
+  auto-vote is stopped; the Electron dialog says the same, and when the main window went away meanwhile it is opened again,
+  not the login form, since the sign-in was not changed). A record the Android window could not store is told as its
+  own notice (`logout-lost`: not recorded, holds only while the app stays open, log out again if it closes first). A marker made only
+  for such a record has no `importedAt` and does not stand for the import (`isImportMarked`); `configFrom` records what
+  made the stored configuration (`import`, `restore`, `fresh`), and a configuration found there that another process's
+  Start fresh wrote is not a restore: it is reported as what it is and strips no sign-in from the copies. Start fresh with a `settings.json` that cannot be read
+  keeps nothing and writes the defaults, saying that the file could not be read and was left as it is (`kept:
+unreadable`; the mirror never writes over a file it cannot read, and `legacyAsideOwed` in the marker has it set aside, in any
+  process, before the first mirror write once it can be read; Start fresh is refused when that cannot be recorded). The CLI refuses `start-fresh` while the retrying state
+  stands, unless `--force` is added. A damaged configuration the window could not move aside (the copy in Preferences was refused) is handled as a failed
   move is on a desktop: it is still what is stored, so nothing restored over it counts as restored (the restore queued
   behind the move would only be declined), saves are refused (`settings-unreadable`, blocking, announced to the window)
-  and `settings.json` is not mirrored over; the cache shows what Preferences holds. A restore's late failure is announced
+  and `settings.json` is not mirrored over; the cache shows what Preferences holds (and nothing is told of the restore
+  the move was queued with), the move is tried again by a later read after a wait that doubles (`moveRetryNotBefore`),
+  and the copy the move would have made is not counted (`hasBackupKey`). A restore's late failure is announced
   too (a dropped save reports only once), and only an import that has started takes the place of an attempt in flight:
   Retry, Start fresh or Re-import that fail at once, or find the configuration there, leave a restore's landing alone. The window is told (`onSettingsRecoveryChange`,
   broadcast by the handlers) when a block ends or the state changes, so an open notice refetches and shows the
   restored notice. The notice is a named region only while it has something in it; a dismissed outcome returns focus to the
   button that ran the action, else the notice's heading, else the element the page gives it (`returnFocusTo`: the
-  Login heading, the App `main`, named by the page title; the page makes it focusable), never an empty element. A read before the Android window has hydrated its stores (`not-loaded`) is not a recovery state: the
+  Login heading, the App `main`, named by what it holds; the page makes it focusable), never an empty element. A session
+  that is stored while the Login page shows, without a login made there (the restore that was waiting came through),
+  moves on to the app as a login does: the page asks the shell for it (`window.api.login()`, which Electron's main
+  process answers by swapping the windows and the web shell and Capacitor by mounting the app) when the settings change
+  and say a session is kept. A read before the Android window has hydrated its stores (`not-loaded`) is not a recovery state: the
   defaults answer, nothing is blocked or logged as an error, and a save is refused until the stores are read.
   `retryImport`, `startFresh` (the file is set aside as `settings.json.original`, or as `settings.json.unimportable-<time>`
   when that is taken, before anything is mirrored over it) and `reimportFromV1` (the configuration in use is set aside)

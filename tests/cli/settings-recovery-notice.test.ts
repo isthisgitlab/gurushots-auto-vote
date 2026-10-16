@@ -5,6 +5,7 @@
  */
 
 jest.mock('../../src/ts/settings', () => ({
+    loadSettings: jest.fn(),
     getSettingsRecovery: jest.fn(),
     retryImport: jest.fn(),
     startFresh: jest.fn(),
@@ -73,6 +74,27 @@ describe('describeSettingsRecovery', () => {
         expect(text).toContain('can be read and written');
     });
 
+    test('a settings.json that cannot be read just now says it is tried again, with the damaged copy named when there is one, and the sign-in it holds', () => {
+        const withCopy = describeSettingsRecovery({
+            code: 'settings-import-retrying',
+            path: '/u/settings.json',
+            damagedAt: '/u/config.json.corrupt-2026',
+        });
+        expect(withCopy).toContain('config.json was damaged and moved to /u/config.json.corrupt-2026');
+        expect(withCopy).toContain('the settings.json at /u/settings.json');
+        expect(withCopy).toContain('could not be read just now');
+        expect(withCopy).toContain('Nothing was overwritten');
+        expect(withCopy).toContain('settings-recovery retry');
+        expect(withCopy).toContain('still holds the sign-in');
+        // Giving the import up is not offered while it may pass.
+        expect(withCopy).not.toContain('start-fresh');
+
+        const without = describeSettingsRecovery({ code: 'settings-import-retrying', path: '/u/settings.json' });
+        expect(without).toContain('The settings.json at /u/settings.json could not be read just now');
+        expect(without).not.toContain('config.json was damaged');
+        expect(without).not.toContain('still holds the sign-in');
+    });
+
     test('a settings.json that could not be imported says the file was left as it is, and the two ways forward', () => {
         const text = describeSettingsRecovery({ code: 'settings-import-failed', path: '/u/settings.json' });
         expect(text).toContain('/u/settings.json');
@@ -139,6 +161,53 @@ describe('settingsRecoveryCmd', () => {
             );
         });
 
+        test('says the file was left as it is when settings.json could not be read', async () => {
+            settings.startFreshDetailed.mockReturnValue({ ok: true, keptAt: null, unreadable: true });
+
+            await expect(settingsRecoveryCmd(['start-fresh'])).resolves.toBe(0);
+
+            expect(mockCategory.success).toHaveBeenCalledWith(
+                'Started with default settings; settings.json could not be read, so it was left as it is and no copy was kept.',
+            );
+            expect(mockCategory.success).not.toHaveBeenCalledWith(
+                expect.stringContaining('there was no settings.json'),
+            );
+        });
+
+        describe('while settings.json could not be read just now and is tried again by itself', () => {
+            beforeEach(() => {
+                settings.getSettingsRecovery.mockReturnValue({
+                    code: 'settings-import-retrying',
+                    path: '/u/settings.json',
+                    blocking: true,
+                });
+            });
+            afterEach(() => settings.getSettingsRecovery.mockReset());
+
+            test('is refused, pointing to retry and to --force', async () => {
+                await expect(settingsRecoveryCmd(['start-fresh'])).resolves.toBe(1);
+
+                expect(settings.startFreshDetailed).not.toHaveBeenCalled();
+                expect(mockCategory.error).toHaveBeenCalledWith(
+                    expect.stringContaining('settings-recovery start-fresh --force'),
+                );
+            });
+
+            test('goes ahead when it is asked for with --force', async () => {
+                settings.startFreshDetailed.mockReturnValue({ ok: true, keptAt: null });
+
+                await expect(settingsRecoveryCmd(['start-fresh', '--force'])).resolves.toBe(0);
+
+                expect(settings.startFreshDetailed).toHaveBeenCalledTimes(1);
+            });
+
+            test('anything else after it is a usage error', async () => {
+                await expect(settingsRecoveryCmd(['start-fresh', '--now'])).resolves.toBe(1);
+
+                expect(settings.startFreshDetailed).not.toHaveBeenCalled();
+            });
+        });
+
         test('says nothing was kept when there was no settings.json', async () => {
             settings.startFreshDetailed.mockReturnValue({ ok: true, keptAt: null });
 
@@ -187,6 +256,20 @@ describe('settingsRecoveryCmd', () => {
             await expect(settingsRecoveryCmd(['reimport'])).resolves.toBe(1);
 
             expect(mockCategory.error).toHaveBeenCalledWith(expect.stringContaining('logs --settings'));
+        });
+
+        test('that did not work names the file it tried (the copy to fix, not settings.json)', async () => {
+            settings.reimportFromV1Detailed.mockReturnValue({
+                ok: false,
+                setAside: null,
+                source: '/u/settings.json.unimportable-2026',
+            });
+
+            await expect(settingsRecoveryCmd(['reimport'])).resolves.toBe(1);
+
+            expect(mockCategory.error).toHaveBeenCalledWith(
+                expect.stringContaining('/u/settings.json.unimportable-2026 is missing'),
+            );
         });
 
         test('with anything after it is a usage error', async () => {

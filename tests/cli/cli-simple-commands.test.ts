@@ -31,6 +31,7 @@ jest.mock('../../src/ts/logger', () => {
 jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(() => ({ mock: false })),
     setSetting: jest.fn(),
+    isSignOutOwed: jest.fn(() => false),
 }));
 
 jest.mock('../../src/ts/apiFactory', () => {
@@ -232,6 +233,42 @@ describe('auth: logout', () => {
         clearAuthToken.mockResolvedValue(false);
         await handleLogout();
         expect(msgs('info')).toEqual(['Already logged out — no token was set']);
+    });
+
+    test('a logout recorded for settings that cannot be loaded just now says so, and not that the token was cleared', async () => {
+        clearAuthToken.mockResolvedValue(false);
+        settings.isSignOutOwed.mockReturnValueOnce(true);
+
+        await expect(handleLogout()).resolves.toBe(true);
+
+        expect(msgs('warning')).toEqual([expect.stringContaining('Logout recorded')]);
+        expect(msgs('success')).toEqual([]);
+        expect(msgs('info')).toEqual([]);
+    });
+
+    test('a logout the saved settings refused says so in words, not by its code', async () => {
+        clearAuthToken.mockRejectedValue(new Error('logout-not-saved'));
+
+        await expect(handleLogout()).resolves.toBe(false);
+
+        expect(msgs('error')).toEqual([expect.stringContaining('(the saved settings are not in use)')]);
+    });
+
+    test('a logout refused for a reason that carries no message is still told', async () => {
+        clearAuthToken.mockRejectedValue('weird');
+
+        await expect(handleLogout()).resolves.toBe(false);
+
+        expect(msgs('error')).toEqual([expect.stringContaining('(unknown error)')]);
+    });
+
+    test('a logout the settings refused is an error, not a success: the user is told they are still logged in', async () => {
+        clearAuthToken.mockRejectedValue(new Error('The sign-out could not be saved'));
+
+        await expect(handleLogout()).resolves.toBe(false);
+
+        expect(msgs('error')).toEqual([expect.stringContaining('you are still logged in')]);
+        expect(msgs('success')).toEqual([]);
     });
 });
 

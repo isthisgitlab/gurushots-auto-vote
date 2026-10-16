@@ -1,7 +1,7 @@
 import { app, ipcMain, shell } from 'electron';
 import * as settings from './settings';
 import * as logger from './logger';
-import { clearAuthToken } from './services/auth';
+import { clearAuthToken, LogoutNotSavedError } from './services/auth';
 import * as logIpc from './ipc/log.handlers';
 import * as updateIpc from './ipc/update.handlers';
 import * as miscIpc from './ipc/misc.handlers';
@@ -15,7 +15,7 @@ import { isTrustedSender, isChannelAllowedForSender } from './ipc/registerHandle
 import { ensureExit, focusExistingWindow, clearTokenOnQuit } from './windows/lifecycle';
 import { bypassQuitGuard } from './windows/quitGuard';
 import { appState } from './index/state';
-import { holdForOpenBoosts, createLoginWindow, createMainWindow } from './index/windows';
+import { holdForOpenBoosts, createLoginWindow, createMainWindow, reportLogoutRefused } from './index/windows';
 import { onReady } from './index/startup';
 import { register as registerNavigationGuard } from './index/navigationGuard';
 import { removeStalePartitionData } from './index/session';
@@ -170,8 +170,8 @@ ipcMain.on('login-success', (event) => {
 });
 
 // Handle logout. ipcMain.on expects a void listener, so the async flow runs
-// in a caught IIFE — a failed token flush is logged, and the window teardown
-// still proceeds so the user is never stuck on a dead main window.
+// in a caught IIFE. A logout the settings refused (the sign-in is still stored) is logged and told to the user, and the
+// main window stays; any other failure ends in the window teardown, so the user is never stuck on a dead main window.
 ipcMain.on('logout', (event) => {
     if (!isTrustedSender(event)) {
         logger.withCategory('api').warning("Refused IPC 'logout' from untrusted frame", null);
@@ -183,14 +183,27 @@ ipcMain.on('logout', (event) => {
     }
     if (!appState.mainWindow) return;
 
+    let refused = false;
     void (async () => {
         // Always clear the token on logout (regardless of stay logged in setting)
         await clearAuthToken();
     })()
         .catch((err) => {
             logger.withCategory('authentication').error('Logout failed to clear token', err);
+            refused = err instanceof LogoutNotSavedError;
+            if (!refused) return;
+            // The main window stays, still logged in. If it went away during the flush, it is opened again first (the user is
+            // still logged in, so the login form would be wrong), so that the dialog has a window to belong to.
+            try {
+                if (!appState.mainWindow || appState.mainWindow.isDestroyed()) createMainWindow();
+            } catch (windowError) {
+                // The refusal is told whatever happens to the window: a dialog without a parent.
+                logger.withCategory('authentication').error('The main window could not be opened again', windowError);
+            }
+            reportLogoutRefused();
         })
         .finally(() => {
+            if (refused) return;
             // Reset mock value to environment default while preserving theme and remember me settings
             const envInfo = settings.getEnvironmentInfo();
             settings.setSetting('mock', envInfo.defaultMock);

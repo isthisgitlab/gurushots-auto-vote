@@ -7,6 +7,7 @@
  */
 
 import { errorMessage } from '../errorMessage';
+import { isPlainObject } from '../plainObject';
 import { getDefaultSettings } from './defaults';
 import { importV1Settings } from './importV1';
 import { isImportMarked, isMirrorStarted, keptImportedRecord, markImportDone } from './importMarker';
@@ -26,7 +27,14 @@ import type { QueuedWriteOutcome } from './storage';
 const LOCK_WAIT_MS = 2000;
 
 /** Why the `settings.json` could not be put into a configuration. */
-type ImportFailureReason = 'busy' | 'not-loaded' | 'unreadable' | 'corrupt' | 'migration-failed' | 'write-failed';
+type ImportFailureReason =
+    | 'busy'
+    | 'not-loaded'
+    | 'unreadable'
+    | 'inaccessible'
+    | 'corrupt'
+    | 'migration-failed'
+    | 'write-failed';
 
 type ImportFailure = { ok: false; reason: ImportFailureReason; detail: string };
 
@@ -40,7 +48,7 @@ type ImportFailure = { ok: false; reason: ImportFailureReason; detail: string };
  */
 type ImportDone =
     | { ok: true; kind: 'imported' | 'recovered' | 'adopted'; text: string; landed?: Promise<QueuedWriteOutcome> }
-    | { ok: true; kind: 'fresh' | 'skipped' };
+    | { ok: true; kind: 'fresh' | 'skipped'; unreadable?: true };
 
 type ImportOutcome = ImportDone | ImportFailure;
 
@@ -48,6 +56,23 @@ type ImportOutcome = ImportDone | ImportFailure;
 type LateFailure = (failure: ImportFailure) => void;
 
 const failure = (reason: ImportFailureReason, detail: string): ImportFailure => ({ ok: false, reason, detail });
+
+// The errors that pass by themselves: a file another program holds for a moment, a read that was interrupted, too many
+// files open for the moment, a timeout, an input/output error (a disk or a share that comes back).
+const TRANSIENT_ERRNOS = new Set(['EBUSY', 'EAGAIN', 'EINTR', 'EMFILE', 'ENFILE', 'ETIMEDOUT', 'EIO']);
+
+/**
+ * A failure to read `settings.json`: `unreadable` when it may pass by itself (a transient errno, or an error with no code
+ * to tell), `inaccessible` when the file itself cannot be read (no permission, a directory in its place): no retry
+ * helps, so it is as unusable as a damaged file.
+ */
+const readFailure = (error: unknown): ImportFailure => {
+    const code = (error instanceof Error || isPlainObject(error)) && 'code' in error ? error.code : undefined;
+    const detail = errorMessage(error) ?? 'unknown error';
+    return typeof code === 'string' && !TRANSIENT_ERRNOS.has(code)
+        ? failure('inaccessible', detail)
+        : failure('unreadable', detail);
+};
 
 const underImportLock = (run: () => ImportOutcome): ImportOutcome => {
     const lock = acquireSettingsLock(LOCK_WAIT_MS);
@@ -127,7 +152,11 @@ const importLegacyText = (
             : failure('write-failed', 'config.json could not be read');
     }
     // The marker keeps a copy of the record (a recovery leaves the one it has): a lost configuration gets its report back.
-    whenStored(written, () => markImportDone(recovering ? undefined : imported), onLateFailure);
+    whenStored(
+        written,
+        () => markImportDone(recovering ? undefined : imported, recovering ? 'restore' : 'import'),
+        onLateFailure,
+    );
     return {
         ok: true,
         kind: recovering ? 'recovered' : 'imported',
@@ -147,7 +176,17 @@ const readLegacyText = (): { ok: true; raw: string | null } | ImportFailure => {
     try {
         return { ok: true, raw: legacyStorage.readRaw() || null };
     } catch (error) {
-        return failure('unreadable', errorMessage(error) ?? 'unknown error');
+        return readFailure(error);
+    }
+};
+
+/** Whether `settings.json` can be read (it may not exist: that is readable as nothing). */
+const canRead = (): boolean => {
+    try {
+        legacyStorage.readRaw();
+        return true;
+    } catch {
+        return false;
     }
 };
 
@@ -203,19 +242,28 @@ const importWhenAbsent = (onLateFailure: LateFailure): ImportOutcome =>
 const startFreshConfig = (
     onLateFailure: LateFailure,
     onKept: (kept: string | Promise<string | null>) => void,
+    onUnreadable: () => boolean,
 ): ImportOutcome =>
     underImportLock(() => {
         const existing = storage.readRaw();
         if (existing) return { ok: true, kind: 'adopted', text: existing };
-        const aside = setAsideLegacy();
+        // A settings.json that cannot be read cannot be kept either: nothing is set aside, and the defaults are written
+        // (the mirror never writes over a file it cannot read).
+        const readable = canRead();
+        // Left as it is, it must be set aside before anything is mirrored over it once it can be read, in any process: if that
+        // cannot be recorded, nothing is started (a promise only this process remembers is not one).
+        if (!readable && !onUnreadable()) {
+            return failure('write-failed', 'the set-aside of settings.json could not be recorded');
+        }
+        const aside: ReturnType<typeof setAsideLegacy> = readable ? setAsideLegacy() : { ok: true };
         if (!aside.ok) return failure('write-failed', `settings.json could not be set aside: ${aside.error}`);
         // (Nothing is kept when there was no settings.json.)
         const kept = aside.landed ?? aside.kept;
         if (kept !== undefined) onKept(kept);
         const written = storage.writeIfAbsent(JSON.stringify(getDefaultSettings(), null, 2));
         if (written.outcome === 'failed') return failure('write-failed', 'config.json could not be saved');
-        whenStored(written.outcome === 'saved' ? written : {}, () => markImportDone(null), onLateFailure);
-        return { ok: true, kind: 'fresh' };
+        whenStored(written.outcome === 'saved' ? written : {}, () => markImportDone(null, 'fresh'), onLateFailure);
+        return { ok: true, kind: 'fresh', ...(readable ? {} : { unreadable: true as const }) };
     });
 
 /** The text of the copy kept of the settings.json that did not import (see importOnRequest). */
@@ -223,7 +271,7 @@ const readCopyText = (copy: string): { ok: true; raw: string | null } | ImportFa
     try {
         return { ok: true, raw: legacyStorage.readCopy(copy) };
     } catch (error) {
-        return failure('unreadable', errorMessage(error) ?? 'unknown error');
+        return readFailure(error);
     }
 };
 

@@ -123,6 +123,8 @@ export const logMessages = {
     m289db73f62af: '  🧩 Fills: {0}',
     m29a4a27aabbd:
         '⏰ Approaching pre-final-window top-up for "{0}" — next cycle in {1}s (capped to the {2}m pre-final-window boundary)',
+    m29dd239731c5:
+        'settings.json could not be read just now, and the import is tried again by itself, so starting fresh is not offered. Run "settings-recovery retry" to try now, or "settings-recovery start-fresh --force" to start with default settings anyway.',
     m29e6f639d64d: 'Error handling preview-swap-photo request:',
     m2a0067d71800: 'To spend the swap, re-run: swap-back --challenge={0} --image={1} --yes',
     m2ab1aff25c5d: '{0} (submitted {1}, skipped {2})',
@@ -209,6 +211,8 @@ export const logMessages = {
     m4f653f002d6c: 'retrieved {0} images',
     m4fbfc26aa499: 'Main() call error details:',
     m4fd075672867: '=== API Factory Debug ===',
+    m5015fe021abd:
+        'Started with default settings; settings.json could not be read, so it was left as it is and no copy was kept.',
     m508c16d160a0: 'No version to skip',
     m50a824cabfb6: 'Unlock challenge ID: {0}',
     m50ad0ce53100: 'Please specify a profile name',
@@ -217,6 +221,8 @@ export const logMessages = {
     m5227d0d02e0e: 'Received SIGINT signal. Exiting...',
     m52a7d2a250a6: 'Token received: {0}',
     m532adbd169db: 'Could not save the title pins:',
+    m533f45aaffc8:
+        'The re-import did not work: {0} is missing, could not be read or converted, or the settings could not be saved. Nothing was changed; see the log for why (logs --settings)',
     m5353dba0a2a1: 'Headless {0} read failed:',
     m54885b4ee6c8: 'CLI Voting Process{0}',
     m54a0e8c17ebb: 'Error',

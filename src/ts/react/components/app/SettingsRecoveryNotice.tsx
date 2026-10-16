@@ -16,18 +16,23 @@ type RecoveryCode =
     | 'settings-corrupt'
     | 'settings-unreadable'
     | 'settings-import-failed'
+    | 'settings-import-retrying'
     | 'settings-save-dropped';
 // `cause` (a save the window gave up only): why the change was dropped — `conflict` (the background service wrote at
 // the same time), `too-large` (past the size the store takes) or `storage` (the store refused it). Any other value,
 // or none, is worded neutrally. `settingsSetAside` (a damaged configuration only): where the unusable settings.json
 // was kept once a save mirrored over it (a path where there are files, a storage key where there are none).
-// `reimportSource` (the same, where there are files): the file a Re-import would read.
+// `reimportSource` (the same, where there are files): the file a Re-import would read. `damagedAt` (a settings.json that
+// cannot be read just now, behind a damaged configuration): where the damaged configuration was kept.
 type Recovery = {
     code: RecoveryCode;
     path: string;
     cause?: string;
     settingsSetAside?: string;
     reimportSource?: string;
+    damagedAt?: string;
+    signInKept?: false;
+    logoutLost?: true;
 };
 
 // The translation keys of each code's what happened / why / what next text.
@@ -51,6 +56,11 @@ const RECOVERY_KEYS: Record<RecoveryCode, { what: string; why: string; next: str
         what: 'notice.recoveryImportWhat',
         why: 'notice.recoveryImportWhy',
         next: 'notice.recoveryImportNext',
+    },
+    'settings-import-retrying': {
+        what: 'notice.recoveryRetryingWhat',
+        why: 'notice.recoveryRetryingWhy',
+        next: 'notice.recoveryRetryingNext',
     },
     'settings-save-dropped': {
         what: 'notice.recoveryDroppedWhat',
@@ -84,6 +94,7 @@ const NO_FILE_KEYS: Partial<Record<RecoveryCode, { what?: string; why: string; n
         why: 'notice.recoveryImportWhyAndroid',
         next: 'notice.recoveryImportNextAndroid',
     },
+    'settings-import-retrying': { why: 'notice.recoveryRetryingWhyAndroid', next: 'notice.recoveryRetryingNext' },
 };
 
 // The outcome and question texts that name settings.json, and the wording used where there is no file to name.
@@ -92,7 +103,6 @@ const NO_FILE_TEXT = new Map([
     ['notice.recoveryRetryFailed', 'notice.recoveryRetryFailedAndroid'],
     ['notice.recoveryStartFreshBody', 'notice.recoveryStartFreshBodyAndroid'],
     ['notice.recoveryStartFreshDone', 'notice.recoveryStartFreshDoneAndroid'],
-    ['notice.recoveryStartFreshDoneAdopted', 'notice.recoveryStartFreshDoneAdoptedAndroid'],
 ]);
 
 // The text keys of a notice: its code's, refined by what the platform and the cause make true. A dropped save is
@@ -104,9 +114,19 @@ const keysFor = (recovery: Recovery, settingsFile: boolean) => {
     if (recovery.settingsSetAside !== undefined) {
         keys.next = settingsFile ? 'notice.recoveryCorruptNextAside' : 'notice.recoveryCorruptNextAsideAndroid';
     }
+    // With no damaged configuration behind it, a settings.json that cannot be read just now is all there is to say.
+    if (recovery.code === 'settings-import-retrying' && recovery.damagedAt === undefined) {
+        keys.why = settingsFile ? 'notice.recoveryRetryingWhyNoCopy' : 'notice.recoveryRetryingWhyNoCopyAndroid';
+    }
     if (recovery.code === 'settings-save-dropped') {
         keys.why = DROPPED_WHY.get(recovery.cause ?? '') ?? 'notice.recoveryDroppedWhyUnknown';
         if (recovery.cause === 'too-large') keys.next = 'notice.recoveryDroppedNextTooLarge';
+        // A logout that was not recorded is not a setting that reverts: it has its own words.
+        if (recovery.cause === 'logout-lost') {
+            keys.what = 'notice.recoveryLogoutLostWhat';
+            keys.why = 'notice.recoveryLogoutLostWhy';
+            keys.next = 'notice.recoveryLogoutLostNext';
+        }
     }
     return keys;
 };
@@ -165,6 +185,8 @@ const needsConfirm = (action: ActionId): action is ConfirmedAction => Object.has
 // The actions each code offers, in order.
 const ACTIONS_FOR: Partial<Record<RecoveryCode, ActionId[]>> = {
     'settings-import-failed': ['retry', 'start-fresh'],
+    // While it may pass by itself, giving up the import is not offered.
+    'settings-import-retrying': ['retry'],
     'settings-corrupt': ['reimport'],
 };
 
@@ -262,7 +284,9 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
         if (action === 'start-fresh' && kept?.kind === 'none') {
             return t(settingsFile ? 'notice.recoveryStartFreshDoneNone' : 'notice.recoveryStartFreshDoneNoneAndroid');
         }
-        if (action === 'start-fresh' && kept?.kind === 'adopted') return worded('notice.recoveryStartFreshDoneAdopted');
+        if (action === 'start-fresh' && kept?.kind === 'adopted') return t('notice.recoveryStartFreshDoneAdopted');
+        if (action === 'start-fresh' && kept?.kind === 'unreadable')
+            return t('notice.recoveryStartFreshDoneUnreadable');
         if (action === 'start-fresh' && kept?.kind === 'pending')
             return t('notice.recoveryStartFreshDonePendingAndroid');
         return interp(worded(ACTIONS[action].done), { path: kept?.kind === 'path' ? kept.path : source });
@@ -278,6 +302,13 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
         else void run(action);
     };
     const keys = recovery && !dismissed ? keysFor(recovery, settingsFile) : null;
+    // The damaged copy keeps the sign-in it held until a logout takes it out (and says so only until then).
+    const keepsSignIn =
+        recovery !== null &&
+        recovery.signInKept !== false &&
+        (recovery.code === 'settings-restored' ||
+            recovery.code === 'settings-corrupt' ||
+            (recovery.code === 'settings-import-retrying' && recovery.damagedAt !== undefined));
     // A landmark only while there is something in it: an empty one is noise for a screen reader.
     const hasContent = Boolean(recovery && keys) || Boolean(outcome) || Boolean(busy);
     return (
@@ -288,7 +319,16 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
                         <p ref={heading} tabIndex={-1} className="font-semibold">
                             {t(keys.what)}
                         </p>
-                        <p className="break-words">{interp(t(keys.why), { path: recovery.path })}</p>
+                        <p className="break-words">
+                            {interp(t(keys.why), { path: recovery.damagedAt ?? recovery.path })}
+                        </p>
+                        {keepsSignIn && <p className="break-words">{t('notice.recoverySignInKept')}</p>}
+                        {recovery.logoutLost && (
+                            <p className="break-words font-semibold">
+                                {t('notice.recoveryLogoutLostWhat')} {t('notice.recoveryLogoutLostWhy')}{' '}
+                                {t('notice.recoveryLogoutLostNext')}
+                            </p>
+                        )}
                         <p className="break-words">{interp(t(keys.next), { path: recovery.settingsSetAside })}</p>
                         {offered.length > 0 && (
                             <div className="flex flex-wrap gap-2 pt-1">

@@ -23,7 +23,7 @@ import * as scenariosHandlers from '../ipc/scenarios.handlers';
 import * as settings from '../settings';
 import * as logger from '../logger';
 import { isSafeExternalUrl } from '../format/urlSafe';
-import { clearAuthToken } from '../services/auth';
+import { clearAuthToken, LogoutNotSavedError } from '../services/auth';
 import * as updateChecker from '../services/UpdateChecker';
 import * as androidUpdateInstaller from '../services/AndroidUpdateInstaller';
 import { hasBundledModel } from '../services/visionVerifier';
@@ -174,6 +174,8 @@ const addSendMethods = (api: BridgeApi) => {
             await clearAuthToken();
         } catch (err) {
             logger.withCategory('authentication').error('Logout failed to clear token', err);
+            // A logout the settings refused did not log anyone out: the screen stays, and the caller tells the user.
+            if (err instanceof LogoutNotSavedError) throw err;
         }
         emit(sendMethods.logout);
     };

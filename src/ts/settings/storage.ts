@@ -71,7 +71,7 @@ let saveDroppedListener: (() => void) | null = null;
  * Why a settings save of the app window was given up: the background service kept changing the settings (`conflict`),
  * the blob is past the size the native store takes (`too-large`), or the store refused or failed it (`storage`).
  */
-type SaveDroppedCause = 'conflict' | 'too-large' | 'storage';
+type SaveDroppedCause = 'conflict' | 'too-large' | 'storage' | 'logout-lost';
 
 let droppedCause: SaveDroppedCause = 'storage';
 
@@ -149,6 +149,19 @@ type SettingsFileOptions = {
     dedicatedBridge: boolean;
     /** a given-up write of this file is reported to the window (the configuration's only) */
     reportsDroppedSaves: boolean;
+};
+
+/** When a copy was made (ms since the epoch), from the time in its name; null if the name has none. */
+const copyMadeAt = (copy: string): number | null => {
+    const stamp = /-(\d{4}-\d\d-\d\dT\d\d)-(\d\d)-(\d\d)-(\d{3}Z)$/.exec(path.basename(copy));
+    const madeAt = stamp ? Date.parse(`${stamp[1]}:${stamp[2]}:${stamp[3]}.${stamp[4]}`) : Number.NaN;
+    return Number.isNaN(madeAt) ? null : madeAt;
+};
+
+/** Whether a copy is at least `ageMs` old; one whose name has no time is taken for old. 0: any copy. */
+const copyIsOlderThan = (copy: string, ageMs: number): boolean => {
+    const madeAt = copyMadeAt(copy);
+    return ageMs <= 0 || madeAt === null || Date.now() - madeAt >= ageMs;
 };
 
 // The time a value was set aside, as part of the name it is kept under.
@@ -540,45 +553,55 @@ const createSettingsFile = (options: SettingsFileOptions) => {
                 : null;
         },
         /** When a copy kept of this file was made (ms since the epoch), from the time in its name; null if the name has none. */
-        keptCopyMadeAt: (copy: string): number | null => {
-            const stamp = /-(\d{4}-\d\d-\d\dT\d\d)-(\d\d)-(\d\d)-(\d{3}Z)$/.exec(path.basename(copy));
-            const madeAt = stamp ? Date.parse(`${stamp[1]}:${stamp[2]}:${stamp[3]}.${stamp[4]}`) : Number.NaN;
-            return Number.isNaN(madeAt) ? null : madeAt;
-        },
+        keptCopyMadeAt: (copy: string): number | null => copyMadeAt(copy),
         /**
          * Changes the copies set aside beside this file (`<file>.corrupt-<time>`, `<file>.unimportable-<time>`) where
          * the files can be read and written at once (a desktop): `change` gets each copy's text and answers the text to
          * keep in its place, or null to leave it. A copy that cannot be read or written is logged (never its text) and
          * left as it is.
+         *
+         * @param olderThanMs - only the copies at least this old (the time is in their name; 0: every copy)
+         * @returns whether every copy was handled (rewritten, or nothing to change): false when one could not be
          */
-        rewriteSetAside: (change: (text: string) => string | null): void => {
+        rewriteSetAside: (change: (text: string) => string | null, olderThanMs = 0): boolean => {
+            let every = true;
             for (const copy of setAsideFiles()) {
+                if (!copyIsOlderThan(copy, olderThanMs)) continue;
                 try {
                     const next = change(fs.readFileSync(copy, 'utf8'));
                     if (next !== null) writeAtomicOwnerOnly(copy, next);
                 } catch (err) {
+                    every = false;
                     logger.withCategory('settings').error(`${path.basename(copy)} could not be rewritten:`, err);
                 }
             }
+            return every;
         },
         /**
          * `rewriteSetAside` for the Android app window: the copies are the Preferences keys `<key>_corrupt…` and
          * `<key>_unimportable…`. For a task that runs on this file's write chain (`enqueue`).
+         *
+         * @returns whether every copy was handled (rewritten, or nothing to change): false when one could not be
          */
-        rewriteSetAsideOnChain: async (change: (text: string) => string | null): Promise<void> => {
+        rewriteSetAsideOnChain: async (change: (text: string) => string | null, olderThanMs = 0): Promise<boolean> => {
             const preferences = getCapacitorPreferences();
-            const copies = (await preferences.keys()).keys.filter((key) =>
-                [CORRUPT_SUFFIX, UNIMPORTABLE_SUFFIX].some((suffix) => key.startsWith(`${prefKey}${suffix}`)),
+            const copies = (await preferences.keys()).keys.filter(
+                (key) =>
+                    [CORRUPT_SUFFIX, UNIMPORTABLE_SUFFIX].some((suffix) => key.startsWith(`${prefKey}${suffix}`)) &&
+                    copyIsOlderThan(key, olderThanMs),
             );
+            let every = true;
             for (const key of copies) {
                 try {
                     const { value } = await preferences.get({ key });
                     const next = value === null ? null : change(value);
                     if (next !== null) await preferences.set({ key, value: next });
                 } catch (err) {
+                    every = false;
                     logger.withCategory('settings').error(`Capacitor ${key} could not be rewritten:`, err);
                 }
             }
+            return every;
         },
         /**
          * Moves a value that cannot be used out of the way, so the next save does not overwrite it: the file is
@@ -593,8 +616,9 @@ const createSettingsFile = (options: SettingsFileOptions) => {
             if (runtime.isCapacitor()) {
                 const backupKey = `${prefKey}${CORRUPT_SUFFIX}-${setAsideStamp()}`;
                 cachedJson = null;
+                const hadBackupKey = hasBackupKey;
                 hasBackupKey = true;
-                const serial = ++writeSerial;
+                ++writeSerial;
                 const moved = writeChain
                     .then(async () => {
                         const preferences = getCapacitorPreferences();
@@ -605,9 +629,11 @@ const createSettingsFile = (options: SettingsFileOptions) => {
                     })
                     .catch((err) => {
                         logger.withCategory('settings').error('Capacitor preferences backup write failed:', err);
-                        // The value was not moved: Preferences still holds it, and the cache shows what is stored again
-                        // (unless a write since has made it show its own).
-                        if (serial === writeSerial) cachedJson = persistedJson;
+                        // The value was not moved: Preferences still holds it, the cache shows what is stored again (a
+                        // write queued meanwhile, a restore, cannot change what is stored over the damaged value, and
+                        // must not be shown in place of it), and there is no copy of it.
+                        cachedJson = persistedJson;
+                        hasBackupKey = hadBackupKey;
                         return false;
                     });
                 writeChain = moved.then(() => undefined);

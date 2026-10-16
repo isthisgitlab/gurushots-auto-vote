@@ -8,6 +8,8 @@ import * as logger from '../../logger';
 import * as settings from '../../settings';
 import { refreshApi, getMiddleware } from '../../apiFactory';
 import { clearAuthToken } from '../../services/auth';
+import { errorMessage } from '../../errorMessage';
+import { LOGOUT_NOT_SAVED } from '../../ipc/logoutCode';
 import { createReadlineInterface, askYesNo, askInput, askSecret } from '../prompts';
 
 /**
@@ -86,13 +88,31 @@ const handleLogin = async (): Promise<boolean> => {
  * (both just blank the token in settings); the next vote/run reports
  * "Not authenticated" until the user logs in again.
  */
-const handleLogout = async () => {
-    const hadToken = await clearAuthToken();
-    if (hadToken) {
+const handleLogout = async (): Promise<boolean> => {
+    let hadToken: boolean;
+    try {
+        hadToken = await clearAuthToken();
+    } catch (error) {
+        logger
+            .withCategory('authentication')
+            .error(
+                `Logout was not saved (${errorMessage(error) === LOGOUT_NOT_SAVED ? 'the saved settings are not in use' : (errorMessage(error) ?? 'unknown error')}); you are still logged in. Fix the settings (see settings-recovery) and run logout again`,
+            );
+        return false;
+    }
+    // A logout made while the saved settings could not be loaded just now is recorded, and holds when they are.
+    if (settings.isSignOutOwed()) {
+        logger
+            .withCategory('authentication')
+            .warning(
+                'Logout recorded, but the saved settings could not be loaded just now, so the login may still be stored; it is cleared as soon as they are loaded (the next run, or settings-recovery retry)',
+            );
+    } else if (hadToken) {
         logger.withCategory('authentication').success('Logged out — token cleared');
     } else {
         logger.withCategory('ui').info('Already logged out — no token was set');
     }
+    return true;
 };
 
 export { handleLogin, handleLogout };

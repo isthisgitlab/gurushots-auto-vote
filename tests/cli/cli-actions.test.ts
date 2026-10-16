@@ -29,6 +29,7 @@ jest.mock('../../src/ts/logger', () => {
 jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(() => 'tok'),
     setSetting: jest.fn(() => true),
+    isSignOutOwed: jest.fn(() => false),
     loadSettings: jest.fn(() => ({ app: { mock: true }, auth: { token: 'tok' } })),
     getEffectiveSetting: jest.fn(),
     flushPendingWrites: jest.fn(async () => {}),

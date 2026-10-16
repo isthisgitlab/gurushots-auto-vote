@@ -602,6 +602,43 @@ describe('createJsonStore', () => {
                 expect(file.updateNow(() => '{}')).toBe('failed');
             });
 
+            test('updateNow written on a file another process changed meanwhile makes the change again on that, so neither is erased', () => {
+                delete g.Capacitor;
+                fs.existsSync.mockReturnValue(true);
+                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const file = createJsonStore({ fileName: 'v2-import.json', prefKey: 'gs_v2_import' });
+                // Read (A), made from, read again before the write (B: changed), then the change is made on B and B holds.
+                fs.readFileSync
+                    .mockReturnValueOnce('A')
+                    .mockReturnValueOnce('B')
+                    .mockReturnValueOnce('B')
+                    .mockReturnValueOnce('B');
+                const seen: Array<string | null> = [];
+
+                const result = file.updateNow((current) => {
+                    seen.push(current);
+                    return `${current}+mine`;
+                });
+
+                expect(result).toBe('saved');
+                expect(seen).toEqual(['A', 'B']);
+                expect(fs.writeFileSync).toHaveBeenCalledWith(expect.anything(), 'B+mine', expect.anything());
+            });
+
+            test('updateNow gives up, and says so, on a file that keeps changing under it', () => {
+                delete g.Capacitor;
+                fs.existsSync.mockReturnValue(true);
+                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const file = createJsonStore({ fileName: 'v2-import.json', prefKey: 'gs_v2_import' });
+                let reads = 0;
+                fs.readFileSync.mockImplementation(() => `v${reads++}`);
+
+                expect(file.updateNow((current) => `${current}+mine`)).toBe('failed');
+
+                expect(fs.writeFileSync).not.toHaveBeenCalled();
+                fs.readFileSync.mockReset();
+            });
+
             test('updateNow in the background service is the native compare-and-write where the key is shared', () => {
                 delete g.Capacitor;
                 g.__GS_HEADLESS__ = true;

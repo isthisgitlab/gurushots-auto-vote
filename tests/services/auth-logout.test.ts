@@ -158,6 +158,7 @@ describe('clearAuthToken', () => {
             invalid<typeof settingsModule.setSetting>((key: string, value: unknown) => {
                 order.push('set');
                 settings.__state.cached[key] = value;
+                return true;
             }),
         );
         settings.flushPendingWrites.mockImplementation(async () => {
@@ -168,6 +169,17 @@ describe('clearAuthToken', () => {
         await clearAuthToken();
 
         expect(order).toEqual(['set', 'flush']);
+    });
+
+    it('reports a logout the settings refused, never takes it for one: it throws once the account memory is dropped', async () => {
+        settings.setSetting.mockReturnValueOnce(false);
+        const { accountGeneration } = require('../../src/ts/services/accountScope') as typeof accountScopeModule;
+        const before = accountGeneration();
+
+        await expect(clearAuthToken()).rejects.toThrow('logout-not-saved');
+
+        expect(accountGeneration()).toBe(before + 1);
+        expect(settings.flushPendingWrites).toHaveBeenCalledTimes(1);
     });
 
     it('reports false when no token was set', async () => {

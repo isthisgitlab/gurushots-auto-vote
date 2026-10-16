@@ -8,6 +8,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { invalid } from '../helpers/invalid';
 import { pickOption } from './helpers/test-utils';
+import { act } from '@testing-library/preact';
+import { fireSettingsChanged } from './helpers/setup';
 import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
 
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
@@ -215,6 +217,92 @@ describe('Login page', () => {
         expect(document.activeElement).toBe(heading);
         expect(heading.getAttribute('tabindex')).toBe('-1');
         expect(document.activeElement).not.toBe(document.body);
+    });
+
+    describe('a session that arrives while the page shows (a settings restore that was waiting came through)', () => {
+        const arrives = (payload: object) => act(() => fireSettingsChanged(payload));
+
+        test('moves on to the app as a login does, once, when it is one to keep', async () => {
+            await renderReady();
+
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+
+            await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
+        });
+
+        test.each([
+            ['a session that is not kept (Stay logged in is off)', { app: { stayLoggedIn: false }, hasToken: true }],
+            ['settings with no session', { app: { stayLoggedIn: true }, hasToken: false }],
+            ['a payload that is not settings', 'nope'],
+            ['settings with no app part', { hasToken: true }],
+        ])('does not move on for %s', async (_name, payload) => {
+            await renderReady();
+
+            arrives(invalid(payload));
+
+            expect(window.api.login).not.toHaveBeenCalled();
+        });
+
+        test('does not move on twice when its own login stores the token meanwhile', async () => {
+            jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { stayLoggedIn: true } }));
+            await renderReady();
+            let finish: (result: { success: true }) => void = () => {};
+            jest.mocked(window.api.authenticate).mockReturnValue(
+                new Promise((resolve) => {
+                    finish = resolve;
+                }),
+            );
+
+            submit('me', 'pw');
+            // The login stores its token and the settings change, before the answer.
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+            await act(async () => finish({ success: true }));
+
+            await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
+        });
+
+        test('a login that threw does not stop a session that arrives later either', async () => {
+            jest.mocked(window.api.authenticate).mockRejectedValue(new Error('offline'));
+            await renderReady();
+            const unhandled = jest.fn();
+            process.once('unhandledRejection', unhandled);
+            submit('me', 'pw');
+            await waitFor(() => expect(window.api.authenticate).toHaveBeenCalled());
+            await act(async () => undefined);
+
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+
+            await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
+            // A macrotask: Node reports an unhandled rejection after the microtasks of the turn have drained, so a flush made of
+            // promises alone would end before the listener could have been called.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            process.off('unhandledRejection', unhandled);
+            expect(unhandled).not.toHaveBeenCalled();
+        });
+
+        test('a move the shell ignored (no session stored after all) leaves the page free to move on at the next one', async () => {
+            await renderReady();
+
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+            await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
+            await act(async () => undefined);
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+
+            await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(2));
+        });
+
+        test('a login that failed does not stop a session that arrives later', async () => {
+            jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'bad' });
+            await renderReady();
+            submit('me', 'wrong');
+            await waitFor(() => expect(window.api.authenticate).toHaveBeenCalled());
+            await act(async () => undefined);
+
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+
+            await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
+        });
     });
 
     test('rejected credentials get their own translated text', async () => {

@@ -257,7 +257,9 @@ const buildEnvironmentHandlers = () => ({
 });
 
 /** What became of settings.json when a fresh start was made (see 'start-fresh-settings'). */
-type StartFreshKept = { kind: 'path'; path: string } | { kind: 'stored' | 'pending' | 'none' | 'adopted' };
+type StartFreshKept =
+    | { kind: 'path'; path: string }
+    | { kind: 'stored' | 'pending' | 'none' | 'adopted' | 'unreadable' };
 
 // A recovery action of the stored settings (see settings/persistence.ts): what it did is announced to the windows, and a
 // failure answers with its code, `settings-import-failed` unless the action says otherwise (what went wrong is
@@ -310,12 +312,14 @@ const buildLocalDataHandlers = ({ afterWipe, broadcastSettingsChange }: Settings
     // `kept`: what became of settings.json — `path` (a copy kept at `path`), `stored` (a copy kept in the app's own
     // storage, which has no path to show), `pending` (that copy could not be written yet and is made with the next save
     // or start), `none` (there was no settings.json to keep) or `adopted` (a configuration was in place already, a
-    // restore that came through meanwhile: nothing was reset, and nothing was kept).
+    // restore that came through meanwhile: nothing was reset, and nothing was kept) or `unreadable` (settings.json could not be
+    // read: it was left as it is, and nothing was kept).
     'start-fresh-settings': detailedRecoveryAction(
         broadcastSettingsChange,
         async (): Promise<{ ok: boolean; kept: StartFreshKept }> => {
-            const { ok, keptAt, landed, adopted } = settings.startFreshDetailed();
+            const { ok, keptAt, landed, adopted, unreadable } = settings.startFreshDetailed();
             if (adopted) return { ok, kept: { kind: 'adopted' } };
+            if (unreadable) return { ok, kept: { kind: 'unreadable' } };
             if (landed !== undefined) return { ok, kept: { kind: (await landed) === null ? 'pending' : 'stored' } };
             return { ok, kept: keptAt === null ? { kind: 'none' } : { kind: 'path', path: keptAt } };
         },

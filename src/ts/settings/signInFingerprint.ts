@@ -91,6 +91,16 @@ const signInChangedByOlderBuild = (
 };
 
 /**
+ * Whether `token` is the one a recorded sign-in names: its hash is the token hash of one of the `recorded` fingerprints.
+ * A token of any other sign-in (a later login) never matches, whatever order anything is stored in.
+ */
+const tokenInSignIns = (recorded: readonly string[], token: string): boolean => {
+    const index = AUTH_KEYS.indexOf('token');
+    const hashed = fieldHash('token', token);
+    return recorded.some((fingerprint) => fingerprint.split('.')[index] === hashed);
+};
+
+/**
  * The fingerprint of the sign-in `settings.json` holds when it holds all four fields and they are one this build wrote
  * (it matches a recorded fingerprint), else null.
  */
@@ -101,4 +111,10 @@ const signInWrittenHere = (legacyText: string | null, recorded: readonly string[
     return recorded.includes(fingerprint) ? fingerprint : null;
 };
 
-export { signInChangedByOlderBuild, signInFingerprint, signInWrittenHere };
+/** The fingerprint of the sign-in `settings.json` holds when it holds a token (an older build wrote it, or this one), else null. */
+const signInHeldIn = (legacyText: string | null): string | null => {
+    const found = signInFieldsIn(legacyText);
+    return found?.token ? signInFingerprint({ ...emptySignIn, ...found }) : null;
+};
+
+export { signInChangedByOlderBuild, signInFingerprint, signInHeldIn, signInWrittenHere, tokenInSignIns };

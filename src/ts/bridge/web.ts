@@ -22,7 +22,9 @@
  */
 
 import { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel } from '../ipc/manifest';
+import { LOGOUT_NOT_SAVED } from '../ipc/logoutCode';
 import { isSafeExternalUrl } from '../format/urlSafe';
+import { isPlainObject } from '../plainObject';
 import { markWebShell } from './webShellFlag';
 
 import type { WindowApi } from '../types/ipc';
@@ -130,11 +132,15 @@ const installWebBridge = (): WindowApi => {
 
     api.login = () => emitShellEvent(sendMethods.login);
     api.logout = async () => {
+        let refused = false;
         try {
-            await post('/api/logout', []);
+            const answer = await post('/api/logout', []);
+            refused = isPlainObject(answer) && answer.success === false;
         } finally {
-            emitShellEvent(sendMethods.logout);
+            // A logout the settings refused did not log anyone out: the screen stays, and the caller tells the user.
+            if (!refused) emitShellEvent(sendMethods.logout);
         }
+        if (refused) throw new Error(LOGOUT_NOT_SAVED);
     };
 
     api.openExternalUrl = (url: unknown) => {

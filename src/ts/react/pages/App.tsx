@@ -7,6 +7,7 @@ import { ChallengesProvider, useChallenges } from '@/contexts/ChallengesContext'
 import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
 import { UpdateProvider } from '@/contexts/UpdateContext';
 import { useSettings } from '@/api/useSettings';
+import { LOGOUT_NOT_SAVED } from '../../ipc/logoutCode';
 import { useBankroll } from '@/api/useBankroll';
 import { useAutoJoinActive } from '@/api/useAutoJoinActive';
 import { useAutoClaimStatus } from '@/api/useAutoClaimStatus';
@@ -186,6 +187,9 @@ function AppModals({
 function AppContent() {
     // Where focus goes when the settings notice has nothing of its own left to return it to.
     const mainRef = useRef<HTMLElement>(null);
+    // A logout that did not end (the sign-in is still stored): the screen stays, and says why. `refused`: the settings did
+    // not take the sign-out; otherwise something else failed. `stopped`: auto-vote was stopped on the way.
+    const [logoutProblem, setLogoutProblem] = useState<{ refused: boolean; stopped: boolean } | null>(null);
     const { ready, t } = useTranslation();
     const { settings, loading: settingsLoading, updateSetting } = useSettings();
     const { challenges, refetch: refetchChallenges } = useChallenges();
@@ -217,14 +221,19 @@ function AppContent() {
     }, [autovote.cycles, refetchBankroll]);
 
     const handleLogout = useCallback(async () => {
+        setLogoutProblem(null);
+        let stopped = false;
         try {
             // Stop autovote if running, or held at launch for a resume
             if (autovote.running || autovote.pendingStartAt !== null) {
                 await autovote.stop();
+                stopped = true;
             }
             await ipc.logout();
         } catch (err) {
             await ipc.logRendererError(`Error during logout: ${errorMessage(err) || err}`);
+            // The user is still logged in, and is told why: the settings refused the sign-out, or something else failed.
+            setLogoutProblem({ refused: errorMessage(err) === LOGOUT_NOT_SAVED, stopped });
         }
     }, [autovote]);
 
@@ -269,6 +278,30 @@ function AppContent() {
             >
                 <ErrorBoundary>
                     <SettingsRecoveryNotice returnFocusTo={mainRef} />
+                    {logoutProblem && (
+                        <div role="alert" className="alert alert-error mb-4 text-sm items-start">
+                            <div className="flex-1 space-y-1">
+                                <p className="font-semibold">
+                                    {t(
+                                        logoutProblem.refused
+                                            ? 'errors.logoutNotSavedTitle'
+                                            : 'errors.logoutFailedTitle',
+                                    )}
+                                </p>
+                                <p>
+                                    {t(
+                                        logoutProblem.refused
+                                            ? 'errors.logoutNotSavedDetail'
+                                            : 'errors.logoutFailedDetail',
+                                    )}
+                                    {logoutProblem.stopped && ` ${t('errors.logoutNotSavedStopped')}`}
+                                </p>
+                            </div>
+                            <button type="button" className="btn btn-sm" onClick={() => setLogoutProblem(null)}>
+                                {t('errors.dismiss')}
+                            </button>
+                        </div>
+                    )}
 
                     {/* Navbar */}
                     <Navbar

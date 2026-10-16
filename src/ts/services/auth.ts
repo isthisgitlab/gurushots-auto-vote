@@ -8,6 +8,7 @@
  * boost flows.
  */
 
+import { LOGOUT_NOT_SAVED } from '../ipc/logoutCode';
 import * as settings from '../settings';
 import * as logger from '../logger';
 import { clearOpenChallenges } from './openChallengeCache';
@@ -103,6 +104,14 @@ const forgetAccountMemory = (): void => {
     forgetChosenPhotosMemory();
 };
 
+/** A logout the settings refused: the sign-out was not saved, so the user is still logged in. */
+class LogoutNotSavedError extends Error {
+    constructor() {
+        super(LOGOUT_NOT_SAVED);
+        this.name = 'LogoutNotSavedError';
+    }
+}
+
 /**
  * Core logout shared by every shell (Electron main, CLI, Capacitor bridge,
  * BaseMiddleware): clear the token and make sure the cleared value is
@@ -116,12 +125,16 @@ const forgetAccountMemory = (): void => {
  * logging wording) stays with each caller.
  *
  * @returns true when a token was actually cleared.
+ * @throws when the sign-out could not be saved (the settings refuse the write): a logout that did not hold is reported,
+ *   never taken for one. (A sign-out made while a restore of the settings is on its way is saved: it holds when the
+ *   restored settings come through.)
  */
 const clearAuthToken = async (): Promise<boolean> => {
     const hadToken = !!settings.getSetting('token');
-    settings.setSetting('token', '');
+    const saved = settings.setSetting('token', '');
     forgetAccountMemory();
     await settings.flushPendingWrites();
+    if (!saved) throw new LogoutNotSavedError();
     return hadToken;
 };
 
@@ -158,4 +171,11 @@ const clearTokenUnlessStayingLoggedIn = async (): Promise<boolean> => {
     return clearAuthToken();
 };
 
-export { requireAuthToken, extractAuthResult, clearAuthToken, switchAccountToken, clearTokenUnlessStayingLoggedIn };
+export {
+    requireAuthToken,
+    extractAuthResult,
+    clearAuthToken,
+    switchAccountToken,
+    clearTokenUnlessStayingLoggedIn,
+    LogoutNotSavedError,
+};

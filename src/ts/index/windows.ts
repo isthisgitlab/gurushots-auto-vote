@@ -26,6 +26,27 @@ function holdForOpenBoosts(event: { preventDefault: () => void }, proceed: () =>
 }
 
 /**
+ * Tells the user that a logout was not saved (the stored settings are not in use, so the sign-in is still stored and was not
+ * changed): the main window stays, so the user is not left to believe they are logged out. Auto-vote is stopped by then (the
+ * window stops it before it logs out), which the dialog says when no session is live.
+ */
+function reportLogoutRefused() {
+    const stopped = !autovoteSessionLive();
+    const options = {
+        type: 'error' as const,
+        message: translationManager.t('errors.logoutNotSavedTitle'),
+        detail: [
+            translationManager.t('errors.logoutNotSavedDetail'),
+            ...(stopped ? [translationManager.t('errors.logoutNotSavedStopped')] : []),
+        ].join(' '),
+    };
+    // The caller opens the main window first when it is gone, so the dialog has one to belong to; without it (a window that
+    // could not be created) the dialog stands alone.
+    const parent = appState.mainWindow;
+    void (parent && !parent.isDestroyed() ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options));
+}
+
+/**
  * Creates a window with the shared web preferences and window-bounds
  * persistence. `extraWebPreferences` carries the one preference only a window may set.
  */
@@ -189,4 +210,4 @@ function checkAutoLogin() {
     return false;
 }
 
-export { holdForOpenBoosts, createLoginWindow, createMainWindow, checkAutoLogin };
+export { holdForOpenBoosts, createLoginWindow, createMainWindow, checkAutoLogin, reportLogoutRefused };

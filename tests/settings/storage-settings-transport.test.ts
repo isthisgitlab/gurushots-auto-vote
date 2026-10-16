@@ -244,6 +244,9 @@ describe('an unusable settings value in the Android app (Preferences)', () => {
 
         // The move says it was not made.
         expect(await (result.ok ? result.moved : undefined)).toBe(false);
+        // There is no copy of it, and the cache shows what is stored again.
+        expect(storage.hasQuarantined()).toBe(false);
+        expect(storage.isPersisted()).toBe(true);
         expect(cat.error).toHaveBeenCalledWith('Capacitor preferences backup write failed:', expect.any(Error));
         expect(mockPreferences.remove).not.toHaveBeenCalled();
     });

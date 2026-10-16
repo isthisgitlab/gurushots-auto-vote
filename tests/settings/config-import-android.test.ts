@@ -186,7 +186,7 @@ describe('the import in the Android app window is done only once its configurati
         expect(savedKeys()).not.toContain('gs_v2_import');
         expect(savedKeys()).not.toContain('gurushots-settings');
         expect(settings.getSettingsRecovery()).toEqual({
-            code: 'settings-import-failed',
+            code: 'settings-import-retrying',
             path: 'gurushots-settings',
             blocking: true,
         });
@@ -216,7 +216,7 @@ describe('the import in the Android app window is done only once its configurati
         settings.loadSettings();
         await settings.flushPendingWrites();
 
-        expect(settings.getSettingsRecovery()?.code).toBe('settings-import-failed');
+        expect(settings.getSettingsRecovery()?.code).toBe('settings-import-retrying');
         expect(savedKeys()).not.toContain('gs_v2_import');
     });
 
@@ -306,7 +306,7 @@ describe('an import the Android native store does not take', () => {
         settings.loadSettings();
 
         expect(settings.getSettingsRecovery()).toEqual({
-            code: 'settings-import-failed',
+            code: 'settings-import-retrying',
             path: 'gurushots-settings',
             blocking: true,
         });

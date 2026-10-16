@@ -273,7 +273,7 @@ const runListProfiles: CommandHandler = async (argv) => {
  */
 const COMMANDS: Record<string, CommandHandler> = {
     login: async () => exitCodeOf(await handleLogin()),
-    logout: exitsZero(handleLogout),
+    logout: async () => exitCodeOf(await handleLogout()),
     vote: runVote,
     run: runRun,
     boost: challengeCommand('Usage: boost --challenge=<id> [--image=<id>]', runBoost),

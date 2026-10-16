@@ -27,12 +27,14 @@ import {
     markMirrorPendingQueued,
     markSignOutScrubPending,
     mirroredSignIns,
+    noteCopiesScrubbed,
     mirroredSignInsNow,
     signOutScrubPendingNow,
+    signOutScrubPendingStored,
 } from './importMarker';
 import { dropInvalidValues, mergeWithDefaults } from './loadValidation';
 import { acquireSettingsLock } from './settingsLock';
-import { signInChangedByOlderBuild, signInFingerprint, signInWrittenHere } from './signInFingerprint';
+import { signInChangedByOlderBuild, signInFingerprint, signInWrittenHere, tokenInSignIns } from './signInFingerprint';
 import { createJsonStore, legacyStorage, storage } from './storage';
 import { throughStore } from './storeTransport';
 import { storedTitlePins, storedTitlePinsNow } from './titlePins';
@@ -176,8 +178,9 @@ const mirrorTextOf = (
 
 // A settings object with its sign-in state cleared, at the top level (a settings.json) and in `auth` (a config.json): the
 // token, the API headers, the last user name and the chosen-photos account (a copy kept of a file is not where the login
-// form is prefilled from); null when it holds none (or is not a JSON object).
-const withoutSignIn = (kept: string): string | null => {
+// form is prefilled from); null when it holds none (or is not a JSON object). With `only` (the fingerprints of recorded
+// sign-ins) a part is cleared only where its token is one of those: the sign-in of any other login stays.
+const withoutSignIn = (kept: string, only?: readonly string[]): string | null => {
     let parsed: unknown;
     try {
         parsed = JSON.parse(kept);
@@ -187,9 +190,11 @@ const withoutSignIn = (kept: string): string | null => {
     if (!isPlainObject(parsed)) return null;
     const identity = ['lastUsername', 'chosenPhotosMemberId'] as const;
     const holdsSignIn = (values: Record<string, unknown>): boolean =>
-        (typeof values.token === 'string' && values.token !== '') ||
-        (isPlainObject(values.apiHeaders) && Object.keys(values.apiHeaders).length > 0) ||
-        identity.some((key) => typeof values[key] === 'string' && values[key] !== '');
+        only === undefined
+            ? (typeof values.token === 'string' && values.token !== '') ||
+              (isPlainObject(values.apiHeaders) && Object.keys(values.apiHeaders).length > 0) ||
+              identity.some((key) => typeof values[key] === 'string' && values[key] !== '')
+            : typeof values.token === 'string' && values.token !== '' && tokenInSignIns(only, values.token);
     const cleared = (values: Record<string, unknown>) => ({
         ...values,
         token: '',
@@ -227,17 +232,22 @@ const keepOriginalQueued = async (current: string): Promise<boolean> =>
  * the copy the user is fixing. A copy that does not parse is left as it is. Where the files are read and written in one
  * step.
  */
-const scrubCopiesSync = (): void => {
-    void throughStore(originalStore, (kept) => (kept === null ? null : withoutSignIn(kept)));
-    storage.rewriteSetAside(withoutSignIn);
-    legacyStorage.rewriteSetAside(withoutSignIn);
+const scrubCopiesSync = (only?: readonly string[]): boolean => {
+    const clear = (kept: string) => withoutSignIn(kept, only);
+    // (`updateNow` has written when it returns, on these platforms.)
+    const original = originalStore.updateNow((kept) => (kept === null ? null : clear(kept)));
+    const configs = storage.rewriteSetAside(clear);
+    const settingsFiles = legacyStorage.rewriteSetAside(clear);
+    return original !== 'failed' && configs && settingsFiles;
 };
 
 /** `scrubCopiesSync` for the Android app window (the set-aside copies are Preferences keys). */
-const scrubCopiesQueued = async (): Promise<void> => {
-    await throughStore(originalStore, (kept) => (kept === null ? null : withoutSignIn(kept)));
-    await storage.rewriteSetAsideOnChain(withoutSignIn);
-    await legacyStorage.rewriteSetAsideOnChain(withoutSignIn);
+const scrubCopiesQueued = async (only?: readonly string[]): Promise<boolean> => {
+    const clear = (kept: string) => withoutSignIn(kept, only);
+    const original = await throughStore(originalStore, (kept) => (kept === null ? null : clear(kept)));
+    const configs = await storage.rewriteSetAsideOnChain(clear);
+    const settingsFiles = await legacyStorage.rewriteSetAsideOnChain(clear);
+    return original !== 'failed' && configs && settingsFiles;
 };
 
 /**
@@ -437,17 +447,63 @@ const mirrorQueued = (
  *
  * @param landed - how the configuration's queued write ended
  */
-const scrubCopiesAfterSignOut = (landed: Promise<QueuedWriteOutcome | undefined> | undefined): void => {
+const scrubCopiesAfterSignOut = (
+    landed: Promise<QueuedWriteOutcome | undefined> | undefined,
+    only?: readonly string[],
+): void => {
+    // Recorded (once the sign-out is saved) and cleared only when every copy was rewritten: a copy that could not be is
+    // tried again at the next start or save (see finishDeferredScrub).
     if (runtime.isCapacitor() && !runtime.isHeadlessService()) {
         void legacyStorage.enqueue(async () => {
-            if ((await landed) !== 'failed') await scrubCopiesQueued();
+            // A sign-out that did not land signed nothing out: there is nothing to clear, and nothing is recorded (a look
+            // for what is owed would clear the copies of a sign-out that never happened).
+            if ((await landed) === 'failed') return;
+            const record = markSignOutScrubPending();
+            if (await scrubCopiesQueued(only)) {
+                noteCopiesScrubbed();
+                clearSignOutScrubPending(record);
+            }
         }, undefined);
+        return;
+    }
+    const record = markSignOutScrubPending();
+    if (runtime.isHeadlessService()) {
+        // The service has no way to list the copies in Preferences: the app window clears them (and the record) when it
+        // next starts or saves.
+        scrubCopiesSync(only);
+    } else if (scrubCopiesSync(only)) {
+        noteCopiesScrubbed();
+        clearSignOutScrubPending(record);
     } else {
-        scrubCopiesSync();
-        // The service has no way to list the copies in Preferences: the app window clears them when it next starts.
-        if (runtime.isHeadlessService()) markSignOutScrubPending();
+        scrubFailedHere = true;
     }
 };
+
+// How long a copy set aside keeps the sign-in it held after a logout that never came (the same as a remembered copy stays
+// the one to fix): older copies lose the sign-in at the start, and keep their settings for recovery.
+const OLD_COPY_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
+/**
+ * At the start: the copies set aside (`config.json.corrupt-<time>`, `settings.json.unimportable-<time>`, and the Android
+ * keys) that are older than OLD_COPY_AGE_MS lose the sign-in they hold, the rest of their settings kept for recovery.
+ * Not the user's own file kept as `settings.json.original`. A copy that cannot be rewritten is logged and left; the next
+ * start tries again. Nothing in the background service (it cannot list the copies in Preferences).
+ */
+const scrubOldCopies = (): void => {
+    if (runtime.isHeadlessService()) return;
+    if (runtime.isCapacitor()) {
+        void legacyStorage.enqueue(async () => {
+            await storage.rewriteSetAsideOnChain(withoutSignIn, OLD_COPY_AGE_MS);
+            await legacyStorage.rewriteSetAsideOnChain(withoutSignIn, OLD_COPY_AGE_MS);
+        }, undefined);
+        return;
+    }
+    storage.rewriteSetAside(withoutSignIn, OLD_COPY_AGE_MS);
+    legacyStorage.rewriteSetAside(withoutSignIn, OLD_COPY_AGE_MS);
+};
+
+// Whether a desktop process failed to rewrite a copy and so looks again at each save (else only at its start).
+let scrubFailedHere = false;
 
 // Whether a look for the clearing the app window owes is under way, and whether another was asked for meanwhile (the
 // service may have recorded one after the running look read the marker).
@@ -455,13 +511,27 @@ let deferredScrubRunning = false;
 let deferredScrubAgain = false;
 
 /**
- * What the app window owes for a sign-out the background service saved: clears the copies in Preferences the service
- * could not reach (see scrubCopiesAfterSignOut). Asked at the window's start and again at each change it saves, since
- * the service may sign out while the window is open. Nothing elsewhere; one look at a time, and a look asked for
- * while one runs is made when it ends.
+ * What is still owed for a sign-out: the copies a rewrite failed on (any platform), and the copies in Preferences the
+ * background service could not reach (see scrubCopiesAfterSignOut). Asked at the start and again at each change the
+ * Android window saves, since the service may sign out while the window is open (a desktop looks again at each save only
+ * after a rewrite failed). Nothing in the service; one look at a time, and a look asked for while one runs is made when it
+ * ends.
  */
-const finishDeferredScrub = (): void => {
-    if (!runtime.isCapacitor() || runtime.isHeadlessService()) return;
+const finishDeferredScrub = (atStart = false): void => {
+    if (runtime.isHeadlessService()) return;
+    if (!runtime.isCapacitor()) {
+        // A desktop: the copies are files, and the record is in the marker file. Looked at when the process starts, and
+        // at each save only after a rewrite failed here.
+        if (!atStart && !scrubFailedHere) return;
+        scrubFailedHere = false;
+        const pending = signOutScrubPendingStored();
+        if (pending === null) return;
+        if (scrubCopiesSync()) {
+            noteCopiesScrubbed();
+            clearSignOutScrubPending(pending);
+        } else scrubFailedHere = true;
+        return;
+    }
     if (deferredScrubRunning) {
         deferredScrubAgain = true;
         return;
@@ -471,8 +541,10 @@ const finishDeferredScrub = (): void => {
         .enqueue(async () => {
             const pending = await signOutScrubPendingNow();
             if (pending === null) return;
-            await scrubCopiesQueued();
-            clearSignOutScrubPending(pending);
+            if (await scrubCopiesQueued()) {
+                noteCopiesScrubbed();
+                clearSignOutScrubPending(pending);
+            }
         }, undefined)
         .finally(() => {
             deferredScrubRunning = false;
@@ -514,6 +586,7 @@ export {
     finishDeferredScrub,
     originalStore,
     scrubCopiesAfterSignOut,
+    scrubOldCopies,
     setAsideLegacy,
     toFormatOne,
 };

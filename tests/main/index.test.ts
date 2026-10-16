@@ -60,6 +60,7 @@ interface FakeBrowserWindowClass {
     instances: FakeWindow[];
     openWindows: FakeWindow[];
     nextLoadResult: Promise<void> | null;
+    nextConstructError: Error | null;
 }
 
 /** What the electron mock below returns (handlers maps record every registered listener). */
@@ -117,6 +118,7 @@ jest.mock('electron', (): FakeElectron => {
         declare static instances: FakeWindow[];
         declare static openWindows: FakeWindow[];
         declare static nextLoadResult: Promise<void> | null;
+        declare static nextConstructError: Error | null;
         declare opts: FakeWindow['opts'];
         declare handlers: FakeWindow['handlers'];
         declare onceHandlers: FakeWindow['onceHandlers'];
@@ -134,6 +136,11 @@ jest.mock('electron', (): FakeElectron => {
         declare close: FakeWindow['close'];
         declare focus: FakeWindow['focus'];
         constructor(opts: FakeWindow['opts']) {
+            if (BrowserWindow.nextConstructError) {
+                const error = BrowserWindow.nextConstructError;
+                BrowserWindow.nextConstructError = null;
+                throw error;
+            }
             this.opts = opts;
             this.handlers = {};
             this.onceHandlers = {};
@@ -165,6 +172,7 @@ jest.mock('electron', (): FakeElectron => {
     BrowserWindow.instances = windows;
     BrowserWindow.openWindows = [];
     BrowserWindow.nextLoadResult = null;
+    BrowserWindow.nextConstructError = null;
     return {
         app: {
             handlers: appHandlers,
@@ -221,7 +229,10 @@ jest.mock('../../src/ts/services/AutoUpdater', () => ({
         setMainWindow: jest.fn(),
     })),
 }));
-jest.mock('../../src/ts/services/auth', () => ({ clearAuthToken: jest.fn(() => Promise.resolve()) }));
+jest.mock('../../src/ts/services/auth', () => {
+    class LogoutNotSavedError extends Error {}
+    return { clearAuthToken: jest.fn(() => Promise.resolve()), LogoutNotSavedError };
+});
 for (const mod of ['log', 'update', 'misc', 'settings', 'voting', 'actions', 'computations', 'currency', 'scenarios']) {
     jest.mock(`../../src/ts/ipc/${mod}.handlers`, () => ({ register: jest.fn() }));
 }
@@ -979,6 +990,115 @@ describe('logout IPC', () => {
         expect(m.cat.error).toHaveBeenCalledWith('Logout failed to clear token', err);
         mainWin()!.onceHandlers.closed();
         expect(m.BrowserWindow.instances.filter((w) => w.file.endsWith('login.html'))).toHaveLength(loginsBefore + 1);
+    });
+
+    it('a logout the settings refused is told to the user and the main window stays', async () => {
+        m.ipcMain.handlers['login-success']({});
+        loginWin()!.handlers.closed();
+        const main = mainWin()!;
+        m.auth.clearAuthToken.mockRejectedValue(new m.auth.LogoutNotSavedError());
+        const loginsBefore = m.BrowserWindow.instances.filter((w) => w.file.endsWith('login.html')).length;
+
+        m.ipcMain.handlers.logout({});
+        await flush();
+
+        expect(m.electron.dialog.showMessageBox).toHaveBeenCalledWith(
+            main,
+            expect.objectContaining({ type: 'error', message: 'errors.logoutNotSavedTitle' }),
+        );
+        expect(main.close).not.toHaveBeenCalled();
+        expect(m.BrowserWindow.instances.filter((w) => w.file.endsWith('login.html'))).toHaveLength(loginsBefore);
+    });
+
+    it('a logout refused after the main window went away is still told, and the main window is opened again (the user is still logged in)', async () => {
+        m.ipcMain.handlers['login-success']({});
+        const main = mainWin()!;
+        m.auth.clearAuthToken.mockImplementation(() => {
+            main.destroyed = true;
+            return Promise.reject(new m.auth.LogoutNotSavedError());
+        });
+        const mainsBefore = m.BrowserWindow.instances.filter((w) => w.file.endsWith('app.html')).length;
+        const loginsBefore = m.BrowserWindow.instances.filter((w) => w.file.endsWith('login.html')).length;
+
+        m.ipcMain.handlers.logout({});
+        await flush();
+
+        // The window is opened first, and the dialog belongs to it.
+        const mains = m.BrowserWindow.instances.filter((w) => w.file.endsWith('app.html'));
+        expect(mains).toHaveLength(mainsBefore + 1);
+        expect(m.electron.dialog.showMessageBox).toHaveBeenCalledWith(
+            mains[mains.length - 1],
+            expect.objectContaining({ type: 'error', message: 'errors.logoutNotSavedTitle' }),
+        );
+        // Not the login form: the sign-in was not changed.
+        expect(m.BrowserWindow.instances.filter((w) => w.file.endsWith('login.html'))).toHaveLength(loginsBefore);
+    });
+
+    it('a logout refused when the main window is gone and cannot be opened again is still told, in a dialog of its own', async () => {
+        m.ipcMain.handlers['login-success']({});
+        const main = mainWin()!;
+        m.auth.clearAuthToken.mockImplementation(() => {
+            main.destroyed = true;
+            main.handlers.closed();
+            m.BrowserWindow.nextConstructError = new Error('no window');
+            return Promise.reject(new m.auth.LogoutNotSavedError());
+        });
+
+        m.ipcMain.handlers.logout({});
+        await flush();
+
+        expect(m.cat.error).toHaveBeenCalledWith('The main window could not be opened again', new Error('no window'));
+        expect(m.electron.dialog.showMessageBox).toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'error', message: 'errors.logoutNotSavedTitle' }),
+        );
+        expect(m.electron.dialog.showMessageBox.mock.calls.at(-1)).toHaveLength(1);
+    });
+
+    it('a logout refused with a main window that was destroyed and could not be opened again is told without a parent', async () => {
+        m.ipcMain.handlers['login-success']({});
+        const main = mainWin()!;
+        m.auth.clearAuthToken.mockImplementation(() => {
+            main.destroyed = true;
+            m.BrowserWindow.nextConstructError = new Error('no window');
+            return Promise.reject(new m.auth.LogoutNotSavedError());
+        });
+
+        m.ipcMain.handlers.logout({});
+        await flush();
+
+        expect(m.electron.dialog.showMessageBox.mock.calls.at(-1)).toHaveLength(1);
+    });
+
+    it('the dialog does not claim auto-vote is stopped while a session is live', async () => {
+        m.ipcMain.handlers['login-success']({});
+        m.settings.getSetting.mockImplementation((key) =>
+            key === 'autovoteStartedLaunch' ? 7 : key === 'autovoteRunning',
+        );
+        m.settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 7 }));
+        m.auth.clearAuthToken.mockRejectedValue(new m.auth.LogoutNotSavedError());
+
+        m.ipcMain.handlers.logout({});
+        await flush();
+
+        expect(m.electron.dialog.showMessageBox).toHaveBeenCalledWith(
+            mainWin(),
+            expect.objectContaining({ detail: 'errors.logoutNotSavedDetail' }),
+        );
+    });
+
+    it('the dialog says the sign-in was not changed, and that auto-vote is stopped when no session is live', async () => {
+        m.ipcMain.handlers['login-success']({});
+        m.auth.clearAuthToken.mockRejectedValue(new m.auth.LogoutNotSavedError());
+
+        m.ipcMain.handlers.logout({});
+        await flush();
+
+        expect(m.electron.dialog.showMessageBox).toHaveBeenCalledWith(
+            mainWin(),
+            expect.objectContaining({
+                detail: 'errors.logoutNotSavedDetail errors.logoutNotSavedStopped',
+            }),
+        );
     });
 
     it('if the main window was destroyed mid-logout, focuses the existing login window', async () => {

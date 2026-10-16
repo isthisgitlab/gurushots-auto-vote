@@ -15,7 +15,45 @@ const SETTINGS_LOCK_ID = 'config-import';
  *
  * @returns the lock; `'busy'` when another process held it for the whole wait; `'unavailable'` when it cannot be had
  */
-const acquireSettingsLock = (waitMs: number) =>
-    acquireWithin(() => acquireUnlockLock(SETTINGS_LOCK_ID, { category: 'settings', internal: true }), waitMs);
+const acquireSettingsLock = (waitMs: number) => {
+    const lock = acquireWithin(
+        () => acquireUnlockLock(SETTINGS_LOCK_ID, { category: 'settings', internal: true }),
+        waitMs,
+    );
+    if (lock === 'busy' || lock === 'unavailable') return lock;
+    heldHere++;
+    let released = false;
+    return {
+        ...lock,
+        // Once only, so that the count of holds stays honest and the lock is let go of once.
+        release: () => {
+            if (released) return;
+            released = true;
+            heldHere--;
+            lock.release();
+        },
+    };
+};
 
-export { acquireSettingsLock };
+// How many holds of the lock this process has now: a change made inside one (the mirror's, the import's) that needs the lock
+// again does not wait for itself.
+let heldHere = 0;
+
+/**
+ * Runs `run` with the lock held, taking it for the run unless this process holds it already.
+ *
+ * @param waitMs - how long to wait for another process to let go
+ * @param busy - the answer when the lock could not be had
+ */
+const underSettingsLock = <T>(waitMs: number, run: () => T, busy: T): T => {
+    if (heldHere > 0) return run();
+    const lock = acquireSettingsLock(waitMs);
+    if (lock === 'busy' || lock === 'unavailable') return busy;
+    try {
+        return run();
+    } finally {
+        lock.release();
+    }
+};
+
+export { acquireSettingsLock, underSettingsLock };

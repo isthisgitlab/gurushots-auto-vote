@@ -43,7 +43,10 @@ jest.mock('../../src/ts/services/UpdateChecker', () => ({
     checkForUpdates: jest.fn(),
     getReleasesUrl: () => 'https://example.com/releases',
 }));
-jest.mock('../../src/ts/services/auth', () => ({ clearAuthToken: jest.fn() }));
+jest.mock('../../src/ts/services/auth', () => {
+    class LogoutNotSavedError extends Error {}
+    return { clearAuthToken: jest.fn(), LogoutNotSavedError };
+});
 jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
@@ -345,6 +348,19 @@ describe('Capacitor bridge', () => {
 
             expect(log.error).toHaveBeenCalledWith('Logout failed to clear token', expect.any(Error));
             expect(onLogout).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('a logout the settings refused', () => {
+        test('does not log anyone out: nothing is emitted, and the caller is told', async () => {
+            const onLogout = jest.fn();
+            bridge.subscribe('logout', onLogout);
+            auth.clearAuthToken.mockRejectedValue(new auth.LogoutNotSavedError());
+
+            await expect(api.logout()).rejects.toBeInstanceOf(auth.LogoutNotSavedError);
+
+            expect(log.error).toHaveBeenCalledWith('Logout failed to clear token', expect.any(Error));
+            expect(onLogout).not.toHaveBeenCalled();
         });
     });
 

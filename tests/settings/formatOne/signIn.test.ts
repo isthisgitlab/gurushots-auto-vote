@@ -56,6 +56,8 @@ describe('the sign-in in the mirror (real fs)', () => {
     let settings: typeof settingsModule;
     let cat: CatDouble;
 
+    // Every settings module loaded in a test: one with a window listening retries by itself, so each is told to stop.
+    const loaded: Array<typeof settingsModule> = [];
     // Each test gets its own module graph; a "restart" is a new graph over the same directory.
     const loadFresh = (setup?: () => void) => {
         jest.isolateModules(() => {
@@ -67,6 +69,7 @@ describe('the sign-in in the mirror (real fs)', () => {
             }));
             setup?.();
             settings = require('../../../src/ts/settings') as typeof settingsModule;
+            loaded.push(settings);
             cat = invalid<typeof loggerModule & { __cat: CatDouble }>(
                 require('../../../src/ts/logger') as typeof loggerModule,
             ).__cat;
@@ -109,6 +112,7 @@ describe('the sign-in in the mirror (real fs)', () => {
     });
 
     afterEach(() => {
+        for (const mod of loaded.splice(0)) mod.onSettingsRecoveryChange(null);
         jest.restoreAllMocks();
         jest.dontMock('../../../src/ts/runtime');
         jest.dontMock('../../../src/ts/lockWait');
@@ -120,12 +124,14 @@ describe('the sign-in in the mirror (real fs)', () => {
         const marker = () =>
             require('../../../src/ts/settings/importMarker') as typeof import('../../../src/ts/settings/importMarker');
 
-        test('is recorded anew by each sign-out, only where a marker exists, and forgotten only for the record that was seen', () => {
+        test('is recorded anew by each sign-out (a missing marker is made for it), and forgotten only for the record that was seen', () => {
             loadFresh();
-            // No marker: nothing is recorded or forgotten.
-            marker().markSignOutScrubPending();
+            // No marker: nothing to forget; a sign-out makes one, holding only its record.
             marker().clearSignOutScrubPending('x');
             expect(fs.existsSync(markerFile)).toBe(false);
+            marker().markSignOutScrubPending();
+            expect(stored(markerFile)).toEqual({ signOutScrubPending: expect.any(String) });
+            fs.rmSync(markerFile);
 
             settings.setSetting('theme', 'dark');
             const untouched = fs.readFileSync(markerFile, 'utf8');
@@ -415,6 +421,98 @@ describe('the sign-in in the mirror (real fs)', () => {
             });
             expect(stored(setAside('settings.json.unimportable-2026-10-16T08-00-00-000Z'))).toMatchObject({
                 token: 'tok-unimportable',
+            });
+        });
+
+        test('at the start, the copies set aside more than two weeks ago lose the sign-in they hold and keep their settings; the recent ones and the original are left', () => {
+            signedIn();
+            const stamp = (ms: number) => new Date(ms).toISOString().replace(/[:.]/g, '-');
+            const old = setAside(`config.json.corrupt-${stamp(Date.now() - 15 * 24 * 3600 * 1000)}`);
+            const oldSettings = setAside(`settings.json.unimportable-${stamp(Date.now() - 20 * 24 * 3600 * 1000)}`);
+            const recent = setAside(`config.json.corrupt-${stamp(Date.now() - 3 * 24 * 3600 * 1000)}`);
+            const original = setAside('settings.json.original');
+            fs.writeFileSync(old, COPY_CONFIG);
+            fs.writeFileSync(oldSettings, COPY_SETTINGS);
+            fs.writeFileSync(recent, COPY_CONFIG);
+            fs.writeFileSync(original, COPY_SETTINGS);
+
+            loadFresh();
+            settings.loadSettings();
+
+            expect(stored(old)).toMatchObject({
+                app: { theme: 'light' },
+                auth: { token: '', apiHeaders: {}, lastUsername: '' },
+            });
+            expect(stored(oldSettings)).toMatchObject({ theme: 'dark', token: '', apiHeaders: {} });
+            expect(stored(recent).auth).toMatchObject({ token: 'tok-old' });
+            expect(stored(original)).toMatchObject({ token: 'tok-unimportable' });
+        });
+
+        describe('when a copy could not be rewritten', () => {
+            const FAILING_COPY = /config\.json\.corrupt-2026-10-16T08-00-00-000Z\.\d+\.[0-9a-f]+\.tmp$/;
+            const copy = () => stored(setAside('config.json.corrupt-2026-10-16T08-00-00-000Z')).auth;
+
+            test('the record is kept, and the copy is cleared at the next save', () => {
+                signedIn();
+                arrangeCopies();
+                const failing = failingWrites(FAILING_COPY);
+
+                expect(settings.setSetting('token', '')).toBe(true);
+
+                expect(copy()).toMatchObject({ token: 'tok-old' });
+                expect(stored(markerFile).signOutScrubPending).toEqual(expect.any(String));
+                // The other copies were cleared meanwhile.
+                expect(stored(setAside('settings.json.unimportable-2026-10-16T08-00-00-000Z'))).toMatchObject({
+                    token: '',
+                });
+
+                failing.failing = false;
+                expect(settings.setSetting('theme', 'light')).toBe(true);
+
+                expect(copy()).toMatchObject({ token: '', lastUsername: '' });
+                expect(stored(markerFile)).not.toHaveProperty('signOutScrubPending');
+            });
+
+            test('the record is kept across a restart, and the copy is cleared at the start', () => {
+                signedIn();
+                arrangeCopies();
+                const failing = failingWrites(FAILING_COPY);
+                expect(settings.setSetting('token', '')).toBe(true);
+                expect(copy()).toMatchObject({ token: 'tok-old' });
+                failing.failing = false;
+
+                loadFresh();
+                settings.loadSettings();
+
+                expect(copy()).toMatchObject({ token: '', lastUsername: '' });
+                expect(stored(markerFile)).not.toHaveProperty('signOutScrubPending');
+            });
+
+            test('a copy that still cannot be rewritten at the restart keeps the record, and the next save tries again', () => {
+                signedIn();
+                arrangeCopies();
+                failingWrites(FAILING_COPY);
+                expect(settings.setSetting('token', '')).toBe(true);
+
+                loadFresh();
+                settings.loadSettings();
+                expect(copy()).toMatchObject({ token: 'tok-old' });
+                expect(stored(markerFile).signOutScrubPending).toEqual(expect.any(String));
+
+                jest.restoreAllMocks();
+                expect(settings.setSetting('theme', 'light')).toBe(true);
+
+                expect(copy()).toMatchObject({ token: '' });
+                expect(stored(markerFile)).not.toHaveProperty('signOutScrubPending');
+            });
+
+            test('and the record is cleared when every copy was rewritten at once', () => {
+                signedIn();
+                arrangeCopies();
+
+                expect(settings.setSetting('token', '')).toBe(true);
+
+                expect(stored(markerFile)).not.toHaveProperty('signOutScrubPending');
             });
         });
 
@@ -1222,6 +1320,804 @@ describe('the sign-in in the mirror (real fs)', () => {
         const unimportable = () =>
             fs.readdirSync(userData).filter((name) => name.startsWith('settings.json.unimportable-'));
 
+        // Loads the app with the import lock busy until `lock.busy` is cleared.
+        const busyLock = (setup?: () => void) => {
+            const lock = { busy: true, tries: 0 };
+            loadFresh(() => {
+                const actual =
+                    jest.requireActual<typeof import('../../../src/ts/lockWait')>('../../../src/ts/lockWait');
+                jest.doMock('../../../src/ts/lockWait', () => ({
+                    acquireWithin: (...args: Parameters<typeof actual.acquireWithin>) => {
+                        lock.tries++;
+                        return lock.busy ? 'busy' : actual.acquireWithin(...args);
+                    },
+                }));
+                setup?.();
+            });
+            return lock;
+        };
+
+        // The sign-out is made at a moment the lock is free (the marker is changed under it); the restore still waits.
+        const signOutWhileWaiting = (lock: { busy: boolean }): boolean => {
+            lock.busy = false;
+            const made = settings.setSetting('token', '');
+            lock.busy = true;
+            return made;
+        };
+
+        test('while it waits, the notice is the retrying one: the damaged copy named, Retry only, and nothing overwritten', () => {
+            damagedConfig();
+            const mirror = fs.readFileSync(legacyFile, 'utf8');
+            busyLock();
+            clockAt(1_000_000);
+
+            settings.loadSettings();
+
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-import-retrying',
+                path: legacyFile,
+                blocking: true,
+                damagedAt: expect.stringMatching(/config\.json\.corrupt-/),
+            });
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(mirror);
+        });
+
+        test("Retry after a busy first restore ends the episode as the automatic path does: restored, and an older build's sign-out is adopted again", () => {
+            damagedConfig();
+            const lock = busyLock();
+            clockAt(1_000_000);
+            settings.loadSettings();
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-retrying' });
+
+            lock.busy = false;
+            expect(settings.retryImport()).toBe(true);
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-restored', blocking: false });
+            expect(settings.loadSettings().auth.token).toBe('tok-1');
+            // An older build signs out in settings.json; the next save takes it over, as it does after any restore.
+            olderBuildChanges((file) => ({ ...file, token: '', apiHeaders: {} }));
+            expect(settings.setSetting('theme', 'light')).toBe(true);
+            expect(settings.loadSettings().auth.token).toBe('');
+            expect(stored(legacyFile)).toMatchObject({ theme: 'light', token: '' });
+        });
+
+        test('a retried restore that finds the configuration restored by another process counts as restored, like the first try', () => {
+            damagedConfig();
+            let storageApi!: typeof import('../../../src/ts/settings/storage');
+            const lock = busyLock(() => {
+                storageApi =
+                    require('../../../src/ts/settings/storage') as typeof import('../../../src/ts/settings/storage');
+            });
+            clockAt(1_000_000);
+            settings.loadSettings();
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-retrying' });
+
+            // Another process restores it meanwhile; this read still found no configuration, and the import under the
+            // lock finds it there.
+            lock.busy = false;
+            fs.writeFileSync(configFile, JSON.stringify({ version: 2, app: { theme: 'dark' }, auth: AUTH }));
+            jest.spyOn(storageApi.storage, 'readRaw').mockReturnValueOnce(null);
+            clockAt(1_000_000 + 5000);
+            settings.loadSettings();
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-restored', blocking: false });
+        });
+
+        test('a restore that keeps failing for a reason that should pass is given up after many tries: settings-corrupt, saves allowed', () => {
+            damagedConfig();
+            busyLock();
+            let now = 1_000_000;
+            clockAt(now);
+            const seen = new Set<string>();
+            for (let attempt = 0; attempt < 12; attempt++) {
+                settings.loadSettings();
+                seen.add(`${settings.getSettingsRecovery()?.code}`);
+                now += 6 * 60 * 1000;
+                clockAt(now);
+            }
+
+            expect([...seen]).toEqual(['settings-import-retrying', 'settings-corrupt']);
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt', blocking: false });
+            expect(settings.setSetting('theme', 'light')).toBe(true);
+        });
+
+        test('a settings.json that cannot be read for good (no permission) behind a damaged configuration is settled at once: settings-corrupt, saves allowed', () => {
+            damagedConfig();
+            loadFresh();
+            const real = fs.readFileSync;
+            jest.spyOn(fs, 'readFileSync').mockImplementation(((file: fs.PathOrFileDescriptor, ...rest: unknown[]) => {
+                if (file === legacyFile) throw Object.assign(new Error('EACCES: denied'), { code: 'EACCES' });
+                return (real as (...args: unknown[]) => unknown)(file, ...rest);
+            }) as typeof fs.readFileSync);
+
+            settings.loadSettings();
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt', blocking: false });
+            expect(settings.setSetting('theme', 'light')).toBe(true);
+            // It cannot be kept as a copy either, so it is not written over.
+            expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('could not be set aside'));
+            jest.restoreAllMocks();
+            expect(stored(legacyFile)).toMatchObject({ theme: 'dark', token: 'tok-1' });
+        });
+
+        test('a settings.json that cannot be looked at when the first save would keep it (a value that carries no message) is not written over', () => {
+            damagedConfig();
+            fs.writeFileSync(legacyFile, '{broken');
+            let storageApi!: typeof import('../../../src/ts/settings/storage');
+            loadFresh(() => {
+                storageApi =
+                    require('../../../src/ts/settings/storage') as typeof import('../../../src/ts/settings/storage');
+            });
+            settings.loadSettings();
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt' });
+            jest.spyOn(storageApi.legacyStorage, 'readRaw').mockImplementation(() => {
+                throw 'weird';
+            });
+
+            expect(settings.setSetting('theme', 'light')).toBe(true);
+
+            expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('unknown error'));
+            jest.restoreAllMocks();
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe('{broken');
+        });
+
+        test('with a window listening, the retry is made by itself once the wait is over, and the window is told', () => {
+            damagedConfig();
+            const lock = busyLock();
+            const heard = jest.fn();
+            settings.onSettingsRecoveryChange(heard);
+            const timers: Array<{ run: () => void; delay: number }> = [];
+            jest.spyOn(global, 'setTimeout').mockImplementation(((run: () => void, delay: number) => {
+                timers.push({ run, delay });
+                return { unref: () => undefined } as unknown as NodeJS.Timeout;
+            }) as unknown as typeof setTimeout);
+            clockAt(1_000_000);
+
+            settings.loadSettings();
+            expect(timers).toHaveLength(1);
+            expect(timers[0].delay).toBeGreaterThanOrEqual(1000);
+
+            lock.busy = false;
+            clockAt(1_000_000 + 5000);
+            timers[0].run();
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-restored' });
+            expect(heard).not.toHaveBeenCalled();
+            return Promise.resolve().then(() => expect(heard).toHaveBeenCalled());
+        });
+
+        test('with nobody listening, no timer is set: the next read does it', () => {
+            damagedConfig();
+            busyLock();
+            const timer = jest.spyOn(global, 'setTimeout');
+            clockAt(1_000_000);
+
+            settings.loadSettings();
+
+            expect(timer).not.toHaveBeenCalled();
+        });
+
+        test('an owed sign-out survives the process: it is recorded, and the next process applies it when its restore lands, in the configuration, the mirror and the copies kept', () => {
+            damagedConfig();
+            fs.writeFileSync(setAside('settings.json.original'), JSON.stringify({ theme: 'dark', token: 'tok-1' }));
+            const lock = busyLock();
+            clockAt(1_000_000);
+            settings.loadSettings();
+
+            expect(signOutWhileWaiting(lock)).toBe(true);
+
+            expect(settings.isSignOutOwed()).toBe(true);
+            // It names the sign-in it signs out by fingerprint, never by value.
+            expect(stored(markerFile).signOutOwed).toEqual({
+                id: expect.any(String),
+                at: expect.any(String),
+                fingerprints: [expect.stringMatching(/^[0-9a-f]+(\.[0-9a-f]+){3}$/)],
+            });
+            expect(fs.readFileSync(markerFile, 'utf8')).not.toContain('tok-1');
+            // The process ends. The next one restores, and the sign-out holds.
+            lock.busy = false;
+            loadFresh();
+            const loaded = settings.loadSettings();
+
+            expect(loaded.auth).toMatchObject({ token: '', apiHeaders: {} });
+            expect(stored(configFile).auth).toMatchObject({ token: '', apiHeaders: {} });
+            expect(stored(legacyFile)).toMatchObject({ token: '' });
+            expect(stored(setAside('settings.json.original'))).toMatchObject({ token: '' });
+            expect(stored(markerFile)).not.toHaveProperty('signOutOwed');
+            expect(settings.isSignOutOwed()).toBe(false);
+        });
+
+        // Every file of the data folder that is not the marker, with what it holds: none may hold a sign-in after a logout.
+        const filesHolding = (needle: string) =>
+            fs
+                .readdirSync(userData)
+                .filter((name) => name !== 'v2-import.json' && fs.statSync(path.join(userData, name)).isFile())
+                .filter((name) => fs.readFileSync(path.join(userData, name), 'utf8').includes(needle));
+
+        describe('an owed sign-out when the episode ends in defaults', () => {
+            const arrangeOwed = () => {
+                damagedConfig();
+                fs.writeFileSync(setAside('settings.json.original'), JSON.stringify({ theme: 'dark', token: 'tok-1' }));
+                const lock = busyLock();
+                clockAt(1_000_000);
+                settings.loadSettings();
+                expect(signOutWhileWaiting(lock)).toBe(true);
+                return lock;
+            };
+
+            test('given up after the wait: no copy keeps the sign-in once settings.json is set aside by the first save, and the notice stops saying it does', () => {
+                const lock = arrangeOwed();
+                clockAt(1_000_000 + 511_000);
+
+                // The restore is given up (settled as unusable), and defaults are in use.
+                expect(settings.retryImport()).toBe(false);
+                expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt' });
+                lock.busy = false;
+                settings.loadSettings();
+                // The first save sets settings.json (which holds the login) aside as a copy, and mirrors over it.
+                expect(settings.setSetting('theme', 'light')).toBe(true);
+                settings.loadSettings();
+
+                expect(filesHolding('tok-1')).toEqual([]);
+                expect(settings.isSignOutOwed()).toBe(false);
+                expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt', signInKept: false });
+            });
+
+            test('a sign-in made after the give-up is not undone by the sign-out that was owed, and the copies still lose the old one', () => {
+                const lock = arrangeOwed();
+                clockAt(1_000_000 + 511_000);
+                expect(settings.retryImport()).toBe(false);
+                lock.busy = false;
+                settings.loadSettings();
+
+                expect(settings.setSetting('token', 'tok-new')).toBe(true);
+
+                expect(settings.loadSettings().auth.token).toBe('tok-new');
+                expect(stored(markerFile)).not.toHaveProperty('signOutOwed');
+                expect(filesHolding('tok-1')).toEqual([]);
+                loadFresh();
+                expect(settings.loadSettings().auth.token).toBe('tok-new');
+            });
+
+            test('while the copy to come is not made the record stays, and a login made meanwhile is stored and stays; the copy is cleared as it is set aside', () => {
+                const lock = arrangeOwed();
+                clockAt(1_000_000 + 511_000);
+                expect(settings.retryImport()).toBe(false);
+                settings.loadSettings();
+                expect(stored(markerFile)).toHaveProperty('signOutOwed');
+
+                // The record names the old sign-in only: the new token is not signed out by it, whatever the lock does.
+                expect(settings.setSetting('token', 'tok-new')).toBe(true);
+                lock.busy = false;
+                expect(settings.setSetting('theme', 'light')).toBe(true);
+
+                expect(filesHolding('tok-1')).toEqual([]);
+                expect(settings.loadSettings().auth.token).toBe('tok-new');
+                loadFresh();
+                expect(settings.loadSettings().auth.token).toBe('tok-new');
+                expect(stored(markerFile)).not.toHaveProperty('signOutOwed');
+            });
+
+            test('with the lock still held at the set-aside, the record that stayed has the copy cleared as it is made', () => {
+                const lock = arrangeOwed();
+                clockAt(1_000_000 + 511_000);
+                expect(settings.retryImport()).toBe(false);
+                settings.loadSettings();
+                expect(lock.busy).toBe(true);
+
+                // Another process still holds the lock: the first save cannot mirror (nor make the pending flag), but it
+                // does set settings.json aside, and the record on file has that copy cleared.
+                expect(settings.setSetting('theme', 'light')).toBe(true);
+
+                expect(filesHolding('tok-1')).toEqual(['settings.json']);
+                expect(
+                    fs.readdirSync(userData).filter((name) => name.startsWith('settings.json.unimportable-')),
+                ).toHaveLength(1);
+            });
+
+            test('a Start fresh that does not happen leaves no promise to set settings.json aside', () => {
+                fs.writeFileSync(legacyFile, '{broken');
+                loadFresh();
+                settings.loadSettings();
+                const real = fs.readFileSync;
+                jest.spyOn(fs, 'readFileSync').mockImplementation(((
+                    file: fs.PathOrFileDescriptor,
+                    ...rest: unknown[]
+                ) => {
+                    if (file === legacyFile) throw Object.assign(new Error('EACCES: denied'), { code: 'EACCES' });
+                    return (real as (...args: unknown[]) => unknown)(file, ...rest);
+                }) as typeof fs.readFileSync);
+                // The record is made, and then the configuration cannot be written.
+                failingWrites(CONFIG_TMP);
+
+                expect(settings.startFresh()).toBe(false);
+
+                jest.restoreAllMocks();
+                expect(fs.existsSync(configFile)).toBe(false);
+                expect(stored(markerFile)).not.toHaveProperty('legacyAsideOwed');
+            });
+
+            test('the same after Start fresh over a settings.json that could not be read: the login made meanwhile stays', () => {
+                const lock = arrangeOwed();
+                lock.busy = false;
+                const real = fs.readFileSync;
+                jest.spyOn(fs, 'readFileSync').mockImplementation(((
+                    file: fs.PathOrFileDescriptor,
+                    ...rest: unknown[]
+                ) => {
+                    if (file === legacyFile) throw Object.assign(new Error('EACCES: denied'), { code: 'EACCES' });
+                    return (real as (...args: unknown[]) => unknown)(file, ...rest);
+                }) as typeof fs.readFileSync);
+                expect(settings.startFresh()).toBe(true);
+                settings.loadSettings();
+                jest.restoreAllMocks();
+                expect(stored(markerFile)).toMatchObject({ legacyAsideOwed: expect.any(String) });
+
+                // It can be read now; the login comes first, and the save sets it aside.
+                expect(settings.setSetting('token', 'tok-new')).toBe(true);
+
+                expect(settings.loadSettings().auth.token).toBe('tok-new');
+                expect(filesHolding('tok-1')).toEqual([]);
+                expect(stored(markerFile)).not.toHaveProperty('legacyAsideOwed');
+                expect(stored(markerFile)).not.toHaveProperty('signOutOwed');
+            });
+
+            test('across processes: the next process applies the record when it starts, and a login after that stays', () => {
+                const lock = arrangeOwed();
+                lock.busy = false;
+
+                loadFresh();
+                expect(settings.loadSettings().auth.token).toBe('');
+                expect(settings.setSetting('token', 'tok-new')).toBe(true);
+                loadFresh();
+
+                expect(settings.loadSettings().auth.token).toBe('tok-new');
+                expect(stored(markerFile)).not.toHaveProperty('signOutOwed');
+            });
+
+            test('a login made after the restore stays: the record names the sign-in it signed out, and a new token is not that one, in whichever process the settings then come through', () => {
+                damagedConfig();
+                const lock = busyLock();
+                clockAt(1_000_000);
+                settings.loadSettings();
+                expect(signOutWhileWaiting(lock)).toBe(true);
+                expect(settings.isSignOutOwed()).toBe(true);
+                lock.busy = false;
+                // (Retry restores the settings, with the login they held; the owed sign-out is applied by the next read.)
+                expect(settings.retryImport()).toBe(true);
+                expect(settings.setSetting('token', 'tok-new')).toBe(true);
+
+                expect(settings.isSignOutOwed()).toBe(false);
+                loadFresh();
+                expect(settings.loadSettings().auth.token).toBe('tok-new');
+            });
+
+            test('the copies are not scrubbed again at every start while nothing changed', () => {
+                const lock = arrangeOwed();
+                lock.busy = false;
+                loadFresh();
+                settings.loadSettings();
+                const stamped = stored(markerFile).copiesScrubbedAt;
+                expect(stamped).toEqual(expect.any(String));
+
+                loadFresh();
+                settings.loadSettings();
+                loadFresh();
+                settings.loadSettings();
+
+                expect(stored(markerFile).copiesScrubbedAt).toBe(stamped);
+            });
+
+            test('Start fresh (also with --force): the copy it keeps holds no sign-in', () => {
+                const lock = arrangeOwed();
+                lock.busy = false;
+
+                expect(settings.startFresh()).toBe(true);
+                settings.loadSettings();
+
+                expect(filesHolding('tok-1')).toEqual([]);
+                expect(settings.isSignOutOwed()).toBe(false);
+            });
+
+            test("another process's fresh start: the next process clears every copy and the record", () => {
+                const lock = arrangeOwed();
+                // Another process starts fresh meanwhile: defaults, and its own copy of settings.json.
+                lock.busy = false;
+                fs.writeFileSync(
+                    configFile,
+                    JSON.stringify({ version: 2, app: { theme: 'light' }, auth: { token: '', apiHeaders: {} } }),
+                );
+                fs.writeFileSync(markerFile, JSON.stringify({ ...stored(markerFile), configFrom: 'fresh' }));
+                fs.writeFileSync(
+                    setAside('settings.json.unimportable-2026-10-16T08-00-00-000Z'),
+                    JSON.stringify({ token: 'tok-1' }),
+                );
+
+                loadFresh();
+                settings.loadSettings();
+
+                expect(stored(setAside('settings.json.unimportable-2026-10-16T08-00-00-000Z'))).toMatchObject({
+                    token: '',
+                });
+                expect(stored(markerFile)).not.toHaveProperty('signOutOwed');
+            });
+
+            test('a notice for a damaged copy still says it holds the sign-in, until a logout has taken it out', () => {
+                damagedConfig();
+                const lock = busyLock();
+                clockAt(1_000_000);
+                settings.loadSettings();
+                expect(settings.getSettingsRecovery()).not.toHaveProperty('signInKept');
+
+                expect(signOutWhileWaiting(lock)).toBe(true);
+
+                expect(settings.getSettingsRecovery()).toMatchObject({ signInKept: false });
+            });
+        });
+
+        describe('an owed sign-out signs out the sign-in it names, whatever order things land in', () => {
+            test('a logout, a login refused while the restore waits, and the restore landing: the token stays blank', () => {
+                damagedConfig();
+                const lock = busyLock();
+                clockAt(1_000_000);
+                settings.loadSettings();
+                expect(signOutWhileWaiting(lock)).toBe(true);
+
+                // The login is refused (the stored settings are not in use), so it leaves nothing behind that could undo the logout.
+                expect(settings.setSetting('token', 'tok-2')).toBe(false);
+                lock.busy = false;
+                expect(settings.retryImport()).toBe(true);
+
+                expect(settings.loadSettings().auth).toMatchObject({ token: '', apiHeaders: {} });
+                expect(stored(configFile).auth).toMatchObject({ token: '', apiHeaders: {} });
+                expect(stored(legacyFile)).toMatchObject({ token: '' });
+                loadFresh();
+                expect(settings.loadSettings().auth.token).toBe('');
+            });
+
+            test("the sign-in named is the one settings.json holds even when the marker recorded none, and the mirror's when settings.json holds none", () => {
+                damagedConfig();
+                const withoutFingerprints = (({ signInPending: _p, signInConfirmed: _c, ...rest }) => rest)(
+                    stored(markerFile),
+                );
+                fs.writeFileSync(markerFile, JSON.stringify(withoutFingerprints));
+                const lock = busyLock();
+                clockAt(1_000_000);
+                settings.loadSettings();
+
+                // Named by what settings.json holds.
+                expect(signOutWhileWaiting(lock)).toBe(true);
+                expect(stored(markerFile).signOutOwed).toMatchObject({ fingerprints: [expect.any(String)] });
+                lock.busy = false;
+                expect(settings.retryImport()).toBe(true);
+                expect(settings.loadSettings().auth.token).toBe('');
+            });
+
+            test("the mirror's fingerprints name the sign-in when settings.json holds no token", () => {
+                damagedConfig();
+                olderBuildChanges(({ token: _token, ...rest }) => rest);
+                const lock = busyLock();
+                clockAt(1_000_000);
+                settings.loadSettings();
+
+                expect(signOutWhileWaiting(lock)).toBe(true);
+
+                expect(stored(markerFile).signOutOwed).toMatchObject({
+                    fingerprints: expect.arrayContaining([expect.any(String)]),
+                });
+            });
+
+            test('a logout with no sign-in to name is refused while settings.json cannot be read, and needs no record when it can', () => {
+                damagedConfig();
+                olderBuildChanges(({ token: _token, ...rest }) => rest);
+                const bare = (({ signInPending: _p, signInConfirmed: _c, ...rest }) => rest)(stored(markerFile));
+                fs.writeFileSync(markerFile, JSON.stringify(bare));
+                const lock = busyLock();
+                clockAt(1_000_000);
+                settings.loadSettings();
+                expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-retrying' });
+
+                // Not known whether the file the restore waits for holds a sign-in: the logout is not taken for made.
+                expect(signOutWhileWaiting(lock)).toBe(false);
+                expect(stored(markerFile)).not.toHaveProperty('signOutOwed');
+            });
+
+            test('a sign-in that is another (an older build logged in meanwhile) is not the one signed out, in the configuration or in a copy', () => {
+                damagedConfig();
+                const lock = busyLock();
+                clockAt(1_000_000);
+                settings.loadSettings();
+                expect(signOutWhileWaiting(lock)).toBe(true);
+                // The older build's login, in the file the restore reads and in a copy kept.
+                olderBuildChanges((file) => ({ ...file, token: 'tok-2' }));
+                const copy = setAside('settings.json.unimportable-2026-10-16T08-00-00-000Z');
+                fs.writeFileSync(copy, JSON.stringify({ token: 'tok-2' }));
+                lock.busy = false;
+
+                loadFresh();
+                expect(settings.loadSettings().auth.token).toBe('tok-2');
+
+                expect(stored(copy)).toMatchObject({ token: 'tok-2' });
+                expect(stored(markerFile)).not.toHaveProperty('signOutOwed');
+                loadFresh();
+                expect(settings.loadSettings().auth.token).toBe('tok-2');
+            });
+
+            test('a record that is not removed (the marker is held) is not made again later: it applies to nothing once the sign-in is gone', () => {
+                damagedConfig();
+                const lock = busyLock();
+                clockAt(1_000_000);
+                settings.loadSettings();
+                expect(signOutWhileWaiting(lock)).toBe(true);
+                lock.busy = false;
+                expect(settings.retryImport()).toBe(true);
+                // The restore lands and is signed out, but the record cannot be removed just now.
+                lock.busy = true;
+                expect(settings.loadSettings().auth.token).toBe('');
+                expect(stored(markerFile)).toHaveProperty('signOutOwed');
+
+                // A login after that stays, and the record never signs it out.
+                lock.busy = false;
+                expect(settings.setSetting('token', 'tok-new')).toBe(true);
+                loadFresh();
+                expect(settings.loadSettings().auth.token).toBe('tok-new');
+                expect(settings.setSetting('theme', 'light')).toBe(true);
+                expect(settings.loadSettings().auth.token).toBe('tok-new');
+            });
+
+            test('a record older than the copies are kept for is removed even while a settings.json is still to be set aside', () => {
+                signedIn();
+                const marker = stored(markerFile);
+                const record = (at: string) => ({ id: 'r', at, fingerprints: ['0.0.0.0'] });
+                fs.writeFileSync(
+                    markerFile,
+                    JSON.stringify({
+                        ...marker,
+                        legacyAsideOwed: 'pending-aside',
+                        signOutOwed: record(new Date(Date.now() - 20 * 24 * 3600 * 1000).toISOString()),
+                    }),
+                );
+                loadFresh();
+
+                settings.loadSettings();
+
+                expect(stored(markerFile)).not.toHaveProperty('signOutOwed');
+            });
+        });
+
+        test('the automatic wait after manual Retries is the one they have earned: the next read tries only once it is over', () => {
+            damagedConfig();
+            const lock = busyLock();
+            clockAt(1_000_000);
+            settings.loadSettings();
+            for (let attempt = 0; attempt < 12; attempt++) settings.retryImport();
+            const tries = lock.tries;
+
+            // Inside the wait (five minutes by now): a read takes no lock.
+            clockAt(1_000_000 + 4 * 60 * 1000);
+            settings.loadSettings();
+            expect(lock.tries).toBe(tries);
+
+            clockAt(1_000_000 + 5 * 60 * 1000 + 1);
+            settings.loadSettings();
+            expect(lock.tries).toBe(tries + 1);
+        });
+
+        test('the give-up is at 510 seconds: 509 stays retrying, 511 settles', () => {
+            damagedConfig();
+            busyLock();
+            clockAt(1_000_000);
+            settings.loadSettings();
+
+            clockAt(1_000_000 + 509_000);
+            expect(settings.retryImport()).toBe(false);
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-retrying' });
+
+            clockAt(1_000_000 + 511_000);
+            expect(settings.retryImport()).toBe(false);
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt', blocking: false });
+        });
+
+        test('a sign-out is refused while another process holds the settings lock: the marker is changed under it', () => {
+            damagedConfig();
+            busyLock();
+            clockAt(1_000_000);
+            settings.loadSettings();
+
+            expect(settings.setSetting('token', '')).toBe(false);
+
+            expect(stored(markerFile)).not.toHaveProperty('signOutOwed');
+        });
+
+        test('Start fresh over a settings.json that could not be read is refused when the set-aside cannot be recorded: nothing is started', () => {
+            fs.writeFileSync(legacyFile, '{broken');
+            loadFresh();
+            settings.loadSettings();
+            const real = fs.readFileSync;
+            jest.spyOn(fs, 'readFileSync').mockImplementation(((file: fs.PathOrFileDescriptor, ...rest: unknown[]) => {
+                if (file === legacyFile) throw Object.assign(new Error('EACCES: denied'), { code: 'EACCES' });
+                return (real as (...args: unknown[]) => unknown)(file, ...rest);
+            }) as typeof fs.readFileSync);
+            failingWrites(MARKER_TMP);
+
+            expect(settings.startFresh()).toBe(false);
+
+            jest.restoreAllMocks();
+            expect(fs.existsSync(configFile)).toBe(false);
+            expect(settings.getSettingsRecovery()).toMatchObject({ blocking: true });
+        });
+
+        test('a sign-out that cannot be recorded is refused, not taken for made', () => {
+            damagedConfig();
+            busyLock();
+            clockAt(1_000_000);
+            settings.loadSettings();
+            failingWrites(MARKER_TMP);
+
+            expect(settings.setSetting('token', '')).toBe(false);
+
+            jest.restoreAllMocks();
+            expect(stored(markerFile)).not.toHaveProperty('signOutOwed');
+        });
+
+        test('ten quick manual Retries do not give the restore up: it is the time that does', () => {
+            damagedConfig();
+            busyLock();
+            clockAt(1_000_000);
+            settings.loadSettings();
+
+            for (let attempt = 0; attempt < 12; attempt++) expect(settings.retryImport()).toBe(false);
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-retrying', blocking: true });
+        });
+
+        test("defaults written by another process's Start fresh, found there at the retry, are not the restore: the copies keep their sign-in", () => {
+            damagedConfig();
+            fs.writeFileSync(setAside('settings.json.original'), JSON.stringify({ theme: 'dark', token: 'tok-orig' }));
+            let storageApi!: typeof import('../../../src/ts/settings/storage');
+            const lock = busyLock(() => {
+                storageApi =
+                    require('../../../src/ts/settings/storage') as typeof import('../../../src/ts/settings/storage');
+            });
+            clockAt(1_000_000);
+            settings.loadSettings();
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-retrying' });
+
+            lock.busy = false;
+            fs.writeFileSync(
+                configFile,
+                JSON.stringify({ version: 2, app: { theme: 'light' }, auth: { token: '', apiHeaders: {} } }),
+            );
+            fs.writeFileSync(markerFile, JSON.stringify({ ...stored(markerFile), configFrom: 'fresh' }));
+            jest.spyOn(storageApi.storage, 'readRaw').mockReturnValueOnce(null);
+            clockAt(1_000_000 + 5000);
+            settings.loadSettings();
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt', blocking: false });
+            expect(stored(setAside('settings.json.original'))).toMatchObject({ token: 'tok-orig' });
+        });
+
+        test("Start fresh that finds the defaults of another process's Start fresh there does not call them the restore either", () => {
+            damagedConfig();
+            fs.writeFileSync(setAside('settings.json.original'), JSON.stringify({ theme: 'dark', token: 'tok-orig' }));
+            const lock = busyLock();
+            clockAt(1_000_000);
+            settings.loadSettings();
+            lock.busy = false;
+            fs.writeFileSync(
+                configFile,
+                JSON.stringify({ version: 2, app: { theme: 'light' }, auth: { token: '', apiHeaders: {} } }),
+            );
+            fs.writeFileSync(markerFile, JSON.stringify({ ...stored(markerFile), configFrom: 'fresh' }));
+
+            expect(settings.startFreshDetailed()).toMatchObject({ ok: true, adopted: true });
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt', blocking: false });
+            expect(stored(setAside('settings.json.original'))).toMatchObject({ token: 'tok-orig' });
+        });
+
+        test('the same at the first try: defaults another process wrote while the damaged configuration was set aside are not a restore', () => {
+            damagedConfig();
+            fs.writeFileSync(setAside('settings.json.original'), JSON.stringify({ theme: 'dark', token: 'tok-orig' }));
+            let storageApi!: typeof import('../../../src/ts/settings/storage');
+            loadFresh(() => {
+                storageApi =
+                    require('../../../src/ts/settings/storage') as typeof import('../../../src/ts/settings/storage');
+            });
+            const real = storageApi.storage.quarantineRaw.bind(storageApi.storage);
+            jest.spyOn(storageApi.storage, 'quarantineRaw').mockImplementation((raw) => {
+                const moved = real(raw);
+                fs.writeFileSync(
+                    configFile,
+                    JSON.stringify({ version: 2, app: { theme: 'light' }, auth: { token: '', apiHeaders: {} } }),
+                );
+                fs.writeFileSync(markerFile, JSON.stringify({ ...stored(markerFile), configFrom: 'fresh' }));
+                return moved;
+            });
+
+            settings.loadSettings();
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt', blocking: false });
+            expect(stored(setAside('settings.json.original'))).toMatchObject({ token: 'tok-orig' });
+        });
+
+        test('a sign-out made while the restore waits holds when the settings come through', () => {
+            damagedConfig();
+            const lock = busyLock();
+            clockAt(1_000_000);
+            settings.loadSettings();
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-retrying' });
+
+            // The user logs out; the blocked settings take no write, but the sign-out is kept.
+            expect(signOutWhileWaiting(lock)).toBe(true);
+            lock.busy = false;
+            clockAt(1_000_000 + 5000);
+
+            expect(settings.loadSettings().auth.token).toBe('');
+            expect(stored(configFile).auth).toMatchObject({ token: '' });
+        });
+
+        test('a sign-out that cannot be applied yet when the settings come through stays owed until it can', () => {
+            damagedConfig();
+            const lock = busyLock();
+            clockAt(1_000_000);
+            settings.loadSettings();
+            expect(signOutWhileWaiting(lock)).toBe(true);
+            lock.busy = false;
+            clockAt(1_000_000 + 5000);
+            // The restore is written; the sign-out written over it is refused.
+            const failing = failingWrites(CONFIG_TMP, 1);
+
+            expect(settings.loadSettings().auth.token).toBe('tok-1');
+            expect(stored(configFile).auth).toMatchObject({ token: 'tok-1' });
+
+            failing.failing = false;
+            expect(settings.loadSettings().auth.token).toBe('');
+            expect(stored(configFile).auth).toMatchObject({ token: '' });
+        });
+
+        test('a sign-out made while the restore waits, when the settings that come through hold none, has nothing to apply', () => {
+            signedIn();
+            olderBuildChanges((file) => ({ ...file, token: '', apiHeaders: {} }));
+            fs.writeFileSync(configFile, '{"app":{"theme":');
+            const lock = busyLock();
+            clockAt(1_000_000);
+            settings.loadSettings();
+            expect(signOutWhileWaiting(lock)).toBe(true);
+            lock.busy = false;
+            clockAt(1_000_000 + 5000);
+
+            expect(settings.loadSettings().auth.token).toBe('');
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-restored' });
+        });
+
+        test('Start fresh over a configuration that is not readable as settings changes nothing of the episode', () => {
+            damagedConfig();
+            fs.writeFileSync(legacyFile, '{broken');
+            loadFresh();
+            settings.loadSettings();
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt' });
+            fs.writeFileSync(configFile, 'garbage');
+
+            expect(settings.startFresh()).toBe(true);
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt' });
+        });
+
+        test('a restore from a settings.json that holds a sign-out an older build made clears the sign-in out of the copies kept', () => {
+            signedIn();
+            // The user\'s own file, kept as the original copy, holds the login.
+            fs.writeFileSync(setAside('settings.json.original'), JSON.stringify({ theme: 'dark', token: 'tok-orig' }));
+            olderBuildChanges((file) => ({ ...file, token: '', apiHeaders: {} }));
+            fs.writeFileSync(configFile, '{"app":{"theme":');
+            loadFresh();
+
+            settings.loadSettings();
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-restored' });
+            expect(stored(setAside('settings.json.original'))).toMatchObject({ token: '' });
+        });
+
         test('the import lock busy once: nothing is saved over settings.json meanwhile, and the next read restores it, signed in', () => {
             damagedConfig();
             const mirror = fs.readFileSync(legacyFile, 'utf8');
@@ -1238,7 +2134,7 @@ describe('the sign-in in the mirror (real fs)', () => {
 
             // The first read cannot restore: defaults, saving refused, and nothing is written over the good file.
             expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
-            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-failed', blocking: true });
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-retrying', blocking: true });
             expect(settings.setSetting('theme', 'light')).toBe(false);
             expect(fs.readFileSync(legacyFile, 'utf8')).toBe(mirror);
             expect(unimportable()).toEqual([]);
@@ -1270,7 +2166,7 @@ describe('the sign-in in the mirror (real fs)', () => {
             clockAt(2_000_000);
 
             settings.loadSettings();
-            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-failed', blocking: true });
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-retrying', blocking: true });
             expect(settings.setSetting('theme', 'light')).toBe(false);
             // Said once, however often it is read.
             settings.loadSettings();
@@ -1297,7 +2193,7 @@ describe('the sign-in in the mirror (real fs)', () => {
             });
             clockAt(1_000_000);
             settings.loadSettings();
-            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-failed', blocking: true });
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-retrying', blocking: true });
             // Meanwhile the good copy is damaged (by hand, an older build, a disk fault).
             fs.writeFileSync(legacyFile, '{broken');
             busy = false;
@@ -1356,7 +2252,7 @@ describe('the sign-in in the mirror (real fs)', () => {
             settings.onSettingsRecoveryChange(heard);
             clockAt(1_000_000);
             settings.loadSettings();
-            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-failed', blocking: true });
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-retrying', blocking: true });
             // (A read that only stays blocked says nothing.)
             settings.loadSettings();
             await Promise.resolve();
@@ -1399,7 +2295,7 @@ describe('the sign-in in the mirror (real fs)', () => {
             // (Every try opens the temporary file once: 1 s, 2 s, 4 s ... up to five minutes apart.)
             expect(failing.seen).toBeLessThanOrEqual(12);
             expect(failing.seen).toBeGreaterThanOrEqual(5);
-            expect([...seen]).toEqual(['settings-import-failed']);
+            expect([...seen]).toEqual(['settings-import-retrying']);
             expect(
                 cat.error.mock.calls.filter(([message]) => String(message).includes('Settings cannot be used')),
             ).toHaveLength(1);

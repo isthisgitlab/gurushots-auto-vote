@@ -79,6 +79,79 @@ describe('SettingsRecoveryNotice', () => {
         expect(alert.textContent).not.toContain(path);
     });
 
+    describe('a settings.json that cannot be read just now (it is tried again by itself)', () => {
+        const action = (name: string) => screen.queryByRole('button', { name });
+
+        test('names the damaged copy and what was not overwritten, and offers Retry only', async () => {
+            mockTranslator.t.mockImplementation((text) =>
+                text === 'notice.recoveryRetryingWhy' ? 'Moved to {path}' : text,
+            );
+            answer({
+                code: 'settings-import-retrying',
+                path: '/data/settings.json',
+                damagedAt: '/data/config.json.corrupt-1',
+            });
+            render(<SettingsRecoveryNotice />);
+
+            const alert = await screen.findByRole('alert');
+            expect(alert.textContent).toContain('notice.recoveryRetryingWhat');
+            expect(alert.textContent).toContain('Moved to /data/config.json.corrupt-1');
+            expect(alert.textContent).toContain('notice.recoveryRetryingNext');
+            expect(action('notice.recoveryRetry')).not.toBeNull();
+            // Giving the import up is not offered while it may pass.
+            expect(action('notice.recoveryStartFresh')).toBeNull();
+            expect(action('notice.recoveryReimport')).toBeNull();
+        });
+
+        test('with no damaged configuration behind it, says only that the file could not be read just now', async () => {
+            answer({ code: 'settings-import-retrying', path: '/data/settings.json' });
+            render(<SettingsRecoveryNotice />);
+
+            const alert = await screen.findByRole('alert');
+            expect(alert.textContent).toContain('notice.recoveryRetryingWhyNoCopy');
+            expect(alert.textContent).not.toContain('notice.recoveryRetryingWhy"');
+            expect(alert.textContent?.match(/recoveryRetryingWhy/g)).toHaveLength(1);
+        });
+
+        test.each([
+            ['with the damaged copy', { damagedAt: 'gurushots-config_corrupt-1' }, 'notice.recoveryRetryingWhyAndroid'],
+            ['without one', {}, 'notice.recoveryRetryingWhyNoCopyAndroid'],
+        ])('on Android %s words it for a store with no file', async (_name, extra, why) => {
+            (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+            answer({ code: 'settings-import-retrying', path: 'gurushots-settings', ...extra });
+            render(<SettingsRecoveryNotice />);
+
+            const alert = await screen.findByRole('alert');
+            expect(alert.textContent).toContain('notice.recoveryRetryingWhat');
+            expect(alert.textContent).toContain(why);
+            expect(alert.textContent).toContain('notice.recoveryRetryingNext');
+            expect(alert.textContent).not.toContain('gurushots-settings');
+            expect(action('notice.recoveryStartFresh')).toBeNull();
+        });
+    });
+
+    test('a logout that was not recorded has words of its own: what happened, that it holds only while the app stays open, and to log out again', async () => {
+        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        answer({ code: 'settings-save-dropped', path: 'gurushots-config', cause: 'logout-lost' });
+        render(<SettingsRecoveryNotice />);
+
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('notice.recoveryLogoutLostWhat');
+        expect(alert.textContent).toContain('notice.recoveryLogoutLostWhy');
+        expect(alert.textContent).toContain('notice.recoveryLogoutLostNext');
+        expect(alert.textContent).not.toContain('notice.recoveryDropped');
+    });
+
+    test('a logout that was not recorded is told in the notice that stands too, not hidden behind it', async () => {
+        answer({ code: 'settings-import-retrying', path: '/data/settings.json', logoutLost: true });
+        render(<SettingsRecoveryNotice />);
+
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('notice.recoveryRetryingWhat');
+        expect(alert.textContent).toContain('notice.recoveryLogoutLostWhat');
+        expect(alert.textContent).toContain('notice.recoveryLogoutLostNext');
+    });
+
     test('a dropped save words the same on Android as elsewhere', async () => {
         (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
         answer({ code: 'settings-save-dropped', path: 'gurushots-config', cause: 'storage' });
@@ -518,6 +591,29 @@ describe('SettingsRecoveryNotice actions', () => {
             await waitFor(() => expect(announced().textContent).toBe('notice.recoveryStartFreshDoneAdopted'));
         });
 
+        test.each([
+            ['on a desktop', undefined, 'notice.recoveryStartFreshDoneUnreadable'],
+            ['on Android', { isNativePlatform: () => true }, 'notice.recoveryStartFreshDoneUnreadable'],
+        ])(
+            'a Start fresh over a settings.json that could not be read says so %s, not that there was none',
+            async (_name, capacitor, text) => {
+                if (capacitor) (globalThis as RendererGlobals).Capacitor = capacitor;
+                jest.mocked(window.api.startFreshSettings).mockResolvedValue({
+                    success: true,
+                    kept: { kind: 'unreadable' },
+                });
+                answer({ code: 'settings-import-failed', path: '/x' });
+                render(<SettingsRecoveryNotice />);
+                await screen.findByRole('alert');
+                fireEvent.click(action('notice.recoveryStartFresh'));
+                fireEvent.click(
+                    within(screen.getByRole('dialog')).getByRole('button', { name: 'notice.recoveryStartFresh' }),
+                );
+
+                await waitFor(() => expect(announced().textContent).toBe(text));
+            },
+        );
+
         test('Start fresh names the path of the copy', async () => {
             mockTranslator.t.mockImplementation((text) =>
                 text === 'notice.recoveryStartFreshDone' ? 'Kept at {path}' : text,
@@ -539,9 +635,9 @@ describe('SettingsRecoveryNotice actions', () => {
 
         test.each([
             ['on a desktop', undefined, 'notice.recoveryStartFreshDoneAdopted'],
-            ['on Android', { isNativePlatform: () => true }, 'notice.recoveryStartFreshDoneAdoptedAndroid'],
+            ['on Android', { isNativePlatform: () => true }, 'notice.recoveryStartFreshDoneAdopted'],
         ])(
-            'a Start fresh that found the settings in place says so %s, in the wording of the platform',
+            'a Start fresh that found the settings in place says so %s, in one wording for both platforms',
             async (_name, capacitor, text) => {
                 if (capacitor) (globalThis as RendererGlobals).Capacitor = capacitor;
                 jest.mocked(window.api.startFreshSettings).mockResolvedValue({

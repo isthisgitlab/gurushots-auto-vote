@@ -16,6 +16,7 @@ import { UnofficialNoticeModal } from '@/components/app/UnofficialNoticeModal';
 import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import * as ipc from '@/api/ipc';
+import { isPlainObject } from '../../plainObject';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 
 /**
@@ -86,20 +87,50 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
         [updateSetting],
     );
 
+    // Whether this page has started the move to the app (a login made here, or a stored session that arrived): once, so
+    // that a login does not also move on because its own token was stored.
+    const moving = useRef(false);
+
     const handleSubmit = useCallback(
         async (username: string, password: string) => {
-            const result = await authenticate(username, password, mockMode);
+            moving.current = true;
+            let moved = false;
+            try {
+                const result = await authenticate(username, password, mockMode);
 
-            if (result.success) {
-                // The main process saved the username when stay logged in is on, as part of the login.
-                await updateSetting('mock', mockMode);
+                if (result.success) {
+                    // The main process saved the username when stay logged in is on, as part of the login.
+                    await updateSetting('mock', mockMode);
 
-                // Transition to main window
-                await login();
+                    // Transition to main window
+                    await login();
+                    moved = true;
+                }
+            } finally {
+                // A login that failed, or threw on the way, leaves the page free to move on when a session arrives.
+                if (!moved) moving.current = false;
             }
         },
         [authenticate, login, mockMode, updateSetting],
     );
+
+    // A session that is stored while this page shows, without a login made here (the settings a pending restore was
+    // waiting for came through, or another process signed in), moves on to the app as a login does. Only for a session
+    // that is kept (Stay logged in), as at the start.
+    useEffect(() => {
+        const unsubscribe = ipc.onSettingsChanged?.((changed: unknown) => {
+            const app = isPlainObject(changed) ? changed.app : undefined;
+            if (moving.current || !isPlainObject(changed) || changed.hasToken !== true) return;
+            if (!isPlainObject(app) || app.stayLoggedIn !== true) return;
+            moving.current = true;
+            // (If the shell ignores the move, as the main process does when no session is stored after all, the page is still
+            // here, and a later session may move it.)
+            void login().finally(() => {
+                moving.current = false;
+            });
+        });
+        return () => unsubscribe?.();
+    }, [login]);
 
     // A failure the shell reported before any login attempt shows until an attempt answers.
     const shownError = authError ?? startupError;

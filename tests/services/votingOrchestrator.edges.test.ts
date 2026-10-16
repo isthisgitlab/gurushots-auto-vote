@@ -389,8 +389,16 @@ describe('runBoost — fill-new fallbacks', () => {
     test('a boost blocked by a Turbo pin that gives way later wakes the scheduler at the release', async () => {
         votingLogic.pickBoostEntry.mockReturnValue(null);
         votingLogic.pinReleaseAt.mockReturnValue(NOW + 1200);
-        const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]);
-        const result = await run(api);
+        // (The clock is held at NOW: the test runs seconds after NOW was read, and a second boundary between them is a flake.)
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+        let result: Awaited<ReturnType<typeof run>>;
+        let api: ReturnType<typeof makeApi>;
+        try {
+            api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]);
+            result = await run(api);
+        } finally {
+            clock.mockRestore();
+        }
         expect(votingLogic.pinReleaseAt).toHaveBeenCalledWith(expect.anything(), '101', 'turbo', NOW);
         expect(api.applyBoost).not.toHaveBeenCalled();
         expect(result.challenges![0].boostHoldUntil).toBe(NOW + 1200);
