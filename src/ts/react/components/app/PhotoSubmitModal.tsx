@@ -73,7 +73,7 @@ function SubmitFooter({
     const { t } = useTranslation();
     const label = count > 0 ? interp(t(texts.submitCount), { count }) : t(texts.submit);
     return (
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
             <button type="button" className="btn btn-outline btn-sm" disabled={submitting} onClick={onCancel}>
                 {t('app.cancel')}
             </button>

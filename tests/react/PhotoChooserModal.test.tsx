@@ -294,9 +294,13 @@ describe('selection', () => {
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         const footer = screen.getByRole('button', { name: 'Use these photos' }).closest('.sticky')!;
         expect(footer.parentElement!.lastElementChild).toBe(footer);
-        const boxClasses = document.querySelector('.modal-box')!.classList;
-        expect(boxClasses.contains('scroll-pb-60')).toBe(true);
-        expect(boxClasses.contains('md:scroll-pb-32')).toBe(true);
+        const box = document.querySelector('.modal-box')!;
+        expect(box.lastElementChild).toBe(footer.parentElement);
+        const boxClasses = box.classList;
+        expect(boxClasses.contains('scroll-pb-[min(24rem,50dvh)]')).toBe(true);
+        expect(boxClasses.contains('md:scroll-pb-[min(12rem,50dvh)]')).toBe(true);
+        expect(boxClasses.contains('scroll-pb-60')).toBe(false);
+        expect(boxClasses.contains('md:scroll-pb-32')).toBe(false);
     });
 
     test('toggles a photo on and off (aria-pressed) and saves the chosen ids', async () => {

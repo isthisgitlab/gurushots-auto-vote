@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal } from '@/components/ui/Modal';
-import { StickyModalFooter, STICKY_FOOTER_SCROLL_PADDING } from '@/components/ui/StickyModalFooter';
+import { StickyModalFooter } from '@/components/ui/StickyModalFooter';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { useImageLoads } from '@/hooks/useImageLoads';
@@ -482,6 +482,16 @@ export function PhotoGrid({
     );
 }
 
+// The chooser's sticky footer can outgrow STICKY_FOOTER_SCROLL_PADDING: it pins the save-error alert, the hold
+// status hint with its Retry button and the buttons. Sized for the worst case on a phone (320px, Latvian): py-4,
+// a multi-line save-error alert, a ~9-line hold hint of text-xs beside a btn-xs Retry, the gaps and the buttons,
+// about 21-22rem, so 24rem. At `md:` (a `size="xl"` box, about 704px at 768px) the Latvian "unconfirmed" hint can
+// wrap to three lines: about 10.75rem with the alert and the buttons, so 12rem with room for the focus ring. Both
+// values are capped at half the viewport height: most landscape phones are 768-915px wide, so `md:` applies to them
+// too, and a short screen, whose box can be as little as ~240-330px tall, keeps room for the focused control, at the
+// cost of a worst-case footer partly covering a tile there.
+const CHOOSER_SCROLL_PADDING = 'scroll-pb-[min(24rem,50dvh)] md:scroll-pb-[min(12rem,50dvh)]';
+
 /** The signed-in member, asked for again on purpose (the main process drops its cached failure). */
 const confirmAccount = async (): Promise<AccountCheck> => {
     const result = await ipc.callOrNull(() => ipc.confirmAccount());
@@ -661,7 +671,7 @@ export function PhotoChooserModal({
                 onClose={dismiss}
                 title={t('app.photoChooserTitle')}
                 size="xl"
-                className={STICKY_FOOTER_SCROLL_PADDING}
+                className={CHOOSER_SCROLL_PADDING}
             >
                 <PhotoChooserBody
                     value={value}

@@ -116,7 +116,9 @@ describe('opening', () => {
         await opened();
         const footer = submitButton().closest('.sticky')!;
         expect(footer.parentElement!.lastElementChild).toBe(footer);
-        const boxClasses = document.querySelector('.modal-box')!.classList;
+        const box = document.querySelector('.modal-box')!;
+        expect(box.lastElementChild).toBe(footer.parentElement);
+        const boxClasses = box.classList;
         expect(boxClasses.contains('scroll-pb-60')).toBe(true);
         expect(boxClasses.contains('md:scroll-pb-32')).toBe(true);
     });
