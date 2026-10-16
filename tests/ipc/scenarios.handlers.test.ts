@@ -237,6 +237,14 @@ describe('status and reset', () => {
         __release: jest.Mock<void, []>;
     };
 
+    test('the reserved key of the every-challenge reset is no challenge id: a reset of it is refused', async () => {
+        await expect(handlers['reset-scenario-state'](null, '@all')).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+        expect(mocked.__ledger.remove).not.toHaveBeenCalled();
+    });
+
     test('reset forgets the challenge progress, under the challenge’s step lock, which is let go', async () => {
         await expect(handlers['reset-scenario-state'](null, 7)).resolves.toEqual({ success: true });
         expect(scenarioStatus.stepLockForMode).toHaveBeenCalledWith(7);

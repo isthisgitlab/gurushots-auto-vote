@@ -23,8 +23,7 @@ const describeSettingsRecovery = ({
     path,
     settingsSetAside,
     damagedAt,
-    signInKept,
-}: Pick<SettingsRecovery, 'code' | 'path' | 'settingsSetAside' | 'damagedAt' | 'signInKept'>): string => {
+}: Pick<SettingsRecovery, 'code' | 'path' | 'settingsSetAside' | 'damagedAt'>): string => {
     switch (code) {
         case 'settings-restored':
             return `The saved settings could not be read (config.json was damaged), so they were restored from settings.json. The damaged file was moved to ${path}; keep it if you want to look at it, or delete it.`;
@@ -42,9 +41,9 @@ const describeSettingsRecovery = ({
                     ? `The settings.json at ${path} could not be read just now (another program may be using it)`
                     : `config.json was damaged and moved to ${damagedAt}, and the settings.json at ${path}, the copy to restore the settings from, could not be read just now (another program may be using it)`
             }, so nothing will be saved and the default settings are in use for now. Nothing was overwritten. The next run tries again by itself; run "settings-recovery retry" to try now.${
-                damagedAt === undefined || signInKept === false
+                damagedAt === undefined
                     ? ''
-                    : ' The damaged copy still holds the sign-in it had, until you next log out.'
+                    : ' The damaged copy may still hold the sign-in it had, even after you log out; delete it once you no longer need it.'
             }`;
         case 'settings-import-failed':
             return `The settings.json at ${path} could not be imported, so nothing will be saved and the default settings are in use. The file was left as it is. Fix it and run "settings-recovery retry", or run "settings-recovery start-fresh" to begin with default settings (a copy of the file is kept beside it, as settings.json.original or, when that name is taken, as settings.json.unimportable-<timestamp>).`;
@@ -90,8 +89,20 @@ const startFresh = (): { ok: boolean; done: string } => {
     };
 };
 
+/**
+ * What Retry came to: the settings were imported from settings.json, or were in place already and nothing was imported.
+ */
+const retry = (): { ok: boolean; done: string } => {
+    const { ok, adopted } = settings.retryImportDetailed();
+    return {
+        ok,
+        done: adopted
+            ? 'Nothing was imported: the settings are already in place. To load settings.json over them, run "settings-recovery reimport".'
+            : 'The settings were imported from settings.json.',
+    };
+};
+
 const ACTIONS = {
-    retry: { run: () => settings.retryImport(), done: () => 'The settings were imported from settings.json.' },
     acknowledge: { run: () => settings.acknowledgeImportReport(), done: () => 'The import report is marked as seen.' },
 } as const;
 
@@ -138,6 +149,7 @@ const finish = ({ ok, done, failed }: { ok: boolean; done: string; failed?: stri
 const settingsRecoveryCmd = async (argv: string[]): Promise<number> => {
     const [action, ...extra] = argv;
     if (action === 'report' && extra.length === 0) return printImportReport();
+    if (action === 'retry' && extra.length === 0) return finish(retry());
     if (action === 'reimport' && extra.length === 0) return finish(reimport());
     if (action === 'start-fresh' && (extra.length === 0 || (extra.length === 1 && extra[0] === '--force'))) {
         // While settings.json could not be read just now and may pass, giving the import up is not offered: it is asked for.

@@ -9,6 +9,7 @@ import { finiteOr } from '../../numbers';
 import type { Challenge, ChallengeMember, RankingEntry } from '../../types/gurushots';
 import type { AdoptableMember, FillLogger, RankDeps } from '../../types/autoFill';
 import { errorMessage } from '../../errorMessage';
+import { dropChallenge } from '../libraryCache';
 
 const getEntries = (challenge: Partial<Challenge> | null | undefined): RankingEntry[] => {
     const entries = challenge?.member?.ranking?.entries;
@@ -36,6 +37,8 @@ const reflectNewEntry = (
     // Coerce the server-supplied id to a string before it joins shared
     // challenge state (mirrors how _postBoost stringifies the image_id).
     ranking.entries.push({ id: String(imageId), turbo: false, boosted: false, boost: -1, boosting: false });
+    // What the photo chooser lists as eligible for this challenge changed with its entries.
+    dropChallenge(String(challenge?.id));
 };
 
 /**

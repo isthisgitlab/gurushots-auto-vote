@@ -172,13 +172,11 @@ const isImportRef = (value: unknown): boolean =>
         (value.invalid === undefined || value.invalid === true));
 
 /**
- * Whether a stored `imported` record has the shape the importer writes (a record an earlier build wrote also holds a
- * `sha256`, which is accepted and ignored).
+ * Whether a stored `imported` record has the shape the importer writes.
  */
 const isImportedRecord = (value: unknown): value is ImportedV2 =>
     isPlainObject(value) &&
     typeof value.at === 'string' &&
-    (value.sha256 === undefined || typeof value.sha256 === 'string') &&
     typeof value.acknowledged === 'boolean' &&
     isPlainObject(value.report) &&
     Array.isArray(value.report.refsBlocked) &&

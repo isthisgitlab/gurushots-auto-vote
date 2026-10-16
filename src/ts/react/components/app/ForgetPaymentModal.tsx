@@ -1,5 +1,6 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useCoinsNow } from '@/api/useCoinsNow';
+import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { useConfirmedAction } from '@/hooks/useConfirmedAction';
 import { interp } from '@/utils/interp';
@@ -20,8 +21,13 @@ const PROBLEM_TEXT: Record<Exclude<ForgetStatus, 'forgotten'>, string> = {
     'not-authenticated': 'app.discoverForgetNotAuthenticated',
 };
 
-const problemOf = (answer: Awaited<ReturnType<typeof ipc.forgetUnconfirmedPayment>> | null): string => {
+// On Android the join state is not a file the user can reach: the next step differs.
+const problemOf = (
+    answer: Awaited<ReturnType<typeof ipc.forgetUnconfirmedPayment>> | null,
+    settingsFile: boolean,
+): string => {
     const reported = answer && 'status' in answer ? answer.status : 'forgotten';
+    if (reported === 'unreadable' && !settingsFile) return 'app.discoverForgetUnreadableAndroid';
     return reported === 'forgotten' ? 'app.discoverForgetFailed' : PROBLEM_TEXT[reported];
 };
 
@@ -62,12 +68,13 @@ export function ForgetPaymentModal({
 }) {
     const { t } = useTranslation();
     const { working, problem, run } = useConfirmedAction(challenge);
+    const { settingsFile } = usePlatformCapabilities();
     const coinsNow = useCoinsNow(challenge !== null && coinsBefore !== undefined);
 
     const forget = (target: OpenChallenge) =>
         run(async () => {
             const answer = await ipc.callOrNull(() => ipc.forgetUnconfirmedPayment(target.id));
-            if (!answer?.success) return problemOf(answer);
+            if (!answer?.success) return problemOf(answer, settingsFile);
             onForgotten(target.id);
             onClose();
             return null;

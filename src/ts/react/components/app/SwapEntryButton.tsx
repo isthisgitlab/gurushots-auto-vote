@@ -3,7 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { useSwapPhoto, useSwapBack } from '@/api/useCurrencyActions';
 import { interp } from '@/utils/interp';
 import { entryPhotoUrl } from '@/utils/formatters';
-import { spentOrStale } from '@/utils/spentOrStale';
+import { alreadyEntered, spentOrStale } from '@/utils/spentOrStale';
 import { CURRENCY_OUTCOME } from '../../../voting/currencyActions';
 import { ActionButton } from '@/components/ui/ActionButton';
 import { InlineError } from '@/components/ui/InlineError';
@@ -211,7 +211,8 @@ export function SwapEntryButton({
         // Only reachable from the confirm modal, which is open only while a candidate is held.
         const result = await commit.run(challengeId, entry.id, (candidate as SwapCandidate).id);
         setCandidate(null);
-        if (spentOrStale(result)) onSpent();
+        // A photo that is entered already is refused with nothing spent; the card still offers it until refreshed.
+        if (spentOrStale(result) || alreadyEntered(result)) onSpent();
     };
 
     return (

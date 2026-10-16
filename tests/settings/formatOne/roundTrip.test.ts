@@ -11,12 +11,29 @@ jest.mock('electron', () => ({}));
 import { z } from 'zod';
 import { V1_KEY_RENAMES, importV1Settings } from '../../../src/ts/settings/importV1';
 import { V1_MIGRATION_FLAGS } from '../../../src/ts/settings/importV1/migrations';
+import { attachCloseTimeRules, takeCloseTimeRules } from '../../../src/ts/settings/closeTimeRules';
+import { getDefaultSettings } from '../../../src/ts/settings/defaults';
+import { getV1Defaults } from '../../../src/ts/settings/importV1/defaults';
+import { dropInvalidV1Values } from '../../../src/ts/settings/importV1/loadValidation';
+import { API_MAX_RETRIES_MAX, API_TIMEOUT_MAX_SEC, API_TIMEOUT_MIN_SEC } from '../../../src/ts/settings/limits';
+import { appValueAllowed } from '../../../src/ts/settings/loadValidation';
+import { getUiDefaultSettings } from '../../../src/ts/settings/uiDefaults';
 import { SETTINGS_SCHEMA, schemaEntry } from '../../../src/ts/settings/schema';
 import { dropInvalidValues, mergeWithDefaults } from '../../../src/ts/settings/loadValidation';
 import { mirrorTextOf, toFormatOne } from '../../../src/ts/settings/formatOneMirror';
 import { FIXTURES } from '../v2/fixtures';
 import { parseSeeds, randomCase } from '../v2/random';
-import { SCHEMA_KEYS, configWithKey, randomLiveConfig, validInSet, valueSetsOf } from '../../helpers/liveConfig';
+import {
+    SCHEMA_KEYS,
+    UI_KEYS,
+    appValuesFor,
+    configWithAppKey,
+    configWithKey,
+    configWithWindowBounds,
+    randomLiveConfig,
+    validInSet,
+    valueSetsOf,
+} from '../../helpers/liveConfig';
 import { parseJsonObject } from '../../helpers/parseJson';
 
 import type { ConfigV2, StoredConfigV2 } from '../../../src/ts/types/config';
@@ -51,18 +68,93 @@ const generatedIsValid = (config: ConfigV2): void => {
     }
 };
 
-const importMirror = (config: ConfigV2, titlePins: Record<string, string>) => {
-    const text = JSON.stringify(toFormatOne(config, titlePins), null, 2);
-    const result = importV1Settings(text, { keptKey });
+// What a restore does with the text of a mirror: the rules it carries beside `titleRules` are taken out before the frozen
+// importer sees the text, and put back where they stood (legacyImport.ts).
+const importMirrorText = (text: string) => {
+    const { raw, carried } = takeCloseTimeRules(text);
+    const result = importV1Settings(raw, { keptKey });
     if (!result.ok) throw new Error(`the importer refused the mirror: ${result.code}: ${result.detail}`);
+    if (carried.length > 0) result.config.rules = attachCloseTimeRules(result.config.rules, carried);
     return result;
 };
+
+const importMirror = (config: ConfigV2, titlePins: Record<string, string>) =>
+    importMirrorText(JSON.stringify(toFormatOne(config, titlePins), null, 2));
 
 describe('the live schema the generator reads', () => {
     test('is not empty, and the generator reaches every key with a value other than its default', () => {
         expect(SCHEMA_KEYS.length).toBeGreaterThan(80);
         for (const key of SCHEMA_KEYS) expect(() => configWithKey(key)).not.toThrow();
     });
+});
+
+describe('the limits of the app settings', () => {
+    // Recovery imports settings.json back through the frozen importer, so a number the live load keeps and the frozen one
+    // drops (or the reverse) would be lost or altered in a restore: the two must accept the same values, at every edge.
+    const NUMERIC_KEYS = UI_KEYS.filter(
+        (key) => typeof getUiDefaultSettings()[key as keyof ReturnType<typeof getUiDefaultSettings>] === 'number',
+    );
+    const PROBES = [
+        -1,
+        0,
+        0.5,
+        1,
+        1.5,
+        2,
+        3,
+        10,
+        11,
+        59,
+        59.5,
+        60,
+        61,
+        99,
+        100,
+        101,
+        299,
+        300,
+        301,
+        9999,
+        10_000,
+        10_001,
+        100_000,
+        API_TIMEOUT_MIN_SEC,
+        API_TIMEOUT_MAX_SEC,
+        API_TIMEOUT_MAX_SEC + 1,
+        API_MAX_RETRIES_MAX,
+        API_MAX_RETRIES_MAX + 1,
+        Number.NaN,
+        Number.POSITIVE_INFINITY,
+        Number.NEGATIVE_INFINITY,
+    ];
+
+    const frozenKeeps = (key: string, value: number): boolean =>
+        !dropInvalidV1Values({ ...getV1Defaults(), [key]: value }).includes(key);
+
+    test('the preferences with a range are the ones the generator can reach', () => {
+        expect(NUMERIC_KEYS).toEqual(
+            expect.arrayContaining([
+                'apiTimeout',
+                'apiMaxRetries',
+                'apiRetryBaseDelayMs',
+                'checkFrequencyMin',
+                'checkFrequencyMax',
+            ]),
+        );
+        for (const key of NUMERIC_KEYS) expect(appValuesFor(key).length).toBeGreaterThan(0);
+    });
+
+    test.each(NUMERIC_KEYS.map((key) => [key]))(
+        'the live load and the frozen importer accept the same values of %s',
+        (key) => {
+            const differing = PROBES.filter((value) => appValueAllowed(key, value) !== frozenKeeps(key, value));
+
+            expect(differing).toEqual([]);
+            // (Probes on both sides of the range: the comparison is not vacuous.)
+            expect(PROBES.some((value) => appValueAllowed(key, value))).toBe(true);
+            expect(PROBES.some((value) => !appValueAllowed(key, value))).toBe(true);
+        },
+    );
 });
 
 describe('the generator check', () => {
@@ -96,6 +188,43 @@ describe('import(toFormatOne(config)) equals the configuration', () => {
 
         expect(loaded(result.config)).toEqual(loaded(config));
         expect(result.titlePins).toEqual(titlePins);
+    });
+
+    test.each(UI_KEYS.map((key) => [key]))(
+        'a configuration with %s other than its default (a preference of the form)',
+        (key) => {
+            const config = configWithAppKey(key);
+            generatedIsValid(config);
+            expect(config.app[key]).not.toEqual(
+                getUiDefaultSettings()[key as keyof ReturnType<typeof getUiDefaultSettings>],
+            );
+
+            const result = importMirror(config, {});
+
+            expect(loaded(result.config)).toEqual(loaded(config));
+        },
+    );
+
+    test('a configuration whose windows were moved and resized', () => {
+        const config = configWithWindowBounds();
+        generatedIsValid(config);
+
+        const result = importMirror(config, {});
+
+        expect(loaded(result.config)).toEqual(loaded(config));
+        expect(result.config.app.windowBounds).toEqual(config.app.windowBounds);
+        expect(config.app.windowBounds).not.toEqual(getDefaultSettings().app.windowBounds);
+    });
+
+    test('every seeded configuration holds every preference of the form at a non-default value, and moved windows', () => {
+        const defaults = getUiDefaultSettings();
+        for (const seed of SEEDS) {
+            const { config } = randomLiveConfig(seed);
+            for (const key of UI_KEYS) {
+                expect(config.app[key]).not.toEqual(defaults[key as keyof typeof defaults]);
+            }
+            expect(config.app.windowBounds.main).toMatchObject({ x: expect.any(Number), width: expect.any(Number) });
+        }
     });
 
     test('the generated configurations hold every schema key, so the cases above cannot pass without it', () => {
@@ -156,6 +285,84 @@ describe('the mirror in format 1', () => {
             expect(JSON.stringify(mirror)).not.toContain(`"${renamed}"`);
     });
 
+    test('leaves a rule with a close-time condition out of titleRules, which an older build would ignore and so match more widely, and carries it beside', () => {
+        const { config } = randomLiveConfig(4);
+        config.rules = [
+            { title: 'Plain', match: 'exact', autoJoin: true },
+            { title: 'Closes', match: 'exact', autoJoin: true, closesAt: '18:00' },
+            {
+                title: 'Closes twice',
+                match: 'exact',
+                autoJoin: true,
+                closesAt: '06:30',
+                closesAtTimes: ['06:30', '18:00'],
+            },
+            { title: 'Closes list', match: 'exact', closesAtTimes: ['06:30', '18:00'] },
+            { title: 'Last', match: 'exact' },
+        ];
+
+        const mirror = toFormatOne(config, {});
+        const { titleRules } = mirror.challengeSettings as { titleRules: Array<{ title: string }> };
+
+        expect(titleRules.map((rule) => rule.title)).toEqual(['Plain', 'Last']);
+        expect(mirror.closeTimeRules).toEqual([
+            { index: 1, rule: config.rules[1] },
+            { index: 2, rule: config.rules[2] },
+            { index: 3, rule: config.rules[3] },
+        ]);
+        expect(config.rules).toHaveLength(5);
+    });
+
+    test('carries no key when no rule has a close-time condition', () => {
+        const { config } = randomLiveConfig(4);
+        config.rules = [{ title: 'Plain', match: 'exact' }];
+
+        expect(toFormatOne(config, {})).not.toHaveProperty('closeTimeRules');
+    });
+
+    test('a restore puts the carried rules back where they stood, and the frozen importer never sees the key', () => {
+        const { config } = randomLiveConfig(4);
+        config.rules = [
+            { title: 'Plain', match: 'exact', autoJoin: true },
+            { title: 'Closes', match: 'exact', autoJoin: false, closesAt: '18:00' },
+            { title: 'Closes list', match: 'exact', closesAtTimes: ['06:30', '18:00'] },
+            { title: 'Last', match: 'exact' },
+        ];
+        const text = JSON.stringify(toFormatOne(config, {}));
+
+        const result = importMirrorText(text);
+
+        expect(loaded(result.config)).toEqual(loaded(config));
+        // The sidecar is no setting of the app: it is in neither the preferences nor the report.
+        expect(JSON.stringify(result.config.app)).not.toContain('closeTimeRules');
+        expect(result.report.refsBlocked).toEqual([]);
+        // A format-1 reader (the frozen importer without the restore's step) sees only the rules it can match correctly.
+        const readOlder = importV1Settings(text, { keptKey });
+        if (!readOlder.ok) throw new Error('the importer refused the mirror');
+        expect(readOlder.config.rules).toHaveLength(2);
+    });
+
+    test('the carried entries are the file a user can edit: entries that are no rule are ignored, a position past the end is the end', () => {
+        const text = JSON.stringify({
+            closeTimeRules: [
+                { index: 9, rule: { title: 'Far', closesAt: '10:00' } },
+                { index: -1, rule: { title: 'Negative' } },
+                { index: 0, rule: 'text' },
+                'nonsense',
+            ],
+            challengeSettings: { titleRules: [{ title: 'A', match: 'exact' }] },
+        });
+
+        const { raw, carried } = takeCloseTimeRules(text);
+
+        expect(carried).toEqual([{ index: 9, rule: { title: 'Far', closesAt: '10:00' } }]);
+        expect(raw).not.toContain('closeTimeRules');
+        expect(attachCloseTimeRules(['a'], carried)).toEqual(['a', { title: 'Far', closesAt: '10:00' }]);
+        expect(takeCloseTimeRules(JSON.stringify({ closeTimeRules: 5 })).carried).toEqual([]);
+        expect(takeCloseTimeRules('{broken')).toEqual({ raw: '{broken', carried: [] });
+        expect(takeCloseTimeRules('[1]').carried).toEqual([]);
+    });
+
     test('where a key sits under both names, the current one wins, whatever the order', () => {
         const base = randomLiveConfig(5).config;
         const a = { ...base, defaults: { autoFill: false, autoSubmit: true } };
@@ -204,9 +411,8 @@ describe('importing, mirroring and importing again changes nothing', () => {
         if (!first.ok) throw new Error(`the importer refused the file: ${first.code}: ${first.detail}`);
 
         const text = mirrorTextOf(JSON.stringify(first.config), first.titlePins);
-        const second = importV1Settings(text ?? 'null', { keptKey });
+        const second = importMirrorText(text ?? 'null');
 
-        if (!second.ok) throw new Error(`the importer refused the mirror: ${second.code}: ${second.detail}`);
         expect(loaded(second.config)).toEqual(loaded(first.config));
         expect(second.titlePins).toEqual(first.titlePins);
     });

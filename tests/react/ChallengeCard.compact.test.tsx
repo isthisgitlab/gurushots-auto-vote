@@ -195,7 +195,7 @@ describe('compact ChallengeCard tile with compactActions', () => {
                 'app.run',
                 '🎯 app.earnTurbo',
                 '🖼 +1',
-                'app.fillPick',
+                '🖼 app.fillPick',
                 'app.settings',
             ]),
         );
@@ -203,14 +203,17 @@ describe('compact ChallengeCard tile with compactActions', () => {
         expect(texts).toHaveLength(7);
     });
 
-    test('"Pick…" is text only (the image prefix belongs to +1 / +N), named for what it does, and opens the picker', async () => {
+    test('"Pick…" carries the image prefix of +1 / +N, is described by what it does in text (not only a title), and opens the picker', async () => {
         const challenge = makeChallenge();
         challenge.member!.ranking!.entries = challenge.member!.ranking!.entries!.slice(0, 1);
         renderWithActions(challenge);
-        const pick = screen.getByText('app.fillPick');
-        expect(pick.textContent).toBe('app.fillPick');
+        const pick = screen.getByRole('button', { name: 'app.fillPick' });
+        expect(pick.textContent).toBe('🖼 app.fillPick');
+        expect(pick.querySelector('[aria-hidden="true"]')?.textContent).toBe('🖼 ');
         expect(pick.hasAttribute('aria-label')).toBe(false);
         expect(pick.getAttribute('title')).toBe('app.fillPickLabel');
+        const description = document.getElementById(pick.getAttribute('aria-describedby') as string);
+        expect(description?.textContent).toBe('app.fillPickLabel');
         fireEvent.click(pick);
         expect(await screen.findByText('app.pickTitle')).toBeTruthy();
         expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(202, undefined, 'cached');
@@ -230,7 +233,7 @@ describe('compact ChallengeCard tile with compactActions', () => {
             onCurrencySpent: () => {},
         };
         const { rerender } = render(<ChallengeCard {...props} />);
-        fireEvent.click(screen.getByText('app.fillPick'));
+        fireEvent.click(screen.getByRole('button', { name: 'app.fillPick' }));
         await screen.findByText('app.pickTitle');
         const dialog = screen.getByRole('dialog');
         mockChallengeSettings.isCompact = false;
@@ -244,7 +247,7 @@ describe('compact ChallengeCard tile with compactActions', () => {
         const challenge = makeChallenge();
         challenge.member!.ranking!.entries = challenge.member!.ranking!.entries!.slice(0, 1);
         renderWithActions(challenge);
-        expect(screen.getByText('app.fillPick').hasAttribute('disabled')).toBe(true);
+        expect(screen.getByRole('button', { name: 'app.fillPick' }).hasAttribute('disabled')).toBe(true);
         expect(screen.getAllByRole('button', { name: /\+/ }).every((b) => b.hasAttribute('disabled'))).toBe(true);
     });
 
@@ -274,9 +277,9 @@ describe('compact ChallengeCard tile with compactActions', () => {
 
         fireEvent.click(screen.getByText('🎯 app.earnTurbo'));
         expect(mockTurbo.playAutoTurbo).toHaveBeenCalledWith(202, 'Harbour Lights');
-        fireEvent.click(screen.getByText('🖼 +1'));
+        fireEvent.click(screen.getByRole('button', { name: '+1' }));
         expect(mockFill.fillNow).toHaveBeenCalledWith(202, 'one');
-        fireEvent.click(screen.getByText('🖼 +3'));
+        fireEvent.click(screen.getByRole('button', { name: '+3' }));
         expect(mockFill.fillNow).toHaveBeenCalledWith(202, 'all');
         fireEvent.click(screen.getByText('app.settings'));
         expect(onSettingsClick).toHaveBeenCalledWith(202, 'Harbour Lights');

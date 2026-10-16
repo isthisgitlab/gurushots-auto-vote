@@ -83,8 +83,6 @@ export interface ConfigApp extends ReturnType<typeof getUiDefaultSettings> {
 /** The record of the import of the first `settings.json`. */
 export interface ImportedV2 {
     at: string;
-    /** Only a record made by an earlier build holds it (a hash it compared `settings.json` with); nothing reads it. */
-    sha256?: string;
     report: ImportReportV2;
     acknowledged: boolean;
 }

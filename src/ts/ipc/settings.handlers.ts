@@ -90,8 +90,6 @@ const handleSetSetting = async (
         // process's to write.
         if (isRendererHiddenKey(key) || isRendererReadOnlyKey(key)) return false;
         const result = settings.setSetting(key, value);
-        // The saved username goes with the choice to stay logged in (the login form cannot write it itself).
-        if (result && key === 'stayLoggedIn' && value === false) settings.setSetting('lastUsername', '');
         if (result && typeof broadcastSettingsChange === 'function') {
             broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
         }
@@ -304,9 +302,10 @@ const buildLocalDataHandlers = ({ afterWipe, broadcastSettingsChange }: Settings
 
     // Try the import of settings.json again; begin with default settings (settings.json is kept beside it);
     // import settings.json again over the settings in use (which are set aside).
-    'retry-settings-import': recoveryAction(
+    // `adopted`: a configuration was in place already (a restore that came through meanwhile), so nothing was imported.
+    'retry-settings-import': detailedRecoveryAction(
         broadcastSettingsChange,
-        () => settings.retryImport(),
+        () => settings.retryImportDetailed(),
         'retry-settings-import',
     ),
     // `kept`: what became of settings.json — `path` (a copy kept at `path`), `stored` (a copy kept in the app's own
@@ -325,13 +324,11 @@ const buildLocalDataHandlers = ({ afterWipe, broadcastSettingsChange }: Settings
         },
         'start-fresh-settings',
     ),
-    // `source`: the file that was read (the copy the user fixed, or settings.json).
+    // `source`: the file that was read (the copy the user fixed, or settings.json); `setAside`: where the settings that
+    // were in use went, null when none were.
     'reimport-settings-from-v1': detailedRecoveryAction(
         broadcastSettingsChange,
-        () => {
-            const { ok, source } = settings.reimportFromV1Detailed();
-            return { ok, source };
-        },
+        () => settings.reimportFromV1Detailed(),
         'reimport-settings-from-v1',
     ),
 

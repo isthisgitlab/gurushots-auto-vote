@@ -143,16 +143,12 @@ describe('set-setting', () => {
         },
     );
 
-    test('turning Stay Logged In off also clears the saved user name; turning it on does not', async () => {
+    test('Stay Logged In is one write: the facade forgets the saved user name with it, and the answer is the facade’s', async () => {
         settings.setSetting = jest.fn().mockReturnValue(true);
-        await expect(handlers['set-setting']({}, 'stayLoggedIn', true)).resolves.toBe(true);
-        expect(settings.setSetting).toHaveBeenCalledTimes(1);
-
         await expect(handlers['set-setting']({}, 'stayLoggedIn', false)).resolves.toBe(true);
-        expect(settings.setSetting).toHaveBeenLastCalledWith('lastUsername', '');
-    });
+        expect(settings.setSetting).toHaveBeenCalledTimes(1);
+        expect(settings.setSetting).toHaveBeenCalledWith('stayLoggedIn', false);
 
-    test('a refused Stay Logged In write leaves the saved user name', async () => {
         settings.setSetting = jest.fn().mockReturnValue(false);
         await expect(handlers['set-setting']({}, 'stayLoggedIn', false)).resolves.toBe(false);
         expect(settings.setSetting).toHaveBeenCalledTimes(1);
@@ -482,7 +478,7 @@ describe('the recovery of the stored settings', () => {
     // Start fresh and re-import are answered by their detailed forms, which also say what became of settings.json and which
     // file was read.
     const channels = [
-        ['retry-settings-import', 'retryImport'],
+        ['retry-settings-import', 'retryImportDetailed'],
         ['start-fresh-settings', 'startFreshDetailed'],
         ['reimport-settings-from-v1', 'reimportFromV1Detailed'],
         ['acknowledge-import-report', 'acknowledgeImportReport'],
@@ -494,18 +490,22 @@ describe('the recovery of the stored settings', () => {
             ? { ok: true, keptAt: '/data/settings.json.original' }
             : method === 'reimportFromV1Detailed'
               ? { ok: true, setAside: null, source: '/data/settings.json.unimportable-1' }
-              : true;
+              : method === 'retryImportDetailed'
+                ? { ok: true }
+                : true;
     const didNot = (method: Method) =>
         method === 'startFreshDetailed'
             ? { ok: false, keptAt: null }
             : method === 'reimportFromV1Detailed'
               ? { ok: false, setAside: null, source: '/data/settings.json' }
-              : false;
+              : method === 'retryImportDetailed'
+                ? { ok: false }
+                : false;
     const answerOf = (channel: (typeof channels)[number][0]) =>
         channel === 'start-fresh-settings'
             ? { success: true, kept: { kind: 'path', path: '/data/settings.json.original' } }
             : channel === 'reimport-settings-from-v1'
-              ? { success: true, source: '/data/settings.json.unimportable-1' }
+              ? { success: true, setAside: null, source: '/data/settings.json.unimportable-1' }
               : { success: true };
 
     test.each(channels)('%s runs %s, then announces the settings to every window', async (channel, method) => {
@@ -585,8 +585,26 @@ describe('the recovery of the stored settings', () => {
     });
 
     test('works without a broadcaster (CLI / Capacitor shape)', async () => {
-        settings.retryImport = jest.fn().mockReturnValue(true);
+        settings.retryImportDetailed = jest.fn().mockReturnValue({ ok: true });
         await expect(handlers['retry-settings-import']()).resolves.toEqual({ success: true });
+    });
+
+    test('retry-settings-import says nothing was imported when a configuration was in place already', async () => {
+        settings.retryImportDetailed = jest.fn().mockReturnValue({ ok: true, adopted: true });
+
+        await expect(handlers['retry-settings-import']()).resolves.toEqual({ success: true, adopted: true });
+    });
+
+    test('reimport-settings-from-v1 says where the settings that were in use went', async () => {
+        settings.reimportFromV1Detailed = jest
+            .fn()
+            .mockReturnValue({ ok: true, setAside: '/data/config.json.corrupt-1', source: '/data/settings.json' });
+
+        await expect(handlers['reimport-settings-from-v1']()).resolves.toEqual({
+            success: true,
+            setAside: '/data/config.json.corrupt-1',
+            source: '/data/settings.json',
+        });
     });
 });
 

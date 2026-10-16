@@ -27,11 +27,11 @@ import {
     markMirrorPendingQueued,
     markSignOutScrubPending,
     mirroredSignIns,
-    noteCopiesScrubbed,
     mirroredSignInsNow,
     signOutScrubPendingNow,
     signOutScrubPendingStored,
 } from './importMarker';
+import { CLOSE_TIME_RULES_KEY, splitCloseTimeRules } from './closeTimeRules';
 import { dropInvalidValues, mergeWithDefaults } from './loadValidation';
 import { acquireSettingsLock } from './settingsLock';
 import { signInChangedByOlderBuild, signInFingerprint, signInWrittenHere, tokenInSignIns } from './signInFingerprint';
@@ -110,14 +110,18 @@ const formatOneScenario = (doc: unknown): unknown => {
  * The configuration (and the title pins kept beside it) as the settings blob an older build reads: the keys under their
  * format-1 names, `auth` back among the top-level keys, `challenges` split into `perChallenge`,
  * `titleProfileSuppressions` and `entryPins`, `defaults` as `globalDefaults`, every one-time migration marked done (the
- * values are migrated already, so an older build never migrates them again), and no `version` or `imported`.
+ * values are migrated already, so an older build never migrates them again), and no `version` or `imported`. A rule with
+ * a close-time condition is left out of `titleRules` (the older build would ignore the condition and match more challenges
+ * than the rule means) and carried in a key of its own that the older build does not read (see closeTimeRules.ts).
  */
 const toFormatOne = (config: ConfigV2, titlePins: Record<string, string>): Record<string, unknown> => {
     const records = Object.entries(config.challenges);
+    const { mirrored, carried } = splitCloseTimeRules(config.rules);
     return {
         ...formatOneKeys(config.app),
         ...config.auth,
         ...Object.fromEntries(V1_MIGRATION_FLAGS.map((flag) => [flag, true])),
+        ...(carried.length > 0 ? { [CLOSE_TIME_RULES_KEY]: carried } : {}),
         challengeSettings: {
             globalDefaults: formatOneKeys(config.defaults),
             perChallenge: Object.fromEntries(
@@ -125,7 +129,7 @@ const toFormatOne = (config: ConfigV2, titlePins: Record<string, string>): Recor
                     record.values === undefined ? [] : [[id, formatOneKeys(record.values)]],
                 ),
             ),
-            titleRules: config.rules.map(formatOneValue),
+            titleRules: mirrored.map(formatOneValue),
             titleProfileSuppressions: Object.fromEntries(
                 records.filter(([, record]) => record.suppressRuleProfile).map(([id]) => [id, true]),
             ),
@@ -460,7 +464,6 @@ const scrubCopiesAfterSignOut = (
             if ((await landed) === 'failed') return;
             const record = markSignOutScrubPending();
             if (await scrubCopiesQueued(only)) {
-                noteCopiesScrubbed();
                 clearSignOutScrubPending(record);
             }
         }, undefined);
@@ -472,7 +475,6 @@ const scrubCopiesAfterSignOut = (
         // next starts or saves.
         scrubCopiesSync(only);
     } else if (scrubCopiesSync(only)) {
-        noteCopiesScrubbed();
         clearSignOutScrubPending(record);
     } else {
         scrubFailedHere = true;
@@ -486,7 +488,8 @@ const OLD_COPY_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 /**
  * At the start: the copies set aside (`config.json.corrupt-<time>`, `settings.json.unimportable-<time>`, and the Android
  * keys) that are older than OLD_COPY_AGE_MS lose the sign-in they hold, the rest of their settings kept for recovery.
- * Not the user's own file kept as `settings.json.original`. A copy that cannot be rewritten is logged and left; the next
+ * That is every copy that can be read: one that does not parse (a damaged `config.json.corrupt-<time>`) is left as it is,
+ * and may still hold the sign-in. Not the user's own file kept as `settings.json.original`. A copy that cannot be rewritten is logged and left; the next
  * start tries again. Nothing in the background service (it cannot list the copies in Preferences).
  */
 const scrubOldCopies = (): void => {
@@ -527,7 +530,6 @@ const finishDeferredScrub = (atStart = false): void => {
         const pending = signOutScrubPendingStored();
         if (pending === null) return;
         if (scrubCopiesSync()) {
-            noteCopiesScrubbed();
             clearSignOutScrubPending(pending);
         } else scrubFailedHere = true;
         return;
@@ -542,7 +544,6 @@ const finishDeferredScrub = (atStart = false): void => {
             const pending = await signOutScrubPendingNow();
             if (pending === null) return;
             if (await scrubCopiesQueued()) {
-                noteCopiesScrubbed();
                 clearSignOutScrubPending(pending);
             }
         }, undefined)

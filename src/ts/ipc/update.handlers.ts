@@ -64,7 +64,11 @@ const buildUpdateFlowHandlers = (deps: UpdateHandlerDeps) => ({
         }
     },
 
-    'download-update': async () => {
+    // Typed as the result both shells return: the Android shell's failure also carries a refusal `code`
+    // (bridge/capacitor.ts implements it).
+    'download-update': async (): Promise<
+        { success: true } | { success: false; error: string; code?: string; fallbackUrl?: string }
+    > => {
         const { autoUpdater, failure } = requireUpdater(deps);
         try {
             if (failure) {

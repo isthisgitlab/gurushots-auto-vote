@@ -43,7 +43,7 @@ let suspend: typeof suspendBoostModule;
 let guard: typeof quitGuardModule;
 let settings: jest.Mocked<typeof settingsModule>;
 let applyBoostsOnSuspend: jest.MockedFunction<
-    (c: readonly Challenge[], token: string) => Promise<PromiseSettledResult<SuspendBoostOutcome>[]>
+    (c: readonly Challenge[], token: string, now?: number) => Promise<PromiseSettledResult<SuspendBoostOutcome>[]>
 >;
 let cat: {
     info: jest.MockedFunction<CategoryLogger['info']>;
@@ -105,6 +105,11 @@ describe('applyImminentBoostsOnSuspend — no-ops', () => {
     test('does nothing when no boost is due within 30 min', async () => {
         await run({ describeDeadlineActions: () => ({ actions: [{ action: 'boost', dueAt: NOW + 3600 }] }) });
         expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
+    });
+
+    test('the boosts are sent at the instant the challenges were selected at', async () => {
+        await run();
+        expect(applyBoostsOnSuspend.mock.calls[0][2]).toBe(NOW);
     });
 
     test('a boost due at exactly 30 min is applied, one due at 31 min is not', async () => {
@@ -185,7 +190,7 @@ describe('applyImminentBoostsOnSuspend — no-ops', () => {
         });
         guard.rememberChallenges([soon], false);
         await suspend.applyImminentBoostsOnSuspend();
-        expect(applyBoostsOnSuspend).toHaveBeenCalledWith([soon], TOKEN);
+        expect(applyBoostsOnSuspend).toHaveBeenCalledWith([soon], TOKEN, expect.any(Number));
     });
 });
 
@@ -256,7 +261,7 @@ describe('applyImminentBoostsOnSuspend — re-entrancy', () => {
 describe('applyImminentBoostsOnSuspend — outcomes', () => {
     test('hands the selected challenges and the stored token to the strategy and logs how early each goes', async () => {
         await run();
-        expect(applyBoostsOnSuspend).toHaveBeenCalledWith(expect.any(Array), TOKEN);
+        expect(applyBoostsOnSuspend).toHaveBeenCalledWith(expect.any(Array), TOKEN, NOW);
         expect(cat.info).toHaveBeenCalledWith(
             'Device is going to sleep — trying to boost [Challenge 1: One] now, 10m before it was due',
             null,

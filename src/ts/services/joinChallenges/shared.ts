@@ -55,6 +55,8 @@ type JoinOutcome = {
     coinsBefore?: number;
     imageId?: string;
     reason?: JoinReason;
+    /** The price the challenge has now, when it rose above the one the join was decided at (nothing was spent). */
+    priceNow?: number;
 };
 
 /**

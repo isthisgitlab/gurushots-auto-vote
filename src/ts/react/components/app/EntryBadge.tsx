@@ -33,7 +33,8 @@ export type EntryPinControls = {
 };
 
 /**
- * One "Pin for Boost / Turbo" toggle: a fixed name, with `aria-pressed` carrying the state.
+ * One "Pin for Boost / Turbo" toggle: `aria-pressed` carries the state, and the visible text says it too ("Pinned
+ * for Boost", as the compact tile does), which is also its accessible name.
  */
 function PinToggle({
     kind,
@@ -47,6 +48,8 @@ function PinToggle({
     onToggle: () => void | Promise<void>;
 }) {
     const { t } = useTranslation();
+    const name = t(kind === 'boost' ? 'app.pinForBoost' : 'app.pinForTurbo');
+    const pinnedName = t(kind === 'boost' ? 'app.pinnedForBoost' : 'app.pinnedForTurbo');
     return (
         <ActionButton
             variant={kind === 'boost' ? 'success' : 'warning'}
@@ -59,7 +62,7 @@ function PinToggle({
             aria-disabled={busy}
             aria-busy={busy}
         >
-            <span aria-hidden="true">📌</span> {t(kind === 'boost' ? 'app.pinForBoost' : 'app.pinForTurbo')}
+            <span aria-hidden="true">📌</span> {pressed ? pinnedName : name}
         </ActionButton>
     );
 }

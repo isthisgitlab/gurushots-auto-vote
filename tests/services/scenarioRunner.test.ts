@@ -1448,10 +1448,12 @@ describe('rule execution', () => {
         currencyActions.unlockBoostWithKey.mockResolvedValueOnce({ ok: false, outcome: 'unclear' });
         setup(single([{ type: 'unlockBoost' }]));
         settings.getScenario.mockReturnValue({ ...single([{ type: 'unlockBoost' }]), limits: { keys: 1 } });
-        await run();
+        const c = challenge();
+        c.member.boost!.state = 'LOCKED';
+        await run(c);
         expect(state().spent.keys).toBe(1);
         // The boost is still locked, so the live challenge does not show the key went through: it is not repeated.
-        await run();
+        await run(c);
         expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
         expect(state().spent.keys).toBe(1);
         expect(state().inFlight).toBeNull();
@@ -1501,6 +1503,25 @@ describe('rule execution', () => {
             await run(c);
             expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
             expect(pass.api.applyBoostToEntry).toHaveBeenCalledTimes(1);
+            expect(state().inFlight).toBeNull();
+            expect(state().fired.r1).toBeDefined();
+            expect(state().spent.keys).toBe(1);
+        });
+
+        test.each([
+            ['AVAILABLE with no timeout', 'AVAILABLE'],
+            ['USED, the boost applied since', 'USED'],
+        ])('the live challenge shows the key spent as well: %s', async (_name, after) => {
+            currencyActions.unlockBoostWithKey.mockResolvedValueOnce(unclear);
+            setup(single([{ type: 'unlockBoost' }]));
+            const c = challenge();
+            c.member.boost!.state = 'LOCKED';
+            await run(c);
+            expect(state().inFlight).toEqual(expect.objectContaining({ unclear: ['unlockBoost'] }));
+            c.member.boost = { state: after, timeout: null };
+            await run(c);
+            // Passed over: the rule moved on instead of halting on a key that was spent.
+            expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
             expect(state().inFlight).toBeNull();
             expect(state().fired.r1).toBeDefined();
             expect(state().spent.keys).toBe(1);

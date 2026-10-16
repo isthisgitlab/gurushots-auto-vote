@@ -885,7 +885,86 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         logChosenSkipOnce(spy, buildChallenge({ id: 's69' }), 'autoSubmit', 'none-usable');
         expect(warnings).toEqual([]); // still remembered
         logChosenSkipOnce(spy, buildChallenge({ id: 's0' }), 'autoSubmit', 'none-usable');
-        expect(warnings).toHaveLength(1); // the early ones were forgotten and are explained again
+        expect(warnings).toHaveLength(1); // the oldest was forgotten and is explained again
+        // Only the oldest goes to make room, not everything: a recent one is still remembered.
+        logChosenSkipOnce(spy, buildChallenge({ id: 's30' }), 'autoSubmit', 'none-usable');
+        expect(warnings).toHaveLength(1);
+    });
+
+    test('the memo drops its oldest challenge at the cap, and the others keep what they know', async () => {
+        const { logger } = makeLog();
+        const walkDeps = {
+            getEligiblePhotosWalk: jest.fn(async () => ({ items: [], truncated: false })),
+            logger,
+        };
+        const look = (id: string) =>
+            resolveMissingChosen({
+                challenge: buildChallenge({ id, member: { ranking: { entries: [] } } }),
+                token: 'tok',
+                ids: ['car'],
+                eligible: [],
+                wantCount: 1,
+                allowWalk: true,
+                deps: walkDeps,
+                label: 'autoSubmit',
+            });
+        for (let i = 0; i < 65; i++) await look(`m${i}`);
+        expect(walkDeps.getEligiblePhotosWalk).toHaveBeenCalledTimes(65);
+        // m1 was kept through the 65th challenge (only m0 made room), m0 is walked again.
+        await look('m1');
+        expect(walkDeps.getEligiblePhotosWalk).toHaveBeenCalledTimes(65);
+        await look('m0');
+        expect(walkDeps.getEligiblePhotosWalk).toHaveBeenCalledTimes(66);
+    });
+
+    test('a skip that follows a walk finding chosen photos missing from the library points at another account’s list', async () => {
+        const { logger, lines } = makeLog();
+        // The list names a photo this library does not hold.
+        const deps = makeDeps({ logger, library: [photo('theme-a')], settings: { chosen: ['car'], only: true } });
+        await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
+        const skips = lines.warning.filter((m) => m.includes('skipped [Challenge c1]'));
+        expect(skips).toHaveLength(1);
+        expect(skips[0]).toContain('Some of them are not in your library');
+        expect(skips[0]).toContain('clear-chosen-photos');
+    });
+
+    test('a skip for a photo that is in the library but not allowed there has no such hint', async () => {
+        const { logger, lines } = makeLog();
+        const refused = photo('car', ['Car'], { permission: { allowed: false, message: 'used elsewhere' } });
+        const deps = makeDeps({
+            logger,
+            library: [photo('theme-a')],
+            walkItems: [photo('theme-a'), refused],
+            settings: { chosen: ['car'], only: true },
+        });
+        await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
+        const skips = lines.warning.filter((m) => m.includes('skipped [Challenge c1]'));
+        expect(skips).toHaveLength(1);
+        expect(skips[0]).not.toContain('clear-chosen-photos');
+    });
+
+    test('a skip with no walk behind it has no hint, and one that gains it is explained again', async () => {
+        const { logger, lines } = makeLog();
+        const challenge = buildChallenge({ id: 'h1', member: { ranking: { entries: [] } } });
+        logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
+        logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
+        expect(lines.warning).toHaveLength(1);
+        expect(lines.warning[0]).not.toContain('clear-chosen-photos');
+        // A walk then finds the chosen photo missing from the library.
+        await resolveMissingChosen({
+            challenge,
+            token: 'tok',
+            ids: ['car'],
+            eligible: [],
+            wantCount: 1,
+            allowWalk: true,
+            deps: { getEligiblePhotosWalk: jest.fn(async () => ({ items: [], truncated: false })), logger },
+            label: 'autoSubmit',
+        });
+        logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
+        logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
+        expect(lines.warning).toHaveLength(2);
+        expect(lines.warning[1]).toContain('clear-chosen-photos');
     });
 
     test('scores for a found photo are merged into scores that already exist, or stand alone', async () => {

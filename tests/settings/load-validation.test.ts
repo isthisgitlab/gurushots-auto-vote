@@ -202,7 +202,6 @@ describe('loadSettings validation', () => {
     describe('the record of the import', () => {
         const imported = {
             at: '2026-10-15T10:00:00.000Z',
-            sha256: '',
             report: { refsBlocked: ['a'] },
             acknowledged: false,
         };

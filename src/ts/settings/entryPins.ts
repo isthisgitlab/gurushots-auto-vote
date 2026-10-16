@@ -129,6 +129,8 @@ const setEntryPin = (kind: EntryPinKind, challengeId: string | number, imageId: 
     const settings = loadSettings();
     const pins = _validMap(settings.challenges);
     const known = Object.hasOwn(pins, key);
+    // Clearing a pin that was never set changes nothing: no write, no broadcast.
+    if (imageId === null && (!known || pins[key][kind] === undefined)) return 'ok';
     const next: EntryPinRecord = { ...(known ? pins[key] : {}) };
     if (imageId === null) {
         delete next[kind];

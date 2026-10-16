@@ -82,6 +82,55 @@ describe('the pending changes of the import marker (real fs)', () => {
         fs.rmSync(root, { recursive: true, force: true });
     });
 
+    test('a marker that cannot be read counts as missing for every question, is said once, and does not stand for a lost import', () => {
+        // A directory where the file should be: reading it throws.
+        fs.mkdirSync(markerFile);
+        load();
+
+        expect(marker.isMirrorStarted()).toBe(false);
+        expect(marker.configSource()).toBeNull();
+        expect(marker.mirroredSignIns()).toEqual([]);
+        // It is no proof that the import never ran: settings.json is not imported over it.
+        expect(marker.isImportMarked()).toBe(true);
+        expect(cat.warning).toHaveBeenCalledTimes(1);
+        expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('could not be read'));
+
+        // Once it reads again, a later failure is said again.
+        fs.rmSync(markerFile, { recursive: true });
+        expect(marker.isMirrorStarted()).toBe(false);
+        expect(marker.isImportMarked()).toBe(false);
+        fs.mkdirSync(markerFile);
+        expect(marker.isMirrorStarted()).toBe(false);
+        expect(cat.warning).toHaveBeenCalledTimes(2);
+    });
+
+    test('a marker that cannot be read is said without the path the error names, which holds the user name', () => {
+        write({});
+        load();
+        jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+            throw new Error("EACCES: permission denied, open '/Users/someone/data/v2-import.json'");
+        });
+
+        expect(marker.isMirrorStarted()).toBe(false);
+
+        expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining("open 'v2-import.json'"));
+        expect(JSON.stringify(cat.warning.mock.calls)).not.toContain('someone');
+    });
+
+    test('a marker whose read throws a value that carries no message is said without one', () => {
+        write({});
+        load();
+        jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+            throw 'weird';
+        });
+
+        expect(marker.isMirrorStarted()).toBe(false);
+
+        expect(cat.warning).toHaveBeenCalledWith(
+            expect.stringContaining('could not be read, so it counts as missing: unknown error'),
+        );
+    });
+
     test('forgetting a copy that is replayed after another was recorded leaves the newer one', () => {
         write({ unimportableCopy: 'settings.json.unimportable-1' });
         load();
@@ -128,25 +177,11 @@ describe('the pending changes of the import marker (real fs)', () => {
         expect(stored().legacyAsideOwed).toBe('two');
     });
 
-    test('the time the copies were cleared is the time of the clearing, not of the replay', () => {
-        write({});
-        load();
-        jest.useFakeTimers({ now: new Date('2026-10-10T10:00:00.000Z') });
-        lock.busy = true;
-        marker.noteCopiesScrubbed();
-
-        jest.setSystemTime(new Date('2026-10-12T10:00:00.000Z'));
-        lock.busy = false;
-        marker.flushPendingMarkerChanges();
-
-        expect(stored().copiesScrubbedAt).toBe('2026-10-10T10:00:00.000Z');
-    });
-
     test('a change that could not be made is said once, not at every replay', () => {
         write({});
         load();
         lock.busy = true;
-        marker.noteCopiesScrubbed();
+        marker.rememberUnimportableCopy('/data/settings.json.unimportable-2026-10-10T10-00-00-000Z');
         expect(cat.warning).toHaveBeenCalledTimes(1);
 
         marker.flushPendingMarkerChanges();

@@ -20,6 +20,7 @@ import { errorMessage } from '../errorMessage';
 import { findActiveChallenge } from './findActiveChallenge';
 import { rankCandidatesForChallenge, resolveMemberId } from './autoFill';
 import { resetPassState as resetPhotoStatsPassState } from './photoStats';
+import { dropChallenge } from './libraryCache';
 import { CURRENCY_OUTCOME, blockedOutcome, swapExcludedIds } from '../voting/currencyActions';
 
 import type { Challenge, RankingEntry } from '../types/gurushots';
@@ -343,6 +344,8 @@ const swapEntry = async (
         { strategy, logger },
     );
     if (result.ok && ledger) ledger.onSwapped(challenge.id, oldEntry, newImageId);
+    // The entry's photo changed (or may have, with no answer): the photo chooser's listing for it is out of date.
+    dropChallenge(challenge.id);
     return result;
 };
 
@@ -384,6 +387,7 @@ const swapBack = async (
         { strategy, logger },
     );
     if (result.ok) ledger.remove(challengeId, record.currentId);
+    dropChallenge(challenge.id);
     return result;
 };
 

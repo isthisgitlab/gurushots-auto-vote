@@ -4,7 +4,7 @@ import * as votingLogic from '../VotingLogic';
 import * as autoFill from '../autoFill';
 import { formatDuration } from '../../format/duration';
 import { failureText, oneLine } from '../../format/logSafe';
-import { secondsToBoostDeadline } from '../../voting/boostWindow';
+import { secondsToBoostDeadline, isKeyUnlockedBoost } from '../../voting/boostWindow';
 import { consumeMission } from '../missions';
 import { buildFillDeps } from './context';
 
@@ -35,7 +35,7 @@ const readBoostAvailability = (
     return {
         boost,
         isTimerBasedAvailable: boost.state === 'AVAILABLE' && hasTimeout,
-        isKeyUnlockedAvailable: boost.state === 'AVAILABLE_KEY' || (boost.state === 'AVAILABLE' && !hasTimeout),
+        isKeyUnlockedAvailable: isKeyUnlockedBoost(boost),
     };
 };
 
@@ -193,7 +193,7 @@ const applyAvailableBoost = async (
         logger
             .withCategory('boost')
             .info(
-                `${logger.challengeTag(challenge)} Emergency Fill window — applying available boost despite Auto-Apply Boost being off`,
+                `${logger.challengeTag(challenge)} Emergency Submit window — applying available boost despite Auto-Apply Boost being off`,
                 null,
             );
     }
@@ -448,14 +448,15 @@ export const runSuspendBoost = async (ctx: ActionContext): Promise<SuspendBoostO
  * (by reference), so a concurrent mock pass can see these mutations; mock-only and
  * harmless.
  *
+ * @param now - Unix seconds; the instant the caller selected the challenges at
  * @returns one settled outcome per challenge, in order
  */
 export const runSuspendBoosts = (
     challenges: readonly Challenge[],
     token: string,
     { api, entryAges }: { api: VotingPassApi; entryAges: EntryAgeLedger | null },
+    now: number = Math.floor(Date.now() / 1000),
 ): Promise<PromiseSettledResult<SuspendBoostOutcome>[]> => {
-    const now = Math.floor(Date.now() / 1000);
     const fillDeps = buildFillDeps(api, entryAges);
     return Promise.allSettled(
         challenges.map((challenge) => runSuspendBoost({ challenge, token, now, api, fillDeps, entryAges })),

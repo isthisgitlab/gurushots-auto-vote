@@ -627,6 +627,34 @@ describe('runMissionFill', () => {
             expect(infoLines().filter((line) => line.includes('mission 88 did not move'))).toHaveLength(1);
         });
 
+        test('a fill that is deferred leaves no stalled mission behind: the next pass still fills', async () => {
+            const ledger = createMemoryAutoSpendLedger();
+            // Pass 1: the fill lands at 0 of 3.
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '31', current: 0, remaining: 3 }))).toBe(true);
+            // Pass 2: the mission moved to 1, but another spend holds the lock: the fill is deferred.
+            let release: ((value?: unknown) => void) | undefined;
+            const held = currencyActions.withSpendLock(() => new Promise((resolve) => (release = resolve)));
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '31', current: 1, remaining: 2 }))).toBe(false);
+            release!();
+            await held;
+            expect(ledger.fills('mission:31')).toBe(1);
+            expect(ledger.lastProgress('mission:31')).toBe(0);
+            // Pass 3: still at 1 (nothing was spent in pass 2): not a stalled mission.
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '31', current: 1, remaining: 2 }))).toBe(true);
+            expect(infoLines().some((line) => line.includes('mission 31 did not move'))).toBe(false);
+        });
+
+        test('a fill that got no answer is not read as a mission that did not move: the next pass still fills', async () => {
+            const ledger = createMemoryAutoSpendLedger();
+            currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'unclear' });
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '32', current: 0, remaining: 3 }))).toBe(false);
+            // Counted, because it may have been made; its reserved progress is not kept.
+            expect(ledger.fills('mission:32')).toBe(1);
+            expect(ledger.lastProgress('mission:32')).toBeNull();
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '32', current: 0, remaining: 3 }))).toBe(true);
+            expect(infoLines().some((line) => line.includes('mission 32 did not move'))).toBe(false);
+        });
+
         test('the second fill of the same pass is not held to the progress the pass started from', async () => {
             const ledger = createMemoryAutoSpendLedger();
             const needs = fillNeeds({ id: '99', current: 0, remaining: 3 });

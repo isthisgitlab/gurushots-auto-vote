@@ -574,7 +574,7 @@ describe('a logout in the Android app window clears the sign-in out of the set-a
         expect(settings.setSetting('token', '')).toBe(true);
         await drain(settings);
 
-        expect(cat.error).toHaveBeenCalledWith(`Capacitor ${CONFIG_COPY} could not be rewritten:`, expect.any(Error));
+        expect(cat.error).toHaveBeenCalledWith(`Capacitor ${CONFIG_COPY} could not be rewritten: unknown error`);
         expect(stored(SETTINGS_COPY)).toMatchObject({ token: '' });
         expect(stored(CONFIG_COPY).auth).toMatchObject({ token: 'tok-old' });
     });

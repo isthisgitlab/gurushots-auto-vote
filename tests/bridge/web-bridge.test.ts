@@ -44,6 +44,7 @@ const tabStore = new Map<string, string>();
 const fakeSessionStorage = invalid({
     getItem: (key: string) => tabStore.get(key) ?? null,
     setItem: (key: string, value: string) => void tabStore.set(key, value),
+    removeItem: (key: string) => void tabStore.delete(key),
 });
 const stubSessionStorage = (value: unknown) =>
     Object.defineProperty(globalThis, 'sessionStorage', { value, configurable: true, writable: true });
@@ -197,13 +198,35 @@ describe('web bridge — access token', () => {
         const refuse = () => {
             throw new Error('denied');
         };
-        stubSessionStorage(invalid({ getItem: refuse, setItem: refuse }));
+        stubSessionStorage(invalid({ getItem: refuse, setItem: refuse, removeItem: refuse }));
         const guarded = reinstall(`#t=${TOKEN}`);
         await guarded.guiVote();
         expect(sentHeaders()['x-web-shell-token']).toBe(TOKEN);
+        mockFetch.mockResolvedValueOnce(reply(403, { error: 'web-shell-token' }));
+        await expect(guarded.guiVote()).rejects.toThrow('web-shell-token');
         const bare = reinstall('');
         await bare.guiVote();
         expect(mockFetch.mock.calls.at(-1)![1].headers).toEqual(expect.objectContaining({ 'x-web-shell-token': '' }));
+    });
+
+    test('the kept token is removed when the server refuses it, and only then', async () => {
+        mockFetch.mockResolvedValueOnce(reply(500, { error: 'vote exploded' }));
+        await expect(api.guiVote()).rejects.toThrow('vote exploded');
+        expect(tabStore.get('web-shell-token')).toBe(TOKEN);
+
+        mockFetch.mockResolvedValueOnce(reply(403, { error: 'web-shell-token' }));
+        await expect(api.guiVote()).rejects.toThrow('web-shell-token');
+        expect(tabStore.has('web-shell-token')).toBe(false);
+    });
+
+    test('a logout keeps the token: a reload after logout and a new login still carries it', async () => {
+        await api.logout();
+        expect(tabStore.get('web-shell-token')).toBe(TOKEN);
+
+        api.login();
+        const reloaded = reinstall('');
+        await reloaded.guiVote();
+        expect(sentHeaders()['x-web-shell-token']).toBe(TOKEN);
     });
 
     test('a runtime with no sessionStorage works the same', async () => {

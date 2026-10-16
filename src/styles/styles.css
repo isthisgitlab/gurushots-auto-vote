@@ -25,6 +25,33 @@
     scrollbar-color: color-mix(in oklch, currentColor 0%, var(--color-latvian)) transparent;
 }
 
+/* The level colours as the progress bar's fill: on a dark theme (as for text-latvian below) they are lightened, as
+ * All Star's near-black would otherwise vanish against the card. The badge keeps the dark colour under its white text. */
+@supports (color: light-dark(red, red)) {
+    :root {
+        --level-fill-allstar: light-dark(
+            var(--color-level-allstar),
+            color-mix(in oklch, var(--color-level-allstar) 45%, white)
+        );
+        --level-fill-elite: light-dark(
+            var(--color-level-elite),
+            color-mix(in oklch, var(--color-level-elite) 55%, white)
+        );
+        --level-fill-premier: light-dark(
+            var(--color-level-premier),
+            color-mix(in oklch, var(--color-level-premier) 55%, white)
+        );
+        --level-fill-skilled: light-dark(
+            var(--color-level-skilled),
+            color-mix(in oklch, var(--color-level-skilled) 55%, white)
+        );
+        --level-fill-popular: light-dark(
+            var(--color-level-popular),
+            color-mix(in oklch, var(--color-level-popular) 55%, white)
+        );
+    }
+}
+
 /* Latvian color utility classes */
 .btn-latvian {
     background-color: var(--color-latvian);
@@ -35,6 +62,14 @@
 .btn-latvian:hover {
     background-color: #7a0014;
     border-color: #7a0014;
+}
+
+/* These rules sit outside any layer, so they would beat DaisyUI's (layered) disabled look and leave a held button
+ * at full carmine: give it that look here. */
+.btn-latvian:is(:disabled, [disabled], [aria-disabled='true'], .btn-disabled) {
+    background-color: color-mix(in oklab, var(--color-base-content) 10%, transparent);
+    border-color: transparent;
+    color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
 }
 
 .progress-latvian::-webkit-progress-value {

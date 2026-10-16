@@ -238,6 +238,8 @@ describe('a challenge that has just started but is not in the open list yet', ()
         getMemberChallenges.mockResolvedValue(invalid({ success: false, error: 'down', items: [] }));
         await advance(32 * 1000);
         expect(screen.getByText(app.discoverUnavailableList, { selector: 'p' })).toBeTruthy();
+        // The row stays, once.
+        expect(screen.getAllByText('Soon')).toHaveLength(1);
         getMemberChallenges.mockResolvedValue(invalid(answer([])));
         await advance(60 * 1000);
         expect(screen.getByText('Starting now — it will appear in the open list shortly')).toBeTruthy();

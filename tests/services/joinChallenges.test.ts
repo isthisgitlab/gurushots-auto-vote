@@ -193,6 +193,38 @@ describe('performJoin — ordering & idempotency', () => {
         expect(deps.submitToChallenge).toHaveBeenCalledWith(1, ['imgA'], 'tok');
     });
 
+    test('a join drops the photo chooser’s cached listing of the challenge; one that fails leaves it', async () => {
+        const cache =
+            require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
+        cache.writeListing('tok', 1, {
+            photos: [],
+            memberId: null,
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        });
+        cache.writeListing('tok', 2, {
+            photos: [],
+            memberId: null,
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        });
+        const failing = makeDeps({
+            submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false, raw: null })),
+        });
+        await performJoin(invalid({ id: 1 }), 'tok', failing, 0);
+        expect(cache.readFresh('tok', 1)).not.toBeNull();
+        await performJoin(invalid({ id: 1 }), 'tok', makeDeps(), 0);
+        expect(cache.readFresh('tok', 1)).toBeNull();
+        expect(cache.readFresh('tok', 2)).not.toBeNull();
+        cache.clearLibraryCache();
+    });
+
     test('joins with the visually re-ranked photo from a 12-photo shortlist', async () => {
         photoPicker.pickPhotosForChallenge.mockReturnValue(['imgA', 'imgB']);
         const rankVisually = jest.fn(async () => ['imgB']);
@@ -480,7 +512,8 @@ describe('a paid join the pass decided: the price is read again right before the
         const store = fileWith({});
         const deps = makeDeps({ getMemberChallenges: openList(open(120)), joinStateStore: store });
         const res = await performJoin(invalid({ id: 7 }), 'tok', deps, 100, { priceCeiling: 100 });
-        expect(res).toEqual({ status: 'failed-no-charge', charged: 0 });
+        // Carries the new price, for the caller that asks again.
+        expect(res).toEqual({ status: 'failed-no-charge', charged: 0, priceNow: 120 });
         expect(deps.coinsUnlock).not.toHaveBeenCalled();
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
         expect(store.writeRaw).not.toHaveBeenCalled();
@@ -1615,6 +1648,41 @@ describe('joinChallengeSingle — manual', () => {
             expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
         });
 
+        test.each([[undefined], [100]])(
+            'a price that rises during the photo pick (confirmed %p) is not spent on',
+            async (expectedCost) => {
+                const reads = [
+                    [{ id: 2, join_coins: 100, type: 'flash' }],
+                    [{ id: 2, join_coins: 150, type: 'flash' }],
+                ];
+                let read = 0;
+                const deps = makeDeps({
+                    getMemberChallenges: double<'getMemberChallenges'>(async () => reads[Math.min(read++, 1)] as never),
+                    getBankroll: balance({ coins: 500 }),
+                });
+                const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost });
+                // Asked again at the new price, which is what Discover and the CLI word as a price change.
+                expect(res).toEqual({ status: 'needs-confirm', challengeId: 2, cost: 150 });
+                expect(deps.coinsUnlock).not.toHaveBeenCalled();
+                expect(deps.submitToChallenge).not.toHaveBeenCalled();
+            },
+        );
+
+        test('a price that cannot be read again during the pick is a plain failure, not a price to confirm', async () => {
+            let read = 0;
+            const deps = makeDeps({
+                getMemberChallenges: double<'getMemberChallenges'>(async () =>
+                    read++ === 0 ? [{ id: 2, join_coins: 100, type: 'flash' }] : [],
+                ),
+                getBankroll: balance({ coins: 500 }),
+            });
+            expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toMatchObject({
+                status: 'failed-no-charge',
+                cost: 100,
+            });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        });
+
         describe('a retry after coins were charged and the submit failed (an unlock marker is left)', () => {
             const MARKED = JSON.stringify({ '2': { unlockedAt: RECENT } });
             const retrying = (marker: string | null, over: NonNullable<Parameters<typeof makeDeps>[0]> = {}) => {
@@ -1970,7 +2038,11 @@ describe('unlock markers are kept per account', () => {
     });
 
     describe('the claims of challenges that are no longer open are dropped', () => {
-        const OLD = { unlockedAt: RECENT - 7 * 60 * 60 * 1000 };
+        // A claim whose join went through, old enough for the list to end it.
+        const OLD = { unlockedAt: RECENT - 7 * 60 * 60 * 1000, joinedAt: RECENT - 7 * 60 * 60 * 1000 };
+        // A paid claim whose submit has not landed (or whose payment is unconfirmed): the list never ends it.
+        const UNJOINED = { unlockedAt: RECENT - 7 * 60 * 60 * 1000 };
+        const UNCONFIRMED = { ...UNJOINED, unconfirmed: true };
         const freeOpen = (...ids: number[]) => openList(ids.map((id) => ({ id, join_coins: 0, type: 'flash' })));
         const claims = () => ({
             [`${A}:7`]: OLD, // closed: goes
@@ -1978,6 +2050,8 @@ describe('unlock markers are kept per account', () => {
             [`${A}:99`]: { unlockedAt: Date.now() }, // closed, but too young to tell from a list read a moment ago
             [`${A}:98`]: { unlockedAt: 'garbage' }, // no age to judge by
             [`${A}:97`]: 'not even an object', // nothing to judge by either
+            [`${A}:96`]: UNJOINED, // closed on the list, but its join never landed: paid, so it stays
+            [`${A}:95`]: UNCONFIRMED, // the same for a payment that got no answer
             [`${B}:9`]: OLD, // another account's: this account's list says nothing about it
             '8': OLD, // a bare one from before accounts were told apart: may be another account's
         });
@@ -1987,7 +2061,7 @@ describe('unlock markers are kept per account', () => {
             const deps = joiningAs(A, store, { getMemberChallenges: freeOpen(5, 12) });
             await runJoinPass('tok', Date.now(), deps);
             expect(Object.keys(store.read()).sort()).toEqual(
-                [`${A}:12`, `${A}:97`, `${A}:98`, `${A}:99`, `${B}:9`, '8'].sort(),
+                [`${A}:12`, `${A}:95`, `${A}:96`, `${A}:97`, `${A}:98`, `${A}:99`, `${B}:9`, '8'].sort(),
             );
         });
 
@@ -2197,6 +2271,7 @@ describe('unlock markers are kept per account', () => {
             acquire.mock.calls.filter(([id]) => id !== 'joinstate');
         // Old enough to be pruned when its challenge is no longer open, and nowhere near 30 days.
         const OLD_AT = RECENT - 7 * 60 * 60 * 1000;
+        const OLD_JOINED = { unlockedAt: OLD_AT, joinedAt: OLD_AT };
 
         beforeEach(() => {
             release.mockClear();
@@ -2308,7 +2383,7 @@ describe('unlock markers are kept per account', () => {
         test('pruning leaves a challenge whose lock another process holds, and says nothing of what it did not drop', async () => {
             const logged: LoggerMock = invalid(require('../../src/ts/logger'));
             logged.withCategory().debug.mockClear();
-            const store = fileWith({ [`${A}:7`]: { unlockedAt: OLD_AT }, [`${A}:8`]: { unlockedAt: OLD_AT } });
+            const store = fileWith({ [`${A}:7`]: OLD_JOINED, [`${A}:8`]: OLD_JOINED });
             const acquire = jest.fn((id: string | number) => ({ ok: String(id) !== '7', release }));
             const deps = joiningAs(A, store, {
                 getMemberChallenges: openList([{ id: 5, join_coins: 0, type: 'flash' }]),
@@ -2326,7 +2401,7 @@ describe('unlock markers are kept per account', () => {
         test('a prune whose write fails does not claim to have dropped anything', async () => {
             const logged: LoggerMock = invalid(require('../../src/ts/logger'));
             logged.withCategory().debug.mockClear();
-            const stored = JSON.stringify({ [`${A}:7`]: { unlockedAt: OLD_AT } });
+            const stored = JSON.stringify({ [`${A}:7`]: OLD_JOINED });
             const deps = joiningAs(
                 A,
                 invalid<ReturnType<typeof fileWith>>({
@@ -3933,7 +4008,8 @@ describe('on the app window, where the background service writes the same claims
         expect(await paidByThisAccount({ id: 3, join_coins: 100 }, 'tok', d)).toBe(false);
         expect(await performJoin(paidChallenge(), 'tok', d, 100)).toEqual({ status: 'failed-no-charge', charged: 0 });
         expect(await joinChallengeSingle(3, 'tok', d, { spendCoins: true })).toMatchObject({
-            status: 'failed-no-charge',
+            status: 'busy',
+            cost: 100,
         });
         expect(d.coinsUnlock).not.toHaveBeenCalled();
         // Each refusal says what to do next.

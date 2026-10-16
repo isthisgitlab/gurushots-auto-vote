@@ -129,7 +129,7 @@ const joinListed = async (
             `challenge ${challengeId}: the saved claims could not be read again — not joining — try again in a moment`,
             null,
         );
-        return { status: 'failed-no-charge', challengeId, cost };
+        return { status: 'busy', challengeId, cost };
     }
     const retryOnly = cost > 0 && claimOf(deps.joinStateStore, challengeId, owner) !== null;
 
@@ -153,7 +153,11 @@ const joinListed = async (
         manual: true,
         submitOnly: retryOnly,
         coinsBefore,
+        // The price is read again right before the claim: one that rose during the photo pick is not spent on.
+        priceCeiling: retryOnly ? undefined : (expectedCost ?? cost),
     });
+    // The price rose while the photo was picked: nothing was spent, and the user is asked again at the new price.
+    if (outcome.priceNow !== undefined) return { status: 'needs-confirm', challengeId, cost: outcome.priceNow };
     return {
         status: outcome.status,
         challengeId,

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsChallengeId } from '@/contexts/SettingsChallengeContext';
 import { useImageLoads } from '@/hooks/useImageLoads';
@@ -51,8 +51,8 @@ function ChosenPhotoChip({ id, position, memberId }: { id: string; position: num
  * The chosen-photos control shared by every editor: the chosen photos as small
  * thumbnails, a button opening the chooser, and Clear. `value` null = nothing
  * set at this layer (a rule row inheriting); `onClear` decides what Clear
- * writes, `clearLabel` what it is called. A list saved under another account is
- * only counted, never shown.
+ * writes, `clearLabel` what it is called, and `clearHint` (when given) says in words what it does. A list
+ * saved under another account is only counted, never shown.
  */
 export function ChosenPhotosControl({
     id,
@@ -60,6 +60,7 @@ export function ChosenPhotosControl({
     onChange,
     onClear,
     clearLabel,
+    clearHint,
     disabled = false,
     challengeId = null,
 }: {
@@ -68,12 +69,14 @@ export function ChosenPhotosControl({
     onChange: (ids: string[]) => void;
     onClear: () => void;
     clearLabel: string;
+    clearHint?: string;
     disabled?: boolean;
     challengeId?: string | number | null;
 }) {
     const { t } = useTranslation();
     const { thumbMember: memberId, otherAccount } = useChosenListAccount();
     const [open, setOpen] = useState(false);
+    const hintId = useId();
     const ids = value ?? [];
     return (
         <div className="flex flex-wrap items-center gap-2">
@@ -103,9 +106,20 @@ export function ChosenPhotosControl({
                 {t('app.choosePhotos')}
             </button>
             {value !== null && (
-                <button type="button" className="btn btn-outline btn-sm" disabled={disabled} onClick={onClear}>
+                <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    disabled={disabled}
+                    aria-describedby={clearHint ? hintId : undefined}
+                    onClick={onClear}
+                >
                     {clearLabel}
                 </button>
+            )}
+            {value !== null && clearHint && (
+                <p id={hintId} className="basis-full text-xs text-base-content/60">
+                    {clearHint}
+                </p>
             )}
             <PhotoChooserModal
                 isOpen={open}
@@ -124,7 +138,9 @@ export function ChosenPhotosControl({
 /**
  * A schema `photos` setting: the chosen-photos control, with the surrounding
  * editor's challenge (if any) as the chooser's eligibility context. Clear
- * stores an explicit empty list, which overrides a list set at a lower layer.
+ * stores an explicit empty list, which overrides a list set at a lower layer:
+ * in a challenge's settings it is offered as "Use none", with a hint that the
+ * reset button brings the inherited list back.
  */
 export function PhotosField({ id, settingKey, value, onChange, onReset, disabled }: SettingFieldProps) {
     const { t } = useTranslation();
@@ -136,7 +152,8 @@ export function PhotosField({ id, settingKey, value, onChange, onReset, disabled
                 value={photoIdsOf(value)}
                 onChange={(ids) => onChange(settingKey, ids)}
                 onClear={() => onChange(settingKey, [])}
-                clearLabel={t('app.photosClear')}
+                clearLabel={t(challengeId === null ? 'app.photosClear' : 'app.photosUseNone')}
+                clearHint={challengeId === null ? undefined : t('app.photosUseNoneHint')}
                 disabled={disabled}
                 challengeId={challengeId}
             />

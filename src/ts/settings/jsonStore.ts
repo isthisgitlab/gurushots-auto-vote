@@ -50,7 +50,9 @@ const WRITE_ATTEMPTS = 3;
 /**
  * Writes a value made from a store's current one at once (not behind a cache); `failed` when the write threw. The value
  * is written only if the store still holds what it was made from (read again just before the write): when another
- * process changed it meanwhile, the change is made again on that, so neither process's change is erased.
+ * process changed it meanwhile, the change is made again on that. This narrows the window in which a concurrent write
+ * is overwritten and does not close it: the second read and the write are two steps, so a caller that must not lose a
+ * change holds the settings lock around the whole.
  */
 const writeNow = (
     prefKey: string,

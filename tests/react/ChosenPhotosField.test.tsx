@@ -181,6 +181,27 @@ describe('challenge context', () => {
         await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(77, undefined, 'cached'));
     });
 
+    test('inside a per-challenge editor Clear is "Use none", described by a hint that the reset button brings the inherited list back', () => {
+        const onChange = jest.fn();
+        render(
+            <SettingsChallengeProvider value={77}>
+                <SettingInput settingKey="chosenPhotos" config={config} value={[idOf(1)]} onChange={onChange} />
+            </SettingsChallengeProvider>,
+        );
+        expect(screen.queryByRole('button', { name: 'app.photosClear' })).toBeNull();
+        const none = screen.getByRole('button', { name: 'app.photosUseNone' });
+        const hint = screen.getByText('app.photosUseNoneHint');
+        expect(none.getAttribute('aria-describedby')).toBe(hint.id);
+        fireEvent.click(none);
+        expect(onChange).toHaveBeenCalledWith('chosenPhotos', []);
+    });
+
+    test('outside one it keeps Clear, with no hint', () => {
+        renderInput([idOf(1)]);
+        expect(screen.getByRole('button', { name: 'app.photosClear' }).getAttribute('aria-describedby')).toBeNull();
+        expect(screen.queryByText('app.photosUseNoneHint')).toBeNull();
+    });
+
     test('outside one it asks with no challenge', async () => {
         renderInput([]);
         fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));

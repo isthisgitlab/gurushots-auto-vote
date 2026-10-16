@@ -80,7 +80,8 @@ describe('list-photos', () => {
         ]);
         expect(info.join('')).not.toMatch(/p1|p2|Pink|Car/);
         expect((info.join('') + stdout.join('')).match(/\p{Cc}/u)).toBeNull();
-        expect(info[info.length - 1]).toContain('set-setting chosenPhotos \'["<id>"]\' --challenge=<id>');
+        // The challenge that was asked about is named in the closing hint, not a placeholder.
+        expect(info[info.length - 1]).toBe('Choose photos with: set-setting chosenPhotos \'["<id>"]\' --challenge=5');
         expect(text('warning')).toEqual(['The list was cut short; narrow it with --search=<tag> to find the rest.']);
     });
 
@@ -99,6 +100,11 @@ describe('list-photos', () => {
         await listPhotosCmd(null, null);
         expect(text('stdout')).toEqual(['  \u2022 p1  [Pink, Flower]']);
         expect(text('warning')).toEqual([]);
+        // With no challenge, the global default is named as well as the per-challenge form.
+        expect(text('info').slice(-2)).toEqual([
+            'Choose photos for every challenge with: set-global-default chosenPhotos \'["<id>"]\'',
+            'or for one challenge with: set-setting chosenPhotos \'["<id>"]\' --challenge=<id>',
+        ]);
         // Without a challenge the note says eligibility is not shown and how to get it.
         expect(text('info').some((m) => m.includes('pass --challenge=<id>'))).toBe(true);
         calls.length = 0;

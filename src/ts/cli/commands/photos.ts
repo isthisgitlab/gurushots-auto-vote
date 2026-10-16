@@ -123,7 +123,14 @@ const listPhotosCmd = async (challengeId: string | null, search: string | null):
             'Eligibility is not shown without a challenge; pass --challenge=<id> to see which photos it accepts.',
         );
     }
-    ui().info('Choose photos with: set-setting chosenPhotos \'["<id>"]\' --challenge=<id>');
+    if (challengeId === null) {
+        ui().info('Choose photos for every challenge with: set-global-default chosenPhotos \'["<id>"]\'');
+        ui().info('or for one challenge with: set-setting chosenPhotos \'["<id>"]\' --challenge=<id>');
+    } else {
+        ui().info(
+            `Choose photos with: set-setting chosenPhotos '["<id>"]' --challenge=${stripTerminalControl(challengeId)}`,
+        );
+    }
     return 0;
 };
 

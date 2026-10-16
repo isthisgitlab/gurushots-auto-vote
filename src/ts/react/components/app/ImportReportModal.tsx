@@ -24,8 +24,9 @@ const acknowledgeReport = async (): Promise<boolean> => {
  * apply (a profile or scenario that is missing or no longer valid), each as the place it is stored in the app and what
  * is wrong with it, and what to do. OK
  * acknowledges it; the report stays readable under About and data. An import with nothing to report is acknowledged
- * without showing anything. An acknowledgement that cannot be saved says so and leaves the dialog open. `hold` keeps it
- * back while another notice is up (it shows when that one is gone).
+ * without showing anything. An acknowledgement that cannot be saved says so and says it will show again at the next
+ * start; the next OK (or Escape) closes the dialog for this session, so a storage that refuses the write never traps the
+ * user in it. `hold` keeps it back while another notice is up (it shows when that one is gone).
  */
 export function ImportReportModal({ hold = false }: { hold?: boolean }) {
     const { t } = useTranslation();
@@ -34,14 +35,23 @@ export function ImportReportModal({ hold = false }: { hold?: boolean }) {
     const { data: report, refetch } = useImportReport();
     const refText = useImportRefText();
     const [saving, setSaving] = useState(false);
-    const [failed, setFailed] = useState(false);
+    // The import (by when it ran) whose acknowledgement could not be saved, and whose report was closed for this session
+    // after that was seen.
+    const [failedImport, setFailedImport] = useState<string | null>(null);
+    // The report closed shows again at the next start, and a report of a later import (a Re-import) shows at once.
+    const [closedImport, setClosedImport] = useState<string | null>(null);
+
+    // The import the report is of, by when it ran.
+    const at = report?.at ?? null;
+    const failed = at !== null && at === failedImport;
 
     const acknowledge = async () => {
         setSaving(true);
         const ok = await acknowledgeReport();
         setSaving(false);
-        setFailed(!ok);
+        setFailedImport(ok ? null : at);
         if (ok) await refetch();
+        else if (failed) setClosedImport(at);
     };
 
     const pending = report !== null && !report.acknowledged;
@@ -53,7 +63,7 @@ export function ImportReportModal({ hold = false }: { hold?: boolean }) {
 
     return (
         <Modal
-            isOpen={pending && !empty && !hold}
+            isOpen={pending && !empty && !hold && at !== closedImport}
             onClose={saving ? undefined : () => void acknowledge()}
             title={t('notice.importReportTitle')}
             size="md"

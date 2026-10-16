@@ -229,11 +229,67 @@ describe('auto-spend ledger — caps are held where the count is written', () =>
         expect(ledger.lastProgress('mission:5')).toBe(2);
     });
 
+    test('a release takes the progress back to what the record held before the reservation', async () => {
+        const ledger = createAutoSpendLedger(rawStore(null));
+        await ledger.reserveFill('mission:5', { progress: 1 });
+        await ledger.reserveFill('mission:5', { progress: 3 });
+        await ledger.releaseFill('mission:5');
+        expect(ledger.fills('mission:5')).toBe(1);
+        expect(ledger.lastProgress('mission:5')).toBe(1);
+        // None before: none after.
+        await ledger.reserveFill('mission:7', { progress: 4 });
+        await ledger.releaseFill('mission:7');
+        expect(ledger.fills('mission:7')).toBe(0);
+        expect(ledger.lastProgress('mission:7')).toBeNull();
+    });
+
+    test('what the release goes back to is read where the write is made, not before it', async () => {
+        const store = rawStore(null);
+        const ledger = createAutoSpendLedger(store);
+        await ledger.reserveFill('mission:5', { progress: 3 });
+        // Another context saves a newer reservation meanwhile.
+        store.set(JSON.stringify({ 'mission:5': { fills: 2, at: Date.now(), progress: 4, before: 3 } }));
+        await ledger.releaseFill('mission:5');
+        expect(ledger.fills('mission:5')).toBe(1);
+        expect(ledger.lastProgress('mission:5')).toBe(3);
+    });
+
+    test('the progress alone can be put back, the count as it is', async () => {
+        const ledger = createAutoSpendLedger(rawStore(null));
+        await ledger.reserveFill('mission:5', { progress: 1 });
+        await ledger.reserveFill('mission:5', { progress: 3 });
+        await ledger.restoreProgress('mission:5');
+        expect(ledger.fills('mission:5')).toBe(2);
+        expect(ledger.lastProgress('mission:5')).toBe(1);
+        await ledger.restoreProgress('mission:5');
+        expect(ledger.lastProgress('mission:5')).toBe(1);
+        // A record that was never reserved at a progress keeps what it has; a challenge with no record gets none.
+        await ledger.reserveFill('plain');
+        await ledger.restoreProgress('plain');
+        expect(ledger.fills('plain')).toBe(1);
+        await ledger.restoreProgress('mission:6');
+        expect(ledger.fills('mission:6')).toBe(0);
+        expect(ledger.lastProgress('mission:6')).toBeNull();
+    });
+
+    test('a reservation without a progress goes back to the progress the record held', async () => {
+        const ledger = createAutoSpendLedger(rawStore(null));
+        await ledger.reserveFill('mission:5', { progress: 2 });
+        await ledger.reserveFill('mission:5');
+        await ledger.releaseFill('mission:5');
+        expect(ledger.fills('mission:5')).toBe(1);
+        expect(ledger.lastProgress('mission:5')).toBe(2);
+    });
+
     test('a record with a progress that is not a number is not a record', async () => {
         const store = rawStore(JSON.stringify({ 'mission:5': { fills: 1, at: Date.now(), progress: 'x' } }));
         const ledger = createAutoSpendLedger(store);
         expect(ledger.fills('mission:5')).toBe(0);
         expect(ledger.lastProgress('mission:5')).toBeNull();
+        const badBefore = createAutoSpendLedger(
+            rawStore(JSON.stringify({ 'mission:5': { fills: 1, at: Date.now(), before: 'x' } })),
+        );
+        expect(badBefore.fills('mission:5')).toBe(0);
     });
 
     test('a ledger that cannot be trusted has no progress to say', () => {
@@ -250,6 +306,23 @@ describe('auto-spend ledger — caps are held where the count is written', () =>
         });
         await expect(ledger.reserveFill(1)).resolves.toBe(false);
         expect(error).toHaveBeenCalledWith('auto-spend ledger not written', null);
+    });
+
+    test("a write that throws is logged without the path it names: that holds the user's home folder", async () => {
+        const error = jest.fn();
+        jest.mocked(logger.withCategory).mockReturnValue(invalid({ error, warning: jest.fn() }));
+        const ledger = createAutoSpendLedger({
+            readRaw: () => null,
+            writeRaw: jest.fn(),
+            updateThrough: async () => {
+                throw new Error("EACCES: permission denied, open '/Users/jane/autoSpends.json'");
+            },
+        });
+        await expect(ledger.reserveFill(1)).resolves.toBe(false);
+        expect(error).toHaveBeenCalledWith(
+            "auto-spend ledger not written: EACCES: permission denied, open 'autoSpends.json'",
+            null,
+        );
     });
 
     test.each(['[1]', '{nope'])(

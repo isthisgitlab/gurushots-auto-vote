@@ -44,7 +44,7 @@ const applyBoost: typeof applyBoostModule.applyBoost = mockMethod(
                 logger
                     .withCategory('voting')
                     .error(
-                        "Couldn't apply Boost — every entry has Turbo or is pinned for Turbo (Boost and Turbo can't share an entry). Add another entry, unpin the photo, or pass --image=<id>",
+                        "Couldn't apply Boost — every entry has Turbo or is pinned for Turbo (Boost and Turbo can't share an entry). Add another entry or unpin the photo",
                         { challengeId: challenge.id?.toString?.() || '' },
                     );
                 return null;

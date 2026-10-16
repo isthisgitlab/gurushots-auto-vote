@@ -109,8 +109,22 @@ describe('settings facade — entry pins', () => {
     });
 
     test('clearing a pin that was never set writes nothing and succeeds', () => {
+        store.write.mockClear();
+
         expect(settings.setEntryPin('turbo', '100', null)).toBe('ok');
+
+        expect(store.write).not.toHaveBeenCalled();
         expect(settings.getEntryPins('100')).toEqual({ boost: null, turbo: null });
+    });
+
+    test('clearing a pin the challenge does not hold, beside one it does, writes nothing and keeps the other', () => {
+        settings.setEntryPin('boost', '100', 'img_a');
+        store.write.mockClear();
+
+        expect(settings.setEntryPin('turbo', '100', null)).toBe('ok');
+
+        expect(store.write).not.toHaveBeenCalled();
+        expect(settings.getEntryPins('100')).toEqual({ boost: 'img_a', turbo: null });
     });
 
     test.each([['bogus'], [''], [null], [undefined], [42]])('refuses the feature %p', (kind) => {

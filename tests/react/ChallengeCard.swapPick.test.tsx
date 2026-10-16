@@ -257,6 +257,34 @@ describe('a refused pick or spend', () => {
         expect(tile(PICK_ID).getAttribute('aria-pressed')).toBe('true');
         // The Swap button under the card carries no error of its own.
         expect(swapButton().className).not.toContain('btn-error');
+        // The card is stale (it still offers a photo that is entered): it refreshes behind the open picker.
+        await waitFor(() => expect(onCurrencySpent).toHaveBeenCalledTimes(1));
+    });
+
+    test('a refused pick for any other reason leaves the card alone', async () => {
+        renderCard();
+        await openPicker();
+        window.api.previewSwapPhoto = jest
+            .fn()
+            .mockResolvedValue({ success: false, outcome: 'api-failed', error: 'api-failed' });
+        fireEvent.click(tile(PICK_ID));
+        fireEvent.click(useThisPhoto());
+        expect((await screen.findByRole('alert')).textContent).toBe(app.currencyOutcomeFailed);
+        expect(onCurrencySpent).not.toHaveBeenCalled();
+    });
+
+    test('a spend refused because the photo is entered already refreshes the card and reopens the picker', async () => {
+        window.api.swapEntryPhoto = jest
+            .fn()
+            .mockResolvedValue({ success: false, outcome: 'already-entered', error: 'already-entered' });
+        renderCard();
+        await openPicker();
+        fireEvent.click(tile(PICK_ID));
+        fireEvent.click(useThisPhoto());
+        fireEvent.click(await screen.findByRole('button', { name: /^Spend 1 swap/ }));
+        await screen.findByText('Choose the photo to swap in');
+        expect((await screen.findByRole('alert')).textContent).toBe(app.currencyOutcomeAlreadyEntered);
+        await waitFor(() => expect(onCurrencySpent).toHaveBeenCalledTimes(1));
     });
 
     test('a spend the server turned down goes back to the picker with its reason; a new pick confirms again', async () => {

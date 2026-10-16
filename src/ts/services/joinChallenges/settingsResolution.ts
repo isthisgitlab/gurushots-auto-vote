@@ -11,7 +11,8 @@ import type { Challenge } from '../../types/gurushots';
 import type { ChallengeValues, TitleRule } from '../../types/settings';
 import { cat } from './shared';
 
-// The only join settings that read the per-id override layer (see resolveJoinSetting).
+// The only join settings that read the per-id override layer (see resolveJoinSetting). The settings cleanup keeps the
+// per-id entries of the same keys (JOIN_KEPT_KEYS in settings/staleChallengeCleanup.ts); a test pins the two equal.
 const PER_ID_JOIN_KEYS: ReadonlySet<string> = new Set([
     'chosenPhotos',
     'chosenPhotosOnly',
@@ -176,6 +177,7 @@ const warnMissingCloseTime = (challenge: Challenge, reason: string) => {
 };
 
 export {
+    PER_ID_JOIN_KEYS,
     resolveJoinSetting,
     anyTitleRuleEnablesAutoJoin,
     isAutoJoinActive,

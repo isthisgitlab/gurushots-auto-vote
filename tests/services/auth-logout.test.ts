@@ -171,14 +171,15 @@ describe('clearAuthToken', () => {
         expect(order).toEqual(['set', 'flush']);
     });
 
-    it('reports a logout the settings refused, never takes it for one: it throws once the account memory is dropped', async () => {
+    it('reports a logout the settings refused, never takes it for one, and keeps what is remembered of the account that is still logged in', async () => {
         settings.setSetting.mockReturnValueOnce(false);
         const { accountGeneration } = require('../../src/ts/services/accountScope') as typeof accountScopeModule;
         const before = accountGeneration();
 
         await expect(clearAuthToken()).rejects.toThrow('logout-not-saved');
 
-        expect(accountGeneration()).toBe(before + 1);
+        expect(accountGeneration()).toBe(before);
+        expect(settings.forgetOpenChallengeIds).not.toHaveBeenCalled();
         expect(settings.flushPendingWrites).toHaveBeenCalledTimes(1);
     });
 

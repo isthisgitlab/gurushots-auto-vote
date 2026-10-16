@@ -93,9 +93,15 @@ const releaseRefusedClaim = async (deps: JoinDeps, id: string | number, owner: s
 
 /**
  * Whether the price still holds: the open list is read again, and the challenge must still be on it at no more than
- * the price the decision to join used. A price that cannot be read again is not one to spend on.
+ * the price the decision to join used. A price that cannot be read again is not one to spend on. `risenTo` is the
+ * live price when it is above the ceiling (null: it holds, or could not be read).
  */
-const priceHolds = async (challenge: Challenge, token: string, deps: JoinDeps, ceiling: number): Promise<boolean> => {
+const priceHolds = async (
+    challenge: Challenge,
+    token: string,
+    deps: JoinDeps,
+    ceiling: number,
+): Promise<{ holds: boolean; risenTo: number | null }> => {
     const tag = logger.challengeTag(challenge);
     let open;
     try {
@@ -105,22 +111,22 @@ const priceHolds = async (challenge: Challenge, token: string, deps: JoinDeps, c
             `${tag}: could not read the price again (${errorMessage(error) || error}) — not spending coins`,
             null,
         );
-        return false;
+        return { holds: false, risenTo: null };
     }
     const live = open?.find((c) => String(c?.id) === String(challenge?.id));
     const cost = Number(live?.join_coins);
     if (!Number.isFinite(cost)) {
         cat().warning(`${tag}: its price could not be read again — not spending coins`, null);
-        return false;
+        return { holds: false, risenTo: null };
     }
     if (cost > ceiling) {
         cat().warning(
             `${tag}: the price rose from ${ceiling} to ${cost} coins since it was decided — not spending coins`,
             null,
         );
-        return false;
+        return { holds: false, risenTo: cost };
     }
-    return true;
+    return { holds: true, risenTo: null };
 };
 
 /**
@@ -156,8 +162,11 @@ const claimAndUnlock = async (
     }
     if (cancellation.isCancelled()) return { outcome: failedNoCharge() };
     // The price the decision used may have moved while the photo was picked: asked right before the claim.
-    if (priceCeiling !== undefined && !(await priceHolds(challenge, token, deps, priceCeiling))) {
-        return { outcome: failedNoCharge() };
+    if (priceCeiling !== undefined) {
+        const price = await priceHolds(challenge, token, deps, priceCeiling);
+        if (!price.holds) {
+            return { outcome: { ...failedNoCharge(), ...(price.risenTo === null ? {} : { priceNow: price.risenTo }) } };
+        }
     }
     // Persist the claim BEFORE spending, so a crash the instant
     // after the charge can never let a later pass re-unlock. If

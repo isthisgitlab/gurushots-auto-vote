@@ -161,6 +161,46 @@ describe('ImportReportModal', () => {
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     });
 
+    test('a second OK, or Escape, after an acknowledgement that could not be saved closes the dialog for this session, whatever the storage answers', async () => {
+        answer(report(['rules[0].profile: "Gone"']));
+        jest.mocked(window.api.acknowledgeImportReport).mockResolvedValue({ success: false, error: 'x' });
+        render(<ImportReportModal />);
+        await screen.findByRole('dialog');
+
+        fireEvent.click(screen.getByRole('button', { name: 'common.ok' }));
+        await screen.findByRole('alert');
+        expect(screen.getByRole('dialog')).toBeTruthy();
+
+        fireEvent.keyDown(document, { key: 'Escape' });
+
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(window.api.acknowledgeImportReport).toHaveBeenCalledTimes(2);
+        // A later settings change does not bring it back; the report is still unacknowledged for the next start.
+        act(() => fireSettingsChanged());
+        await waitFor(() => expect(window.api.getImportReport).toHaveBeenCalledTimes(2));
+        expect(screen.queryByRole('dialog')).toBeNull();
+
+        // The report of a later import (a Re-import) in the same session is a new one: it shows, without the failure.
+        jest.mocked(window.api.getImportReport).mockResolvedValue(
+            invalid({
+                success: true,
+                report: {
+                    at: '2026-10-16T11:30:00.000Z',
+                    refsBlocked: ['rules[1].profile: "Other"'],
+                    acknowledged: false,
+                },
+            }),
+        );
+        act(() => fireSettingsChanged());
+
+        await screen.findByRole('dialog');
+        expect(screen.queryByRole('alert')).toBeNull();
+        // And its own first OK that fails does not close it: that takes a second one.
+        fireEvent.click(screen.getByRole('button', { name: 'common.ok' }));
+        await screen.findByRole('alert');
+        expect(screen.getByRole('dialog')).toBeTruthy();
+    });
+
     test('an acknowledgement that throws is a failure too, with its message logged', async () => {
         answer(report(['rules[0].profile: "Gone"']));
         jest.mocked(window.api.acknowledgeImportReport).mockRejectedValue(new Error('bridge down'));

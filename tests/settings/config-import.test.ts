@@ -1082,6 +1082,20 @@ describe('the import of a settings.json (real fs)', () => {
             expect(settings.loadSettings().app.theme).toBe('light');
         });
 
+        test('retryImportDetailed says nothing was imported when a configuration is stored already, and plain success when it imported', () => {
+            fs.writeFileSync(configFile, JSON.stringify({ app: { theme: 'light' } }));
+            loadFresh();
+
+            expect(settings.retryImportDetailed()).toEqual({ ok: true, adopted: true });
+            expect(settings.loadSettings().app.theme).toBe('light');
+
+            fs.rmSync(configFile);
+            fs.writeFileSync(legacyFile, JSON.stringify(ONE_X));
+            loadFresh();
+
+            expect(settings.retryImportDetailed()).toEqual({ ok: true });
+        });
+
         test('retryImport with no settings.json says it did not work', () => {
             loadFresh();
 

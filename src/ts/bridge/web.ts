@@ -40,6 +40,9 @@ const TOKEN_HEADER = 'x-web-shell-token';
 
 const TOKEN_STORAGE_KEY = 'web-shell-token';
 
+// What the server answers a request without this run's token (web/server.ts).
+const TOKEN_REFUSED = 'web-shell-token';
+
 // The token is kept in the tab's own sessionStorage: it survives a reload of the tab, is not shared with other tabs and
 // is gone when the tab closes. A browser that refuses the access (blocked site data) leaves it in memory only.
 const keptToken = (): string => {
@@ -54,6 +57,15 @@ const keepToken = (token: string) => {
         globalThis.sessionStorage?.setItem(TOKEN_STORAGE_KEY, token);
     } catch {
         // memory only
+    }
+};
+// Drops what the tab kept: a token the server refused is of no use to a reload. A logout keeps it: the tab stays
+// open on the same run, and a reload after the next login needs it.
+const forgetToken = () => {
+    try {
+        globalThis.sessionStorage?.removeItem(TOKEN_STORAGE_KEY);
+    } catch {
+        // nothing kept to drop
     }
 };
 
@@ -78,7 +90,10 @@ const post = async (url: string, args: unknown[]) => {
         body: JSON.stringify({ args, undefinedAt }),
     });
     const body = (await response.json()) as { result?: unknown; error?: string };
-    if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
+    if (!response.ok) {
+        if (body.error === TOKEN_REFUSED) forgetToken();
+        throw new Error(body.error || `Request failed (${response.status})`);
+    }
     return body.result;
 };
 

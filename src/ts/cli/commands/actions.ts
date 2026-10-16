@@ -93,7 +93,11 @@ const boostChallenge = async (challengeId: string, { imageId = null }: { imageId
         if (response) {
             logger.withCategory('boost').success(`Boost applied to "${challenge.title}"`);
         } else {
-            logger.withCategory('boost').error(`Failed to apply boost to "${challenge.title}" (see log for reason)`);
+            logger
+                .withCategory('boost')
+                .error(
+                    `Failed to apply boost to "${challenge.title}" (see log for reason). To boost one photo yourself, pass --image=<id>`,
+                );
         }
     } catch (err) {
         logger.withCategory('boost').error(`Failed to apply boost: ${errorMessage(err) || err}`);

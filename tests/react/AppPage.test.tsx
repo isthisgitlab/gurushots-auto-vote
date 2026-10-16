@@ -140,6 +140,14 @@ describe('App page', () => {
         return utils;
     };
 
+    test('the navbar sits in the banner and the main landmark holds the page content, not the navbar', async () => {
+        await renderReady();
+        const banner = screen.getByRole('banner');
+        const main = screen.getByRole('main', { name: 'app.mainContent' });
+        expect(within(banner).getByText('app.title')).toBeTruthy();
+        expect(within(main).queryByText('app.title')).toBeNull();
+    });
+
     test('shows the loader until translations + settings are ready', async () => {
         render(<App />);
         expect(screen.getByText('common.loading')).toBeTruthy();

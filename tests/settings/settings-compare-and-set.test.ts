@@ -532,7 +532,7 @@ describe('the app window being told that a save was given up', () => {
         });
     };
 
-    test('a save that kept conflicting is reported once, and the next save that lands takes it back', async () => {
+    test('a save that kept conflicting is reported, each one given up after it again, and the next save that lands takes it back', async () => {
         const { native, compareAndWrite } = nativeWindow('{"a":1}');
         const { storage, initializeAsync, flushPendingWrites, isSaveDropped, onSaveDroppedChange } = loadStorage();
         await initializeAsync();
@@ -548,17 +548,17 @@ describe('the app window being told that a save was given up', () => {
         expect(isSaveDropped()).toBe(true);
         expect(listener).toHaveBeenCalledTimes(1);
 
-        // A second one given up while it is already reported is not a change.
+        // A second one given up while it is already reported is a notice of its own (the window shows it again).
         storage.writeRaw('{"a":1,"w":2}');
         await flushPendingWrites();
-        expect(listener).toHaveBeenCalledTimes(1);
+        expect(listener).toHaveBeenCalledTimes(2);
 
         compareAndWrite.mockImplementation(conflicting!);
         storage.writeRaw('{"a":1,"w":3}');
         await flushPendingWrites();
         expect(isSaveDropped()).toBe(false);
-        expect(listener).toHaveBeenCalledTimes(2);
-        expect(seen).toEqual([true, false]);
+        expect(listener).toHaveBeenCalledTimes(3);
+        expect(seen).toEqual([true, true, false]);
     });
 
     test('a save the plugin rejected is reported as well, as a storage failure', async () => {
@@ -611,10 +611,16 @@ describe('the app window being told that a save was given up', () => {
         expect(getSaveDroppedCause()).toBe('too-large');
     });
 
-    test('a cause that changes while a save is reported tells the listener again; the same cause does not', async () => {
+    test('every save given up tells the listener, with its own serial, whether or not its cause is the one reported', async () => {
         const { native, compareAndWrite } = nativeWindow('{"a":1}');
-        const { storage, initializeAsync, flushPendingWrites, getSaveDroppedCause, onSaveDroppedChange } =
-            loadStorage();
+        const {
+            storage,
+            initializeAsync,
+            flushPendingWrites,
+            getSaveDroppedCause,
+            getSaveDroppedSerial,
+            onSaveDroppedChange,
+        } = loadStorage();
         await initializeAsync();
         const listener = jest.fn();
         onSaveDroppedChange(listener);
@@ -630,6 +636,14 @@ describe('the app window being told that a save was given up', () => {
         await flushPendingWrites();
         expect(getSaveDroppedCause()).toBe('too-large');
         expect(listener).toHaveBeenCalledTimes(2);
+        expect(getSaveDroppedSerial()).toBe(2);
+
+        compareAndWrite.mockRejectedValueOnce(Object.assign(new Error('too large'), { code: 'too-large' }));
+        storage.writeRaw('{"a":1,"w":3}');
+        await flushPendingWrites();
+        expect(getSaveDroppedCause()).toBe('too-large');
+        expect(listener).toHaveBeenCalledTimes(3);
+        expect(getSaveDroppedSerial()).toBe(3);
     });
 
     test('a failed save is reported although a later one lands: that one carries only its own change', async () => {
@@ -727,6 +741,7 @@ describe('the app window being told that a save was given up', () => {
             code: 'settings-save-dropped',
             path: KEY,
             cause: 'conflict',
+            serial: 1,
         });
         expect(listener).toHaveBeenCalledTimes(1);
         // The setting shows its stored value again.

@@ -39,8 +39,8 @@ const REASON_OUTCOME: Record<string, Partial<Record<JoinReason, OutcomeMeta>>> =
 
 /**
  * What a join left behind for its row: the line to show (`key` null: the result carries its own error text),
- * and whether the row offers "Retry submit" — only a charged join that can still be finished by one, which
- * is not one that is waiting for a photo — and "I wasn't charged", which only an unconfirmed payment offers (an
+ * and whether the row's button resumes the submit ("Retry submit", which spends nothing) — any charged join,
+ * one that is waiting for a photo included — and "I wasn't charged", which only an unconfirmed payment offers (an
  * older version's record cannot be forgotten).
  */
 const outcomeMeta = (outcome: {
@@ -53,7 +53,7 @@ const outcomeMeta = (outcome: {
     const pending = status === 'charged-pending-submit';
     return {
         ...meta,
-        retry: pending && reason !== 'no-photo',
+        retry: pending,
         forget: pending && reason === 'unconfirmed',
     };
 };

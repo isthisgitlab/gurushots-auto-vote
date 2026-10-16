@@ -75,7 +75,7 @@ const cardElement = (challenge: Challenge, settingsVersion = 0) => (
 const renderCard = (challenge: Challenge) => render(cardElement(challenge));
 
 const pinButtons = (kind: 'Boost' | 'Turbo') =>
-    screen.queryAllByRole('button', { name: new RegExp(`app\\.pinFor${kind}`) });
+    screen.queryAllByRole('button', { name: new RegExp(`app\\.pin(?:ned)?For${kind}`) });
 
 // Moves focus with no focusout or focusin reaching any listener below the window: the move's own events are swallowed.
 const focusSilently = (element: HTMLElement) => {
@@ -242,7 +242,7 @@ describe('pinning from the card', () => {
         expect(screen.queryByText('errors.pinFailed')).toBeNull();
     });
 
-    test('the pin cap has its own text, and anything unlisted falls back to the write failure', async () => {
+    test('the pin cap has its own text, and anything unlisted gets the generic failure, not the settings-file one', async () => {
         window.api.setEntryPin = jest.fn().mockResolvedValue({ success: false, error: 'pin-cap-reached' });
         renderCard(makeChallenge());
         fireEvent.click(pinButtons('Boost')[0]);
@@ -252,7 +252,8 @@ describe('pinning from the card', () => {
 
         window.api.setEntryPin = jest.fn().mockResolvedValue({ success: false, error: 'boom' });
         fireEvent.click(pinButtons('Boost')[0]);
-        expect(await screen.findByText('errors.pinFailed')).not.toBeNull();
+        expect(await screen.findByText('errors.actionFailed')).not.toBeNull();
+        expect(screen.queryByText('errors.pinFailed')).toBeNull();
     });
 });
 

@@ -2060,6 +2060,34 @@ describe('reflectNewEntry — same-cycle slot accounting', () => {
         expect(challenge.member!.ranking!.entries![0].id).toBe('12345');
     });
 
+    test('drops the photo chooser’s cached listing of that challenge: what it accepts changed with its entries', () => {
+        const cache =
+            require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
+        const challenge: Partial<Challenge> = { id: 'c1', max_photo_submits: 4, member: { ranking: { entries: [] } } };
+        cache.writeListing('tok', 'c1', {
+            photos: [],
+            memberId: null,
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        });
+        cache.writeListing('tok', 'c2', {
+            photos: [],
+            memberId: null,
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        });
+        reflectNewEntry(challenge, 'new-1');
+        expect(cache.readFresh('tok', 'c1')).toBeNull();
+        expect(cache.readFresh('tok', 'c2')).not.toBeNull();
+        cache.clearLibraryCache();
+    });
+
     test('creates the entries array when ranking has none', () => {
         const challenge: Partial<Challenge> = { id: 'c1', max_photo_submits: 4, member: { ranking: {} } };
         reflectNewEntry(challenge, 'new-1');

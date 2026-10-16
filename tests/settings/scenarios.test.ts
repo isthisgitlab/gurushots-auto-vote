@@ -238,6 +238,41 @@ describe('settings facade — scenarios', () => {
             expect(settings.getScenario('Turbo in the top 10')).toEqual(JSON.parse(text));
             expect(settings.exportScenario('missing')).toBeNull();
         });
+
+        // printDocument prints an export without redacting it, on the ground that a scenario holds no credentials.
+        test('an exported scenario holds no key a log would redact, no sign-in and no account identifier', () => {
+            const { SENSITIVE_KEY_RE } =
+                require('../../src/ts/logger/sanitize') as typeof import('../../src/ts/logger/sanitize');
+            const { PRIVATE_SETTING_KEYS } =
+                require('../../src/ts/format/settingsLogMask') as typeof import('../../src/ts/format/settingsLogMask');
+            const keysOf = (value: unknown): string[] =>
+                value !== null && typeof value === 'object'
+                    ? Object.entries(value).flatMap(([key, inner]) => [key, ...keysOf(inner)])
+                    : [];
+            const plan = simple('Photos');
+            const withPhotos = {
+                ...plan,
+                phases: { main: { ...plan.phases.main, settings: { chosenPhotos: ['a'.repeat(32)] } } },
+            };
+            settings.saveScenario(withPhotos);
+            for (const { id } of SCENARIO_TEMPLATES) settings.saveScenario({ ...template(id), name: `Export ${id}` });
+
+            const exported = [withPhotos.name, ...SCENARIO_TEMPLATES.map(({ id }) => `Export ${id}`)].map(
+                (name) => settings.exportScenario(name)!,
+            );
+            expect(exported).toHaveLength(SCENARIO_TEMPLATES.length + 1);
+            expect(settings.getScenario('Photos')?.phases.main.settings).toEqual({ chosenPhotos: ['a'.repeat(32)] });
+            for (const text of exported) {
+                expect(text).not.toBe('null');
+                for (const key of keysOf(JSON.parse(text))) {
+                    expect(key).not.toMatch(SENSITIVE_KEY_RE);
+                    expect(key).not.toBe('apiHeaders');
+                    expect(key).not.toBe('auth');
+                    expect(PRIVATE_SETTING_KEYS.has(key)).toBe(false);
+                    expect(key).not.toBe('chosenPhotos');
+                }
+            }
+        });
     });
 });
 

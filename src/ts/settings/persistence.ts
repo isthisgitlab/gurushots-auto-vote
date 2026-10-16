@@ -11,7 +11,14 @@
 import * as logger from '../logger';
 import * as runtime from '../runtime';
 import { schemaEntry } from './schema';
-import { getSaveDroppedCause, isSaveDropped, legacyStorage, onSaveDroppedChange, storage } from './storage';
+import {
+    getSaveDroppedCause,
+    getSaveDroppedSerial,
+    isSaveDropped,
+    legacyStorage,
+    onSaveDroppedChange,
+    storage,
+} from './storage';
 import type { QueuedWriteOutcome, SaveDroppedCause } from './storage';
 import { errorMessage } from '../errorMessage';
 import { getDefaultSettings } from './defaults';
@@ -37,7 +44,6 @@ import {
     clearLegacyAsideOwed,
     clearSignOutOwed,
     configSource,
-    copiesScrubbedAtStored,
     forgetUnimportableCopy,
     keptUnimportableCopy,
     legacyAsideOwedStored,
@@ -85,8 +91,6 @@ let lastWarning: string | null = null;
  *   - settings-import-retrying (blocking): the same, but for a reason that may pass by itself (the file is held by
  *     another program, a read or a write failed once): the app tries again by itself, and nothing was overwritten.
  *     `damagedAt` (when the configuration was damaged and set aside) is where its damaged copy went.
- *   `signInKept: false` (any code that names a damaged copy): a logout has taken the sign-in out of the copies, so they no
- *   longer hold it; absent, the copies hold the sign-in they had until the next logout.
  *   `logoutLost: true` (any code): a logout was not recorded and holds only while the app stays open.
  */
 type SettingsRecovery = {
@@ -101,28 +105,24 @@ type SettingsRecovery = {
     settingsSetAside?: string;
     reimportSource?: string;
     damagedAt?: string;
-    signInKept?: false;
     logoutLost?: true;
 };
+
+/** What the import left unresolved: `refsBlocked` holds a reference as the user knows its parts, or the text an earlier build stored. */
+type ImportReport = { at: string; refsBlocked: Array<string | ImportRef>; acknowledged: boolean };
 
 /**
  * A change the app window made to the settings that could not be saved (Android: the background service kept changing
  * the settings, or the save was refused), so the setting shows its stored value again. Not a recovery of the stored
- * settings, which are in use; `path` is where they live and `cause` why the save was given up. Cleared by the next save
- * that lands.
+ * settings, which are in use; `path` is where they live, `cause` why the save was given up and `serial` which of the saves
+ * given up this was (a window shows a notice again when it changes). Cleared by the next save that lands.
  */
-/** What the import left unresolved: `refsBlocked` holds a reference as the user knows its parts, or the text an earlier build stored. */
-type ImportReport = { at: string; refsBlocked: Array<string | ImportRef>; acknowledged: boolean };
-
-type SettingsSaveDropped = { code: 'settings-save-dropped'; path: string; cause: SaveDroppedCause };
+type SettingsSaveDropped = { code: 'settings-save-dropped'; path: string; cause: SaveDroppedCause; serial: number };
 
 // Set while the stored settings cannot be used and must not be overwritten; cleared by the next load that gets through.
 let blocked: (SettingsRecovery & { blocking: true }) | null = null;
 // Where the last unparseable configuration went; kept for the rest of the process so a window opened later can still say so.
 let corruptBackupPath: string | null = null;
-// When the episode of the damaged configuration began (ms since the epoch): a logout since has taken the sign-in out of
-// its copies.
-let episodeStartedAt = 0;
 // The unparseable text already moved aside, so a store that keeps handing it back (the Android service's) is not
 // moved, and logged, again on every read.
 let lastQuarantinedRaw: string | null = null;
@@ -253,7 +253,16 @@ const _scheduleRetry = (delayMs: number) => {
     retryTimer = setTimeout(
         () => {
             retryTimer = null;
-            loadSettings();
+            // (A timer's throw would end the main process.)
+            try {
+                loadSettings();
+            } catch (error) {
+                logger
+                    .withCategory('settings')
+                    .error(
+                        `The scheduled retry of the settings import failed: ${errorMessage(error) ?? 'unknown error'}`,
+                    );
+            }
         },
         Math.max(delayMs, 0) + 50,
     );
@@ -334,7 +343,6 @@ const _recoverCorrupt = (raw: string, reason: string): ConfigV2 => {
     }
     lastQuarantinedRaw = raw;
     corruptBackupPath = moved.path;
-    episodeStartedAt = Date.now();
     restoredFromMirror = false;
     restoreRetryPending = false;
     // Where the move is only queued, it may yet fail (see _notMoved).
@@ -690,16 +698,6 @@ const _settleOwedSignOut = (record: OwedSignOut): void => {
 };
 
 /**
- * Whether a logout has taken the sign-in out of the copies kept: one is owed (it is taken out when the settings come
- * through), or the copies were cleared (by any process) since this episode began.
- */
-const _copiesLostSignIn = (): boolean => {
-    if (signOutOwedStored() !== null) return true;
-    const clearedAt = copiesScrubbedAtStored();
-    return clearedAt !== null && clearedAt >= episodeStartedAt;
-};
-
-/**
  * Whether a sign-out is owed to a restore that has not come through yet (it holds when it does).
  */
 const isSignOutOwed = (): boolean =>
@@ -715,16 +713,13 @@ const getSettingsRecovery = (): SettingsRecovery | null => {
 };
 
 const _recoveryState = (): SettingsRecovery | null => {
-    if (blocked) {
-        return blocked.damagedAt !== undefined && _copiesLostSignIn() ? { ...blocked, signInKept: false } : blocked;
-    }
+    if (blocked) return blocked;
     // A restore on its way has no verdict yet; the window is told when it has (see _awaitRestore).
     if (!corruptBackupPath || restoreInFlight) return null;
     return {
         code: restoredFromMirror ? 'settings-restored' : 'settings-corrupt',
         path: corruptBackupPath,
         blocking: false,
-        ...(_copiesLostSignIn() ? { signInKept: false as const } : {}),
         ...(!restoredFromMirror && legacySetAside !== null ? { settingsSetAside: legacySetAside } : {}),
         ...(!restoredFromMirror && !runtime.isCapacitor() ? { reimportSource: _reimportSource() } : {}),
     };
@@ -743,9 +738,19 @@ const onRecoveryChange = (listener: (() => void) | null): void => {
  */
 const getSettingsSaveDropped = (): SettingsSaveDropped | null =>
     signOutLostNotice
-        ? { code: 'settings-save-dropped', path: storage.location(), cause: 'logout-lost' }
+        ? {
+              code: 'settings-save-dropped',
+              path: storage.location(),
+              cause: 'logout-lost',
+              serial: getSaveDroppedSerial(),
+          }
         : isSaveDropped()
-          ? { code: 'settings-save-dropped', path: storage.location(), cause: getSaveDroppedCause() }
+          ? {
+                code: 'settings-save-dropped',
+                path: storage.location(),
+                cause: getSaveDroppedCause(),
+                serial: getSaveDroppedSerial(),
+            }
           : null;
 
 /**
@@ -923,6 +928,11 @@ const _saveChangeDetailed = (change: (current: ConfigV2) => Partial<ConfigV2>, w
             return { ok: false };
         }
         const next = { ...current, ...changed };
+        // The saved user name goes with the choice to stay logged in: turning that off forgets the name in the same
+        // write, whoever changes it (the form, the CLI, a script).
+        if (current.app.stayLoggedIn === true && next.app.stayLoggedIn !== true && next.auth.lastUsername !== '') {
+            next.auth = { ...next.auth, lastUsername: '' };
+        }
         // Write via storage adapter (sync fs on Electron/CLI; cache + async write-behind on Capacitor)
         const saved = _persist(next, withMirror);
         // A token that was stored and is cleared is a sign-out, which the copies kept of the settings files are cleared
@@ -1104,9 +1114,23 @@ const _recovered = (
  * Import `settings.json` again after it failed (the file was fixed, or has loaded since): the operation that failed,
  * run as the explicit import it is whatever the marker and a set-aside configuration say.
  *
- * @returns whether a configuration is stored now
+ * @returns whether a configuration is stored now, and `adopted` when one was in place already (a restore that came
+ *   through meanwhile): nothing was imported
  */
-const retryImport = (): boolean => _recovered(() => _runImport(retryLegacyImport), _finishRestore);
+const retryImportDetailed = (): { ok: boolean; adopted?: true } => {
+    let adopted = false;
+    const ok = _recovered(() => {
+        const run = _runImport(retryLegacyImport);
+        adopted = run.outcome.ok && run.outcome.kind === 'adopted';
+        return run;
+    }, _finishRestore);
+    return { ok, ...(adopted ? { adopted } : {}) };
+};
+
+/**
+ * `retryImportDetailed`, for the caller that wants to know only whether a configuration is stored now.
+ */
+const retryImport = (): boolean => retryImportDetailed().ok;
 
 /**
  * Begin with a default configuration instead of importing: `settings.json` is kept (as `settings.json.original`, or as
@@ -1281,6 +1305,7 @@ export {
     saveWindowBounds,
     getWindowBounds,
     retryImport,
+    retryImportDetailed,
     startFresh,
     startFreshDetailed,
     reimportFromV1,

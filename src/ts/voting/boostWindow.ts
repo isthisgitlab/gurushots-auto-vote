@@ -25,6 +25,17 @@ const isBoostWindowOpen = (boost: MemberBoost | null | undefined, now: number): 
 };
 
 /**
+ * Whether the boost is key-unlocked: AVAILABLE_KEY, or AVAILABLE with no positive timeout (nothing counts down).
+ */
+const isKeyUnlockedBoost = (boost: MemberBoost | null | undefined): boolean => {
+    const timeout = boost?.timeout;
+    return (
+        boost?.state === 'AVAILABLE_KEY' ||
+        (boost?.state === 'AVAILABLE' && !(typeof timeout === 'number' && timeout > 0))
+    );
+};
+
+/**
  * The instant a boost stops being usable (Unix seconds): its own timeout for a
  * timer-based boost (AVAILABLE with a positive timeout), else the challenge close.
  */
@@ -116,7 +127,7 @@ const boostApplyThreshold = (
     const b: MemberBoost = boost || {};
     const timeout = b.timeout;
     const hasTimeout = typeof timeout === 'number' && timeout > 0;
-    if (b.state === 'AVAILABLE_KEY' || (b.state === 'AVAILABLE' && !hasTimeout)) {
+    if (isKeyUnlockedBoost(b)) {
         return { thresholdSec: keyUnlockedBoostTimeSec, branch: 'key' };
     }
     if (b.state === 'AVAILABLE' && hasTimeout) {
@@ -125,4 +136,11 @@ const boostApplyThreshold = (
     return { thresholdSec: -Infinity, branch: null };
 };
 
-export { isBoostWindowOpen, boostDeadline, secondsToBoostDeadline, openBoostWindows, boostApplyThreshold };
+export {
+    isBoostWindowOpen,
+    isKeyUnlockedBoost,
+    boostDeadline,
+    secondsToBoostDeadline,
+    openBoostWindows,
+    boostApplyThreshold,
+};

@@ -243,11 +243,13 @@ const createMockStrategy = (client: MockEndpoints) => {
      * shared runSuspendBoosts over the pass's mock endpoints and the in-memory
      * entry-age ledger (mock mode must never touch the real entryAges file).
      */
-    const applyBoostsOnSuspend: typeof realModule.applyBoostsOnSuspend = async (challenges, token) =>
-        runSuspendBoosts(challenges, token, {
-            api: pickEndpoints(client, VOTING_PASS_ENDPOINTS),
-            entryAges: mockEntryAgeLedger,
-        });
+    const applyBoostsOnSuspend: typeof realModule.applyBoostsOnSuspend = async (challenges, token, now) =>
+        runSuspendBoosts(
+            challenges,
+            token,
+            { api: pickEndpoints(client, VOTING_PASS_ENDPOINTS), entryAges: mockEntryAgeLedger },
+            now,
+        );
 
     return {
         joinChallenge,

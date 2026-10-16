@@ -216,8 +216,8 @@ const votingPassApi = () => ({
  * entry-age ledger a voting pass uses (device going to sleep —
  * windows/suspendBoost.ts). Thin binder over the shared runSuspendBoosts.
  */
-const applyBoostsOnSuspend = (challenges: readonly Challenge[], token: string) =>
-    runSuspendBoosts(challenges, token, { api: votingPassApi(), entryAges: entryAgeLedger });
+const applyBoostsOnSuspend = (challenges: readonly Challenge[], token: string, now?: number) =>
+    runSuspendBoosts(challenges, token, { api: votingPassApi(), entryAges: entryAgeLedger }, now);
 
 // Whether a setting the window leaves to the background service is on (the global default; a challenge's own rule may
 // turn it on too); it is said once a process, so that a vote started in the app that does not join or fill has a

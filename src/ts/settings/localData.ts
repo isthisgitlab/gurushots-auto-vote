@@ -26,7 +26,13 @@ import {
     removePreferenceKeys,
     resumeWrites,
 } from './storage';
-import { isCliSessionActive, isDesktopAppActive } from './cliSessionLock';
+import {
+    MARKER_NAME_RE,
+    APP_LOCK_FILE_NAME,
+    isCliSessionActive,
+    isDesktopAppActive,
+    isWebServerActive,
+} from './cliSessionLock';
 import { ORIGINAL_SETTINGS_KEY } from './formatOneMirror';
 
 import type { CapacitorGlobals } from '../types/capacitor';
@@ -57,17 +63,28 @@ const LOCAL_DATA_DIRECTORIES = ['logs', 'vision'] as const;
 // The vision runtime of the CLI binary lives under this app name whatever the build (services/visionCliAssets.ts).
 const VISION_APP_NAME = 'gurushots-auto-vote';
 
-// Files that are not stores but sit beside them: the CLI session and desktop-app markers, and the lock files of the
-// join and scenario state and of the settings import; a lock file may have a ".stale-<token>" copy a takeover left (a crash mid-way).
-const LOCK_FILE_RE = /^(?:(?:statelock|joinlock)-.+\.lock(?:\.stale-.+)?|cli-session\.lock|desktop-app\.lock)$/;
+// Files that are not stores but sit beside them: the CLI session, web-server and desktop-app markers, and the lock files
+// of the join and scenario state and of the settings import; a lock file may have a ".stale-<token>" copy a takeover
+// left (a crash mid-way).
+const LOCK_FILE_RE = /^(?:statelock|joinlock)-.+\.lock(?:\.stale-.+)?$/;
+const isLockFile = (name: string) =>
+    LOCK_FILE_RE.test(name) || MARKER_NAME_RE.test(name) || name === APP_LOCK_FILE_NAME;
+
+// What the settings are read back from when config.json is missing (the mirror, the kept copy of the user's file, the
+// import marker): deleted before config.json, so a file that cannot be removed never brings the sign-in back.
+const RESTORE_SOURCES = ['settings.json', 'settings.json.original', 'v2-import.json'] as const;
+const CONFIG_FILE = 'config.json';
+
+// A Windows file that antivirus or an indexer holds for a moment is retried rather than left behind.
+const RM_OPTIONS = { recursive: true, force: true, maxRetries: 3, retryDelay: 100 } as const;
 
 /**
  * The electron session the app's windows use, for the wipe to clear its cookies, local storage and cache.
  */
 const appSession = () => (require('electron') as typeof import('electron')).session.fromPartition(APP_PARTITION);
 
-/** Why a wipe was refused: a live CLI session, the running desktop app, or a voting pass in this process. */
-type WipeBusyCode = 'busy-pass' | 'busy-cli' | 'busy-app';
+/** Why a wipe was refused: a live CLI process, the running desktop app or web server, or a voting pass in this process. */
+type WipeBusyCode = 'busy-pass' | 'busy-cli' | 'busy-app' | 'busy-web';
 
 /**
  * `error` is a WipeBusyCode when nothing was touched; otherwise what could not be deleted, with what was `removed` and,
@@ -84,7 +101,7 @@ type WipeDeps = {
     stopScheduler: () => void;
     /** Android: stops the background service and clears its native stores (resolves ok: whether it all went). */
     wipeNative: () => Promise<{ ok: boolean } | null>;
-    /** Electron: clears the windows' cookies, local storage and cache. */
+    /** Electron: clears the cookies, local storage and cache of the app's windows and of Electron's default session. */
     clearSession: () => Promise<void>;
 };
 
@@ -103,9 +120,10 @@ const nativeWipe = async (): Promise<{ ok: boolean } | null> => {
 // that began during the wait is refused too.
 const liveBusyReason = async (): Promise<WipeBusyCode | null> => {
     // Together, so two old markers cost one wait, not two.
-    const [cli, app] = await Promise.all([isCliSessionActive(), isDesktopAppActive()]);
+    const [cli, app, web] = await Promise.all([isCliSessionActive(), isDesktopAppActive(), isWebServerActive()]);
     if (cli) return 'busy-cli';
     if (app) return 'busy-app';
+    if (web) return 'busy-web';
     return isVotingPassRunning() ? 'busy-pass' : null;
 };
 
@@ -115,9 +133,12 @@ const defaultDeps = (): WipeDeps => ({
     wipeNative: nativeWipe,
     clearSession: async () => {
         if (!runtime.isElectron()) return;
-        const session = appSession();
-        await session.clearStorageData();
-        await session.clearCache();
+        // The default session writes its cookies, storage and caches at the user-data root, beside the app's files.
+        const { session } = require('electron') as typeof import('electron');
+        for (const target of [appSession(), session.defaultSession]) {
+            await target.clearStorageData();
+            await target.clearCache();
+        }
     },
 });
 
@@ -133,7 +154,7 @@ const localDataPaths = (userData: string): string[] => {
         try {
             return fs
                 .readdirSync(userData)
-                .filter((name) => LOCK_FILE_RE.test(name) || storeFiles.some((file) => name.startsWith(`${file}.`)));
+                .filter((name) => isLockFile(name) || storeFiles.some((file) => name.startsWith(`${file}.`)));
         } catch {
             return [];
         }
@@ -141,7 +162,7 @@ const localDataPaths = (userData: string): string[] => {
     const directories = LOCAL_DATA_DIRECTORIES.map((dir) =>
         dir === 'vision' ? vision(runtime.getUserDataDir(VISION_APP_NAME)) : path.join(userData, dir),
     );
-    return [
+    const all = [
         ...new Set([
             ...storeFiles.map((file) => path.join(userData, file)),
             ...beside.map((name) => path.join(userData, name)),
@@ -149,6 +170,10 @@ const localDataPaths = (userData: string): string[] => {
             vision(userData),
         ]),
     ];
+    // The sources the settings are restored from go first and config.json last.
+    const first = RESTORE_SOURCES.map((file) => path.join(userData, file));
+    const last = path.join(userData, CONFIG_FILE);
+    return [...first, ...all.filter((target) => !first.includes(target) && target !== last), last];
 };
 
 /**
@@ -194,12 +219,18 @@ const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeRes
             await removePreferenceKeys(keys);
             removed.push(...keys);
         } else {
-            for (const target of localDataPaths(getUserDataPath())) {
+            const userData = getUserDataPath();
+            const restoreSources = new Set<string>(RESTORE_SOURCES.map((file) => path.join(userData, file)));
+            let restoreSourceFailed = false;
+            for (const target of localDataPaths(userData)) {
                 if (!fs.existsSync(target)) continue;
+                // Without config.json the next load restores it, sign-in included, from a source left behind.
+                if (restoreSourceFailed && target === path.join(userData, CONFIG_FILE)) continue;
                 try {
-                    fs.rmSync(target, { recursive: true, force: true });
+                    fs.rmSync(target, RM_OPTIONS);
                     removed.push(target);
                 } catch (err) {
+                    restoreSourceFailed ||= restoreSources.has(target);
                     failures.push(`${target} (${errorMessage(err) ?? 'unknown error'})`);
                 }
             }

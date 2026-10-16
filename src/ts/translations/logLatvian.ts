@@ -83,6 +83,8 @@ export const logMessages = {
     m1d4fbe07be9f: 'API atbilde',
     m1d8536f2dbdb: 'Nav lejupielādēta atjauninājuma, ko instalēt',
     m1dc37b518aae: '{0} Nevar iesniegt jaunu foto Turbo izmantošanai ({1}); izmanto Turbo esošajam foto',
+    m1dd20ed44833:
+        '{0} Ārkārtas iesniegšanas logs — izmanto pieejamo Boost, lai gan "Automātiski izmantot Boost" ir izslēgts',
     m1e2a1cb0aa1e: '🔄 Mainīti uzstādījumi, kuriem vajadzīga pārlādēšana; pārlādē galveno logu...',
     m1f609b07986f: '\nLai mainītu režīmu, palaid: login',
     m1f91f6908c64:
@@ -105,6 +107,8 @@ export const logMessages = {
     m23b48f4fafcb: 'Kļūda, apstrādājot submit-picked-photos pieprasījumu:',
     m23f42fc399da: 'Kļūda, apstrādājot run-voting-cycle-for-challenge pieprasījumu:',
     m242ed6b08a3d: 'Lejupielādes progress: {0} %',
+    m243099e8f79d:
+        'Neizdevās izmantot Boost — katram foto ir Turbo vai tas ir piesprausts Turbo (Boost un Turbo nevar būt vienam foto). Pievieno vēl vienu foto vai noņem piespraudi',
     m2432f84c64ff: 'Manuālā iesniegšana: izaicinājumā {1} iesniegti foto: {0}',
     m2444c60b5de3: '🔄 Atsvaidzina API, jo mainīti uzstādījumi',
     m2482ae4539b8: 'Fails {0} ir importēts vēlreiz.',
@@ -116,13 +120,13 @@ export const logMessages = {
     m2594374cf0b1: '🔑 Atslēgas atbloķēšanas pieprasījums: izaicinājums={0}, apstiprināts={1}',
     m2611ef1839ec: 'Pievienošanās solī radās kļūda (balsošana turpinās): {0}',
     m2632c99956d4: 'Noraidīts nosaukuma noteikums "{0}": {1}',
-    m2772df34004c:
-        'Neizdevās izmantot Boost — katram foto ir Turbo vai tas ir piesprausts Turbo (Boost un Turbo nevar būt vienam foto). Pievieno vēl vienu foto, noņem piespraudi vai norādi --image=<id>',
     m27a6caa84238: 'Atjauninājums nav pieejams. Pašreizējā versija ir jaunākā:',
     m27b9a6b5dd90: '{0} Automātiskais Turbo izlaists — automātiski iesniegtajam foto {1} nav skaidras atbilstības',
     m2804bf44f7b0: 'Izrakstījies — pieteikšanās tokens dzēsts',
     m2826e41438c8: 'Turbo izmantots foto {0}',
     m289db73f62af: '  🧩 Uzpildes: {0}',
+    m2978b51fd54e:
+        '{0}: izaicinājums {1} izlaists — neviens no taviem izvēlētajiem foto tur nav iesniedzams (izaicinājumam nav piedāvāts, jau izmantots citā izaicinājumā vai neatbilst taviem tagu uzstādījumiem), un ir ieslēgts „Iesniegt tikai izvēlētos foto”. Izvēlies citus foto vai izslēdz šo uzstādījumu; ārkārtas iesniegšana to pirms termiņa neņem vērā, tāpēc izslēdz ārkārtas iesniegšanu šim izaicinājumam, lai vieta paliktu tukša. Daži no tiem nav tavā bibliotēkā — saraksts var saturēt cita konta foto: izņem tos (atlasītājā „Izņemt šos sarakstus” vai ar komandu clear-chosen-photos)',
     m29a4a27aabbd:
         '⏰ Tuvojas redzamības uzpilde pirms beigu loga izaicinājumā "{0}" — nākamais cikls pēc {1} s (ne vēlāk kā {2} min pirms beigu loga)',
     m29dd239731c5:
@@ -249,6 +253,8 @@ export const logMessages = {
     m59d9de540e96: 'Izaicinājumam {0} nevar pievienoties (jau pievienojies vai tas ir slēgts).',
     m5a19de5a1959: 'Atsakās saglabāt entryIds ar rezervēto atslēgu "{0}"',
     m5a28d38dcb9c: '  Noklusējums: {0}',
+    m5a6d92dd49a4:
+        'Neizdevās izmantot Boost izaicinājumā "{0}" (iemeslu skati žurnālā). Lai izmantotu Boost vienam konkrētam foto, norādi --image=<id>',
     m5a89e42191e3: 'backgroundActivity: enerģijas taupīšanas bloķētājs nav pieejams: {0}',
     m5b02d5838c5b: '{0}: iesniegšanas laikā izaicinājumā {1} radās izņēmums: {2}',
     m5b38ce53a4b3: 'Kļūda, apstrādājot get-setting pieprasījumu uzstādījumam "{0}":',
@@ -352,8 +358,6 @@ export const logMessages = {
     m8439c6f65a76: 'Uzstādīta globālā noklusējuma vērtība {0} = {1}',
     m84415f2cbc69: '💡 Saglabā ar komandu: save-profile "<name>" --challenge=<id>',
     m844dabcb9866: 'Manuālā iesniegšana: izvēlēto foto ir {0}, bet izaicinājumā {2} brīvu vietu ir tikai {1}',
-    m853ff535f641:
-        '{0} Ārkārtas iesniegšanas logs — izmanto pieejamo Boost, lai gan "Automātiski izmantot Boost" ir izslēgts',
     m857b188b49a2: 'Atkopšana neizdevās; iemeslu skaties žurnālā (logs --settings)',
     m85836b7eb267: 'Neizdevās atsvaidzināt Capacitor {0}:',
     m85cc53234d4e: 'Ierīce pāriet miega režīmā — mēģina izmantot Boost izaicinājumā {0} tūlīt (termiņš jau pienācis)',
@@ -401,8 +405,6 @@ export const logMessages = {
     m90de88ed5bbb: 'Kļūda, apstrādājot vote-on-challenge-manual pieprasījumu:',
     m917f85ff00e1: 'Neizdevās izspēlēt Turbo: {0}',
     m91a132669012: 'Nederīga uzstādījuma atslēga: {0}',
-    m91f0a61ee83e:
-        '{0} Ārkārtas iesniegšanas logs — izmanto izcīnīto Turbo, lai gan "Automātiski izmantot Turbo" ir izslēgts',
     m92799224f8ba: 'Saņemta aktīvo izaicinājumu atbilde',
     m92d4cac3f532: '🗳️ {0} Sāk manuālo balsošanu',
     m92d4cb1c6433: 'photoStats: neizdevās nolasīt statistikas kešatmiņu: {0}',
@@ -499,7 +501,6 @@ export const logMessages = {
     mae61bd89ab89: 'Uzstādījumu shēma:',
     maec2f5dbafde: 'Nevar nolasīt automātisko tēriņu uzskaiti: {0}',
     maec3c7d79e47: 'Kļūda, piemērojot profilu',
-    maf6fd613cb45: 'Neizdevās izmantot Boost izaicinājumā "{0}" (iemeslu skati žurnālā)',
     maf82fa7d9842: 'Filtrs: {0}',
     mb005409e56d5: '❌ Neizdevās ielādēt izaicinājumus, lai manuāli balsotu visos',
     mb029191fe533: '💡 Palaid "help-settings", lai skatītu detalizētu informāciju par katru uzstādījumu',
@@ -532,6 +533,8 @@ export const logMessages = {
     mb8a998e304ee: '📋 Atrasti aktīvi izaicinājumi: {0}',
     mb8ff0ba416b3: 'Boost jau izmantots',
     mb911fd21e323: '💡 Palaid "list-settings --challenge={0}", lai pārskatītu piemērotās individuālās vērtības',
+    mb94205dcd75c:
+        '{0} Ārkārtas iesniegšanas logs — izmanto izcīnīto Turbo, lai gan "Automātiski izmantot Turbo" ir izslēgts',
     mb958477fdd90: 'Kļūda, apstrādājot authenticate pieprasījumu:',
     mb995fe95018c: 'fillExposure: izaicinājumam {0} nav pieejams dalībnieka ID',
     mbad20ee0998c: 'Ielādē aktīvos izaicinājumus',

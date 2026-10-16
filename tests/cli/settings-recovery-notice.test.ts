@@ -7,7 +7,7 @@
 jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(),
     getSettingsRecovery: jest.fn(),
-    retryImport: jest.fn(),
+    retryImportDetailed: jest.fn(),
     startFresh: jest.fn(),
     reimportFromV1: jest.fn(),
     reimportFromV1Detailed: jest.fn(),
@@ -85,14 +85,15 @@ describe('describeSettingsRecovery', () => {
         expect(withCopy).toContain('could not be read just now');
         expect(withCopy).toContain('Nothing was overwritten');
         expect(withCopy).toContain('settings-recovery retry');
-        expect(withCopy).toContain('still holds the sign-in');
+        expect(withCopy).toContain('may still hold the sign-in');
+        expect(withCopy).toContain('delete it once you no longer need it');
         // Giving the import up is not offered while it may pass.
         expect(withCopy).not.toContain('start-fresh');
 
         const without = describeSettingsRecovery({ code: 'settings-import-retrying', path: '/u/settings.json' });
         expect(without).toContain('The settings.json at /u/settings.json could not be read just now');
         expect(without).not.toContain('config.json was damaged');
-        expect(without).not.toContain('still holds the sign-in');
+        expect(without).not.toContain('sign-in');
     });
 
     test('a settings.json that could not be imported says the file was left as it is, and the two ways forward', () => {
@@ -132,12 +133,22 @@ describe('reportSettingsRecovery', () => {
 
 describe('settingsRecoveryCmd', () => {
     test('retry runs its action and says it worked', async () => {
-        jest.mocked(settings.retryImport).mockReturnValue(true);
+        jest.mocked(settings.retryImportDetailed).mockReturnValue({ ok: true });
 
         await expect(settingsRecoveryCmd(['retry'])).resolves.toBe(0);
 
-        expect(settings.retryImport).toHaveBeenCalledTimes(1);
+        expect(settings.retryImportDetailed).toHaveBeenCalledTimes(1);
         expect(mockCategory.success).toHaveBeenCalledWith('The settings were imported from settings.json.');
+    });
+
+    test('retry that finds the settings in place already says nothing was imported, and how to load settings.json over them', async () => {
+        jest.mocked(settings.retryImportDetailed).mockReturnValue({ ok: true, adopted: true });
+
+        await expect(settingsRecoveryCmd(['retry'])).resolves.toBe(0);
+
+        expect(mockCategory.success).toHaveBeenCalledWith(
+            'Nothing was imported: the settings are already in place. To load settings.json over them, run "settings-recovery reimport".',
+        );
     });
 
     describe('start-fresh', () => {
@@ -280,7 +291,7 @@ describe('settingsRecoveryCmd', () => {
     });
 
     test('an action that did not work exits 1 and points to the log', async () => {
-        jest.mocked(settings.retryImport).mockReturnValue(false);
+        jest.mocked(settings.retryImportDetailed).mockReturnValue({ ok: false });
 
         await expect(settingsRecoveryCmd(['retry'])).resolves.toBe(1);
 
@@ -300,7 +311,7 @@ describe('settingsRecoveryCmd', () => {
         async (argv) => {
             await expect(settingsRecoveryCmd(argv)).resolves.toBe(1);
 
-            expect(settings.retryImport).not.toHaveBeenCalled();
+            expect(settings.retryImportDetailed).not.toHaveBeenCalled();
             expect(settings.startFreshDetailed).not.toHaveBeenCalled();
             expect(settings.reimportFromV1Detailed).not.toHaveBeenCalled();
         },

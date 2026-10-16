@@ -177,6 +177,8 @@ describe('CLI boost command', () => {
         await boostChallenge('111', {});
 
         expect(contains(msgsAt('error'), 'Failed to apply boost')).toBe(true);
+        // The CLI is where the flag exists.
+        expect(contains(msgsAt('error'), 'pass --image=<id>')).toBe(true);
     });
 
     test('not authenticated: does not boost, prompts to login', async () => {

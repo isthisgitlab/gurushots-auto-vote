@@ -17,6 +17,7 @@ const {
     readLatest,
     writeListing,
     dropContext,
+    dropChallenge,
     dropEpoch,
     clearLibraryCache,
     LIBRARY_FRESH_MS,
@@ -154,6 +155,20 @@ describe('drops', () => {
         expect(dropEpoch()).toBe(before + 1);
         dropContext('t', '1');
         expect(dropEpoch()).toBe(before + 2);
+    });
+
+    test('dropping a challenge by its id alone forgets it for every account, and nothing else', () => {
+        writeListing('a', '1', listingAt(T0, 'a-one'), T0);
+        writeListing('b', '1', listingAt(T0, 'b-one'), T0);
+        writeListing('a', '11', listingAt(T0, 'a-eleven'), T0);
+        writeListing('a', null, listingAt(T0, 'a-none'), T0);
+        const before = dropEpoch();
+        dropChallenge(1);
+        expect(readFresh('a', '1', T0)).toBeNull();
+        expect(readFresh('b', '1', T0)).toBeNull();
+        expect(readFresh('a', '11', T0)).not.toBeNull();
+        expect(readFresh('a', null, T0)).not.toBeNull();
+        expect(dropEpoch()).toBe(before + 1);
     });
 
     test('writes and reads leave the epoch alone', () => {

@@ -87,10 +87,21 @@ describe('EntryBadge pin toggles', () => {
 
     test('aria-pressed follows the stored pin, and the pressed button is filled rather than outlined', () => {
         renderBadge(controls({ pins: { boost: 'e1', turbo: 'other' } }));
-        expect(pinBoost()!.getAttribute('aria-pressed')).toBe('true');
-        expect(pinBoost()!.className).not.toContain('btn-outline');
+        const boost = screen.getByRole('button', { name: /app\.pinnedForBoost/ });
+        expect(boost.getAttribute('aria-pressed')).toBe('true');
+        expect(boost.className).not.toContain('btn-outline');
         expect(pinTurbo()!.getAttribute('aria-pressed')).toBe('false');
         expect(pinTurbo()!.className).toContain('btn-outline');
+    });
+
+    test('the pressed button says "Pinned for …" in text, and that visible text is its accessible name', () => {
+        renderBadge(controls({ pins: { boost: 'e1', turbo: 'other' } }));
+        const pressed = screen.getByRole('button', { name: /app\.pinnedForBoost/ });
+        expect(pressed.textContent).toContain('app.pinnedForBoost');
+        expect(pressed.hasAttribute('aria-label')).toBe(false);
+        expect(pressed.getAttribute('aria-pressed')).toBe('true');
+        expect(pinTurbo()!.textContent).toContain('app.pinForTurbo');
+        expect(pinTurbo()!.textContent).not.toContain('app.pinnedForTurbo');
     });
 
     test('pressing a toggle asks to pin (or clear) this photo for that feature', () => {

@@ -21,7 +21,9 @@ type RecoveryCode =
 // `cause` (a save the window gave up only): why the change was dropped — `conflict` (the background service wrote at
 // the same time), `too-large` (past the size the store takes) or `storage` (the store refused it). Any other value,
 // or none, is worded neutrally. `settingsSetAside` (a damaged configuration only): where the unusable settings.json
-// was kept once a save mirrored over it (a path where there are files, a storage key where there are none).
+// was kept once a save mirrored over it (a path where there are files, a storage key where there are none). `serial`
+// (a save the window gave up only): which of the saves given up this was, so that a repeat of the same cause is a
+// notice of its own.
 // `reimportSource` (the same, where there are files): the file a Re-import would read. `damagedAt` (a settings.json that
 // cannot be read just now, behind a damaged configuration): where the damaged configuration was kept.
 type Recovery = {
@@ -31,9 +33,14 @@ type Recovery = {
     settingsSetAside?: string;
     reimportSource?: string;
     damagedAt?: string;
-    signInKept?: false;
+    serial?: number;
     logoutLost?: true;
 };
+
+// What makes a notice the same notice: a dismissal holds for it and for no other (another code, another place, another
+// cause, or another save given up).
+const noticeKey = ({ code, path, cause, settingsSetAside, damagedAt, serial, logoutLost }: Recovery): string =>
+    JSON.stringify([code, path, cause, settingsSetAside, damagedAt, serial, logoutLost]);
 
 // The translation keys of each code's what happened / why / what next text.
 const RECOVERY_KEYS: Record<RecoveryCode, { what: string; why: string; next: string }> = {
@@ -138,7 +145,14 @@ const ACTIONS: Record<
     ActionId,
     {
         label: string;
-        run: () => Promise<{ success: boolean; error?: string; kept?: StartFreshKept; source?: string }>;
+        run: () => Promise<{
+            success: boolean;
+            error?: string;
+            kept?: StartFreshKept;
+            source?: string;
+            adopted?: boolean;
+            setAside?: string | null;
+        }>;
         done: string;
         failed: string;
         primary?: true;
@@ -201,8 +215,17 @@ type StartFreshKept = Extract<
     { success: true }
 >['kept'];
 
-// `kept` (Start fresh only) and `source` (Re-import: the file it read, or would have read when it failed).
-type Outcome = { action: ActionId; ok: boolean; kept?: StartFreshKept; source?: string };
+// `kept` (Start fresh only), `adopted` (Retry: the settings were in place already, so nothing was imported) and `source`
+// and `setAside` (Re-import: the file it read, or would have read when it failed, and where the settings in use went,
+// null when none were).
+type Outcome = {
+    action: ActionId;
+    ok: boolean;
+    kept?: StartFreshKept;
+    source?: string;
+    adopted?: boolean;
+    setAside?: string | null;
+};
 
 const fetchRecovery = () => ipc.getSettingsRecovery();
 
@@ -235,7 +258,7 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
         apply: applyRecovery,
         subscribe: true,
     });
-    const [dismissed, setDismissed] = useState(false);
+    const [dismissedKey, setDismissedKey] = useState<string | null>(null);
     const [busy, setBusy] = useState<ActionId | null>(null);
     const [confirming, setConfirming] = useState<ConfirmedAction | null>(null);
     const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -245,20 +268,25 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
     const heading = useRef<HTMLParagraphElement>(null);
     // A notice that went away and comes back is a new one.
     useEffect(() => {
-        if (!recovery) setDismissed(false);
+        if (!recovery) setDismissedKey(null);
     }, [recovery]);
+    const dismissed = recovery !== null && dismissedKey === noticeKey(recovery);
 
     const run = async (action: ActionId) => {
         setBusy(action);
         setOutcome(null);
         let ok = false;
         let kept: StartFreshKept | undefined;
+        let adopted: boolean | undefined;
+        let setAside: string | null | undefined;
         let source = recovery?.reimportSource;
         try {
             const result = await ACTIONS[action].run();
             ok = result?.success === true;
             if (ok) {
                 kept = result.kept;
+                adopted = result.adopted;
+                setAside = result.setAside;
                 source = result.source ?? source;
             }
             if (!ok)
@@ -266,7 +294,7 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
         } catch (error) {
             void ipc.logRendererError(`Settings recovery "${action}" threw: ${errorMessage(error) || error}`);
         }
-        setOutcome({ action, ok, kept, source });
+        setOutcome({ action, ok, kept, source, adopted, setAside });
         setConfirming(null);
         setBusy(null);
         if (ok) await refetch();
@@ -279,8 +307,12 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
         t(settingsFile ? key : (NO_FILE_TEXT.get(key) ?? /* istanbul ignore next -- see above */ key));
     // What an outcome says: Start fresh names where settings.json was kept (or that it is not yet, or there was none);
     // Re-import names the file it read.
-    const outcomeText = ({ action, ok, kept, source }: Outcome): string => {
+    const outcomeText = ({ action, ok, kept, source, adopted, setAside }: Outcome): string => {
         if (!ok) return interp(worded(ACTIONS[action].failed), { path: source });
+        if (action === 'retry' && adopted) return t('notice.recoveryRetryDoneAdopted');
+        if (action === 'reimport' && setAside === null) {
+            return interp(t('notice.recoveryReimportDoneNothingAside'), { path: source });
+        }
         if (action === 'start-fresh' && kept?.kind === 'none') {
             return t(settingsFile ? 'notice.recoveryStartFreshDoneNone' : 'notice.recoveryStartFreshDoneNoneAndroid');
         }
@@ -302,10 +334,9 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
         else void run(action);
     };
     const keys = recovery && !dismissed ? keysFor(recovery, settingsFile) : null;
-    // The damaged copy keeps the sign-in it held until a logout takes it out (and says so only until then).
+    // The damaged copy cannot be read as settings, so a logout cannot take the sign-in out of it: it may still hold it.
     const keepsSignIn =
         recovery !== null &&
-        recovery.signInKept !== false &&
         (recovery.code === 'settings-restored' ||
             recovery.code === 'settings-corrupt' ||
             (recovery.code === 'settings-import-retrying' && recovery.damagedAt !== undefined));
@@ -322,7 +353,11 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
                         <p className="break-words">
                             {interp(t(keys.why), { path: recovery.damagedAt ?? recovery.path })}
                         </p>
-                        {keepsSignIn && <p className="break-words">{t('notice.recoverySignInKept')}</p>}
+                        {keepsSignIn && (
+                            <p className="break-words">
+                                {t(settingsFile ? 'notice.recoverySignInKept' : 'notice.recoverySignInKeptAndroid')}
+                            </p>
+                        )}
                         {recovery.logoutLost && (
                             <p className="break-words font-semibold">
                                 {t('notice.recoveryLogoutLostWhat')} {t('notice.recoveryLogoutLostWhy')}{' '}
@@ -351,7 +386,7 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
                             </div>
                         )}
                     </div>
-                    <button type="button" className="btn btn-sm" onClick={() => setDismissed(true)}>
+                    <button type="button" className="btn btn-sm" onClick={() => setDismissedKey(noticeKey(recovery))}>
                         {t('errors.dismiss')}
                     </button>
                 </div>

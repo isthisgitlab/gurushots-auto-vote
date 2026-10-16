@@ -30,9 +30,10 @@ export type DownloadProgress = { percent: number; transferred: number; total: nu
  * Which step failed, for the dialog's translated message: `update` (reaching the
  * update server or downloading) offers the browser download, `install` does not, and
  * `unverified` (the Android updater refused the download because it could not be checked
- * against the release; the release page is already open) does not either.
+ * against the release; the release page is already open) does not either, nor does `page-opened`
+ * (the Android install failed for another reason and the release page is already open).
  */
-type UpdateError = { kind: 'update' | 'install' | 'unverified' };
+type UpdateError = { kind: 'update' | 'install' | 'unverified' | 'page-opened' };
 
 // The codes the Android updater rejects a download with when it cannot vouch for it.
 const UNVERIFIED_DOWNLOAD_CODES: ReadonlySet<string> = new Set([
@@ -42,6 +43,9 @@ const UNVERIFIED_DOWNLOAD_CODES: ReadonlySet<string> = new Set([
     'digest',
     'digest-missing',
 ]);
+
+// The code the Android updater answers with when its install failed and it opened the release page instead.
+const RELEASE_PAGE_OPENED_CODE = 'release-page-opened';
 
 interface UpdateStateFields {
     updateInfo: UpdateSummary | null;
@@ -140,9 +144,16 @@ const UpdateContext = createContext<UpdateContextValue | null>(null);
  */
 const failWith = (dispatch: Dispatch<UpdateAction>, kind: 'update' | 'install', reason: unknown, code?: unknown) => {
     const unverified = kind === 'update' && typeof code === 'string' && UNVERIFIED_DOWNLOAD_CODES.has(code);
+    const pageOpened = kind === 'update' && code === RELEASE_PAGE_OPENED_CODE;
     const step = kind === 'install' ? 'Update install' : 'Update';
-    void ipc.logRendererError(`${step} failed: ${errorMessage(reason) || reason}${unverified ? ` (${code})` : ''}`);
-    dispatch({ type: ACTIONS.SET_ERROR, payload: { kind: unverified ? 'unverified' : kind } });
+    void ipc.logRendererError(
+        `${step} failed: ${errorMessage(reason) || reason}${unverified || pageOpened ? ` (${code})` : ''}`,
+    );
+    const failedKind = (() => {
+        if (unverified) return 'unverified';
+        return pageOpened ? 'page-opened' : kind;
+    })();
+    dispatch({ type: ACTIONS.SET_ERROR, payload: { kind: failedKind } });
 };
 
 /**
@@ -197,7 +208,7 @@ export function UpdateProvider({ children }: { children?: ComponentChildren }) {
             const result = await ipc.downloadUpdate();
 
             // The Android updater's refusal answers with its code beside the error.
-            if (!result.success) failWith(dispatch, 'update', result.error, (result as { code?: unknown }).code);
+            if (!result.success) failWith(dispatch, 'update', result.error, result.code);
         } catch (err) {
             failWith(dispatch, 'update', err);
         }

@@ -112,6 +112,8 @@ function ChosenMarks({ c, name, onChoose }: { c: OpenChallenge; name: string; on
 /**
  * A row's Join button, named by its challenge (and, when paid, its cost) for assistive
  * technology; while joining the visible text says so, so no static label contradicts it.
+ * A row whose coins are already spent (`retry`) offers Retry submit instead, with no cost in its name:
+ * pressing it spends nothing.
  * A challenge that has not started cannot be joined, and neither can one that has only just started
  * and is not in the open list yet (a join would answer "no longer open"): the button is disabled and
  * its name says why.
@@ -120,6 +122,7 @@ function JoinButton({
     id,
     name,
     cost,
+    retry,
     busy,
     waiting,
     onClick,
@@ -127,21 +130,24 @@ function JoinButton({
     id: OpenChallenge['id'];
     name: string;
     cost: number;
+    retry: boolean;
     busy: JoinPhase | null;
     waiting: 'notStarted' | 'startingNow' | null;
     onClick: () => void;
 }) {
     const { t } = useTranslation();
-    const paid = cost > 0;
+    const paid = cost > 0 && !retry;
     const label = interp(
         t(
-            waiting === 'notStarted'
-                ? 'app.discoverJoinNotStartedLabel'
-                : waiting === 'startingNow'
-                  ? 'app.discoverJoinOpeningLabel'
-                  : paid
-                    ? 'app.discoverJoinPaidLabel'
-                    : 'app.discoverJoinLabel',
+            retry
+                ? 'app.discoverRetrySubmitLabel'
+                : waiting === 'notStarted'
+                  ? 'app.discoverJoinNotStartedLabel'
+                  : waiting === 'startingNow'
+                    ? 'app.discoverJoinOpeningLabel'
+                    : paid
+                      ? 'app.discoverJoinPaidLabel'
+                      : 'app.discoverJoinLabel',
         ),
         { title: name, coins: cost },
     );
@@ -155,9 +161,11 @@ function JoinButton({
         >
             {busy
                 ? t(busy === 'asking' ? 'app.discoverChecking' : 'app.discoverJoining')
-                : paid
-                  ? t('app.discoverJoinPaid')
-                  : t('app.discoverJoin')}
+                : retry
+                  ? t('app.discoverRetrySubmit')
+                  : paid
+                    ? t('app.discoverJoinPaid')
+                    : t('app.discoverJoin')}
         </button>
     );
 }
@@ -228,7 +236,7 @@ function StartLine({ c, nowSec }: { c: OpenChallenge; nowSec: number }) {
     if (c.status !== 'upcoming') return null;
     const left = secondsToStart(c, nowSec);
     return (
-        <div className="text-xs text-info mt-0.5">
+        <div className="text-xs text-base-content/70 mt-0.5">
             {left === null
                 ? t('app.discoverStartingNow')
                 : interp(t('app.discoverStartsIn'), { time: formatDuration(left) })}
@@ -246,14 +254,12 @@ function RowOutcome({
     cost,
     name,
     busy,
-    onRetry,
     onForget,
 }: {
     outcome: JoinOutcome;
     cost: number;
     name: string;
     busy: boolean;
-    onRetry: () => void;
     onForget: () => void;
 }) {
     const { t } = useTranslation();
@@ -267,16 +273,6 @@ function RowOutcome({
             {meta.key
                 ? interp(t(meta.key), { coins: outcome.cost ?? cost, have: outcome.coins })
                 : ipcErrorText(outcome.error, t) || t('app.discoverGenericError')}
-            {meta.retry && (
-                <button
-                    className="btn btn-outline btn-sm ml-2"
-                    aria-label={interp(t('app.discoverRetrySubmitLabel'), { title: name })}
-                    onClick={onRetry}
-                    disabled={busy}
-                >
-                    {t('app.discoverRetrySubmit')}
-                </button>
-            )}
             {meta.forget && (
                 <button
                     className="btn btn-ghost btn-sm ml-1"
@@ -300,7 +296,6 @@ function DiscoverRow({
     timezone,
     onChoose,
     onJoin,
-    onRetry,
     onForget,
 }: {
     c: OpenChallenge;
@@ -310,11 +305,12 @@ function DiscoverRow({
     timezone: string;
     onChoose: () => void;
     onJoin: () => void;
-    onRetry: () => void;
     onForget: () => void;
 }) {
     const { t } = useTranslation();
     const cost = costOf(c);
+    // Coins already spent: the row resumes the submit rather than joining (and paying) again.
+    const retry = outcome !== undefined && outcomeMeta(outcome).retry;
     const closeTime = endTimeOf(c.close_time);
     const name = rowName(c, t('app.discoverUntitled'));
     // Upcoming rows wait: until the start, then until the open list shows the challenge.
@@ -342,14 +338,7 @@ function DiscoverRow({
                     <div className="text-xs text-base-content/60 mt-0.5">{t('app.discoverUpcomingChosenHint')}</div>
                 )}
                 {outcome && (
-                    <RowOutcome
-                        outcome={outcome}
-                        cost={cost}
-                        name={name}
-                        busy={busy !== null}
-                        onRetry={onRetry}
-                        onForget={onForget}
-                    />
+                    <RowOutcome outcome={outcome} cost={cost} name={name} busy={busy !== null} onForget={onForget} />
                 )}
             </div>
             <div className="flex items-center gap-2">
@@ -360,7 +349,15 @@ function DiscoverRow({
                 >
                     {t('app.choosePhotos')}
                 </button>
-                <JoinButton id={c.id} name={name} cost={cost} busy={busy} waiting={waiting} onClick={onJoin} />
+                <JoinButton
+                    id={c.id}
+                    name={name}
+                    cost={cost}
+                    retry={retry}
+                    busy={busy}
+                    waiting={waiting}
+                    onClick={onJoin}
+                />
             </div>
         </li>
     );
@@ -462,12 +459,14 @@ export function DiscoverSection({
                         </button>
                     </div>
 
+                    {/* A failed read leaves the rows of the last good one (see useMemberChallenges): the error stands beside them. */}
+                    {error && <p className="text-sm text-error mb-2">{t('app.discoverUnavailableList')}</p>}
                     {loading && list.length === 0 ? (
                         <InlineLoader />
-                    ) : error ? (
-                        <p className="text-sm text-error">{t('app.discoverUnavailableList')}</p>
                     ) : list.length === 0 ? (
-                        <p className="text-sm text-base-content/60">{t('app.discoverEmpty')}</p>
+                        error ? null : (
+                            <p className="text-sm text-base-content/60">{t('app.discoverEmpty')}</p>
+                        )
                     ) : (
                         <ul className="flex flex-col gap-2">
                             {list.map((c) => (
@@ -480,7 +479,6 @@ export function DiscoverSection({
                                     timezone={timezone}
                                     onChoose={() => setChoosing(c)}
                                     onJoin={() => ask(c)}
-                                    onRetry={() => ask(c)}
                                     onForget={() => setForgetting(c)}
                                 />
                             ))}

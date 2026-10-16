@@ -5,6 +5,7 @@
 
 import { errorMessage } from '../errorMessage';
 import { isPlainObject } from '../plainObject';
+import { sanitizeLogString } from '../logger/sanitize';
 import type { ActionResult, SuccessResponse } from '../types/gurushots';
 
 /**
@@ -97,16 +98,32 @@ const getRetryAfterMs = (caught: unknown): number | null => {
     return null;
 };
 
+// The only fields of a failed response's body that reach the log: what the server said went wrong and how long to
+// wait. The rest of a body can hold account data and is not needed to read a failure.
+const LOGGED_FAILURE_FIELDS = ['error', 'message', 'retry_after'] as const;
+
+const loggedFailureBody = (data: unknown): Record<string, string | number | boolean> | null => {
+    if (!isPlainObject(data)) return null;
+    const logged: Record<string, string | number | boolean> = {};
+    for (const field of LOGGED_FAILURE_FIELDS) {
+        const value = data[field];
+        if (typeof value === 'string') logged[field] = sanitizeLogString(value);
+        else if (typeof value === 'number' || typeof value === 'boolean') logged[field] = value;
+    }
+    return logged;
+};
+
 /**
- * What the log line of a failed request says: the response status (or NO_RESPONSE), the message, the response
- * body and whether it was a client timeout.
+ * What the log line of a failed request says: the response status (or NO_RESPONSE), the message, the
+ * `error` / `message` / `retry_after` fields of the response body (never the rest of it) and whether it was a
+ * client timeout.
  */
 const describeFailure = (caught: unknown) => {
     const response = responseOf(caught);
     return {
         status: response?.status || 'NO_RESPONSE',
         error: errorMessage(caught),
-        responseData: response?.data || null,
+        responseData: loggedFailureBody(response?.data),
         timeout: codeOf(caught) === 'ECONNABORTED',
     };
 };

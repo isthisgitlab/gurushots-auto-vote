@@ -20,6 +20,20 @@ describe('htmlToText', () => {
         },
     );
 
+    test('a line break with attributes is a break too, not glued text', () => {
+        expect(htmlToText('one<br class="x">two')).toBe('one \u2014 two');
+        expect(htmlToText('one<BR clear=\'all\' data-x="a > b"/>two')).toBe('one \u2014 two');
+        expect(htmlToText('<br class="x">text<br id=y>')).toBe('text');
+        expect(htmlToText('one<brand>two')).toBe('onetwo');
+    });
+
+    test('the end of a paragraph, division or list item keeps its text apart from the next block', () => {
+        expect(htmlToText('<p>First</p><p>Second</p>')).toBe('First Second');
+        expect(htmlToText('<div>One</div><div>Two</div>')).toBe('One Two');
+        expect(htmlToText('<ul><li>a</li><LI>b</LI ></ul>')).toBe('a b');
+        expect(htmlToText('<p>kept</p>')).toBe('kept');
+    });
+
     test('the server’s own wording reads as one line', () => {
         expect(
             htmlToText("This image <b>has won a challenge</b><br/><span>it can't participate in another</span>"),
@@ -104,5 +118,6 @@ describe('htmlToText', () => {
         const long = `${'<b>x</b> &amp; '.repeat(20_000)}<br>`;
         expect(htmlToText(long)).toBe(`${'x & '.repeat(20_000).trim()}`);
         expect(htmlToText(`<a ${'"'.repeat(50_001)}`)).toBe(`<a ${'"'.repeat(50_001)}`);
+        expect(htmlToText(`<br ${'"'.repeat(50_001)}`)).toBe(`<br ${'"'.repeat(50_001)}`);
     });
 });

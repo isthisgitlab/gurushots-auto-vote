@@ -9,6 +9,8 @@
 import { SETTINGS_SCHEMA, validateSetting } from '../../src/ts/settings/schema';
 import { TITLE_RULE_INLINE_KEYS } from '../../src/ts/settings/ruleBehaviour';
 import { getDefaultSettings, schemaDefaults } from '../../src/ts/settings/defaults';
+import { appValueAllowed } from '../../src/ts/settings/loadValidation';
+import { getUiDefaultSettings } from '../../src/ts/settings/uiDefaults';
 import { makeRng } from '../settings/v2/random';
 
 import type { ConfigV2 } from '../../src/ts/types/config';
@@ -26,6 +28,18 @@ const APP_STATE_KEYS = [
 ];
 
 const SCHEMA_KEYS = Object.keys(SETTINGS_SCHEMA);
+
+// The preferences of the settings form (theme, timezone, API timeout, ...): app keys outside the schema.
+const UI_KEYS = Object.keys(getUiDefaultSettings());
+
+// Values for the app keys that are not the pools' kind of value (names of themes, languages and zones).
+const APP_EXTRA_POOL: readonly unknown[] = ['dark', 'lv', 'Europe/London', ['Europe/Riga', 'Asia/Kolkata']];
+
+// The window geometry an app saves: a position and a size for each window, none of them the default.
+const NON_DEFAULT_WINDOW_BOUNDS = {
+    login: { x: 40, y: 60, width: 640, height: 720 },
+    main: { x: 120, y: 80, width: 1024, height: 768 },
+};
 
 const POOL: readonly unknown[] = [
     true,
@@ -78,6 +92,23 @@ const valuesFor = (key: string): unknown[] => {
 
 const valueFor = (rng: Rng, key: string): unknown => structuredClone(rng.pick(valuesFor(key)));
 
+/**
+ * The values of an app key worth storing: of its default's kind, accepted by the live load (its type and its range), and
+ * not its default. Throws for a key no pool reaches, so that a new preference gets a value before it passes this test.
+ */
+const appValuesFor = (key: string): unknown[] => {
+    const fallback: unknown = getUiDefaultSettings()[key as keyof ReturnType<typeof getUiDefaultSettings>];
+    const sameKind = (value: unknown): boolean =>
+        Array.isArray(fallback)
+            ? Array.isArray(value) && value.every((item) => typeof item === 'string')
+            : typeof value === typeof fallback;
+    const accepted = [...POOL, ...APP_EXTRA_POOL].filter(
+        (value) => sameKind(value) && appValueAllowed(key, value) && JSON.stringify(value) !== JSON.stringify(fallback),
+    );
+    if (accepted.length === 0) throw new Error(`liveConfig has no value pool that the app key ${key} accepts: add one`);
+    return accepted;
+};
+
 const PER_CHALLENGE_KEYS = SCHEMA_KEYS.filter(
     (key) => SETTINGS_SCHEMA[key as keyof typeof SETTINGS_SCHEMA].perChallenge,
 );
@@ -112,12 +143,16 @@ const TITLES = ['Aurora Borealis', 'Harbor Lights', 'Wild Macro', 'Golden Hour']
 const randomLiveConfig = (seed: number): { config: ConfigV2; titlePins: Record<string, string> } => {
     const rng = makeRng(seed);
     const config = getDefaultSettings();
-    config.app.theme = rng.pick(['light', 'dark']);
-    config.app.language = rng.pick(['en', 'lv']);
-    config.app.checkFrequencyMin = rng.int(1, 30);
     config.app.mock = rng.chance(0.5);
     config.app.onboardingCompleted = rng.chance(0.5);
-    config.app.customTimezones = rng.some(['Europe/Riga', 'Asia/Kolkata', 'America/New_York'], 2);
+    // Every preference of the settings form holds a value other than its default.
+    for (const key of UI_KEYS) config.app[key] = structuredClone(rng.pick(appValuesFor(key)));
+    const { checkFrequencyMin: low, checkFrequencyMax: high } = config.app;
+    if (typeof low === 'number' && typeof high === 'number' && low > high) {
+        config.app.checkFrequencyMin = high;
+        config.app.checkFrequencyMax = low;
+    }
+    config.app.windowBounds = structuredClone(NON_DEFAULT_WINDOW_BOUNDS);
     for (const key of APP_STATE_KEYS) config.app[key] = valueFor(rng, key);
     config.auth = {
         token: `tok-${seed}`,
@@ -210,6 +245,22 @@ const configWithKey = (key: string): ConfigV2 => {
 };
 
 /**
+ * A configuration that holds one preference of the settings form (`UI_KEYS`) at a value other than its default.
+ */
+const configWithAppKey = (key: string): ConfigV2 => {
+    const config = getDefaultSettings();
+    config.app[key] = structuredClone(appValuesFor(key)[0]);
+    return config;
+};
+
+/** A configuration whose windows have been moved and resized. */
+const configWithWindowBounds = (): ConfigV2 => {
+    const config = getDefaultSettings();
+    config.app.windowBounds = structuredClone(NON_DEFAULT_WINDOW_BOUNDS);
+    return config;
+};
+
+/**
  * Every set of setting values a configuration holds (the global defaults, a profile, a scenario phase, a rule's inline
  * values, a challenge's own values), each with the path it sits at.
  */
@@ -227,4 +278,16 @@ const valueSetsOf = (config: ConfigV2): Array<[string, Values]> => {
     return sets;
 };
 
-export { APP_STATE_KEYS, SCHEMA_KEYS, configWithKey, randomLiveConfig, valueSetsOf, valuesFor, validInSet };
+export {
+    APP_STATE_KEYS,
+    SCHEMA_KEYS,
+    UI_KEYS,
+    appValuesFor,
+    configWithAppKey,
+    configWithKey,
+    configWithWindowBounds,
+    randomLiveConfig,
+    valueSetsOf,
+    valuesFor,
+    validInSet,
+};

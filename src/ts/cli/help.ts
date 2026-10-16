@@ -40,14 +40,14 @@ Commands:
              within discoverUpcomingHours (24 by default; 0 = open only). An upcoming challenge
              can't be joined until it starts, but you can choose its photos now.
   join <id> [--yes [--max-coins=<coins>]] - Join an open challenge. Free joins immediately; paid joins
-             print the coin cost and require --yes before spending coins. --yes alone pays the
-             cost at that moment; with --max-coins=<coins> it refuses (and spends nothing) if the cost
+             print the coin cost and require --yes before spending coins. --yes alone pays
+             up to the cost printed first; with --max-coins=<coins> it refuses (and spends nothing) if the cost
              is above that. An upcoming challenge answers that it has not started. Exits 1 when the
              challenge was not joined, including a paid challenge priced without --yes.
   forget-payment <id> - Forget a join payment the app could not confirm (it got no answer), after checking on the
              GuruShots website that the coins were not taken. The next join asks for the price again; if the
              coins were taken, joining again charges a second time, and auto-join may join it again within its
-             coin budget. A record from an older version cannot be forgotten: it clears by itself, at the next check after 30 days.
+             coin budget. A record from an older version cannot be forgotten: it stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days.
   list-photos [--challenge=<id>] [--search=<tag>] - List your photo ids, to choose them for auto-join / auto-submit.
              With --challenge each photo shows whether that challenge accepts it.
   list-photos --challenge=<id> --suggest - Rank your photos for that challenge by your auto-submit rules and list
@@ -91,7 +91,8 @@ Commands:
   licenses - Print the third-party license notices
   reset-data --yes - Delete everything stored on this device: settings and the saved login, every store, logs and
              the extracted vision runtime. It cannot be undone, so it does nothing without --yes. Quit the
-             desktop app and stop any CLI session first: it refuses to delete while either is running.
+             desktop app, stop the web UI and wait for (or stop) any other CLI command or session first: it refuses to
+             delete while one is running.
   reset-windows  - Reset window positions to default
   settings-recovery retry|start-fresh|reimport|report|acknowledge - When the saved settings are not in use: try importing
              settings.json again, begin with default settings (a copy of settings.json is kept as settings.json.original, or as

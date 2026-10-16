@@ -11,11 +11,9 @@ import * as apiFactory from '../../apiFactory';
 import { peekMemberId, resolveMemberId } from '../../services/autoFill';
 import { resolveJoinSetting } from '../../services/joinChallenges';
 import { getOpenChallenge } from '../../services/openChallengeCache';
+import { MAX_ANNOTATED_IDS } from '../../settings/limits';
 
 import type { Challenge, ChosenAnnotation } from '../../types/gurushots';
-
-// Most ids one request may ask about: the open list plus the upcoming rows Discover shows (at most 100).
-const MAX_ANNOTATED_IDS = 300;
 
 const idsOf = (value: unknown): string[] =>
     Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];

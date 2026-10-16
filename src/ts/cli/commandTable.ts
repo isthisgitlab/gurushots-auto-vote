@@ -374,4 +374,15 @@ const COMMANDS: Record<string, CommandHandler> = {
     '-h': exitsZero(showHelp),
 };
 
-export { COMMANDS };
+// The commands that hold no session marker, so they never make a local-data wipe wait: help and licenses, which only
+// print, and `reset-data`, which checks for running sessions itself.
+const MARKERLESS_COMMANDS = new Set(['help', '--help', '-h', 'licenses', 'reset-data']);
+
+/**
+ * Whether a command holds the CLI session marker while it runs: every command that loads the settings does, since a
+ * load can write them back (a migration, a scrub) and a command can spend, so a wipe (or `reset-data` in another
+ * terminal) refuses while it runs.
+ */
+const holdsSessionMarker = (name: string): boolean => !MARKERLESS_COMMANDS.has(name);
+
+export { COMMANDS, holdsSessionMarker };

@@ -286,6 +286,45 @@ describe('retry classification', () => {
             expect.objectContaining({ status: 'NO_RESPONSE', responseData: null, timeout: false }),
         ]);
     });
+
+    test('a failed response logs only its error, message and retry_after fields, never the rest of the body', async () => {
+        defaultSettings({ apiMaxRetries: 0 });
+        axios.mockRejectedValue(
+            httpError(400, {
+                error: 'Bad request',
+                message: 'nope\nforged line',
+                retry_after: 3,
+                ok: false,
+                email: 'me@example.com',
+                profile: { token: 'abc123', name: 'Me' },
+            }),
+        );
+
+        await makePostRequest(URL, {}, '');
+
+        const [entry] = apiLogEntries('API Error Response');
+        expect(entry).toEqual(
+            expect.objectContaining({
+                status: 400,
+                responseData: { error: 'Bad request', message: 'nope forged line', retry_after: 3 },
+            }),
+        );
+        expect(JSON.stringify(entry)).not.toMatch(/me@example\.com|abc123|profile/);
+    });
+
+    test('a failed response with a boolean field or no allowlisted field logs just those', async () => {
+        defaultSettings({ apiMaxRetries: 0 });
+        axios.mockRejectedValueOnce(httpError(400, { error: false, other: 1 }));
+        axios.mockRejectedValueOnce(httpError(502, '<html>gateway</html>'));
+
+        await makePostRequest(URL, {}, '');
+        await makePostRequest(URL, {}, '');
+
+        expect(apiLogEntries('API Error Response')).toEqual([
+            expect.objectContaining({ status: 400, responseData: { error: false } }),
+            expect.objectContaining({ status: 502, responseData: null }),
+        ]);
+    });
 });
 
 describe('account endpoints are logged without their response body', () => {

@@ -65,6 +65,9 @@ const UNIMPORTABLE_SUFFIX = '_unimportable';
 // write issued after that one that lands.
 let saveDropped = false;
 let droppedAfter = 0;
+// How many saves were given up in this process: each one is a notice of its own, so a repeat of the same cause is told
+// apart from the one a window already showed.
+let droppedSerial = 0;
 let saveDroppedListener: (() => void) | null = null;
 
 /**
@@ -75,6 +78,13 @@ type SaveDroppedCause = 'conflict' | 'too-large' | 'storage' | 'logout-lost';
 
 let droppedCause: SaveDroppedCause = 'storage';
 
+// The errno of a failed file operation (`EACCES`, `EIO`), for a log line: the error's own message names the path, which
+// holds the user's account name.
+const errnoOf = (err: unknown): string => {
+    const code = typeof err === 'object' && err !== null && 'code' in err ? err.code : undefined;
+    return typeof code === 'string' ? code : 'unknown error';
+};
+
 // The cause of a save that threw: the code the native plugin rejected with (`too-large`), or the one a save that lost
 // to the other writer on every attempt carries (`conflict`); anything else is the store's failure.
 const causeOf = (err: unknown): SaveDroppedCause => {
@@ -82,9 +92,13 @@ const causeOf = (err: unknown): SaveDroppedCause => {
     return code === 'too-large' || code === 'conflict' ? code : 'storage';
 };
 
-// A change of the reported cause while a save is already reported is a change too: the window words it by the cause.
-const setSaveDropped = (dropped: boolean, cause: SaveDroppedCause = 'storage') => {
-    if (saveDropped === dropped && (!dropped || droppedCause === cause)) return;
+// A change of the user's that is given up is a notice of its own, even when it repeats the cause of the one reported: the
+// window shows it again (`again`). A write the app issues itself (the restore of the configuration, which a read tries
+// again at once) reports a repeat once, or a store that refuses every write would make the window read, try and report in
+// a loop.
+const setSaveDropped = (dropped: boolean, cause: SaveDroppedCause = 'storage', again = false) => {
+    if (saveDropped === dropped && (!dropped || (droppedCause === cause && !again))) return;
+    if (dropped) droppedSerial++;
     saveDropped = dropped;
     droppedCause = cause;
     saveDroppedListener?.();
@@ -95,6 +109,9 @@ const isSaveDropped = (): boolean => saveDropped;
 
 /** Why the save reported by {@link isSaveDropped} was given up (`storage` while none is). */
 const getSaveDroppedCause = (): SaveDroppedCause => droppedCause;
+
+/** How many saves were given up so far: the one reported by {@link isSaveDropped} is the latest. */
+const getSaveDroppedSerial = (): number => droppedSerial;
 
 /**
  * Tells `listener` whenever {@link isSaveDropped} changes, so a window can re-read the settings (the one subscriber is
@@ -230,7 +247,10 @@ const createSettingsFile = (options: SettingsFileOptions) => {
     };
 
     // Queues the write of a change of the cache: after the writes before it, as a compare-and-write.
-    const queueCapacitorWrite = (update: (stored: string | null) => string | null): Promise<QueuedWriteOutcome> => {
+    const queueCapacitorWrite = (
+        update: (stored: string | null) => string | null,
+        userChange: boolean,
+    ): Promise<QueuedWriteOutcome> => {
         const issuedIn = writeGeneration;
         const serial = ++writeSerial;
         const ended = writeChain
@@ -250,7 +270,7 @@ const createSettingsFile = (options: SettingsFileOptions) => {
                 if (!reportsDroppedSaves) return 'failed';
                 // The window is told, so the user can make the change again.
                 droppedAfter = writeSerial;
-                setSaveDropped(true, causeOf(err));
+                setSaveDropped(true, causeOf(err), userChange);
                 return 'failed';
             });
         writeChain = ended.then(() => undefined);
@@ -327,7 +347,7 @@ const createSettingsFile = (options: SettingsFileOptions) => {
             // its hydration and previously-persisted settings would be lost on the next read of an unwritten key.
             const base = cachedJson;
             cachedJson = data;
-            return { ok: true, landed: queueCapacitorWrite((stored) => rebase(base, data, stored)) };
+            return { ok: true, landed: queueCapacitorWrite((stored) => rebase(base, data, stored), true) };
         }
         const file = filePath();
         sweepOnce(file);
@@ -396,7 +416,10 @@ const createSettingsFile = (options: SettingsFileOptions) => {
                 // The cache shows the import at once; if the service saved first, the compare-and-write finds its text
                 // and the cache takes that (`declined`). Whether it landed is for `landed` to say.
                 cachedJson = data;
-                return { outcome: 'saved', landed: queueCapacitorWrite((stored) => (stored === null ? data : null)) };
+                return {
+                    outcome: 'saved',
+                    landed: queueCapacitorWrite((stored) => (stored === null ? data : null), false),
+                };
             }
             const file = filePath();
             if (fs.existsSync(file)) return { outcome: 'exists', current: fs.readFileSync(file, 'utf8') };
@@ -572,7 +595,9 @@ const createSettingsFile = (options: SettingsFileOptions) => {
                     if (next !== null) writeAtomicOwnerOnly(copy, next);
                 } catch (err) {
                     every = false;
-                    logger.withCategory('settings').error(`${path.basename(copy)} could not be rewritten:`, err);
+                    logger
+                        .withCategory('settings')
+                        .error(`${path.basename(copy)} could not be rewritten: ${errnoOf(err)}`);
                 }
             }
             return every;
@@ -598,7 +623,7 @@ const createSettingsFile = (options: SettingsFileOptions) => {
                     if (next !== null) await preferences.set({ key, value: next });
                 } catch (err) {
                     every = false;
-                    logger.withCategory('settings').error(`Capacitor ${key} could not be rewritten:`, err);
+                    logger.withCategory('settings').error(`Capacitor ${key} could not be rewritten: ${errnoOf(err)}`);
                 }
             }
             return every;
@@ -757,6 +782,7 @@ export {
     legacyStorage,
     isSaveDropped,
     getSaveDroppedCause,
+    getSaveDroppedSerial,
     onSaveDroppedChange,
     initializeAsync,
     flushPendingWrites,

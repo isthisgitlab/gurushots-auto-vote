@@ -29,6 +29,7 @@ import { cat, inFlight, lockFor } from './shared';
 import type { Claim, JoinDeps, JoinOutcome, UnlockState } from './shared';
 import { alreadyJoined, claimsStale, failedNoCharge, unlockUnderLock } from './paidUnlock';
 import { claimOf, markJoined, markerKey, markerOwner, paidOwnerUnknown } from './unlockMarker';
+import { dropChallenge } from '../libraryCache';
 import { pickJoinPhoto } from './photoPick';
 import type { JoinPick } from './photoPick';
 
@@ -108,6 +109,8 @@ const submitJoin = async (
         // A paid submit that succeeds proves this account held the unlock: the claim it used stays, marked joined,
         // bare or not, for a process that read the open list before this join.
         if (needsCoins > 0 && claim) await markClaimJoined(deps, id, claim, owner, holdsLock);
+        // The photo chooser's listing for it was read before the challenge had this entry.
+        dropChallenge(String(id));
         cat().success(
             `joined ${logger.challengeTag(challenge)}${needsCoins > 0 ? ` (spent ${needsCoins} coins)` : ''}`,
             null,

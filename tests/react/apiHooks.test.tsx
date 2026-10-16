@@ -11,11 +11,13 @@ import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
 import { useDeadlineActions } from '@/api/useDeadlineActions';
 import { useMemberChallenges } from '@/api/useMemberChallenges';
+import { useOpenChosenAnnotations } from '@/api/useOpenChosenAnnotations';
 import { useSwapBacks } from '@/api/useSwapBacks';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 import { mockApi } from './helpers/setup';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
+import { MAX_ANNOTATED_IDS } from '../../src/ts/settings/limits';
 
 const deferred = () => {
     let resolve!: (value: unknown) => void;
@@ -467,12 +469,32 @@ describe('useDeadlineActions', () => {
 });
 
 describe('useMemberChallenges', () => {
-    test('a failed response empties items and surfaces the server error', async () => {
+    test('a failed response surfaces the server error, with no items before a good read', async () => {
         mockApi.getMemberChallenges.mockResolvedValueOnce({ success: false, error: 'rate_limited' });
         const { result } = renderHook(() => useMemberChallenges());
         await waitFor(() => expect(result.current.loading).toBe(false));
         expect(result.current.items).toEqual([]);
         expect(result.current.error!.message).toBe('rate_limited');
+    });
+
+    test('a failed re-read, answered or rejected, keeps the items of the last good read', async () => {
+        mockApi.getMemberChallenges.mockResolvedValueOnce(invalid({ success: true, items: [{ id: 1 }] }));
+        const { result } = renderHook(() => useMemberChallenges());
+        await waitFor(() => expect(result.current.items).toEqual([{ id: 1 }]));
+
+        mockApi.getMemberChallenges.mockResolvedValueOnce({ success: false, error: 'rate_limited' });
+        await act(async () => {
+            await result.current.refetch();
+        });
+        expect(result.current.items).toEqual([{ id: 1 }]);
+        expect(result.current.error!.message).toBe('rate_limited');
+
+        mockApi.getMemberChallenges.mockRejectedValueOnce(new Error('ipc'));
+        await act(async () => {
+            await result.current.refetch();
+        });
+        expect(result.current.items).toEqual([{ id: 1 }]);
+        expect(result.current.error!.message).toBe('ipc');
     });
 
     test('a missing response falls back to fetch_failed; a non-array success is empty', async () => {
@@ -493,6 +515,50 @@ describe('useMemberChallenges', () => {
             await result.current.refetch();
         });
         expect(result.current.items).toEqual([{ id: 1 }]);
+    });
+});
+
+describe('useOpenChosenAnnotations', () => {
+    const annotation = { chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 };
+    const idsOf = (count: number) => Array.from({ length: count }, (_, i) => String(i + 1));
+    const answerWith = (ids: ReadonlyArray<string | number>) => ({
+        success: true as const,
+        annotations: Object.fromEntries(ids.map((id) => [String(id), annotation])),
+    });
+
+    test('asks for exactly the cap in one request, and merges the parts of a longer list (301 ids: two requests)', async () => {
+        mockApi.getOpenChosenAnnotations.mockImplementation(async (ids) => invalid(answerWith(ids)));
+        const { result, rerender } = renderHook(({ ids }) => useOpenChosenAnnotations(ids), {
+            initialProps: { ids: idsOf(MAX_ANNOTATED_IDS) },
+        });
+        await waitFor(() => expect(Object.keys(result.current.annotations)).toHaveLength(MAX_ANNOTATED_IDS));
+        expect(mockApi.getOpenChosenAnnotations).toHaveBeenCalledTimes(1);
+
+        mockApi.getOpenChosenAnnotations.mockClear();
+        rerender({ ids: idsOf(MAX_ANNOTATED_IDS + 1) });
+        await waitFor(() => expect(Object.keys(result.current.annotations)).toHaveLength(MAX_ANNOTATED_IDS + 1));
+        expect(mockApi.getOpenChosenAnnotations.mock.calls.map(([ids]) => ids.length)).toEqual([MAX_ANNOTATED_IDS, 1]);
+    });
+
+    test('a part that fails leaves only its rows without annotations; no part answering leaves none', async () => {
+        mockApi.getOpenChosenAnnotations.mockImplementation(async (ids) =>
+            invalid(ids.length === MAX_ANNOTATED_IDS ? { success: false, error: 'busy' } : answerWith(ids)),
+        );
+        const { result, rerender } = renderHook(({ ids }) => useOpenChosenAnnotations(ids), {
+            initialProps: { ids: idsOf(MAX_ANNOTATED_IDS + 1) },
+        });
+        await waitFor(() => expect(Object.keys(result.current.annotations)).toEqual([String(MAX_ANNOTATED_IDS + 1)]));
+
+        mockApi.getOpenChosenAnnotations.mockRejectedValue(new Error('ipc'));
+        rerender({ ids: idsOf(2) });
+        await waitFor(() => expect(result.current.annotations).toEqual({}));
+    });
+
+    test('no ids asks nothing', async () => {
+        const { result } = renderHook(() => useOpenChosenAnnotations([]));
+        await act(async () => undefined);
+        expect(result.current.annotations).toEqual({});
+        expect(mockApi.getOpenChosenAnnotations).not.toHaveBeenCalled();
     });
 });
 

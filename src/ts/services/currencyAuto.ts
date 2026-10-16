@@ -405,9 +405,11 @@ const runMissionFill: (ctx: CurrencyCtx, missions: MissionNeeds | null | undefin
             () => currencyActions.fillExposure(challenge.id, token, { strategy: currency.strategy, logger }),
             'mission fill',
         );
-        // A fill that got no answer may have been made: it stays counted.
+        // A fill that got no answer may have been made: it stays counted, and its progress is not recorded as one
+        // that did not move the mission, which the next pass would read as a stalled mission.
         if (!result?.ok) {
-            if (result?.outcome !== CURRENCY_OUTCOME.unclear) await ledger.releaseFill(key);
+            if (result?.outcome === CURRENCY_OUTCOME.unclear) await ledger.restoreProgress(key);
+            else await ledger.releaseFill(key);
             return false;
         }
         mission.spentThisPass += 1;

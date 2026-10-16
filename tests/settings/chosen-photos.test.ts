@@ -73,6 +73,18 @@ describe('Chosen Photos settings', () => {
             expect(settings.setGlobalDefault('chosenPhotos', value)).toBe(false);
         });
 
+        test('a rejected list is logged as a count, never as the ids, whether it is a global default or a challenge’s own', () => {
+            const category = logger.withCategory('settings');
+            const ids = ['private_a', 'private_b', ''];
+
+            expect(settings.setGlobalDefault('chosenPhotos', ids)).toBe(false);
+            expect(settings.setChallengeOverride('chosenPhotos', '7', ids)).toBe(false);
+
+            const logged = JSON.stringify(jest.mocked(category.error).mock.calls);
+            expect(logged).toContain('3 photo(s)');
+            expect(logged).not.toContain('private_');
+        });
+
         test('the cap is small, and the member record is an internal string', () => {
             expect(
                 settings.setGlobalDefault(

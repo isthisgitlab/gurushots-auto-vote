@@ -118,6 +118,7 @@ function DetailHeader({
  */
 function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; userProgress: RankingTotal }) {
     const { t } = useTranslation();
+    const progressLabelId = useId();
     const nextLevelInfo = getNextLevelInfo(challenge);
     const { colorClass, progressClass } = getLevelStatus(
         userProgress.level as number,
@@ -127,7 +128,9 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
     return (
         <div className="bg-base-200 rounded p-2">
             <div className="flex justify-between items-center mb-1">
-                <span className="text-xs font-medium">{t('app.yourProgress')}</span>
+                <span id={progressLabelId} className="text-xs font-medium">
+                    {t('app.yourProgress')}
+                </span>
                 <span className={`badge badge-sm ${colorClass}`}>
                     {userProgress.level_name} {userProgress.level}
                 </span>
@@ -140,7 +143,20 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
                     {userProgress.votes} {t('app.votes')}
                 </span>
             </div>
-            <progress className={`progress ${progressClass} w-full`} value={userProgress.percent} max="100" />
+            <div className="flex items-center gap-2">
+                <progress
+                    className={`progress ${progressClass} w-full`}
+                    value={userProgress.percent}
+                    max="100"
+                    aria-labelledby={progressLabelId}
+                />
+                {/* The bar alone says it by colour and length; the progress element already announces the value. */}
+                {userProgress.percent !== undefined && (
+                    <span className="text-xs tabular-nums shrink-0" aria-hidden="true">
+                        {Math.round(userProgress.percent)}%
+                    </span>
+                )}
+            </div>
             {challenge.type !== 'flash' && (
                 <div className="text-xs text-base-content/60 mt-1">{userProgress.next_message}</div>
             )}
@@ -390,7 +406,7 @@ function EntryDetails({
             ))}
             {pinError && (
                 <InlineError className="mt-1" onDismiss={clearPinError}>
-                    {ipcErrorText(pinError, t, 'errors.pinFailed')}
+                    {ipcErrorText(pinError, t)}
                 </InlineError>
             )}
         </div>
@@ -504,10 +520,16 @@ export function ChallengeCardDetail({
             {/* Boost/turbo conflict — a boost (or won turbo) is available but every
                 entry has the other feature or is pinned for it, so it can't be
                 placed. The compact tile shows the same state as a one-line note. */}
-            {[boostWarning, turboWarning].map(
-                (warning) =>
+            {(
+                [
+                    ['boost', boostWarning],
+                    ['turbo', turboWarning],
+                ] as const
+            ).map(
+                ([kind, warning]) =>
                     warning && (
-                        <div key={warning} className="alert alert-warning py-2 text-xs" role="alert">
+                        // Keyed on which feature it is about, so a reworded warning is not announced as a new one.
+                        <div key={kind} className="alert alert-warning py-2 text-xs" role="alert">
                             <span>{warning}</span>
                         </div>
                     ),

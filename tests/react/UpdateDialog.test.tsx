@@ -315,6 +315,32 @@ describe('UpdateProvider + UpdateDialog', () => {
         },
     );
 
+    it('an Android install that failed after opening the release page says so, and does not offer the browser download again', async () => {
+        mockApi.downloadUpdate.mockResolvedValue({
+            success: false,
+            error: 'network down; the release page was opened instead',
+            code: 'release-page-opened',
+        });
+        renderDialog();
+        await emit('onUpdateAvailable', INFO);
+        await clickAndSettle(screen.getByText('app.download'));
+        expect(screen.getByText('app.updateReleasePageOpened')).toBeTruthy();
+        expect(screen.queryByText('app.updateFailed')).toBeNull();
+        expect(screen.queryByText('app.downloadInBrowser')).toBeNull();
+        expect(screen.getByText('app.close')).toBeTruthy();
+        expect(mockApi.logError).toHaveBeenCalledWith(
+            'Update failed: network down; the release page was opened instead (release-page-opened)',
+        );
+    });
+
+    it('takes the release-page-opened code from an update-error event as well', async () => {
+        renderDialog();
+        await emit('onUpdateAvailable', INFO);
+        await emit('onUpdateError', { message: 'x', code: 'release-page-opened' });
+        expect(screen.getByText('app.updateReleasePageOpened')).toBeTruthy();
+        expect(screen.queryByText('app.downloadInBrowser')).toBeNull();
+    });
+
     it('takes the refusal code from an update-error event as well', async () => {
         renderDialog();
         await emit('onUpdateAvailable', INFO);

@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { RuleNumberField } from './RuleFields';
 import { normalizeRuleClosesAt } from '../../../settings/challengeRules';
@@ -35,10 +35,15 @@ const MAX_CLOSE_TIMES = 24;
 // The editable end-time list of a rule, read the way the matcher reads it (normalizeRuleCloseTimes): the list
 // when it holds an entry that is not blank (a non-text entry counts, and shows as an invalid row), else
 // `closesAt`. Stored rules carry `closesAtTimes` only when they list more than one, `closesAt` mirroring the
-// first. Always at least one row so a fresh rule shows an input.
+// first. Always at least one row so a fresh rule shows an input. A list of two or more blank rows with a blank
+// `closesAt` is the editor's own (Add time on a blank row, or a cleared row): the matcher reads it as any time,
+// as it reads one blank row, so the rows stay on screen.
 const closeTimeRows = (rule: TitleRule): { rows: unknown[]; fromList: boolean } => {
     const list: unknown = rule.closesAtTimes;
-    const fromList = Array.isArray(list) && list.some((entry) => typeof entry !== 'string' || entry.trim() !== '');
+    const fromList =
+        Array.isArray(list) &&
+        (list.some((entry) => typeof entry !== 'string' || entry.trim() !== '') ||
+            (list.length > 1 && (rule.closesAt ?? '') === ''));
     return { rows: fromList ? list : [rule.closesAt ?? ''], fromList };
 };
 
@@ -86,7 +91,7 @@ function CloseTimeRow({
                     className={`input input-sm min-w-32 flex-1 ${invalid ? 'input-error' : ''}`}
                     aria-invalid={invalid ? 'true' : undefined}
                     aria-describedby={invalid ? messageId : undefined}
-                    aria-label={`${t('app.titleRuleClosesAtRow')} ${index + 1}`}
+                    aria-label={`${t('app.titleRuleClosesAtRow')} ${index + 1} ${t('app.of')} ${count}`}
                     value={value}
                     onChange={(e) => onChange(e.currentTarget.value)}
                 />
@@ -118,8 +123,19 @@ function RuleClosesAtField({ rule, onPatch }: { rule: TitleRule; onPatch: RulePa
     // The matcher trims a listed time, and reads the single one as it is.
     const times = rows.map((row) => (typeof row === 'string' ? (fromList ? row.trim() : row) : ''));
     const malformedList = hasMalformedList(rule);
+    const listRef = useRef<HTMLDivElement>(null);
+    const addRef = useRef<HTMLButtonElement>(null);
+    // Where focus goes once a removed row is gone: the row that took its place, else Add time.
+    const focusAfterRemove = useRef<number | null>(null);
+    useEffect(() => {
+        const at = focusAfterRemove.current;
+        if (at === null) return;
+        focusAfterRemove.current = null;
+        const inputs = listRef.current?.querySelectorAll<HTMLInputElement>('input[type="time"]');
+        (inputs?.[at] ?? addRef.current)?.focus();
+    });
     return (
-        <div className="flex flex-col gap-1">
+        <div ref={listRef} className="flex flex-col gap-1">
             <span className="text-sm">{t('app.titleRuleClosesAt')}</span>
             {rows.map((row, index) => (
                 // Index key: rows are only appended or removed, and the input is controlled.
@@ -130,10 +146,14 @@ function RuleClosesAtField({ rule, onPatch }: { rule: TitleRule; onPatch: RulePa
                     index={index}
                     count={rows.length}
                     onChange={(next) => onPatch(closeTimesPatch(times.map((time, i) => (i === index ? next : time))))}
-                    onRemove={() => onPatch(closeTimesPatch(times.filter((_, i) => i !== index)))}
+                    onRemove={() => {
+                        focusAfterRemove.current = index;
+                        onPatch(closeTimesPatch(times.filter((_, i) => i !== index)));
+                    }}
                 />
             ))}
             <button
+                ref={addRef}
                 type="button"
                 className="btn btn-outline btn-sm self-start"
                 disabled={rows.length >= MAX_CLOSE_TIMES}

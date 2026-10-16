@@ -160,6 +160,28 @@ describe('Login page', () => {
         expect((document.getElementById('username') as HTMLInputElement).value).toBe('');
     });
 
+    test('a rejected read of the saved username leaves the field empty and unhandled-rejection free', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { stayLoggedIn: true } }));
+        jest.mocked(window.api.getSetting).mockRejectedValue(new Error('ipc'));
+        const unhandled = jest.fn();
+        process.once('unhandledRejection', unhandled);
+        await renderReady();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        process.off('unhandledRejection', unhandled);
+        expect((document.getElementById('username') as HTMLInputElement).value).toBe('');
+        expect(unhandled).not.toHaveBeenCalled();
+    });
+
+    test('the saved username is read once, and not again after a settings change once it is there', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { stayLoggedIn: true } }));
+        jest.mocked(window.api.getSetting).mockResolvedValue('alice');
+        await renderReady();
+        await waitFor(() => expect((document.getElementById('username') as HTMLInputElement).value).toBe('alice'));
+        act(() => fireSettingsChanged({ app: { stayLoggedIn: true }, hasToken: false }));
+        await act(async () => undefined);
+        expect(jest.mocked(window.api.getSetting).mock.calls.filter(([key]) => key === 'lastUsername')).toHaveLength(1);
+    });
+
     test('failed auth shows a translated, announced error and does not transition', async () => {
         jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'Bad credentials' });
         await renderReady();
@@ -242,6 +264,31 @@ describe('Login page', () => {
             arrives(invalid(payload));
 
             expect(window.api.login).not.toHaveBeenCalled();
+        });
+
+        test('a session that was stored when the page opened is not an arrival: ticking Stay logged in does not sign in with it', async () => {
+            jest.mocked(window.api.getSettings).mockResolvedValue(
+                invalid({ app: { stayLoggedIn: false }, hasToken: true }),
+            );
+            await renderReady();
+
+            fireEvent.click(checkboxes()[0]);
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+
+            await act(async () => undefined);
+            expect(window.api.login).not.toHaveBeenCalled();
+        });
+
+        test('a session that was stored when the page opened, then cleared and stored again, is an arrival', async () => {
+            jest.mocked(window.api.getSettings).mockResolvedValue(
+                invalid({ app: { stayLoggedIn: true }, hasToken: true }),
+            );
+            await renderReady();
+
+            arrives({ app: { stayLoggedIn: true }, hasToken: false });
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+
+            await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
         });
 
         test('does not move on twice when its own login stores the token meanwhile', async () => {

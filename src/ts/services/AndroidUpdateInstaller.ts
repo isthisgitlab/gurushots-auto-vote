@@ -3,9 +3,7 @@
  * via the native `ApkInstaller` Capacitor plugin (AndroidManifest already
  * declares REQUEST_INSTALL_PACKAGES, a FileProvider, and the package-archive
  * VIEW <queries>). When the plugin is unavailable (older build, plugin not
- * registered) it falls back to handing the URL to the system browser, which
- * recognizes .apk and downloads it; tapping the completed-download
- * notification then invokes the system installer.
+ * registered) it falls back to opening the release page in the system browser.
  *
  * The native path emits `downloadProgress` listener events so a progress bar
  * can settle as the APK downloads; the browser fallback has no progress.
@@ -14,7 +12,7 @@
  * digest. When it refuses or fails for any reason (wrong host, wrong content
  * type, too large, digest mismatch or missing, network), the user is sent to
  * the release page, never to the APK URL: the browser would fetch it
- * unchecked.
+ * unchecked. The same holds with no plugin.
  */
 
 import * as runtime from '../runtime';
@@ -24,10 +22,15 @@ import { errorMessage } from '../errorMessage';
 
 import type { CapacitorGlobals } from '../types/capacitor';
 
-/** A failure always says why, so the update dialog has a message to show. `code` is the native refusal's, when it gave one. */
+/**
+ * A failure always says why, so the update dialog has a message to show. `code` is the native refusal's when it gave
+ * one; a native failure without one carries RELEASE_PAGE_OPENED: the release page was opened instead.
+ */
 type InstallResult =
     | { success: true; version?: string | null; viaFallback?: boolean }
     | { success: false; version?: string | null; error: string; code?: string };
+
+const RELEASE_PAGE_OPENED = 'release-page-opened';
 
 /** The typed code a native plugin call rejected with (`host`, `content-type`, `size`, `digest`, `digest-missing`), if any. */
 const rejectionCode = (err: unknown): string | undefined => {
@@ -40,28 +43,27 @@ const rejectionCode = (err: unknown): string | undefined => {
 // touch globalThis.Capacitor.
 const getNativeInstaller = () => (globalThis as CapacitorGlobals).Capacitor?.Plugins?.ApkInstaller || null;
 
-// Browser fallback: hand the URL to the system browser. One extra tap vs the
-// native installer but works with no native code and matches the sideload
-// distribution users are already used to.
-const openInBrowser = (downloadUrl: string, version: string | null | undefined): InstallResult => {
+// Browser fallback: hand the release page to the system browser, where the user downloads the APK. Works with no
+// native code.
+const openInBrowser = (pageUrl: string, version: string | null | undefined): InstallResult => {
     try {
         const Cap = (globalThis as CapacitorGlobals).Capacitor;
         if (Cap?.Plugins?.Browser?.open) {
-            void Cap.Plugins.Browser.open({ url: downloadUrl });
+            void Cap.Plugins.Browser.open({ url: pageUrl });
             return { success: true, version, viaFallback: true };
         }
     } catch {
         // fall through to window.open
     }
     if (typeof globalThis.open === 'function') {
-        globalThis.open(downloadUrl, '_blank');
+        globalThis.open(pageUrl, '_blank');
         return { success: true, version, viaFallback: true };
     }
     if (typeof globalThis.location !== 'undefined') {
-        globalThis.location.href = downloadUrl;
+        globalThis.location.href = pageUrl;
         return { success: true, version, viaFallback: true };
     }
-    return { success: false, error: 'No mechanism to open the download URL' };
+    return { success: false, error: 'No mechanism to open the release page' };
 };
 
 /**
@@ -109,7 +111,7 @@ const downloadAndInstall = async ({
                       success: false,
                       version,
                       error: `${errorMessage(err) || 'The APK could not be installed'}; the release page was opened instead`,
-                      code: rejectionCode(err),
+                      code: rejectionCode(err) ?? RELEASE_PAGE_OPENED,
                   }
                 : opened;
         } finally {
@@ -123,7 +125,8 @@ const downloadAndInstall = async ({
         }
     }
 
-    return openInBrowser(downloadUrl, version);
+    const asset = updateChecker.getReleaseAsset(downloadUrl);
+    return openInBrowser(asset?.releaseUrl || updateChecker.getReleasesUrl(), version);
 };
 
 export { downloadAndInstall };

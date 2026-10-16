@@ -78,6 +78,7 @@ export const getSettingsRecovery = persistence.getSettingsRecovery;
 export const isSignOutOwed = persistence.isSignOutOwed;
 // Recovery of a configuration that could not be imported or read (see persistence.ts)
 export const retryImport = persistence.retryImport;
+export const retryImportDetailed = persistence.retryImportDetailed;
 export const startFresh = persistence.startFresh;
 export const startFreshDetailed = persistence.startFreshDetailed;
 export const reimportFromV1 = persistence.reimportFromV1;

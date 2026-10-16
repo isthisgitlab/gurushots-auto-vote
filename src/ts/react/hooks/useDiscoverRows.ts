@@ -23,7 +23,8 @@ const startOf = (c: OpenChallenge): number => Number(c.start_time);
  * A row that was upcoming and whose start has passed therefore stays, as "starting now", for up to
  * UPCOMING_GRACE_SEC after the start or until the open list shows it, and the list is re-read every
  * STARTING_RECHECK_MS meanwhile. The list is also re-read when the soonest upcoming start arrives.
- * A failed read (`failed`) changes nothing: the rows that were shown are the ones to keep.
+ * A failed read (`failed`) changes nothing: `items` still holds the last good read, whose rows stay, and a
+ * started upcoming row among them keeps the re-reads going.
  *
  * @returns the rows (open ones, those starting now, the upcoming ones) and the current time in seconds
  */
@@ -43,7 +44,8 @@ export function useDiscoverRows(
     useTick(CLOCK_TICK_MS, items.some(isUpcoming) || waiting);
 
     // Each read: carry over the upcoming rows that have started and are not open yet. A failed read
-    // lists nothing, so it confirms nothing: the rows of the last good read stay as they were.
+    // confirms nothing, so every started upcoming row counts as not open yet (it is listed in `items`
+    // already, so it is not shown twice).
     useEffect(() => {
         const now = Math.floor(Date.now() / 1000);
         const present = new Set(failed ? [] : items.map((c) => String(c.id)));
@@ -79,6 +81,14 @@ export function useDiscoverRows(
         return () => clearInterval(id);
     }, [waiting, refetchRef]);
 
+    const listed = new Set(items.map((c) => String(c.id)));
     const upcoming = items.filter(isUpcoming);
-    return { rows: [...items.filter((c) => !isUpcoming(c)), ...lingering, ...upcoming], nowSec };
+    return {
+        rows: [
+            ...items.filter((c) => !isUpcoming(c)),
+            ...lingering.filter((c) => !listed.has(String(c.id))),
+            ...upcoming,
+        ],
+        nowSec,
+    };
 }

@@ -79,7 +79,7 @@ const releaseDelayMs = (releaseAt: number): number =>
  * keyUnlockedBoostTime, boostImageIndex, currency rules, …) arrive as a new
  * `settingsVersion`, which ChallengesSection bumps once per settings-changed
  * broadcast — one refetch per card per settings change, without a remount.
- * A photo pinned for the other feature blocks a spend only until Emergency Fill takes
+ * A photo pinned for the other feature blocks a spend only until Emergency Submit takes
  * over, and no fingerprint field moves then, so the fetch that reports those instants
  * (`boostReleaseAt` / `turboReleaseAt`) also arms one refetch, for the sooner of them.
  *

@@ -63,7 +63,7 @@ describe('toRendererSettings', () => {
                 profiles: { P: { exposure: 70 } },
                 rules: [{ title: 'Macro' }],
                 challenges: { '7': { values: { exposure: 60 }, pins: { boost: 'e1' } } },
-                imported: { at: 'x', sha256: '', report: { refsBlocked: [] }, acknowledged: false },
+                imported: { at: 'x', report: { refsBlocked: [] }, acknowledged: false },
             },
         );
         const { auth, ...rest } = stored;

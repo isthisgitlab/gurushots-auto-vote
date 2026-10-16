@@ -24,6 +24,7 @@ import type * as updateModule from '../../src/ts/cli/commands/update';
 import type * as logsModule from '../../src/ts/cli/commands/logs';
 import type * as settingsCommandsModule from '../../src/ts/cli/commands/settings';
 import type * as scenariosModule from '../../src/ts/cli/commands/scenarios';
+import type * as cliSessionLockModule from '../../src/ts/settings/cliSessionLock';
 import { invalid } from '../helpers/invalid';
 import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
 
@@ -43,6 +44,7 @@ type Mods = {
     logs: jest.MockedObjectDeep<typeof logsModule>;
     cmd: jest.MockedObjectDeep<typeof settingsCommandsModule>;
     scenarios: jest.MockedObjectDeep<typeof scenariosModule>;
+    sessionLock: jest.MockedObjectDeep<typeof cliSessionLockModule> & { __release: jest.Mock<void, []> };
 };
 type Loaded = Mods & { msgs: (level: string) => string[]; exitCodes: unknown[] };
 
@@ -72,6 +74,12 @@ jest.mock('../../src/ts/settings', () => ({
 }));
 
 jest.mock('../../src/ts/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
+
+// The marker a running command holds in the user-data directory: recorded, never written.
+jest.mock('../../src/ts/settings/cliSessionLock', () => {
+    const release = jest.fn<void, []>();
+    return { __release: release, holdCliSessionLock: jest.fn(() => release) };
+});
 
 // This test loads real command helpers while fs is globally mocked. Mock
 // Electron so its package entry point does not try to download a binary.
@@ -216,6 +224,7 @@ const run = async (argv: string[], setup?: (mods: Mods) => void) => {
             logs: require('../../src/ts/cli/commands/logs') as typeof logsModule,
             cmd: require('../../src/ts/cli/commands/settings') as typeof settingsCommandsModule,
             scenarios: require('../../src/ts/cli/commands/scenarios') as typeof scenariosModule,
+            sessionLock: require('../../src/ts/settings/cliSessionLock') as typeof cliSessionLockModule,
         });
         setup?.(m);
         require('../../src/ts/cli/cli');
@@ -232,7 +241,8 @@ describe('startup', () => {
         const m = await run(['status']);
         expect(m.randomizer.initializeHeaders).toHaveBeenCalled();
         expect(m.settings.seedIntentProfiles).toHaveBeenCalled();
-        expect(Object.keys(processHandlers).sort()).toEqual(['uncaughtException', 'unhandledRejection']);
+        // `exit` releases the session marker `status` holds like every command that loads the settings.
+        expect(Object.keys(processHandlers).sort()).toEqual(['exit', 'uncaughtException', 'unhandledRejection']);
         expect(m.voting.showStatus).toHaveBeenCalled();
         expect(m.exitCodes).toEqual([0]);
         expect(m.logger.cleanup).toHaveBeenCalled();
@@ -322,6 +332,107 @@ describe('startup', () => {
         processHandlers[event](...args);
         expect(m.msgs('error')).toContain(message);
         expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+});
+
+describe('the CLI session marker', () => {
+    test.each([
+        ['vote', []],
+        ['run', []],
+        ['start', []],
+        ['login', []],
+        ['logout', []],
+        ['boost', ['--challenge=1']],
+        ['turbo', ['--challenge=1']],
+        ['submit', ['--challenge=1']],
+        ['join', ['1']],
+        ['swap', ['--challenge=1']],
+        ['fill-exposure', ['--challenge=1']],
+        ['set-setting', ['exposure', '80']],
+        ['reset-all-settings', []],
+        ['discover', []],
+        ['check-updates', []],
+        // Anything that loads the settings can write them back, so the read-only commands hold it too.
+        ['status', []],
+        ['get-setting', ['exposure']],
+        ['list-settings', []],
+        ['list-profiles', []],
+        ['list-photos', []],
+        ['list-scenarios', []],
+        ['logs', []],
+        ['help-settings', []],
+    ])('%s holds it until the process exits', async (command, tail) => {
+        const m = await run([command, ...tail]);
+
+        expect(m.sessionLock.holdCliSessionLock).toHaveBeenCalledTimes(1);
+        // Released when the process exits, however it ends; never earlier.
+        expect(processHandlers.exit).toBe(m.sessionLock.__release);
+        expect(m.sessionLock.__release).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['help', []],
+        ['--help', []],
+        ['-h', []],
+        ['licenses', []],
+        ['reset-data', []],
+    ])('%s holds none: it never loads the settings, or checks for sessions itself', async (command, tail) => {
+        const m = await run([command, ...tail]);
+
+        expect(m.sessionLock.holdCliSessionLock).not.toHaveBeenCalled();
+        expect(processHandlers.exit).toBeUndefined();
+    });
+
+    test.each([[[]], [['frobnicate']], [['constructor']]])(
+        'none is held for %p (no command, or an unknown one)',
+        async (argv) => {
+            const m = await run(argv);
+
+            expect(m.sessionLock.holdCliSessionLock).not.toHaveBeenCalled();
+        },
+    );
+
+    test('is held before the settings are first written (the headers, the presets), and before the command runs', async () => {
+        const m = await run(['logout']);
+
+        expect(m.sessionLock.holdCliSessionLock.mock.invocationCallOrder[0]).toBeLessThan(
+            m.randomizer.initializeHeaders.mock.invocationCallOrder[0],
+        );
+        expect(m.sessionLock.holdCliSessionLock.mock.invocationCallOrder[0]).toBeLessThan(
+            m.settings.seedIntentProfiles.mock.invocationCallOrder[0],
+        );
+        expect(m.sessionLock.holdCliSessionLock.mock.invocationCallOrder[0]).toBeLessThan(
+            m.auth.handleLogout.mock.invocationCallOrder[0],
+        );
+    });
+
+    test('a marker that cannot be written is one warning with the cause, and the command still runs', async () => {
+        const m = await run(['logout'], (mods) =>
+            mods.sessionLock.holdCliSessionLock.mockImplementation(() => {
+                throw Object.assign(new Error("EACCES: permission denied, open '/Users/me/data/cli-session-1.lock'"), {
+                    code: 'EACCES',
+                });
+            }),
+        );
+
+        expect(m.msgs('warning')).toEqual([
+            "Could not mark this command as running (a local-data wipe will not wait for it): EACCES: permission denied, open 'cli-session-1.lock'",
+        ]);
+        expect(m.auth.handleLogout).toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual([]);
+        expect(m.exitCodes).toEqual([0]);
+        expect(processHandlers.exit).toBeUndefined();
+    });
+
+    test('a marker failure with no message is still one warning', async () => {
+        const m = await run(['logout'], (mods) =>
+            mods.sessionLock.holdCliSessionLock.mockImplementation(() => {
+                throw null;
+            }),
+        );
+
+        expect(m.msgs('warning')).toEqual([expect.stringContaining('unknown error')]);
+        expect(m.exitCodes).toEqual([0]);
     });
 });
 

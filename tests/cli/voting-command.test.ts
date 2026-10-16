@@ -41,10 +41,6 @@ jest.mock('../../src/ts/scheduling/runScheduler', () => ({ createScheduler: jest
 jest.mock('../../src/ts/dateFormat', () => ({ formatDateTime: jest.fn(() => 'NOW') }));
 jest.mock('../../src/ts/voting/boostWindow', () => ({ openBoostWindows: jest.fn(() => []) }));
 jest.mock('../../src/ts/services/auth', () => ({ clearTokenUnlessStayingLoggedIn: jest.fn() }));
-const mockReleaseSessionLock = jest.fn<void, []>();
-jest.mock('../../src/ts/settings/cliSessionLock', () => ({
-    holdCliSessionLock: jest.fn(() => mockReleaseSessionLock),
-}));
 
 jest.mock('../../src/ts/ipc/voting.handlers', () => {
     const handlers = { 'vote-on-challenge-manual': jest.fn() };
@@ -72,7 +68,6 @@ import type * as runSchedulerModule from '../../src/ts/scheduling/runScheduler';
 import type * as boostWindowModule from '../../src/ts/voting/boostWindow';
 import type * as authModule from '../../src/ts/services/auth';
 import type * as votingModule from '../../src/ts/cli/commands/voting';
-import type * as cliSessionLockModule from '../../src/ts/settings/cliSessionLock';
 import type * as votingHandlersModule from '../../src/ts/ipc/voting.handlers';
 const { __mw: mw } = jest.mocked(
     require('../../src/ts/apiFactory') as typeof apiFactoryModule & {
@@ -83,9 +78,6 @@ const { __mw: mw } = jest.mocked(
             >
         >;
     },
-);
-const { holdCliSessionLock } = jest.mocked(
-    require('../../src/ts/settings/cliSessionLock') as typeof cliSessionLockModule,
 );
 const { createScheduler } = jest.mocked(require('../../src/ts/scheduling/runScheduler') as typeof runSchedulerModule);
 const { openBoostWindows } = jest.mocked(require('../../src/ts/voting/boostWindow') as typeof boostWindowModule);
@@ -236,46 +228,6 @@ describe('startContinuousVoting', () => {
         await startContinuousVoting();
         expect(msgs('info')[0]).toBe('=== Starting Continuous Voting Mode (REAL MODE) ===');
         expect(createScheduler).not.toHaveBeenCalled();
-        expect(holdCliSessionLock).not.toHaveBeenCalled();
-    });
-
-    describe('the CLI session marker', () => {
-        test('is held once authenticated, and not released while the session runs', async () => {
-            await startContinuousVoting();
-
-            expect(holdCliSessionLock).toHaveBeenCalledTimes(1);
-            expect(holdCliSessionLock.mock.invocationCallOrder[0]).toBeLessThan(
-                createScheduler.mock.invocationCallOrder[0],
-            );
-            expect(mockReleaseSessionLock).not.toHaveBeenCalled();
-        });
-
-        test('is released on a shutdown signal, before the process exits', async () => {
-            clearTokenUnlessStayingLoggedIn.mockResolvedValue(false);
-            await startContinuousVoting();
-
-            signalHandlers.SIGTERM();
-            await new Promise((r) => setImmediate(r));
-
-            expect(mockReleaseSessionLock).toHaveBeenCalledTimes(1);
-            expect(mockReleaseSessionLock.mock.invocationCallOrder[0]).toBeLessThan(
-                exitSpy.mock.invocationCallOrder[0],
-            );
-        });
-
-        test('is released on any exit of the process', async () => {
-            await startContinuousVoting();
-
-            expect(signalHandlers.exit).toBe(mockReleaseSessionLock);
-        });
-
-        test('is released when the scheduler fails to start, and the failure still surfaces', async () => {
-            scheduler.start.mockRejectedValue(new Error('no start'));
-
-            await expect(startContinuousVoting()).rejects.toThrow('no start');
-
-            expect(mockReleaseSessionLock).toHaveBeenCalledTimes(1);
-        });
     });
 
     test('wires the scheduler, registers signal handlers and keeps the process alive', async () => {

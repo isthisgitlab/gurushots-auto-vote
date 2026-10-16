@@ -115,7 +115,7 @@ export const runTurboApply = async (ctx: ActionContext) => {
         logger
             .withCategory('turbo')
             .info(
-                `${logger.challengeTag(challenge)} Emergency Fill window — applying won turbo despite Auto-Apply Turbo being off`,
+                `${logger.challengeTag(challenge)} Emergency Submit window — applying won turbo despite Auto-Apply Turbo being off`,
                 null,
             );
     }

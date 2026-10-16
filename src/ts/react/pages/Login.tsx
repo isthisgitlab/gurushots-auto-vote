@@ -37,21 +37,35 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
     const [stayLoggedIn, setStayLoggedIn] = useState(false);
     const [mockMode, setMockMode] = useState(false);
     const [initialUsername, setInitialUsername] = useState('');
+    // Whether a session was stored as of the last settings seen (null until the first): a session that was there when
+    // the page opened is not an arrival, so ticking Stay logged in must not sign in with it.
+    const hadToken = useRef<boolean | null>(null);
 
     useEffect(() => {
         if (settings) {
             setTheme(settings.app.theme || 'light');
             setStayLoggedIn(settings.app.stayLoggedIn || false);
-
-            // Pre-fill username if stay logged in is enabled. The saved name is part of the sign-in state, which the
-            // settings the renderer is handed leave out: it is read on its own.
-            if (settings.app.stayLoggedIn) {
-                void ipc.getSetting('lastUsername').then((saved) => {
-                    if (typeof saved === 'string' && saved !== '') setInitialUsername(saved);
-                });
-            }
+            // Whether a session was already stored when the page opened: only the first settings say so (a later
+            // arrival is told by the broadcast that carries it).
+            hadToken.current ??= settings.hasToken === true;
         }
     }, [settings]);
+
+    // Pre-fill username if stay logged in is enabled, until a name is there. The saved name is part of the sign-in
+    // state, which the settings the renderer is handed leave out: it is read on its own.
+    const rememberedName = settings?.app.stayLoggedIn === true;
+    useEffect(() => {
+        if (!rememberedName || initialUsername !== '') return undefined;
+        let current = true;
+        void ipc
+            .callOrNull(() => ipc.getSetting('lastUsername'))
+            .then((saved) => {
+                if (current && typeof saved === 'string' && saved !== '') setInitialUsername(saved);
+            });
+        return () => {
+            current = false;
+        };
+    }, [rememberedName, initialUsername]);
 
     useEffect(() => {
         if (envInfo) {
@@ -116,17 +130,21 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
 
     // A session that is stored while this page shows, without a login made here (the settings a pending restore was
     // waiting for came through, or another process signed in), moves on to the app as a login does. Only for a session
-    // that is kept (Stay logged in), as at the start.
+    // that is kept (Stay logged in), as at the start, and only when it arrives: one stored at open stays out.
     useEffect(() => {
         const unsubscribe = ipc.onSettingsChanged?.((changed: unknown) => {
-            const app = isPlainObject(changed) ? changed.app : undefined;
-            if (moving.current || !isPlainObject(changed) || changed.hasToken !== true) return;
+            if (!isPlainObject(changed)) return;
+            const arrived = changed.hasToken === true && hadToken.current === false;
+            hadToken.current = changed.hasToken === true;
+            const app = changed.app;
+            if (moving.current || !arrived) return;
             if (!isPlainObject(app) || app.stayLoggedIn !== true) return;
             moving.current = true;
             // (If the shell ignores the move, as the main process does when no session is stored after all, the page is still
             // here, and a later session may move it.)
             void login().finally(() => {
                 moving.current = false;
+                hadToken.current = false;
             });
         });
         return () => unsubscribe?.();

@@ -189,6 +189,7 @@ describe('Delete all local data', () => {
         ['busy-pass', 'about.deleteBusyPass'],
         ['busy-cli', 'about.deleteBusyCli'],
         ['busy-app', 'about.deleteBusyApp'],
+        ['busy-web', 'about.deleteBusyWeb'],
     ])('a refusal with %s says what is in the way and the step that clears it', async (code, key) => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: code });
         render(<AboutDataSection />);
@@ -315,18 +316,18 @@ describe('Delete all local data', () => {
         expect(within(alert).getByText('about.deleteRestartsOnClose')).toBeTruthy();
     });
 
-    test('on Android a failure that asks for no reload, or a call that throws, uses the plain text', async () => {
+    test('on Android a failure that asks for no reload, or a call that throws, names the stored data, not other programs', async () => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: false, error: 'preferences failed' });
         jest.mocked(window.api.wipeLocalData).mockRejectedValueOnce(new Error('ipc closed'));
         (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
         render(<AboutDataSection />);
         openDelete();
         confirm();
-        expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailed');
+        expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailedAndroid');
         expect(within(dialog()).queryByText('about.deleteRestartsOnClose')).toBeNull();
 
         confirm();
-        await waitFor(() => expect(within(dialog()).getByRole('alert').textContent).toBe('about.deleteFailed'));
+        await waitFor(() => expect(within(dialog()).getByRole('alert').textContent).toBe('about.deleteFailedAndroid'));
         expect(window.api.reloadWindow).not.toHaveBeenCalled();
     });
 

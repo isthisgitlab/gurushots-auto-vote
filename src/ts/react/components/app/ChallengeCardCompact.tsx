@@ -186,11 +186,17 @@ export function ChallengeCardCompact({
 
             {/* Boost/turbo conflict is state worth seeing even in the tile —
                 a one-line note instead of the detailed card's alert box. */}
-            {[boostWarning, turboWarning].map(
-                (warning) =>
+            {/* Not clamped: the release time and the remedy come last, and a title shows only to a mouse. Keyed on
+                which feature it is about, so a reworded warning is not announced as a new one. */}
+            {(
+                [
+                    ['boost', boostWarning],
+                    ['turbo', turboWarning],
+                ] as const
+            ).map(
+                ([kind, warning]) =>
                     warning && (
-                        // line-clamp-2 cuts a long sentence off; the title carries it whole.
-                        <div key={warning} className="text-xs text-warning line-clamp-2" role="alert" title={warning}>
+                        <div key={kind} className="text-xs text-warning" role="alert">
                             ⚠ {warning}
                         </div>
                     ),

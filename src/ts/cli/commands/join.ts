@@ -13,7 +13,6 @@ import { formatDuration } from '../../format/duration';
 import { challengeKind, challengePhotoCount, listedTags } from '../../format/challengeListing';
 import { endTimeOf, formatEndTimeIn } from '../../format/endTime';
 import * as settings from '../../settings';
-import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 
 import type { NullEventHandlers } from '../../types/cli';
 import type { ForgetStatus } from '../../types/join';
@@ -76,11 +75,16 @@ const showDiscover = async () => {
         return;
     }
     const nowSec = Date.now() / 1000;
-    const timezone = settings.getSetting('timezone') || DEFAULT_TIMEZONE;
+    const timezone = settings.getSetting('timezone');
     items.forEach((c) => logger.withCategory('ui').info(discoverLine(c, nowSec, timezone)));
-    logger.withCategory('ui').info('Join with: join <id>          (free challenges)');
-    logger.withCategory('ui').info('           join <id> --yes    (paid challenges — spends coins)');
     const upcoming = items.filter((c) => c?.status === 'upcoming');
+    // Only a challenge that has started can be joined: a list of upcoming ones alone has nothing to join yet.
+    if (upcoming.length < items.length) {
+        logger.withCategory('ui').info('Join with: join <id>          (free challenges)');
+        logger
+            .withCategory('ui')
+            .info('           join <id> --yes --max-coins=<cost>    (paid challenges — spends up to that many coins)');
+    }
     if (upcoming.length > 0) {
         // An upcoming challenge cannot be joined yet, but its photos can be chosen now.
         logger
@@ -127,11 +131,18 @@ const unconfirmedText = (
     return `The payment for ${challengeId} got no answer, so it may or may not have gone through, and the join did not finish.${balanceHint(balances.before, balances.now)} ${rerun} If the GuruShots website shows the coins were not taken, run "forget-payment ${challengeId}" and join again.`;
 };
 
+/** The most a confirmed join may spend: what `--max-coins` said, or else the cost that was printed first. */
+type SpendCap = { coins: number; named: boolean };
+
+const capText = (cap: SpendCap | undefined): string =>
+    cap && !cap.named ? `the ${cap.coins} coins shown` : '--max-coins allows';
+
 // Map a join outcome status to a user-facing line; null for an unknown status.
 const joinLine = (
     result: JoinOutcome | null | undefined,
     challengeId: string | number,
     coinsNow: number | null,
+    cap?: SpendCap,
 ): { level: 'info' | 'error'; text: string } | null => {
     if (result?.error === 'invalid-args') return { level: 'error', text: INVALID_ID_TEXT };
     switch (result?.status) {
@@ -148,7 +159,7 @@ const joinLine = (
             if (result?.reason === 'no-photo') {
                 return {
                     level: 'error',
-                    text: `Coins were already spent on ${challengeId}, but no photo qualifies for this challenge. Add an eligible photo, then re-run "join ${challengeId} --yes" — you will NOT be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.`,
+                    text: `Coins were already spent on ${challengeId}, but no photo qualifies for this challenge. Add an eligible photo, then re-run "join ${challengeId}" — you will NOT be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.`,
                 };
             }
             if (result?.reason === 'unconfirmed' || result?.reason === 'earlier-payment') {
@@ -159,7 +170,7 @@ const joinLine = (
             }
             return {
                 level: 'error',
-                text: `Coins were charged for ${challengeId} but the join did not complete. Re-run "join ${challengeId} --yes" to retry the submit — you will NOT be charged again.`,
+                text: `Coins were charged for ${challengeId} but the join did not complete. Re-run "join ${challengeId}" to retry the submit — you will NOT be charged again.`,
             };
         case 'failed-no-charge':
             if (result?.reason === 'account-unknown') {
@@ -193,7 +204,7 @@ const joinLine = (
         case 'needs-confirm':
             return {
                 level: 'error',
-                text: `Challenge ${challengeId} costs ${Number(result?.cost)} coins, more than --max-coins allows. Nothing was spent — to pay this cost, re-run: join ${challengeId} --yes --max-coins=${Number(result?.cost)}`,
+                text: `Challenge ${challengeId} costs ${Number(result?.cost)} coins, more than ${capText(cap)}. Nothing was spent — to pay this cost, re-run: join ${challengeId} --yes --max-coins=${Number(result?.cost)}`,
             };
         case 'busy':
             return { level: 'info', text: `A join is already in progress for ${challengeId}. Try again in a moment.` };
@@ -220,8 +231,12 @@ const coinsNow = async (result: JoinOutcome | null | undefined): Promise<number 
 /**
  * @returns whether the challenge was joined
  */
-const reportJoin = async (result: JoinOutcome | null | undefined, challengeId: string | number): Promise<boolean> => {
-    const line = joinLine(result, challengeId, await coinsNow(result));
+const reportJoin = async (
+    result: JoinOutcome | null | undefined,
+    challengeId: string | number,
+    cap?: SpendCap,
+): Promise<boolean> => {
+    const line = joinLine(result, challengeId, await coinsNow(result), cap);
     if (line) {
         logger.withCategory('ui')[line.level](line.text);
         return result?.status === 'joined';
@@ -235,8 +250,8 @@ const reportJoin = async (result: JoinOutcome | null | undefined, challengeId: s
 /**
  * Join one challenge. Free challenges join immediately; paid challenges print
  * the cost and require `--yes` (yes=true) before any coins are spent. The re-run line
- * names that cost as `--max-coins`: with it, a challenge whose live cost has risen above it
- * is not joined. `--yes` alone accepts whatever the cost is at that moment.
+ * names that cost as `--max-coins`: a challenge whose live cost has risen above it is not joined.
+ * `--yes` alone caps the spend at the cost printed first.
  *
  * @param challengeId - from argv; a missing id exits with usage
  * @param options.maxCoins - the most the user agreed to pay (`--max-coins=<coins>`)
@@ -268,10 +283,10 @@ const joinChallengeCmd = async (
             .info(`To spend the coins and join, re-run: join ${challengeId} --yes --max-coins=${Number(first.cost)}`);
         return 1;
     }
-    const confirmed = (await (maxCoins === undefined
-        ? handlers()['join-challenge'](null, challengeId, true)
-        : handlers()['join-challenge'](null, challengeId, true, maxCoins))) as JoinOutcome;
-    return (await reportJoin(confirmed, challengeId)) ? 0 : 1;
+    // Without --max-coins the cap is the cost just printed: a price that rises in between is not spent on.
+    const cap = { coins: maxCoins ?? Number(first.cost), named: maxCoins !== undefined };
+    const confirmed = (await handlers()['join-challenge'](null, challengeId, true, cap.coins)) as JoinOutcome;
+    return (await reportJoin(confirmed, challengeId, cap)) ? 0 : 1;
 };
 
 type ForgetLine = { level: 'info' | 'error'; text: (id: string | number) => string };

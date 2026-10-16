@@ -170,7 +170,7 @@ describe('runBoost — availability and readiness', () => {
         const api = makeApi([withBoost({ state: 'AVAILABLE_KEY' })]);
         await run(api);
         expect(api.applyBoost).toHaveBeenCalledTimes(1);
-        expect(messages('info').some((m) => m.includes('Emergency Fill window'))).toBe(false);
+        expect(messages('info').some((m) => m.includes('Emergency Submit window'))).toBe(false);
         expect(messages('startOperation')).toEqual(
             expect.arrayContaining([
                 expect.stringContaining('Applying boost to challenge [Challenge 101: Orchestrated] (key-unlocked)'),
@@ -553,7 +553,7 @@ describe('runTurboApply fallbacks', () => {
         await run(api);
         expect(api.applyTurbo).toHaveBeenCalledWith(101, 'e1', 'tok');
         expect(autoFill.submitNewEntryForAction).not.toHaveBeenCalled();
-        expect(messages('info').some((m) => m.includes('Emergency Fill window'))).toBe(false);
+        expect(messages('info').some((m) => m.includes('Emergency Submit window'))).toBe(false);
         expect(autoFill.reflectEntryFlag).toHaveBeenCalledWith(expect.anything(), 'e1', 'turbo');
     });
 

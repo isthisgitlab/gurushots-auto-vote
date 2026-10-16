@@ -26,7 +26,7 @@ export const common = {
 // Error / recovery UI
 export const errors = {
     boundaryTitle: 'Kaut kas nogāja greizi',
-    logoutNotSavedStopped: 'Automātiskā balsošana ir apturēta.',
+    logoutNotSavedStopped: 'Automātiskā balsošana ir apturēta. Palaid to vēlreiz, lai turpinātu balsot.',
     logoutFailedTitle: 'Izrakstīšanās nepabeidzās',
     logoutFailedDetail:
         'Izrakstoties kaut kas nogāja greizi, tāpēc tu, iespējams, joprojām esi pieteicies. Mēģini vēlreiz; sīkāka informācija ir žurnālos.',
@@ -39,7 +39,7 @@ export const errors = {
     actionInvalidArgs:
         'Darbību neizdevās izpildīt: izaicinājuma vai foto identifikators nav derīgs. Pārlādē lietotni un mēģini vēlreiz.',
     actionFailed:
-        'Darbība netika pabeigta. GuruShots to nepieņēma vai neatbildēja. Mēģini vēlreiz pēc brīža; ja tas atkārtojas, sīkāka informācija ir žurnālos.',
+        'Darbība netika pabeigta. Lietotne vai GuruShots to nevarēja pabeigt. Mēģini vēlreiz pēc brīža; ja tas atkārtojas, sīkāka informācija ir žurnālos.',
     loginFailed:
         'Pieteikšanās neizdevās. GuruShots to nepieņēma vai nebija sasniedzams. Pārbaudi lietotājvārdu, paroli un savienojumu un mēģini vēlreiz.',
     invalidCredentials:
@@ -75,7 +75,7 @@ export const errors = {
     suggestBusy: 'Foto netika sarindoti. Cita rindošana vēl turpinās. Pagaidi, kamēr tā beidzas, un mēģini vēlreiz.',
     suggestAccountChanged: 'Foto netika sarindoti. Rindošanas laikā tu nomainīji kontu. Atver „Izvēlēties…” vēlreiz.',
     suggestChallengeEnded:
-        'Foto netika sarindoti. Izaicinājums ir beidzies vai to nevarēja nolasīt. Aizver šo logu un atver kartīti vēlreiz.',
+        'Foto netika sarindoti. Izaicinājums ir beidzies vai to nevarēja nolasīt. Aizver šo dialoglodziņu un atver kartīti vēlreiz.',
     suggestFailed: 'Foto netika sarindoti. GuruShots neatbildēja vai rindošana nepabeidzās. Mēģini vēlreiz pēc brīža.',
     fetchChallengesFailed: 'Izaicinājumus neizdevās ielādēt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
     accountChanged: 'Saraksta ielādes laikā mainījās konts, tāpēc rezultāts tika atmests. Atver sarakstu vēlreiz.',
@@ -694,7 +694,7 @@ export const app = {
     discoverJoining: 'Pievienojas…',
     discoverChecking: 'Pārbauda…',
     discoverPendingNoPhoto:
-        'Monētas jau ir iztērētas, bet šim izaicinājumam neder neviens foto. Pievieno derīgu foto un nospied „Pievienoties”. Ja izmanto „Obligātie tagi” vai ir izslēgts „Iesniegt arī bez tagu sakritības”, arī tie var neļaut izvēlēties foto.',
+        'Monētas jau ir iztērētas, bet šim izaicinājumam neder neviens foto. Pievieno derīgu foto un nospied „Mēģināt iesniegt vēlreiz”: monētas netiks ieturētas atkārtoti. Ja izmanto „Obligātie tagi” vai ir izslēgts „Iesniegt arī bez tagu sakritības”, arī tie var neļaut izvēlēties foto.',
     discoverUnconfirmed:
         'Par šī izaicinājuma maksājumu netika saņemta atbilde, tāpēc nav zināms, vai tas izdevās. Atkārtojot tiek iesniegts tikai tavs foto, tāpēc monētas netiks ieturētas divreiz. Ja GuruShots vietnē redzams, ka monētas netika ieturētas, nospied „Monētas netika ieturētas”, tad pievienojies vēlreiz.',
     discoverEarlierPayment:
@@ -721,7 +721,9 @@ export const app = {
     discoverForgetNotAuthenticated:
         'Neesi pieteicies, tāpēc nekas netika mainīts. Piesakies no jauna un mēģini vēlreiz.',
     discoverForgetUnreadable:
-        'Saglabātos maksājumu ierakstus neizdevās nolasīt, tāpēc nekas netika mainīts. Restartē lietotni un mēģini vēlreiz; ja tas atkārtojas, jāpārbauda pievienošanās stāvokļa fails — skati žurnālu.',
+        'Saglabātos maksājumu ierakstus neizdevās nolasīt, tāpēc nekas netika mainīts. Restartē lietotni un mēģini vēlreiz. Ja tas atkārtojas, pievienošanās stāvokļa fails (joinState.json lietotnes datu mapē) nav nolasāms: vispirms pārbaudi monētu vēsturi GuruShots vietnē, tad pārvieto šo failu malā un restartē lietotni.',
+    discoverForgetUnreadableAndroid:
+        'Saglabātos maksājumu ierakstus neizdevās nolasīt, tāpēc nekas netika mainīts. Restartē lietotni un mēģini vēlreiz. Ja tas atkārtojas, lietotnes saglabātais pievienošanās stāvoklis nav nolasāms: vispirms pārbaudi monētu vēsturi GuruShots vietnē, tad šajā lietotnē atver Uzstādījumi → Par lietotni un datiem un izvēlies „Dzēst visus vietējos datus…” (pēc tam tu būsi izrakstījies, un lietotnes uzstādījumi būs atiestatīti).',
     discoverForgetFailed: 'Pašlaik neizdevās aizmirst maksājumu. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
     discoverAccountUnknown:
         'Neizdevās noskaidrot, kurā kontā esi pieteicies, tāpēc šis mēģinājums neko nedarīja un monētas netērēja. Mēģini vēlreiz pēc brīža vai piesakies vēlreiz.',
@@ -768,10 +770,10 @@ export const app = {
         'Foto, ko automātiskā pievienošanās un automātiskā iesniegšana mēģina izmantot pirmos. Tiem joprojām jāatbilst taviem tagu uzstādījumiem (ja vien nav ieslēgts „Iesniegt arī bez tagu sakritības” un neviens foto tiem neatbilst), un lietotne tos kārto tāpat, kā kārto savas automātiskās izvēles (ja vien nav ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos”). Foto var būt tikai vienā izaicinājumā, tāpēc ar kopīgu sarakstu to paņem izaicinājums, kas tiek aizpildīts pirmais. Saraksts pieder kontam, kas to saglabāja, un citā kontā tiek ignorēts; ja citā kontā saglabā sarakstu, pirmajā kontā saglabātie saraksti sāk attiekties arī uz to, ja vien tos iepriekš neizņem. Scenārija saraksts tiek izmantots tikai pēc pievienošanās. Apmaiņa sarakstu neņem vērā.',
     chosenPhotosInOrder: 'Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos',
     chosenPhotosInOrderDesc:
-        'Kad ir uzstādīti izvēlētie foto, iesniedz tos tādā secībā, kādā tos izvēlējies (numuri izvēles logā), nevis kārto tā, kā lietotne kārto savas automātiskās izvēles. Foto, kas neiztur tavus obligātos tagus, jau ir iesniegts vai šim izaicinājumam nav pieejams, izlaiž un izmanto nākamo sarakstā; atlikušās vietas aizpilda pēc kārtojuma kā parasti. Pēc noklusējuma izslēgts.',
+        'Kad ir uzstādīti izvēlētie foto, iesniedz tos tādā secībā, kādā tos izvēlējies (numuri izvēles logā), nevis kārto tā, kā lietotne kārto savas automātiskās izvēles. Foto, kas neiztur tavus obligātos tagus, jau ir iesniegts vai šim izaicinājumam nav pieejams, izlaiž un izmanto nākamo sarakstā; atlikušās vietas aizpilda pēc kārtojuma kā parasti. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” un neviens no izvēlētajiem foto neatbilst taviem obligātajiem tagiem, tos tomēr var iesniegt. Pēc noklusējuma izslēgts.',
     chosenPhotosOnly: 'Iesniegt tikai izvēlētos foto',
     chosenPhotosOnlyDesc:
-        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski (ar pogu „Izvēlēties…” izaicinājuma kartītē vienreiz iesniedz tevis izvēlētos foto), ārkārtas iesniegšana šo uzstādījumu neņem vērā (ieslēdz izaicinājumam „Foto tikai manuāli”, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā (ja vien nav ieslēgts „Foto tikai manuāli”: tad sadaļā „Atrast izaicinājumus” izvēlies šī izaicinājuma foto un nospied „Pievienoties”). Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem obligātajiem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
+        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski (ar pogu „Izvēlēties…” izaicinājuma kartītē vienreiz iesniedz tevis izvēlētos foto), ārkārtas iesniegšana šo uzstādījumu neņem vērā (ieslēdz izaicinājumam „Foto tikai manuāli”, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā (ja vien nav ieslēgts „Foto tikai manuāli”: tad sadaļā „Atrast izaicinājumus” izvēlies šī izaicinājuma foto un nospied „Pievienoties” vai „Mēģināt iesniegt vēlreiz”, ja monētas jau iztērētas). Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem obligātajiem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
     chosenPhotosMemberId: 'Izvēlēto foto konts',
     chosenPhotosClearedAt: 'Izvēlēto foto notīrīšanas laiks',
     chosenPhotosClearedAtDesc:
@@ -781,6 +783,9 @@ export const app = {
     chosenPhotosCount: 'Izvēlēto foto: {count}',
     choosePhotos: 'Izvēlēties foto',
     photosClear: 'Notīrīt',
+    photosUseNone: 'Neizmantot nevienu',
+    photosUseNoneHint:
+        'Šajā izaicinājumā netiek izmantoti izvēlētie foto, pat ja globālajos noklusējumos vai kādā noteikumā ir saraksts. Atiestatīšanas poga blakus šim laukam atgriež mantoto sarakstu.',
     chosenPhotoThumbAlt: 'Izvēlētais foto {n}: {id}',
     chosenPhotosScenarioHint:
         'Scenārija izvēlētie foto tiek izmantoti tikai pēc pievienošanās izaicinājumam; pievienojoties tie netiek ņemti vērā.',
@@ -788,7 +793,7 @@ export const app = {
         'Tas attiecas uz katru izaicinājumu, ko aptver: automātiskā pievienošanās un iesniegšana izlaiž katru izaicinājumu, kuram nav derīga izvēlētā foto.',
     photoChooserTitle: 'Izvēlēties foto',
     photoChooserHelp:
-        'Lietotne šos foto izmanto pirmos, un tiem joprojām jāiztur tavi tagu filtri. Tos kārto tāpat, kā kārto savas automātiskās izvēles, vai arī izmanto tos šeit redzamo numuru secībā, ja ir ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos” (uzstādījumi „Automātiskā iesniegšana”, globāli vai katram izaicinājumam).',
+        'Lietotne šos foto izmanto pirmos, un tiem joprojām jāiztur tavi tagu filtri. Tos kārto tāpat, kā kārto savas automātiskās izvēles, vai arī izmanto tos šeit redzamo numuru secībā, ja ir ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos” (uzstādījumi „Automātiskā iesniegšana”: globālie noklusējumi, izaicinājuma noteikums vai paša izaicinājuma uzstādījumi pēc pievienošanās).',
     photoChooserSearchLabel: 'Meklēt savus foto pēc taga',
     photoChooserSearchPlaceholder: 'piem., saulriets',
     photoChooserSearch: 'Meklēt',
@@ -879,6 +884,10 @@ export const app = {
     photoChooserSaveNoContext:
         'Saglabāšana ir bloķēta: bez aktīva vai atvērta izaicinājuma lietotne nevar pārbaudīt, kuram kontam šis saraksts pieder. Notīri sarakstu, lai saglabātu, vai vispirms pievienojies izaicinājumam.',
     photoChooserSaveError: 'Izvēlētos foto neizdevās saglabāt, jo uzstādījumu nevarēja ierakstīt. Mēģini vēlreiz.',
+    photoChooserDiscardTitle: 'Atmest izmaiņas?',
+    photoChooserDiscardText:
+        'Izvēlētie foto ir mainīti, bet nav saglabāti. Ja aizvērsi tagad, šīs izmaiņas pazudīs. Izvēlies „Atcelt”, lai turpinātu izvēli, un tad spied „Izmantot šos foto”.',
+    photoChooserDiscard: 'Atmest izmaiņas',
     photoChooserUse: 'Izmantot šos foto',
     fillPick: 'Izvēlēties…',
     fillPickLabel: 'Izvēlēties, kurus foto iesniegt tagad',
@@ -889,7 +898,7 @@ export const app = {
     pickOverCap: 'Izvēlēti: {count}, brīvās vietas: {max}. Noņem dažus, lai iesniegtu.',
     pickFull: 'Visām brīvajām vietām foto izvēlēti',
     pickTileLocked: 'Aizslēgts, kamēr lietotne pārbauda, vai tas der šim izaicinājumam.',
-    pickNoSlots: 'Brīvu vietu vairs nav: katrā vietā jau ir foto. Aizver šo logu.',
+    pickNoSlots: 'Brīvu vietu vairs nav: katrā vietā jau ir foto. Aizver šo dialoglodziņu.',
     pickSubmit: 'Iesniegt',
     pickSubmitCount: 'Iesniegt {count} foto',
     pickAuto: 'Automātiski',
@@ -1379,6 +1388,8 @@ export const app = {
         'Atjauninājumu neizdevās instalēt: lejupielādēto atjauninājumu nevarēja uzstādīt. Restartē lietotni un mēģini vēlreiz.',
     updateUnverified:
         'Lejupielādi neizdevās pārbaudīt, tāpēc tā netika instalēta. Laidiena lapa ir atvērta tavā pārlūkā.',
+    updateReleasePageOpened:
+        'Atjauninājumu neizdevās instalēt lietotnē. Laidiena lapa ir atvērta tavā pārlūkā, kur vari to lejupielādēt.',
     skipVersion: 'Izlaist versiju',
     remindLater: 'Atgādināt vēlāk',
     download: 'Lejupielādēt',
@@ -1610,11 +1621,13 @@ export const notice = {
         'Tavus saglabātos uzstādījumus neizdevās importēt, tāpēc uzstādījumu saglabāšana ir izslēgta un lietotne izmanto noklusētos uzstādījumus.',
     recoveryImportWhy: 'Failu settings.json (šeit: {path}) neizdevās nolasīt vai pārveidot.',
     recoveryImportNext:
-        'Salabo šo failu un izvēlies „Mēģināt vēlreiz” vai izvēlies „Sākt no jauna”, lai sāktu ar noklusētajiem uzstādījumiem. Nekas netika pārrakstīts, un „Sākt no jauna” paturēs settings.json kopiju blakus kā settings.json.original vai, ja šis nosaukums ir aizņemts, kā settings.json.unimportable-<time>.',
+        'Salabo šo failu un izvēlies „Mēģināt vēlreiz” vai izvēlies „Sākt no jauna”, lai sāktu ar noklusētajiem uzstādījumiem. Nekas netika pārrakstīts, un „Sākt no jauna” paturēs settings.json kopiju blakus kā settings.json.original vai, ja šis nosaukums ir aizņemts, kā settings.json.unimportable- ar datumu un laiku beigās.',
     recoveryImportWhyAndroid: 'Kopiju, ko lietotne uztur aktuālu, neizdevās nolasīt vai pārveidot.',
     recoveryImportNextAndroid:
         'Izvēlies „Mēģināt vēlreiz” vai „Sākt no jauna”, lai sāktu ar noklusētajiem uzstādījumiem. Nekas netika pārrakstīts, un uzstādījumu saglabāšana paliek izslēgta, kamēr nav izdarīta kāda no šīm darbībām. „Sākt no jauna” paturēs saglabāto uzstādījumu kopiju.',
-    recoverySignInKept: 'Bojātajā kopijā joprojām ir pieteikšanās dati, līdz nākamajai izrakstīšanās reizei.',
+    recoverySignInKept:
+        'Bojātajā kopijā joprojām var būt pieteikšanās dati, arī pēc izrakstīšanās. Izdzēs to, kad tā vairs nav vajadzīga.',
+    recoverySignInKeptAndroid: 'Bojātajā kopijā joprojām var būt pieteikšanās dati, arī pēc izrakstīšanās.',
     recoveryRetryingWhat: 'Tavus uzstādījumus šobrīd neizdevās ielādēt, tāpēc uzstādījumu saglabāšana ir apturēta.',
     recoveryRetryingWhy:
         'Fails config.json bija bojāts un ir pārvietots uz {path}, bet failu settings.json, no kura atjaunot tavus uzstādījumus, šobrīd neizdevās nolasīt (iespējams, to izmanto cita programma). Nekas netika pārrakstīts.',
@@ -1631,7 +1644,7 @@ export const notice = {
     recoveryWorking: 'Notiek darbība…',
     recoveryStartFreshTitle: 'Sākt ar noklusētajiem uzstādījumiem?',
     recoveryStartFreshBody:
-        'Lietotne sāks darbu ar noklusētajiem uzstādījumiem. Fails settings.json netiek importēts; tā kopija tiek paturēta blakus kā settings.json.original vai, ja šis nosaukums ir aizņemts, kā settings.json.unimportable-<time>.',
+        'Lietotne sāks darbu ar noklusētajiem uzstādījumiem. Fails settings.json netiek importēts; tā kopija tiek paturēta blakus kā settings.json.original vai, ja šis nosaukums ir aizņemts, kā settings.json.unimportable- ar datumu un laiku beigās.',
     recoveryStartFreshBodyAndroid:
         'Lietotne sāks darbu ar noklusētajiem uzstādījumiem. Saglabātā kopija netiek importēta; lietotne paturēs tās kopiju savā krātuvē.',
     recoveryReimportTitle: 'Vēlreiz importēt failu?',
@@ -1641,6 +1654,8 @@ export const notice = {
     recoveryRetryDone: 'Tavi uzstādījumi no settings.json ir importēti. Uzstādījumu saglabāšana atkal darbojas.',
     recoveryRetryDoneAndroid:
         'Tavi uzstādījumi ir atjaunoti no saglabātās kopijas. Uzstādījumu saglabāšana atkal darbojas.',
+    recoveryRetryDoneAdopted:
+        'Nekas netika importēts. Tavi uzstādījumi jau bija savā vietā (atjaunoti vai importēti, kamēr tu izvēlējies šo darbību), un lietotne tos izmanto. Uzstādījumu saglabāšana darbojas.',
     recoveryRetryFailed:
         'Importēšana neizdevās. Failu settings.json neizdevās nolasīt vai pārveidot, vai arī uzstādījumus neizdevās saglabāt. Nekas netika mainīts. Salabo settings.json un mēģini vēlreiz vai izvēlies „Sākt no jauna”. Sīkāka informācija ir žurnālā.',
     recoveryRetryFailedAndroid:
@@ -1663,6 +1678,8 @@ export const notice = {
         'Sākt ar noklusētajiem uzstādījumiem neizdevās. Jaunos uzstādījumus neizdevās saglabāt. Nekas netika mainīts. Mēģini vēlreiz, un, ja tas atkārtojas, pārbaudi, vai lietotne var rakstīt savā krātuvē. Sīkāka informācija ir žurnālā.',
     recoveryReimportDone:
         'Fails {path} ir importēts vēlreiz. Tavi iepriekšējie uzstādījumi un pieteikšanās ir novietoti malā, un tiek izmantoti tie, kas ir šajā failā.',
+    recoveryReimportDoneNothingAside:
+        'Fails {path} ir importēts vēlreiz. Iepriekšējo uzstādījumu, ko novietot malā, nebija, un tiek izmantoti tie, kas ir šajā failā.',
     recoveryReimportFailed:
         'Importēšana neizdevās. Faila {path} trūkst, to neizdevās nolasīt vai pārveidot, vai arī uzstādījumus neizdevās saglabāt. Salabo to un mēģini vēlreiz. Ja parādās jauns paziņojums, rīkojies pēc tā. Sīkāka informācija ir žurnālā.',
     importReportTitle: 'Uzstādījumi importēti',
@@ -1727,9 +1744,11 @@ export const about = {
     deleteBusyPass:
         'Notiek balsošanas cikls, tāpēc nekas netika dzēsts. Aptur automātisko balsošanu, pagaidi, kamēr cikls beidzas, un mēģini vēlreiz.',
     deleteBusyCli:
-        'Darbojas komandrindas sesija, tāpēc nekas netika dzēsts. Aptur to terminālī, kurā tā darbojas (Ctrl+C), un mēģini vēlreiz.',
+        'Darbojas cita komandrindas komanda vai sesija, tāpēc nekas netika dzēsts. Pagaidi, kamēr tā beidzas, vai aptur to terminālī, kurā tā darbojas (Ctrl+C), un mēģini vēlreiz.',
     deleteBusyApp:
         'Darbvirsmas lietotne ir atvērta, tāpēc nekas netika dzēsts. Aizver darbvirsmas lietotni un mēģini vēlreiz.',
+    deleteBusyWeb:
+        'Darbojas tīmekļa serveris (pnpm web), tāpēc nekas netika dzēsts. Aptur to terminālī, kurā tas darbojas (Ctrl+C), un mēģini vēlreiz.',
     deleteFailed:
         'Ne viss tika izdzēsts. Kādu failu vai krātuvi neizdevās noņemt. Aizver citas programmas, kas izmanto lietotnes failus, un mēģini vēlreiz.',
     deleteFailedAndroid:

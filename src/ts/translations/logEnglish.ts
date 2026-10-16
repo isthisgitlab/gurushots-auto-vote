@@ -83,6 +83,7 @@ export const logMessages = {
     m1d4fbe07be9f: 'API Response',
     m1d8536f2dbdb: 'No update downloaded to install',
     m1dc37b518aae: '{0} turbo fill-new unavailable ({1}); applying to existing entry',
+    m1dd20ed44833: '{0} Emergency Submit window — applying available boost despite Auto-Apply Boost being off',
     m1e2a1cb0aa1e: '🔄 Reload-required settings changed, reloading main window...',
     m1f609b07986f: '\nTo change mode, run: login',
     m1f91f6908c64: 'manualFill: settings module not provided to fillChallengeNow for {0}; tag rules will not apply',
@@ -103,6 +104,8 @@ export const logMessages = {
     m23b48f4fafcb: 'Error handling submit-picked-photos request:',
     m23f42fc399da: 'Error handling run-voting-cycle-for-challenge request:',
     m242ed6b08a3d: 'Download progress: {0}%',
+    m243099e8f79d:
+        "Couldn't apply Boost — every entry has Turbo or is pinned for Turbo (Boost and Turbo can't share an entry). Add another entry or unpin the photo",
     m2432f84c64ff: 'manualFill: submitted {0} entries for {1}',
     m2444c60b5de3: '🔄 Refreshing API due to settings change',
     m2482ae4539b8: '{0} was imported again.',
@@ -114,13 +117,13 @@ export const logMessages = {
     m2594374cf0b1: '🔑 Key unlock request: Challenge={0}, confirmed={1}',
     m2611ef1839ec: 'join pass errored (voting continues): {0}',
     m2632c99956d4: 'Title rule rejected for "{0}": {1}',
-    m2772df34004c:
-        "Couldn't apply Boost — every entry has Turbo or is pinned for Turbo (Boost and Turbo can't share an entry). Add another entry, unpin the photo, or pass --image=<id>",
     m27a6caa84238: 'No update available. Current version is latest:',
     m27b9a6b5dd90: '{0} auto-Turbo skipped for uncertain auto-submitted photo {1}',
     m2804bf44f7b0: 'Logged out — token cleared',
     m2826e41438c8: 'Turbo applied to entry {0}',
     m289db73f62af: '  🧩 Fills: {0}',
+    m2978b51fd54e:
+        '{0}: skipped {1} — none of your chosen photos can be submitted there (not offered for this challenge, already used in another one, or filtered out by your tag settings), and Submit Only Chosen Photos is on. Choose other photos or turn that setting off; Emergency Submit ignores it near the deadline, so turn Emergency Submit off for this challenge to keep the slot empty. Some of them are not in your library — the list may hold photos of another account: remove them (chooser → Remove those lists, or clear-chosen-photos)',
     m29a4a27aabbd:
         '⏰ Approaching pre-final-window top-up for "{0}" — next cycle in {1}s (capped to the {2}m pre-final-window boundary)',
     m29dd239731c5:
@@ -244,6 +247,8 @@ export const logMessages = {
     m59d9de540e96: 'Challenge {0} is not open to join (already joined or closed).',
     m5a19de5a1959: 'Refusing to store entryIds under reserved key "{0}"',
     m5a28d38dcb9c: '  Default: {0}',
+    m5a6d92dd49a4:
+        'Failed to apply boost to "{0}" (see log for reason). To boost one photo yourself, pass --image=<id>',
     m5a89e42191e3: 'backgroundActivity: power-save blocker unavailable: {0}',
     m5b02d5838c5b: '{0}: submit threw for {1}: {2}',
     m5b38ce53a4b3: 'Error handling get-setting request for key "{0}":',
@@ -346,7 +351,6 @@ export const logMessages = {
     m8439c6f65a76: 'Set global default {0} = {1}',
     m84415f2cbc69: '💡 Save one with: save-profile "<name>" --challenge=<id>',
     m844dabcb9866: 'manualFill: {0} picked photos but only {1} open slots for {2}',
-    m853ff535f641: '{0} Emergency Fill window — applying available boost despite Auto-Apply Boost being off',
     m857b188b49a2: 'The recovery did not work; see the log for why (logs --settings)',
     m85836b7eb267: 'Capacitor {0} refresh failed:',
     m85cc53234d4e: 'Device is going to sleep — trying to boost {0} now (already due)',
@@ -392,7 +396,6 @@ export const logMessages = {
     m90de88ed5bbb: 'Error handling vote-on-challenge-manual request:',
     m917f85ff00e1: 'Failed to play turbo: {0}',
     m91a132669012: 'Invalid setting key: {0}',
-    m91f0a61ee83e: '{0} Emergency Fill window — applying won turbo despite Auto-Apply Turbo being off',
     m92799224f8ba: 'Active challenges response received',
     m92d4cac3f532: '🗳️ {0} Starting manual voting process',
     m92d4cb1c6433: 'photoStats: could not read the stats cache: {0}',
@@ -486,7 +489,6 @@ export const logMessages = {
     mae61bd89ab89: 'Settings Schema:',
     maec2f5dbafde: 'auto-spend ledger unreadable: {0}',
     maec3c7d79e47: 'Error applying profile',
-    maf6fd613cb45: 'Failed to apply boost to "{0}" (see log for reason)',
     maf82fa7d9842: 'Filter: {0}',
     mb005409e56d5: '❌ Failed to fetch challenges for manual vote all',
     mb029191fe533: '💡 Use "help-settings" for detailed information about each setting',
@@ -519,6 +521,7 @@ export const logMessages = {
     mb8a998e304ee: '📋 Found {0} active challenges',
     mb8ff0ba416b3: 'Boost already used',
     mb911fd21e323: '💡 Run "list-settings --challenge={0}" to review the applied overrides',
+    mb94205dcd75c: '{0} Emergency Submit window — applying won turbo despite Auto-Apply Turbo being off',
     mb958477fdd90: 'Error handling authenticate request:',
     mb995fe95018c: 'fillExposure: member id unavailable for {0}',
     mbad20ee0998c: 'Fetching active challenges',

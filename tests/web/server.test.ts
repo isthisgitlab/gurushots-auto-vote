@@ -22,6 +22,7 @@ import type * as authModule from '../../src/ts/services/auth';
 import type * as settingsModule from '../../src/ts/settings';
 import type * as randomizerModule from '../../src/ts/api/randomizer';
 import type * as updateCheckerModule from '../../src/ts/services/UpdateChecker';
+import type * as cliSessionLockModule from '../../src/ts/settings/cliSessionLock';
 import type { CategoryLogger, GuiLogSink } from '../../src/ts/logger';
 
 let mockWipeSucceeds = true;
@@ -80,6 +81,9 @@ jest.mock('../../src/ts/settings', () => ({
     getEnvironmentInfo: jest.fn(() => ({ defaultMock: false })),
     getUserDataPath: jest.fn(() => '/tmp/user-data'),
 }));
+// The marker the server holds while it runs: recorded, never written to a user-data directory.
+const mockReleaseMarker = jest.fn<void, []>();
+jest.mock('../../src/ts/settings/cliSessionLock', () => ({ holdWebServerLock: jest.fn(() => mockReleaseMarker) }));
 const mockLog = { error: jest.fn(), warning: jest.fn(), info: jest.fn() };
 jest.mock('../../src/ts/logger', () => ({
     withCategory: jest.fn((): Pick<CategoryLogger, 'error' | 'warning' | 'info'> => mockLog),
@@ -91,6 +95,9 @@ const auth = jest.mocked(require('../../src/ts/services/auth') as typeof authMod
 const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
 const randomizer = jest.mocked(require('../../src/ts/api/randomizer') as typeof randomizerModule);
 const updateChecker = jest.mocked(require('../../src/ts/services/UpdateChecker') as typeof updateCheckerModule);
+const { holdWebServerLock } = jest.mocked(
+    require('../../src/ts/settings/cliSessionLock') as typeof cliSessionLockModule,
+);
 
 type Reply = { status: number; headers: http.IncomingHttpHeaders; body: string };
 
@@ -344,6 +351,34 @@ describe('access token', () => {
         expect(headerOnly.status).toBe(403);
     });
 
+    test('the event stream refuses a cross-site request even with the right token', async () => {
+        const stream = (headers: Record<string, string>) =>
+            request('GET', `/api/events?t=${TOKEN}`, { headers }).then((reply) => reply.status);
+        expect(await stream({ Origin: 'http://evil.example' })).toBe(403);
+        expect(await stream({ Origin: `http://localhost:${port + 1}` })).toBe(403);
+        expect(await stream({ 'Sec-Fetch-Site': 'cross-site' })).toBe(403);
+        expect(await stream({ 'Sec-Fetch-Site': 'same-site' })).toBe(403);
+    });
+
+    test.each([['same-origin'], ['none']])('the event stream opens for Sec-Fetch-Site: %s', async (site) => {
+        const status = await new Promise<number>((resolve, reject) => {
+            const req = http.get(
+                {
+                    host: '127.0.0.1',
+                    port,
+                    path: `/api/events?t=${TOKEN}`,
+                    headers: { Host: `localhost:${port}`, 'Sec-Fetch-Site': site },
+                },
+                (res) => {
+                    resolve(res.statusCode ?? 0);
+                    req.destroy();
+                },
+            );
+            req.on('error', reject);
+        });
+        expect(status).toBe(200);
+    });
+
     test('a token in the query does not authorize a POST', async () => {
         const reply = await request('POST', `/api/invoke/get-setting?t=${TOKEN}`, {
             headers: { 'Content-Type': 'application/json' },
@@ -592,6 +627,31 @@ describe('startWebServer', () => {
 
     afterEach(() => {
         delete globals.sendLogToGUI;
+        holdWebServerLock.mockClear();
+        mockReleaseMarker.mockClear();
+    });
+
+    test('holds the web-server marker while it listens, so a wipe from the app or the CLI waits for it', async () => {
+        const started = await startWebServer({ port: 0, distDir });
+
+        expect(holdWebServerLock).toHaveBeenCalledTimes(1);
+        expect(started.server.listening).toBe(true);
+        expect(mockReleaseMarker).not.toHaveBeenCalled();
+
+        await close(started.server);
+        expect(mockReleaseMarker).toHaveBeenCalledTimes(1);
+    });
+
+    test('holds no marker when it could not start listening', async () => {
+        const started = await startWebServer({ port: 0, distDir });
+        const taken = (started.server.address() as net.AddressInfo).port;
+        holdWebServerLock.mockClear();
+        try {
+            await expect(startWebServer({ port: taken, distDir })).rejects.toThrow(/EADDRINUSE/);
+            expect(holdWebServerLock).not.toHaveBeenCalled();
+        } finally {
+            await close(started.server);
+        }
     });
 
     test('boots headers and intent presets, routes the logger fan-out, and listens on loopback', async () => {

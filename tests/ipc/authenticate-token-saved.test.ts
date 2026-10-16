@@ -9,6 +9,7 @@ jest.mock('../../src/ts/apiFactory');
 jest.mock('../../src/ts/windows/quitGuard', () => ({ rememberChallenges: jest.fn() }));
 
 import { invalid } from '../helpers/invalid';
+import { logCategories } from '../helpers/logCategories';
 
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
@@ -59,5 +60,17 @@ describe('authenticate with settings that cannot be written', () => {
         await buildHandlers().authenticate({}, 'user@example.com', 'pw', false);
 
         expect(settings.setSetting).toHaveBeenCalledWith('lastUsername', kept);
+    });
+
+    test('a user name that cannot be saved is logged, and the login that was saved still stands', async () => {
+        settings.setSetting.mockImplementation((key: string) => key === 'token');
+        settings.getSetting.mockImplementation(invalid((key: string) => (key === 'stayLoggedIn' ? true : 'old-token')));
+
+        const result = await buildHandlers().authenticate({}, 'user@example.com', 'pw', false);
+
+        expect(result).toEqual({ success: true });
+        expect(
+            logCategories('warning', 'The user name for the login form could not be saved; the login itself was'),
+        ).toEqual(['authentication']);
     });
 });

@@ -20,7 +20,7 @@ test('a status says what it says, unless a reason makes it more exact', () => {
     expect(outcomeMeta({ status: 'charged-pending-submit', reason: 'no-photo' })).toEqual({
         key: 'app.discoverPendingNoPhoto',
         variant: 'error',
-        retry: false,
+        retry: true,
         forget: false,
     });
     expect(outcomeMeta({ status: 'failed-no-charge', reason: 'account-unknown' })).toEqual({

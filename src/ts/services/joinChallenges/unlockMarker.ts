@@ -349,8 +349,9 @@ const forgetClaim = async (deps: JoinDeps, id: string | number, owner: string | 
  *     of a challenge in the list just read): no challenge lives that long, and it ends the keeping of other
  *     accounts' records (and balances) for good. A bare claim is never kept by the list: that this account can see
  *     the challenge says nothing about whose the bare claim is;
- *   - this account's own claims whose challenge is no longer open, from a successful, non-empty open list (an
- *     empty one is never trusted, like the open-list memory of the settings facade). The list is this account's, so
+ *   - this account's own joined claims whose challenge is no longer open, from a successful, non-empty open list (an
+ *     empty one is never trusted, like the open-list memory of the settings facade). A claim whose join has not
+ *     landed stays until the age above, whatever the list says. The list is this account's, so
  *     a challenge missing from it says nothing about another account's claim on it, nor about a bare claim.
  * A claim's age counts from its join once it has joined. An account that cannot be told prunes by age only. A claim
  * younger than CLAIM_PRUNE_MIN_AGE_MS is kept whatever
@@ -383,7 +384,10 @@ const pruneClosedClaims = async (
         // Age alone never removes this account's own keyed claim of a challenge it can still join: that is its
         // protection. A bare claim has no such protection: the list says nothing about whose it is.
         if (claimAge >= CLAIM_MAX_AGE_MS) return sep === -1 || !open;
-        return ownerKnown && own && claimAge >= CLAIM_PRUNE_MIN_AGE_MS && !open;
+        // Only a joined claim goes on the list's say: a paid claim whose submit has not landed is the proof that
+        // keeps the next join from paying again, and one list read that misses its challenge must not end it.
+        const joined = isPlainObject(claim) && isFiniteNumber(claim.joinedAt);
+        return ownerKnown && own && joined && claimAge >= CLAIM_PRUNE_MIN_AGE_MS && !open;
     };
     // A challenge whose unlock lock another process holds is mid-join: its claim is left alone.
     const held: Array<{ release: () => void }> = [];

@@ -52,7 +52,7 @@ describe('reset-data', () => {
 
         expect(logger.printLine).toHaveBeenNthCalledWith(
             1,
-            'Checking whether a CLI session or the desktop app is still running…',
+            'Checking whether another CLI command, the web server or the desktop app is still running…',
         );
         expect(jest.mocked(logger.printLine).mock.invocationCallOrder[0]).toBeLessThan(
             localData.wipeLocalData.mock.invocationCallOrder[0],
@@ -73,8 +73,15 @@ describe('reset-data', () => {
 
     test.each([
         ['busy-pass', 'a voting pass is running. Stop it, then run reset-data again.'],
-        ['busy-cli', 'a CLI session is running. Stop it (Ctrl+C in its terminal), then run reset-data again.'],
+        [
+            'busy-cli',
+            'another CLI command or session is running. Wait for it or stop it (Ctrl+C in its terminal), then run reset-data again.',
+        ],
         ['busy-app', 'the desktop app is running. Quit it, then run reset-data again.'],
+        [
+            'busy-web',
+            'the web server (pnpm web) is running. Stop it (Ctrl+C in its terminal), then run reset-data again.',
+        ],
     ] as const)('when %s, it says nothing was deleted and what to do next, and exits 1', async (code, nextStep) => {
         localData.wipeLocalData.mockResolvedValue({ success: false, error: code });
 

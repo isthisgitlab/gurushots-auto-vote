@@ -11,7 +11,8 @@
  * unlock is one-shot by nature (the boost is no longer LOCKED afterwards).
  *
  * Shape, keyed by challenge id: { "<challengeId>": { fills, at } }; a mission's record also holds `progress`, the
- * mission's server progress when its latest fill was counted.
+ * mission's server progress when its latest fill was counted, and `before`, the progress the record held when that
+ * fill was reserved (null: none), which a fill that is not made puts back.
  *
  * Same platform-aware transport as swapBackStore, so on Capacitor its cache
  * MUST be hydrated at boot (initializeAutoSpendAsync, wired in Capacitor.tsx).
@@ -22,7 +23,7 @@ import type { AutoSpendRecord, RawJsonStore, ThroughResult } from './types/store
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
-import { errorMessage } from './errorMessage';
+import { fileErrorMessage } from './errorMessage';
 import { storeLoaded, throughStore } from './settings/storeTransport';
 import * as runtime from './runtime';
 
@@ -50,7 +51,7 @@ const recoveryStep = (): string =>
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** A ledger record: the fills counted, and for a mission the progress it had when the latest was. */
-type AutoSpendEntry = AutoSpendRecord & { progress?: number };
+type AutoSpendEntry = AutoSpendRecord & { progress?: number; before?: number | null };
 
 /** What `reserveFill` holds the count to, and records. */
 type ReserveOptions = {
@@ -58,6 +59,13 @@ type ReserveOptions = {
     max?: number;
     /** the mission's progress when this fill is counted */
     progress?: number;
+};
+
+// The progress a record goes back to when a reserved fill is not made, as that reservation recorded it; a record
+// without one (no progress was reserved) keeps what it has. Worked out on the record the write replaces.
+const restoredProgress = (record: AutoSpendEntry | undefined) => {
+    const progress = record?.before === undefined ? record?.progress : (record.before ?? undefined);
+    return progress === undefined ? {} : { progress };
 };
 
 /**
@@ -68,7 +76,8 @@ const isRecord = (r: unknown): r is AutoSpendEntry =>
     Number.isInteger(r.fills) &&
     Number(r.fills) >= 0 &&
     Number.isFinite(r.at) &&
-    (r.progress === undefined || Number.isFinite(r.progress));
+    (r.progress === undefined || Number.isFinite(r.progress)) &&
+    (r.before === undefined || r.before === null || Number.isFinite(r.before));
 
 /**
  * The ledger's text as its records, or null when it is not a JSON object (a store never written is an empty ledger).
@@ -162,7 +171,7 @@ const createAutoSpendLedger = (
                 return JSON.stringify(state);
             });
         } catch (error) {
-            logger.withCategory('currency').error(`auto-spend ledger not written: ${errorMessage(error)}`, null);
+            logger.withCategory('currency').error(`auto-spend ledger not written: ${fileErrorMessage(error)}`, null);
             return false;
         }
         if (result === 'failed') logger.withCategory('currency').error('auto-spend ledger not written', null);
@@ -191,16 +200,39 @@ const createAutoSpendLedger = (
             adjust(challengeId, (record) => {
                 const fills = record?.fills ?? 0;
                 if (max !== undefined && fills >= max) return null;
-                const kept = progress ?? record?.progress;
-                return { fills: fills + 1, ...(kept === undefined ? {} : { progress: kept }) };
+                if (progress === undefined) {
+                    // Nothing new to record: what the record holds is what a release of this one goes back to.
+                    return {
+                        fills: fills + 1,
+                        ...(record?.progress === undefined
+                            ? {}
+                            : { progress: record.progress, before: record.progress }),
+                    };
+                }
+                return { fills: fills + 1, progress, before: record?.progress ?? null };
             }),
 
-        /** Take back a reserved fill that was not made (best effort: a count too high only holds back a fill). */
+        /**
+         * Take back a reserved fill that was not made (best effort: a count too high only holds back a fill). A
+         * mission's record goes back to the progress it held before the reservation, so a fill that was not made does
+         * not leave the progress it was reserved at behind.
+         */
         releaseFill: async (challengeId: string | number): Promise<void> => {
             await adjust(challengeId, (record) => ({
                 fills: Math.max(0, (record?.fills ?? 0) - 1),
-                ...(record?.progress === undefined ? {} : { progress: record.progress }),
+                ...restoredProgress(record),
             }));
+        },
+
+        /**
+         * Put a mission's recorded progress back to what it was before the latest reservation, the fills counted as
+         * they are: for a fill that got no answer, which stays counted, but whose reserved progress says nothing about
+         * whether it moved the mission.
+         */
+        restoreProgress: async (challengeId: string | number): Promise<void> => {
+            await adjust(challengeId, (record) =>
+                record ? { fills: record.fills, ...restoredProgress(record) } : null,
+            );
         },
     };
 };

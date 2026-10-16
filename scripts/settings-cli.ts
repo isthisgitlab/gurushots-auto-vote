@@ -147,9 +147,15 @@ function runGet() {
         console.log(formatValue(forDisplay(allSettings)));
     } else {
         // Show specific setting
-        // A bare name that is not a container of the configuration is an app or sign-in setting, as `set` takes it.
-        const nested = getNestedProperty(allSettings, key);
-        const value = nested === undefined && !key.includes('.') ? settings.getSetting(key) : nested;
+        // A bare name that is not a container of the configuration is an app or sign-in setting, as `set` takes it; one
+        // the schema defines that is neither is a global default (what `set` writes it as).
+        let value = getNestedProperty(allSettings, key);
+        if (value === undefined && !key.includes('.')) {
+            value = settings.getSetting(key);
+            if (value === undefined && Object.hasOwn(settings.SETTINGS_SCHEMA, key)) {
+                value = settings.getGlobalDefault(key);
+            }
+        }
         if (value === undefined) {
             console.error(`Setting '${key}' not found`);
             process.exit(1);

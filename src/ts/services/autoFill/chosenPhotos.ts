@@ -137,6 +137,14 @@ const MAX_WALK_MEMOS = 64;
 // list keeps what is already known about the ids it still holds.
 const walkMemos: Map<string, WalkMemo> = new Map();
 
+/** Makes room in a capped map by dropping its oldest entry (a Map iterates in insertion order), not every entry. */
+const evictOldest = (map: Map<string, unknown>): void => {
+    for (const key of map.keys()) {
+        map.delete(key);
+        return;
+    }
+};
+
 const truncatedWalkDelay = (truncatedWalks: number): number =>
     Math.min(TRUNCATED_WALK_RETRY_MS * 2 ** (truncatedWalks - 1), MAX_TRUNCATED_WALK_RETRY_MS);
 
@@ -253,7 +261,7 @@ const rememberWalk = ({
         Object.assign(memo, { truncatedWalks, nextWalkAt, knownIds });
         return;
     }
-    if (walkMemos.size >= MAX_WALK_MEMOS) walkMemos.clear();
+    if (walkMemos.size >= MAX_WALK_MEMOS) evictOldest(walkMemos);
     walkMemos.set(String(challenge.id), {
         at: now,
         entryCount: getEntries(challenge).length,
@@ -353,14 +361,17 @@ type ChosenSkipReason = 'none-usable' | 'all-entered';
 // The last reason logged per challenge. A skip repeats every scheduler cycle,
 // so the line is only written when the state differs from the last one logged
 // and is cleared again when the challenge stops skipping.
-const loggedSkips: Map<string, ChosenSkipReason> = new Map();
+const loggedSkips: Map<string, string> = new Map();
 const MAX_LOGGED_SKIPS = 64;
 
 const logChosenSkipOnce = (logger: FillLogger, challenge: Challenge, label: string, reason: ChosenSkipReason): void => {
     const key = String(challenge.id);
-    if (loggedSkips.get(key) === reason) return;
-    if (loggedSkips.size >= MAX_LOGGED_SKIPS) loggedSkips.clear();
-    loggedSkips.set(key, reason);
+    // A walk that found chosen photos missing from the library adds a hint to the line: logged again once it shows.
+    const foreign = [...(walkMemos.get(key)?.outcomes.values() ?? [])].some((outcome) => outcome.state === 'not-found');
+    const logged = foreign && reason === 'none-usable' ? `${reason}+foreign` : reason;
+    if (loggedSkips.get(key) === logged) return;
+    if (!loggedSkips.has(key) && loggedSkips.size >= MAX_LOGGED_SKIPS) evictOldest(loggedSkips);
+    loggedSkips.set(key, logged);
     const log = logger.withCategory(label === 'join' ? 'join' : 'autoSubmit');
     const tag = logger.challengeTag(challenge);
     // what happened -> why -> what next. Emergency Submit ignores the setting
@@ -372,8 +383,11 @@ const logChosenSkipOnce = (logger: FillLogger, challenge: Challenge, label: stri
         );
         return;
     }
+    const hint = foreign
+        ? '. Some of them are not in your library — the list may hold photos of another account: remove them (chooser → Remove those lists, or clear-chosen-photos)'
+        : '';
     log.warning(
-        `${label}: skipped ${tag} — none of your chosen photos can be submitted there (not offered for this challenge, already used in another one, or filtered out by your tag settings), and Submit Only Chosen Photos is on. Choose other photos or turn that setting off; Emergency Submit ignores it near the deadline, so turn Emergency Submit off for this challenge to keep the slot empty`,
+        `${label}: skipped ${tag} — none of your chosen photos can be submitted there (not offered for this challenge, already used in another one, or filtered out by your tag settings), and Submit Only Chosen Photos is on. Choose other photos or turn that setting off; Emergency Submit ignores it near the deadline, so turn Emergency Submit off for this challenge to keep the slot empty${hint}`,
         null,
     );
 };

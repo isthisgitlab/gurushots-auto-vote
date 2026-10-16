@@ -132,7 +132,8 @@ class LogoutNotSavedError extends Error {
 const clearAuthToken = async (): Promise<boolean> => {
     const hadToken = !!settings.getSetting('token');
     const saved = settings.setSetting('token', '');
-    forgetAccountMemory();
+    // A refused sign-out leaves the user logged in: what is remembered about the account stays.
+    if (saved) forgetAccountMemory();
     await settings.flushPendingWrites();
     if (!saved) throw new LogoutNotSavedError();
     return hadToken;

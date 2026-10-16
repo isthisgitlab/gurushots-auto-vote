@@ -78,7 +78,15 @@ const handleAuthenticate = (async (event: unknown, username: string, password: s
                 return { success: false as const, error: 'token-not-saved' };
             }
             // The login form pre-fills the name while "Stay logged in" is on.
-            settings.setSetting('lastUsername', settings.getSetting('stayLoggedIn') === true ? String(username) : '');
+            const nameSaved = settings.setSetting(
+                'lastUsername',
+                settings.getSetting('stayLoggedIn') === true ? String(username) : '',
+            );
+            if (!nameSaved) {
+                logger
+                    .withCategory('authentication')
+                    .warning('The user name for the login form could not be saved; the login itself was');
+            }
             logger.withCategory('authentication').info('🔐 Authentication successful', { success: true });
             return { success: true as const };
         }

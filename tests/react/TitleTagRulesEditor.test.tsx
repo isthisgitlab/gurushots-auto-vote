@@ -4,6 +4,7 @@
  * mock returns each key verbatim, so labels/placeholders are the i18n keys.
  */
 
+import { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { TitleTagRulesEditor } from '@/components/app/TitleTagRulesEditor';
 import type { TitleRule } from '../../src/ts/types/settings';
@@ -309,7 +310,8 @@ describe('TitleTagRulesEditor', () => {
 
     describe('closes at', () => {
         const rowWith = (over = {}) => [{ title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], ...over }];
-        const input = (n = 1) => screen.getByLabelText<HTMLInputElement>(`app.titleRuleClosesAtRow ${n}`);
+        const input = (n = 1) =>
+            screen.getByLabelText<HTMLInputElement>(new RegExp(`^app\\.titleRuleClosesAtRow ${n} app\\.of \\d+$`));
         const addButton = () => screen.getByRole('button', { name: /app\.addCloseTime/ });
 
         test('the time input patches closesAt, an empty value sends an empty string, and one row keeps no list', () => {
@@ -379,6 +381,59 @@ describe('TitleTagRulesEditor', () => {
             ]);
             rerender(<TitleTagRulesEditor value={rowWith({ closesAt: '18:10' })} onChange={onChange} />);
             expect(screen.queryByRole('button', { name: /app\.removeCloseTime/ })).toBeNull();
+        });
+
+        test('each row is named by its place in the list: "Close time 1 of 2"', () => {
+            render(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: '17:10', closesAtTimes: ['17:10', '18:10'] })}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect(screen.getByLabelText('app.titleRuleClosesAtRow 1 app.of 2')).toBeTruthy();
+            expect(screen.getByLabelText('app.titleRuleClosesAtRow 2 app.of 2')).toBeTruthy();
+        });
+
+        test('Add time on a blank row keeps both blank rows on screen, and clearing the first of two blank-first rows keeps the list', () => {
+            const Harness = ({ start }: { start: TitleRule[] }) => {
+                const [rules, setRules] = useState<TitleRule[]>(start);
+                return <TitleTagRulesEditor value={rules} onChange={setRules} />;
+            };
+            render(<Harness start={rowWith()} />);
+            fireEvent.click(addButton());
+            expect([input(1).value, input(2).value]).toEqual(['', '']);
+            fireEvent.change(input(2), { target: { value: '10:00' } });
+            fireEvent.change(input(1), { target: { value: '09:00' } });
+            fireEvent.change(input(1), { target: { value: '' } });
+            expect([input(1).value, input(2).value]).toEqual(['', '10:00']);
+            fireEvent.change(input(2), { target: { value: '' } });
+            expect([input(1).value, input(2).value]).toEqual(['', '']);
+        });
+
+        test('removing a row moves focus to the row that took its place, else to Add time', () => {
+            const Harness = () => {
+                const [rules, setRules] = useState<TitleRule[]>(
+                    rowWith({ closesAt: '09:00', closesAtTimes: ['09:00', '10:00', '11:00'] }),
+                );
+                return <TitleTagRulesEditor value={rules} onChange={setRules} />;
+            };
+            render(<Harness />);
+            fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 2' }));
+            expect(document.activeElement).toBe(input(2));
+            expect(input(2).value).toBe('11:00');
+            fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 2' }));
+            // One row left: no Remove to land on, so focus goes to Add time.
+            expect(document.activeElement).toBe(addButton());
+        });
+
+        test('removing a lone invalid row (the row stays, blank) lands focus on its input', () => {
+            const Harness = () => {
+                const [rules, setRules] = useState<TitleRule[]>(rowWith({ closesAt: '7:10' }));
+                return <TitleTagRulesEditor value={rules} onChange={setRules} />;
+            };
+            render(<Harness />);
+            fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 1' }));
+            expect(document.activeElement).toBe(input(1));
         });
 
         test('Add time is held at 24 rows', () => {
@@ -471,6 +526,7 @@ describe('TitleTagRulesEditor', () => {
                 [false],
             ],
             ['an empty list falls back to closesAt', { closesAt: '17:10', closesAtTimes: [] }, ['17:10'], [false]],
+            ['blank rows with no closesAt at all stay as rows', { closesAtTimes: ['', ' '] }, ['', ''], [false, false]],
             [
                 'an invalid closesAt behind a list of blanks is invalid',
                 { closesAt: 'x', closesAtTimes: [''] },

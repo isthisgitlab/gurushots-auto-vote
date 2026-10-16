@@ -421,5 +421,5 @@ const createStateFile = (
     return { read, mutate, ...createResets({ store, acquireLock, read, asRequests, write }) };
 };
 
-export { createStateFile, epochOf, isRecord, isTombstone };
+export { ALL_KEY, createStateFile, epochOf, isRecord, isTombstone };
 export type { Mutation, ResetResult, StateLock };

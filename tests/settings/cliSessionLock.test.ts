@@ -26,9 +26,13 @@ const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
 const {
     holdCliSessionLock,
     isCliSessionActive,
+    holdWebServerLock,
+    isWebServerActive,
     holdDesktopAppLock,
     isDesktopAppActive,
-    LOCK_FILE_NAME,
+    CLI_SESSION_PREFIX,
+    WEB_SERVER_PREFIX,
+    processMarkerName,
     APP_LOCK_FILE_NAME,
     HEARTBEAT_MS,
     STALE_AFTER_MS,
@@ -50,7 +54,8 @@ describe('cli session lock', () => {
     beforeEach(() => {
         root = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-lock-'));
         jest.spyOn(runtime, 'getAppUserDataPath').mockReturnValue(root);
-        lockFile = path.join(root, LOCK_FILE_NAME);
+        // This process's own CLI marker; what is written into it names whichever process a test wants it to.
+        lockFile = path.join(root, processMarkerName(CLI_SESSION_PREFIX));
     });
 
     afterEach(() => {
@@ -457,6 +462,128 @@ describe('cli session lock', () => {
 
             expect(unref).toHaveBeenCalledTimes(1);
             release();
+        });
+    });
+
+    describe('several holders', () => {
+        const other = (prefix: string, pid: number) => path.join(root, `${prefix}-${pid}.lock`);
+
+        test('each process has a file of its own: two holders are both seen, and one leaving leaves the other', async () => {
+            const release = holdCliSessionLock();
+            expect(path.basename(lockFile)).toBe(`cli-session-${process.pid}.lock`);
+            fs.writeFileSync(other(CLI_SESSION_PREFIX, process.ppid), JSON.stringify({ pid: process.ppid }));
+            await expect(isCliSessionActive()).resolves.toBe(true);
+
+            // This process is done: the other one's marker is untouched and still counts.
+            release();
+            expect(fs.existsSync(lockFile)).toBe(false);
+            expect(fs.existsSync(other(CLI_SESSION_PREFIX, process.ppid))).toBe(true);
+            await expect(isCliSessionActive()).resolves.toBe(true);
+
+            // The other one is gone too.
+            fs.rmSync(other(CLI_SESSION_PREFIX, process.ppid));
+            await expect(isCliSessionActive()).resolves.toBe(false);
+        });
+
+        test('a live holder among dead ones is enough, and the check reads them together', async () => {
+            jest.useFakeTimers();
+            try {
+                fs.writeFileSync(other(CLI_SESSION_PREFIX, 2 ** 22 + 1), JSON.stringify({ pid: 2 ** 22 + 1 }));
+                fs.writeFileSync(other(CLI_SESSION_PREFIX, process.ppid), JSON.stringify({ pid: process.ppid }));
+                fs.writeFileSync(other(CLI_SESSION_PREFIX, 4242), JSON.stringify({ pid: process.ppid }));
+                age(other(CLI_SESSION_PREFIX, 4242), STALE_AFTER_MS + 5_000);
+                const mixed = isCliSessionActive();
+                await jest.advanceTimersByTimeAsync(SETTLE_MS);
+                await expect(mixed).resolves.toBe(true);
+
+                // Two old markers cost one wait, not two.
+                fs.rmSync(other(CLI_SESSION_PREFIX, process.ppid));
+                fs.writeFileSync(other(CLI_SESSION_PREFIX, 4343), JSON.stringify({ pid: process.ppid }));
+                age(other(CLI_SESSION_PREFIX, 4343), STALE_AFTER_MS + 5_000);
+                const old = isCliSessionActive();
+                await jest.advanceTimersByTimeAsync(SETTLE_MS);
+                await expect(old).resolves.toBe(false);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        test('the CLI, web-server and desktop-app markers are separate kinds', async () => {
+            fs.writeFileSync(other(WEB_SERVER_PREFIX, process.ppid), JSON.stringify({ pid: process.ppid }));
+            // Files that are not markers of a kind, whatever they name.
+            fs.writeFileSync(path.join(root, 'cli-session-x.lock'), JSON.stringify({ pid: process.ppid }));
+            fs.writeFileSync(path.join(root, 'web-server.lock'), JSON.stringify({ pid: process.ppid }));
+
+            await expect(isWebServerActive()).resolves.toBe(true);
+            await expect(isCliSessionActive()).resolves.toBe(false);
+            await expect(isDesktopAppActive()).resolves.toBe(false);
+        });
+
+        test('a CLI marker named just cli-session.lock counts as a live CLI session, by the same heartbeat rule', async () => {
+            jest.useFakeTimers();
+            try {
+                const shared = path.join(root, 'cli-session.lock');
+                fs.writeFileSync(shared, JSON.stringify({ pid: process.ppid }));
+                await expect(isCliSessionActive()).resolves.toBe(true);
+                await expect(isWebServerActive()).resolves.toBe(false);
+
+                age(shared, STALE_AFTER_MS + 5_000);
+                const old = isCliSessionActive();
+                await jest.advanceTimersByTimeAsync(SETTLE_MS);
+                await expect(old).resolves.toBe(false);
+
+                fs.writeFileSync(shared, JSON.stringify({ pid: 2 ** 22 + 3 }));
+                await expect(isCliSessionActive()).resolves.toBe(false);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        test('there are no holders when the user-data directory is gone', async () => {
+            fs.rmSync(root, { recursive: true, force: true });
+
+            await expect(isCliSessionActive()).resolves.toBe(false);
+            await expect(isWebServerActive()).resolves.toBe(false);
+        });
+
+        test('a holder removes the markers of its kind whose process is gone, and no others', () => {
+            const dead = other(CLI_SESSION_PREFIX, 2 ** 22 + 1);
+            const alive = other(CLI_SESSION_PREFIX, process.ppid);
+            const deadWeb = other(WEB_SERVER_PREFIX, 2 ** 22 + 2);
+            const unreadable = other(CLI_SESSION_PREFIX, 77);
+            fs.writeFileSync(dead, JSON.stringify({ pid: 2 ** 22 + 1 }));
+            fs.writeFileSync(alive, JSON.stringify({ pid: process.ppid }));
+            fs.writeFileSync(deadWeb, JSON.stringify({ pid: 2 ** 22 + 2 }));
+            fs.writeFileSync(unreadable, 'garbage');
+
+            const release = holdCliSessionLock();
+
+            expect(fs.existsSync(dead)).toBe(false);
+            expect(fs.existsSync(alive)).toBe(true);
+            expect(fs.existsSync(deadWeb)).toBe(true);
+            expect(fs.existsSync(unreadable)).toBe(true);
+            release();
+        });
+
+        test('a leftover that cannot be removed does not stop the holder', () => {
+            fs.writeFileSync(other(CLI_SESSION_PREFIX, 2 ** 22 + 1), JSON.stringify({ pid: 2 ** 22 + 1 }));
+            jest.spyOn(fs, 'unlinkSync').mockImplementationOnce(() => {
+                throw new Error('busy');
+            });
+
+            expect(() => holdCliSessionLock()()).not.toThrow();
+        });
+
+        test('the web server holds a marker of its own while it runs', async () => {
+            const release = holdWebServerLock();
+            const file = path.join(root, `web-server-${process.pid}.lock`);
+
+            expect(fs.existsSync(file)).toBe(true);
+            fs.writeFileSync(file, JSON.stringify({ pid: process.ppid }));
+            await expect(isWebServerActive()).resolves.toBe(true);
+            fs.writeFileSync(file, JSON.stringify({ pid: process.pid }));
+            release();
+            expect(fs.existsSync(file)).toBe(false);
         });
     });
 

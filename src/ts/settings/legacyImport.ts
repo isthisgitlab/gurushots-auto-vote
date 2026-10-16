@@ -9,6 +9,7 @@
 import { errorMessage } from '../errorMessage';
 import { isPlainObject } from '../plainObject';
 import { getDefaultSettings } from './defaults';
+import { attachCloseTimeRules, takeCloseTimeRules } from './closeTimeRules';
 import { importV1Settings } from './importV1';
 import { isImportMarked, isMirrorStarted, keptImportedRecord, markImportDone } from './importMarker';
 import { invalidReferences } from './importReport';
@@ -128,8 +129,12 @@ const importLegacyText = (
     { replacing, recovering }: ImportMode = {},
 ): ImportOutcome => {
     // The keys of the live schema are kept whether or not the frozen one knows them: the file holds what this app wrote.
-    const result = importV1Settings(raw, { keptKey: (key) => schemaEntry(key) !== undefined });
+    // The rules the mirror carries beside `titleRules` are taken out before the frozen importer sees the text, and put back
+    // where they stood (before the report is made, so it covers them too).
+    const { raw: mirrored, carried } = takeCloseTimeRules(raw);
+    const result = importV1Settings(mirrored, { keptKey: (key) => schemaEntry(key) !== undefined });
     if (!result.ok) return failure(result.code, result.detail);
+    if (carried.length > 0) result.config.rules = attachCloseTimeRules(result.config.rules, carried);
     const { refsBlocked } = result.report;
     const imported: ImportedV2 | undefined = recovering
         ? (keptImportedRecord() ?? undefined)

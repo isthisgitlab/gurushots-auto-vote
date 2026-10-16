@@ -26,7 +26,7 @@ export const common = {
 // Error / recovery UI
 export const errors = {
     boundaryTitle: 'Something went wrong',
-    logoutNotSavedStopped: 'Auto-vote is stopped.',
+    logoutNotSavedStopped: 'Auto-vote is stopped. Start it again to keep voting.',
     logoutFailedTitle: 'The logout did not finish',
     logoutFailedDetail:
         'Something went wrong while logging out, so you may still be logged in. Try again; the logs have the details.',
@@ -39,7 +39,7 @@ export const errors = {
     actionInvalidArgs:
         'The action could not run: the challenge or photo id is not valid. Reload the app and try again.',
     actionFailed:
-        'The action did not finish. GuruShots did not accept it or did not answer. Try again in a moment; if it keeps failing, the logs have the details.',
+        'The action did not finish. The app or GuruShots could not complete it. Try again in a moment; if it keeps failing, the logs have the details.',
     loginFailed:
         'Login did not work. GuruShots did not accept it or could not be reached. Check your username, password and connection, then try again.',
     invalidCredentials: 'Login failed. GuruShots did not accept the username or password. Check them and try again.',
@@ -74,7 +74,7 @@ export const errors = {
     suggestBusy: 'The photos were not ranked. Another ranking is still running. Wait for it to finish, then try again.',
     suggestAccountChanged: 'The photos were not ranked. You switched accounts while it ran. Reopen Pick….',
     suggestChallengeEnded:
-        'The photos were not ranked. This challenge has ended or could not be read. Close this window and reopen the card.',
+        'The photos were not ranked. This challenge has ended or could not be read. Close this dialog and reopen the card.',
     suggestFailed:
         'The photos were not ranked. GuruShots did not answer, or the ranking did not finish. Try again in a moment.',
     fetchChallengesFailed: 'The challenges could not be loaded. GuruShots did not answer. Try again in a moment.',
@@ -690,7 +690,7 @@ export const app = {
     discoverJoining: 'Joining…',
     discoverChecking: 'Checking…',
     discoverPendingNoPhoto:
-        'Coins were already spent, but no photo qualifies for this challenge. Add an eligible photo, then press Join. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.',
+        'Coins were already spent, but no photo qualifies for this challenge. Add an eligible photo, then press Retry submit: you will not be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.',
     discoverUnconfirmed:
         'The payment for this challenge got no answer, so it may or may not have gone through. Retrying only submits your photo, so you are never charged twice. If the GuruShots website shows the coins were not taken, press "I wasn\'t charged", then join again.',
     discoverEarlierPayment:
@@ -716,7 +716,9 @@ export const app = {
         'A join of this challenge is in progress, or another part of the app is using the saved payment records. Nothing was changed. Try again in a moment.',
     discoverForgetNotAuthenticated: 'You are not logged in, so nothing was changed. Log in again, then try once more.',
     discoverForgetUnreadable:
-        'The saved payment records could not be read, so nothing was changed. Restart the app and try again; if it keeps happening, the join-state file needs attention — check the log.',
+        "The saved payment records could not be read, so nothing was changed. Restart the app and try again. If it keeps happening, the join-state file (joinState.json in the app's data folder) is unreadable: check your coin history on the GuruShots website first, then move that file aside and restart the app.",
+    discoverForgetUnreadableAndroid:
+        'The saved payment records could not be read, so nothing was changed. Restart the app and try again. If it keeps happening, the app\'s saved join state is unreadable: check your coin history on the GuruShots website first, then open Settings → About and data in this app and choose "Delete all local data…" (this also logs you out and resets the app\'s settings).',
     discoverForgetFailed: 'Could not forget the payment right now. Nothing was changed. Try again in a moment.',
     discoverAccountUnknown:
         'Could not confirm which account is logged in, so this attempt did nothing and spent no coins. Try again shortly, or log in again.',
@@ -761,10 +763,10 @@ export const app = {
         "Photos that auto-join and auto-submit try first. They must still fit your tag settings (unless Submit Even Without a Tag Match is on and no photo fits them at all), and they are ranked the way the app ranks its own picks (unless “Use Chosen Photos in the order I picked them” is on). A photo can be in only one challenge, so with a shared list the challenge filled first takes it. The list belongs to the account that saved it and is ignored on another account; saving a list there makes the lists saved under the first account apply to it too, unless you remove them first. A scenario's list applies only after joining. Swap ignores the list.",
     chosenPhotosInOrder: 'Use Chosen Photos in the order I picked them',
     chosenPhotosInOrderDesc:
-        "With Chosen Photos set, enter them in the order you picked them (the numbers in the chooser) instead of ranking them the way the app ranks its own picks. A photo that fails your must-include tags, is already entered or isn't offered for the challenge is skipped, and the next one in the list is used; any slots left over are filled by ranking as usual. Off by default.",
+        "With Chosen Photos set, enter them in the order you picked them (the numbers in the chooser) instead of ranking them the way the app ranks its own picks. A photo that fails your must-include tags, is already entered or isn't offered for the challenge is skipped, and the next one in the list is used; any slots left over are filled by ranking as usual. If Submit Even Without a Tag Match is on and none of the chosen photos fits your must-include tags, they can still be entered. Off by default.",
     chosenPhotosOnly: 'Submit Only Chosen Photos',
     chosenPhotosOnlyDesc:
-        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically (Pick… on a challenge card submits photos you choose, once), Emergency Submit ignores this setting (turn on Manual Photos Only for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted (unless Manual Photos Only is on: then, in Discover, choose the photo for that challenge and press Join). Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your must-include tags, they can still be entered. With an empty list this does nothing.',
+        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically (Pick… on a challenge card submits photos you choose, once), Emergency Submit ignores this setting (turn on Manual Photos Only for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted (unless Manual Photos Only is on: then, in Discover, choose the photo for that challenge and press Join, or Retry submit when its coins are already spent). Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your must-include tags, they can still be entered. With an empty list this does nothing.',
     chosenPhotosMemberId: 'Chosen Photos Account',
     chosenPhotosClearedAt: 'Chosen Photos Cleared At',
     chosenPhotosClearedAtDesc:
@@ -774,6 +776,9 @@ export const app = {
     chosenPhotosCount: 'Chosen photos: {count}',
     choosePhotos: 'Choose photos',
     photosClear: 'Clear',
+    photosUseNone: 'Use none',
+    photosUseNoneHint:
+        'This challenge uses no chosen photos, even if your global defaults or a rule have a list. The reset button next to this field brings that inherited list back.',
     chosenPhotoThumbAlt: 'Chosen photo {n}: {id}',
     chosenPhotosScenarioHint:
         "A scenario's chosen photos apply only after the challenge is joined; joining never uses them.",
@@ -781,7 +786,7 @@ export const app = {
         'This applies to every challenge it covers: auto-join and auto-submit skip each challenge that has no usable chosen photo.',
     photoChooserTitle: 'Choose photos',
     photoChooserHelp:
-        'The app uses these first, and they must still pass your tag filters. It ranks them the way it ranks its own picks, or goes by the numbers shown here when “Use Chosen Photos in the order I picked them” is on (Auto-Submit settings, globally or per challenge).',
+        "The app uses these first, and they must still pass your tag filters. It ranks them the way it ranks its own picks, or goes by the numbers shown here when “Use Chosen Photos in the order I picked them” is on (Auto-Submit settings: the global defaults, a challenge rule, or the challenge's own settings once it is joined).",
     photoChooserSearchLabel: 'Search your photos by tag',
     photoChooserSearchPlaceholder: 'e.g. sunset',
     photoChooserSearch: 'Search',
@@ -867,6 +872,10 @@ export const app = {
     photoChooserSaveNoContext:
         "Saving is blocked: without an active or open challenge the app can't check which account this list belongs to. Clear the list to save, or join a challenge first.",
     photoChooserSaveError: "The chosen photos weren't saved because the setting couldn't be written. Try again.",
+    photoChooserDiscardTitle: 'Discard your changes?',
+    photoChooserDiscardText:
+        "You've changed the chosen photos but haven't saved them. Closing now throws those changes away. Choose Cancel to keep choosing, then press Use these photos.",
+    photoChooserDiscard: 'Discard changes',
     photoChooserUse: 'Use these photos',
     fillPick: 'Pick…',
     fillPickLabel: 'Choose which photos to submit now',
@@ -877,7 +886,7 @@ export const app = {
     pickOverCap: 'Picked: {count}, open slots: {max}. Remove some to submit.',
     pickFull: 'All open slots picked',
     pickTileLocked: 'Locked while the app checks whether this challenge accepts it.',
-    pickNoSlots: 'No open slots left: every slot already holds a photo. Close this window.',
+    pickNoSlots: 'No open slots left: every slot already holds a photo. Close this dialog.',
     pickSubmit: 'Submit',
     pickSubmitCount: 'Submit {count}',
     pickAuto: 'Auto',
@@ -951,7 +960,7 @@ export const app = {
     titleRuleMinHours: 'Runs at least',
     titleRuleMaxHours: 'Runs at most',
     titleRuleClosesAt: 'Closes at (any one matches)',
-    titleRuleClosesAtRow: 'Closes at',
+    titleRuleClosesAtRow: 'Close time',
     addCloseTime: 'Add time',
     removeCloseTime: 'Remove time',
     titleRuleClosesAtInvalid:
@@ -1353,6 +1362,8 @@ export const app = {
         "The update couldn't be installed: the downloaded update could not be applied. Restart the app and try again.",
     updateUnverified:
         'The download could not be verified, so it was not installed. The release page is open in your browser.',
+    updateReleasePageOpened:
+        "The update couldn't be installed in the app. The release page is open in your browser, where you can download it.",
     skipVersion: 'Skip Version',
     remindLater: 'Remind Later',
     download: 'Download',
@@ -1578,11 +1589,13 @@ export const notice = {
         'Your stored settings could not be imported, so saving settings is turned off and the app uses default settings.',
     recoveryImportWhy: 'The file settings.json at {path} could not be read or converted.',
     recoveryImportNext:
-        'Fix that file, then choose Retry, or choose Start fresh to begin with default settings. Nothing was overwritten, and Start fresh keeps a copy of settings.json beside it (settings.json.original, or settings.json.unimportable-<time> when that name is taken).',
+        'Fix that file, then choose Retry, or choose Start fresh to begin with default settings. Nothing was overwritten, and Start fresh keeps a copy of settings.json beside it (settings.json.original, or, when that name is taken, settings.json.unimportable- followed by the date and time).',
     recoveryImportWhyAndroid: 'The copy of your settings the app keeps up to date could not be read or converted.',
     recoveryImportNextAndroid:
         'Choose Retry to try again, or Start fresh to begin with default settings. Nothing was overwritten, and saving settings stays off until one of them is done. Start fresh keeps a copy of the stored settings.',
-    recoverySignInKept: 'The damaged copy still holds the sign-in it had, until you next log out.',
+    recoverySignInKept:
+        'The damaged copy may still hold the sign-in it had, even after you log out. Delete it once you no longer need it.',
+    recoverySignInKeptAndroid: 'The damaged copy may still hold the sign-in it had, even after you log out.',
     recoveryRetryingWhat: 'Your settings could not be loaded just now, so saving settings is paused.',
     recoveryRetryingWhy:
         'config.json was damaged and moved to {path}, and settings.json, the copy to restore your settings from, could not be read just now (another program may be using it). Nothing was overwritten.',
@@ -1599,7 +1612,7 @@ export const notice = {
     recoveryWorking: 'Working…',
     recoveryStartFreshTitle: 'Start with default settings?',
     recoveryStartFreshBody:
-        'The app begins with default settings. settings.json is not imported; a copy of it is kept beside it, as settings.json.original or, when that name is taken, as settings.json.unimportable-<time>.',
+        'The app begins with default settings. settings.json is not imported; a copy of it is kept beside it, as settings.json.original or, when that name is taken, as settings.json.unimportable- followed by the date and time.',
     recoveryStartFreshBodyAndroid:
         'The app begins with default settings. The stored copy is not imported; the app keeps a copy of it in its own storage.',
     recoveryReimportTitle: 'Import the file again?',
@@ -1608,6 +1621,8 @@ export const notice = {
     recoveryReimportConfirm: 'Import again',
     recoveryRetryDone: 'Your settings were imported from settings.json. Saving settings works again.',
     recoveryRetryDoneAndroid: 'Your settings were restored from the stored copy. Saving settings works again.',
+    recoveryRetryDoneAdopted:
+        'Nothing was imported. Your settings were already in place (restored or imported while you chose this), and the app is using them. Saving settings works.',
     recoveryRetryFailed:
         'The import did not work. settings.json could not be read or converted, or the settings could not be saved. Nothing was changed. Fix settings.json and choose Retry again, or choose Start fresh. The log has the details.',
     recoveryRetryFailedAndroid:
@@ -1630,6 +1645,8 @@ export const notice = {
         'Starting with default settings did not work. The new settings could not be saved. Nothing was changed. Try again, and if it keeps failing, check that the app can write to its storage. The log has the details.',
     recoveryReimportDone:
         '{path} was imported again. Your earlier settings and login were set aside, and the ones in that file are in use.',
+    recoveryReimportDoneNothingAside:
+        '{path} was imported again. There were no earlier settings to set aside, and the ones in that file are in use.',
     recoveryReimportFailed:
         'The import did not work. {path} is missing, could not be read or converted, or the settings could not be saved. Fix it and try again. If a new notice appears, follow it. The log has the details.',
     importReportTitle: 'Settings imported',
@@ -1692,8 +1709,10 @@ export const about = {
     deleteBusyPass:
         'A voting pass is running, so nothing was deleted. Stop auto-vote, wait for the pass to end, then try again.',
     deleteBusyCli:
-        'A command-line session is running, so nothing was deleted. Stop it in the terminal where it runs (Ctrl+C), then try again.',
+        'Another command-line command or session is running, so nothing was deleted. Wait for it to finish or stop it in the terminal where it runs (Ctrl+C), then try again.',
     deleteBusyApp: 'The desktop app is open, so nothing was deleted. Quit the desktop app, then try again.',
+    deleteBusyWeb:
+        'The web server (pnpm web) is running, so nothing was deleted. Stop it in the terminal where it runs (Ctrl+C), then try again.',
     deleteFailed:
         "Not everything could be deleted. A file or store could not be removed. Close other programs that use the app's files, then try again.",
     deleteFailedAndroid:

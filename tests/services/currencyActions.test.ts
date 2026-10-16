@@ -282,6 +282,43 @@ describe('swapEntry', () => {
         expect(strategy.swapPhoto).toHaveBeenCalledWith(555, 'old', 'fresh', 'tok');
     });
 
+    test('drops the photo chooser’s cached listing of the challenge, for every account', async () => {
+        const cache =
+            require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
+        cache.writeListing('tok', 555, {
+            photos: [],
+            memberId: null,
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        });
+        cache.writeListing('other', 555, {
+            photos: [],
+            memberId: null,
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        });
+        cache.writeListing('tok', 556, {
+            photos: [],
+            memberId: null,
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        });
+        await swapEntry(555, 'old', 'fresh', 'tok', { strategy: stubStrategy(), logger });
+        expect(cache.readFresh('tok', 555)).toBeNull();
+        expect(cache.readFresh('other', 555)).toBeNull();
+        expect(cache.readFresh('tok', 556)).not.toBeNull();
+        cache.clearLibraryCache();
+    });
+
     test.each(['old', 'entered'])('refuses %s as the replacement', async (newId) => {
         const strategy = stubStrategy();
         expect((await swapEntry(555, 'old', newId, 'tok', { strategy, logger })).outcome).toBe('already-entered');
@@ -394,6 +431,26 @@ describe('swap back', () => {
         expect(await swapBack(555, 'repl', 'tok', { strategy, logger, ledger })).toEqual({ ok: true, outcome: 'ok' });
         expect(strategy.swapPhoto).toHaveBeenCalledWith(555, 'repl', 'orig', 'tok');
         expect(ledger.list(555)).toEqual([]);
+    });
+
+    test('a swap back drops the photo chooser’s cached listing of the challenge too', async () => {
+        const cache =
+            require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
+        const strategy = stubStrategy({ challenge: swappedChallenge() });
+        const ledger = createMemoryLedger();
+        ledger.onSwapped(555, { id: 'orig', member_id: 'mem1', boosted: true }, 'repl');
+        cache.writeListing('tok', 555, {
+            photos: [],
+            memberId: null,
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        });
+        await swapBack(555, 'repl', 'tok', { strategy, logger, ledger });
+        expect(cache.readFresh('tok', 555)).toBeNull();
+        cache.clearLibraryCache();
     });
 
     test('no record for that slot → not-available, nothing spent', async () => {

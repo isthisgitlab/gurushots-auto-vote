@@ -5,6 +5,8 @@
  *
  * Thin dispatcher: parses argv, routes to a command module, and owns
  * process-level concerns (init, exit codes, unhandled error handlers).
+ * Every command that loads the settings (all but help, licenses and reset-data) holds the CLI session marker while it
+ * runs (settings/cliSessionLock.ts).
  * The command table (name → handler) is cli/commandTable.ts, built from the
  * handler factories in cli/commandKit.ts; `help` text is cli/help.ts.
  * The actual command logic lives in:
@@ -21,8 +23,10 @@ logger.withCategory('api').debug('CLI module loaded, starting initialization', n
 
 import * as settings from '../settings';
 import { UserDataUnavailableError } from '../runtime';
+import { fileErrorMessage } from '../errorMessage';
 import { initializeHeaders } from '../api/randomizer';
-import { COMMANDS } from './commandTable';
+import { COMMANDS, holdsSessionMarker } from './commandTable';
+import { holdCliSessionLock } from '../settings/cliSessionLock';
 import { usageError } from './commandKit';
 import { reportSettingsRecovery } from './commands/settingsRecovery';
 import { showUnofficialNotice } from './commands/unofficialNotice';
@@ -43,8 +47,28 @@ const dispatch = (name: string | undefined, argv: string[]): number | Promise<nu
     return COMMANDS[name](argv);
 };
 
+/**
+ * Takes the marker the desktop app and the local-data wipe look for: this process may be using the saved login or
+ * writing the app's data. It is released when the process exits, however it ends. Best effort: a marker that cannot be
+ * written only costs those checks, so the command still runs.
+ */
+const holdSessionMarker = (name: string | undefined) => {
+    if (!name || !Object.hasOwn(COMMANDS, name) || !holdsSessionMarker(name)) return;
+    try {
+        process.on('exit', holdCliSessionLock());
+    } catch (error) {
+        logger
+            .withCategory('settings')
+            .warning(
+                `Could not mark this command as running (a local-data wipe will not wait for it): ${fileErrorMessage(error) ?? 'unknown error'}`,
+            );
+    }
+};
+
 const main = async () => {
     try {
+        // Before anything reads or writes the settings: the headers are saved on a first run.
+        holdSessionMarker(command);
         initializeHeaders();
         // Seed the curated intent presets once (idempotent; never fatal) so
         // the `settings` command lists them and they can be applied from CLI.

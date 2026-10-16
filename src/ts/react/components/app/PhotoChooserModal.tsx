@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { useImageLoads } from '@/hooks/useImageLoads';
 import { buildPhotoUrl } from '@/utils/formatters';
@@ -500,6 +501,7 @@ function PhotoChooserBody({
     reloadSaved,
     onSave,
     onClose,
+    unsaved,
 }: {
     value: string[];
     savedCount: number;
@@ -508,10 +510,20 @@ function PhotoChooserBody({
     reloadSaved?: () => Promise<string[] | null>;
     onSave: (ids: string[]) => boolean | Promise<boolean>;
     onClose: () => void;
+    /** Kept up to date with whether the selection differs from the list it started from (the saved one). */
+    unsaved: { current: boolean };
 }) {
     const { t } = useTranslation();
     const owner = useChosenPhotosOwner();
     const [selected, setSelected] = useState<string[]>(value);
+    // The list the selection started from: the saved one, or what a late read of it brought.
+    const [startedFrom, setStartedFrom] = useState<string[]>(value);
+    unsaved.current = selected.length !== startedFrom.length || selected.some((id, i) => id !== startedFrom[i]);
+    const startFrom = useCallback((ids: string[]) => {
+        setStartedFrom(ids);
+        setSelected(ids);
+    }, []);
+    const startFresh = useCallback(() => startFrom([]), [startFrom]);
     const { state, known, generation, revalidating, recheckFailed, load, refresh, retry, setMember } =
         useLibraryListing(challengeId);
     const [listsRemoved, setListsRemoved] = useState(false);
@@ -527,7 +539,7 @@ function PhotoChooserBody({
         owner,
         state,
         removed: listsRemoved,
-        onFirstSeen: () => setSelected([]),
+        onFirstSeen: startFresh,
     });
     // A saved list that came without its ids is read again once the listing shows it is this
     // account's, and the selection starts from it; until then Save is held (see the hook).
@@ -540,7 +552,7 @@ function PhotoChooserBody({
         confirmAccount,
         retryListing: retry,
         onMember: setMember,
-        onRead: setSelected,
+        onRead: startFrom,
     });
     // Until the list is read the tiles are inert: a late read would otherwise overwrite what was picked.
     const locked = saved.status !== 'ok';
@@ -599,8 +611,9 @@ function PhotoChooserBody({
 /**
  * Pick the photos for a Chosen Photos list from the member's own library.
  *
- * The selection is a set (no order; photos rank by the picker's own scorer),
- * capped at MAX_CHOSEN_PHOTOS. `challengeId` makes the listing say whether each
+ * The selection is a numbered list in the order it is saved in (the app goes by that
+ * order only when Use Chosen Photos in the order I picked them is on; otherwise photos
+ * rank by the picker's own scorer), capped at MAX_CHOSEN_PHOTOS. `challengeId` makes the listing say whether each
  * photo can enter THAT challenge; without it eligibility is only known at submit
  * time. `onSave` gets the chosen ids and answers whether they were stored: on
  * false (or a throw) the modal stays open on an error. `clearMeansInherit` says
@@ -629,18 +642,44 @@ export function PhotoChooserModal({
     onSave: (ids: string[]) => boolean | Promise<boolean>;
 }) {
     const { t } = useTranslation();
+    const unsaved = useRef(false);
+    const [asking, setAsking] = useState(false);
+    // The question belongs to one opening: a modal the parent keeps mounted must not open on it next time.
+    useEffect(() => {
+        if (!isOpen) setAsking(false);
+    }, [isOpen]);
     if (!isOpen) return null;
+    // Esc, the backdrop and the close button: picks that are not saved are not thrown away unasked.
+    const dismiss = () => (unsaved.current ? setAsking(true) : onClose());
     return (
-        <Modal isOpen onClose={onClose} title={t('app.photoChooserTitle')} size="xl">
-            <PhotoChooserBody
-                value={value}
-                savedCount={savedCount}
-                challengeId={challengeId}
-                clearMeansInherit={clearMeansInherit}
-                reloadSaved={reloadSaved}
-                onSave={onSave}
-                onClose={onClose}
-            />
-        </Modal>
+        <>
+            <Modal isOpen onClose={dismiss} title={t('app.photoChooserTitle')} size="xl">
+                <PhotoChooserBody
+                    value={value}
+                    savedCount={savedCount}
+                    challengeId={challengeId}
+                    clearMeansInherit={clearMeansInherit}
+                    reloadSaved={reloadSaved}
+                    onSave={onSave}
+                    onClose={onClose}
+                    unsaved={unsaved}
+                />
+            </Modal>
+            <ConfirmModal
+                isOpen={asking}
+                title={t('app.photoChooserDiscardTitle')}
+                working={false}
+                problem={null}
+                onClose={() => setAsking(false)}
+                onConfirm={() => {
+                    setAsking(false);
+                    onClose();
+                }}
+                confirmLabel="app.photoChooserDiscard"
+                workingLabel="app.photoChooserDiscard"
+            >
+                <p>{t('app.photoChooserDiscardText')}</p>
+            </ConfirmModal>
+        </>
     );
 }

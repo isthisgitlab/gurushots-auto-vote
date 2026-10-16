@@ -33,7 +33,7 @@ const applyBoost = async (challenge: Challenge, token: string): Promise<SuccessR
         logger
             .withCategory('voting')
             .error(
-                "Couldn't apply Boost — every entry has Turbo or is pinned for Turbo (Boost and Turbo can't share an entry). Add another entry, unpin the photo, or pass --image=<id>",
+                "Couldn't apply Boost — every entry has Turbo or is pinned for Turbo (Boost and Turbo can't share an entry). Add another entry or unpin the photo",
                 { challengeId },
             );
         return null;

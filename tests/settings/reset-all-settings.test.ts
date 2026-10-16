@@ -14,7 +14,13 @@ import type { MemoryStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/settings');
 import { isConfig } from '../helpers/storedShapes';
 import { parseJsonAs } from '../helpers/parseJson';
+import { logCategories } from '../helpers/logCategories';
+import titlePinsModule = require('../../src/ts/settings/titlePins');
 
+jest.mock('../../src/ts/settings/titlePins', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/settings/titlePins')>('../../src/ts/settings/titlePins'),
+}));
 jest.mock('../../src/ts/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
@@ -48,7 +54,7 @@ describe('settings facade — resetAllSettings', () => {
         removeHeadlessStore();
     });
 
-    const imported = { at: '2026-10-15T10:00:00.000Z', sha256: '', report: { refsBlocked: [] }, acknowledged: true };
+    const imported = { at: '2026-10-15T10:00:00.000Z', report: { refsBlocked: [] }, acknowledged: true };
 
     test('keeps the whole sign-in state and the mock mode, and resets everything else to defaults', () => {
         store.value = JSON.stringify({
@@ -107,6 +113,19 @@ describe('settings facade — resetAllSettings', () => {
         expect(settings.resetAllSettings()).toBe(true);
 
         expect(settings.getTitlePins()).toEqual({});
+    });
+
+    test('pins that cannot be cleared are logged, and do not make a reset of the configuration a failed one', () => {
+        store.value = JSON.stringify({ app: { theme: 'dark' } });
+        const clearing = jest.spyOn(titlePinsModule, 'clearTitlePins').mockReturnValue(false);
+
+        expect(settings.resetAllSettings()).toBe(true);
+
+        expect(parseJsonAs(store.value!, isConfig).app.theme).toBe('light');
+        expect(
+            logCategories('warning', 'The settings were reset, but the saved title pins could not be cleared'),
+        ).toEqual(['settings']);
+        clearing.mockRestore();
     });
 
     test('settings that cannot be saved keep the pins too', () => {

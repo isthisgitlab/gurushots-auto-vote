@@ -6,7 +6,7 @@ import { BusyContent } from '@/components/ui/LoadingSpinner';
 import * as ipc from '@/api/ipc';
 import { errorMessage } from '../../../errorMessage';
 
-type Busy = 'busy-pass' | 'busy-cli' | 'busy-app';
+type Busy = 'busy-pass' | 'busy-cli' | 'busy-app' | 'busy-web';
 type Outcome = 'idle' | Busy | 'failed' | 'failed-reload' | 'done';
 
 // Each refusal names what is in the way and the one step that clears it.
@@ -14,6 +14,7 @@ const BUSY_KEYS: Record<Busy, string> = {
     'busy-pass': 'about.deleteBusyPass',
     'busy-cli': 'about.deleteBusyCli',
     'busy-app': 'about.deleteBusyApp',
+    'busy-web': 'about.deleteBusyWeb',
 };
 const isBusy = (error: unknown): error is Busy => typeof error === 'string' && Object.hasOwn(BUSY_KEYS, error);
 
@@ -21,7 +22,7 @@ const isBusy = (error: unknown): error is Busy => typeof error === 'string' && O
  * Confirms and runs "Delete all local data". It lists what goes (the background service state only on Android),
  * and starts with focus on Cancel — Cancel is the first control and there is no close button, so nothing is
  * deleted by a stray Enter. While the delete runs the dialog cannot be dismissed. A refusal (a voting pass, a command-line
- * session or the desktop app is in the way) or a failure is worded for the user and stays on screen (a failure that left the
+ * session, the web server or the desktop app is in the way) or a failure is worded for the user and stays on screen (a failure that left the
  * window's caches emptied reloads it when the dialog is closed, and the outcome alert carries a sentence that says so); on success the
  * shell relaunches the app, or, where it cannot (the web shell's server stops), the text says to start it again.
  */
@@ -71,7 +72,8 @@ export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onC
     const outcomeKey = (() => {
         if (outcome === 'idle') return null;
         if (outcome === 'done') return relaunchesAfterWipe ? 'about.deleteDone' : 'about.deleteDoneWeb';
-        if (outcome === 'failed') return 'about.deleteFailed';
+        // Android has no other programs holding the files: its failure text names the stored data and the service.
+        if (outcome === 'failed') return backgroundService ? 'about.deleteFailedAndroid' : 'about.deleteFailed';
         if (outcome === 'failed-reload') return 'about.deleteFailedAndroid';
         return BUSY_KEYS[outcome];
     })();

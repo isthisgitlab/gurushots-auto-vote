@@ -2,8 +2,9 @@ import { stripTerminalControl } from './logSafe';
 
 /**
  * The plain text of a short HTML message the server sends (a photo's reason it cannot enter a challenge, say), as
- * the terminal and the renderer's text nodes show it. In order: an HTML comment is removed; `<br>` becomes a dash
- * between the lines, and a break at either end of the message separates nothing and is dropped; every other tag the
+ * the terminal and the renderer's text nodes show it. In order: an HTML comment is removed; `<br>` (with or without
+ * attributes) becomes a dash between the lines, and a break at either end of the message separates nothing and is
+ * dropped; a closing `</p>`, `</div>` or `</li>` becomes a space, so the blocks around it stay apart; every other tag the
  * pattern recognises is removed (a `>` inside a quoted attribute value does not end it); the named entities in
  * `ENTITIES` are decoded in one pass, so an encoded tag or entity stays literal text and any other entity, numeric
  * ones included, is left as written (a real `&mdash;` at either end stays); then control and invisible format
@@ -30,7 +31,9 @@ const ENTITIES = new Map<string, string>([
 ]);
 
 const COMMENTS = /<!--[\s\S]*?-->/g;
-const LINE_BREAKS = /(?:<br\s*\/?>\s*)+/gi;
+const LINE_BREAKS = /(?:<br\b(?:"[^"]*"|'[^']*'|[^<>"'])*>\s*)+/gi;
+// The end of a block: its text must not run into the next one.
+const BLOCK_ENDS = /<\/(?:p|div|li)\s*>/gi;
 // A tag opens with a letter (or a slash and a letter): a `<` in running text is not one. A quoted attribute value
 // may hold `<` and `>`.
 const TAGS = /<\/?[a-z](?:"[^"]*"|'[^']*'|[^<>"'])*>/gi;
@@ -46,6 +49,7 @@ const htmlToText = (html: string): string =>
             .replaceAll(BREAK, '')
             .replace(COMMENTS, '')
             .replace(LINE_BREAKS, BREAK)
+            .replace(BLOCK_ENDS, ' ')
             .replace(TAGS, '')
             // A break at either end separates nothing.
             .replace(BREAKS_AND_SPACE, '')

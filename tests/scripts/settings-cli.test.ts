@@ -19,7 +19,8 @@ jest.mock('../../src/ts/settings', () => ({
         auth: { token: 'super-secret-token', apiHeaders: { authorization: 'Bearer abc' } },
     })),
     getSetting: jest.fn((key: string) => ({ token: 'super-secret-token', theme: 'dark' })[key as 'token' | 'theme']),
-    SETTINGS_SCHEMA: {},
+    SETTINGS_SCHEMA: { exposure: {}, theme: {} },
+    getGlobalDefault: jest.fn((key: string) => ({ exposure: 80 })[key as 'exposure']),
 }));
 
 // Faithful stand-in for the logger's key-based deep redaction (the real
@@ -267,6 +268,21 @@ describe('settings-cli get formatting and lookup', () => {
 
         expect(output).toBe('theme: "dark"');
         expect(settings.getSetting).toHaveBeenCalledWith('theme');
+    });
+
+    test('a schema key that is no app setting is read as the global default `set` writes it as', async () => {
+        const { output, exitCalls } = await runScript('get', 'exposure');
+
+        expect(output).toBe('exposure: 80');
+        expect(settings.getGlobalDefault).toHaveBeenCalledWith('exposure');
+        expect(exitCalls).not.toContain(1);
+    });
+
+    test('a schema key that is also an app setting is read as the app setting', async () => {
+        const { output } = await runScript('get', 'theme');
+
+        expect(output).toBe('theme: "dark"');
+        expect(settings.getGlobalDefault).not.toHaveBeenCalled();
     });
 
     test('a container of the configuration is read as a path, not through the facade', async () => {

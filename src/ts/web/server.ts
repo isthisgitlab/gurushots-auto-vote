@@ -39,6 +39,7 @@ import { clearAuthToken, LogoutNotSavedError } from '../services/auth';
 import { LOGOUT_NOT_SAVED } from '../ipc/logoutCode';
 import { initializeHeaders } from '../api/randomizer';
 import * as settings from '../settings';
+import { holdWebServerLock } from '../settings/cliSessionLock';
 import * as logger from '../logger';
 import { errorMessage } from '../errorMessage';
 import { isPlainObject } from '../plainObject';
@@ -150,6 +151,14 @@ const isSameOrigin = (req: IncomingMessage) => {
     const origin = req.headers.origin;
     // aislop-ignore-next-line ai-slop/hardcoded-url -- same-origin check built from the request's own Host header, not a deployment URL
     return origin === undefined || origin === `http://${req.headers.host}`;
+};
+
+// An event stream is a GET, which a browser sends without Origin when it is same-origin; a stream opened from another
+// site carries an Origin that is not this server's, and Sec-Fetch-Site says `cross-site` or `same-site` (another port
+// on this host is same-site, not same-origin).
+const isCrossSiteStream = (req: IncomingMessage) => {
+    const site = req.headers['sec-fetch-site'];
+    return !isSameOrigin(req) || (site !== undefined && site !== 'same-origin' && site !== 'none');
 };
 
 const readJsonBody = async (req: IncomingMessage): Promise<unknown> => {
@@ -321,6 +330,8 @@ const createWebServer = ({ distDir, token = newShellToken(), onLocalDataWiped }:
         if (!isLocalHost(req.headers.host)) fail(res, 403, 'Refused: non-local Host header');
         else if (pathname.startsWith('/api/') && !isShellToken(requestToken(req, pathname, searchParams), token)) {
             fail(res, 403, WEB_SHELL_TOKEN_REFUSED);
+        } else if (req.method === 'GET' && pathname === '/api/events' && isCrossSiteStream(req)) {
+            fail(res, 403, 'Refused: cross-site request');
         } else if (req.method === 'GET' && pathname === '/api/events') openEventStream(res, clients);
         else if (pathname.startsWith('/api/')) {
             res.once('finish', stopIfWiped);
@@ -369,6 +380,9 @@ const startWebServer = async ({ port, distDir }: StartOptions) => {
         server.once('error', reject);
         server.listen(port, LOOPBACK_HOST, () => resolve());
     });
+    // The marker a local-data wipe from the desktop app or the CLI looks for: this server writes the app's data until it
+    // stops (every wipe stops it). A server killed by a signal leaves one that goes stale.
+    server.once('close', holdWebServerLock());
     const address = server.address() as { port: number };
     const origin = `http://localhost:${address.port}/`;
     logger.withCategory('ui').info(`Web UI listening on ${origin}`, { userData: settings.getUserDataPath() });

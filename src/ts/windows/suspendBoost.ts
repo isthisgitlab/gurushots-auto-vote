@@ -131,6 +131,7 @@ const applyImminentBoostsOnSuspend = async ({
         const results = await apiFactory.getApiStrategy().applyBoostsOnSuspend(
             selected.map(({ challenge }) => challenge),
             token,
+            now,
         );
         results.forEach((result, index) => {
             const { challenge } = selected[index];

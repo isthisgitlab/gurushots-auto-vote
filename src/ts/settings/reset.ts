@@ -62,8 +62,15 @@ const resetAllSettings = (): boolean => {
     newSettings.app.mock = currentSettings.app.mock;
     if (currentSettings.imported) newSettings.imported = currentSettings.imported;
 
-    // The pins the cache holds go with the rest, as `titlePins` of settings format 1 did.
-    return saveSettings(newSettings) && clearTitlePins();
+    if (!saveSettings(newSettings)) return false;
+    // The pins the cache holds go with the rest, as `titlePins` of settings format 1 did. The configuration is reset
+    // whether or not they are: a pin store that cannot be written is said, not reported as a reset that failed.
+    if (!clearTitlePins()) {
+        logger
+            .withCategory('settings')
+            .warning('The settings were reset, but the saved title pins could not be cleared');
+    }
+    return true;
 };
 
 /**

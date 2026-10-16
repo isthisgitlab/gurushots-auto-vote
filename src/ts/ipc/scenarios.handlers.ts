@@ -36,6 +36,7 @@ import { evaluateScenario, startState } from '../scenarios/evaluate';
 import { simulateScenario } from '../scenarios/simulate';
 import { SCENARIO_TEMPLATES } from '../scenarios/templates';
 import { refreshScenarioStateAsync } from '../scenarioStateStore';
+import { ALL_KEY } from '../scenarioStateFile';
 import { backgroundServiceOwnsScenarios } from '../services/scenarioRunner';
 
 import type { IpcMain } from 'electron';
@@ -270,7 +271,8 @@ const buildHandlers = () =>
         },
 
         'reset-scenario-state': async (event: unknown, challengeId: string | number) => {
-            if (!isIdArg(challengeId)) return invalidArgs;
+            // The state file keeps its count of resets of every challenge under ALL_KEY: that is no challenge's id.
+            if (!isIdArg(challengeId) || String(challengeId) === ALL_KEY) return invalidArgs;
             return safely('reset-scenario-state', () => resetScenario(challengeId));
         },
 

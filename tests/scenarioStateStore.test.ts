@@ -424,6 +424,22 @@ describe('the file’s changes are made under a lock across processes', () => {
         await expect(ledger.remove(7)).resolves.toBe('removed');
     });
 
+    test("a write that fails is logged without the path it names: that holds the user's home folder", () => {
+        const store = rawStore();
+        const ledger = createStateLedger(
+            store,
+            jest.fn(() => ({ ok: true, release: jest.fn() })),
+        );
+        jest.mocked(store.writeRaw).mockImplementationOnce(() => {
+            throw new Error("EACCES: permission denied, open '/Users/jane/scenarioState.json'");
+        });
+        expect(ledger.set(7, state())).toBe('failed');
+        expect(invalid<() => CategoryLogger>(logger.withCategory)().error).toHaveBeenCalledWith(
+            "scenario state could not be written: EACCES: permission denied, open 'scenarioState.json'",
+            null,
+        );
+    });
+
     test('the lock is let go whatever happens in the change, and a write that fails is a failed write, not a throw', () => {
         const store = rawStore();
         const release = jest.fn();

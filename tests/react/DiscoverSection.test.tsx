@@ -12,6 +12,7 @@ import { invalid } from '../helpers/invalid';
 import { app } from '../../src/ts/translations/english';
 import type { OpenChallenge } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
+import type { RendererGlobals } from '../../src/ts/types/capacitor';
 import type { JoinOutcome } from '@/components/app/DiscoverSection';
 
 type JoinApi = WindowApi['joinChallenge'];
@@ -696,6 +697,24 @@ describe('edge paths', () => {
         expect(window.api.getMemberChallenges).toHaveBeenCalledTimes(2);
     });
 
+    test('a failed automatic re-read keeps the rows, a pending Retry submit among them, and shows the error beside them', async () => {
+        window.api.joinChallenge = joinMock().mockResolvedValue(
+            invalid({ success: false, status: 'charged-pending-submit' }),
+        );
+        renderSection();
+        await screen.findByText('Paid One');
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        await screen.findByText('app.discoverChargedPending');
+        window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: false, error: 'down' }));
+        jest.mocked(window.api.getMemberChallenges).mockClear();
+        fireEvent.click(screen.getByText('app.discoverRefresh'));
+        expect(await screen.findByText('app.discoverUnavailableList', { selector: 'p' })).toBeTruthy();
+        expect(screen.getByText('Free One')).toBeTruthy();
+        expect(screen.getByText('Paid One')).toBeTruthy();
+        expect(screen.getByText('app.discoverRetrySubmit')).toBeTruthy();
+        expect(screen.queryByText('app.discoverEmpty')).toBeNull();
+    });
+
     test('the error badge of the collapsed section has a text name', async () => {
         window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: false, error: 'down' }));
         renderSection();
@@ -836,7 +855,7 @@ describe('edge paths', () => {
         expect(screen.queryByText('app.discoverChargedPending')).toBeNull();
     });
 
-    test('coins already spent but no photo qualifies: it says so, and offers no retry that cannot work', async () => {
+    test('coins already spent but no photo qualifies: it says so, and the row offers Retry submit rather than a paid Join', async () => {
         window.api.joinChallenge = joinMock().mockResolvedValue(
             invalid({ success: false, status: 'charged-pending-submit', reason: 'no-photo' }),
         );
@@ -846,8 +865,42 @@ describe('edge paths', () => {
         const note = await screen.findByText('app.discoverPendingNoPhoto');
         expect(note.getAttribute('role')).toBe('alert');
         expect(screen.queryByText('app.discoverChargedPending')).toBeNull();
-        expect(screen.queryByText('app.discoverRetrySubmit')).toBeNull();
+        expect(screen.getAllByText('app.discoverRetrySubmit')).toHaveLength(1);
+        expect(screen.queryByText('app.discoverJoinPaid')).toBeNull();
     });
+
+    test.each([undefined, 'unconfirmed', 'earlier-payment'])(
+        'a charged row (reason %s) has one button, Retry submit, named without a cost and not in the warning colour; it spends nothing',
+        async (reason) => {
+            window.api.joinChallenge = joinMock().mockResolvedValue(
+                invalid({ success: false, status: 'charged-pending-submit', ...(reason ? { reason } : {}) }),
+            );
+            mockTranslator.t.mockImplementation((key) =>
+                key === 'app.discoverRetrySubmitLabel'
+                    ? 'Retry submit for {title}'
+                    : key === 'app.discoverJoinPaidLabel'
+                      ? 'Join (paid) {title}, {coins} coins'
+                      : key,
+            );
+            try {
+                renderSection();
+                await screen.findByText('Paid One');
+                fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+                const retry = await screen.findByRole('button', { name: 'Retry submit for Paid One' });
+                expect(retry.textContent).toBe('app.discoverRetrySubmit');
+                expect(retry.className).not.toContain('btn-warning');
+                expect(screen.getAllByText('app.discoverRetrySubmit')).toHaveLength(1);
+                expect(screen.queryByRole('button', { name: /coins/ })).toBeNull();
+                fireEvent.click(retry);
+                await waitFor(() => expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, false));
+                expect(jest.mocked(window.api.joinChallenge).mock.calls.every(([, spend]) => spend === false)).toBe(
+                    true,
+                );
+            } finally {
+                mockTranslator.t.mockImplementation((key) => key);
+            }
+        },
+    );
 
     test('a payment that got no answer says so, and keeps the Retry that only submits', async () => {
         window.api.joinChallenge = joinMock().mockResolvedValue(
@@ -1040,6 +1093,21 @@ describe('edge paths', () => {
             fireEvent.click(screen.getByText('app.discoverForgetPayment'));
             await screen.findByText('app.discoverForgetTitle');
             expect(screen.queryByText(key)).toBeNull();
+        });
+
+        test('an unreadable join state tells an Android user to clear the app storage, not to move a file', async () => {
+            (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+            try {
+                window.api.forgetUnconfirmedPayment = forgetMock().mockResolvedValue(
+                    invalid({ success: false, error: 'unreadable', status: 'unreadable' }),
+                );
+                await openForgetDialog();
+                fireEvent.click(screen.getByText('app.discoverForgetConfirm'));
+                expect(await screen.findByText('app.discoverForgetUnreadableAndroid')).toBeTruthy();
+                expect(screen.queryByText('app.discoverForgetUnreadable')).toBeNull();
+            } finally {
+                delete (globalThis as RendererGlobals).Capacitor;
+            }
         });
 
         describe('the balance before the payment, to compare with GuruShots', () => {

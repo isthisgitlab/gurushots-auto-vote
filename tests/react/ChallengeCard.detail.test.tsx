@@ -349,6 +349,24 @@ describe('progress', () => {
         expect(unknown.container.querySelector('progress')?.className).toContain('progress-latvian');
     });
 
+    test('the percentage is visible text, and the bar is named by the "Your progress" caption', () => {
+        const { container } = renderCard(
+            withTotal({ votes: 5, rank: 1, level: 5, level_name: 'ALL STAR', percent: 42.4, next_message: '' }),
+        );
+        const bar = container.querySelector('progress')!;
+        expect(screen.getByText('42%')).toBeTruthy();
+        const caption = screen.getByText('app.yourProgress');
+        expect(bar.getAttribute('aria-labelledby')).toBe(caption.id);
+        expect(caption.id).not.toBe('');
+    });
+
+    test('a ranking total without a percentage shows no percentage text', () => {
+        const { container } = renderCard(
+            withTotal({ votes: 5, rank: 1, level: 5, level_name: 'ALL STAR', next_message: '' }),
+        );
+        expect(container.querySelector('progress')!.parentElement!.textContent).toBe('');
+    });
+
     test('levels past the named table fall back to LEVEL n', () => {
         renderCard(withTotal({ votes: 5, rank: 1, level: 6, level_name: 'X', percent: 1, next_message: '' }));
         expect(screen.getByText(/LEVEL 7 \(8995/)).toBeTruthy();
@@ -847,7 +865,7 @@ describe('entries, tags and alerts', () => {
             await waitFor(() => expect(alerts()).toEqual([text]));
         });
 
-        test('the compact tile shows both notes, each carrying its whole text as a title', async () => {
+        test('the compact tile shows both notes whole (no clamp, no title standing in for the text)', async () => {
             window.api.getEffectiveSetting = jest.fn(async (key) => key === 'compactCards');
             answer({ boost: { by: 'pin', releaseAt }, turbo: { by: 'flag' } });
             renderCard(makeChallenge());
@@ -859,10 +877,33 @@ describe('entries, tags and alerts', () => {
                     .replace(/\{other\}/g, 'Turbo')
                     .replace('{time}', when)}`,
             );
-            expect(boost.getAttribute('title')).toBe(boost.textContent?.slice(2));
+            expect(boost.className).not.toContain('line-clamp');
+            expect(boost.hasAttribute('title')).toBe(false);
             expect(turbo.textContent).toBe(
                 "⚠ Turbo can't apply: your only entry already has Boost (they can't share an entry). Add another entry to use both.",
             );
+        });
+
+        test('a reworded warning for the same feature updates the same element', async () => {
+            answer({ turbo: { by: 'flag' } });
+            const challenge = makeChallenge();
+            const { rerender } = renderCard(challenge, { settingsVersion: 0 });
+            const first = await screen.findByRole('alert');
+            answer({ turbo: { by: 'pin' as const, releaseAt } });
+            rerender(
+                <ChallengeCard
+                    challenge={challenge}
+                    settingsVersion={1}
+                    timeRemaining="2h"
+                    timezone="local"
+                    autovoteRunning={false}
+                    onVoteComplete={jest.fn()}
+                    onSettingsClick={jest.fn()}
+                    onCurrencySpent={jest.fn()}
+                />,
+            );
+            await waitFor(() => expect(screen.getByRole('alert').textContent).toContain(when));
+            expect(screen.getByRole('alert')).toBe(first);
         });
 
         test('nothing is shown while nothing is blocked', async () => {

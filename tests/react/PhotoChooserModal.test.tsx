@@ -57,6 +57,97 @@ const deferred = <T,>() => {
     return { promise, resolve };
 };
 
+describe('closing with unsaved picks', () => {
+    const backdrop = () => document.querySelector<HTMLElement>('.modal-backdrop')!;
+    const discardTitle = 'Discard your changes?';
+
+    test('Escape and the backdrop close at once while the selection is the saved one', async () => {
+        const { onClose } = setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(onClose).toHaveBeenCalledTimes(1);
+        fireEvent.click(backdrop());
+        expect(onClose).toHaveBeenCalledTimes(2);
+        expect(screen.queryByText(discardTitle)).toBeNull();
+    });
+
+    test('Escape, the backdrop and the close button ask before discarding a changed selection', async () => {
+        const { onClose, onSave } = setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.click(tile(2));
+
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.getByText(discardTitle)).toBeTruthy();
+        expect(onClose).not.toHaveBeenCalled();
+        // Escape closes the question only; the picks are still there.
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByText(discardTitle)).toBeNull();
+        expect(tile(2).getAttribute('aria-pressed')).toBe('true');
+
+        fireEvent.click(backdrop());
+        expect(screen.getByText(discardTitle)).toBeTruthy();
+        fireEvent.click(
+            within(screen.getByText(discardTitle).closest('[role="dialog"]') as HTMLElement).getByRole('button', {
+                name: 'Cancel',
+            }),
+        );
+        expect(screen.queryByText(discardTitle)).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'common.closeModal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(onSave).not.toHaveBeenCalled();
+    });
+
+    test('putting the selection back to the saved one closes without asking; the same photos in another order is a change', async () => {
+        const { onClose } = setup({ value: [idOf(1), idOf(2)] });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.click(tile(2));
+        fireEvent.click(tile(2));
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(onClose).toHaveBeenCalledTimes(1);
+
+        fireEvent.click(tile(1));
+        fireEvent.click(tile(1));
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.getByText(discardTitle)).toBeTruthy();
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    test('a modal the parent keeps mounted does not reopen on the discard question', async () => {
+        const { rerender, onClose, onSave } = setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.click(tile(2));
+        fireEvent.keyDown(document, { key: 'Escape' });
+        fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+        // The parent closes it, and opens it again later.
+        rerender(<PhotoChooserModal isOpen={false} onClose={onClose} value={[idOf(1)]} onSave={onSave} />);
+        rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} onSave={onSave} />);
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(screen.queryByText(discardTitle)).toBeNull();
+
+        // A question left open when the parent closes the chooser is gone too.
+        fireEvent.click(tile(2));
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.getByText(discardTitle)).toBeTruthy();
+        rerender(<PhotoChooserModal isOpen={false} onClose={onClose} value={[idOf(1)]} onSave={onSave} />);
+        rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} onSave={onSave} />);
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(screen.queryByText(discardTitle)).toBeNull();
+    });
+
+    test('a saved list read late is the list to compare with, not a change', async () => {
+        const reloadSaved = jest.fn().mockResolvedValue([idOf(1)]);
+        jest.mocked(window.api.getSetting).mockResolvedValue(MEMBER);
+        const { onClose } = setup({ value: [], savedCount: 1, reloadSaved });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await waitFor(() => expect(tile(1).getAttribute('aria-pressed')).toBe('true'));
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+});
+
 const getLibrary = () => jest.mocked(window.api.getLibraryPhotos);
 
 // The count line is the first live region; the footer's hold/confirmation status is the last.
@@ -1542,7 +1633,7 @@ test('explains how chosen photos are used: ranked, or in the picked order when t
     expect(help).toContain('must still pass your tag filters');
     expect(help).toContain('ranks them the way it ranks its own picks');
     expect(help).toContain('Use Chosen Photos in the order I picked them');
-    expect(help).toContain('Auto-Submit settings, globally or per challenge');
+    expect(help).toContain('Auto-Submit settings: the global defaults, a challenge rule, or the challenge');
     await screen.findByRole('button', { name: /^Photo 00000001:/ });
 });
 

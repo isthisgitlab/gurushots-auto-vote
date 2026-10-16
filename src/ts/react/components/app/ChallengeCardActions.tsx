@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
 import { useSubmitPicked } from '@/api/useSubmitPicked';
 import { useSwapPhoto } from '@/api/useCurrencyActions';
-import { spentOrStale } from '@/utils/spentOrStale';
+import { alreadyEntered, spentOrStale } from '@/utils/spentOrStale';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { ActionButton } from '@/components/ui/ActionButton';
@@ -62,10 +62,13 @@ function EarnTurboButton({
     );
 }
 
+/** A button's decorative prefix, kept out of its accessible name. */
+const Icon = ({ icon }: { icon: string }) => (icon ? <span aria-hidden="true">{icon}</span> : null);
+
 /**
  * "+1" / "+N" submit buttons and "Pick…" (detailed entries cell, compact action
  * row). "+N" only appears when more than one slot is open. `icon` prefixes the
- * "+1" / "+N" labels where the entries cell isn't there to say what they add.
+ * labels where the entries cell isn't there to say what they add.
  * A running fill or pick-submit (`picking`) disables all of them.
  */
 export function FillButtons({
@@ -86,6 +89,7 @@ export function FillButtons({
     icon?: string;
 }) {
     const { t } = useTranslation();
+    const pickHintId = useId();
     return (
         <>
             <ActionButton
@@ -96,7 +100,8 @@ export function FillButtons({
                 aria-busy={filling}
             >
                 <BusyContent busy={filling} label="+1">
-                    {`${icon}+1`}
+                    <Icon icon={icon} />
+                    +1
                 </BusyContent>
             </ActionButton>
             {slotsRemaining > 1 && (
@@ -107,18 +112,24 @@ export function FillButtons({
                     aria-busy={filling}
                 >
                     <BusyContent busy={filling} label={`+${slotsRemaining}`}>
-                        {`${icon}+${slotsRemaining}`}
+                        <Icon icon={icon} />+{slotsRemaining}
                     </BusyContent>
                 </button>
             )}
+            {/* "Pick…" alone does not say what it does; the sentence is its description (a title is lost on touch). */}
             <button
                 className="btn btn-sm btn-outline"
                 title={t('app.fillPickLabel')}
+                aria-describedby={pickHintId}
                 onClick={onPick}
                 disabled={filling || picking}
             >
+                <Icon icon={icon} />
                 {t('app.fillPick')}
             </button>
+            <span id={pickHintId} className="sr-only">
+                {t('app.fillPickLabel')}
+            </span>
         </>
     );
 }
@@ -275,16 +286,22 @@ function useSwapPickModal({
     };
 
     // A refusal leaves the picker open (its alert says why); a preview that went through moves on to the confirm.
-    // "Not available" means the entry being replaced is no longer entered (or the challenge changed): the picker
-    // stays open so its alert says so, and the card refreshes behind it (the picker is card-level, so the refresh
-    // does not unmount it); the user closes it.
+    // "Not available" means the entry being replaced is no longer entered (or the challenge changed), and
+    // "already entered" that the photo picked is: the picker stays open so its alert says so, and the card
+    // refreshes behind it (the picker is card-level, so the refresh does not unmount it), which stops the
+    // photo being offered again; the user closes it or picks another.
     const pick =
         (current: SwapPickFlow) =>
         async (imageIds: string[]): Promise<PickOutcome> => {
             commit.clearError();
             const result = await preview.run(challenge.id, current.entry.id, imageIds[0]);
             if (!result?.success) {
-                if (result?.error === CURRENCY_OUTCOME.notAvailable) onCurrencySpent?.();
+                if (
+                    result?.error === CURRENCY_OUTCOME.notAvailable ||
+                    result?.error === CURRENCY_OUTCOME.alreadyEntered
+                ) {
+                    onCurrencySpent?.();
+                }
                 return 'failed';
             }
             if (!result.candidate) return 'failed';
@@ -303,6 +320,8 @@ function useSwapPickModal({
             endAndRefresh(current);
             return;
         }
+        // Refused for a photo that is entered already: nothing was spent, the picker reopens, and the card refreshes.
+        if (alreadyEntered(result)) onCurrencySpent?.();
         const held = outcome === CURRENCY_OUTCOME.unclear || outcome === CURRENCY_OUTCOME.noBalance ? outcome : null;
         setFlow({ ...current, candidate: held ? candidate : null, held });
     };

@@ -418,7 +418,7 @@ describe('mock/index', () => {
                 await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).resolves.toBeNull();
                 // The same error the real surface logs, so the CLI user is told how to proceed in mock mode too.
                 expect(logger.__mockErrorFn).toHaveBeenCalledWith(
-                    "Couldn't apply Boost — every entry has Turbo or is pinned for Turbo (Boost and Turbo can't share an entry). Add another entry, unpin the photo, or pass --image=<id>",
+                    "Couldn't apply Boost — every entry has Turbo or is pinned for Turbo (Boost and Turbo can't share an entry). Add another entry or unpin the photo",
                     { challengeId: '' },
                 );
             });

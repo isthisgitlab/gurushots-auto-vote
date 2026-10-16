@@ -168,6 +168,16 @@ test('a not-available commit still refreshes (the state moved under us)', async 
     await waitFor(() => expect(onSpent).toHaveBeenCalledTimes(1));
 });
 
+test('an already-entered commit refreshes too: the card still offered that photo', async () => {
+    window.api.swapEntryPhoto = jest
+        .fn()
+        .mockResolvedValue({ success: false, outcome: 'already-entered', error: 'already-entered' });
+    const { onSpent } = renderButton();
+    fireEvent.click(swapButton());
+    fireEvent.click(await screen.findByText('app.currencySpend'));
+    await waitFor(() => expect(onSpent).toHaveBeenCalledTimes(1));
+});
+
 test('Cancel closes the confirm modal without swapping', async () => {
     const { onSpent } = renderButton();
     fireEvent.click(swapButton());

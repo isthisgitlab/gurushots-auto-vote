@@ -122,6 +122,17 @@ describe('runSuspendBoosts — target rule', () => {
         expect(messages('endOperation').join()).toContain('Boost applied successfully');
     });
 
+    test('the caller’s instant decides, not the clock the boosts run at', async () => {
+        const api = makeApi();
+        const challenge = timed();
+        // The boost timed out an hour before the instant the caller passes: nothing is left to send.
+        const later = NOW + 3600;
+        expect(
+            await runSuspendBoosts([challenge], 'tok', { api: invalid<VotingPassApi>(api), entryAges: null }, later),
+        ).toEqual([{ status: 'fulfilled', value: 'applied' }]);
+        expect(votingLogic.isBoostBlocked).toHaveBeenCalledWith(challenge, '101', later);
+    });
+
     test('a key-unlocked boost is boosted too', async () => {
         const api = makeApi();
         expect(await run([keyed()], api)).toEqual([{ status: 'fulfilled', value: 'applied' }]);

@@ -10,6 +10,7 @@ import * as currencyActions from '../currencyActions';
 import { isManualPhotosOnly } from '../manualPhotosOnly';
 import { submitNewEntryForAction, reflectNewEntry, reflectEntryFlag, getSlotsRemaining } from '../autoFill';
 import { selectEntry, entriesOf } from '../../scenarios/selectors';
+import { isKeyUnlockedBoost } from '../../voting/boostWindow';
 import type {
     ActedChallenge,
     ActionHandler,
@@ -217,7 +218,11 @@ const spendLanded = async (
     const none = { landed: false, remember: {} };
     if (!(await refreshLive(ctx))) return none;
     const { challenge } = ctx;
-    if (action.type === 'unlockBoost') return { ...none, landed: challenge.member?.boost?.state === 'AVAILABLE_KEY' };
+    if (action.type === 'unlockBoost') {
+        // Unlocked, or already applied to a photo since: either way the key was spent.
+        const boost = challenge.member?.boost;
+        return { ...none, landed: isKeyUnlockedBoost(boost) || boost?.state === 'USED' };
+    }
     if (action.type === 'fillExposure') {
         return { ...none, landed: Number(challenge.member?.ranking?.exposure?.exposure_factor) >= 100 };
     }

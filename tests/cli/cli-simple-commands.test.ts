@@ -340,7 +340,7 @@ describe('discover', () => {
         expect(info).toContain('  • [2] dogs (?) — free');
         expect(info).toContain('  • [3] untitled (?) — free');
         expect(info).toContain('  • [undefined] untitled (?) — free');
-        expect(info.some((l) => l.includes('join <id> --yes'))).toBe(true);
+        expect(info.some((l) => l.includes('join <id> --yes --max-coins=<cost>'))).toBe(true);
         expect(info).toContain('=== Open and upcoming challenges ===');
         // No upcoming row, no upcoming advice.
         expect(info.some((l) => l.includes('list-photos'))).toBe(false);
@@ -536,6 +536,19 @@ describe('discover', () => {
             expect(info.some((l) => l.includes('cannot be joined until they start'))).toBe(true);
         });
 
+        test('a list of upcoming challenges alone offers no join instructions, only the photo steps', async () => {
+            handlers['get-member-challenges'].mockResolvedValue(
+                invalid({
+                    success: true,
+                    items: [{ id: 2, title: 'Soon', status: 'upcoming', join_coins: 0, start_time: NOW_SEC + 600 }],
+                }),
+            );
+            await showDiscover();
+            const info = msgs('info');
+            expect(info.some((l) => l.includes('Join with:') || l.includes('join <id>'))).toBe(false);
+            expect(info).toContain('  list-photos --challenge=<id>');
+        });
+
         test("print the server's text without terminal control sequences", async () => {
             const esc = String.fromCharCode(27);
             handlers['get-member-challenges'].mockResolvedValue(
@@ -580,7 +593,7 @@ describe('join', () => {
         [{ status: 'skipped-unaffordable', cost: 10, coins: 3 }, 'error', 'needs 10, you have 3'],
         [{ status: 'skipped-unaffordable', cost: 10 }, 'error', 'you have ?'],
         [{ status: 'balance-unknown' }, 'error', 'Could not read your coin balance'],
-        [{ status: 'charged-pending-submit' }, 'error', 'you will NOT be charged again'],
+        [{ status: 'charged-pending-submit' }, 'error', 'Re-run "join 7" to retry the submit'],
         [{ status: 'failed-no-charge' }, 'error', 'Could not join 7. No coins were charged.'],
         [{ status: 'skipped-no-photo' }, 'error', 'No eligible photo'],
         [{ status: 'unavailable' }, 'info', 'not open to join'],
@@ -605,7 +618,7 @@ describe('join', () => {
         );
         await joinChallengeCmd('7');
         expect(msgs('error')).toEqual([
-            'Coins were already spent on 7, but no photo qualifies for this challenge. Add an eligible photo, then re-run "join 7 --yes" — you will NOT be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.',
+            'Coins were already spent on 7, but no photo qualifies for this challenge. Add an eligible photo, then re-run "join 7" — you will NOT be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.',
         ]);
     });
 
@@ -748,8 +761,8 @@ describe('join', () => {
             .mockResolvedValueOnce(invalid({ status: 'needs-confirm', cost: 25 }))
             .mockResolvedValueOnce(invalid({ status: 'joined' }));
         await joinChallengeCmd('7', { yes: true });
-        // --yes alone accepts the cost at that moment: no cost is named.
-        expect(handlers['join-challenge']).toHaveBeenLastCalledWith(null, '7', true);
+        // --yes alone caps the spend at the cost that was printed.
+        expect(handlers['join-challenge']).toHaveBeenLastCalledWith(null, '7', true, 25);
         expect(msgs('info')).toContain('✅ Joined challenge 7.');
     });
 
@@ -771,6 +784,16 @@ describe('join', () => {
             'Challenge 7 costs 40 coins, more than --max-coins allows. Nothing was spent — to pay this cost, re-run: join 7 --yes --max-coins=40',
         ]);
         expect(msgs('info')).not.toContain('✅ Joined challenge 7.');
+    });
+
+    test('with --yes alone, a price that rose is worded against the cost shown, not a --max-coins nobody passed', async () => {
+        handlers['join-challenge']
+            .mockResolvedValueOnce(invalid({ status: 'needs-confirm', cost: 25 }))
+            .mockResolvedValueOnce(invalid({ success: false, status: 'needs-confirm', cost: 40 }));
+        await joinChallengeCmd('7', { yes: true });
+        expect(msgs('error')).toEqual([
+            'Challenge 7 costs 40 coins, more than the 25 coins shown. Nothing was spent — to pay this cost, re-run: join 7 --yes --max-coins=40',
+        ]);
     });
 });
 

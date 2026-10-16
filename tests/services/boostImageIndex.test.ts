@@ -273,13 +273,14 @@ describe('applyBoost - a photo pinned for Turbo', () => {
     });
     afterEach(() => settings.getEntryPins.mockReturnValue({ boost: null, turbo: null }));
 
-    test('a single pin-blocked entry sends nothing and tells the CLI user how to proceed', async () => {
+    test('a single pin-blocked entry sends nothing and says how to proceed, without a CLI-only flag', async () => {
         await expect(applyBoost(buildChallenge([{ id: 'only' }]), 'tok')).resolves.toBeNull();
         expect(apiClient.makePostRequest).not.toHaveBeenCalled();
         const errors = jest
             .mocked(logger.withCategory)
             .mock.results.flatMap((r) => jest.mocked(r.value as CategoryLogger).error.mock.calls.map((c) => c[0]));
-        expect(errors).toEqual([expect.stringContaining('Add another entry, unpin the photo, or pass --image=<id>')]);
+        expect(errors).toEqual([expect.stringContaining('Add another entry or unpin the photo')]);
+        expect(String(errors[0])).not.toContain('--image');
     });
 
     test('with a second entry the boost steps off the pinned photo', async () => {

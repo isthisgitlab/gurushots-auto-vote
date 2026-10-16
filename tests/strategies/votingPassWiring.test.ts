@@ -152,10 +152,11 @@ describe('applyBoostsOnSuspend wiring', () => {
     test('real strategy binds the pass endpoints and the persisted entry-age ledger', async () => {
         const { entryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
         const { applyBoostsOnSuspend } = require('../../src/ts/strategies/real') as typeof realModule;
-        await applyBoostsOnSuspend(challenges, 'tok');
-        const [passed, token, deps] = runSuspendBoosts.mock.calls[0];
+        await applyBoostsOnSuspend(challenges, 'tok', 1_700_000_000);
+        const [passed, token, deps, now] = runSuspendBoosts.mock.calls[0];
         expect(passed).toBe(challenges);
         expect(token).toBe('tok');
+        expect(now).toBe(1_700_000_000);
         expect(deps.entryAges).toBe(entryAgeLedger);
         for (const method of [...REQUIRED_FILL_METHODS, 'applyBoost', 'applyBoostToEntry'] as const) {
             expect(typeof deps.api[method]).toBe('function');
@@ -165,10 +166,11 @@ describe('applyBoostsOnSuspend wiring', () => {
     test('mock strategy binds the mock endpoints and the in-memory ledger — never the real file', async () => {
         const { entryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
         const { mockApiClient } = require('../../src/ts/mock') as typeof mockModule;
-        await mockApiClient.applyBoostsOnSuspend(challenges, 'tok');
-        const [passed, token, deps] = runSuspendBoosts.mock.calls[0];
+        await mockApiClient.applyBoostsOnSuspend(challenges, 'tok', 1_700_000_000);
+        const [passed, token, deps, now] = runSuspendBoosts.mock.calls[0];
         expect(passed).toBe(challenges);
         expect(token).toBe('tok');
+        expect(now).toBe(1_700_000_000);
         expect(deps.entryAges).toBeTruthy();
         expect(deps.entryAges).not.toBe(entryAgeLedger);
         for (const method of [...REQUIRED_FILL_METHODS, 'applyBoost', 'applyBoostToEntry'] as const) {

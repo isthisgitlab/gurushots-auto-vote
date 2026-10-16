@@ -55,7 +55,7 @@ import type { RawJsonStore, ScenarioEpoch, ScenarioState } from './types/stores'
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { storeLoaded } from './settings/storeTransport';
-import { errorMessage } from './errorMessage';
+import { fileErrorMessage } from './errorMessage';
 import { acquireUnlockLock } from './joinStateStore';
 import { createStateFile, epochOf, isRecord, isTombstone } from './scenarioStateFile';
 import type { Mutation, ResetResult, StateLock } from './scenarioStateFile';
@@ -154,7 +154,7 @@ const createStateLedger = (
                 return { ...map, [key]: record };
             });
         } catch (error) {
-            log.error(`scenario state could not be written: ${errorMessage(error)}`, null);
+            log.error(`scenario state could not be written: ${fileErrorMessage(error)}`, null);
         }
         if (result === 'refused') {
             log.warning(

@@ -426,7 +426,6 @@ describe('the mirror of the configuration in settings.json (real fs)', () => {
                     version: 2,
                     imported: {
                         at: '2026-10-15T10:00:00.000Z',
-                        sha256: 'a'.repeat(64),
                         report: { refsBlocked: [] },
                         acknowledged: true,
                     },
@@ -464,7 +463,7 @@ describe('the mirror of the configuration in settings.json (real fs)', () => {
             expect(stored(markerFile)).toHaveProperty('mirrorStartedAt');
         });
 
-        test('keeps its import record, which still holds the hash, and reports nothing about a changed file', () => {
+        test('keeps its import record, and reports nothing about a changed file', () => {
             arrange();
             loadFresh();
 
@@ -474,7 +473,7 @@ describe('the mirror of the configuration in settings.json (real fs)', () => {
                 acknowledged: true,
             });
             expect(settings.getSettingsRecovery()).toBeNull();
-            expect(stored(configFile).imported).toMatchObject({ sha256: 'a'.repeat(64) });
+            expect(stored(configFile).imported).toMatchObject({ at: '2026-10-15T10:00:00.000Z', acknowledged: true });
         });
     });
 
@@ -500,6 +499,33 @@ describe('the mirror of the configuration in settings.json (real fs)', () => {
             expect(fs.existsSync(configFile)).toBe(true);
             expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('restored from settings.json'));
         });
+
+        test.each([
+            ['missing', () => fs.rmSync(configFile)],
+            ['damaged', () => fs.writeFileSync(configFile, '{"app":{"theme":')],
+        ])(
+            'a %s one is restored with its rules that have a close-time condition, which settings.json keeps out of titleRules',
+            (_name, lose) => {
+                loadFresh();
+                const rules = [
+                    { title: 'Macro', match: 'exact', autoJoin: true },
+                    { title: 'Evening', match: 'contains', autoJoin: false, closesAt: '18:00' },
+                    { title: 'Late', match: 'contains', closesAtTimes: ['22:00', '23:30'] },
+                ];
+                expect(settings.saveSettings({ rules })).toBe(true);
+                // A format-1 build reads titleRules: it must not see the rules whose condition it does not know.
+                const mirror = stored(legacyFile) as { challengeSettings: { titleRules: Array<{ title: string }> } };
+                expect(mirror.challengeSettings.titleRules.map((rule) => rule.title)).toEqual(['Macro']);
+                lose();
+
+                loadFresh();
+                const loaded = settings.loadSettings();
+
+                expect(loaded.rules).toEqual(rules);
+                expect(loaded.app).not.toHaveProperty('closeTimeRules');
+                expect(settings.getImportReport()).toBeNull();
+            },
+        );
 
         test('a damaged one is set aside, the settings are restored, and a notice says where the copy went', () => {
             mirrored();

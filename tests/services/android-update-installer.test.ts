@@ -1,9 +1,9 @@
 /**
  * AndroidUpdateInstaller routes APK download+install to the native
  * ApkInstaller Capacitor plugin when present (in-app download + system
- * installer), and falls back to opening the URL in the browser when the
- * plugin is absent. Whenever the native plugin refuses or fails, the release
- * page is opened instead of the APK URL. The native Kotlin is covered by the
+ * installer), and falls back to opening the release page in the browser when
+ * the plugin is absent. Whenever the native plugin refuses or fails, the
+ * release page is opened instead of the APK URL. The native Kotlin is covered by the
  * Robolectric tests; here we cover the JS routing.
  */
 
@@ -71,14 +71,29 @@ describe('AndroidUpdateInstaller', () => {
         expect(remove).toHaveBeenCalled();
     });
 
-    test('falls back to the browser when the native plugin is absent', async () => {
+    test('without the native plugin it opens the release page, never the APK url', async () => {
         g.Capacitor = { Plugins: {} };
         g.open = jest.fn();
+        updateChecker.getReleaseAsset.mockReturnValue({
+            downloadUrl: 'https://x/app.apk',
+            digest: 'sha256:abc',
+            releaseUrl: 'https://x/release',
+        });
 
         const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk', version: '1.2.3' });
 
-        expect(g.open).toHaveBeenCalledWith('https://x/app.apk', '_blank');
-        expect(res.success).toBe(true);
+        expect(g.open).toHaveBeenCalledTimes(1);
+        expect(g.open).toHaveBeenCalledWith('https://x/release', '_blank');
+        expect(res).toEqual({ success: true, version: '1.2.3', viaFallback: true });
+    });
+
+    test('without the native plugin and an asset it does not know, it opens the generic releases page', async () => {
+        const browserOpen = jest.fn();
+        g.Capacitor = { Plugins: { Browser: { open: browserOpen } } };
+
+        await downloadAndInstall({ downloadUrl: 'https://x/app.apk', version: '1.2.3' });
+
+        expect(browserOpen).toHaveBeenCalledWith({ url: 'https://github.com/o/r/releases/latest' });
     });
 
     test('returns an error when no download URL is provided', async () => {
@@ -176,19 +191,23 @@ describe('AndroidUpdateInstaller', () => {
         ['an empty code', Object.assign(new Error('x'), { code: '' })],
         ['a code that is not text', Object.assign(new Error('x'), { code: 7 })],
         ['no error object', null],
-    ])('a rejection with %s carries no code', async (_name, rejection) => {
-        const dl = jest.fn().mockRejectedValue(rejection);
-        g.Capacitor = { Plugins: { ApkInstaller: { downloadAndInstall: dl }, Browser: { open: jest.fn() } } };
+        ['no code', new Error('network down')],
+    ])(
+        'a rejection with %s carries the release-page-opened code, which says the page is open',
+        async (_name, rejection) => {
+            const dl = jest.fn().mockRejectedValue(rejection);
+            g.Capacitor = { Plugins: { ApkInstaller: { downloadAndInstall: dl }, Browser: { open: jest.fn() } } };
 
-        const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk', version: '1.0.0' });
+            const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk', version: '1.0.0' });
 
-        expect(res).toEqual({
-            success: false,
-            version: '1.0.0',
-            error: expect.stringContaining('the release page was opened instead'),
-            code: undefined,
-        });
-    });
+            expect(res).toEqual({
+                success: false,
+                version: '1.0.0',
+                error: expect.stringContaining('the release page was opened instead'),
+                code: 'release-page-opened',
+            });
+        },
+    );
 
     test('opens the generic releases page when the failed asset is unknown, and still says why without a message', async () => {
         const dl = jest.fn().mockRejectedValue('boom');
@@ -203,6 +222,7 @@ describe('AndroidUpdateInstaller', () => {
             success: false,
             version: '1.0.0',
             error: 'The APK could not be installed; the release page was opened instead',
+            code: 'release-page-opened',
         });
     });
 
@@ -230,7 +250,7 @@ describe('AndroidUpdateInstaller', () => {
 
         const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk' });
 
-        expect(res).toEqual({ success: false, error: 'No mechanism to open the download URL' });
+        expect(res).toEqual({ success: false, error: 'No mechanism to open the release page' });
     });
 
     test('falls through to window.open when the Browser plugin throws', async () => {
@@ -247,7 +267,7 @@ describe('AndroidUpdateInstaller', () => {
 
         const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk', version: '1.0.0' });
 
-        expect(g.open).toHaveBeenCalledWith('https://x/app.apk', '_blank');
+        expect(g.open).toHaveBeenCalledWith('https://github.com/o/r/releases/latest', '_blank');
         expect(res).toMatchObject({ success: true, viaFallback: true });
     });
 
@@ -258,7 +278,7 @@ describe('AndroidUpdateInstaller', () => {
 
         const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk', version: '1.0.0' });
 
-        expect(g.location!.href).toBe('https://x/app.apk');
+        expect(g.location!.href).toBe('https://github.com/o/r/releases/latest');
         expect(res).toEqual({ success: true, version: '1.0.0', viaFallback: true });
     });
 
@@ -269,6 +289,6 @@ describe('AndroidUpdateInstaller', () => {
 
         const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk' });
 
-        expect(res).toEqual({ success: false, error: 'No mechanism to open the download URL' });
+        expect(res).toEqual({ success: false, error: 'No mechanism to open the release page' });
     });
 });

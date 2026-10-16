@@ -12,6 +12,7 @@
 
 import * as logger from '../logger';
 import * as runtime from '../runtime';
+import { fileErrorMessage } from '../errorMessage';
 import { isPlainObject } from '../plainObject';
 import { isImportedRecord } from './loadValidation';
 import { underSettingsLock } from './settingsLock';
@@ -36,7 +37,29 @@ const parseMarker = (raw: string | null): Record<string, unknown> | null => {
     }
 };
 
-const readMarker = (): Record<string, unknown> | null => parseMarker(importMarkerStore.readRaw());
+// Whether a marker that could not be read (no permission, a directory in its place) was said so already.
+let unreadableSaid = false;
+
+/** The stored marker text, or `unreadable` when the file cannot be read: said once, and read again each time. */
+const readMarkerText = (): { text: string | null; unreadable: boolean } => {
+    try {
+        const text = importMarkerStore.readRaw();
+        unreadableSaid = false;
+        return { text, unreadable: false };
+    } catch (error) {
+        if (!unreadableSaid) {
+            unreadableSaid = true;
+            logger
+                .withCategory('settings')
+                .warning(
+                    `The import marker could not be read, so it counts as missing: ${fileErrorMessage(error) ?? 'unknown error'}`,
+                );
+        }
+        return { text: null, unreadable: true };
+    }
+};
+
+const readMarker = (): Record<string, unknown> | null => parseMarker(readMarkerText().text);
 
 const MARKER_LOCK_WAIT_MS = 2000;
 const MARKER_PENDING =
@@ -55,7 +78,9 @@ const underMarkerLock = <T>(run: () => T, busy: T): T =>
  * was.
  */
 const isImportMarked = (): boolean => {
-    const raw = importMarkerStore.readRaw();
+    const { text: raw, unreadable } = readMarkerText();
+    // A marker that cannot be read is no proof that the import never ran: settings.json is not imported unasked over it.
+    if (unreadable) return true;
     if (raw === null) return false;
     const marker = parseMarker(raw);
     return marker === null || typeof marker.importedAt === 'string';
@@ -306,20 +331,6 @@ const clearLegacyAsideOwed = (id: string): void => {
     dropFieldIf('legacyAsideOwed', id);
 };
 
-/** Records that the copies kept of the settings files were cleared of the sign-in they held (after a sign-out). */
-const noteCopiesScrubbed = (): void => {
-    // The time is the clearing's, taken now, not the time of a replay.
-    const at = new Date().toISOString();
-    changeMarker((marker) => ({ ...marker, copiesScrubbedAt: at }));
-};
-
-/** When the copies were last cleared of the sign-in (ms since the epoch), or null. */
-const copiesScrubbedAtStored = (): number | null => {
-    const at = readMarker()?.copiesScrubbedAt;
-    const time = typeof at === 'string' ? Date.parse(at) : Number.NaN;
-    return Number.isNaN(time) ? null : time;
-};
-
 /** The record of a sign-out owed to a restore, or null. */
 const signOutOwedStored = (): OwedSignOut | null => {
     const record = readMarker()?.signOutOwed;
@@ -421,7 +432,6 @@ export {
     clearSignOutScrubPending,
     configSource,
     flushPendingMarkerChanges,
-    copiesScrubbedAtStored,
     importMarkerStore,
     isImportMarked,
     isMirrorStarted,
@@ -438,7 +448,6 @@ export {
     markMirrorPendingQueued,
     markSignOutOwed,
     markSignOutScrubPending,
-    noteCopiesScrubbed,
     mirroredSignIns,
     rememberUnimportableCopy,
     signOutOwedStored,

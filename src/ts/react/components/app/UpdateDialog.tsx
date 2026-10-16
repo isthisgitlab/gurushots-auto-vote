@@ -19,6 +19,7 @@ const ERROR_KEYS = {
     update: 'app.updateFailed',
     install: 'app.updateInstallFailed',
     unverified: 'app.updateUnverified',
+    'page-opened': 'app.updateReleasePageOpened',
 } as const;
 
 /**

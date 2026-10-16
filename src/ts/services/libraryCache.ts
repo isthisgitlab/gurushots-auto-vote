@@ -10,8 +10,10 @@
  * does to an answer reaches the cache.
  *
  * The account's own actions in this window (a submit, a fill, a join, a swap) drop a challenge's entry
- * (`dropContext`), and a read that was running meanwhile writes nothing, whichever challenge was dropped
- * (`dropEpoch`). A logout or account switch empties everything (`clearLibraryCache`).
+ * (`dropContext`), and so do the automatic ones (a new entry reflected on the pass's challenge, a swap, a join:
+ * `dropChallenge`, which has no token at hand and drops the challenge for every account). A read that was running
+ * meanwhile writes nothing, whichever challenge was dropped (`dropEpoch`). A logout or account switch empties
+ * everything (`clearLibraryCache`).
  */
 
 import * as logger from '../logger';
@@ -140,6 +142,16 @@ const dropContext = (token: string, contextId: string | number | null): void => 
     log('dropped');
 };
 
+/** Same as `dropContext`, for the code that has the challenge but not the token: every account's entry of it goes. */
+const dropChallenge = (contextId: string | number): void => {
+    const suffix = `:id:${contextId}`;
+    for (const key of entries.keys()) {
+        if (key.endsWith(suffix)) entries.delete(key);
+    }
+    dropCount += 1;
+    log('dropped');
+};
+
 /** How many drops there have been: a read compares it before and after its walk, and writes only if it held. */
 const dropEpoch = (): number => dropCount;
 
@@ -154,6 +166,7 @@ export {
     readLatest,
     writeListing,
     dropContext,
+    dropChallenge,
     dropEpoch,
     clearLibraryCache,
     LIBRARY_FRESH_MS,

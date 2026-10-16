@@ -199,6 +199,54 @@ describe('SettingsRecoveryNotice', () => {
         await screen.findByRole('alert');
     });
 
+    test('a notice stays dismissed when the same one is read again, and shows again for another save given up with the same cause', async () => {
+        const dropped = (serial: number) => ({
+            code: 'settings-save-dropped',
+            path: 'gurushots-config',
+            cause: 'too-large',
+            serial,
+        });
+        answer(dropped(1));
+        render(<SettingsRecoveryNotice />);
+        await screen.findByRole('alert');
+        fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
+        expect(screen.queryByRole('alert')).toBeNull();
+
+        // The same save, read again after another settings change.
+        act(() => fireSettingsChanged());
+        await waitFor(() => expect(window.api.getSettingsRecovery).toHaveBeenCalledTimes(2));
+        expect(screen.queryByRole('alert')).toBeNull();
+
+        // The next change is given up too, for the same cause, with no notice between.
+        answer(dropped(2));
+        act(() => fireSettingsChanged());
+        await screen.findByRole('alert');
+    });
+
+    test('a different notice replacing a dismissed one is shown', async () => {
+        answer({ code: 'settings-corrupt', path: '/data/config.json.corrupt-1' });
+        render(<SettingsRecoveryNotice />);
+        await screen.findByRole('alert');
+        fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
+        expect(screen.queryByRole('alert')).toBeNull();
+
+        answer({ code: 'settings-import-failed', path: '/data/settings.json' });
+        act(() => fireSettingsChanged());
+
+        expect((await screen.findByRole('alert')).textContent).toContain('notice.recoveryImportWhat');
+    });
+
+    test.each([
+        ['settings-corrupt', true, 'notice.recoverySignInKept'],
+        ['settings-restored', false, 'notice.recoverySignInKeptAndroid'],
+    ])('the damaged copy of %s may still hold the sign-in, and the notice says so', async (code, settingsFile, key) => {
+        if (!settingsFile) (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        answer({ code, path: '/data/config.json.corrupt-1' });
+        render(<SettingsRecoveryNotice />);
+
+        expect((await screen.findByRole('alert')).textContent).toContain(key);
+    });
+
     test.each([
         ['a code this build has no wording for', { success: true, recovery: { code: 'settings-new', path: '/x' } }],
         ['a refused read', { success: false, error: 'x' }],
@@ -286,6 +334,19 @@ describe('SettingsRecoveryNotice actions', () => {
             const done = (await screen.findByText('notice.recoveryRetryDone')).closest('.alert');
             expect(done?.className).toContain('alert-success');
             await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+        });
+
+        test('a Retry that finds the settings in place already says nothing was imported', async () => {
+            jest.mocked(window.api.retrySettingsImport).mockResolvedValue({ success: true, adopted: true });
+            answer({ code: 'settings-import-failed', path: '/data/settings.json' });
+            render(<SettingsRecoveryNotice />);
+            await screen.findByRole('alert');
+            answer(null);
+
+            fireEvent.click(action('notice.recoveryRetry'));
+
+            expect(await screen.findByText('notice.recoveryRetryDoneAdopted')).toBeTruthy();
+            expect(screen.queryByText('notice.recoveryRetryDone')).toBeNull();
         });
 
         test('a failure says what happened, why and what next, in an alert beside the notice, and Dismiss clears it', async () => {
@@ -441,6 +502,7 @@ describe('SettingsRecoveryNotice actions', () => {
 
             jest.mocked(window.api.reimportSettingsFromV1).mockResolvedValue({
                 success: true,
+                setAside: '/data/config.json.corrupt-2',
                 source: '/data/settings.json',
             });
             answer(null);
@@ -449,6 +511,25 @@ describe('SettingsRecoveryNotice actions', () => {
             expect(window.api.reimportSettingsFromV1).toHaveBeenCalledTimes(1);
             expect(await screen.findByText('notice.recoveryReimportDone')).toBeTruthy();
             await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+        });
+
+        test('a re-import with nothing in use to set aside does not say it set anything aside', async () => {
+            jest.mocked(window.api.reimportSettingsFromV1).mockResolvedValue({
+                success: true,
+                setAside: null,
+                source: '/data/settings.json',
+            });
+            answer({ code: 'settings-corrupt', path: '/x' });
+            render(<SettingsRecoveryNotice />);
+            await screen.findByRole('alert');
+            fireEvent.click(action('notice.recoveryReimport'));
+            answer(null);
+            fireEvent.click(
+                within(screen.getByRole('dialog')).getByRole('button', { name: 'notice.recoveryReimportConfirm' }),
+            );
+
+            expect(await screen.findByText('notice.recoveryReimportDoneNothingAside')).toBeTruthy();
+            expect(screen.queryByText('notice.recoveryReimportDone')).toBeNull();
         });
 
         test('a re-import that fails says so beside the notice, which stays', async () => {
@@ -867,7 +948,11 @@ describe('SettingsRecoveryNotice actions', () => {
             );
             jest.mocked(window.api.reimportSettingsFromV1)
                 .mockResolvedValueOnce({ success: false, error: 'x' })
-                .mockResolvedValueOnce({ success: true, source: '/data/settings.json.unimportable-1' });
+                .mockResolvedValueOnce({
+                    success: true,
+                    setAside: '/data/config.json.corrupt-1',
+                    source: '/data/settings.json.unimportable-1',
+                });
             answer({
                 code: 'settings-corrupt',
                 path: '/data/config.json.corrupt-1',

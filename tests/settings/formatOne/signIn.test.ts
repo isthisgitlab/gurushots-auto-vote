@@ -521,16 +521,19 @@ describe('the sign-in in the mirror (real fs)', () => {
             arrangeCopies();
             const real = fs.readFileSync;
             jest.spyOn(fs, 'readFileSync').mockImplementation(((file: fs.PathLike | number, ...rest: unknown[]) => {
-                if (String(file).endsWith('config.json.corrupt-2026-10-16T08-00-00-000Z')) throw new Error('EIO');
+                if (String(file).endsWith('config.json.corrupt-2026-10-16T08-00-00-000Z')) {
+                    throw Object.assign(new Error(`EIO: i/o error, open '${String(file)}'`), { code: 'EIO' });
+                }
                 return (real as (...args: unknown[]) => unknown)(file, ...rest);
             }) as typeof fs.readFileSync);
 
             expect(settings.setSetting('token', '')).toBe(true);
 
+            // The errno only: the error's own text names the path, and with it the user's account name.
             expect(cat.error).toHaveBeenCalledWith(
-                'config.json.corrupt-2026-10-16T08-00-00-000Z could not be rewritten:',
-                expect.any(Error),
+                'config.json.corrupt-2026-10-16T08-00-00-000Z could not be rewritten: EIO',
             );
+            expect(everyLog()).not.toContain(userData);
             expect(stored(setAside('settings.json.unimportable-2026-10-16T08-00-00-000Z'))).toMatchObject({
                 token: '',
             });
@@ -1311,10 +1314,11 @@ describe('the sign-in in the mirror (real fs)', () => {
     });
 
     describe('a restore that could not be tried just now', () => {
-        // The mirror has written; then the configuration alone is damaged: settings.json is the good copy to restore from.
+        // The mirror has written; then the configuration alone is damaged (cut off, with its sign-in in it): settings.json
+        // is the good copy to restore from.
         const damagedConfig = () => {
             signedIn();
-            fs.writeFileSync(configFile, '{"app":{"theme":');
+            fs.writeFileSync(configFile, '{"app":{"theme":"dark"},"auth":{"token":"tok-1","apiHeaders":{},"last');
         };
         const clockAt = (now: number) => jest.spyOn(Date, 'now').mockReturnValue(now);
         const unimportable = () =>
@@ -1486,6 +1490,36 @@ describe('the sign-in in the mirror (real fs)', () => {
             return Promise.resolve().then(() => expect(heard).toHaveBeenCalled());
         });
 
+        test.each([
+            ['an error', new Error('disk gone'), 'disk gone'],
+            ['a value that carries no message', 'weird', 'unknown error'],
+        ])(
+            'a retry that throws %s is logged and does not leave the timer: it would end the main process',
+            (_name, thrown, said) => {
+                damagedConfig();
+                busyLock();
+                settings.onSettingsRecoveryChange(jest.fn());
+                const timers: Array<{ run: () => void }> = [];
+                jest.spyOn(global, 'setTimeout').mockImplementation(((run: () => void) => {
+                    timers.push({ run });
+                    return { unref: () => undefined } as unknown as NodeJS.Timeout;
+                }) as unknown as typeof setTimeout);
+                clockAt(1_000_000);
+                settings.loadSettings();
+                expect(timers).toHaveLength(1);
+                // The read that follows the wait throws (the clock is the first thing it asks).
+                jest.spyOn(Date, 'now').mockImplementation(() => {
+                    throw thrown;
+                });
+
+                expect(() => timers[0].run()).not.toThrow();
+
+                expect(cat.error).toHaveBeenCalledWith(
+                    expect.stringContaining(`retry of the settings import failed: ${said}`),
+                );
+            },
+        );
+
         test('with nobody listening, no timer is set: the next read does it', () => {
             damagedConfig();
             busyLock();
@@ -1527,11 +1561,17 @@ describe('the sign-in in the mirror (real fs)', () => {
             expect(settings.isSignOutOwed()).toBe(false);
         });
 
-        // Every file of the data folder that is not the marker, with what it holds: none may hold a sign-in after a logout.
+        // Every file of the data folder that is not the marker, with what it holds: none may hold a sign-in after a logout,
+        // except the damaged configuration, which does not parse and so cannot be rewritten (see the test of its notice).
         const filesHolding = (needle: string) =>
             fs
                 .readdirSync(userData)
-                .filter((name) => name !== 'v2-import.json' && fs.statSync(path.join(userData, name)).isFile())
+                .filter(
+                    (name) =>
+                        name !== 'v2-import.json' &&
+                        !name.startsWith('config.json.corrupt-') &&
+                        fs.statSync(path.join(userData, name)).isFile(),
+                )
                 .filter((name) => fs.readFileSync(path.join(userData, name), 'utf8').includes(needle));
 
         describe('an owed sign-out when the episode ends in defaults', () => {
@@ -1560,7 +1600,7 @@ describe('the sign-in in the mirror (real fs)', () => {
 
                 expect(filesHolding('tok-1')).toEqual([]);
                 expect(settings.isSignOutOwed()).toBe(false);
-                expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt', signInKept: false });
+                expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt' });
             });
 
             test('a sign-in made after the give-up is not undone by the sign-out that was owed, and the copies still lose the old one', () => {
@@ -1697,15 +1737,18 @@ describe('the sign-in in the mirror (real fs)', () => {
                 lock.busy = false;
                 loadFresh();
                 settings.loadSettings();
-                const stamped = stored(markerFile).copiesScrubbedAt;
-                expect(stamped).toEqual(expect.any(String));
+                const original = setAside('settings.json.original');
+                expect(stored(original)).toMatchObject({ token: '' });
+                expect(stored(markerFile)).not.toHaveProperty('signOutScrubPending');
+                const rewrittenAt = fs.statSync(original).mtimeMs;
 
                 loadFresh();
                 settings.loadSettings();
                 loadFresh();
                 settings.loadSettings();
 
-                expect(stored(markerFile).copiesScrubbedAt).toBe(stamped);
+                expect(fs.statSync(original).mtimeMs).toBe(rewrittenAt);
+                expect(stored(markerFile)).not.toHaveProperty('signOutScrubPending');
             });
 
             test('Start fresh (also with --force): the copy it keeps holds no sign-in', () => {
@@ -1742,16 +1785,26 @@ describe('the sign-in in the mirror (real fs)', () => {
                 expect(stored(markerFile)).not.toHaveProperty('signOutOwed');
             });
 
-            test('a notice for a damaged copy still says it holds the sign-in, until a logout has taken it out', () => {
+            test('a logout cannot take the sign-in out of the damaged configuration, which does not parse: it stays as it was', () => {
                 damagedConfig();
                 const lock = busyLock();
                 clockAt(1_000_000);
                 settings.loadSettings();
-                expect(settings.getSettingsRecovery()).not.toHaveProperty('signInKept');
+                const damaged = fs.readdirSync(userData).filter((name) => name.startsWith('config.json.corrupt-'));
+                expect(damaged).toHaveLength(1);
+                const before = fs.readFileSync(setAside(damaged[0]), 'utf8');
 
                 expect(signOutWhileWaiting(lock)).toBe(true);
+                lock.busy = false;
+                expect(settings.retryImport()).toBe(true);
+                settings.loadSettings();
 
-                expect(settings.getSettingsRecovery()).toMatchObject({ signInKept: false });
+                // Every readable copy lost the token; the damaged one is untouched and still holds it.
+                expect(filesHolding('tok-1')).toEqual([]);
+                expect(fs.readFileSync(setAside(damaged[0]), 'utf8')).toBe(before);
+                expect(before).toContain('tok-1');
+                expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-restored' });
+                expect(settings.getSettingsRecovery()).not.toHaveProperty('signInKept');
             });
         });
 
