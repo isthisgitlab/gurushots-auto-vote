@@ -49,6 +49,31 @@ test.each([
     expect(screen.queryByText(/scenarioStatusNext/)).toBeNull();
 });
 
+test.each([
+    [false, 'app.scenarioStatusPausedManual'],
+    [true, 'app.scenarioStatusPausedManualShort'],
+])('a paused plan that has not started does not promise the next run (compact=%s)', (compact, paused) => {
+    render(
+        <ScenarioStatusLine
+            compact={compact}
+            status={{
+                name: 'Plan',
+                phase: 'main',
+                started: false,
+                lastError: null,
+                manualOnly: true,
+                nextWakeAt: null,
+            }}
+        />,
+    );
+    expect(screen.getByTitle('Plan').textContent).toBe(`🧭 Plan · app.scenarioStatusNotStartedManual · ${paused}`);
+});
+
+test('a plan that has not started, with the switch off, still starts on the next run', () => {
+    render(<ScenarioStatusLine status={{ name: 'Plan', phase: 'main', started: false, lastError: null }} />);
+    expect(screen.getByTitle('Plan').textContent).toBe('🧭 Plan · app.scenarioStatusNotStarted');
+});
+
 const unclear = (over: Partial<NonNullable<ScenarioSummary['spendUnclear']>> = {}): ScenarioSummary => ({
     name: 'Plan',
     phase: 'main',
@@ -111,6 +136,17 @@ describe('with the card’s words', () => {
         expect(screen.getAllByRole('status')).toHaveLength(1);
     });
 });
+
+test.each([
+    ['unclear', 'app.scenarioStatusSpendUnclearManual'],
+    ['pending', 'app.scenarioStatusSpendUnclearPendingManual'],
+] as const)(
+    'under Manual Only the %s notice says the check waits for the switch, not the next cycle',
+    (origin, key) => {
+        render(<ScenarioStatusLine status={{ ...unclear({ origin }), manualOnly: true, lastError: null }} />);
+        expect(screen.getByRole('status').textContent).toBe(key);
+    },
+);
 
 test('a spend that got no answer is shown even when an unrelated problem has replaced the last error', () => {
     render(<ScenarioStatusLine status={{ ...unclear({ action: 'swap' }), lastError: null }} />);

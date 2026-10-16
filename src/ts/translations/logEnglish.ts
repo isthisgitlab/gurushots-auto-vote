@@ -188,6 +188,7 @@ export const logMessages = {
     m42f218b86441: 'Application is about to quit. Forcing exit...',
     m43720acfbd52: '=== GuruShots Auto Voter - CLI Manual Voting (vote-to-100%) ===',
     m446023c05bef: 'Skipped seeding intent profile "{0}" (invalid for this install)',
+    m447a3bc9dead: '{0} Could not read the Manual Only setting — nothing runs automatically',
     m448e6fe1f380: 'The settings were not imported from a settings.json: nothing to acknowledge.',
     m45a520c33383: 'Update available:',
     m463ef69443aa: '📋 Found {0} challenges to process',
@@ -558,6 +559,8 @@ export const logMessages = {
     mc740a107f995: '=== Settings for challenge {0} ===',
     mc8cd4963a8ea: 'Failed to reset all settings',
     mc8d226aceff9: 'Deleted profile "{0}"',
+    mc8e2050f9112:
+        'Manual Only is on for {0}: the join was already paid for, but no photo is entered automatically — enter one from Discover: choose the photo for this challenge (Chosen Photos), then press Join',
     mc90925d0c1f3: 'Process exiting with code: {0}',
     mc93c515e28d4:
         '{0} photo {1} is pinned for Turbo, which gives way at its release time after the device sleeps — boosting it now',

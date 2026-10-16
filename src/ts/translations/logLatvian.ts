@@ -193,6 +193,7 @@ export const logMessages = {
     m42f218b86441: 'Lietotne tūlīt aizvērsies. Piespiedu iziešana...',
     m43720acfbd52: '=== GuruShots Auto Voter — CLI manuālā balsošana (līdz 100 %) ===',
     m446023c05bef: 'Izlaista nodoma profila "{0}" sākotnējā izveide (šai instalācijai nederīgs)',
+    m447a3bc9dead: '{0} Neizdevās nolasīt uzstādījumu „Tikai manuāli” — nekas nenotiek automātiski',
     m448e6fe1f380: 'Uzstādījumi netika importēti no settings.json: nav, ko atzīmēt kā redzētu.',
     m45a520c33383: 'Pieejams atjauninājums:',
     m463ef69443aa: '📋 Atrasti apstrādājamie izaicinājumi: {0}',
@@ -571,6 +572,8 @@ export const logMessages = {
     mc740a107f995: '=== Izaicinājuma {0} uzstādījumi ===',
     mc8cd4963a8ea: 'Neizdevās atiestatīt visus uzstādījumus',
     mc8d226aceff9: 'Dzēsts profils "{0}"',
+    mc8e2050f9112:
+        'Izaicinājumam {0} ir ieslēgts „Tikai manuāli”: pievienošanās jau ir apmaksāta, bet foto netiek iesniegts automātiski — iesniedz to sadaļā „Atrast izaicinājumus”: izvēlies šī izaicinājuma foto („Izvēlētie foto”) un nospied „Pievienoties”',
     mc90925d0c1f3: 'Process beidz darbu ar kodu: {0}',
     mc93c515e28d4:
         '{0} Foto {1} ir piesprausts Turbo, bet piespraude atkāpjas laikā, kad ierīce jau būs miegā — izmanto Boost uzreiz',

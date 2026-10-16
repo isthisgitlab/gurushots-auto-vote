@@ -69,6 +69,8 @@ import { missionVoteDecision, planMissionVotes, resetMissionVoteLog } from './vo
 import {
     isManualOnlyFailClosed,
     manualOnlyOnLine,
+    manualOnlyState,
+    manualOnlyUnreadableLine,
     pruneManualOnlyLog,
     resetManualOnlyLog,
     skipIfManualOnly,
@@ -154,13 +156,13 @@ const processChallenge = async (
         return cancelPass(pass.allChallenges);
     }
 
-    // Manual Only: nothing below runs on this challenge. Checked live, after the cancellation
-    // check, so a switch turned on mid-pass takes effect from the next challenge.
-    if (skipIfManualOnly(challenge, now, pass)) return null;
-
     logger
         .withCategory('voting')
         .progress(`Processing challenge ${position}/${total}: ${challenge.title}`, position, total);
+
+    // Manual Only: nothing below runs on this challenge. Checked live, after the cancellation
+    // check, so a switch turned on mid-pass takes effect from the next challenge.
+    if (skipIfManualOnly(challenge, now, pass)) return null;
 
     // The challenge's scenario runs first: its actions (and a phase change)
     // land before the built-in steps, which then read the new phase's
@@ -284,7 +286,12 @@ const runVotingPass = async (
         const { challenges } = scope;
 
         // A scoped Run on a Manual Only challenge is a deliberate no-op, not a failure.
-        if (challengeIdFilter != null && isManualOnlyFailClosed(challenges[0])) {
+        const scopedState = challengeIdFilter != null ? manualOnlyState(challenges[0]) : 'off';
+        // Fail closed, but say what happened: an unreadable switch is a failed Run, not a Manual Only one.
+        if (scopedState === 'unreadable') {
+            return abortPass(manualOnlyUnreadableLine(challenges[0]), allChallenges, 'warning');
+        }
+        if (scopedState === 'on') {
             const message = manualOnlyOnLine(challenges[0]);
             logger.withCategory('voting').info(message, null);
             logger.withCategory('voting').endOperation('voting-process', message);

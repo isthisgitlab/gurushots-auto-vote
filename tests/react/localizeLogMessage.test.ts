@@ -68,6 +68,22 @@ describe('Latvian log messages', () => {
         );
     });
 
+    test('translates the unreadable-switch line and the paid-join warning', () => {
+        const tag = '[Challenge 42: Sunset]';
+        expect(
+            localizeLogMessage(`⚠️ ${tag} Could not read the Manual Only setting — nothing runs automatically`),
+        ).toBe(
+            '⚠️ [Izaicinājums 42: Sunset] Neizdevās nolasīt uzstādījumu „Tikai manuāli” — nekas nenotiek automātiski',
+        );
+        expect(
+            localizeLogMessage(
+                `⚠️ Manual Only is on for ${tag}: the join was already paid for, but no photo is entered automatically — enter one from Discover: choose the photo for this challenge (Chosen Photos), then press Join`,
+            ),
+        ).toBe(
+            '⚠️ Izaicinājumam [Izaicinājums 42: Sunset] ir ieslēgts „Tikai manuāli”: pievienošanās jau ir apmaksāta, bet foto netiek iesniegts automātiski — iesniedz to sadaļā „Atrast izaicinājumus”: izvēlies šī izaicinājuma foto („Izvēlētie foto”) un nospied „Pievienoties”',
+        );
+    });
+
     test('translates logger progress and the generated plural suffix', () => {
         const progress = '[██████████░░░░░░░░░░] 50% (1/2)';
         expect(localizeLogMessage(`ℹ️ Processing challenge 1/2: Sunset ${progress}`)).toBe(

@@ -445,12 +445,17 @@ export const app = {
         'Spied „{details}”, tad „{reset}” — scenārijs „{name}” ir apturēts: šī izaicinājuma saglabāto progresu nevar nolasīt.',
     scenarioStatusPhase: 'fāze {phase}',
     scenarioStatusNotStarted: 'nākamajā palaišanā sāksies fāzē {phase}',
+    scenarioStatusNotStartedManual: 'sāksies fāzē {phase}, kad „Tikai manuāli” būs izslēgts',
     scenarioStatusNext: 'nākamā pārbaude pēc {time}',
     scenarioStatusPausedManual: 'apturēts: ir ieslēgts „Tikai manuāli”, tāpēc neviens solis netiek izpildīts',
     scenarioStatusPausedManualShort: 'apturēts („Tikai manuāli”)',
     scenarioStatusProblem: 'Pēdējais solis izlaists: {message}',
     scenarioStatusSpendUnclear:
         'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts. Tas netiks tērēts atkārtoti: nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
+    scenarioStatusSpendUnclearManual:
+        'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts. Tas netiks tērēts atkārtoti: kad „Tikai manuāli” būs izslēgts, nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
+    scenarioStatusSpendUnclearPendingManual:
+        'Lietotne nesaglabāja, vai „{action}” tika nosūtīts, tāpēc tas, iespējams, tika izpildīts. Tas netiks tērēts atkārtoti: kad „Tikai manuāli” būs izslēgts, nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
     scenarioStatusSpendUnclearPending:
         'Lietotne nesaglabāja, vai „{action}” tika nosūtīts, tāpēc tas, iespējams, tika izpildīts. Tas netiks tērēts atkārtoti: nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
     scenarioStatusSpendStopped:

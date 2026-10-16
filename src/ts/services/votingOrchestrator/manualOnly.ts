@@ -11,17 +11,26 @@ export const manualOnlyOnLine = (challenge: Challenge): string =>
     `${logger.challengeTag(challenge)} Manual Only is on — nothing runs automatically`;
 
 /**
- * Whether the pass may not run anything on this challenge, read for a decision made OUTSIDE the
- * per-challenge `try` (the mission quota, the scoped Run): a switch read that throws counts as
- * Manual Only there, so nothing is spent on a challenge whose state can't be read.
+ * The switch for a decision made OUTSIDE the per-challenge `try` (the mission quota, the scoped Run):
+ * `unreadable` when the read throws, so the caller can tell that from a switch that is on.
  */
-export const isManualOnlyFailClosed = (challenge: Challenge): boolean => {
+export const manualOnlyState = (challenge: Challenge): 'on' | 'off' | 'unreadable' => {
     try {
-        return isManualPhotosOnly(settings, challenge?.id);
+        return isManualPhotosOnly(settings, challenge?.id) ? 'on' : 'off';
     } catch {
-        return true;
+        return 'unreadable';
     }
 };
+
+/**
+ * Whether the pass may not run anything on this challenge, decided outside the per-challenge `try`: a switch
+ * read that throws counts as Manual Only, so nothing is spent on a challenge whose state can't be read.
+ */
+export const isManualOnlyFailClosed = (challenge: Challenge): boolean => manualOnlyState(challenge) !== 'off';
+
+/** The scoped Run's line when the switch can't be read: nothing runs, and it is not claimed to be on. */
+export const manualOnlyUnreadableLine = (challenge: Challenge): string =>
+    `${logger.challengeTag(challenge)} Could not read the Manual Only setting — nothing runs automatically`;
 
 // Challenge ids the pass already reported as Manual Only, so entering and leaving the state is
 // logged once rather than on every pass (the same shape as voteStallReported in missionVotes.ts).

@@ -19,10 +19,15 @@ const CORRUPT_KEY = {
     record: ['app.scenarioStatusCorruptRecord', 'app.scenarioStatusCorruptRecordShort'],
 } as const;
 
-// The notice for a spend that is being checked on, by what the doubt came from.
+// The notice for a spend that is being checked on, by what the doubt came from. Under Manual Only the next cycle
+// checks nothing, so the text says the check waits for the switch to go off.
 const CHECKED_KEY = {
     unclear: 'app.scenarioStatusSpendUnclear',
     pending: 'app.scenarioStatusSpendUnclearPending',
+} as const;
+const CHECKED_MANUAL_KEY = {
+    unclear: 'app.scenarioStatusSpendUnclearManual',
+    pending: 'app.scenarioStatusSpendUnclearPendingManual',
 } as const;
 
 // The notice for a rule that was stopped, on the card and (short) on the compact tile, by what the stop came from.
@@ -85,7 +90,7 @@ function Notice({ status, compact }: { status: Summary; compact: boolean }) {
               t(
                   spendUnclear.stopped
                       ? STOPPED_KEY[compact ? 1 : 0][spendUnclear.origin]
-                      : CHECKED_KEY[spendUnclear.origin],
+                      : (status.manualOnly ? CHECKED_MANUAL_KEY : CHECKED_KEY)[spendUnclear.origin],
               ),
               {
                   action: t(`app.sbAct_${spendUnclear.action}`),
@@ -137,9 +142,12 @@ export function ScenarioStatusLine({
 
     if (status.missing || status.corrupt) return <Unavailable status={status} compact={compact} onReset={onReset} />;
 
+    // A plan that has not started starts on the next run, except under Manual Only, which runs nothing until it is off.
     const phase = status.started
         ? interp(t('app.scenarioStatusPhase'), { phase: status.phase })
-        : interp(t('app.scenarioStatusNotStarted'), { phase: status.phase });
+        : interp(t(status.manualOnly ? 'app.scenarioStatusNotStartedManual' : 'app.scenarioStatusNotStarted'), {
+              phase: status.phase,
+          });
     const remaining = status.nextWakeAt ? status.nextWakeAt - now : null;
     // Manual Only pauses the plan: no step runs and no check is due, so the line says so instead of a countdown.
     const next = status.manualOnly

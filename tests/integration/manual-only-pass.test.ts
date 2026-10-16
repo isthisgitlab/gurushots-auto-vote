@@ -5,7 +5,7 @@
  * (the fetch, the join/claim pre-steps, the bankroll read) carry no challenge and are not counted.
  */
 
-const mockLogs: Array<{ level: string; msg: string }> = [];
+const mockLogs: Array<{ level: string; msg: string; args: unknown[] }> = [];
 
 jest.mock('../../src/ts/settings');
 jest.mock('../../src/ts/settings/storage', () => ({
@@ -23,7 +23,11 @@ jest.mock('../../src/ts/logger', () => {
             get:
                 (_target, level: string) =>
                 (msg: unknown, ...rest: unknown[]) => {
-                    mockLogs.push({ level, msg: String(msg) + (typeof rest[0] === 'string' ? ` ${rest[0]}` : '') });
+                    mockLogs.push({
+                        level,
+                        msg: String(msg) + (typeof rest[0] === 'string' ? ` ${rest[0]}` : ''),
+                        args: [msg, ...rest],
+                    });
                 },
         },
     );
@@ -369,6 +373,22 @@ describe('the scoped Run', () => {
         expect(result.challenges).toHaveLength(2);
     });
 
+    test('when the switch cannot be read it fails closed, says so, and is a failed Run, not a Manual Only one', async () => {
+        mockSettings((id) => {
+            if (id === String(MANUAL_ID)) throw new Error('unreadable');
+            return false;
+        });
+        const calls: Call[] = [];
+        const { deps } = passDeps(calls, [dueChallenge(MANUAL_ID), dueChallenge(SIBLING_ID)]);
+        const result = await run(deps, MANUAL_ID);
+        const message = `[Challenge ${MANUAL_ID}: Challenge ${MANUAL_ID}] Could not read the Manual Only setting — nothing runs automatically`;
+        expect(result).toEqual(expect.objectContaining({ success: false, error: message }));
+        expect(result.challenges).toHaveLength(2);
+        expect(mockLogs.filter((entry) => entry.level === 'warning').map((entry) => entry.msg)).toContain(message);
+        expect(infoLines().some((line) => line.includes('Manual Only is on'))).toBe(false);
+        expect(methodsOf(attributed(calls, MANUAL_ID))).toEqual([]);
+    });
+
     test('through the CLI cliVote it closes cli-vote as a success', async () => {
         mockSettings([MANUAL_ID]);
         const calls: Call[] = [];
@@ -386,6 +406,30 @@ describe('the scoped Run', () => {
         expect(mockLogs.some((entry) => entry.level === 'endOperation')).toBe(true);
     });
 
+    test('through the CLI cliVote an unreadable switch closes cli-vote as a failure with the real cause', async () => {
+        mockSettings((id) => {
+            if (id === String(MANUAL_ID)) throw new Error('unreadable');
+            return false;
+        });
+        const calls: Call[] = [];
+        const { deps } = passDeps(calls, [dueChallenge(MANUAL_ID)]);
+        const { BaseMiddleware } =
+            require('../../src/ts/services/BaseMiddleware') as typeof import('../../src/ts/services/BaseMiddleware');
+        const middleware = new BaseMiddleware(
+            invalid({ fetchChallengesAndVote: (_token: string, id: string | number | null) => run(deps, id) }),
+        );
+        jest.spyOn(middleware, '_requireCliToken').mockReturnValue('tok');
+        const message = `[Challenge ${MANUAL_ID}: Challenge ${MANUAL_ID}] Could not read the Manual Only setting — nothing runs automatically`;
+        const result = await middleware.cliVote(MANUAL_ID);
+        expect(result).toEqual(expect.objectContaining({ success: false, error: message }));
+        const closed = mockLogs.filter((entry) => entry.level === 'endOperation').map((entry) => entry.args);
+        // The pass closes its own operation with the cause, and cli-vote closes as a failure (no success text).
+        expect(closed).toContainEqual(['voting-process', null, message]);
+        expect(closed).toContainEqual(['cli-vote', null, message]);
+        expect(closed).not.toContainEqual(['cli-vote', 'Voting process completed successfully']);
+        expect(methodsOf(attributed(calls, MANUAL_ID))).toEqual([]);
+    });
+
     test('on a challenge without the switch it runs as before', async () => {
         mockSettings([MANUAL_ID]);
         const calls: Call[] = [];
@@ -393,6 +437,20 @@ describe('the scoped Run', () => {
         await run(deps, SIBLING_ID);
         expect(attributed(calls, SIBLING_ID).length).toBeGreaterThan(0);
         expect(methodsOf(attributed(calls, MANUAL_ID))).toEqual([]);
+    });
+});
+
+describe('the progress counter', () => {
+    test('counts every challenge, a skipped Manual Only one included', async () => {
+        mockSettings([MANUAL_ID]);
+        const calls: Call[] = [];
+        const { deps } = passDeps(calls, [dueChallenge(MANUAL_ID), dueChallenge(SIBLING_ID)]);
+        await run(deps);
+        const progress = mockLogs.filter((entry) => entry.level === 'progress').map((entry) => entry.msg);
+        expect(progress).toEqual([
+            `Processing challenge 1/2: Challenge ${MANUAL_ID}`,
+            `Processing challenge 2/2: Challenge ${SIBLING_ID}`,
+        ]);
     });
 });
 

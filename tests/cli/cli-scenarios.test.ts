@@ -374,6 +374,13 @@ describe('scenario-status', () => {
         expect(text()).not.toContain('Paused (Manual Only)');
     });
 
+    test('a paused plan that has not started does not promise the next voting pass', async () => {
+        h['get-scenario-status'].mockResolvedValueOnce(status({ manualOnly: true }));
+        await cmd.scenarioStatusCmd('7');
+        expect(text()).toContain('Not started yet — it starts in phase "main" once Manual Only is off.');
+        expect(text()).not.toContain('next voting pass');
+    });
+
     test('a quiet plan prints only its phase', async () => {
         h['get-scenario-status'].mockResolvedValue(
             status({

@@ -142,6 +142,38 @@ describe('describeDeadlineActions — row gating', () => {
         });
     });
 
+    test.each([[true], [false]])(
+        'a pin on the entry that carries the other feature is a flag block, not the pin’s (switch %s)',
+        (manualOnly) => {
+            // The only entry already has Turbo and is also pinned for Turbo: unpinning would free nothing.
+            mockSettings({ manualPhotosOnly: manualOnly, emergencySubmit: 300 });
+            settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
+            const boost = VotingLogic.describeDeadlineActions(
+                build({
+                    boost: { state: 'AVAILABLE_KEY' },
+                    turbo: { state: 'LOCKED' },
+                    entries: [{ id: 'e1', turbo: true }],
+                }),
+                NOW,
+            );
+            expect(boost).toEqual(
+                expect.objectContaining({ boostBlocked: true, boostBlockedBy: 'flag', boostReleaseAt: null }),
+            );
+            settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
+            const turbo = VotingLogic.describeDeadlineActions(
+                build({
+                    boost: { state: 'AVAILABLE_KEY' },
+                    turbo: { state: 'WON' },
+                    entries: [{ id: 'e1', boosted: true }],
+                }),
+                NOW,
+            );
+            expect(turbo).toEqual(
+                expect.objectContaining({ turboBlocked: true, turboBlockedBy: 'flag', turboReleaseAt: null }),
+            );
+        },
+    );
+
     test('a Turbo blocked by a boosted sole entry is blocked by a flag', () => {
         mockSettings({ useTurbo: true });
         const challenge = build({

@@ -214,7 +214,9 @@ const scenarioStatusCmd = async (challengeId: string) => {
     ui().info(`Scenario "${status.scenario.name}" on challenge ${challengeId}`);
     if (status.manualOnly) ui().info('  Paused (Manual Only): no step runs and no check is due.');
     if (!state) {
-        ui().info(`  Not started yet — it starts in phase "${status.scenario.start}" on the next voting pass.`);
+        ui().info(
+            `  Not started yet — it starts in phase "${status.scenario.start}" ${status.manualOnly ? 'once Manual Only is off' : 'on the next voting pass'}.`,
+        );
         return 0;
     }
     ui().info(`  Phase: ${state.phase} (since ${at(state.phaseEnteredAt)})`);

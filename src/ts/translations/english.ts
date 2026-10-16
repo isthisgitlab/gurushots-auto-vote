@@ -441,12 +441,17 @@ export const app = {
         'Press “{details}”, then “{reset}” — scenario "{name}" is paused: this challenge’s saved progress cannot be read.',
     scenarioStatusPhase: 'phase {phase}',
     scenarioStatusNotStarted: 'starts in phase {phase} on the next run',
+    scenarioStatusNotStartedManual: 'starts in phase {phase} once Manual Only is off',
     scenarioStatusNext: 'next check in {time}',
     scenarioStatusPausedManual: 'paused: Manual Only is on, so no step runs',
     scenarioStatusPausedManualShort: 'paused (Manual Only)',
     scenarioStatusProblem: 'Last step skipped: {message}',
     scenarioStatusSpendUnclear:
         'GuruShots gave no answer to “{action}”, so it may have gone through. It will not be spent again: the next cycle only checks whether it took effect.',
+    scenarioStatusSpendUnclearManual:
+        'GuruShots gave no answer to “{action}”, so it may have gone through. It will not be spent again: once Manual Only is off, the next cycle only checks whether it took effect.',
+    scenarioStatusSpendUnclearPendingManual:
+        'The app did not record whether “{action}” was sent, so it may have gone through. It will not be spent again: once Manual Only is off, the next cycle only checks whether it took effect.',
     scenarioStatusSpendUnclearPending:
         'The app did not record whether “{action}” was sent, so it may have gone through. It will not be spent again: the next cycle only checks whether it took effect.',
     scenarioStatusSpendStopped:
