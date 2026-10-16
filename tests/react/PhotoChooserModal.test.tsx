@@ -464,6 +464,59 @@ describe('selection', () => {
         });
     });
 
+    describe('PhotoGrid before any listing is read (idle)', () => {
+        const extra = new Map([photo(1), photo(2)].map((p) => [p.id, p]));
+        const grid = (props: Partial<Parameters<typeof PhotoGrid>[0]> = {}) =>
+            render(
+                <PhotoGrid
+                    state={{ status: 'idle' }}
+                    known={new Map()}
+                    selected={[]}
+                    hideUnlisted={false}
+                    locked={false}
+                    hasChallenge
+                    revalidating={false}
+                    recheckFailed={false}
+                    numbered={false}
+                    onToggle={jest.fn()}
+                    onRetry={jest.fn()}
+                    onRefresh={jest.fn()}
+                    {...props}
+                />,
+            );
+        const idleLine = () => screen.getByText(/^Photos are not loaded yet/);
+
+        test('with no picks it says nothing is loaded and shows no tile', () => {
+            grid({ extraPhotos: extra });
+            expect(idleLine().getAttribute('role')).toBe('status');
+            expect(screen.queryByRole('button')).toBeNull();
+        });
+
+        test('a pick found in extraPhotos shows as a pressed, unnumbered tile with the idle member’s thumbnail and toggles', () => {
+            const onToggle = jest.fn();
+            grid({ selected: [idOf(2)], extraPhotos: extra, idleMemberId: MEMBER, onToggle });
+            expect(idleLine()).toBeTruthy();
+            expect(screen.getAllByRole('button')).toHaveLength(1);
+            expect(tile(2).getAttribute('aria-pressed')).toBe('true');
+            expect(tile(2).querySelector('.badge')).toBeNull();
+            expect(tile(2).textContent).not.toContain('Can be entered');
+            expect(tile(2).querySelector('img')?.getAttribute('src')).toContain(MEMBER);
+            fireEvent.click(tile(2));
+            expect(onToggle).toHaveBeenCalledWith(idOf(2));
+        });
+
+        test('a pick missing from extraPhotos renders nothing', () => {
+            grid({ selected: [idOf(9)], extraPhotos: extra });
+            expect(screen.queryByRole('button')).toBeNull();
+        });
+
+        test('without extraPhotos a pick renders nothing', () => {
+            grid({ selected: [idOf(1)] });
+            expect(idleLine()).toBeTruthy();
+            expect(screen.queryByRole('button')).toBeNull();
+        });
+    });
+
     test('starts from the saved value', async () => {
         setup({ value: [idOf(1)] });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });

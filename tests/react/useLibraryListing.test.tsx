@@ -436,3 +436,50 @@ describe('the member on screen', () => {
         await waitFor(() => expect([...result.current.known.keys()]).toEqual(['d']));
     });
 });
+
+describe('onDemand', () => {
+    test('starts idle and reads nothing until asked', async () => {
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => undefined);
+        expect(result.current.state).toEqual({ status: 'idle' });
+        expect(getLibrary()).not.toHaveBeenCalled();
+    });
+
+    test('load("") from idle reads the library', async () => {
+        getLibrary().mockResolvedValue(answer());
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        expect(result.current.state).toMatchObject({ status: 'ready', listing: { preview: false } });
+        expect(getLibrary()).toHaveBeenCalledWith(7, undefined, 'cached');
+    });
+
+    test('retry() from idle is a fresh full read', async () => {
+        getLibrary().mockResolvedValue(answer());
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => {
+            result.current.retry();
+        });
+        await waitFor(() => expect(result.current.state.status).toBe('ready'));
+        expect(getLibrary().mock.calls).toEqual([[7, undefined, 'fresh']]);
+    });
+
+    test('an answer that lands after unmounting is dropped', async () => {
+        const pending = deferred();
+        getLibrary().mockReturnValueOnce(pending.promise);
+        const { result, unmount } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        act(() => {
+            void result.current.load('');
+        });
+        unmount();
+        await act(async () => pending.resolve(answer()));
+        expect(getLibrary()).toHaveBeenCalledTimes(1);
+    });
+
+    test('without it the library is read on mount, as before', async () => {
+        getLibrary().mockResolvedValue(answer());
+        const { result } = renderHook(() => useLibraryListing(7));
+        expect(result.current.state).toEqual({ status: 'loading' });
+        await waitFor(() => expect(result.current.state.status).toBe('ready'));
+        expect(getLibrary()).toHaveBeenCalledTimes(1);
+    });
+});

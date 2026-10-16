@@ -571,8 +571,10 @@ describe('pick', () => {
     const pickButton = () => screen.getByRole('button', { name: app.fillPick });
     const openAndPick = async (n = 1) => {
         fireEvent.click(pickButton());
+        // Pick… opens with nothing loaded; Load all shows the library as last loaded with picking held, and the
+        // fresh read unlocks it.
+        fireEvent.click(await screen.findByRole('button', { name: app.pickLoadAll }));
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        // The opening shows the library as last loaded with picking held; the fresh read unlocks it.
         await waitFor(() => expect(tile(1).getAttribute('aria-disabled')).toBe('false'));
         fireEvent.click(tile(n));
     };
@@ -679,7 +681,7 @@ describe('pick', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(screen.queryByRole('dialog')).toBeNull();
         fireEvent.click(pickButton());
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await screen.findByRole('button', { name: app.pickLoadAll });
         expect(screen.queryByRole('alert')).toBeNull();
     });
 

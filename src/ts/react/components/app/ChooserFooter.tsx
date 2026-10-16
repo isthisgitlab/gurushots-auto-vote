@@ -38,6 +38,8 @@ const SAVE_HOLD_HINT: Record<
     checking: 'app.photoChooserSaveChecking',
     'check-failed': 'app.photoChooserSaveCheckFailed',
     loading: 'app.photoChooserSaveWaits',
+    // The chooser reads on open and never starts idle; the entry completes the record.
+    idle: 'app.photoChooserSaveWaits',
     ready: 'app.photoChooserSaveWaits',
     error: 'app.photoChooserSaveWaitsError',
     'no-context': 'app.photoChooserSaveNoContext',

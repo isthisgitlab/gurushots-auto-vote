@@ -322,6 +322,7 @@ export function PhotoGrid({
     fullKey = 'app.photoChooserListFull',
     numbered = true,
     extraPhotos,
+    idleMemberId = null,
 }: {
     state: ListState;
     known: Map<string, LibraryPhoto>;
@@ -357,10 +358,43 @@ export function PhotoGrid({
     numbered?: boolean;
     /** Records of photos the listing may not return (the suggestions), looked up after it for a selected id. */
     extraPhotos?: ReadonlyMap<string, LibraryPhoto>;
+    /** The member that owns the `extraPhotos`: with no listing read yet, the selected tiles take it for their thumbnails. */
+    idleMemberId?: string | null;
 }) {
     const { t } = useTranslation();
     // Every won id this chooser has been told of: a search that no longer lists a chosen photo still knows it has won.
     const everWon = useRef(new Set<string>());
+    if (state.status === 'idle') {
+        // Nothing is read yet: only what is picked is shown, from the records Auto brought, so a pick never goes invisible.
+        const picked = selected.flatMap((id) => extraPhotos?.get(id) ?? []);
+        return (
+            <>
+                <p className="text-base-content/70 text-sm" role="status">
+                    {t('app.pickIdle')}
+                </p>
+                {picked.length > 0 && (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                        {picked.map((photo) => (
+                            <PhotoTile
+                                key={photo.id}
+                                photo={photo}
+                                memberId={idleMemberId}
+                                selected
+                                position={null}
+                                blockedReason={null}
+                                atCap={false}
+                                fullKey={fullKey}
+                                allowedKnown={false}
+                                locked={locked}
+                                lockedKey={lockedKey}
+                                onToggle={onToggle}
+                            />
+                        ))}
+                    </div>
+                )}
+            </>
+        );
+    }
     if (state.status === 'loading') return <InlineLoader text={t('app.photoChooserLoading')} />;
     if (state.status === 'no-context') {
         return (

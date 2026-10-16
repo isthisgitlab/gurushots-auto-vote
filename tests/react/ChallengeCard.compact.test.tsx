@@ -216,7 +216,10 @@ describe('compact ChallengeCard tile with compactActions', () => {
         expect(description?.textContent).toBe('app.fillPickLabel');
         fireEvent.click(pick);
         expect(await screen.findByText('app.pickTitle')).toBeTruthy();
-        expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(202, undefined, 'cached');
+        // Opening reads nothing; Load all does.
+        expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
+        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(202, undefined, 'cached'));
     });
 
     test('the picker stays open, with its listing, when the card switches layout', async () => {
@@ -232,14 +235,30 @@ describe('compact ChallengeCard tile with compactActions', () => {
             onSettingsClick: jest.fn(),
             onCurrencySpent: () => {},
         };
+        jest.mocked(window.api.getLibraryPhotos).mockResolvedValue({
+            success: true,
+            photos: [{ id: 'a'.repeat(32), labels: ['harbour'], allowed: true, message: null, uploadDate: 1 }],
+            memberId: 'm',
+            truncated: false,
+            wonIds: [],
+            wonCount: 0,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
+            allowedKnown: true,
+        });
         const { rerender } = render(<ChallengeCard {...props} />);
         fireEvent.click(screen.getByRole('button', { name: 'app.fillPick' }));
         await screen.findByText('app.pickTitle');
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
+        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(2));
         const dialog = screen.getByRole('dialog');
         mockChallengeSettings.isCompact = false;
         rerender(<ChallengeCard {...props} />);
         expect(screen.getByRole('dialog')).toBe(dialog);
-        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(2));
+        // A remounted body would start idle and read nothing, so the count alone cannot show there was none.
+        expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(2);
+        expect(screen.queryByText('app.pickIdle')).toBeNull();
+        expect(screen.getAllByRole('button', { name: /photoChooserTileLabel/ }).length).toBeGreaterThan(0);
     });
 
     test('a fill in flight disables Pick… along with +1 / +N', () => {

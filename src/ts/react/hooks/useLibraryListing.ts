@@ -19,9 +19,10 @@ export type LibraryPhoto = Listing['photos'][number];
 /**
  * What the chooser is showing. `ready` keeps the listing's photos beside what
  * the response said about them (a `preview` listing is the library as last loaded, its marks withheld);
- * every other state is a reason there are none.
+ * every other state is a reason there are none. `idle` is a chooser that reads nothing until asked to.
  */
 export type ListState =
+    | { status: 'idle' }
     | { status: 'loading' }
     | { status: 'ready'; listing: Listing }
     | { status: 'no-context' }
@@ -37,12 +38,13 @@ const replacesListing = (error: string | undefined): boolean =>
 /**
  * The listing for a challenge. A no-search read may come from memory as a preview, which is read again in
  * the background; a search, Retry and Refresh read afresh. Answers to any but the newest request are dropped.
+ * With `onDemand` nothing is read on mount: the listing is `idle` until `load` (or `retry`) is called.
  */
 export function useLibraryListing(
     challengeId: string | number | null,
-    { alwaysFresh = false }: { alwaysFresh?: boolean } = {},
+    { alwaysFresh = false, onDemand = false }: { alwaysFresh?: boolean; onDemand?: boolean } = {},
 ) {
-    const [state, setState] = useState<ListState>({ status: 'loading' });
+    const [state, setState] = useState<ListState>({ status: onDemand ? 'idle' : 'loading' });
     // Every photo any fresh response has listed, by id: a selected photo that a narrower
     // search omits keeps its record and is not shown as a missing tile.
     const [known, setKnown] = useState<Map<string, LibraryPhoto>>(new Map());
@@ -132,11 +134,11 @@ export function useLibraryListing(
     );
 
     useEffect(() => {
-        void load('');
+        if (!onDemand) void load('');
         return () => {
             requestRef.current += 1;
         };
-    }, [load]);
+    }, [load, onDemand]);
 
     // Reads the current search again without taking the listing off the screen: the new listing replaces it
     // when it lands, and that is a new generation (answered here, like retry's, for the caller to record).

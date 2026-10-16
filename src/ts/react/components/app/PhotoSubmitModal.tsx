@@ -53,7 +53,7 @@ type Suggested = { photos: LibraryPhoto[]; memberId: string | null; statsLimited
 
 /**
  * Cancel and Submit: Submit names how many are picked and is held with none, while the pick cannot be sent
- * (over the cap, or the listing is being read), or while sending.
+ * (over the cap, or a listing asked for is being read or failed), or while sending.
  */
 function SubmitFooter({
     count,
@@ -93,8 +93,10 @@ function SubmitFooter({
 }
 
 /**
- * The modal's body. Mounted only while the modal is open, so every opening starts with nothing picked
- * and reads the listing afresh, picking only once that read is in. `max` is the card's live count of open slots: it can shrink while the modal is open.
+ * The modal's body. Mounted only while the modal is open, so every opening starts with nothing picked.
+ * With `suggest` (Pick…) no listing is read until Load all, Search or a Retry asks for one, and Auto's picks can
+ * be sent without it; without `suggest` (the swap picker) the listing is read afresh on opening, picking only once
+ * that read is in. `max` is the card's live count of open slots: it can shrink while the modal is open.
  */
 function PhotoSubmitBody({
     challengeId,
@@ -125,11 +127,15 @@ function PhotoSubmitBody({
     // always comes back as a preview, and picking waits for the fresh read.
     const { state, known, generation, revalidating, recheckFailed, load, refresh, retry } = useLibraryListing(
         challengeId,
-        { alwaysFresh: true },
+        { alwaysFresh: true, onDemand: suggest },
     );
     const preview = state.status === 'ready' && state.listing.preview;
-    // Until the app has checked which photos the challenge accepts, none can be picked or sent.
+    // Once a listing is shown, until the app has checked which photos the challenge accepts, none can be picked or
+    // sent. An idle one shows none: Auto's picks are ranked against the live challenge's eligible photos.
     const checking = preview || recheckFailed;
+    const reading = state.status === 'loading' || revalidating;
+    // Bumped by Load all to remount the search box empty, so it never shows a term the grid is not filtered by.
+    const [searchKey, setSearchKey] = useState(0);
 
     // The generation of the read a failed submit asked for: once a listing of that generation (or later) is
     // in, photos it says can no longer be entered leave the pick. Null when nothing is waiting.
@@ -141,6 +147,8 @@ function PhotoSubmitBody({
     const { suggest: runSuggest, loading: suggesting } = useSuggestPhotos();
     const [suggested, setSuggested] = useState<Suggested | null>(null);
     const [suggestedKnown, setSuggestedKnown] = useState<ReadonlyMap<string, LibraryPhoto>>(new Map());
+    // The member of the last answer that named one: it survives the strip clearing, so picks keep their thumbnails.
+    const [suggestedMemberId, setSuggestedMemberId] = useState<string | null>(null);
     const [suggestFailure, setSuggestFailure] = useState<string | null>(null);
     const suggestEpoch = useRef(0);
     useEffect(
@@ -214,6 +222,7 @@ function PhotoSubmitBody({
             return;
         }
         setSuggested(result);
+        if (result.memberId !== null) setSuggestedMemberId(result.memberId);
         setSuggestedKnown(
             (prev) => new Map([...prev, ...result.photos.map((photo): [string, LibraryPhoto] => [photo.id, photo])]),
         );
@@ -264,7 +273,7 @@ function PhotoSubmitBody({
     let autoStatus = '';
     if (suggesting) autoStatus = t('app.pickAutoRunning');
     else if (suggested) autoStatus = interp(t('app.pickSuggestedCount'), { count: suggested.photos.length });
-    const search = <SearchForm onSearch={(term) => void load(term)} />;
+    const search = <SearchForm key={searchKey} onSearch={(term) => void load(term)} />;
     return (
         <div className="space-y-3">
             {notice && (
@@ -277,6 +286,22 @@ function PhotoSubmitBody({
                 <div className="space-y-1">
                     <div className="flex flex-wrap items-start gap-2">
                         <div className="min-w-48 flex-1">{search}</div>
+                        <button
+                            type="button"
+                            className={`btn btn-outline btn-sm ${reading ? 'btn-disabled' : ''}`}
+                            // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body>.
+                            aria-disabled={reading}
+                            aria-busy={reading}
+                            onClick={() => {
+                                if (reading) return;
+                                setSearchKey((key) => key + 1);
+                                void load('');
+                            }}
+                        >
+                            <BusyContent busy={reading} label={t('app.pickLoadAll')}>
+                                {t('app.pickLoadAll')}
+                            </BusyContent>
+                        </button>
                         <button
                             type="button"
                             className={`btn btn-sm ${suggesting ? 'btn-disabled' : ''}`}
@@ -348,12 +373,13 @@ function PhotoSubmitBody({
                 blockedKey={blocked?.reasonKey}
                 numbered={false}
                 extraPhotos={suggestedKnown}
+                idleMemberId={suggestedMemberId}
             />
             <StickyModalFooter>
                 {alert}
                 <SubmitFooter
                     count={selected.length}
-                    held={over || state.status !== 'ready' || checking}
+                    held={over || checking || (state.status !== 'ready' && state.status !== 'idle')}
                     submitting={submitting}
                     texts={texts}
                     onSubmit={submit}
