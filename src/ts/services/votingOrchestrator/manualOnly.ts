@@ -30,7 +30,7 @@ export const isManualOnlyFailClosed = (challenge: Challenge): boolean => manualO
 
 /** The scoped Run's line when the switch can't be read: nothing runs, and it is not claimed to be on. */
 export const manualOnlyUnreadableLine = (challenge: Challenge): string =>
-    `${logger.challengeTag(challenge)} Could not read the Manual Only setting — nothing runs automatically`;
+    `${logger.challengeTag(challenge)} Could not read the Manual Only setting — nothing runs automatically. Open the challenge settings, make sure Manual Only is set the way you want and save, then try again`;
 
 // Challenge ids the pass already reported as Manual Only, so entering and leaving the state is
 // logged once rather than on every pass (the same shape as voteStallReported in missionVotes.ts).

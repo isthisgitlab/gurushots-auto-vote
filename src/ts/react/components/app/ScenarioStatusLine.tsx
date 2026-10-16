@@ -150,8 +150,11 @@ export function ScenarioStatusLine({
           });
     const remaining = status.nextWakeAt ? status.nextWakeAt - now : null;
     // Manual Only pauses the plan: no step runs and no check is due, so the line says so instead of a countdown.
+    // A plan that has not started already says it starts once Manual Only is off, so it adds no paused suffix.
     const next = status.manualOnly
-        ? t(compact ? 'app.scenarioStatusPausedManualShort' : 'app.scenarioStatusPausedManual')
+        ? status.started
+            ? t(compact ? 'app.scenarioStatusPausedManualShort' : 'app.scenarioStatusPausedManual')
+            : null
         : remaining !== null && remaining > 0
           ? interp(t('app.scenarioStatusNext'), { time: formatDuration(remaining, { includeSeconds: true }) })
           : null;

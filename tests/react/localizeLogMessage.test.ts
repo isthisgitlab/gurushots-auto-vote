@@ -71,9 +71,11 @@ describe('Latvian log messages', () => {
     test('translates the unreadable-switch line and the paid-join warning', () => {
         const tag = '[Challenge 42: Sunset]';
         expect(
-            localizeLogMessage(`⚠️ ${tag} Could not read the Manual Only setting — nothing runs automatically`),
+            localizeLogMessage(
+                `⚠️ ${tag} Could not read the Manual Only setting — nothing runs automatically. Open the challenge settings, make sure Manual Only is set the way you want and save, then try again`,
+            ),
         ).toBe(
-            '⚠️ [Izaicinājums 42: Sunset] Neizdevās nolasīt uzstādījumu „Tikai manuāli” — nekas nenotiek automātiski',
+            '⚠️ [Izaicinājums 42: Sunset] Neizdevās nolasīt uzstādījumu „Tikai manuāli” — nekas nenotiek automātiski. Atver izaicinājuma uzstādījumus, pārliecinies, ka „Tikai manuāli” ir uzstādīts tā, kā vēlies, saglabā un mēģini vēlreiz',
         );
         expect(
             localizeLogMessage(

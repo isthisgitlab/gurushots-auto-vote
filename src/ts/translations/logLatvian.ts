@@ -193,7 +193,6 @@ export const logMessages = {
     m42f218b86441: 'Lietotne tūlīt aizvērsies. Piespiedu iziešana...',
     m43720acfbd52: '=== GuruShots Auto Voter — CLI manuālā balsošana (līdz 100 %) ===',
     m446023c05bef: 'Izlaista nodoma profila "{0}" sākotnējā izveide (šai instalācijai nederīgs)',
-    m447a3bc9dead: '{0} Neizdevās nolasīt uzstādījumu „Tikai manuāli” — nekas nenotiek automātiski',
     m448e6fe1f380: 'Uzstādījumi netika importēti no settings.json: nav, ko atzīmēt kā redzētu.',
     m45a520c33383: 'Pieejams atjauninājums:',
     m463ef69443aa: '📋 Atrasti apstrādājamie izaicinājumi: {0}',
@@ -317,6 +316,8 @@ export const logMessages = {
     m70ff387cddf7: 'Kļūda, apstrādājot fill-challenge-now pieprasījumu:',
     m73e1cd41a435: 'Izlaižamās versijas izvēle pārcelta uz uzstādījumiem: {0}',
     m747d5419887f: '{0}: meklēšana "{1}" izaicinājumam {2} neizdevās: {3}',
+    m74c13aa1b923:
+        '{0} Neizdevās nolasīt uzstādījumu „Tikai manuāli” — nekas nenotiek automātiski. Atver izaicinājuma uzstādījumus, pārliecinies, ka „Tikai manuāli” ir uzstādīts tā, kā vēlies, saglabā un mēģini vēlreiz',
     m74ed240ea8e0: 'Kļūda, atiestatot globālo noklusējuma vērtību "{0}"',
     m756be8911759: 'API kļūdas atbilde',
     m75e175350f1c: '✅ Turbo veiksmīgi izmantots',

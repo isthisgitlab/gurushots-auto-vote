@@ -143,9 +143,10 @@ describe('describeDeadlineActions — row gating', () => {
     });
 
     test.each([[true], [false]])(
-        'a pin on the entry that carries the other feature is a flag block, not the pin’s (switch %s)',
+        'a pin on a photo that already carries the flag is inert, so the block is a flag block and stays (switch %s)',
         (manualOnly) => {
-            // The only entry already has Turbo and is also pinned for Turbo: unpinning would free nothing.
+            // Regression lock: the only entry already has Turbo and is also pinned for Turbo. The pin is not live
+            // (a pin is inert once any entry carries its own feature’s flag), so Manual Only has no pin block to lift.
             mockSettings({ manualPhotosOnly: manualOnly, emergencySubmit: 300 });
             settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
             const boost = VotingLogic.describeDeadlineActions(

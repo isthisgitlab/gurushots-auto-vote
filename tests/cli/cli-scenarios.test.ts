@@ -364,8 +364,17 @@ describe('scenario-status', () => {
         expect(text('warning')).not.toContain('\u202E');
     });
 
-    test('Manual Only says the plan is paused, started or not', async () => {
-        h['get-scenario-status'].mockResolvedValueOnce(status({ manualOnly: true }));
+    test('Manual Only says a started plan is paused', async () => {
+        const started = {
+            phase: 'main',
+            phaseEnteredAt: 1,
+            memory: {},
+            spent: {},
+            inFlight: null,
+            lastAction: null,
+            lastError: null,
+        };
+        h['get-scenario-status'].mockResolvedValueOnce(status({ manualOnly: true, state: started }));
         await expect(cmd.scenarioStatusCmd('7')).resolves.toBe(0);
         expect(text()).toContain('Paused (Manual Only): no step runs and no check is due.');
         logger.__calls.length = 0;
@@ -378,6 +387,8 @@ describe('scenario-status', () => {
         h['get-scenario-status'].mockResolvedValueOnce(status({ manualOnly: true }));
         await cmd.scenarioStatusCmd('7');
         expect(text()).toContain('Not started yet — it starts in phase "main" once Manual Only is off.');
+        // The card says no more for a plan that has not started, and neither does the CLI.
+        expect(text()).not.toContain('Paused (Manual Only)');
         expect(text()).not.toContain('next voting pass');
     });
 

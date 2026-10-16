@@ -381,7 +381,7 @@ describe('the scoped Run', () => {
         const calls: Call[] = [];
         const { deps } = passDeps(calls, [dueChallenge(MANUAL_ID), dueChallenge(SIBLING_ID)]);
         const result = await run(deps, MANUAL_ID);
-        const message = `[Challenge ${MANUAL_ID}: Challenge ${MANUAL_ID}] Could not read the Manual Only setting — nothing runs automatically`;
+        const message = `[Challenge ${MANUAL_ID}: Challenge ${MANUAL_ID}] Could not read the Manual Only setting — nothing runs automatically. Open the challenge settings, make sure Manual Only is set the way you want and save, then try again`;
         expect(result).toEqual(expect.objectContaining({ success: false, error: message }));
         expect(result.challenges).toHaveLength(2);
         expect(mockLogs.filter((entry) => entry.level === 'warning').map((entry) => entry.msg)).toContain(message);
@@ -419,7 +419,7 @@ describe('the scoped Run', () => {
             invalid({ fetchChallengesAndVote: (_token: string, id: string | number | null) => run(deps, id) }),
         );
         jest.spyOn(middleware, '_requireCliToken').mockReturnValue('tok');
-        const message = `[Challenge ${MANUAL_ID}: Challenge ${MANUAL_ID}] Could not read the Manual Only setting — nothing runs automatically`;
+        const message = `[Challenge ${MANUAL_ID}: Challenge ${MANUAL_ID}] Could not read the Manual Only setting — nothing runs automatically. Open the challenge settings, make sure Manual Only is set the way you want and save, then try again`;
         const result = await middleware.cliVote(MANUAL_ID);
         expect(result).toEqual(expect.objectContaining({ success: false, error: message }));
         const closed = mockLogs.filter((entry) => entry.level === 'endOperation').map((entry) => entry.args);

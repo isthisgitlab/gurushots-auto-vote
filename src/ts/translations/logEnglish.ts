@@ -188,7 +188,6 @@ export const logMessages = {
     m42f218b86441: 'Application is about to quit. Forcing exit...',
     m43720acfbd52: '=== GuruShots Auto Voter - CLI Manual Voting (vote-to-100%) ===',
     m446023c05bef: 'Skipped seeding intent profile "{0}" (invalid for this install)',
-    m447a3bc9dead: '{0} Could not read the Manual Only setting — nothing runs automatically',
     m448e6fe1f380: 'The settings were not imported from a settings.json: nothing to acknowledge.',
     m45a520c33383: 'Update available:',
     m463ef69443aa: '📋 Found {0} challenges to process',
@@ -311,6 +310,8 @@ export const logMessages = {
     m70ff387cddf7: 'Error handling fill-challenge-now request:',
     m73e1cd41a435: 'Migrated skip-version preference to settings: {0}',
     m747d5419887f: '{0}: search "{1}" failed for {2}: {3}',
+    m74c13aa1b923:
+        '{0} Could not read the Manual Only setting — nothing runs automatically. Open the challenge settings, make sure Manual Only is set the way you want and save, then try again',
     m74ed240ea8e0: "Error resetting global default '{0}'",
     m756be8911759: 'API Error Response',
     m75e175350f1c: '✅ Turbo applied successfully',

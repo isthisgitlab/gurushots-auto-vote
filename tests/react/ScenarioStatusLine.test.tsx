@@ -49,25 +49,25 @@ test.each([
     expect(screen.queryByText(/scenarioStatusNext/)).toBeNull();
 });
 
-test.each([
-    [false, 'app.scenarioStatusPausedManual'],
-    [true, 'app.scenarioStatusPausedManualShort'],
-])('a paused plan that has not started does not promise the next run (compact=%s)', (compact, paused) => {
-    render(
-        <ScenarioStatusLine
-            compact={compact}
-            status={{
-                name: 'Plan',
-                phase: 'main',
-                started: false,
-                lastError: null,
-                manualOnly: true,
-                nextWakeAt: null,
-            }}
-        />,
-    );
-    expect(screen.getByTitle('Plan').textContent).toBe(`🧭 Plan · app.scenarioStatusNotStartedManual · ${paused}`);
-});
+test.each([[false], [true]])(
+    'a paused plan that has not started does not promise the next run, and adds no paused suffix (compact=%s)',
+    (compact) => {
+        render(
+            <ScenarioStatusLine
+                compact={compact}
+                status={{
+                    name: 'Plan',
+                    phase: 'main',
+                    started: false,
+                    lastError: null,
+                    manualOnly: true,
+                    nextWakeAt: null,
+                }}
+            />,
+        );
+        expect(screen.getByTitle('Plan').textContent).toBe('🧭 Plan · app.scenarioStatusNotStartedManual');
+    },
+);
 
 test('a plan that has not started, with the switch off, still starts on the next run', () => {
     render(<ScenarioStatusLine status={{ name: 'Plan', phase: 'main', started: false, lastError: null }} />);

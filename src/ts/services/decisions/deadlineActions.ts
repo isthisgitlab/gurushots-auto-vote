@@ -186,19 +186,15 @@ const describeConflicts = (challenge: Challenge, challengeId: string, now: numbe
         hasEntries &&
         pickTurboEntry(challenge, challengeId, now) === null &&
         !(hasFreeSlot && resolveTurboFillNewMode(challenge, challengeId) !== 'no');
-    // A Boost is blocked by the photo pinned for Turbo, and a Turbo by the one pinned for Boost. A block is the
-    // pin's only when the pin alone causes it: with the pin ignored, some entry is free of the other feature.
-    // Otherwise every entry carries the flag, the block stays whatever the pin, and unpinning cannot help.
-    const causeOf = (blocked: boolean, blocker: 'boost' | 'turbo', flag: 'turbo' | 'boosted') =>
+    // A Boost is blocked by the photo pinned for Turbo, and a Turbo by the one pinned for Boost.
+    const causeOf = (blocked: boolean, blocker: 'boost' | 'turbo') =>
         blocked
-            ? livePinnedId(challenge, challengeId, blocker) !== null &&
-              Array.isArray(entries) &&
-              entries.some((entry) => !entry?.[flag])
+            ? livePinnedId(challenge, challengeId, blocker) !== null
                 ? ('pin' as const)
                 : ('flag' as const)
             : null;
-    const rawBoostBy = causeOf(rawBoostBlocked, 'turbo', 'turbo');
-    const rawTurboBy = causeOf(rawTurboBlocked, 'boost', 'boosted');
+    const rawBoostBy = causeOf(rawBoostBlocked, 'turbo');
+    const rawTurboBy = causeOf(rawTurboBlocked, 'boost');
     const boostBlocked = rawBoostBlocked && !(manualOnly && rawBoostBy === 'pin');
     const turboBlocked = rawTurboBlocked && !(manualOnly && rawTurboBy === 'pin');
     return {
@@ -206,10 +202,8 @@ const describeConflicts = (challenge: Challenge, challengeId: string, now: numbe
         turboBlocked,
         boostBlockedBy: boostBlocked ? rawBoostBy : null,
         turboBlockedBy: turboBlocked ? rawTurboBy : null,
-        boostReleaseAt:
-            boostBlocked && rawBoostBy === 'pin' ? pinReleaseAt(challenge, challengeId, 'turbo', now) : null,
-        turboReleaseAt:
-            turboBlocked && rawTurboBy === 'pin' ? pinReleaseAt(challenge, challengeId, 'boost', now) : null,
+        boostReleaseAt: boostBlocked ? pinReleaseAt(challenge, challengeId, 'turbo', now) : null,
+        turboReleaseAt: turboBlocked ? pinReleaseAt(challenge, challengeId, 'boost', now) : null,
     };
 };
 

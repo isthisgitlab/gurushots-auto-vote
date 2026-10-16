@@ -285,13 +285,13 @@ const runVotingPass = async (
         if (scope.result) return scope.result;
         const { challenges } = scope;
 
-        // A scoped Run on a Manual Only challenge is a deliberate no-op, not a failure.
         const scopedState = challengeIdFilter != null ? manualOnlyState(challenges[0]) : 'off';
         // Fail closed, but say what happened: an unreadable switch is a failed Run, not a Manual Only one.
         if (scopedState === 'unreadable') {
             return abortPass(manualOnlyUnreadableLine(challenges[0]), allChallenges, 'warning');
         }
         if (scopedState === 'on') {
+            // A scoped Run on a Manual Only challenge is a deliberate no-op, not a failure.
             const message = manualOnlyOnLine(challenges[0]);
             logger.withCategory('voting').info(message, null);
             logger.withCategory('voting').endOperation('voting-process', message);
