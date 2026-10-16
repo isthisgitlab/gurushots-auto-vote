@@ -152,6 +152,35 @@ describe('module load: logs directory', () => {
         expect(lastEntry(logger).message).toBe('ℹ️ First second');
     });
 
+    test('printLine strips terminal control but keeps line breaks and tabs', () => {
+        const { logger } = loadLogger();
+        const ESC = String.fromCharCode(27);
+        logger.printLine(`a${ESC}[31mred${ESC}[0m\tb\u202Ec\r\nd`);
+        expect(logSpy).toHaveBeenCalledWith('ared\tbc\nd');
+    });
+
+    test('printLine and printStderr cut a text past the length cap before redacting it', () => {
+        const { logger } = loadLogger();
+        logger.printLine(`password: hunter2 ${'x'.repeat(40000)}`);
+        const printed = String(logSpy.mock.calls.at(-1)?.[0]);
+        expect(printed).not.toContain('hunter2');
+        expect(printed.length).toBeLessThan(16500);
+        expect(printed.endsWith('…')).toBe(true);
+        logger.printStderr(`token=abc ${'y'.repeat(40000)}`);
+        const warned = String(errorSpy.mock.calls.at(-1)?.[0]);
+        expect(warned.length).toBeLessThan(16500);
+        expect(warned).not.toContain('abc');
+    });
+
+    test('a message past the length cap is cut before it is redacted and written', () => {
+        const { logger } = loadLogger();
+        logger.info(`password: hunter2 ${'x'.repeat(40000)}`);
+        const message = lastEntry(logger).message;
+        expect(message).not.toContain('hunter2');
+        expect(message.length).toBeLessThan(16500);
+        expect(message.endsWith('…')).toBe(true);
+    });
+
     test('printDocument keeps the text as it is, with its layout, but strips control characters', () => {
         const { logger, fs } = loadLogger();
         const sink = jest.fn();

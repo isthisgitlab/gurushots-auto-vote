@@ -19,6 +19,11 @@ const resolveGuiSink = (): GuiLogSink | null =>
 // monotonic seq lets the renderer de-dupe live messages that race the
 // backlog fetch.
 const MAX_RECENT = 1000;
+// A message is cut to this length before redaction runs, so no input can make that pass expensive. Messages are one
+// line by convention; the renderer's longest (8 KB) fits with room to spare.
+const MAX_MESSAGE_LENGTH = 16384;
+const capLength = <T>(text: T): T | string =>
+    typeof text === 'string' && text.length > MAX_MESSAGE_LENGTH ? `${text.slice(0, MAX_MESSAGE_LENGTH)}…` : text;
 const recentLogs: LogEntry[] = [];
 let nextSeq = 1;
 
@@ -52,7 +57,7 @@ const writeLog = (
         const cat = category || 'general';
         // Scrub credentials folded into the message string before it reaches
         // the ring buffer, disk, console, or the GUI fan-out below.
-        message = redactMessage(message);
+        message = redactMessage(capLength(message));
         // Strip ANSI escapes and other control characters and collapse CR/LF in the composed message
         // centrally (defense-in-depth against log injection / CWE-117 and terminal escape injection into
         // the console, GUI and file sinks). Per-call-site oneLine()/challengeTag()
@@ -112,17 +117,18 @@ const writeLog = (
 /**
  * Write a line to the console only: no log file, ring buffer or GUI feed. For
  * output a command was asked for (a long listing) that must not be persisted.
- * Credentials folded into the text are redacted like any log message; untrusted
- * content is otherwise printed as given, so callers strip it themselves.
+ * Credentials folded into the text are redacted like any log message, and terminal
+ * control is stripped (line breaks and tabs kept) so untrusted content cannot drive the terminal.
  */
-const printLine = (text: string): void => writeConsole('log', redactMessage(text));
+const printLine = (text: string): void =>
+    writeConsole('log', stripTerminalControl(redactMessage(capLength(text)), { keepLayout: true }));
 
 /**
  * Write a note to the console's error stream only (stderr; redacted, like printLine). For a
  * warning that belongs next to a document printed on stdout without ending up inside it,
  * so that piping the document stays valid.
  */
-const printStderr = (text: string): void => writeConsole('error', redactMessage(text));
+const printStderr = (text: string): void => writeConsole('error', redactMessage(capLength(text)));
 
 /**
  * Write a document the user asked for (help, a scenario's JSON) to the console only,

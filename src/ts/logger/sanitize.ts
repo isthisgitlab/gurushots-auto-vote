@@ -6,6 +6,17 @@
 const SENSITIVE_KEY_RE =
     /^(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|(?:set[_-]?)?cookie|authorization|x[_-]auth[_-]token|x[_-]token|email|login|user[_-]?name|phone)$/i;
 const REDACTED = '[REDACTED]';
+// An auth scheme with its credential, wherever it appears (`retrying with Bearer eyJ…`): the key-anchored patterns
+// below only see one that follows a key and a separator. Only a credential-shaped value goes with the scheme (see
+// isCredentialValue), so a title such as `Basic Black and White` or `Ring Bearer Portraits` is left alone.
+const AUTH_SCHEME_MSG_RE = /\b(bearer|basic)\s+([A-Za-z0-9._~+/=-]{12,})/gi;
+const BEARER_TOKEN_RE = /^[A-Za-z0-9._~+/-]{16,}=*$/;
+const BASIC_CREDENTIALS_RE = /^[A-Za-z0-9+/]{12,}={0,2}$/;
+// A run of letters is a word; a credential also holds digits, capitals inside it or the symbols of its alphabet.
+const NOT_A_WORD_RE = /[A-Z0-9._~+/=-]/;
+const isCredentialValue = (scheme: string, value: string) =>
+    (scheme.toLowerCase() === 'bearer' ? BEARER_TOKEN_RE : BASIC_CREDENTIALS_RE).test(value) &&
+    NOT_A_WORD_RE.test(value.slice(1));
 const MAX_SANITIZE_DEPTH = 6;
 
 /**
@@ -59,22 +70,29 @@ const sanitizeLogString = (value: unknown, maxLength: number = 200): string =>
 // at whitespace; a quoted value ends at its closing quote, an escaped quote inside it (`"a\"b c"`) included. An account
 // identifier's (email, login, username, phone) runs to the end of the field (`;` `)` or the end of the line, not a
 // comma), because such a value may hold spaces (`+371 20000000`, `alice b`) and a part left behind would still identify
-// the account.
+// the account. An unquoted value starts on a non-space character, so the separator's trailing `\s*` and the value never
+// match the same run of spaces: a long run of spaces after a key cannot make the match backtrack quadratically.
 const CREDENTIAL_MSG_RE =
     /\b(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|authorization|x[_-]?auth[_-]?token|x[_-]?token)\b(["']?\s*[:=]\s*)(?:(?:bearer|basic|token|digest)\s+(?=\S))?("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|(?!=+(?:\s|$))\S+)/gi;
 const IDENTITY_MSG_RE =
-    /\b(email|login|user[_-]?name|phone)\b(["']?\s*[:=]\s*)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|(?!=+(?:\s|$))[^;)\r\n]*[^;)\s])/gi;
+    /\b(email|login|user[_-]?name|phone)\b(["']?\s*[:=]\s*)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|(?!=+(?:\s|$))[^;)\s](?:[^;)\r\n]*[^;)\s])?)/gi;
 // A cookie header holds several `name=value` pairs split by `;` and spaces, so its value runs to the end of the line
 // (a quoted one, as in JSON text, to its closing quote).
 const COOKIE_MSG_RE =
-    /\b((?:set[_-]?)?cookie)\b(["']?\s*[:=]\s*)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|(?!=+(?:\s|$))[^\r\n]*[^\s])/gi;
+    /\b((?:set[_-]?)?cookie)\b(["']?\s*[:=]\s*)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|(?!=+(?:\s|$))[^\s](?:[^\r\n]*[^\s])?)/gi;
 
 function redactMessage(message: string): string;
 function redactMessage(message: unknown): unknown;
 function redactMessage(message: unknown): unknown {
     if (typeof message !== 'string') return message;
     const redact = (_match: string, key: string, sep: string) => `${key}${sep}${REDACTED}`;
-    return message.replace(COOKIE_MSG_RE, redact).replace(CREDENTIAL_MSG_RE, redact).replace(IDENTITY_MSG_RE, redact);
+    return message
+        .replace(COOKIE_MSG_RE, redact)
+        .replace(CREDENTIAL_MSG_RE, redact)
+        .replace(IDENTITY_MSG_RE, redact)
+        .replace(AUTH_SCHEME_MSG_RE, (match: string, scheme: string, value: string) =>
+            isCredentialValue(scheme, value) ? `${scheme} ${REDACTED}` : match,
+        );
 }
 
 export { sanitizeForLog, sanitizeLogString, redactMessage, SENSITIVE_KEY_RE, REDACTED };
