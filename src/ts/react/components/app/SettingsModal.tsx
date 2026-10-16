@@ -9,7 +9,8 @@ import { useAutovote } from '@/contexts/AutovoteContext';
 import { tierSchemaEntries, SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { Modal } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
-import { ModalActionRow, MODAL_ACTION_ROW_SCROLL_PADDING } from '@/components/ui/ModalActionRow';
+import { ModalActionRow } from '@/components/ui/ModalActionRow';
+import { STICKY_FOOTER_SCROLL_PADDING } from '@/components/ui/StickyModalFooter';
 import { SettingsTierHeading } from '@/components/ui/SettingsTierHeading';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { SettingInput, SettingLabel } from './SettingInput';
@@ -240,7 +241,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             onClose={handleCancel}
             title={t('app.globalSettings')}
             size="2xl"
-            className={MODAL_ACTION_ROW_SCROLL_PADDING}
+            className={STICKY_FOOTER_SCROLL_PADDING}
         >
             {/* Spinner only for the first load: every settings write broadcasts a
                 change that refetches the schema, and swapping the form out for the

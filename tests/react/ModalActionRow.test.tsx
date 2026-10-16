@@ -53,7 +53,7 @@ describe('ModalActionRow', () => {
     test('renders as a sticky footer flush with the modal box', () => {
         const { container } = renderRow();
         expect((container.firstChild as HTMLElement).className).toBe(
-            'sticky -bottom-6 z-10 -mx-6 -mb-6 px-6 py-4 bg-base-100 border-t border-base-300',
+            'sticky -bottom-6 z-10 -mx-6 -mb-6 px-6 py-4 bg-base-100 border-t border-base-300 space-y-2',
         );
     });
 

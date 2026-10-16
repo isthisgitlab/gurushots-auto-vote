@@ -111,6 +111,16 @@ describe('opening', () => {
         expect(submitButton().textContent).toBe('Submit');
     });
 
+    test('Submit sits in a footer pinned to the bottom of the modal box, which keeps focus above it', async () => {
+        setup();
+        await opened();
+        const footer = submitButton().closest('.sticky')!;
+        expect(footer.parentElement!.lastElementChild).toBe(footer);
+        const boxClasses = document.querySelector('.modal-box')!.classList;
+        expect(boxClasses.contains('scroll-pb-60')).toBe(true);
+        expect(boxClasses.contains('md:scroll-pb-32')).toBe(true);
+    });
+
     test('picked tiles are not numbered', async () => {
         setup();
         await opened();

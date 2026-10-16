@@ -289,6 +289,16 @@ describe('listing and tiles', () => {
 });
 
 describe('selection', () => {
+    test('Save sits in a footer pinned to the bottom of the modal box, which keeps focus above it', async () => {
+        setup();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        const footer = screen.getByRole('button', { name: 'Use these photos' }).closest('.sticky')!;
+        expect(footer.parentElement!.lastElementChild).toBe(footer);
+        const boxClasses = document.querySelector('.modal-box')!.classList;
+        expect(boxClasses.contains('scroll-pb-60')).toBe(true);
+        expect(boxClasses.contains('md:scroll-pb-32')).toBe(true);
+    });
+
     test('toggles a photo on and off (aria-pressed) and saves the chosen ids', async () => {
         const { onSave, onClose } = setup();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });

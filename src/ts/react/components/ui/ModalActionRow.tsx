@@ -1,31 +1,16 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from './LoadingSpinner';
 import { ResetIcon } from './ResetButton';
+import { StickyModalFooter } from './StickyModalFooter';
 import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 
 const ROW_ICON_CLASS = 'w-4 h-4 mr-1';
 
-// The modal hosting the row must put this on its `.modal-box` (via Modal's
-// `className`): the opaque footer covers the bottom of the scroll area, and the
-// scroll padding keeps a focused control scrolled above it. On phones the
-// footer is at its tallest, about 13.2rem (buttons wrapped onto two rows and a
-// multi-line Latvian save-error alert at 320px), so 15rem. The `md:` value
-// assumes a `size="2xl"` host, whose box is 91.67% of the viewport: about 704px
-// at 768px (a classic scrollbar takes ~15px off). There the buttons and the
-// Latvian save-error alert each fit one line and the footer is about 7rem, so
-// 8rem. Each includes room for the focus ring. A larger Android system font
-// scale can still outgrow the phone value.
-export const MODAL_ACTION_ROW_SCROLL_PADDING = 'scroll-pb-60 md:scroll-pb-32';
-
 /**
  * Shared Save / secondary / Cancel action row used by the settings modals
- * (SettingsModal and ChallengeSettingsModal). It is a footer pinned to the
- * bottom of the modal's scroll area: render it as the last child of the modal
- * content. The negative margins cancel the modal box's padding so the bar sits
- * flush with the box edges and the opaque background hides the content
- * scrolling underneath. The hosting modal passes
- * MODAL_ACTION_ROW_SCROLL_PADDING as the Modal's className so focus scrolling
- * keeps controls above the footer.
+ * (SettingsModal and ChallengeSettingsModal), rendered in a StickyModalFooter:
+ * render it as the last child of the modal content, and pass
+ * STICKY_FOOTER_SCROLL_PADDING as the hosting Modal's className.
  *
  * @param props.saving        - disables Save and shows the spinner
  * @param props.onSecondary - warning button handler (Reset All / Clear All)
@@ -52,9 +37,9 @@ export function ModalActionRow({
     const { t } = useTranslation();
 
     return (
-        <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 px-6 py-4 bg-base-100 border-t border-base-300">
+        <StickyModalFooter>
             {saveError && (
-                <div className="alert alert-error py-2 text-sm mb-2" role="alert">
+                <div className="alert alert-error py-2 text-sm" role="alert">
                     <span>{t('app.settingsSaveError')}</span>
                 </div>
             )}
@@ -81,6 +66,6 @@ export function ModalActionRow({
                     {t('app.cancel')}
                 </button>
             </div>
-        </div>
+        </StickyModalFooter>
     );
 }

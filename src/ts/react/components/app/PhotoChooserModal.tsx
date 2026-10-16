@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal } from '@/components/ui/Modal';
+import { StickyModalFooter, STICKY_FOOTER_SCROLL_PADDING } from '@/components/ui/StickyModalFooter';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { useImageLoads } from '@/hooks/useImageLoads';
@@ -591,19 +592,21 @@ function PhotoChooserBody({
                 onRetry={retry}
                 onRefresh={refresh}
             />
-            <ChooserFooter
-                saveFailed={saveFailed}
-                saveWaits={saveWaits}
-                holdReason={holdReasonOf(saved, state.status)}
-                retrying={saved.retrying}
-                confirmed={saved.confirmed}
-                locked={locked}
-                onRetryHold={saved.retry}
-                saving={saving}
-                onSave={save}
-                onClear={() => setSelected([])}
-                onClose={onClose}
-            />
+            <StickyModalFooter>
+                <ChooserFooter
+                    saveFailed={saveFailed}
+                    saveWaits={saveWaits}
+                    holdReason={holdReasonOf(saved, state.status)}
+                    retrying={saved.retrying}
+                    confirmed={saved.confirmed}
+                    locked={locked}
+                    onRetryHold={saved.retry}
+                    saving={saving}
+                    onSave={save}
+                    onClear={() => setSelected([])}
+                    onClose={onClose}
+                />
+            </StickyModalFooter>
         </div>
     );
 }
@@ -653,7 +656,13 @@ export function PhotoChooserModal({
     const dismiss = () => (unsaved.current ? setAsking(true) : onClose());
     return (
         <>
-            <Modal isOpen onClose={dismiss} title={t('app.photoChooserTitle')} size="xl">
+            <Modal
+                isOpen
+                onClose={dismiss}
+                title={t('app.photoChooserTitle')}
+                size="xl"
+                className={STICKY_FOOTER_SCROLL_PADDING}
+            >
                 <PhotoChooserBody
                     value={value}
                     savedCount={savedCount}

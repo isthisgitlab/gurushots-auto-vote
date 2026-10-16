@@ -8,7 +8,8 @@ import { tierSchemaEntries } from '@/utils/groupSettings';
 import { Modal } from '@/components/ui/Modal';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
-import { ModalActionRow, MODAL_ACTION_ROW_SCROLL_PADDING } from '@/components/ui/ModalActionRow';
+import { ModalActionRow } from '@/components/ui/ModalActionRow';
+import { STICKY_FOOTER_SCROLL_PADDING } from '@/components/ui/StickyModalFooter';
 import { SettingsTierHeading } from '@/components/ui/SettingsTierHeading';
 import { ChallengeProfilesBar } from './ChallengeProfilesBar';
 import { ChallengeSettingsGroup } from './ChallengeSettingsGroup';
@@ -126,7 +127,7 @@ export function ChallengeSettingsModal({
             onClose={onClose}
             title={`${t('app.challengeSettings')}: ${challengeTitle}`}
             size="2xl"
-            className={MODAL_ACTION_ROW_SCROLL_PADDING}
+            className={STICKY_FOOTER_SCROLL_PADDING}
         >
             {/* Schema spinner only for the first load — a background refetch
                 (every settings write broadcasts one) must not blank the form. */}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
+import { StickyModalFooter, STICKY_FOOTER_SCROLL_PADDING } from '@/components/ui/StickyModalFooter';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
 import { interp } from '@/utils/interp';
 import { suggestErrorText } from '@/api/ipcErrorText';
@@ -348,15 +349,17 @@ function PhotoSubmitBody({
                 numbered={false}
                 extraPhotos={suggestedKnown}
             />
-            {alert}
-            <SubmitFooter
-                count={selected.length}
-                held={over || state.status !== 'ready' || checking}
-                submitting={submitting}
-                texts={texts}
-                onSubmit={submit}
-                onCancel={onClose}
-            />
+            <StickyModalFooter>
+                {alert}
+                <SubmitFooter
+                    count={selected.length}
+                    held={over || state.status !== 'ready' || checking}
+                    submitting={submitting}
+                    texts={texts}
+                    onSubmit={submit}
+                    onCancel={onClose}
+                />
+            </StickyModalFooter>
         </div>
     );
 }
@@ -410,6 +413,7 @@ export function PhotoSubmitModal({
             onClose={submitting ? undefined : onClose}
             title={t(texts.title)}
             size="xl"
+            className={STICKY_FOOTER_SCROLL_PADDING}
             showCloseButton={!submitting}
         >
             <PhotoSubmitBody
