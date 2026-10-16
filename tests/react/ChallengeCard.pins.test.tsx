@@ -16,6 +16,7 @@ const mockChallengeSettings = {
     autoSubmitEnabled: false,
     isCompact: false,
     hasCompactOverride: false,
+    manualPhotosOnly: false,
     toggleCompact: jest.fn(),
 };
 jest.mock('@/hooks/useChallengeSettings', () => ({ useChallengeSettings: () => mockChallengeSettings }));
@@ -98,6 +99,7 @@ const focusSilently = (element: HTMLElement) => {
 
 beforeEach(() => {
     mockChallengeSettings.isCompact = false;
+    mockChallengeSettings.manualPhotosOnly = false;
     window.api.getSettingsSchema = jest.fn().mockResolvedValue({ schema: {}, defaults: {} });
     window.api.getEffectiveSetting = jest.fn().mockResolvedValue(null);
     window.api.getChallengeOverride = jest.fn().mockResolvedValue(null);
@@ -544,6 +546,59 @@ describe('a stored pin that no longer applies', () => {
         await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalled());
         expect(screen.queryByText('app.pinGoneNote')).toBeNull();
         expect(screen.queryByText('app.pinConflictNote')).toBeNull();
+    });
+});
+
+describe('Manual Only hides the notes for pins that are not applying', () => {
+    beforeEach(() => {
+        mockChallengeSettings.manualPhotosOnly = true;
+    });
+
+    test.each([
+        ['a photo that left the challenge', { boost: 'gone', turbo: null }],
+        ['a photo that carries the other feature', { boost: null, turbo: 'e1' }],
+    ])('the detailed card shows no note for %s', async (_name, pins) => {
+        window.api.getEntryPins = jest.fn().mockResolvedValue(pins);
+        renderCard(makeChallenge({}, [{ id: 'e1', member_id: 'm', rank: 3, votes: 40, boosted: true }]));
+        await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalled());
+        await waitFor(() => expect(screen.getAllByRole('group').length).toBeGreaterThan(0));
+        expect(screen.queryByText('app.pinGoneNote')).toBeNull();
+        expect(screen.queryByText('app.pinConflictNote')).toBeNull();
+    });
+
+    test('the compact tile shows no mark for them', async () => {
+        mockChallengeSettings.isCompact = true;
+        window.api.getEntryPins = jest.fn().mockResolvedValue({ boost: 'gone', turbo: null });
+        renderCard(makeChallenge());
+        await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalled());
+        await waitFor(() => expect(screen.queryByText('app.pinNotApplying')).toBeNull());
+        expect(screen.queryByText('📌 app.pinNotApplyingShort')).toBeNull();
+    });
+
+    test('the swap confirm still warns that a live pin will be left with nothing', async () => {
+        window.api.getEntryPins = jest.fn().mockResolvedValue({ boost: 'e1', turbo: null });
+        window.api.previewSwapPhoto = jest
+            .fn()
+            .mockResolvedValue({ success: true, outcome: 'ok', candidate: { id: 'new1', member_id: 'm' } });
+        const challenge = makeChallenge({}, [{ id: 'e1', member_id: 'm', rank: 3, votes: 40 }], {
+            swap_enable: true,
+            swap_locked: false,
+        });
+        render(
+            <ChallengeCard
+                challenge={challenge}
+                timeRemaining="2h"
+                timezone="local"
+                autovoteRunning={false}
+                settingsVersion={0}
+                onVoteComplete={jest.fn()}
+                onSettingsClick={jest.fn()}
+                onCurrencySpent={jest.fn()}
+                bankroll={{ keys: 0, swaps: 3, fills: 0, coins: 0 }}
+            />,
+        );
+        fireEvent.click((await screen.findAllByText(/app\.currencySwap$/))[0].closest('button')!);
+        expect(await screen.findByText('app.pinSwapWarning')).not.toBeNull();
     });
 });
 

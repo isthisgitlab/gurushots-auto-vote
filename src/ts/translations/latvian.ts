@@ -446,6 +446,8 @@ export const app = {
     scenarioStatusPhase: 'fāze {phase}',
     scenarioStatusNotStarted: 'nākamajā palaišanā sāksies fāzē {phase}',
     scenarioStatusNext: 'nākamā pārbaude pēc {time}',
+    scenarioStatusPausedManual: 'apturēts: ir ieslēgts „Tikai manuāli”, tāpēc neviens solis netiek izpildīts',
+    scenarioStatusPausedManualShort: 'apturēts („Tikai manuāli”)',
     scenarioStatusProblem: 'Pēdējais solis izlaists: {message}',
     scenarioStatusSpendUnclear:
         'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts. Tas netiks tērēts atkārtoti: nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
@@ -626,6 +628,7 @@ export const app = {
     sbSimulateOn: 'Simulēt izaicinājumam',
     sbSimulatePick: 'Izvēlies izaicinājumu…',
     sbSimulateAssume: 'Pieņem, ka katrs solis izdodas un izaicinājuma dati paliek tādi kā tagad.',
+    sbSimulatePausedManual: 'Apturēts („Tikai manuāli”) — šādi notiktu, ja „Tikai manuāli” tagad būtu izslēgts.',
     sbSimulateNothing: 'Nekas netiktu izpildīts.',
     sbSimulateFailed: 'Simulāciju neizdevās palaist.',
     sbStop_closed: 'Beidzas: izaicinājums noslēdzas.',
@@ -756,7 +759,7 @@ export const app = {
     validationOutOfRange: 'Ievadi vērtību no {min} līdz {max}.',
     validationAtLeast: 'Ievadi vērtību, kas nav mazāka par {min}.',
     autoSubmitBadge: 'automātiskā iesniegšana',
-    manualPhotosBadge: 'foto tikai manuāli',
+    manualPhotosBadge: 'tikai manuāli',
     customBadge: 'pielāgots',
     customSettingsHint: 'Ir pielāgoti uzstādījumi',
     mustIncludeTags: 'Obligātie tagi',
@@ -773,7 +776,7 @@ export const app = {
         'Kad ir uzstādīti izvēlētie foto, iesniedz tos tādā secībā, kādā tos izvēlējies (numuri izvēles logā), nevis kārto tā, kā lietotne kārto savas automātiskās izvēles. Foto, kas neiztur tavus obligātos tagus, jau ir iesniegts vai šim izaicinājumam nav pieejams, izlaiž un izmanto nākamo sarakstā; atlikušās vietas aizpilda pēc kārtojuma kā parasti. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” un neviens no izvēlētajiem foto neatbilst taviem obligātajiem tagiem, tos tomēr var iesniegt. Pēc noklusējuma izslēgts.',
     chosenPhotosOnly: 'Iesniegt tikai izvēlētos foto',
     chosenPhotosOnlyDesc:
-        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski (ar pogu „Izvēlēties…” izaicinājuma kartītē vienreiz iesniedz tevis izvēlētos foto), ārkārtas iesniegšana šo uzstādījumu neņem vērā (ieslēdz izaicinājumam „Foto tikai manuāli”, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā (ja vien nav ieslēgts „Foto tikai manuāli”: tad sadaļā „Atrast izaicinājumus” izvēlies šī izaicinājuma foto un nospied „Pievienoties” vai „Mēģināt iesniegt vēlreiz”, ja monētas jau iztērētas). Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem obligātajiem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
+        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski (ar pogu „Izvēlēties…” izaicinājuma kartītē vienreiz iesniedz tevis izvēlētos foto), ārkārtas iesniegšana šo uzstādījumu neņem vērā (uzstādi izaicinājumam ārkārtas iesniegšanu uz 0, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā (ja vien nav ieslēgts „Tikai manuāli”: tad sadaļā „Atrast izaicinājumus” izvēlies šī izaicinājuma foto un nospied „Pievienoties” vai „Mēģināt iesniegt vēlreiz”, ja monētas jau iztērētas). Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem obligātajiem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
     chosenPhotosMemberId: 'Izvēlēto foto konts',
     chosenPhotosClearedAt: 'Izvēlēto foto notīrīšanas laiks',
     chosenPhotosClearedAtDesc:
@@ -1189,15 +1192,14 @@ export const app = {
     normal: 'NORMĀLS',
     of: 'no',
     onePhoto: '1 foto',
-    manualPhotosOnly: 'Foto tikai manuāli',
+    manualPhotosOnly: 'Tikai manuāli',
     manualPhotosOnlyDesc:
-        'Lietotne pati nepievienojas šim izaicinājumam un neiesniedz vai neapmaina tajā nevienu foto, un tas attiecas arī uz scenāriju soļiem, kas iesniedz vai apmaina foto. Tava manuālā pievienošanās un pogas +1/+N foto joprojām izvēlas pašas, bet ar „Izvēlēties…” un „Apmainīt” foto izvēlies tu. Boost un Turbo joprojām tiek uzlikti jau esošiem foto. Ja izaicinājumam vēl neesi pievienojies vai tas atgriežas ar jaunu ID, izmanto izaicinājumu noteikumu.',
-    manualPhotosOnlyHint:
-        'Šim izaicinājumam ir ieslēgts „Foto tikai manuāli”, tāpēc šis uzstādījums nekad pats neiesniedz foto.',
-    manualPhotosOnlyBoostHint:
-        'Šim izaicinājumam ir ieslēgts „Foto tikai manuāli”, tāpēc Boost un Turbo tiek uzlikti jau esošam foto, nekad jaunam.',
+        'Lietotne šajā izaicinājumā pati neko nedara: nepievienojas, neiesniedz un neapmaina foto, nebalso, neizmanto Boost, nepiemēro un nepelna Turbo, neatbloķē ar atslēgām, netērē uzpildi un nepalaiž scenāriju soļus. Visas kartītes pogas joprojām darbojas (poga „Palaist” ir paslēpta, jo tā palaiž automātiskos noteikumus), bet „Balsot visur” šo izaicinājumu izlaiž. Lai foto izvēlētos pats un automātiskā balsošana turpinātos, atstāj šo uzstādījumu izslēgtu un ierobežo automātisko pievienošanos un iesniegšanu ar saviem foto, izmantojot „Izvēlētie foto” un „Iesniegt tikai izvēlētos foto” (jau samaksāta pievienošanās tik un tā iesniedz automātiski izvēlētu foto), vai izslēdz automātisko pievienošanos (visiem izaicinājumiem vai noteikumā, kas to ieslēdz) un šim izaicinājumam izslēdz automātisko iesniegšanu, tad izslēdz ārkārtas iesniegšanu, automātisko foto apmaiņu un Boost un Turbo jauniem foto, kā arī noņem scenāriju soļus, kas iesniedz vai apmaina foto. Kad šo uzstādījumu izslēdz, scenāriju soļi un tēriņi, kuru laiks jau pienācis, tiek izpildīti nākamajā ciklā. Ja izaicinājumam vēl neesi pievienojies vai tas atgriežas ar jaunu ID, izmanto izaicinājumu noteikumu.',
+    manualOnlyLabel: '„Tikai manuāli” ir ieslēgts — nekas nenotiek automātiski',
+    manualOnlyAlert:
+        '„Tikai manuāli” ir ieslēgts: lietotne šajā izaicinājumā pati neko nedara. Tā nekad nepievienojas un neiesniedz foto, neapmaina tos, nebalso, neizmanto Boost, nepiemēro un nepelna Turbo, neatbloķē ar atslēgām, netērē uzpildi un nepalaiž scenāriju soļus. Visas kartītes pogas joprojām darbojas; poga „Palaist” ir paslēpta, jo tā palaiž automātiskos noteikumus. „Balsot visur” šo izaicinājumu izlaiž.',
     manualPhotosOnlyRuleHint:
-        'Kad ir ieslēgts „Foto tikai manuāli”, izaicinājumiem, kurus šis noteikums aptver, lietotne automātiski nepievienojas un neiesniedz foto, ja vien paša izaicinājuma uzstādījums to neizslēdz, tāpēc šī noteikuma automātiskā pievienošanās un automātiskā iesniegšana tur nedarbojas.',
+        'Kad ir ieslēgts „Tikai manuāli”, izaicinājumos, kurus šis noteikums aptver, lietotne vispār nebalso, neizmanto Boost un Turbo, nepievienojas izaicinājumiem un neiesniedz foto, ja vien paša izaicinājuma uzstādījums šo slēdzi neizslēdz.',
     onlyBoost: 'Tikai Boost režīms',
     onlyBoostDesc: 'Šajā izaicinājumā pilnībā izlaist parasto balsošanu un tikai izmantot Boost.',
     voteOnNewEntry: 'Balsot par jaunu foto',
@@ -1458,7 +1460,7 @@ export const app = {
     scenarioIssueTooLarge: 'Fails ir lielāks par {kb} KB.',
     scenarioIssueNotJson: 'Šis nav derīgs JSON.',
     scenarioIssuePhaseScenario: 'Fāze nevar mainīt, kurš scenārijs ir piešķirts.',
-    scenarioIssuePhaseManualPhotos: 'Fāze nevar mainīt uzstādījumu „Foto tikai manuāli”.',
+    scenarioIssuePhaseManualPhotos: 'Fāze nevar mainīt uzstādījumu „Tikai manuāli”.',
     scenarioIssueNotPerChallenge: 'Šo uzstādījumu nevar iestatīt vienam izaicinājumam.',
     scenarioIssueSetTogether: 'Uzstādi {fields} kopā.',
     scenarioIssueConflictDefaults:

@@ -35,6 +35,12 @@ function useAppSettings(isOpen: boolean) {
     return useIpcQuery(fetchAppSettings, { enabled: isOpen, latestOnly: true }).data;
 }
 
+// With Manual Only on, a one-line label (see below) sticks to the top of the scroll area, so the box also keeps a
+// focused control scrolled below it (WCAG 2.2 SC 2.4.11). On phones the label is at its tallest, about 3rem (the
+// Latvian text wraps onto two lines at 320px), so 4rem; at `md:` it fits one line, about 2rem, so 3rem. Each
+// includes room for the focus ring. The label is opaque and `aria-hidden`: the alert below it carries the same text.
+const MANUAL_ONLY_SCROLL_PADDING = 'scroll-pt-16 md:scroll-pt-12';
+
 /**
  * Explains what an override is, then summarises the effective settings: how
  * many keys diverge from the global defaults right now (the per-row "Global
@@ -113,6 +119,7 @@ export function ChallengeSettingsModal({
 
     if (!isOpen) return null;
 
+    const manualOnly = form.effectiveOf('manualPhotosOnly') === true;
     const hintsFor = challengeSettingHints({
         effectiveOf: form.effectiveOf,
         appSettings,
@@ -127,7 +134,7 @@ export function ChallengeSettingsModal({
             onClose={onClose}
             title={`${t('app.challengeSettings')}: ${challengeTitle}`}
             size="2xl"
-            className={STICKY_FOOTER_SCROLL_PADDING}
+            className={`${STICKY_FOOTER_SCROLL_PADDING}${manualOnly ? ` ${MANUAL_ONLY_SCROLL_PADDING}` : ''}`}
         >
             {/* Schema spinner only for the first load — a background refetch
                 (every settings write broadcasts one) must not blank the form. */}
@@ -139,6 +146,22 @@ export function ChallengeSettingsModal({
                 </div>
             ) : (
                 <div className="space-y-4">
+                    {manualOnly && (
+                        <div
+                            className="sticky -top-6 z-10 -mx-6 px-6 py-2 bg-base-100 border-b border-warning text-xs font-semibold text-base-content"
+                            aria-hidden="true"
+                        >
+                            ✋ {t('app.manualOnlyLabel')}
+                        </div>
+                    )}
+                    {/* Not a live region: it is on screen when the modal opens, and flipping the switch must not
+                        interrupt the user. */}
+                    {manualOnly && (
+                        <div className="alert alert-warning text-sm">
+                            <StrokeIcon d={ICON_PATHS.info} className="w-5 h-5" />
+                            <span>{t('app.manualOnlyAlert')}</span>
+                        </div>
+                    )}
                     <OverridesSummary overrideCount={Object.keys(form.overrides).length} titleRules={form.titleRules} />
 
                     {/* Named profiles: apply loads a saved tactic into the form

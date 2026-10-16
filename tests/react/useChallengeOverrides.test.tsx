@@ -65,7 +65,7 @@ test('applyProfile() without a schema (its fetch failed) keeps no key instead of
     expect(result.current.titleRules).toMatchObject({ suppressed: true, profile: null });
 });
 
-test("applyProfile() keeps the challenge's own Manual Photos Only, which a profile never holds as off", async () => {
+test("applyProfile() keeps the challenge's own Manual Only, which a profile never holds as off", async () => {
     mockApi.getChallengeOverrides.mockReset().mockResolvedValue({ exposure: 50, manualPhotosOnly: false });
     const p = {
         ...props(),
@@ -86,7 +86,7 @@ test("applyProfile() keeps the challenge's own Manual Photos Only, which a profi
     expect(result.current.overrides).toEqual({ manualPhotosOnly: true });
 });
 
-test("applyProfile(): a profile that sets Manual Photos Only wins over the challenge's own value, and one that does not leaves it", async () => {
+test("applyProfile(): a profile that sets Manual Only wins over the challenge's own value, and one that does not leaves it", async () => {
     mockApi.getChallengeOverrides.mockReset().mockResolvedValue({ manualPhotosOnly: false });
     const p = {
         ...props(),

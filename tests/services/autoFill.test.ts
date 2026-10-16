@@ -406,7 +406,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(submitToChallenge).not.toHaveBeenCalled();
     });
 
-    test('returns disabled while Manual Photos Only is on, even with auto-submit on', async () => {
+    test('returns disabled while Manual Only is on, even with auto-submit on', async () => {
         const challenge = makeChallenge({ entries: [{ id: 'e1' }] });
         const getEligiblePhotos = jest.fn();
         const submitToChallenge = jest.fn();
@@ -1191,12 +1191,12 @@ describe('evaluateEmergencyFill — the state-only stand-downs, shared with the 
         const settings = makeSettings({ autoSubmit: true, mustIncludeTags: ['sunset'] });
         const gate = evaluateEmergencyFill(open(), 'c1', settings);
         expect(gate).toEqual({ standDown: false, autoSubmitEnabled: true, mustIncludeTags: ['sunset'] });
-        // Manual Photos Only and autoSubmit: nothing else is read.
+        // Manual Only and autoSubmit: nothing else is read.
         expect(settings.getEffectiveSetting).toHaveBeenCalledTimes(2);
         expect(settings.getEffectiveTagSetting).toHaveBeenCalledTimes(1);
     });
 
-    test('stands down while Manual Photos Only is on, however auto-fill is set', () => {
+    test('stands down while Manual Only is on, however auto-fill is set', () => {
         const settings = makeSettings({ autoSubmit: false, manualPhotosOnly: true });
         expect(evaluateEmergencyFill(open(), 'c1', settings)).toEqual({
             standDown: true,
@@ -1254,7 +1254,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         expect(getEligiblePhotos).not.toHaveBeenCalled();
     });
 
-    test('returns skipped inside the window while Manual Photos Only is on, and submits nothing', async () => {
+    test('returns skipped inside the window while Manual Only is on, and submits nothing', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
         const getEligiblePhotos = jest.fn();
         const submitToChallenge = jest.fn();

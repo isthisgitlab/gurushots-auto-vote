@@ -37,7 +37,7 @@ const onlyChosenActive = (settings: FillSettings, challengeId: string | number):
  *   - no challenge id (`undefined`/`null`, exactly the runner's own guard — an
  *     empty-string id is NOT one of them, so callers that normalise a missing id
  *     to '' must pass the raw id instead),
- *   - Manual Photos Only on for the challenge (it never submits by itself),
+ *   - Manual Only on for the challenge (it never submits by itself),
  *   - no free slot left to fill, and
  *   - "normal auto-fill already owns this challenge": auto-fill on with no
  *     must-include filter, the common configuration, in which the staggered
@@ -82,7 +82,7 @@ const evaluateEmergencyFill = (
     };
     if (challengeId === undefined || challengeId === null) return inert;
     if (getSlotsRemaining(challenge) <= 0) return inert;
-    // Manual Photos Only: nothing is submitted by itself, so the deadline view drops the row too.
+    // Manual Only: nothing is submitted by itself, so the deadline view drops the row too.
     if (isManualPhotosOnly(settings, challengeId)) return inert;
 
     const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);

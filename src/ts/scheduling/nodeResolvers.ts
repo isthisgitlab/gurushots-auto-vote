@@ -87,7 +87,7 @@ const currencyTimingOf = (
 
 const resolveCurrencyAuto = ((challengeId: string) => ({
     key: currencyTimingOf('autoKeyUnlock', 'autoKey', challengeId),
-    // Manual Photos Only: no swap ever fires on its own, so the scheduler has no wake to hold for it.
+    // Manual Only: no swap ever fires on its own, so the scheduler has no wake to hold for it.
     swap: isManualPhotosOnly(settings, challengeId) ? null : currencyTimingOf('autoSwap', 'autoSwap', challengeId),
     fill: currencyTimingOf('autoExposureFill', 'autoExposureFill', challengeId),
 })) satisfies ResolveCurrencyAuto;

@@ -133,9 +133,12 @@ export function deriveChallengeCardView(
         lowExposure,
         exposureClass: lowExposure ? 'text-error font-bold' : '',
         cardAlertClass: `${lowExposure ? 'border-2 border-error' : 'border'}${boostOpen ? ' ring-2 ring-info ring-offset-2 ring-offset-base-100' : ''}`,
-        // Manual Photos Only stops the auto-submit, so its badge gives way to the manual-photos one.
+        // Manual Only stops the auto-submit, so its badge gives way to the manual-only one.
         showAutoSubmitBadge: autoSubmitEnabled && !manualPhotosOnly && slotsRemaining > 0,
         showManualPhotosBadge: manualPhotosOnly,
+        // Manual Only: the card's notes about pins that are not applying are hidden, since a pin only steers
+        // the automatic spends, which do not run there.
+        manualOnly: manualPhotosOnly,
         // Bankroll-currency actions — shown only when the balance and the
         // challenge both allow them (shared predicates; the main process
         // re-checks the live state before spending).
@@ -154,7 +157,8 @@ export function deriveChallengeCardView(
         showVoteButton: challenge.start_time < now && exposureFactor < 100,
         // Run button: fires one full auto-strategy cycle for this card. Hidden
         // while the scheduled autovote loop is active to avoid racing
-        // concurrent strategy passes for the same challenge.
-        showRunButton: !autovoteRunning && challenge.start_time < now,
+        // concurrent strategy passes for the same challenge. Also hidden under
+        // Manual Only: Run applies the automatic rules, which do nothing there.
+        showRunButton: !autovoteRunning && challenge.start_time < now && !manualPhotosOnly,
     };
 }

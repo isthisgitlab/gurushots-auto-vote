@@ -60,7 +60,9 @@ const runVotingCycle = async (
             .info(`--- ${label} Cycle ${cycleNumber}${scopeSuffix} (${isMockMode ? 'MOCK' : 'REAL'} MODE) ---`);
         logger.withCategory('voting').info(`Time: ${formatDateTime()}`);
         if (isManual) {
-            logger.withCategory('voting').info('Mode: Manual (votes to 100% regardless of threshold settings)');
+            logger
+                .withCategory('voting')
+                .info('Mode: Manual (votes to 100% regardless of threshold settings; skips Manual Only challenges)');
         }
 
         if (!ensureAuthenticated()) {

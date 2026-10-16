@@ -212,6 +212,7 @@ const scenarioStatusCmd = async (challengeId: string) => {
     }
     const { state } = status;
     ui().info(`Scenario "${status.scenario.name}" on challenge ${challengeId}`);
+    if (status.manualOnly) ui().info('  Paused (Manual Only): no step runs and no check is due.');
     if (!state) {
         ui().info(`  Not started yet — it starts in phase "${status.scenario.start}" on the next voting pass.`);
         return 0;
@@ -307,6 +308,10 @@ const scenarioDryRunCmd = async (challengeId: string) => {
         ui().error(`  Halted: ${result.halted}`);
         return 1;
     }
+    if (result.manualOnly) {
+        ui().info('  Paused (Manual Only): nothing would run now and no check is due.');
+        return 0;
+    }
     for (const rule of result.explain)
         ui().info(`  [${rule.status}] ${stripTerminalControl(rule.label)}: ${rule.reason}`);
     ui().info(
@@ -330,6 +335,7 @@ const scenarioSimulateCmd = async (challengeId: string) => {
     const result = await handlers()['simulate-scenario'](null, challengeId);
     if (!result.success) return reportFailure(result, 'Simulation failed');
     ui().info(`Scenario "${result.scenario}" from phase ${result.startPhase}, assuming every step succeeds:`);
+    if (result.manualOnly) ui().info('  Paused (Manual Only): this is what would run if the switch were off now.');
     if (result.events.length === 0) ui().info('  Nothing would run.');
     for (const event of result.events) {
         const move = event.toPhase ? ` → phase ${event.toPhase}` : '';

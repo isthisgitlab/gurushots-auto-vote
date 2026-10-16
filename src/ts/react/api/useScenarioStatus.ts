@@ -51,6 +51,8 @@ export type ScenarioSummary = {
         /** What the stop came from: GuruShots giving no answer, or the app stopping before it knew (`pending`). */
         origin: 'unclear' | 'pending';
     } | null;
+    /** Manual Only is on for the challenge: the plan is paused. */
+    manualOnly?: boolean;
     nextWakeAt?: number | null;
 };
 
@@ -165,6 +167,18 @@ function summarize(status: ScenarioStatus, challenge: Challenge): ScenarioSummar
         started: status.state !== null,
         lastError: status.state?.lastError?.message ?? null,
         spendUnclear: spendUnclearOf(state, status.scenario, challenge.id),
-        nextWakeAt: nextWakeAt({ scenario: status.scenario, state, challenge, now, timezone: status.timezone }),
+        // Manual Only pauses the plan: no step runs, so there is no next check to show.
+        manualOnly: status.manualOnly,
+        nextWakeAt: status.manualOnly
+            ? null
+            : nextWakeAt({
+                  scenario: status.scenario,
+                  state,
+                  challenge,
+                  now,
+                  timezone: status.timezone,
+                  // A plan that has not started has no phase clock yet (the scheduler reads it the same way).
+                  phaseClock: status.state !== null,
+              }),
     };
 }

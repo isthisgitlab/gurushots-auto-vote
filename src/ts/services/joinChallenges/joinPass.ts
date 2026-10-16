@@ -153,7 +153,7 @@ const noteTimingRefusal = (challenge: Challenge, reason: string, pass: JoinPassS
 const warnedPaidNotEntered = new Set<string>();
 
 /**
- * With Manual Photos Only on, a join the user already paid for is still not entered by itself. Say so once, so
+ * With Manual Only on, a join the user already paid for is still not entered by itself. Say so once, so
  * the coins are not left stranded unnoticed. The challenge is not joined, so it has no card and no Pick… button:
  * the user enters it from Discover: choose the photo for that challenge (Chosen Photos), then press Join, which
  * tries those photos first.
@@ -163,7 +163,7 @@ const noteUnenteredPaidJoin = async (challenge: Challenge, token: string, deps: 
     if (warnedPaidNotEntered.has(key) || !(await paidByThisAccount(challenge, token, deps))) return;
     warnedPaidNotEntered.add(key);
     cat().warning(
-        `Manual Photos Only is on for ${logger.challengeTag(challenge)}: the join was already paid for, but no photo is entered automatically — enter one from Discover: choose the photo for this challenge (Chosen Photos), then press Join`,
+        `Manual Only is on for ${logger.challengeTag(challenge)}: the join was already paid for, but no photo is entered automatically — enter one from Discover: choose the photo for this challenge (Chosen Photos), then press Join`,
         null,
     );
 };
@@ -185,7 +185,7 @@ const joinCandidate = async (
     if (resolveJoinSetting('autoJoin', challenge) !== true) {
         return 'skipped:autojoin-off';
     }
-    // Manual Photos Only: the join would enter a photo by itself, so it is left to the user.
+    // Manual Only: the join would enter a photo by itself, so it is left to the user.
     if (resolveJoinSetting('manualPhotosOnly', challenge) === true) {
         await noteUnenteredPaidJoin(challenge, token, deps);
         return 'skipped:manual-photos-only';

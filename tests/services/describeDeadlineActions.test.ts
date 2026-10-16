@@ -297,30 +297,32 @@ describe('describeDeadlineActions — row gating', () => {
     });
 });
 
-describe('describeDeadlineActions — Manual Photos Only', () => {
+describe('describeDeadlineActions — Manual Only', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    test('drops the Auto-Submit and Emergency Submit rows, whatever else is set', () => {
-        mockSettings({ autoSubmit: true, emergencySubmit: 300, manualPhotosOnly: true, mustIncludeTags: ['sunset'] });
-        expect(actionsOf(build())).not.toContain('autoSubmit');
-        expect(actionsOf(build())).not.toContain('emergencySubmit');
-        mockSettings({ autoSubmit: false, emergencySubmit: 300, manualPhotosOnly: true });
-        expect(actionsOf(build())).not.toContain('emergencySubmit');
-    });
-
-    test('keeps the Boost and Turbo rows: they go on entries that already exist', () => {
-        mockSettings({ manualPhotosOnly: true, useTurbo: true });
+    test('lists no action at all, whatever else is set', () => {
+        mockSettings({
+            autoSubmit: true,
+            emergencySubmit: 300,
+            manualPhotosOnly: true,
+            mustIncludeTags: ['sunset'],
+            useTurbo: true,
+        });
         const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' } });
-        expect(actionsOf(challenge)).toEqual(expect.arrayContaining(['boost', 'turbo']));
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW).actions).toEqual([]);
+        mockSettings({ autoSubmit: false, emergencySubmit: 300, manualPhotosOnly: true });
+        expect(actionsOf(build())).toEqual([]);
     });
 
-    test('with the switch off the same challenge keeps both rows', () => {
+    test('with the switch off the same challenge keeps its rows', () => {
         mockSettings({ autoSubmit: true, emergencySubmit: 300, mustIncludeTags: ['sunset'], manualPhotosOnly: false });
-        expect(actionsOf(build())).toEqual(expect.arrayContaining(['autoSubmit', 'emergencySubmit']));
+        const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' } });
+        expect(actionsOf(challenge)).toEqual(
+            expect.arrayContaining(['autoSubmit', 'emergencySubmit', 'boost', 'turbo']),
+        );
     });
 
-    test('boostBlocked stays true for a turboed sole entry even with fill-new on and a free slot', () => {
-        // No fresh photo will be submitted, so the fill-new option resolves nothing and the warning must show.
+    test('a flag block (every entry carries the other feature) is still reported', () => {
         mockSettings({ boostNewSubmit: true, boostNewSubmitOnConflict: true, manualPhotosOnly: true });
         const challenge = build({
             boost: { state: 'AVAILABLE_KEY' },
@@ -328,8 +330,56 @@ describe('describeDeadlineActions — Manual Photos Only', () => {
             maxSubmits: 2,
         });
         const result = VotingLogic.describeDeadlineActions(challenge, NOW);
-        expect(result.boostBlocked).toBe(true);
-        expect(result.actions.map((a) => a.action)).not.toContain('boost');
+        expect(result).toEqual(
+            expect.objectContaining({ boostBlocked: true, boostBlockedBy: 'flag', boostReleaseAt: null, actions: [] }),
+        );
+    });
+
+    test('the quit guard (and so the sleep boost) selects no boost on the challenge', () => {
+        const guard = require('../../src/ts/windows/quitGuard') as typeof import('../../src/ts/windows/quitGuard');
+        const challenge = build({ boost: { state: 'AVAILABLE', timeout: CLOSE - 10 } });
+        guard.rememberChallenges([challenge], false);
+        try {
+            mockSettings({ manualPhotosOnly: false });
+            expect(
+                guard
+                    .imminentBoostChallenges(NOW, VotingLogic.describeDeadlineActions, 3600)
+                    .map((boost) => boost.challenge.id),
+            ).toEqual(['42']);
+            mockSettings({ manualPhotosOnly: true });
+            expect(guard.imminentBoostChallenges(NOW, VotingLogic.describeDeadlineActions, 3600)).toEqual([]);
+        } finally {
+            guard.resetQuitGuard();
+        }
+    });
+
+    test.each([[true], [false]])('a pin block with the switch %s', (manualOnly) => {
+        const expected = !manualOnly;
+        mockSettings({ manualPhotosOnly: manualOnly, autoBoost: true, useTurbo: true, emergencySubmit: 0 });
+        settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
+        const boost = VotingLogic.describeDeadlineActions(
+            build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } }),
+            NOW,
+        );
+        expect(boost).toEqual(
+            expect.objectContaining({
+                boostBlocked: expected,
+                boostBlockedBy: expected ? 'pin' : null,
+                boostReleaseAt: null,
+            }),
+        );
+        settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
+        const turbo = VotingLogic.describeDeadlineActions(
+            build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' } }),
+            NOW,
+        );
+        expect(turbo).toEqual(
+            expect.objectContaining({
+                turboBlocked: expected,
+                turboBlockedBy: expected ? 'pin' : null,
+                turboReleaseAt: null,
+            }),
+        );
     });
 });
 
@@ -417,7 +467,7 @@ describe('resolveBoostFillNewMode', () => {
         expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('always');
     });
 
-    test("'no' while Manual Photos Only is on, whichever fill-new option is set", () => {
+    test("'no' while Manual Only is on, whichever fill-new option is set", () => {
         mockSettings({ boostNewSubmit: true, boostNewSubmitOnConflict: true, manualPhotosOnly: true });
         expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('no');
         expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('no');

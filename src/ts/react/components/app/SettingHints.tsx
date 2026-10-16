@@ -176,14 +176,13 @@ export const chosenPhotosOnlyReachHint = (t: Translate): SettingHint => ({
 });
 
 /**
- * Manual Photos Only is on for the challenge: the setting this hint sits under never enters a photo.
- * The four Boost/Turbo fresh-photo options go on an entry the challenge already has instead. In the rule
- * editor there is no single challenge: the hint says what the rule's Auto-Join and Auto-Submit come to.
+ * The rule editor's Manual Only hint: a rule matches many challenges, so there is no single challenge for the
+ * challenge settings modal's alert to speak for; the hint says what the app does on the challenges the rule matches.
  */
-export const manualPhotosOnlyHint = (
-    t: Translate,
-    textKey: 'app.manualPhotosOnlyHint' | 'app.manualPhotosOnlyBoostHint' | 'app.manualPhotosOnlyRuleHint',
-): SettingHint => ({ tone: 'text-warning', text: t(textKey) });
+export const manualPhotosOnlyHint = (t: Translate, textKey: 'app.manualPhotosOnlyRuleHint'): SettingHint => ({
+    tone: 'text-warning',
+    text: t(textKey),
+});
 
 const GLOBAL_HINTS: Map<string, (ctx: GlobalHintContext) => SettingHint[]> = new Map([
     [
@@ -353,17 +352,6 @@ function votingPauseStatusHints(ctx: ChallengeHintContext): SettingHint[] {
     return hints;
 }
 
-// The settings Manual Photos Only overrides: each automatic photo path it blocks.
-const MANUAL_PHOTOS_HINTED_KEYS = [
-    ['autoSubmit', 'app.manualPhotosOnlyHint'],
-    ['emergencySubmit', 'app.manualPhotosOnlyHint'],
-    ['autoSwap', 'app.manualPhotosOnlyHint'],
-    ['boostNewSubmit', 'app.manualPhotosOnlyBoostHint'],
-    ['boostNewSubmitOnConflict', 'app.manualPhotosOnlyBoostHint'],
-    ['turboNewSubmit', 'app.manualPhotosOnlyBoostHint'],
-    ['turboNewSubmitOnConflict', 'app.manualPhotosOnlyBoostHint'],
-] as const;
-
 const CHALLENGE_HINTS: Map<string, (ctx: ChallengeHintContext) => SettingHint[]> = new Map([
     ['useScheduledFill', scheduledFillStatusHints],
     ['scheduledFillBeforeEnd', wastedFillWindowHints],
@@ -377,10 +365,6 @@ const CHALLENGE_HINTS: Map<string, (ctx: ChallengeHintContext) => SettingHint[]>
     // stepped straight over, and voting proceeds as if it were never set.
     ['votingPauseDurationMinutes', (ctx) => shortWindowHints(ctx.pause, 'app.votingPauseShortWindowHint', ctx)],
     ['voteBeforeBoost', boostPrefillHints],
-    ...MANUAL_PHOTOS_HINTED_KEYS.map(([key, textKey]): [string, (ctx: ChallengeHintContext) => SettingHint[]] => [
-        key,
-        ({ effectiveOf, t }) => (effectiveOf('manualPhotosOnly') === true ? [manualPhotosOnlyHint(t, textKey)] : []),
-    ]),
 ]);
 
 /**

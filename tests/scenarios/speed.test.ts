@@ -50,6 +50,34 @@ describe('recordVoteSample', () => {
     });
 });
 
+describe('a speed condition resumed after a pause', () => {
+    const PAUSE_END = NOW + 5 * H;
+    const entry = { id: 'p', votes: 140 };
+
+    test('reads the average over the whole gap: (votesNow − votesAtLastPrePause) × 3600 / (now − tLastPrePause)', () => {
+        // The last sample before the pause is the newest at or before the window start, whatever the window.
+        const history = recordVoteSample({ p: [[NOW, 40]] }, [{ id: 'p', votes: 140 }], PAUSE_END);
+        expect(history.p).toEqual([
+            [NOW, 40],
+            [PAUSE_END, 140],
+        ]);
+        expect(votesPerHour(history, entry, PAUSE_END, H)).toBe(((140 - 40) * 3600) / (PAUSE_END - NOW));
+    });
+
+    test('with every pre-pause sample older than 48 h it reads nothing until 10 minutes after the first new sample', () => {
+        const history = recordVoteSample(
+            { p: [[NOW - 1, 40]] },
+            [{ id: 'p', votes: 140 }],
+            NOW + HISTORY_KEEP_SEC + 10,
+        );
+        const resumedAt = NOW + HISTORY_KEEP_SEC + 10;
+        expect(history.p).toEqual([[resumedAt, 140]]);
+        expect(votesPerHour(history, entry, resumedAt, H)).toBeNull();
+        expect(votesPerHour(history, { id: 'p', votes: 150 }, resumedAt + 599, H)).toBeNull();
+        expect(votesPerHour(history, { id: 'p', votes: 150 }, resumedAt + 600, H)).toBe((10 * 3600) / 600);
+    });
+});
+
 describe('votesPerHour / speedRatio', () => {
     const history: VoteHistory = {
         fast: [

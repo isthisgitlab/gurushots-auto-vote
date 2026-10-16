@@ -38,11 +38,12 @@ import {
 } from './support';
 import type { Retry } from './support';
 
-// A scenario step that enters or swaps a photo is as automatic as any other: with Manual Photos Only on it is
-// skipped. What a skip comes to is the rule's usual skip semantics (scenarioRunner/rule.ts): a rule with no
-// completed step yet stops there without firing and retries on later passes, so it runs once the switch is off;
-// a rule whose earlier step already went through moves past the skipped step for good.
-const MANUAL_PHOTOS_SKIP = 'Manual Photos Only is on';
+// With Manual Only on the voting pass never runs a scenario at all (votingOrchestrator.ts), so this is defence in
+// depth: a step that enters or swaps a photo is skipped here too. What a skip comes to is the rule's usual skip
+// semantics (scenarioRunner/rule.ts): a rule with no completed step yet stops there without firing and retries on
+// later passes, so it runs once the switch is off; a rule whose earlier step already went through moves past the
+// skipped step for good.
+const MANUAL_PHOTOS_SKIP = 'Manual Only is on';
 
 const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type: K }>> } = {
     enterPhoto: async (action, ctx, state) => {

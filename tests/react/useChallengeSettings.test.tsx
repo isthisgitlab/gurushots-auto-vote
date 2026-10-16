@@ -74,7 +74,7 @@ test('seeds isCompact from initialCompact, then applies the IPC values', async (
     expect(window.api.getChallengeOverride).not.toHaveBeenCalledWith('theme', '42');
 });
 
-test('reads the effective Manual Photos Only value', async () => {
+test('reads the effective Manual Only value', async () => {
     effective = { autoSubmit: true, manualPhotosOnly: true, compactCards: false };
     render(<Probe />);
     await waitFor(() => expect(state().manual).toBe(true));

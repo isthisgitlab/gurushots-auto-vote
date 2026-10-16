@@ -51,6 +51,23 @@ describe('Latvian log messages', () => {
         expect(localizeLogMessage('ℹ️ Invalid timestamp provided')).toBe('ℹ️ Norādīts nederīgs laika zīmogs');
     });
 
+    test('translates the Manual Only lines', () => {
+        const tag = '[Challenge 42: Sunset]';
+        expect(localizeLogMessage(`ℹ️ ${tag} Manual Only is on — nothing runs automatically`)).toBe(
+            'ℹ️ [Izaicinājums 42: Sunset] „Tikai manuāli” ir ieslēgts — nekas nenotiek automātiski',
+        );
+        expect(localizeLogMessage(`ℹ️ ${tag} Manual Only is off — automatic rules resume`)).toBe(
+            'ℹ️ [Izaicinājums 42: Sunset] „Tikai manuāli” ir izslēgts — automātiskie noteikumi atsākas',
+        );
+        expect(
+            localizeLogMessage(
+                'ℹ️ Mode: Manual (votes to 100% regardless of threshold settings; skips Manual Only challenges)',
+            ),
+        ).toBe(
+            'ℹ️ Režīms: manuāls (balso līdz 100 % neatkarīgi no sliekšņu uzstādījumiem; izlaiž izaicinājumus ar „Tikai manuāli”)',
+        );
+    });
+
     test('translates logger progress and the generated plural suffix', () => {
         const progress = '[██████████░░░░░░░░░░] 50% (1/2)';
         expect(localizeLogMessage(`ℹ️ Processing challenge 1/2: Sunset ${progress}`)).toBe(

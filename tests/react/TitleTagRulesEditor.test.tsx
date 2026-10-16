@@ -244,7 +244,7 @@ describe('TitleTagRulesEditor', () => {
                 expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotosInOrder: true })]);
             });
 
-            test('Manual Photos Only offers inherit and on only: a rule never holds off', () => {
+            test('Manual Only offers inherit and on only: a rule never holds off', () => {
                 const onChange = jest.fn();
                 render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
                 const select = screen.getByLabelText<HTMLSelectElement>('app.manualPhotosOnly');
@@ -261,7 +261,7 @@ describe('TitleTagRulesEditor', () => {
                 expect(screen.getByLabelText<HTMLSelectElement>('app.manualPhotosOnly').value).toBe('');
             });
 
-            test('Manual Photos Only on a rule says what it does to the rule, directly under its own select', () => {
+            test('Manual Only on a rule says what it does to the rule, directly under its own select', () => {
                 const { rerender } = render(
                     <TitleTagRulesEditor value={rowWith({ manualPhotosOnly: true })} onChange={jest.fn()} />,
                 );
@@ -271,8 +271,8 @@ describe('TitleTagRulesEditor', () => {
                 expect(hint.parentElement).toBe(select.parentElement);
                 expect(select.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
                 expect(screen.getByRole('group', { name: 'app.chosenPhotos' }).contains(hint)).toBe(false);
-                // A rule has no single challenge: the per-challenge wording is not used.
-                expect(screen.queryByText('app.manualPhotosOnlyHint')).toBeNull();
+                // A rule has no single challenge: the challenge settings modal's alert is not used.
+                expect(screen.queryByText('app.manualOnlyAlert')).toBeNull();
                 rerender(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
                 expect(screen.queryByText('app.manualPhotosOnlyRuleHint')).toBeNull();
             });

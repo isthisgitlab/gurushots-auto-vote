@@ -159,7 +159,6 @@ export const logMessages = {
     m340b486c69db: '💡 Palaid "list-settings", lai skatītu visas pašreizējās vērtības',
     m3496296b814e: 'Uzpildīt redzamību izaicinājumā "{0}" līdz 100 %.',
     m350ffeb03aa5: 'Kļūda, lejupielādējot atjauninājumu:',
-    m356f0c1ca164: 'Režīms: manuāls (balso līdz 100 % neatkarīgi no sliekšņu uzstādījumiem)',
     m35701d0c7d7e: 'Režīms: {0}',
     m3574fb89525c: '  API noildze: {0} s',
     m35f7861bd6c9: '  🔑 Atslēgas: {0}',
@@ -189,6 +188,7 @@ export const logMessages = {
     m41663698bea9: 'Automātiskā atjaunināšana netiek atbalstīta — lejupielādē pārlūkā',
     m41af098b5c36: 'Kļūda, atverot ārējo URL:',
     m42a101a862d5: 'Lai iztērētu atslēgu, palaid vēlreiz: unlock-boost --challenge={0} --yes',
+    m42b1a2765e46: '{0} „Tikai manuāli” ir ieslēgts — nekas nenotiek automātiski',
     m42dbf4e4ef22: 'Saglabāts profils "{0}" no izaicinājuma {2}; individuālo vērtību skaits: {1}',
     m42f218b86441: 'Lietotne tūlīt aizvērsies. Piespiedu iziešana...',
     m43720acfbd52: '=== GuruShots Auto Voter — CLI manuālā balsošana (līdz 100 %) ===',
@@ -640,6 +640,7 @@ export const logMessages = {
     me241f310e2df: 'Boost izmantots foto {0} izaicinājumā "{1}"',
     me27c93c5a1e2: '🚀 Palaiž pirmo balsošanas ciklu...',
     me29b55ed6153: 'Kļūda, apstrādājot vote-on-challenge pieprasījumu:',
+    me31ce9ce699f: '{0} „Tikai manuāli” ir izslēgts — automātiskie noteikumi atsākas',
     me438c2d3abfc:
         '{0} Jauna foto iesniegšana Turbo izmantošanai: katram foto ir Boost vai tas ir piesprausts Boost — Turbo izlaists',
     me48953f7d846: 'Ar --image=<id> norādi foto, kas pašlaik atrodas šajā vietā',
@@ -674,6 +675,8 @@ export const logMessages = {
     mebe9fabc11e0: 'Kļūda, sākot žurnāla straumi:',
     mecf049a681c1: 'Pieteikšanās tokens nav norādīts, tāpēc balsošanas cikls neatradīs izaicinājumus',
     mecf16c8105d2: 'Starp izaicinājumiem ievieto {0} ms pauzi',
+    med10654ca330:
+        'Režīms: manuāls (balso līdz 100 % neatkarīgi no sliekšņu uzstādījumiem; izlaiž izaicinājumus ar „Tikai manuāli”)',
     med8d3d8bacc1: 'Kļūda, apstrādājot get-swap-backs pieprasījumu:',
     med9e4b755fd4: 'Neizdevās nolasīt monētu atlikumu — nepievienojas {0}.',
     mee90f52ed29e: 'Lietotājs izlaida atjauninājumu:',

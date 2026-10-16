@@ -241,7 +241,7 @@ const pickFor = (spec: FeatureSpec, challenge: Challenge, challengeId: string, n
  *   entry carries the other feature or is its live pin, released or not): submit a fresh photo for
  *   the spend, so a pin that has given way still prefers a fresh photo to its own.
  * - `'no'` — spend on an existing entry the normal way (always the case while the photo pinned
- *   for this feature is usable: the pin names the target, and while Manual Photos Only is on: no
+ *   for this feature is usable: the pin names the target, and while Manual Only is on: no
  *   fresh photo is ever submitted by itself).
  *
  * The always setting takes precedence, and the conflict mode only engages when the conflict

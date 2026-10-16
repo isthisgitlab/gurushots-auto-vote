@@ -364,6 +364,16 @@ describe('scenario-status', () => {
         expect(text('warning')).not.toContain('\u202E');
     });
 
+    test('Manual Only says the plan is paused, started or not', async () => {
+        h['get-scenario-status'].mockResolvedValueOnce(status({ manualOnly: true }));
+        await expect(cmd.scenarioStatusCmd('7')).resolves.toBe(0);
+        expect(text()).toContain('Paused (Manual Only): no step runs and no check is due.');
+        logger.__calls.length = 0;
+        h['get-scenario-status'].mockResolvedValueOnce(status({ manualOnly: false }));
+        await cmd.scenarioStatusCmd('7');
+        expect(text()).not.toContain('Paused (Manual Only)');
+    });
+
     test('a quiet plan prints only its phase', async () => {
         h['get-scenario-status'].mockResolvedValue(
             status({
@@ -494,6 +504,26 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         expect(text()).toContain('Would run now: r2 → boost, goto');
     });
 
+    test('dry run on a Manual Only challenge says it is paused and lists no rule or check', async () => {
+        h['dry-run-scenario'].mockResolvedValueOnce(
+            invalid({
+                success: true,
+                scenario: 'Plan',
+                phase: 'main',
+                started: true,
+                halted: null,
+                manualOnly: true,
+                explain: [{ status: 'ready', label: 'Rule', reason: 'all conditions hold' }],
+                fire: null,
+                nextWakeAt: null,
+            }),
+        );
+        await expect(cmd.scenarioDryRunCmd('7')).resolves.toBe(0);
+        expect(text()).toContain('Paused (Manual Only): nothing would run now and no check is due.');
+        expect(text()).not.toContain('Next time-based check');
+        expect(text()).not.toContain('[ready]');
+    });
+
     test('dry run: nothing ready, halted, or failed', async () => {
         h['dry-run-scenario'].mockResolvedValueOnce(
             invalid({
@@ -556,6 +586,24 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         expect(text()).toContain('[main] Hold it: swap, goto → phase holding');
         expect(text()).not.toContain('\u202E');
         expect(text()).toContain('waits on live data');
+    });
+
+    test('simulate on a Manual Only challenge keeps the timeline and notes it is paused', async () => {
+        h['simulate-scenario'].mockResolvedValueOnce(
+            invalid({
+                success: true,
+                scenario: 'Plan',
+                startPhase: 'main',
+                manualOnly: true,
+                events: [],
+                stoppedBecause: 'idle',
+                stoppedAt: 1_800_000_000,
+                halted: null,
+            }),
+        );
+        await expect(cmd.scenarioSimulateCmd('7')).resolves.toBe(0);
+        expect(text()).toContain('Paused (Manual Only): this is what would run if the switch were off now.');
+        expect(text()).toContain('Nothing would run.');
     });
 
     test('simulate: an empty or halted timeline, and a failure', async () => {

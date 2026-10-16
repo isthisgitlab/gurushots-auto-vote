@@ -17,7 +17,7 @@ describe('getGroupApplicability', () => {
         }
     });
 
-    test('the general group (Manual Photos Only) stays applicable once every slot is full', () => {
+    test('the general group (Manual Only) stays applicable once every slot is full', () => {
         const challenge = challengeWith({ ranking: { entries: [{ id: 'a' }, { id: 'b' }] } }, { max_photo_submits: 2 });
         expect(getGroupApplicability('autoSubmit', challenge).applicable).toBe(false);
         expect(getGroupApplicability('general', challenge)).toEqual({ applicable: true, reasonKey: null });

@@ -438,6 +438,7 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
             {result && (
                 <div className="text-xs bg-base-200 rounded p-2 space-y-1">
                     <p className="text-base-content/60">{t('app.sbSimulateAssume')}</p>
+                    {result.manualOnly && <p className="text-warning">{t('app.sbSimulatePausedManual')}</p>}
                     {result.events.length === 0 ? (
                         <p>{t('app.sbSimulateNothing')}</p>
                     ) : (

@@ -100,6 +100,11 @@ describe('autovoteScheduler resolvers', () => {
         );
         await expect(resolveScenarioWake('c1')).resolves.toEqual({ scenario, state: null, timezone: 'UTC' });
         expect(mockApi.getScenarioStatus).toHaveBeenCalledWith('c1');
+        // Manual Only keeps the scheduler's boundaries: the flag does not change what it reads.
+        mockApi.getScenarioStatus.mockResolvedValueOnce(
+            invalid({ success: true, scenario, state: null, corrupt: false, timezone: 'UTC', manualOnly: true }),
+        );
+        await expect(resolveScenarioWake('c1')).resolves.toEqual({ scenario, state: null, timezone: 'UTC' });
         mockApi.getScenarioStatus.mockResolvedValueOnce(
             invalid({ success: true, scenario, state: null, corrupt: true }),
         );
@@ -128,7 +133,7 @@ describe('autovoteScheduler resolvers', () => {
         });
     });
 
-    it('resolveCurrencyAuto: Manual Photos Only leaves the swap with no wake, as the Node resolver does', async () => {
+    it('resolveCurrencyAuto: Manual Only leaves the swap with no wake, as the Node resolver does', async () => {
         const values = {
             autoKeyUnlock: true,
             autoKeyAfterStart: 60,

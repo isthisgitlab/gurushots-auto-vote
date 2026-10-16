@@ -127,7 +127,7 @@ describe('useScenarioStatus', () => {
         expect(window.api.getScenarioStatus).toHaveBeenCalledWith(8);
     });
 
-    test('a plan not started yet is summarised from its start phase', async () => {
+    test('a plan not started yet is summarised from its start phase, with no phase clock to wake for', async () => {
         jest.mocked(window.api.getScenarioStatus).mockResolvedValueOnce(
             invalid({
                 success: true,
@@ -144,7 +144,65 @@ describe('useScenarioStatus', () => {
         expect(summary).toEqual(
             expect.objectContaining({ name: 'Plan', phase: 'main', started: false, lastError: null }),
         );
-        expect(summary.nextWakeAt).toBeGreaterThan(NOW);
+        expect(summary.nextWakeAt).toBeNull();
+    });
+
+    test('a plan not started yet still shows its other bounds, the same wake the scheduler reads', async () => {
+        const bounded = {
+            name: 'Plan',
+            start: 'main',
+            phases: {
+                main: {
+                    rules: [
+                        {
+                            id: 'r',
+                            if: [
+                                {
+                                    type: 'all',
+                                    of: [
+                                        { type: 'inPhaseFor', min: '10m' },
+                                        { type: 'beforeEnd', max: '2h' },
+                                    ],
+                                },
+                            ],
+                            do: [],
+                        },
+                    ],
+                },
+            },
+        };
+        jest.mocked(window.api.getScenarioStatus).mockResolvedValueOnce(
+            invalid({
+                success: true,
+                assigned: 'Plan',
+                scenario: bounded,
+                state: null,
+                corrupt: false,
+                timezone: 'UTC',
+            }),
+        );
+        render(<StatusProbe challenge={challenge()} />);
+        await waitFor(() => expect(out()).not.toBe('none'));
+        expect(parseJsonObject(out()).nextWakeAt).toBe(NOW + 86400 - 7200);
+    });
+
+    test('Manual Only pauses the plan: it is flagged and shows no next check', async () => {
+        jest.mocked(window.api.getScenarioStatus).mockResolvedValueOnce(
+            invalid({
+                success: true,
+                assigned: 'Plan',
+                scenario,
+                state: { phase: 'main', phaseEnteredAt: NOW, fired: {}, memory: {} },
+                corrupt: false,
+                timezone: 'UTC',
+                manualOnly: true,
+            }),
+        );
+        render(<StatusProbe challenge={challenge()} />);
+        await waitFor(() => expect(out()).not.toBe('none'));
+        expect(parseJsonObject(out())).toEqual(
+            expect.objectContaining({ started: true, manualOnly: true, nextWakeAt: null }),
+        );
     });
 
     test('a running plan carries its phase and last problem', async () => {

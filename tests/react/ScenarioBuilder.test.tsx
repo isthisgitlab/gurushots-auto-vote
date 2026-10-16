@@ -279,6 +279,29 @@ describe('simulate', () => {
         expect(screen.getByText('Phase gone')).toBeTruthy();
     });
 
+    test('a Manual Only challenge keeps the timeline and says it is paused; a plain one does not', async () => {
+        jest.mocked(window.api.simulateScenario)
+            .mockResolvedValueOnce(
+                invalid({ success: true, events: [], stoppedBecause: 'idle', halted: null, manualOnly: true }),
+            )
+            .mockResolvedValueOnce(
+                invalid({ success: true, events: [], stoppedBecause: 'idle', halted: null, manualOnly: false }),
+            );
+        jest.mocked(window.api.getActiveChallenges).mockResolvedValue({
+            challenges: [invalid({ id: 7, title: 'Show' })],
+        });
+        await renderBuilder();
+        const picker = await screen.findByLabelText<HTMLSelectElement>('app.sbSimulateOn');
+        await waitFor(() => expect(within(picker).getByText('Show')).toBeTruthy());
+        changeSelect(picker, '7');
+        click('app.sbSimulate');
+        await screen.findByText('app.sbSimulatePausedManual');
+        expect(screen.getByText('app.sbSimulateNothing')).toBeTruthy();
+        click('app.sbSimulate');
+        await waitFor(() => expect(screen.queryByText('app.sbSimulatePausedManual')).toBeNull());
+        expect(screen.getByText('app.sbSimulateNothing')).toBeTruthy();
+    });
+
     test('an empty timeline, and a failed run with its problems', async () => {
         jest.mocked(window.api.simulateScenario)
             .mockResolvedValueOnce(invalid({ success: true, events: [], stoppedBecause: 'idle', halted: null }))

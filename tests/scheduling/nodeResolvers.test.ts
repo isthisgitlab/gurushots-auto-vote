@@ -87,7 +87,7 @@ describe('resolveCurrencyAuto', () => {
         });
     });
 
-    test('Manual Photos Only leaves the swap with no wake, and the other two rules alone', () => {
+    test('Manual Only leaves the swap with no wake, and the other two rules alone', () => {
         const timing = { afterStartSec: 60, beforeEndSec: 0, afterPercent: 0 };
         const rule = (enableKey: string, prefix: string) => ({
             [enableKey]: true,

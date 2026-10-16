@@ -1316,7 +1316,7 @@ describe('actions', () => {
     });
 });
 
-describe('Manual Photos Only', () => {
+describe('Manual Only', () => {
     const switchOn = () =>
         settings.getEffectiveSetting.mockImplementation((key) =>
             key === 'scenario' ? assigned : key === 'manualPhotosOnly' ? true : 0,
@@ -1342,7 +1342,7 @@ describe('Manual Photos Only', () => {
             setup(single([action]));
             switchOn();
             await run();
-            expect(state().lastError!.message).toContain('Manual Photos Only is on');
+            expect(state().lastError!.message).toContain('Manual Only is on');
             expect(state().fired).toEqual({});
             expect(state().inFlight).toBeNull();
             expect(autoFill.submitNewEntryForAction).not.toHaveBeenCalled();
@@ -1380,7 +1380,7 @@ describe('Manual Photos Only', () => {
         expect(currencyActions.swapEntry).not.toHaveBeenCalled();
         expect(state().fired.r1).toBeDefined();
         expect(state().phase).toBe('next');
-        expect(state().lastError!.message).toContain('Manual Photos Only is on');
+        expect(state().lastError!.message).toContain('Manual Only is on');
     });
 
     test('a remembered photo is not entered either', async () => {
@@ -1389,6 +1389,36 @@ describe('Manual Photos Only', () => {
         switchOn();
         await run();
         expect(pass.api.submitToChallenge).not.toHaveBeenCalled();
+    });
+});
+
+describe('resuming after a Manual Only pause', () => {
+    // The voting pass runs no scenario step while the switch is on, so a plan resumes from its saved state, as after
+    // an app downtime of the same length: nothing was written, nothing is made up for.
+    test('a once rule whose time condition came due during the pause fires its step once, on the first pass after', async () => {
+        currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+        setup(single([{ type: 'fillExposure' }], { repeat: 'once', if: [{ type: 'inPhaseFor', min: '10m' }] }));
+        // Saved before the pause, with the phase entered long before the condition's 10 minutes were up.
+        ledger.set(7, initialState('Plan', 'main', NOW - 3 * 86400));
+        await run();
+        expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+        expect(state().fired.r1).toBeDefined();
+        await run();
+        expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+    });
+
+    test('a step that landed before the pause is not sent again: the rule resumes at the next one', async () => {
+        currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+        setup(
+            plan({
+                main: { rules: [rule('r1', [{ type: 'fillExposure' }, { type: 'goto', phase: 'next' }])] },
+                next: {},
+            }),
+        );
+        ledger.set(7, { ...initialState('Plan', 'main', NOW - 3 * 86400), inFlight: { ruleId: 'r1', actionIndex: 1 } });
+        await run();
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        expect(state().phase).toBe('next');
     });
 });
 

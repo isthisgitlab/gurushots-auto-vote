@@ -16,6 +16,10 @@
  *
  * The per-phase runners live in services/votingOrchestrator/.
  *
+ * Manual Only (`manualPhotosOnly`, votingOrchestrator/manualOnly.ts): a challenge with it on is skipped whole, read
+ * live per challenge, so nothing below runs on it; a scoped Run on it is a successful no-op. The skip keeps the
+ * read-only ledgers (entry ages, the new-entry snapshot) current.
+ *
  * Runners execute SEQUENTIALLY by design: auto-fill mutates the shared
  * challenge object (reflectNewEntry) so a later turbo/boost in the same
  * cycle sees the consumed slot and new entry. Do not parallelize them.
@@ -62,6 +66,13 @@ import { playAutoTurbo } from './votingOrchestrator/turbo';
 import { describeNewEntryOutcome, detectNewEntry, recordEntrySnapshot } from './votingOrchestrator/newEntries';
 import { voteOnChallenge } from './votingOrchestrator/vote';
 import { missionVoteDecision, planMissionVotes, resetMissionVoteLog } from './votingOrchestrator/missionVotes';
+import {
+    isManualOnlyFailClosed,
+    manualOnlyOnLine,
+    pruneManualOnlyLog,
+    resetManualOnlyLog,
+    skipIfManualOnly,
+} from './votingOrchestrator/manualOnly';
 
 import type { Challenge } from '../types/gurushots';
 import type { VotingPassDeps, VotingPassResult } from '../types/votingPass';
@@ -142,6 +153,10 @@ const processChallenge = async (
     if (cancellation.isCancelled()) {
         return cancelPass(pass.allChallenges);
     }
+
+    // Manual Only: nothing below runs on this challenge. Checked live, after the cancellation
+    // check, so a switch turned on mid-pass takes effect from the next challenge.
+    if (skipIfManualOnly(challenge, now, pass)) return null;
 
     logger
         .withCategory('voting')
@@ -268,6 +283,15 @@ const runVotingPass = async (
         if (scope.result) return scope.result;
         const { challenges } = scope;
 
+        // A scoped Run on a Manual Only challenge is a deliberate no-op, not a failure.
+        if (challengeIdFilter != null && isManualOnlyFailClosed(challenges[0])) {
+            const message = manualOnlyOnLine(challenges[0]);
+            logger.withCategory('voting').info(message, null);
+            logger.withCategory('voting').endOperation('voting-process', message);
+            return { success: true, message, challenges: allChallenges };
+        }
+        pruneManualOnlyLog(allChallenges);
+
         const pass: PassContext = {
             token,
             api,
@@ -279,7 +303,11 @@ const runVotingPass = async (
             scenarios,
             missions,
             refreshMissionNeeds,
-            missionVoteQuota: planMissionVotes(missions, challengeIdFilter, allChallenges),
+            missionVoteQuota: planMissionVotes(
+                missions,
+                challengeIdFilter,
+                allChallenges.filter((challenge) => !isManualOnlyFailClosed(challenge)),
+            ),
             allChallenges,
             turboSnapshot,
         };
@@ -335,5 +363,5 @@ const runVotingPass = async (
     }
 };
 
-export { runVotingPass, resetMissionVoteLog, isVotingPassRunning };
+export { runVotingPass, resetMissionVoteLog, resetManualOnlyLog, isVotingPassRunning };
 export type { PassContext };

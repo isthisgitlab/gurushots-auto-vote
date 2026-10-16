@@ -102,7 +102,7 @@ export const resolveCurrencyAuto: ResolveCurrencyAuto = async (challengeId) => {
         currencyTimingOf('autoExposureFill', 'autoExposureFill', challengeId),
         ipc.getEffectiveSetting('manualPhotosOnly', challengeId),
     ]);
-    // Manual Photos Only: no swap ever fires on its own, so there is no wake to hold for it.
+    // Manual Only: no swap ever fires on its own, so there is no wake to hold for it.
     return { key, swap: manualPhotosOnly === true ? null : swap, fill };
 };
 

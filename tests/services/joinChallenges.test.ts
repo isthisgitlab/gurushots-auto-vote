@@ -4125,7 +4125,7 @@ describe('on the app window, where the background service writes the same claims
     });
 });
 
-describe('runJoinPass — Manual Photos Only', () => {
+describe('runJoinPass — Manual Only', () => {
     const A = 'a'.repeat(32);
     const memberIdentity = require('../../src/ts/services/autoFill/memberIdentity') as typeof memberIdentityModule;
     const switchOn = () =>

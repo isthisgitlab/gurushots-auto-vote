@@ -16,7 +16,7 @@ const KINDS: IssueKind[] = [
     { pattern: /^Not valid JSON: /, key: 'app.scenarioIssueNotJson' },
     // The semantic checks'
     { pattern: /^A phase cannot change the scenario assignment itself$/, key: 'app.scenarioIssuePhaseScenario' },
-    { pattern: /^A phase cannot change Manual Photos Only$/, key: 'app.scenarioIssuePhaseManualPhotos' },
+    { pattern: /^A phase cannot change Manual Only$/, key: 'app.scenarioIssuePhaseManualPhotos' },
     { pattern: /^Not a per-challenge setting$/, key: 'app.scenarioIssueNotPerChallenge' },
     { pattern: /^Set (.+) together$/, key: 'app.scenarioIssueSetTogether', params: ['fields'] },
     { pattern: /^These values conflict with the global defaults/, key: 'app.scenarioIssueConflictDefaults' },

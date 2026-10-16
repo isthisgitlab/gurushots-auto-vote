@@ -442,6 +442,8 @@ export const app = {
     scenarioStatusPhase: 'phase {phase}',
     scenarioStatusNotStarted: 'starts in phase {phase} on the next run',
     scenarioStatusNext: 'next check in {time}',
+    scenarioStatusPausedManual: 'paused: Manual Only is on, so no step runs',
+    scenarioStatusPausedManualShort: 'paused (Manual Only)',
     scenarioStatusProblem: 'Last step skipped: {message}',
     scenarioStatusSpendUnclear:
         'GuruShots gave no answer to “{action}”, so it may have gone through. It will not be spent again: the next cycle only checks whether it took effect.',
@@ -622,6 +624,7 @@ export const app = {
     sbSimulateOn: 'Simulate on challenge',
     sbSimulatePick: 'Pick a challenge…',
     sbSimulateAssume: 'Assumes every step succeeds and the challenge data stays as it is now.',
+    sbSimulatePausedManual: 'Paused (Manual Only) — this is what would run if Manual Only were off now.',
     sbSimulateNothing: 'Nothing would run.',
     sbSimulateFailed: 'The simulation could not run.',
     sbStop_closed: 'Stops: the challenge closes.',
@@ -749,7 +752,7 @@ export const app = {
     validationOutOfRange: 'Enter a value between {min} and {max}.',
     validationAtLeast: 'Enter a value of {min} or more.',
     autoSubmitBadge: 'auto-submit',
-    manualPhotosBadge: 'manual photos',
+    manualPhotosBadge: 'manual only',
     customBadge: 'custom',
     customSettingsHint: 'Has custom settings',
     mustIncludeTags: 'Must Include Tags',
@@ -766,7 +769,7 @@ export const app = {
         "With Chosen Photos set, enter them in the order you picked them (the numbers in the chooser) instead of ranking them the way the app ranks its own picks. A photo that fails your must-include tags, is already entered or isn't offered for the challenge is skipped, and the next one in the list is used; any slots left over are filled by ranking as usual. If Submit Even Without a Tag Match is on and none of the chosen photos fits your must-include tags, they can still be entered. Off by default.",
     chosenPhotosOnly: 'Submit Only Chosen Photos',
     chosenPhotosOnlyDesc:
-        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically (Pick… on a challenge card submits photos you choose, once), Emergency Submit ignores this setting (turn on Manual Photos Only for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted (unless Manual Photos Only is on: then, in Discover, choose the photo for that challenge and press Join, or Retry submit when its coins are already spent). Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your must-include tags, they can still be entered. With an empty list this does nothing.',
+        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically (Pick… on a challenge card submits photos you choose, once), Emergency Submit ignores this setting (set Emergency Submit to 0 for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted (unless Manual Only is on: then, in Discover, choose the photo for that challenge and press Join, or Retry submit when its coins are already spent). Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your must-include tags, they can still be entered. With an empty list this does nothing.',
     chosenPhotosMemberId: 'Chosen Photos Account',
     chosenPhotosClearedAt: 'Chosen Photos Cleared At',
     chosenPhotosClearedAtDesc:
@@ -1169,14 +1172,14 @@ export const app = {
     normal: 'NORMAL',
     of: 'of',
     onePhoto: '1 photo',
-    manualPhotosOnly: 'Manual Photos Only',
+    manualPhotosOnly: 'Manual Only',
     manualPhotosOnlyDesc:
-        "The app never joins, submits or swaps a photo in this challenge on its own, and that includes scenario steps that enter or swap a photo. Your manual Join and +1/+N still pick the photo themselves, while Pick… and Swap let you choose. Boost and Turbo still go on entries you already have. For a challenge you haven't joined yet, or one that comes back under a new id, use a Challenge Rule.",
-    manualPhotosOnlyHint: 'Manual Photos Only is on for this challenge, so this never enters a photo by itself.',
-    manualPhotosOnlyBoostHint:
-        'Manual Photos Only is on for this challenge, so Boost and Turbo go on an entry you already have, never on a fresh photo.',
+        "The app does nothing on this challenge by itself: it never joins or enters a photo, swaps, votes, boosts, applies or earns Turbo, unlocks with keys, spends a fill or runs scenario steps. Every button on the card still works (Run is hidden, because it runs the automatic rules), and Vote All skips this challenge. To choose photos yourself and keep auto-voting, leave this off and limit Auto-Join and Auto-Submit to your own picks with Chosen Photos + Submit Only Chosen Photos (a join you already paid for still submits an automatic pick), or turn Auto-Join off (globally, or in the title rule that enables it) and Auto-Submit off for the challenge, then turn off Emergency Submit, Auto-Swap and the fresh-photo Boost/Turbo options, and remove any scenario enter/swap steps. Turning this off lets any scenario steps and spends that came due run on the next pass. For a challenge you haven't joined yet, or one that comes back under a new id, use a Challenge Rule.",
+    manualOnlyLabel: 'Manual Only is on — nothing runs automatically',
+    manualOnlyAlert:
+        'Manual Only is on: the app does nothing on this challenge by itself. It never joins or enters a photo, swaps, votes, boosts, applies or earns Turbo, unlocks with keys, spends a fill or runs scenario steps. Every button on the card still works; Run is hidden because it runs the automatic rules. Vote All skips this challenge.',
     manualPhotosOnlyRuleHint:
-        "With Manual Photos Only on, the challenges this rule matches are not joined or given a photo automatically, unless a challenge's own setting turns it off, so this rule's Auto-Join and Auto-Submit have no effect there.",
+        "With Manual Only on, the app does no voting, boosting, Turbo or photo entry at all on the challenges this rule matches, unless a challenge's own setting turns the switch off.",
     onlyBoost: 'Only Boost Mode',
     onlyBoostDesc: 'Skip regular voting for this challenge entirely and only apply Boost.',
     voteOnNewEntry: 'Vote on New Entry',
@@ -1432,7 +1435,7 @@ export const app = {
     scenarioIssueTooLarge: 'The file is larger than {kb} KB.',
     scenarioIssueNotJson: 'This is not valid JSON.',
     scenarioIssuePhaseScenario: 'A phase cannot change which scenario is assigned.',
-    scenarioIssuePhaseManualPhotos: 'A phase cannot change Manual Photos Only.',
+    scenarioIssuePhaseManualPhotos: 'A phase cannot change Manual Only.',
     scenarioIssueNotPerChallenge: 'This setting cannot be set for a single challenge.',
     scenarioIssueSetTogether: 'Set {fields} together.',
     scenarioIssueConflictDefaults: 'These values conflict with the global defaults they work together with.',

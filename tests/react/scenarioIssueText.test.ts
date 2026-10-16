@@ -8,7 +8,7 @@ describe('scenarioIssueText', () => {
         ['The file is larger than 256 KB', 'app.scenarioIssueTooLarge'],
         ['Not valid JSON: Unexpected token }', 'app.scenarioIssueNotJson'],
         ['A phase cannot change the scenario assignment itself', 'app.scenarioIssuePhaseScenario'],
-        ['A phase cannot change Manual Photos Only', 'app.scenarioIssuePhaseManualPhotos'],
+        ['A phase cannot change Manual Only', 'app.scenarioIssuePhaseManualPhotos'],
         ['Not a per-challenge setting', 'app.scenarioIssueNotPerChallenge'],
         ['Set exposureTarget and boostTime together', 'app.scenarioIssueSetTogether'],
         ['These values conflict with the global defaults they combine with', 'app.scenarioIssueConflictDefaults'],

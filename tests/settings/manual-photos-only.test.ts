@@ -1,6 +1,6 @@
 /**
- * Manual Photos Only (`manualPhotosOnly`): a challengeOnly boolean that, once on, stops every automatic photo
- * entry. `false` lives only in a challenge's own override: rules and profiles hold "on" or nothing, a profile
+ * Manual Only (`manualPhotosOnly`): a challengeOnly boolean that, once on, stops everything automatic on a
+ * challenge. `false` lives only in a challenge's own override: rules and profiles hold "on" or nothing, a profile
  * apply keeps the challenge's value, a scenario phase may not set it, and an un-joined id's value is honoured by
  * the join and survives stale cleanup. Drives the in-memory headless-store seam so the facade round-trips.
  */
@@ -29,7 +29,7 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
-describe('Manual Photos Only setting', () => {
+describe('Manual Only setting', () => {
     let store: MemoryStore;
     const blob = () => parseJsonAs(store.value!, isConfig);
     const writeBlob = (edit: (raw: ReturnType<typeof blob>) => void) => {
@@ -213,7 +213,7 @@ describe('Manual Photos Only setting', () => {
                     issues: [
                         {
                             path: 'phases.main.settings.manualPhotosOnly',
-                            message: 'A phase cannot change Manual Photos Only',
+                            message: 'A phase cannot change Manual Only',
                         },
                     ],
                 });

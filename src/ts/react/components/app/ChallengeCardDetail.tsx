@@ -395,7 +395,8 @@ function EntryDetails({
                     />
                 ))}
             </div>
-            {unusablePins(challenge, pins).map(({ kind, state }) => (
+            {/* Manual Only: a pin only steers the automatic spends, which do not run, so its notes stay hidden. */}
+            {(view.manualOnly ? [] : unusablePins(challenge, pins)).map(({ kind, state }) => (
                 <DanglingPinNote
                     key={kind}
                     kind={kind}

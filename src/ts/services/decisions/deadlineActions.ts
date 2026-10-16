@@ -170,14 +170,18 @@ const isBoostBlocked = (challenge: Challenge, challengeId: string, now: number):
  * block (`boostReleaseAt` / `turboReleaseAt`, null when the block never gives way).
  * A block with no pin in it is a flag: the warning differs, because unpinning cannot help.
  *
+ * With Manual Only on a pin-caused block is not a block: the card's Boost and Turbo buttons send
+ * the photo the user clicked straight to the apply path and never consult a pin, so a pin only
+ * steers the automatic spends, which do not run. A flag block is real for manual play too.
+ *
  * @param now - Unix timestamp in seconds
  */
-const describeConflicts = (challenge: Challenge, challengeId: string, now: number): Conflicts => {
+const describeConflicts = (challenge: Challenge, challengeId: string, now: number, manualOnly: boolean): Conflicts => {
     const entries = challenge?.member?.ranking?.entries;
     const hasEntries = Array.isArray(entries) && entries.length >= 1;
     const hasFreeSlot = getSlotsRemaining(challenge) > 0;
-    const boostBlocked = isBoostBlocked(challenge, challengeId, now);
-    const turboBlocked =
+    const rawBoostBlocked = isBoostBlocked(challenge, challengeId, now);
+    const rawTurboBlocked =
         challenge?.member?.turbo?.state === 'WON' &&
         hasEntries &&
         pickTurboEntry(challenge, challengeId, now) === null &&
@@ -189,11 +193,15 @@ const describeConflicts = (challenge: Challenge, challengeId: string, now: numbe
                 ? ('pin' as const)
                 : ('flag' as const)
             : null;
+    const rawBoostBy = causeOf(rawBoostBlocked, 'turbo');
+    const rawTurboBy = causeOf(rawTurboBlocked, 'boost');
+    const boostBlocked = rawBoostBlocked && !(manualOnly && rawBoostBy === 'pin');
+    const turboBlocked = rawTurboBlocked && !(manualOnly && rawTurboBy === 'pin');
     return {
         boostBlocked,
         turboBlocked,
-        boostBlockedBy: causeOf(boostBlocked, 'turbo'),
-        turboBlockedBy: causeOf(turboBlocked, 'boost'),
+        boostBlockedBy: boostBlocked ? rawBoostBy : null,
+        turboBlockedBy: turboBlocked ? rawTurboBy : null,
         boostReleaseAt: boostBlocked ? pinReleaseAt(challenge, challengeId, 'turbo', now) : null,
         turboReleaseAt: turboBlocked ? pinReleaseAt(challenge, challengeId, 'boost', now) : null,
     };
@@ -220,6 +228,10 @@ const describeConflicts = (challenge: Challenge, challengeId: string, now: numbe
  *   - a threshold of 0 / -Infinity means off/n-a (auto-fill satisfied,
  *     emergency-fill off, key-unlocked boost off) — always omitted.
  *
+ * Manual Only: the app does nothing by itself on the challenge, so `actions` is empty (the conflict
+ * flags stay, see describeConflicts). This one function also feeds the sleep boost, the quit guard,
+ * deadline notifications and the card timeline.
+ *
  * Purely reads the passed challenge object (never mutates it, never calls an
  * apply path), so it cannot perturb a concurrent sequential voting pass. The
  * entry count is read at call time, so this is a snapshot that can drift from
@@ -239,7 +251,8 @@ const describeDeadlineActions = (
     const boostTimerBranch = boost.state === 'AVAILABLE' && boostHasTimeout;
     const turboState = challenge?.member?.turbo?.state;
 
-    const conflicts = describeConflicts(challenge, challengeId, now);
+    const manualOnly = isManualPhotosOnly(settings, challengeId);
+    const conflicts = describeConflicts(challenge, challengeId, now, manualOnly);
     const { boostBlocked, turboBlocked, boostReleaseAt, turboReleaseAt } = conflicts;
     // A blocked spend whose pin will give way is still coming, just later: its row stays.
     const boostRowHidden = boostBlocked && boostReleaseAt === null;
@@ -266,10 +279,7 @@ const describeDeadlineActions = (
                 if (boostTimerBranch && !(getEffectiveBoostTime(challengeId) > 0)) return false;
                 return true;
             case 'autoSubmit':
-                return (
-                    settings.getEffectiveSetting('autoSubmit', challengeId) === true &&
-                    !isManualPhotosOnly(settings, challengeId)
-                );
+                return settings.getEffectiveSetting('autoSubmit', challengeId) === true;
             case 'emergencySubmit':
                 // thresholdSec > 0 already means enabled (0 = off); the runner
                 // owns the state-only stand-downs, so ask it rather than keeping
@@ -286,6 +296,8 @@ const describeDeadlineActions = (
                 return false;
         }
     };
+
+    if (manualOnly) return { actions: [], ...conflicts };
 
     const actions = orderDeadlineActions(challenge)
         .filter(({ action, thresholdSec }) => isVisible(action, thresholdSec))

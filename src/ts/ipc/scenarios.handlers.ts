@@ -34,6 +34,9 @@ import { getScenarioStatus, ledgerForMode, stepLockForMode } from '../services/s
 import { findActiveChallenge } from '../services/findActiveChallenge';
 import { evaluateScenario, startState } from '../scenarios/evaluate';
 import { simulateScenario } from '../scenarios/simulate';
+import { entriesOf } from '../scenarios/selectors';
+import { recordVoteSample } from '../scenarios/speed';
+import { isManualPhotosOnly } from '../services/manualPhotosOnly';
 import { SCENARIO_TEMPLATES } from '../scenarios/templates';
 import { refreshScenarioStateAsync } from '../scenarioStateStore';
 import { ALL_KEY } from '../scenarioStateFile';
@@ -42,6 +45,7 @@ import { backgroundServiceOwnsScenarios } from '../services/scenarioRunner';
 import type { IpcMain } from 'electron';
 import type { IpcHandlerMap } from './registerHandlers';
 import type { ScenarioDocument, ScenarioIssue } from '../settings/scenarioSchema';
+import type { VoteHistory } from '../scenarios/speed';
 import type { ActiveChallengesResponse, Bankroll, Challenge } from '../types/gurushots';
 
 /**
@@ -89,6 +93,16 @@ const safely = async <T>(
         return errorResult(error, `The ${label} request failed`);
     }
 };
+
+/**
+ * The state with this pass's vote sample recorded, the transform the live pass applies first
+ * (scenarioRunner/step.ts): it is pure, so a preview reads the speed history the pass would, the 48 h
+ * trim and the sample cap included, after a pause or downtime.
+ */
+const withVoteSample = <S extends { history?: VoteHistory }>(state: S, challenge: Challenge, now: number): S => ({
+    ...state,
+    history: recordVoteSample(state.history, entriesOf(challenge), now),
+});
 
 /**
  * What the dry run and the simulation both need: the challenge's scenario
@@ -140,7 +154,9 @@ const loadLiveScenario = async (
         status: status as Omit<ScenarioStatus, 'scenario'> & { scenario: ScenarioDocument },
         challenge,
         now,
-        state: status.state ?? startState(status.scenario, now),
+        // The live pass records a vote sample first (scenarioRunner/step.ts), so a preview reads the same
+        // speed history the pass would after a pause or downtime.
+        state: withVoteSample(status.state ?? startState(status.scenario, now), challenge, now),
         bankroll: await strategy.getBankroll(guard.token),
     };
 };
@@ -262,10 +278,12 @@ const buildHandlers = () =>
             return safely('get-scenario-status', async () => {
                 await refreshScenarioStateAsync();
                 // `serviceRuns`: the background service is installed, so it alone advances the plans, whatever this window could read.
+                // `manualOnly`: Manual Only is on, so no step runs; read here, never echoed from the renderer.
                 return {
                     success: true as const,
                     ...getScenarioStatus(challengeId),
                     serviceRuns: backgroundServiceOwnsScenarios(),
+                    manualOnly: isManualPhotosOnly(settings, challengeId),
                 };
             });
         },
@@ -285,23 +303,30 @@ const buildHandlers = () =>
                 const loaded = await loadLiveScenario('scenario dry run', challengeId);
                 if (!loaded.ok) return loaded.response;
                 const { status } = loaded;
-                const decision = evaluateScenario(runInput(loaded));
+                // A plan that has not started has no phase clock yet: its in-phase bounds are left out.
+                const decision = evaluateScenario({ ...runInput(loaded), phaseClock: status.state !== null });
+                // Manual Only pauses the scenario: nothing fires and no wake is due.
+                const manualOnly = isManualPhotosOnly(settings, challengeId);
                 return {
                     success: true as const,
                     scenario: status.scenario.name,
                     phase: decision.phase,
                     started: status.state !== null,
                     halted: decision.halted,
-                    fire: decision.fire
-                        ? {
-                              ruleId: decision.fire.ruleId,
-                              startIndex: decision.fire.startIndex,
-                              // `rule` is untyped in scenarios/evaluate; a validated rule's `do` is its action list.
-                              actions: (decision.fire.rule.do as Array<{ type: string }>).map((action) => action.type),
-                          }
-                        : null,
+                    manualOnly,
+                    fire:
+                        decision.fire && !manualOnly
+                            ? {
+                                  ruleId: decision.fire.ruleId,
+                                  startIndex: decision.fire.startIndex,
+                                  // `rule` is untyped in scenarios/evaluate; a validated rule's `do` is its action list.
+                                  actions: (decision.fire.rule.do as Array<{ type: string }>).map(
+                                      (action) => action.type,
+                                  ),
+                              }
+                            : null,
                     explain: decision.explain,
-                    nextWakeAt: decision.nextWakeAt,
+                    nextWakeAt: manualOnly ? null : decision.nextWakeAt,
                 };
             });
         },
@@ -318,6 +343,8 @@ const buildHandlers = () =>
                     scenario: status.scenario.name,
                     startPhase: state.phase,
                     now,
+                    // The timeline is what would run if the switch were off now.
+                    manualOnly: isManualPhotosOnly(settings, challengeId),
                     ...timeline,
                 };
             });

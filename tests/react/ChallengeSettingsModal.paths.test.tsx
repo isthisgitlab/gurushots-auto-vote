@@ -242,6 +242,42 @@ describe('editing and saving', () => {
         expect(footer.parentElement!.lastElementChild).toBe(footer);
     });
 
+    describe('Manual Only', () => {
+        const withSwitch = async (value: boolean) => {
+            mockSchemaState.schema = invalid({
+                ...BASE_SCHEMA,
+                manualPhotosOnly: field('boost', 'boolean', false),
+            });
+            mockApi.getChallengeOverrides.mockResolvedValue({ manualPhotosOnly: value });
+            renderModal();
+            await loaded();
+        };
+
+        test('on: a non-live alert states it, and a sticky label keeps it in view, with matching scroll padding', async () => {
+            await withSwitch(true);
+            const alert = screen.getByText('app.manualOnlyAlert').closest('.alert')!;
+            expect(alert.getAttribute('role')).toBeNull();
+            const label = screen.getByText(/app\.manualOnlyLabel/);
+            expect(label.getAttribute('aria-hidden')).toBe('true');
+            for (const cls of ['sticky', '-top-6', 'z-10', '-mx-6', 'px-6', 'bg-base-100'])
+                expect(label.classList.contains(cls)).toBe(true);
+            // happy-dom lays nothing out, so the padding that keeps a focused control below the label is a class check.
+            const box = document.querySelector('.modal-box')!.classList;
+            expect(box.contains('scroll-pt-16')).toBe(true);
+            expect(box.contains('md:scroll-pt-12')).toBe(true);
+            expect(box.contains('scroll-pb-60')).toBe(true);
+        });
+
+        test('off: neither the alert nor the label shows, and the box keeps only its footer padding', async () => {
+            await withSwitch(false);
+            expect(screen.queryByText('app.manualOnlyAlert')).toBeNull();
+            expect(screen.queryByText(/app\.manualOnlyLabel/)).toBeNull();
+            const box = document.querySelector('.modal-box')!.classList;
+            expect(box.contains('scroll-pt-16')).toBe(false);
+            expect(box.contains('scroll-pb-60')).toBe(true);
+        });
+    });
+
     test('a successful save closes and passes the non-suppressed mode', async () => {
         const { onClose } = renderModal();
         await loaded();

@@ -1,10 +1,11 @@
 /**
- * End-to-end guard for Manual Photos Only: the REAL voting pass, rule engine, fill pipeline, decisions and currency
- * runner over a challenge that every automatic photo path wants to act on at once. Each unit gate is tested where
+ * End-to-end guard for Manual Only: the REAL voting pass, rule engine, fill pipeline, decisions and currency
+ * runner over a challenge that every automatic path wants to act on at once. Each unit gate is tested where
  * it lives; this is the seam that catches a path nobody gated. Only settings (to drive every option), the spend
  * endpoints and the API are stubbed.
  *
- * The control run (switch off) must submit photos and swap; the same pass with the switch on must do neither.
+ * The control run (switch off) must submit photos, swap, boost and turbo; the same pass with the switch on must do
+ * none of them.
  */
 
 jest.mock('../../src/ts/settings');
@@ -225,22 +226,25 @@ describe('a pass over a challenge every automatic photo path wants', () => {
         expect(['e1', 'e2']).not.toContain(api.applyTurbo.mock.calls[0][1]);
     });
 
-    test('switch on: Boost and Turbo still go on the entries the challenge already has', async () => {
+    test('switch on: nothing is boosted, turboed, played or voted either', async () => {
         mockSettings({ manualPhotosOnly: true });
         const api = makeApi(challenge());
         await run(api);
-        // Boost takes the existing-entry path (never the explicit fresh-photo one) and Turbo lands on an existing entry.
-        expect(api.applyBoost).toHaveBeenCalledTimes(1);
+        expect(api.applyBoost).not.toHaveBeenCalled();
         expect(api.applyBoostToEntry).not.toHaveBeenCalled();
-        expect(api.applyTurbo).toHaveBeenCalledTimes(1);
-        expect(['e1', 'e2']).toContain(api.applyTurbo.mock.calls[0][1]);
+        expect(api.applyTurbo).not.toHaveBeenCalled();
+        expect(api.runTurboMiniGame).not.toHaveBeenCalled();
+        expect(api.submitVotes).not.toHaveBeenCalled();
     });
 
-    test('switch on: the deadline view lists no Auto-Submit or Emergency Submit row', () => {
+    test('control, switch off: the deadline view lists the rows that would act', () => {
+        mockSettings({ manualPhotosOnly: false });
+        const rows = VotingLogic.describeDeadlineActions(challenge(), NOW).actions.map((row) => row.action);
+        expect(rows).toEqual(expect.arrayContaining(['autoSubmit', 'boost', 'turbo']));
+    });
+
+    test('switch on: the deadline view lists no row at all', () => {
         mockSettings({ manualPhotosOnly: true });
-        const { actions } = VotingLogic.describeDeadlineActions(challenge(), NOW);
-        const rows = actions.map((row) => row.action);
-        expect(rows).not.toContain('autoSubmit');
-        expect(rows).not.toContain('emergencySubmit');
+        expect(VotingLogic.describeDeadlineActions(challenge(), NOW).actions).toEqual([]);
     });
 });

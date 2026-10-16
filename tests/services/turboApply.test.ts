@@ -202,7 +202,7 @@ describe('shouldApplyTurbo', () => {
         });
     });
 
-    describe('Manual Photos Only turns both fresh-photo options off', () => {
+    describe('Manual Only turns both fresh-photo options off', () => {
         test('turboNewSubmit: turbo goes on the existing entry, never a fresh photo', () => {
             mockSettings({ turboNewSubmit: true, manualPhotosOnly: true });
             const result = VotingLogic.shouldApplyTurbo(buildChallenge({ closeInSeconds: 600 }), NOW());

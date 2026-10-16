@@ -68,6 +68,7 @@ export function ChallengeCardCompact({
     turboStatus,
     entries,
     pins,
+    manualOnly,
     hasCompactOverride,
     onToggleCompact,
     boostWarning,
@@ -85,6 +86,7 @@ export function ChallengeCardCompact({
     turboStatus: ChallengeCardView['turboStatus'];
     entries: ChallengeCardView['entries'];
     pins: EntryPins;
+    manualOnly: ChallengeCardView['manualOnly'];
     hasCompactOverride: boolean;
     onToggleCompact: () => void | Promise<void>;
     boostWarning: string | null;
@@ -98,7 +100,8 @@ export function ChallengeCardCompact({
     const rank = progress?.rank;
     const hasRank = rank !== undefined && rank > 0;
     // One muted mark for the pins that are stored but not taking effect: it names the feature(s) once, the card says why.
-    const notApplying = unusablePins(challenge, pins).map(({ kind }) => kind);
+    // Under Manual Only no pin steers anything (the spends are not automatic), so there is nothing to warn about.
+    const notApplying = manualOnly ? [] : unusablePins(challenge, pins).map(({ kind }) => kind);
     const names = { boost: t('app.boost'), turbo: t('app.turbo') };
     let notApplyingNote: { short: string; long: string } | null = null;
     if (notApplying.length > 0) {

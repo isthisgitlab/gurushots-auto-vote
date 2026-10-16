@@ -33,7 +33,7 @@ const SETTING_PAIRS = [
  */
 const PHASE_FORBIDDEN_KEYS = new Map([
     ['scenario', 'A phase cannot change the scenario assignment itself'],
-    ['manualPhotosOnly', 'A phase cannot change Manual Photos Only'],
+    ['manualPhotosOnly', 'A phase cannot change Manual Only'],
 ]);
 
 /**

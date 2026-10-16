@@ -103,6 +103,8 @@ export async function soonestScenarioWake(
             challenge: open[i],
             now,
             timezone: input.timezone,
+            // No saved state = the plan has not started: it has no phase clock yet.
+            phaseClock: input.state !== null,
         });
         if (startTime !== null && isSoonerUpcomingStart(startTime, now, best)) {
             best = { challengeId: open[i].id, challengeTitle: challengeLabel(open[i]), startTime, phase: state.phase };

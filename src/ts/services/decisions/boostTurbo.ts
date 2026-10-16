@@ -252,7 +252,7 @@ const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergenc
     const applyWith = (decision: TurboDecision): TurboDecision =>
         pinFallback ? { ...decision, pinFallback } : decision;
 
-    // The pick and the fill-new mode (Manual Photos Only turns both fresh-photo options off) are
+    // The pick and the fill-new mode (Manual Only turns both fresh-photo options off) are
     // shared with the deadline view, so the two never disagree on what a Turbo does.
     const fillMode = resolveTurboFillNewMode(challenge, challengeId);
     // With fill-new on, an existing entry is only the fallback target (used when no fresh photo can be

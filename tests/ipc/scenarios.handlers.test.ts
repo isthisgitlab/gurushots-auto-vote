@@ -13,6 +13,7 @@ jest.mock('../../src/ts/settings', () => ({
     importScenario: jest.fn(),
     exportScenario: jest.fn(),
     exportScenarioWithNotes: jest.fn(),
+    getEffectiveSetting: jest.fn(() => false),
 }));
 jest.mock('../../src/ts/ipc/chosenPhotosOwner', () => ({ stampChosenPhotosOwner: jest.fn() }));
 jest.mock('../../src/ts/services/scenarioStatus', () => {
@@ -39,6 +40,7 @@ jest.mock('../../src/ts/logger', () => ({
 
 import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
 import type { ScenarioStateLedger } from '../../src/ts/types/votingPass';
+import type { ScenarioState } from '../../src/ts/types/stores';
 import { invalid } from '../helpers/invalid';
 
 import scenarioRunner = require('../../src/ts/services/scenarioRunner');
@@ -210,6 +212,16 @@ describe('status and reset', () => {
         expect(refreshScenarioStateAsync).toHaveBeenCalled();
     });
 
+    test('status carries Manual Only, read from the settings and never from the caller', async () => {
+        scenarioStatus.getScenarioStatus.mockReturnValue(
+            invalid({ assigned: 'Plan', scenario, state: null, corrupt: false }),
+        );
+        await expect(handlers['get-scenario-status'](null, 7)).resolves.toMatchObject({ manualOnly: false });
+        settings.getEffectiveSetting.mockReturnValueOnce(true);
+        await expect(handlers['get-scenario-status'](null, 7)).resolves.toMatchObject({ manualOnly: true });
+        expect(settings.getEffectiveSetting).toHaveBeenLastCalledWith('manualPhotosOnly', '7');
+    });
+
     test('status says whether the background service runs the plans, whatever this process could read', async () => {
         scenarioStatus.getScenarioStatus.mockReturnValue(
             invalid({ assigned: 'Plan', scenario, state: null, corrupt: 'unloaded' }),
@@ -359,6 +371,152 @@ describe('dry-run-scenario', () => {
         );
     });
 
+    test('Manual Only pauses the plan: manualOnly is set, nothing fires and no wake is due', async () => {
+        settings.getEffectiveSetting.mockReturnValue(true);
+        try {
+            await expect(handlers['dry-run-scenario'](null, 7)).resolves.toEqual(
+                expect.objectContaining({ success: true, manualOnly: true, fire: null, nextWakeAt: null }),
+            );
+        } finally {
+            settings.getEffectiveSetting.mockReturnValue(false);
+        }
+        await expect(handlers['dry-run-scenario'](null, 7)).resolves.toEqual(
+            expect.objectContaining({ manualOnly: false, fire: expect.objectContaining({ ruleId: 'r2' }) }),
+        );
+    });
+
+    test('a plan that has not started has no phase clock: its in-phase bound is no wake', async () => {
+        const phased: ScenarioDocument = {
+            name: 'Phased',
+            version: 1,
+            start: 'main',
+            phases: {
+                main: {
+                    rules: [
+                        {
+                            id: 'p',
+                            if: [{ type: 'inPhaseFor', min: '4m' }],
+                            do: [{ type: 'notify', message: 'x' }],
+                        },
+                    ],
+                },
+            },
+        };
+        const state = invalid<ScenarioState>({
+            phase: 'main',
+            phaseEnteredAt: NOW,
+            memory: {},
+            fired: {},
+            inFlight: null,
+        });
+        scenarioStatus.getScenarioStatus.mockReturnValue({
+            assigned: 'Phased',
+            scenario: phased,
+            state: null,
+            corrupt: false,
+            timezone: 'UTC',
+        });
+        await expect(handlers['dry-run-scenario'](null, 7)).resolves.toEqual(
+            expect.objectContaining({ started: false, nextWakeAt: null }),
+        );
+        scenarioStatus.getScenarioStatus.mockReturnValue({
+            assigned: 'Phased',
+            scenario: phased,
+            state,
+            corrupt: false,
+            timezone: 'UTC',
+        });
+        await expect(handlers['dry-run-scenario'](null, 7)).resolves.toEqual(
+            expect.objectContaining({ started: true, nextWakeAt: NOW + 240 }),
+        );
+    });
+
+    test('reads the speed history the live pass would: a sample is recorded and the old ones aged out', async () => {
+        const speedy: ScenarioDocument = {
+            name: 'Speedy',
+            version: 1,
+            start: 'main',
+            phases: {
+                main: {
+                    rules: [
+                        {
+                            id: 's',
+                            if: [
+                                {
+                                    type: 'entry',
+                                    select: { by: 'mostVotes' },
+                                    field: 'votesPerHour',
+                                    op: '>',
+                                    value: 0,
+                                },
+                            ],
+                            do: [{ type: 'notify', message: 'x' }],
+                        },
+                    ],
+                },
+            },
+        };
+        strategy.getActiveChallenges.mockResolvedValueOnce(
+            invalid({
+                challenges: [
+                    {
+                        id: 7,
+                        close_time: NOW + 86400,
+                        member: { ranking: { entries: [{ id: 11, votes: 90, rank: 1 }] } },
+                    },
+                ],
+            }),
+        );
+        // The only sample is older than the 48 h the live pass keeps: it is dropped, the fresh one is too
+        // recent to measure from, so the speed reads nothing and the rule waits.
+        scenarioStatus.getScenarioStatus.mockReturnValue({
+            assigned: 'Speedy',
+            scenario: speedy,
+            state: invalid({
+                phase: 'main',
+                phaseEnteredAt: NOW - 400000,
+                memory: {},
+                fired: {},
+                inFlight: null,
+                history: { '11': [[NOW - 3 * 86400, 10]] },
+            }),
+            corrupt: false,
+            timezone: 'UTC',
+        });
+        await expect(handlers['dry-run-scenario'](null, 7)).resolves.toEqual(
+            expect.objectContaining({ fire: null, explain: [expect.objectContaining({ status: 'waiting' })] }),
+        );
+        // Samples inside the 48 h are kept, so the speed over the whole gap reads.
+        strategy.getActiveChallenges.mockResolvedValueOnce(
+            invalid({
+                challenges: [
+                    {
+                        id: 7,
+                        close_time: NOW + 86400,
+                        member: { ranking: { entries: [{ id: 11, votes: 90, rank: 1 }] } },
+                    },
+                ],
+            }),
+        );
+        scenarioStatus.getScenarioStatus.mockReturnValue({
+            assigned: 'Speedy',
+            scenario: speedy,
+            state: invalid({
+                phase: 'main',
+                phaseEnteredAt: NOW - 400000,
+                memory: {},
+                fired: {},
+                inFlight: null,
+                history: { '11': [[NOW - 86400, 10]] },
+            }),
+            corrupt: false,
+            timezone: 'UTC',
+        });
+        await expect(handlers['dry-run-scenario'](null, 7)).resolves.toEqual(
+            expect.objectContaining({ fire: expect.objectContaining({ ruleId: 's' }) }),
+        );
+    });
+
     test('uses the stored state once started; nothing ready → no fire', async () => {
         scenarioStatus.getScenarioStatus.mockReturnValue({
             assigned: 'Plan',
@@ -433,6 +591,18 @@ describe('simulate-scenario', () => {
         );
         expect((result as Extract<typeof result, { events: unknown }>).events[0]).toEqual(
             expect.objectContaining({ ruleId: 'r2' }),
+        );
+    });
+
+    test('Manual Only is carried with the timeline, which stays', async () => {
+        settings.getEffectiveSetting.mockReturnValueOnce(true);
+        const result = await handlers['simulate-scenario'](null, 7);
+        expect(result).toEqual(expect.objectContaining({ success: true, manualOnly: true }));
+        expect((result as Extract<typeof result, { events: unknown }>).events[0]).toEqual(
+            expect.objectContaining({ ruleId: 'r2' }),
+        );
+        await expect(handlers['simulate-scenario'](null, 7)).resolves.toEqual(
+            expect.objectContaining({ manualOnly: false }),
         );
     });
 

@@ -1,10 +1,10 @@
 /**
- * Manual Photos Only in the renderer: the card view's two badge flags, and the hints the challenge settings
- * modal shows under every setting the switch overrides.
+ * Manual Only in the renderer: the card view's badge, Run and pin-note flags, and the per-setting hints the challenge
+ * settings modal no longer shows (its alert speaks for every setting at once).
  */
 
 import { render, screen } from './helpers/test-utils';
-import { SettingHintList, challengeSettingHints } from '@/components/app/SettingHints';
+import { SettingHintList, challengeSettingHints, manualPhotosOnlyHint } from '@/components/app/SettingHints';
 import { deriveChallengeCardView } from '@/utils/challengeCardView';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
@@ -39,13 +39,23 @@ describe('deriveChallengeCardView', () => {
         });
     });
 
+    test('the Run button is hidden while the switch is on, and shown when it is off', () => {
+        expect(view({ autoSubmitEnabled: false, manualPhotosOnly: true }).showRunButton).toBe(false);
+        expect(view({ autoSubmitEnabled: false, manualPhotosOnly: false }).showRunButton).toBe(true);
+    });
+
+    test('the card hides its pin notes through manualOnly', () => {
+        expect(view({ autoSubmitEnabled: false, manualPhotosOnly: true }).manualOnly).toBe(true);
+        expect(view({ autoSubmitEnabled: false, manualPhotosOnly: false }).manualOnly).toBe(false);
+    });
+
     test('on, with every slot full, the manual-photos badge still shows (Auto-Swap is what it holds back)', () => {
         const full = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
         expect(view({ autoSubmitEnabled: false, manualPhotosOnly: true }, full).showManualPhotosBadge).toBe(true);
     });
 });
 
-describe('hints under the settings the switch overrides', () => {
+describe('no hint under the settings the switch overrides', () => {
     const hintsFor = (values: Record<string, unknown>) =>
         challengeSettingHints({
             effectiveOf: (key) => values[key],
@@ -56,22 +66,23 @@ describe('hints under the settings the switch overrides', () => {
         });
 
     test.each([
-        ['autoSubmit', 'app.manualPhotosOnlyHint'],
-        ['emergencySubmit', 'app.manualPhotosOnlyHint'],
-        ['autoSwap', 'app.manualPhotosOnlyHint'],
-        ['boostNewSubmit', 'app.manualPhotosOnlyBoostHint'],
-        ['boostNewSubmitOnConflict', 'app.manualPhotosOnlyBoostHint'],
-        ['turboNewSubmit', 'app.manualPhotosOnlyBoostHint'],
-        ['turboNewSubmitOnConflict', 'app.manualPhotosOnlyBoostHint'],
-    ])('%s carries its hint while the switch is on, and none while it is off', (key, text) => {
-        render(<SettingHintList hints={hintsFor({ manualPhotosOnly: true })(key)} />);
-        expect(screen.getByText(text)).toBeTruthy();
+        'autoSubmit',
+        'emergencySubmit',
+        'autoSwap',
+        'boostNewSubmit',
+        'boostNewSubmitOnConflict',
+        'turboNewSubmit',
+        'turboNewSubmitOnConflict',
+        'autoBoost',
+        'manualPhotosOnly',
+    ])('%s carries none, with the switch on, off or unset: the modal alert speaks for them all', (key) => {
+        expect(hintsFor({ manualPhotosOnly: true })(key)).toEqual([]);
         expect(hintsFor({ manualPhotosOnly: false })(key)).toEqual([]);
         expect(hintsFor({})(key)).toEqual([]);
     });
 
-    test('settings the switch leaves alone get no hint', () => {
-        expect(hintsFor({ manualPhotosOnly: true })('autoBoost')).toEqual([]);
-        expect(hintsFor({ manualPhotosOnly: true })('manualPhotosOnly')).toEqual([]);
+    test('the rule editor keeps its own hint', () => {
+        render(<SettingHintList hints={[manualPhotosOnlyHint(t, 'app.manualPhotosOnlyRuleHint')]} />);
+        expect(screen.getByText('app.manualPhotosOnlyRuleHint')).toBeTruthy();
     });
 });

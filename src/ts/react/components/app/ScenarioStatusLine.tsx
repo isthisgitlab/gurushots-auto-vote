@@ -141,10 +141,12 @@ export function ScenarioStatusLine({
         ? interp(t('app.scenarioStatusPhase'), { phase: status.phase })
         : interp(t('app.scenarioStatusNotStarted'), { phase: status.phase });
     const remaining = status.nextWakeAt ? status.nextWakeAt - now : null;
-    const next =
-        remaining !== null && remaining > 0
-            ? interp(t('app.scenarioStatusNext'), { time: formatDuration(remaining, { includeSeconds: true }) })
-            : null;
+    // Manual Only pauses the plan: no step runs and no check is due, so the line says so instead of a countdown.
+    const next = status.manualOnly
+        ? t(compact ? 'app.scenarioStatusPausedManualShort' : 'app.scenarioStatusPausedManual')
+        : remaining !== null && remaining > 0
+          ? interp(t('app.scenarioStatusNext'), { time: formatDuration(remaining, { includeSeconds: true }) })
+          : null;
 
     return (
         <div className={compact ? 'text-xs text-base-content/70' : 'text-xs bg-base-200 rounded p-2 space-y-1'}>

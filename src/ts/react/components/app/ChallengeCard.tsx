@@ -162,6 +162,7 @@ export function ChallengeCard({
                 turboStatus={view.turboStatus}
                 entries={view.entries}
                 pins={entryPins.pins}
+                manualOnly={view.manualOnly}
                 hasCompactOverride={hasCompactOverride}
                 onToggleCompact={toggleCompact}
                 boostWarning={boostWarning}

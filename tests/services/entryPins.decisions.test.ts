@@ -216,7 +216,7 @@ describe('a live pin blocks the other feature’s spend', () => {
         expect(VotingLogic.resolveBoostFillNewMode(challenge, '42')).toBe('no');
     });
 
-    test('Manual Photos Only never fills a fresh photo to resolve the conflict', () => {
+    test('Manual Only never fills a fresh photo to resolve the conflict', () => {
         setup(
             { turbo: 'aaa' },
             { boostNewSubmitOnConflict: true, turboNewSubmitOnConflict: true, manualPhotosOnly: true },

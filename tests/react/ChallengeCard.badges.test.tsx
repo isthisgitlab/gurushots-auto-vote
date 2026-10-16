@@ -154,7 +154,7 @@ describe('ChallengeCard badge row — logical/state badges', () => {
         expect(badgeByText(container, '📥 app.autoSubmitBadge')).toBeFalsy();
     });
 
-    test('Manual Photos Only shows its own badge in place of the auto-submit one', () => {
+    test('Manual Only shows its own badge in place of the auto-submit one', () => {
         mockChallengeSettings.autoSubmitEnabled = true;
         mockChallengeSettings.manualPhotosOnly = true;
         const { container } = renderCard(makeChallenge());
@@ -164,7 +164,7 @@ describe('ChallengeCard badge row — logical/state badges', () => {
         expect(badgeByText(container, '📥 app.autoSubmitBadge')).toBeFalsy();
     });
 
-    test('the manual-photos badge is absent while the switch is off', () => {
+    test('the manual-only badge is absent while the switch is off', () => {
         const { container } = renderCard(makeChallenge());
         expect(badgeByText(container, '✋ app.manualPhotosBadge')).toBeFalsy();
     });

@@ -385,7 +385,9 @@ describe('createCadenceChain', () => {
             start: 'main',
             phases: { main: { rules: [{ id: 'r', if: [{ type: 'inPhaseFor', min: '2m' }], do: [] }] } },
         };
-        const deps = makeDeps({ resolveScenarioWake: jest.fn(() => ({ scenario, state: null, timezone: 'UTC' })) });
+        // A started plan: an in-phase bound only counts against a phase clock that is running.
+        const state = { phase: 'main', phaseEnteredAt: now, fired: {}, memory: {}, inFlight: null };
+        const deps = makeDeps({ resolveScenarioWake: jest.fn(() => ({ scenario, state, timezone: 'UTC' })) });
         const chain = createCadenceChain(invalid(deps));
         await chain.scheduleNext(
             invalid([{ id: 6, title: 'Plan Later', type: 'regular', start_time: now - 60, close_time: now + 7200 }]),

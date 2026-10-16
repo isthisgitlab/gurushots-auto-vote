@@ -260,7 +260,7 @@ describe('runAutoSwap', () => {
         expect(ranking.swaps).toEqual([{ id: 'e2' }]);
     });
 
-    test('does nothing while Manual Photos Only is on, however auto-swap is set', async () => {
+    test('does nothing while Manual Only is on, however auto-swap is set', async () => {
         set({ manualPhotosOnly: true });
         const ctx = makeCtx();
         expect(await runAutoSwap(ctx)).toBe(false);

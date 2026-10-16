@@ -15,10 +15,10 @@ Usage: <command>
 Commands:
   login    - Authenticate with GuruShots and save token
   logout   - Clear the saved authentication token
-  vote     - Run one manual voting cycle (votes to 100% regardless of settings).
-             Add --challenge=<id> to manually vote a single challenge.
+  vote     - Run one manual voting cycle (votes to 100% regardless of settings; skips Manual Only challenges).
+             Add --challenge=<id> to manually vote a single challenge, which works on a Manual Only one too.
   run      - Run one full auto-strategy cycle (boost / turbo / auto-submit / threshold-aware vote).
-             Add --challenge=<id> to scope to a single challenge.
+             Add --challenge=<id> to scope to a single challenge; on a Manual Only challenge it does nothing.
   boost    - Apply a boost to a challenge: boost --challenge=<id> [--image=<id>]
   pin      - Pin the photo Boost and Turbo land on (timing is unchanged; none clears a pin; no flags lists them):
              pin --challenge=<id> [--boost=<imageId|none>] [--turbo=<imageId|none>]

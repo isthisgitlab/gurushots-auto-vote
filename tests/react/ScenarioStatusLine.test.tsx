@@ -35,6 +35,20 @@ test('a running plan: phase, next check and last problem (detail)', () => {
     expect(screen.getByRole('status').textContent).toBe('app.scenarioStatusProblem');
 });
 
+test.each([
+    [false, 'app.scenarioStatusPausedManual'],
+    [true, 'app.scenarioStatusPausedManualShort'],
+])('Manual Only pauses the plan: compact=%s says so in place of a countdown', (compact, key) => {
+    render(
+        <ScenarioStatusLine
+            compact={compact}
+            status={{ name: 'Plan', phase: 'main', started: true, lastError: null, manualOnly: true, nextWakeAt: null }}
+        />,
+    );
+    expect(screen.getByTitle('Plan').textContent).toBe(`🧭 Plan · app.scenarioStatusPhase · ${key}`);
+    expect(screen.queryByText(/scenarioStatusNext/)).toBeNull();
+});
+
 const unclear = (over: Partial<NonNullable<ScenarioSummary['spendUnclear']>> = {}): ScenarioSummary => ({
     name: 'Plan',
     phase: 'main',

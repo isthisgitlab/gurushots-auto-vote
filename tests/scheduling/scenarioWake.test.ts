@@ -6,6 +6,7 @@
 import type * as thresholdWindowModule from '../../src/ts/scheduling/thresholdWindow';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
+import type { ScenarioCondition } from '../../src/ts/types/scenario';
 import type { ScenarioEngineState } from '../../src/ts/types/scenario';
 import { invalid } from '../helpers/invalid';
 
@@ -24,6 +25,8 @@ const scenario: ScenarioDocument = {
     },
 };
 
+const startedMain = invalid<ScenarioEngineState>({ phase: 'main', phaseEnteredAt: NOW, fired: {}, memory: {} });
+
 const challenge = (id: number, overrides = {}): Challenge =>
     invalid<Challenge>({
         id,
@@ -34,10 +37,10 @@ const challenge = (id: number, overrides = {}): Challenge =>
     });
 
 describe('soonestScenarioWake', () => {
-    test('the soonest wake across challenges; a plan not started yet is judged from its start phase', async () => {
+    test('the soonest wake across challenges, each from the phase it is in', async () => {
         const resolve = jest.fn(async (id: string) =>
             id === '1'
-                ? { scenario, state: null, timezone: 'UTC' }
+                ? { scenario, state: startedMain, timezone: 'UTC' }
                 : {
                       scenario,
                       state: invalid<ScenarioEngineState>({
@@ -58,6 +61,41 @@ describe('soonestScenarioWake', () => {
         await expect(soonestScenarioWake([challenge(1)], NOW, resolve)).resolves.toEqual(
             expect.objectContaining({ challengeId: 1, startTime: NOW + 600, phase: 'main' }),
         );
+    });
+
+    describe('a plan that has not started has no phase clock', () => {
+        const timed = (condition: ScenarioCondition): ScenarioDocument => ({
+            name: 'Timed',
+            version: 1,
+            start: 'main',
+            phases: { main: { rules: [{ id: 'r', if: [condition], do: [{ type: 'fillExposure' }] }] } },
+        });
+        const inPhase: ScenarioCondition = { type: 'inPhaseFor', min: '10m' };
+        const beforeEnd: ScenarioCondition = { type: 'beforeEnd', max: '2h' };
+        const wakeOf = (doc: ScenarioDocument, state: ScenarioEngineState | null) =>
+            soonestScenarioWake([challenge(1)], NOW, () => ({ scenario: doc, state, timezone: 'UTC' }));
+
+        test.each([
+            ['bare', inPhase],
+            ['inside all', { type: 'all', of: [inPhase] } as ScenarioCondition],
+            ['inside any', { type: 'any', of: [inPhase] } as ScenarioCondition],
+            ['inside not', { type: 'not', condition: inPhase } as ScenarioCondition],
+        ])('an in-phase bound (%s) is no wake', async (_label, condition) => {
+            await expect(wakeOf(timed(condition), null)).resolves.toBeNull();
+        });
+
+        test('the same bound wakes a plan that has started', async () => {
+            await expect(wakeOf(timed(inPhase), startedMain)).resolves.toEqual(
+                expect.objectContaining({ startTime: NOW + 600 }),
+            );
+        });
+
+        test('its other bounds still produce a wake', async () => {
+            const doc = timed({ type: 'all', of: [inPhase, beforeEnd] });
+            await expect(wakeOf(doc, null)).resolves.toEqual(
+                expect.objectContaining({ startTime: NOW + 86400 - 7200, phase: 'main' }),
+            );
+        });
     });
 
     test('skips closed challenges, no-scenario challenges, throwing resolvers and nothing-pending plans', async () => {
@@ -84,7 +122,7 @@ describe('computeNextCycleDelayMs — scenario boundary', () => {
     test('caps the wait to the scenario wake and reports it', async () => {
         const result = await computeNextCycleDelayMs([challenge(1)], NOW, {
             ...base,
-            resolveScenarioWake: () => ({ scenario, state: null, timezone: 'UTC' }),
+            resolveScenarioWake: () => ({ scenario, state: startedMain, timezone: 'UTC' }),
         });
         expect(result.mode).toBe('scenario');
         expect(result.delayMs).toBe(600_000);

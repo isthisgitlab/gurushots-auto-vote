@@ -130,7 +130,9 @@ describe('runVotingCycle', () => {
         expect(mw.cliVoteManual).toHaveBeenCalled();
         expect(mw.cliVote).not.toHaveBeenCalled();
         expect(msgs('info')[0]).toBe('--- Manual Voting Cycle 2 (MOCK MODE) ---');
-        expect(msgs('info')).toContain('Mode: Manual (votes to 100% regardless of threshold settings)');
+        expect(msgs('info')).toContain(
+            'Mode: Manual (votes to 100% regardless of threshold settings; skips Manual Only challenges)',
+        );
         expect(logger.__calls.find((c) => c.level === 'startOperation')!.msg).toBe('manual-vote-cycle-2');
     });
 

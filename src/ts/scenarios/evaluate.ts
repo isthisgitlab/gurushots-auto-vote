@@ -27,6 +27,8 @@ export interface EvaluateInput {
     bankroll?: Bankroll | null;
     /** rules already fired in this pass */
     skipRuleIds?: Set<string>;
+    /** false for a plan that has not started: it has no phase clock, so no in-phase bound is a wake (nextWake.ts) */
+    phaseClock?: boolean;
 }
 
 /**
