@@ -302,3 +302,68 @@ describe('EntryBadge — error styling on button', () => {
         expect(button.className).not.toMatch(/btn-error/);
     });
 });
+
+describe('EntryBadge — layout: an info row, then an actions row', () => {
+    const renderBadge = (props = {}) =>
+        render(
+            <EntryBadge
+                timezone="local"
+                {...noCallbacks}
+                entry={baseEntry({ appEntered: { at: 1_792_420_000, exact: true } })}
+                challengeId={777}
+                boostAvailable={false}
+                turboAvailable={false}
+                {...props}
+            />,
+        );
+    const badge = (container: Element) => container.querySelector('.badge')!;
+
+    test('the badge is a left-aligned column', () => {
+        const { container } = renderBadge();
+        const { className } = badge(container);
+        for (const cls of ['flex-col', 'items-start', 'justify-start', 'text-left']) {
+            expect(className).toContain(cls);
+        }
+    });
+
+    test('the info row holds the rank and when it went in; the actions row holds the buttons', () => {
+        const { container } = renderBadge({ boostAvailable: true, turboAvailable: true, swapAvailable: true });
+        const [info, actions] = Array.from(badge(container).children);
+        expect(info.className).toContain('flex-wrap');
+        expect(info.textContent).toContain('app.rank');
+        expect(info.textContent).toContain('app.entrySubmitted');
+        expect(info.querySelector('button')).toBeNull();
+        expect(actions.className).toContain('flex-wrap');
+        expect(actions.className).toContain('gap-2');
+        const labels = Array.from(actions.querySelectorAll('button')).map((button) => button.textContent);
+        expect(labels).toEqual([
+            expect.stringContaining('app.boost'),
+            expect.stringContaining('app.turbo'),
+            expect.stringContaining('app.currencySwap'),
+        ]);
+        expect(actions.textContent).not.toContain('app.rank');
+    });
+
+    test('the swap-back button is in the actions row beside Swap', () => {
+        const { container } = renderBadge({
+            swapAvailable: true,
+            swapBack: { currentId: 'e1', previousId: 'old', previousMemberId: 'm', kind: 'boost' },
+        });
+        const actions = badge(container).children[1];
+        expect(actions.querySelectorAll('button')).toHaveLength(2);
+    });
+
+    test('no actions row renders when no action is available', () => {
+        const { container } = renderBadge();
+        expect(badge(container).children).toHaveLength(1);
+        expect(container.querySelector('button')).toBeNull();
+    });
+
+    test('a failed action’s message stays below both rows', () => {
+        mockBoostState.error = 'Boost failed';
+        const { container } = renderBadge({ boostAvailable: true });
+        const children = Array.from(badge(container).children);
+        expect(children).toHaveLength(3);
+        expect(children[2].getAttribute('role')).toBe('alert');
+    });
+});

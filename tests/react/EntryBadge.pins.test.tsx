@@ -74,9 +74,11 @@ describe('EntryBadge pin toggles', () => {
         expect(onToggle).toHaveBeenCalledWith('boost', 'e1');
     });
 
-    test('the entry badge wraps, so six buttons do not overflow a narrow screen', () => {
-        const { container } = renderBadge(controls());
-        expect(container.querySelector('.badge')!.className).toContain('flex-wrap');
+    test('the buttons sit in a wrapping actions row, so six of them do not overflow a narrow screen', () => {
+        renderBadge(controls(), { boostAvailable: true, swapAvailable: true });
+        const row = pinBoost()!.parentElement!;
+        expect(row.className).toContain('flex-wrap');
+        expect(row.className).toContain('gap-2');
     });
 
     test('both toggles show with a fixed name and text label, unpressed by default', () => {
@@ -139,11 +141,18 @@ describe('EntryBadge pin toggles', () => {
         expect(pinBoost()).not.toBeNull();
     });
 
-    test('the toggles sit in their own group apart from the Boost button', () => {
+    test('the toggles share the actions row with the Boost button, 8px apart, not beside the rank', () => {
         renderBadge(controls(), { boostAvailable: true });
-        const group = pinBoost()!.parentElement!;
-        expect(group.className).toContain('ml-2');
-        expect(group.contains(screen.getByRole('button', { name: /🚀/ }))).toBe(false);
+        const row = pinBoost()!.parentElement!;
+        expect(row.className).toContain('gap-2');
+        expect(row.contains(screen.getByRole('button', { name: /🚀/ }))).toBe(true);
+        expect(row.contains(screen.getByText(/app\.rank/))).toBe(false);
+    });
+
+    test('no actions row renders when no toggle shows', () => {
+        const { container } = renderBadge(controls({ canPin: { boost: false, turbo: false } }));
+        expect(pinBoost()).toBeNull();
+        expect(container.querySelector('.badge')!.children).toHaveLength(1);
     });
 });
 

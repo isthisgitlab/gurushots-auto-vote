@@ -69,26 +69,31 @@ function PinToggle({
 }
 
 /**
- * The pin toggles of one entry, grouped apart from the spend buttons by the same 8px step as Swap. A toggle shows
- * while its feature can still fire, and not on a photo that carries the other feature.
+ * Which pin toggles an entry shows: a toggle shows while its feature can still fire, and not on a photo that carries
+ * the other feature.
+ */
+const visiblePins = (pin: EntryPinControls | undefined, carriesBoost: boolean, carriesTurbo: boolean) => ({
+    boost: pin !== undefined && pin.canPin.boost && !carriesTurbo,
+    turbo: pin !== undefined && pin.canPin.turbo && !carriesBoost,
+});
+
+/**
+ * The pin toggles of one entry, direct children of the actions row so its gap keeps them apart from the spend buttons.
  */
 function PinToggles({
     entry,
     pin,
-    carriesBoost,
-    carriesTurbo,
+    showBoost,
+    showTurbo,
 }: {
     entry: RankingEntry;
     pin: EntryPinControls;
-    carriesBoost: boolean;
-    carriesTurbo: boolean;
+    showBoost: boolean;
+    showTurbo: boolean;
 }) {
     const imageId = String(entry.id);
-    const showBoost = pin.canPin.boost && !carriesTurbo;
-    const showTurbo = pin.canPin.turbo && !carriesBoost;
-    if (!showBoost && !showTurbo) return null;
     return (
-        <span className="ml-2 inline-flex flex-wrap items-center gap-2">
+        <>
             {showBoost && (
                 <PinToggle
                     kind="boost"
@@ -105,7 +110,7 @@ function PinToggles({
                     onToggle={() => pin.onToggle('turbo', imageId)}
                 />
             )}
-        </span>
+        </>
     );
 }
 
@@ -189,75 +194,81 @@ export function EntryBadge({
         if (result?.success) onTurboApplied();
     };
 
+    const pins = visiblePins(pin, isEntryBoosted, isEntryTurboed);
+    const hasActions = showBoostButton || showTurboButton || pins.boost || pins.turbo || swapAvailable;
+
     return (
-        // h-auto + py-1: a stock DaisyUI badge is ~20px tall, which would clip
-        // the thumbnail. Growing the badge keeps the chip, the text and the
-        // action buttons on one baseline. flex-wrap: up to six buttons, with longer
-        // translated labels, must not overflow a narrow (Android) width.
-        <div className={`badge badge-outline badge-sm ${entryTypeClass} flex h-auto flex-wrap items-center gap-1 py-1`}>
-            <EntryPhoto entry={entry} />
-            <span>{icon}</span>
-            <span>
-                {t('app.rank')} {entry.rank} ({entry.votes} {t('app.votes')})
-            </span>
-            <EntryTime time={entry.appEntered} timezone={timezone} />
-            {showBoostButton && (
-                <ActionButton
-                    variant="success"
-                    error={boostError}
-                    className="ml-1"
-                    onClick={() => void handleBoost()}
-                    disabled={boosting}
-                    aria-busy={boosting}
-                >
-                    <BusyContent busy={boosting} label={t('app.boost')}>
-                        {`🚀 ${t('app.boost')}`}
-                    </BusyContent>
-                </ActionButton>
-            )}
-            {showTurboButton && (
-                <ActionButton
-                    variant="warning"
-                    error={turboError}
-                    className="ml-1"
-                    onClick={() => void handleTurbo()}
-                    disabled={turboing}
-                    aria-busy={turboing}
-                >
-                    <BusyContent busy={turboing} label={t('app.turbo')}>
-                        {`⚡ ${t('app.turbo')}`}
-                    </BusyContent>
-                </ActionButton>
-            )}
-            {pin && <PinToggles entry={entry} pin={pin} carriesBoost={isEntryBoosted} carriesTurbo={isEntryTurboed} />}
-            {swapAvailable && (
-                // ml-2 + gap: keep Swap an 8px step away from Boost/Turbo so
-                // adjacent touch targets aren't flush on Android.
-                <span className="ml-2 inline-flex items-center gap-2">
-                    <SwapEntryButton
-                        entry={entry}
-                        challengeId={challengeId}
-                        bankroll={bankroll}
-                        warnActioned={isEntryActioned}
-                        warnPinned={pin?.livePin ?? null}
-                        onSpent={onSwapped}
-                        onChoose={onChooseSwap}
-                    />
-                    {swapBack && (
-                        <SwapBackButton
-                            entry={entry}
-                            swapBack={swapBack}
-                            challengeId={challengeId}
-                            bankroll={bankroll}
-                            onSpent={onSwapped}
-                        />
-                    )}
+        // Two left-aligned rows in a column: what the entry is (photo, rank, when it went in), then what can be done
+        // with it. DaisyUI's badge is an inline, centred flex row, so flex-col / items-start / text-left override it.
+        // h-auto + py-1: a stock badge is ~20px tall, which would clip the thumbnail. Each row wraps on its own, so
+        // up to six buttons with longer translated labels do not overflow a narrow (Android) width; the actions row's
+        // gap-2 keeps adjacent touch targets 8px apart.
+        <div
+            className={`badge badge-outline badge-sm ${entryTypeClass} flex h-auto flex-col items-start justify-start gap-1 px-2 py-1 text-left`}
+        >
+            <div className="flex flex-wrap items-center gap-1">
+                <EntryPhoto entry={entry} />
+                <span>{icon}</span>
+                <span>
+                    {t('app.rank')} {entry.rank} ({entry.votes} {t('app.votes')})
                 </span>
+                <EntryTime time={entry.appEntered} timezone={timezone} />
+            </div>
+            {hasActions && (
+                <div className="flex flex-wrap items-center gap-2">
+                    {showBoostButton && (
+                        <ActionButton
+                            variant="success"
+                            error={boostError}
+                            onClick={() => void handleBoost()}
+                            disabled={boosting}
+                            aria-busy={boosting}
+                        >
+                            <BusyContent busy={boosting} label={t('app.boost')}>
+                                {`🚀 ${t('app.boost')}`}
+                            </BusyContent>
+                        </ActionButton>
+                    )}
+                    {showTurboButton && (
+                        <ActionButton
+                            variant="warning"
+                            error={turboError}
+                            onClick={() => void handleTurbo()}
+                            disabled={turboing}
+                            aria-busy={turboing}
+                        >
+                            <BusyContent busy={turboing} label={t('app.turbo')}>
+                                {`⚡ ${t('app.turbo')}`}
+                            </BusyContent>
+                        </ActionButton>
+                    )}
+                    {pin && <PinToggles entry={entry} pin={pin} showBoost={pins.boost} showTurbo={pins.turbo} />}
+                    {swapAvailable && (
+                        <>
+                            <SwapEntryButton
+                                entry={entry}
+                                challengeId={challengeId}
+                                bankroll={bankroll}
+                                warnActioned={isEntryActioned}
+                                warnPinned={pin?.livePin ?? null}
+                                onSpent={onSwapped}
+                                onChoose={onChooseSwap}
+                            />
+                            {swapBack && (
+                                <SwapBackButton
+                                    entry={entry}
+                                    swapBack={swapBack}
+                                    challengeId={challengeId}
+                                    bankroll={bankroll}
+                                    onSpent={onSwapped}
+                                />
+                            )}
+                        </>
+                    )}
+                </div>
             )}
             {(boostError || turboError) && (
-                <InlineError className="ml-1" onDismiss={dismissError}>
-                    {ipcErrorText(boostError || turboError, t)}
-                </InlineError>
+                <InlineError onDismiss={dismissError}>{ipcErrorText(boostError || turboError, t)}</InlineError>
             )}
         </div>
     );
