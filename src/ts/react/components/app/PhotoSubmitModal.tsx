@@ -134,6 +134,8 @@ function PhotoSubmitBody({
     // sent. An idle one shows none: Auto's picks are ranked against the live challenge's eligible photos.
     const checking = preview || recheckFailed;
     const reading = state.status === 'loading' || revalidating;
+    // Whether the read on screen is one Load all started: only that one shows Load all as busy.
+    const [loadAllReading, setLoadAllReading] = useState(false);
     // Bumped by Load all to remount the search box empty, so it never shows a term the grid is not filtered by.
     const [searchKey, setSearchKey] = useState(0);
 
@@ -150,6 +152,17 @@ function PhotoSubmitBody({
     // The member of the last answer that named one: it survives the strip clearing, so picks keep their thumbnails.
     const [suggestedMemberId, setSuggestedMemberId] = useState<string | null>(null);
     const [suggestFailure, setSuggestFailure] = useState<string | null>(null);
+    // Every id picked in this opening, in first-pick order: while idle the grid keeps each one's tile in place
+    // when it is unpicked, so the tile (and the focus on it) stays and the pick can be made again. The state
+    // remembers the ids once they are unpicked; a pick is shown in the render that makes it.
+    const [idleSeen, setIdleSeen] = useState<string[]>([]);
+    useEffect(() => {
+        setIdleSeen((prev) => {
+            const added = selected.filter((id) => !prev.includes(id));
+            return added.length > 0 ? [...prev, ...added] : prev;
+        });
+    }, [selected]);
+    const idleShown = [...idleSeen, ...selected.filter((id) => !idleSeen.includes(id))];
     const suggestEpoch = useRef(0);
     useEffect(
         () => () => {
@@ -198,6 +211,7 @@ function PhotoSubmitBody({
 
     // After a Refresh answers, the pick is checked against the listing it brought, as after a refused submit.
     const refreshListing = () => {
+        setLoadAllReading(false);
         clearSuggestions();
         pruneFromRef.current = refresh();
     };
@@ -205,6 +219,7 @@ function PhotoSubmitBody({
     const submit = () => {
         void (async () => {
             if ((await onSubmit(selected)) === 'refreshed') {
+                setLoadAllReading(false);
                 clearSuggestions();
                 pruneFromRef.current = retry();
             }
@@ -273,7 +288,18 @@ function PhotoSubmitBody({
     let autoStatus = '';
     if (suggesting) autoStatus = t('app.pickAutoRunning');
     else if (suggested) autoStatus = interp(t('app.pickSuggestedCount'), { count: suggested.photos.length });
-    const search = <SearchForm key={searchKey} onSearch={(term) => void load(term)} />;
+    // Load all waits for any read, and for a submit, as Refresh does.
+    const loadAllHeld = reading || submitting;
+    const loadAllBusy = reading && loadAllReading;
+    const search = (
+        <SearchForm
+            key={searchKey}
+            onSearch={(term) => {
+                setLoadAllReading(false);
+                void load(term);
+            }}
+        />
+    );
     return (
         <div className="space-y-3">
             {notice && (
@@ -288,17 +314,18 @@ function PhotoSubmitBody({
                         <div className="min-w-48 flex-1">{search}</div>
                         <button
                             type="button"
-                            className={`btn btn-outline btn-sm ${reading ? 'btn-disabled' : ''}`}
+                            className={`btn btn-outline btn-sm ${loadAllHeld ? 'btn-disabled' : ''}`}
                             // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body>.
-                            aria-disabled={reading}
-                            aria-busy={reading}
+                            aria-disabled={loadAllHeld}
+                            aria-busy={loadAllBusy}
                             onClick={() => {
-                                if (reading) return;
+                                if (loadAllHeld) return;
+                                setLoadAllReading(true);
                                 setSearchKey((key) => key + 1);
                                 void load('');
                             }}
                         >
-                            <BusyContent busy={reading} label={t('app.pickLoadAll')}>
+                            <BusyContent busy={loadAllBusy} label={t('app.pickLoadAll')}>
                                 {t('app.pickLoadAll')}
                             </BusyContent>
                         </button>
@@ -374,6 +401,7 @@ function PhotoSubmitBody({
                 numbered={false}
                 extraPhotos={suggestedKnown}
                 idleMemberId={suggestedMemberId}
+                idleIds={idleShown}
             />
             <StickyModalFooter>
                 {alert}

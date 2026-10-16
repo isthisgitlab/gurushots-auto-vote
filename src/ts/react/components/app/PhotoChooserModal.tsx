@@ -296,10 +296,12 @@ function PendingTile({
     );
 }
 
+const TILE_GRID = 'grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4';
+
 /**
- * The library listing with its states: loading, an error with Retry, the
- * missing-challenge explanation, and the tiles (selected ones pinned first).
- * The defaults are the Chosen Photos list's: numbered, capped at MAX_CHOSEN_PHOTOS.
+ * The library listing with its states: idle (the not-loaded line, plus the tiles Auto named that were picked in
+ * this opening), loading, an error with Retry, the missing-challenge explanation, and the tiles (selected ones
+ * pinned first). The defaults are the Chosen Photos list's: numbered, capped at MAX_CHOSEN_PHOTOS.
  */
 export function PhotoGrid({
     state,
@@ -323,6 +325,7 @@ export function PhotoGrid({
     numbered = true,
     extraPhotos,
     idleMemberId = null,
+    idleIds,
 }: {
     state: ListState;
     known: Map<string, LibraryPhoto>;
@@ -360,29 +363,33 @@ export function PhotoGrid({
     extraPhotos?: ReadonlyMap<string, LibraryPhoto>;
     /** The member that owns the `extraPhotos`: with no listing read yet, the selected tiles take it for their thumbnails. */
     idleMemberId?: string | null;
+    /** The ids the idle grid shows, in place whether picked or not (default: the selected ones). */
+    idleIds?: string[];
 }) {
     const { t } = useTranslation();
     // Every won id this chooser has been told of: a search that no longer lists a chosen photo still knows it has won.
     const everWon = useRef(new Set<string>());
     if (state.status === 'idle') {
-        // Nothing is read yet: only what is picked is shown, from the records Auto brought, so a pick never goes invisible.
-        const picked = selected.flatMap((id) => extraPhotos?.get(id) ?? []);
+        // Nothing is read yet: only the photos Auto named that were picked are shown, from the records it brought,
+        // so a pick never goes invisible. An unpicked one keeps its place, so it can be picked again.
+        const chosenIdle = new Set(selected);
+        const shownIdle = (idleIds ?? selected).flatMap((id) => extraPhotos?.get(id) ?? []);
         return (
             <>
                 <p className="text-base-content/70 text-sm" role="status">
-                    {t('app.pickIdle')}
+                    {t(selected.length > 0 ? 'app.pickIdleWithPicks' : 'app.pickIdle')}
                 </p>
-                {picked.length > 0 && (
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-                        {picked.map((photo) => (
+                {shownIdle.length > 0 && (
+                    <div className={TILE_GRID}>
+                        {shownIdle.map((photo) => (
                             <PhotoTile
                                 key={photo.id}
                                 photo={photo}
                                 memberId={idleMemberId}
-                                selected
+                                selected={chosenIdle.has(photo.id)}
                                 position={null}
                                 blockedReason={null}
-                                atCap={false}
+                                atCap={selected.length >= max}
                                 fullKey={fullKey}
                                 allowedKnown={false}
                                 locked={locked}
@@ -480,7 +487,7 @@ export function PhotoGrid({
                     )}
                 </p>
             )}
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+            <div className={TILE_GRID}>
                 {/* Numbered 1, 2, 3… as shown: a photo left out (another account's) leaves no gap. */}
                 {selected.map((id) => {
                     const photo = lookup(id);

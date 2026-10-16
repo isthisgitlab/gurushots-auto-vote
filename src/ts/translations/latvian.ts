@@ -914,6 +914,8 @@ export const app = {
         'Šī poga sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem, arī ar vietējo attēlu pārbaudi. Nekas netiek iesniegts.',
     pickLoadAll: 'Ielādēt visus foto',
     pickIdle: 'Foto vēl nav ielādēti. Ielādē visus, meklē vai izmanto pogu „Automātiski”.',
+    pickIdleWithPicks:
+        'Izvēlētos foto var iesniegt jau tagad. Ielādē visus foto vai meklē, lai redzētu pārējo bibliotēku.',
     pickAutoRunning: 'Foto tiek sarindoti… tas var aizņemt minūti. Nekas netiek iesniegts.',
     pickSuggestedTitle: 'Ieteikumi',
     pickSuggestedCount: 'Ieteikumi: {count}',

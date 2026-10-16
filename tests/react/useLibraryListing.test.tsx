@@ -463,15 +463,15 @@ describe('onDemand', () => {
         expect(getLibrary().mock.calls).toEqual([[7, undefined, 'fresh']]);
     });
 
-    test('an answer that lands after unmounting is dropped', async () => {
+    test('a preview that lands after unmounting starts no re-check', async () => {
         const pending = deferred();
         getLibrary().mockReturnValueOnce(pending.promise);
-        const { result, unmount } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        const { result, unmount } = renderHook(() => useLibraryListing(7, { onDemand: true, alwaysFresh: true }));
         act(() => {
             void result.current.load('');
         });
-        unmount();
-        await act(async () => pending.resolve(answer()));
+        act(() => unmount());
+        await act(async () => pending.resolve(previewAnswer()));
         expect(getLibrary()).toHaveBeenCalledTimes(1);
     });
 

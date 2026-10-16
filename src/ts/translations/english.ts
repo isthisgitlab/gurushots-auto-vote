@@ -902,6 +902,8 @@ export const app = {
         'Auto ranks your photos by your auto-submit rules, including the local image check. Nothing is submitted.',
     pickLoadAll: 'Load all photos',
     pickIdle: 'Photos are not loaded yet. Load them all, search, or press Auto.',
+    pickIdleWithPicks:
+        'Your picks can be submitted as they are. Load all photos or search to see the rest of your library.',
     pickAutoRunning: 'Ranking your photos… this can take a minute. Nothing is submitted.',
     pickSuggestedTitle: 'Suggestions',
     pickSuggestedCount: 'Suggestions: {count}',

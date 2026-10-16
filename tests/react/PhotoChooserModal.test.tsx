@@ -489,13 +489,15 @@ describe('selection', () => {
         test('with no picks it says nothing is loaded and shows no tile', () => {
             grid({ extraPhotos: extra });
             expect(idleLine().getAttribute('role')).toBe('status');
+            expect(idleLine().textContent).toBe('Photos are not loaded yet. Load them all, search, or press Auto.');
             expect(screen.queryByRole('button')).toBeNull();
         });
 
         test('a pick found in extraPhotos shows as a pressed, unnumbered tile with the idle member’s thumbnail and toggles', () => {
             const onToggle = jest.fn();
             grid({ selected: [idOf(2)], extraPhotos: extra, idleMemberId: MEMBER, onToggle });
-            expect(idleLine()).toBeTruthy();
+            expect(screen.getByText(/^Your picks can be submitted as they are/).getAttribute('role')).toBe('status');
+            expect(screen.queryByText(/^Photos are not loaded yet/)).toBeNull();
             expect(screen.getAllByRole('button')).toHaveLength(1);
             expect(tile(2).getAttribute('aria-pressed')).toBe('true');
             expect(tile(2).querySelector('.badge')).toBeNull();
@@ -505,6 +507,21 @@ describe('selection', () => {
             expect(onToggle).toHaveBeenCalledWith(idOf(2));
         });
 
+        test('idleIds keeps an unpicked tile in place, offered again while there is room and held at the cap', () => {
+            const onToggle = jest.fn();
+            const props = { selected: [idOf(2)], idleIds: [idOf(1), idOf(2)], extraPhotos: extra, onToggle };
+            const { unmount } = grid({ ...props, max: 3 });
+            expect(screen.getAllByRole('button')).toHaveLength(2);
+            expect(tile(1).getAttribute('aria-pressed')).toBe('false');
+            expect(tile(1).getAttribute('aria-disabled')).toBe('false');
+            fireEvent.click(tile(1));
+            expect(onToggle).toHaveBeenCalledWith(idOf(1));
+            unmount();
+            grid({ ...props, max: 1 });
+            expect(tile(1).getAttribute('aria-disabled')).toBe('true');
+            expect(tile(2).getAttribute('aria-disabled')).toBe('false');
+        });
+
         test('a pick missing from extraPhotos renders nothing', () => {
             grid({ selected: [idOf(9)], extraPhotos: extra });
             expect(screen.queryByRole('button')).toBeNull();
@@ -512,7 +529,7 @@ describe('selection', () => {
 
         test('without extraPhotos a pick renders nothing', () => {
             grid({ selected: [idOf(1)] });
-            expect(idleLine()).toBeTruthy();
+            expect(screen.getByText(/^Your picks can be submitted as they are/)).toBeTruthy();
             expect(screen.queryByRole('button')).toBeNull();
         });
     });

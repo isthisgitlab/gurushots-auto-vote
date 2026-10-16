@@ -1091,10 +1091,13 @@ describe('Pick… loads photos on demand', () => {
     };
     const strip = () => screen.queryByRole('region', { name: 'Suggestions' });
     // The tile in the grid: the strip's tile of the same photo has the same name.
-    const idleTile = (n: number) =>
-        screen
+    const idleTile = (n: number) => {
+        const found = screen
             .getAllByRole('button', { name: new RegExp(`^Photo ${shortOf(n)}:`) })
-            .find((el) => !strip()?.contains(el)) as HTMLElement;
+            .find((el) => !strip()?.contains(el));
+        expect(found).toBeDefined();
+        return found!;
+    };
     const pickFromStrip = (n: number) =>
         fireEvent.click(
             within(screen.getByRole('region', { name: 'Suggestions' })).getByRole('button', {
@@ -1107,6 +1110,7 @@ describe('Pick… loads photos on demand', () => {
         expect(getLibrary()).not.toHaveBeenCalled();
         expect(idleLine()?.getAttribute('role')).toBe('status');
         expect(loadAllButton().getAttribute('aria-disabled')).toBe('false');
+        expect(idleLine()?.textContent).toBe('Photos are not loaded yet. Load them all, search, or press Auto.');
         expect(screen.getByRole('button', { name: 'Search' })).toBeTruthy();
         expect(autoButton()).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Refresh photos' })).toBeNull();
@@ -1161,7 +1165,11 @@ describe('Pick… loads photos on demand', () => {
         const refreshed = deferred<Answer>();
         getLibrary().mockReturnValueOnce(refreshed.promise);
         fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
-        await waitFor(() => expect(loadAllButton().getAttribute('aria-busy')).toBe('true'));
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: 'Refresh photos' }).getAttribute('aria-busy')).toBe('true'),
+        );
+        expect(loadAllButton().getAttribute('aria-disabled')).toBe('true');
+        expect(loadAllButton().getAttribute('aria-busy')).toBe('false');
         loadAll();
         expect(getLibrary()).toHaveBeenCalledTimes(3);
         await act(async () => refreshed.resolve(listing([photo(1)])));
@@ -1187,12 +1195,46 @@ describe('Pick… loads photos on demand', () => {
         setup({ suggest: true });
         fireEvent.change(searchBox(), { target: { value: 'sun' } });
         fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-        await waitFor(() => expect(loadAllButton().getAttribute('aria-busy')).toBe('true'));
+        await waitFor(() => expect(loadAllButton().getAttribute('aria-disabled')).toBe('true'));
+        // The read is the Search's, not Load all's: Load all is held but does not show itself busy.
+        expect(loadAllButton().getAttribute('aria-busy')).toBe('false');
         loadAll();
         expect(searchBox().value).toBe('sun');
         expect(getLibrary()).toHaveBeenCalledTimes(1);
         await act(async () => searching.resolve(listing([photo(1)])));
         await opened();
+    });
+
+    test('while a submit is in flight Load all is held and sends no read', async () => {
+        const { update } = setup({ suggest: true });
+        update({ submitting: true });
+        expect(loadAllButton().getAttribute('aria-disabled')).toBe('true');
+        loadAll();
+        expect(getLibrary()).not.toHaveBeenCalled();
+        update({ submitting: false });
+        expect(loadAllButton().getAttribute('aria-disabled')).toBe('false');
+        loadAll();
+        await opened();
+    });
+
+    test('after Load all landed, a later Search read leaves Load all held but not busy', async () => {
+        setup({ suggest: true });
+        await loadedAll();
+        getLibrary().mockReturnValueOnce(deferred<Answer>().promise);
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+        await waitFor(() => expect(loadAllButton().getAttribute('aria-disabled')).toBe('true'));
+        expect(loadAllButton().getAttribute('aria-busy')).toBe('false');
+    });
+
+    test('after Load all landed, the read of a refreshed submit leaves Load all held but not busy', async () => {
+        const onSubmit = jest.fn<Promise<PickOutcome>, [string[]]>().mockResolvedValue('refreshed');
+        setup({ suggest: true, onSubmit });
+        await loadedAll();
+        fireEvent.click(tile(1));
+        getLibrary().mockReturnValueOnce(deferred<Answer>().promise);
+        fireEvent.click(submitButton());
+        await waitFor(() => expect(loadAllButton().getAttribute('aria-disabled')).toBe('true'));
+        expect(loadAllButton().getAttribute('aria-busy')).toBe('false');
     });
 
     test('Search reads the library without Load all', async () => {
@@ -1222,12 +1264,17 @@ describe('Pick… loads photos on demand', () => {
         expect(inGrid.getAttribute('aria-pressed')).toBe('true');
         expect(inGrid.querySelector('img')?.getAttribute('src')).toContain(MEMBER);
         expect(inGrid.querySelector('.badge')).toBeNull();
-        fireEvent.click(inGrid);
-        expect(inGrid.isConnected).toBe(false);
-        expect(countLine().textContent).toBe('Picked: 0/3 open slots');
+        expect(idleLine()).toBeNull();
+        expect(
+            screen
+                .getByText(
+                    'Your picks can be submitted as they are. Load all photos or search to see the rest of your library.',
+                )
+                .getAttribute('role'),
+        ).toBe('status');
     });
 
-    test('a second Auto that fails leaves the pick on screen and removable', async () => {
+    test('a second Auto that fails clears the strip; unpicking the tile leaves it in place, focused and pickable again', async () => {
         setup({ suggest: true });
         await auto([photo(9), photo(1)]);
         pickFromStrip(9);
@@ -1236,9 +1283,32 @@ describe('Pick… loads photos on demand', () => {
         await screen.findByRole('alert');
         expect(screen.queryByRole('region', { name: 'Suggestions' })).toBeNull();
         expect(idleTile(9).getAttribute('aria-pressed')).toBe('true');
-        fireEvent.click(idleTile(9));
+        const kept = idleTile(9);
+        kept.focus();
+        fireEvent.click(kept);
         expect(countLine().textContent).toBe('Picked: 0/3 open slots');
-        expect(screen.queryByRole('button', { name: /^Photo 00000009:/ })).toBeNull();
+        expect(idleTile(9)).toBe(kept);
+        expect(kept.getAttribute('aria-pressed')).toBe('false');
+        expect(document.activeElement).toBe(kept);
+        expect(idleLine()).toBeTruthy();
+        fireEvent.click(kept);
+        expect(kept.getAttribute('aria-pressed')).toBe('true');
+        expect(countLine().textContent).toBe('Picked: 1/3 open slots');
+    });
+
+    test('an unpicked idle tile is offered again only while there is room', async () => {
+        setup({ suggest: true, max: 2 });
+        await auto([photo(9), photo(1), photo(2)]);
+        pickFromStrip(9);
+        suggestPhotos().mockResolvedValueOnce(invalid<Suggestion>({ success: false, error: 'no-match' }));
+        fireEvent.click(autoButton());
+        await screen.findByRole('alert');
+        fireEvent.click(idleTile(9));
+        await auto([photo(1), photo(2)]);
+        pickFromStrip(1);
+        pickFromStrip(2);
+        expect(idleTile(9).getAttribute('aria-pressed')).toBe('false');
+        expect(idleTile(9).getAttribute('aria-disabled')).toBe('true');
     });
 
     test('a second Auto with a different ranking still shows the earlier pick', async () => {
