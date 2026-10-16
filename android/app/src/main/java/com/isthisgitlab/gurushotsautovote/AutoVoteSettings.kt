@@ -60,7 +60,8 @@ object AutoVoteSettings {
             )
         }
     } catch (t: Throwable) {
-        Log.e(TAG, "Failed to parse settings JSON", t)
+        // Never the exception or its message: a JSONException's message quotes the input, which holds the token.
+        Log.e(TAG, "Failed to parse settings JSON (${t.javaClass.simpleName})")
         empty()
     }
 

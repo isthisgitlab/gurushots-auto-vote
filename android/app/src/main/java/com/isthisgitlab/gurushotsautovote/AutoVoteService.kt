@@ -200,6 +200,20 @@ class AutoVoteService : Service() {
             Log.i(TAG, "handleStart called but service already running")
             return
         }
+        // A wipe held the service's writes back; this start is the user's, after it. The WebView of the run the wipe
+        // stopped may still be around, with a cycle in it, so it is released first: the hold is lifted only once
+        // nothing of the old run can write: its WebView, and with it the watchdog and the wake lock of the cycle that was
+        // in it, which would otherwise end the new run's first cycle early. A restart without a wipe reuses the WebView.
+        if (SideStores.isWiping()) {
+            mainHandler.removeCallbacks(cycleWatchdog)
+            cycleWakeLock?.let { if (it.isHeld) it.release() }
+            cycleWakeLock = null
+            cycleDone.set(true)
+            webView?.destroy()
+            webView = null
+            pageReady = false
+            SideStores.resume()
+        }
         isRunning = true
         cycleCount = 0
         lastError = null
@@ -253,7 +267,7 @@ class AutoVoteService : Service() {
             Log.i(TAG, "Cycle ${cycleCount + 1} starting (JS)")
             // ensureWebView() above set it on this (main) thread, and it is only
             // cleared on the main thread too (releaseResources' posted block,
-            // onDestroy), so it can't be null here.
+            // handleStart after a wipe, onDestroy), so it can't be null here.
             webView!!.evaluateJavascript(
                 "(function(){try{" +
                     "if(window.GS&&window.GS.runOneCycle){window.GS.runOneCycle();}" +
@@ -521,7 +535,8 @@ class AutoVoteService : Service() {
          */
         @android.webkit.JavascriptInterface
         fun compareAndWriteKey(key: String, expected: String?, data: String): Boolean =
-            SideStores.compareAndSet(this@AutoVoteService, key, expected, data).outcome == SideStores.Outcome.SAVED
+            SideStores.compareAndSet(this@AutoVoteService, key, expected, data, fromService = true).outcome ==
+                SideStores.Outcome.SAVED
 
         @Volatile private var writeRefusal = ""
 
@@ -534,7 +549,7 @@ class AutoVoteService : Service() {
          */
         @android.webkit.JavascriptInterface
         fun write(data: String): Boolean {
-            val result = SideStores.compareAndSet(this@AutoVoteService, CONFIG_KEY, lastRead, data)
+            val result = SideStores.compareAndSet(this@AutoVoteService, CONFIG_KEY, lastRead, data, fromService = true)
             val saved = result.outcome == SideStores.Outcome.SAVED
             if (saved) lastRead = data
             writeRefusal = when (result.outcome) {
@@ -561,7 +576,8 @@ class AutoVoteService : Service() {
                 delay = o.optLong("nextDelayMs", -1L)
                 lastError = if (o.has("error") && o.optString("error", "").isNotEmpty()) o.optString("error") else null
             } catch (t: Throwable) {
-                Log.w(TAG, "Bad onCycleComplete payload", t)
+                // Never the exception or its message: a JSONException's message quotes the payload.
+                Log.w(TAG, "Bad onCycleComplete payload (${t.javaClass.simpleName})")
             }
             // lastError is JS-supplied, possibly API-derived text: log only its
             // presence. The headless JS already logs the detail through the
@@ -807,9 +823,38 @@ internal object SideStores {
             ORIGINAL_SETTINGS_KEY
         )
 
+    // Set by [wipe], cleared by [resume] (the service's next start): while set, the background service's bridge cannot
+    // write, so a cycle already inside the headless WebView cannot bring back what the wipe deleted (a side store, or
+    // the configuration through a compare-and-set against the now-empty value). The app window's own writes (the
+    // plugin's) are not held back: they are the user's, and the app is used again right after a wipe.
+    @Volatile
+    private var wiping = false
+
+    /** Deletes everything in the file and holds the service's writes back until [resume]; one lock with every write. */
+    @Synchronized
+    fun wipe(context: Context): Boolean {
+        wiping = true
+        return prefs(context).edit().clear().commit()
+    }
+
+    /** Whether a wipe is holding the service's writes back. */
+    fun isWiping(): Boolean = wiping
+
+    /** Lets the service write again (it is starting). */
+    fun resume() {
+        wiping = false
+    }
+
+    private fun refusedByWipe(name: String): Boolean {
+        val refused = wiping
+        if (refused) Log.w(AutoVoteService.TAG, "Refusing to persist $name blob: local data was just deleted")
+        return refused
+    }
+
     @Synchronized
     fun write(context: Context, key: String, data: String): Boolean {
         val name = names[key] ?: return false
+        if (refusedByWipe(name)) return false
         if (key in compareAndSetOnly) {
             Log.w(AutoVoteService.TAG, "Refusing a plain write of $name blob: it is changed by compare-and-set only")
             return false
@@ -819,10 +864,20 @@ internal object SideStores {
         return commit(prefs, key, prefs.getString(key, null), data)
     }
 
-    /** @param expected what the caller read; null or empty: nothing was stored */
+    /**
+     * @param expected what the caller read; null or empty: nothing was stored
+     * @param fromService the background service's bridge is writing, which a wipe holds back until its next start
+     */
     @Synchronized
-    fun compareAndSet(context: Context, key: String, expected: String?, data: String): Result {
+    fun compareAndSet(
+        context: Context,
+        key: String,
+        expected: String?,
+        data: String,
+        fromService: Boolean = false
+    ): Result {
         val name = names[key] ?: return Result(Outcome.REFUSED, null)
+        if (fromService && refusedByWipe(name)) return Result(Outcome.REFUSED, null)
         if (tooLarge(name, data, maxBytes(key))) return Result(Outcome.TOO_LARGE, null)
         if (!isJsonObject(name, data)) return Result(Outcome.REFUSED, null)
         val prefs = prefs(context)

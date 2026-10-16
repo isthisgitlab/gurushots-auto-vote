@@ -1,12 +1,16 @@
 package com.isthisgitlab.gurushotsautovote
 
 import android.content.Context
+import android.util.Log
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowLog
 
 @RunWith(RobolectricTestRunner::class)
 class AutoVoteSettingsTest {
@@ -38,6 +42,20 @@ class AutoVoteSettingsTest {
     fun malformedConfigurationFallsBackToDefaults() {
         TestSupport.writeConfig(context, "{not json")
         assertEquals(defaults, AutoVoteSettings.read(context))
+    }
+
+    @Test
+    fun aParseFailureLogsOnlyTheExceptionClassNeverTheStoredText() {
+        ShadowLog.clear()
+        // The configuration holds the token: a JSONException's message quotes the text it could not parse.
+        TestSupport.writeConfig(context, """{"token":"s3cr3t-token","apiHeaders":{"x":"s3cr3t-header"""")
+
+        assertEquals(defaults, AutoVoteSettings.read(context))
+
+        val errors = ShadowLog.getLogs().filter { it.type == Log.ERROR }
+        assertEquals(listOf("Failed to parse settings JSON (JSONException)"), errors.map { it.msg })
+        assertNull(errors.single().throwable)
+        assertFalse(ShadowLog.getLogs().any { "s3cr3t" in it.msg || it.throwable?.message?.contains("s3cr3t") == true })
     }
 
     @Test

@@ -116,7 +116,9 @@ class AutoVotePlugin : Plugin() {
         val updates = File(ctx.cacheDir, "updates")
         // Every step runs, whether or not an earlier one failed.
         val stateGone = ServiceState.clear(ctx)
-        val storageGone = ctx.getSharedPreferences(SideStores.PREFS_FILE, Context.MODE_PRIVATE).edit().clear().commit()
+        // Under the lock every write takes, and holding the service's writes back: a cycle already running cannot put back
+        // what this clears.
+        val storageGone = SideStores.wipe(ctx)
         val updatesGone = !updates.exists() || updates.deleteRecursively()
         val filesGone = stateGone and storageGone and updatesGone
         // WebView storage is touched on the main thread, the one the WebView lives on.

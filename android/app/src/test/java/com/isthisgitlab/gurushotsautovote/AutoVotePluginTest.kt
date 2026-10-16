@@ -53,6 +53,7 @@ class AutoVotePluginTest {
         AutoVoteService.lastRunAtMillis = 0L
         AutoVoteService.lastError = null
         ServiceState.clear(app)
+        SideStores.resume()
         AutoVotePlugin.newWebView = { WebView(it) }
     }
 
@@ -276,6 +277,10 @@ class AutoVotePluginTest {
         assertEquals(ServiceState.Status(false, 0, 0L, null), ServiceState.status(app))
         assertTrue(prefs.all.isEmpty())
         assertFalse(updates.exists())
+        // What the background service still has in flight cannot put anything back.
+        assertFalse(SideStores.write(app, "gs_scenario_state", "{}"))
+        assertEquals(SideStores.Outcome.REFUSED, SideStores.compareAndSet(app, "gurushots-config", null, "{}", fromService = true).outcome)
+        assertTrue(prefs.all.isEmpty())
     }
 
     @Test

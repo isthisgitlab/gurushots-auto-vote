@@ -10,6 +10,7 @@ import android.app.Service
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import android.content.pm.ApplicationInfo
 import android.content.pm.ServiceInfo
 import android.net.Uri
@@ -38,6 +39,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -94,6 +96,7 @@ class AutoVoteServiceTest {
         AutoVoteService.lastRunAtMillis = 0L
         AutoVoteService.lastError = null
         ServiceState.clear(app)
+        SideStores.resume()
     }
 
     // ---------- helpers ----------
@@ -474,6 +477,44 @@ class AutoVoteServiceTest {
         assertFalse(store.compareAndWriteKey("gs_join_state", "{\"a\":1,\"b\":1}", "{} x"))
         // A plain write is held to the same size and shape.
         assertFalse(store.writeKey("gs_join_state", "{} x"))
+    }
+
+    @Test
+    fun aWipeHoldsTheBridgeWritesBackUntilTheServiceStartsAgain() {
+        val store = newService().HeadlessStore()
+        TestSupport.writeConfig(app, """{"version":2,"token":"secret"}""")
+        assertTrue(store.writeKey("gs_scenario_state", "{\"7\":{}}"))
+        assertEquals("""{"version":2,"token":"secret"}""", store.read())
+
+        // A cycle that is already inside the headless page when the wipe lands.
+        assertTrue(SideStores.wipe(app))
+        ShadowLog.clear()
+        assertFalse(store.writeKey("gs_scenario_state", "{\"7\":{}}"))
+        assertFalse(store.compareAndWriteKey("gs_join_state", null, "{\"a\":1}"))
+        assertFalse(store.write("""{"version":2,"token":"secret"}"""))
+        assertEquals("refused", store.lastWriteRefusal())
+
+        assertNull(store.readKey("gs_scenario_state"))
+        assertNull(store.readKey("gs_join_state"))
+        assertNull(TestSupport.readConfig(app))
+        assertTrue(app.getSharedPreferences(SideStores.PREFS_FILE, Context.MODE_PRIVATE).all.isEmpty())
+        assertEquals(
+            listOf(
+                "Refusing to persist scenario state blob: local data was just deleted",
+                "Refusing to persist join-state blob: local data was just deleted",
+                "Refusing to persist config blob: local data was just deleted",
+            ),
+            ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
+        )
+
+        // The app window's own writes are the user's: the plugin is not held back (it logs in again after a wipe).
+        assertEquals(SideStores.Outcome.SAVED, SideStores.compareAndSet(app, "gurushots-config", null, "{\"version\":2}").outcome)
+
+        // The next start lifts the hold.
+        TestSupport.writeConfig(app, null)
+        newService().command(AutoVoteService.ACTION_START)
+        assertTrue(store.writeKey("gs_scenario_state", "{\"7\":{}}"))
+        assertTrue(store.compareAndWriteKey("gs_join_state", null, "{\"a\":1}"))
     }
 
     @Test
@@ -879,6 +920,56 @@ class AutoVoteServiceTest {
     }
 
     @Test
+    fun aBadCycleReportLogsOnlyTheExceptionClassNeverThePayload() {
+        val svc = startedAndReady()
+        runCycle(svc)
+        ShadowLog.clear()
+
+        // A JSONException's message quotes the text it could not parse.
+        svc.HeadlessBridge().onCycleComplete("""{"error":"s3cr3t-detail""")
+
+        val warnings = ShadowLog.getLogsForTag(AutoVoteService.TAG).filter { it.type == Log.WARN }
+        assertEquals(listOf("Bad onCycleComplete payload (JSONException)"), warnings.map { it.msg })
+        assertNull(warnings.single().throwable)
+        assertFalse(ShadowLog.getLogs().any { "s3cr3t" in it.msg || it.throwable?.message?.contains("s3cr3t") == true })
+    }
+
+    @Test
+    fun aStartWhileRunningDoesNotLiftTheHoldAWipePlaced() {
+        val svc = startedAndReady()
+        val store = svc.HeadlessStore()
+        assertTrue(SideStores.wipe(app))
+
+        // The service is still running (the wipe's stop has not landed): this START is not a fresh one.
+        assertTrue(AutoVoteService.isRunning)
+        svc.command(AutoVoteService.ACTION_START)
+
+        assertFalse(store.writeKey("gs_scenario_state", "{\"7\":{}}"))
+    }
+
+    @Test
+    fun aFreshStartReleasesTheOldWebViewBeforeItLiftsTheHoldAWipePlaced() {
+        val svc = startedAndReady()
+        val store = svc.HeadlessStore()
+        val old = svc.webView()!!
+        // A cycle whose timed wake lock the OS already released.
+        runCycle(svc)
+        ShadowPowerManager.getLatestWakeLock().release()
+        // What the plugin's wipe does: stops the run and holds the writes back; the old instance's WebView is still there.
+        AutoVoteService.isRunning = false
+        assertTrue(SideStores.wipe(app))
+        assertFalse(store.writeKey("gs_scenario_state", "{\"7\":{}}"))
+
+        svc.command(AutoVoteService.ACTION_START)
+
+        assertTrue(shadowOf(old).wasDestroyCalled())
+        assertTrue(store.writeKey("gs_scenario_state", "{\"7\":{}}"))
+        idle()
+        // The new run has a WebView of its own.
+        assertTrue(svc.webView() !== old)
+    }
+
+    @Test
     fun outOfBandDelaysFallBackToConfiguredInterval() {
         settings("""{"checkFrequencyMin":5}""")
         val svc = startedAndReady()
@@ -1000,6 +1091,42 @@ class AutoVoteServiceTest {
         assertFalse(wakeLock.isHeld)
         assertTrue(notificationText()!!.endsWith(": Timed out — will retry"))
         assertAlarmIn(3 * MINUTE)
+    }
+
+    @Test
+    fun aFreshStartAfterAWipeLeavesNothingOfTheOldCycleToEndTheNewOne() {
+        val svc = startedAndReady()
+        runCycle(svc)
+        val oldWakeLock = ShadowPowerManager.getLatestWakeLock()
+        assertTrue(oldWakeLock.isHeld)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(60))
+
+        // The wipe stops the run while that cycle is still in its WebView; the START that follows is a fresh one.
+        AutoVoteService.isRunning = false
+        assertTrue(SideStores.wipe(app))
+        svc.command(AutoVoteService.ACTION_START)
+        idle()
+        assertFalse(oldWakeLock.isHeld)
+        val wv = svc.webView()!!
+        shadowOf(wv).webViewClient.onPageFinished(wv, HEADLESS_URL)
+        clearAlarms()
+
+        runCycle(svc)
+        val newWakeLock = ShadowPowerManager.getLatestWakeLock()
+        assertTrue(newWakeLock.isHeld)
+        assertNotSame(oldWakeLock, newWakeLock)
+
+        // Past the old cycle's 120 s watchdog: it must not end the new cycle.
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(61))
+        assertNull(AutoVoteService.lastError)
+        assertEquals(0, AutoVoteService.cycleCount)
+        assertTrue(newWakeLock.isHeld)
+
+        // The new cycle still has a watchdog of its own.
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(60))
+        assertEquals("cycle-timeout", AutoVoteService.lastError)
+        assertEquals(1, AutoVoteService.cycleCount)
+        assertFalse(newWakeLock.isHeld)
     }
 
     @Test
