@@ -173,7 +173,7 @@ describe('runSuspendBoosts — target rule', () => {
         expect(api.applyBoostToEntry).toHaveBeenCalledWith('101', 'p1', 'tok');
         expect(api.applyBoost).not.toHaveBeenCalled();
         expect(autoFill.reflectEntryFlag).toHaveBeenCalledWith(challenge, 'p1', 'boosted');
-        expect(clear).toHaveBeenCalledWith(101, expect.any(Number));
+        expect(clear).toHaveBeenCalledWith(101, 'p1', expect.any(Number));
     });
 
     test('fill-new with no pending photo boosts the existing entry, says why, and never submits', async () => {

@@ -105,11 +105,11 @@ describe('entry-age ledger', () => {
         expect(ledger.pending(1)).toBe('fresh');
         expect(ledger.enteredAt(1, 'fresh')).toBe(NOW);
 
-        ledger.clearPending(1, NOW + 120);
+        ledger.clearPending(1, 'fresh', NOW + 120);
         expect(ledger.pending(1)).toBeNull();
         expect(ledger.enteredAt(1, 'fresh')).toBe(NOW);
-        ledger.clearPending(1, NOW + 180);
-        ledger.clearPending(9, NOW + 180);
+        ledger.clearPending(1, 'fresh', NOW + 180);
+        ledger.clearPending(9, 'fresh', NOW + 180);
         expect(ledger.pending(9)).toBeNull();
     });
 
@@ -197,7 +197,8 @@ describe('entry-age ledger', () => {
         const warning = jest.fn();
         jest.mocked(logger.withCategory).mockReturnValueOnce(invalid({ warning }));
         expect(createEntryAgeLedger(rawStore('{nope')).pending(1)).toBeNull();
-        expect(warning).toHaveBeenCalled();
+        // A fixed reason: the message of a parse error quotes the text, which holds member and image ids.
+        expect(warning).toHaveBeenCalledWith('entry-age ledger unreadable (not JSON)', null);
 
         const plainThrow = jest.fn();
         jest.mocked(logger.withCategory).mockReturnValueOnce(invalid({ warning: plainThrow }));
@@ -208,7 +209,7 @@ describe('entry-age ledger', () => {
             writeRaw: jest.fn(),
         });
         expect(throwing.enteredAt(1, 'a')).toBeNull();
-        expect(plainThrow).toHaveBeenCalledWith(expect.stringContaining('plain'), null);
+        expect(plainThrow).toHaveBeenCalledWith('entry-age ledger unreadable (read failed: not an error)', null);
 
         expect(createEntryAgeLedger(rawStore('[]')).pending(1)).toBeNull();
         expect(createEntryAgeLedger(rawStore('null')).pending(1)).toBeNull();
@@ -227,6 +228,31 @@ describe('entry-age ledger', () => {
         expect(malformed.enteredAt(2, 'a')).toBeNull();
         expect(malformed.enteredAt(5, 'a')).toBe(NOW);
         expect(malformed.pending(5)).toBe('a');
+    });
+
+    test('a pending id that is not a non-empty string reads as none', () => {
+        const stored = (pending: unknown) =>
+            createEntryAgeLedger(
+                rawStore(JSON.stringify({ 1: { closeTime: NOW + 60, entered: { a: NOW }, pending } })),
+            ).pending(1);
+        expect(stored(12)).toBeNull();
+        expect(stored('')).toBeNull();
+        expect(stored(['a'])).toBeNull();
+        expect(stored(undefined)).toBeNull();
+        expect(stored('a')).toBe('a');
+    });
+
+    test('a listing with no entries does not replace a record that has some; one that has none takes it', () => {
+        const store = rawStore(null);
+        const ledger = createEntryAgeLedger(store);
+        ledger.observe(listing(1, ['a', 'b']), NOW);
+        ledger.observe(listing(1, []), NOW + 60);
+        expect(Object.keys(store.peek()['1'].entered).sort()).toEqual(['a', 'b']);
+        ledger.observe(listing(2, []), NOW + 60);
+        expect(store.peek()['2'].entered).toEqual({});
+        ledger.observe(listing(2, ['c']), NOW + 120);
+        // The challenge had been seen with none, so an entry that appears is new.
+        expect(store.peek()['2'].entered).toEqual({ c: NOW + 120 });
     });
 });
 
@@ -264,14 +290,12 @@ describe('entry times: exact and approximate', () => {
         });
     });
 
-    test('the only entry of a challenge first seen goes in when the member joined (approximately)', () => {
+    test('the only entry of a challenge first seen stays unknown: the join time says nothing of a photo swapped in since', () => {
         const ledger = createMemoryEntryAgeLedger();
-        expect(ledger.observeAll([listing(1, ['a'], { joined: NOW - 500 })], NOW)).toEqual({
-            '1': { a: { at: NOW - 500, exact: false } },
-        });
-        // Two entries: which one joining submitted is not known.
-        expect(ledger.observeAll([listing(2, ['a', 'b'], { joined: NOW - 500 })], NOW)).toEqual({});
-        expect(ledger.observeAll([listing(3, ['a'], { joined: 0 })], NOW)).toEqual({});
+        expect(ledger.observeAll([listing(1, ['a'], { joined: NOW - 500 })], NOW)).toEqual({});
+        expect(ledger.enteredAt(1, 'a')).toBe(0);
+        // Seen again, it still is: the first fetch that showed it is not the time it went in.
+        expect(ledger.observeAll([listing(1, ['a'], { joined: NOW - 500 })], NOW + 60)).toEqual({});
     });
 
     test('a record a submit made before any fetch leaves the other entries unknown and its placeholder close time is replaced', () => {
@@ -314,6 +338,27 @@ describe('entry times: exact and approximate', () => {
         expect(store.peek()['1'].memberId).toBe('other');
         expect(ledger.enteredAt(1, 'b')).toBe(0);
         expect(ledger.enteredAt(1, 'z')).toBe(0);
+    });
+
+    test('the record of another account is dropped: its pending, exact and uncertain photos are not carried', () => {
+        const store = rawStore(null);
+        const ledger = createEntryAgeLedger(store);
+        ledger.observe(listing(1, [{ id: 'a', member_id: 'me' }]), NOW);
+        ledger.markPending(listing(1, [{ id: 'a', member_id: 'me' }]), 'p', NOW + 10);
+        ledger.markSubmitted(1, ['x'], NOW + 10);
+        ledger.markUncertain(listing(1, [{ id: 'a', member_id: 'me' }]), 'u', NOW + 10);
+        expect(store.peek()['1']).toMatchObject({ pending: 'p', exact: ['p', 'x'], uncertain: ['u'] });
+
+        ledger.observe(listing(1, [{ id: 'z', member_id: 'other' }]), NOW + 60);
+
+        expect(store.peek()['1']).toMatchObject({
+            pending: null,
+            exact: [],
+            uncertain: [],
+            memberId: 'other',
+            entered: { z: 0 },
+        });
+        expect(ledger.pending(1)).toBeNull();
     });
 
     test('a record without an account takes the listing account and keeps the times', () => {
@@ -524,7 +569,7 @@ describe('entry-age ledger on the Android app window', () => {
         expect(ledger.isUncertain(1, 'b')).toBe(true);
         ledger.markPending(listing(1, ['a', 'b']), 'p', NOW + 62);
         expect(ledger.pending(1)).toBe('p');
-        ledger.clearPending(1, NOW + 63);
+        ledger.clearPending(1, 'p', NOW + 63);
         expect(ledger.pending(1)).toBeNull();
         expect(store.stored()).toBeNull();
         expect(store.updateThrough).toHaveBeenCalledTimes(5);
@@ -602,7 +647,124 @@ describe('entry-age ledger on the Android app window', () => {
         expect(ledger.pending(1)).toBe('p');
         await ledger.refresh();
         expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    test('at a refresh that succeeds a failed mark is made again on the fresh value, and a failed observation is dropped', async () => {
+        const store = windowStore(null);
+        const ledger = createEntryAgeLedger(store, async () => true);
+        ledger.observe(listing(1, ['a']), NOW);
+        ledger.markPending(listing(2, []), 'p', NOW);
+        ledger.markSubmitted(3, ['x'], NOW);
+        ledger.markUncertain(listing(4, []), 'u', NOW);
+        ledger.clearPending(2, 'p', NOW + 1);
+        for (let index = 0; index < 5; index++) store.land(index, 'failed');
+        await flush();
+        expect(store.updateThrough).toHaveBeenCalledTimes(5);
+        // The service saved a record of its own while the window's writes were failing.
+        store.serviceWrote(
+            JSON.stringify({
+                9: {
+                    closeTime: NOW + 3600,
+                    entered: { s: 0 },
+                    pending: null,
+                    exact: [],
+                    memberId: null,
+                    observed: true,
+                },
+            }),
+        );
+
+        await ledger.refresh();
+
+        // The four marks were issued again (not the observation), and read at once.
+        expect(store.updateThrough).toHaveBeenCalledTimes(9);
+        expect(ledger.pending(2)).toBeNull();
+        expect(ledger.enteredAt(2, 'p')).toBe(NOW);
+        expect(ledger.enteredAt(3, 'x')).toBe(NOW);
+        expect(ledger.isUncertain(4, 'u')).toBe(true);
+        expect(ledger.enteredAt(1, 'a')).toBeNull();
+        expect(ledger.enteredAt(9, 's')).toBe(0);
+        // Landing them saves the fresh value with the marks made on it.
+        for (let index = 5; index < 9; index++) store.land(index);
+        await flush();
+        const saved = parseJsonAs(store.stored()!, isRecordOf(isEntryAgeRecord));
+        expect(Object.keys(saved).sort()).toEqual(['2', '3', '4', '9']);
+        expect(saved['2'].pending).toBeNull();
+    });
+
+    test('a mark after a failed one is made again with it, in order: a pending photo that was cleared stays cleared', async () => {
+        const store = windowStore(null);
+        const ledger = createEntryAgeLedger(store, async () => true);
+        ledger.markPending(listing(1, []), 'p', NOW);
+        // The boost lands and gives up on the photo while the mark is unsaved.
+        ledger.clearPending(1, 'p', NOW + 5);
+        store.land(0, 'failed');
+        // Against a value that never got the photo, the clear changes nothing.
+        store.land(1, 'aborted');
+        await flush();
         expect(ledger.pending(1)).toBeNull();
+
+        await ledger.refresh();
+
+        expect(store.updateThrough).toHaveBeenCalledTimes(4);
+        expect(ledger.pending(1)).toBeNull();
+        store.land(2);
+        store.land(3);
+        await flush();
+        expect(ledger.pending(1)).toBeNull();
+        expect(parseJsonAs(store.stored()!, isRecordOf(isEntryAgeRecord))['1']).toMatchObject({ pending: null });
+        // Nothing is kept any more: the log holds no failed change.
+        store.serviceWrote('{}');
+        expect(ledger.enteredAt(1, 'p')).toBeNull();
+    });
+
+    test('a mark still in flight while a refresh runs is made again with the failed one, in order', async () => {
+        const store = windowStore(null);
+        let finishRefresh: (read: boolean) => void = () => {};
+        const ledger = createEntryAgeLedger(store, () => new Promise<boolean>((resolve) => (finishRefresh = resolve)));
+        ledger.markPending(listing(1, []), 'p', NOW);
+        store.land(0, 'failed');
+        await flush();
+
+        const refreshing = ledger.refresh();
+        // The boost lands and gives up on the photo while the refresh reads Preferences.
+        ledger.clearPending(1, 'p', NOW + 5);
+        expect(ledger.pending(1)).toBeNull();
+        finishRefresh(true);
+        await refreshing;
+
+        // Both are made again on the fresh value, the clear after the mark; the clear that was in flight is theirs now.
+        expect(store.updateThrough).toHaveBeenCalledTimes(4);
+        expect(ledger.pending(1)).toBeNull();
+        store.land(1, 'aborted');
+        store.land(2);
+        store.land(3);
+        await flush();
+        expect(ledger.pending(1)).toBeNull();
+        expect(parseJsonAs(store.stored()!, isRecordOf(isEntryAgeRecord))['1']).toMatchObject({ pending: null });
+    });
+
+    test('a clear names its photo: it does not erase another pending photo, as a clear made again could', () => {
+        const store = rawStore(null);
+        const ledger = createEntryAgeLedger(store);
+        ledger.markPending(listing(1, []), 'service-photo', NOW);
+        ledger.clearPending(1, 'p', NOW + 5);
+        expect(ledger.pending(1)).toBe('service-photo');
+        ledger.clearPending(1, 'service-photo', NOW + 6);
+        expect(ledger.pending(1)).toBeNull();
+    });
+
+    test('marks that landed after a failed one are not kept once it is gone, and without one they never are', async () => {
+        const store = windowStore(null);
+        const ledger = createEntryAgeLedger(store, async () => true);
+        ledger.markSubmitted(1, ['x'], NOW);
+        store.land(0);
+        await flush();
+        store.serviceWrote('{}');
+        // It landed with no failed mark in the log: it is not replayed.
+        await ledger.refresh();
+        expect(store.updateThrough).toHaveBeenCalledTimes(1);
+        expect(ledger.enteredAt(1, 'x')).toBeNull();
     });
 
     test('a failed write stays applied through a refresh that fails, which is logged', async () => {
@@ -620,7 +782,11 @@ describe('entry-age ledger on the Android app window', () => {
         restore();
         expect(ledger.pending(1)).toBe('p');
         expect(warning).toHaveBeenCalledTimes(2);
-        expect(warning).toHaveBeenLastCalledWith(expect.stringContaining('boom'), null);
+        // The kind of error, not its message.
+        expect(warning).toHaveBeenLastCalledWith(
+            'entry-age ledger not refreshed (not an error) — using the cached copy',
+            null,
+        );
     });
 
     test('a refresh without a store to refresh does nothing', async () => {
@@ -655,7 +821,7 @@ describe('entry-age ledger on the Android app window', () => {
         ledger.markPending(listing(1, []), 'p', NOW);
         await flush();
         restore();
-        expect(warning).toHaveBeenCalledWith(expect.stringContaining('no preferences'), null);
+        expect(warning).toHaveBeenCalledWith('entry-age ledger not written (Error)', null);
         expect(ledger.pending(1)).toBeNull();
     });
 
@@ -677,7 +843,8 @@ describe('entry-age ledger on the Android app window', () => {
         const { warning, restore } = captureWarnings();
         expect(ledger.enteredAt(1, 'x')).toBe(NOW + 1);
         restore();
-        expect(warning).toHaveBeenCalledWith(expect.stringContaining('late failure'), null);
+        // The kind of error, not its message.
+        expect(warning).toHaveBeenCalledWith('entry-age change not applied (Error)', null);
     });
 });
 
@@ -706,5 +873,53 @@ describe('entry-age ledger over a store that writes at once', () => {
         // Where the write is only queued (null), the store is written through throughStore.
         ledger.markPending(listing(3, []), 'r', NOW);
         expect(ledger.pending(3)).toBe('r');
+    });
+
+    test('a mark that failed at once is made again at a refresh that succeeds', async () => {
+        let raw: string | null = null;
+        const results: Array<ThroughResult | null> = ['failed', 'saved'];
+        const store = {
+            readRaw: () => raw,
+            writeRaw: jest.fn(),
+            updateNow: jest.fn((update: (current: string | null) => string | null) => {
+                const result = results.shift() ?? null;
+                if (result === 'saved') raw = update(raw);
+                return result;
+            }),
+        };
+        const ledger = createEntryAgeLedger(store, async () => true);
+        ledger.markPending(listing(1, []), 'p', NOW);
+        expect(raw).toBeNull();
+        expect(ledger.pending(1)).toBe('p');
+
+        await ledger.refresh();
+
+        expect(store.updateNow).toHaveBeenCalledTimes(2);
+        expect(raw).toContain('"pending":"p"');
+        expect(ledger.pending(1)).toBe('p');
+    });
+
+    test('marks made after a failed one that landed at once are made again with it', async () => {
+        let raw: string | null = null;
+        const results: Array<ThroughResult | null> = ['failed', 'saved', 'saved', 'saved'];
+        const store = {
+            readRaw: () => raw,
+            writeRaw: jest.fn(),
+            updateNow: jest.fn((update: (current: string | null) => string | null) => {
+                const result = results.shift() ?? null;
+                if (result === 'saved') raw = update(raw) ?? raw;
+                return result;
+            }),
+        };
+        const ledger = createEntryAgeLedger(store, async () => true);
+        ledger.markPending(listing(1, []), 'p', NOW);
+        ledger.clearPending(1, 'p', NOW + 5);
+        expect(ledger.pending(1)).toBeNull();
+
+        await ledger.refresh();
+
+        expect(store.updateNow).toHaveBeenCalledTimes(4);
+        expect(ledger.pending(1)).toBeNull();
+        expect(raw).toContain('"pending":null');
     });
 });

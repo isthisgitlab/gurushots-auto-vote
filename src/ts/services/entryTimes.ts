@@ -10,7 +10,7 @@
  */
 
 import * as logger from '../logger';
-import { errorMessage } from '../errorMessage';
+import { errorKind } from '../errorMessage';
 import type { submitToChallenge as SubmitToChallenge } from '../api/submissions';
 import type { swapPhoto as SwapPhoto } from '../api/currency';
 import type { ActiveChallengesResponse, Challenge, RankingEntry } from '../types/gurushots';
@@ -22,7 +22,30 @@ const entriesOf = (challenge: Challenge): RankingEntry[] =>
     Array.isArray(challenge?.member?.ranking?.entries) ? challenge.member.ranking.entries : [];
 
 const logFailure = (what: string, error: unknown) => {
-    logger.withCategory('boost').warning(`${what}: ${errorMessage(error) ?? String(error)}`, null);
+    logger.withCategory('boost').warning(`${what} (${errorKind(error)})`, null);
+};
+
+// How long a fetch waits for the ledger to re-read what the background service wrote before it goes on with the cache.
+const REFRESH_TIMEOUT_MS = 5000;
+
+/**
+ * The ledger's refresh, which must never hold a fetch up: past REFRESH_TIMEOUT_MS, or if it throws, the fetch goes on
+ * with the ledger as the cache holds it. The timer is cleared when the refresh settles first.
+ */
+const refreshWithin = async (ledger: EntryAgeLedger): Promise<void> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(true), REFRESH_TIMEOUT_MS);
+    });
+    try {
+        if (await Promise.race([ledger.refresh().then(() => false), timedOut])) {
+            logger.withCategory('boost').warning('entry-age ledger refresh timed out — using the cached copy', null);
+        }
+    } catch (error) {
+        logFailure('entry-age ledger not refreshed', error);
+    } finally {
+        clearTimeout(timer);
+    }
 };
 
 /**
@@ -41,9 +64,9 @@ export const annotateEntryTimes = async (
     for (const challenge of response.challenges) {
         for (const entry of entriesOf(challenge)) delete entry?.appEntered;
     }
+    // The background service records entries in its own context: see what it wrote.
+    await refreshWithin(ledger);
     try {
-        // The background service records entries in its own context: see what it wrote.
-        await ledger.refresh();
         const times = ledger.observeAll(response.challenges, now);
         for (const challenge of response.challenges) {
             for (const entry of entriesOf(challenge)) {

@@ -17,6 +17,7 @@ const renderBadge = () => {
     const onTurboApplied = jest.fn();
     render(
         <EntryBadge
+            timezone="local"
             entry={entry}
             challengeId={7}
             boostAvailable
@@ -77,6 +78,7 @@ describe('swap controls', () => {
     const renderSwap = (swapBack: SwapBackOffer | null) =>
         render(
             <EntryBadge
+                timezone="local"
                 entry={entry}
                 challengeId={7}
                 boostAvailable={false}

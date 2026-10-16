@@ -1,4 +1,4 @@
-import { errorMessage, fileErrorMessage } from '../src/ts/errorMessage';
+import { errorKind, errorMessage, fileErrorMessage } from '../src/ts/errorMessage';
 
 describe('errorMessage', () => {
     test.each<[string, unknown, string | undefined]>([
@@ -45,5 +45,17 @@ describe('fileErrorMessage', () => {
         ['no message', null, undefined],
     ])('%s', (_label, error, expected) => {
         expect(fileErrorMessage(error)).toBe(expected);
+    });
+});
+
+describe('errorKind', () => {
+    test.each<[string, unknown, string]>([
+        ['an Error', new Error('quoted text'), 'Error'],
+        ['a subclass', new SyntaxError('Unexpected token in {"id":1}'), 'SyntaxError'],
+        ['a string', 'plain', 'not an error'],
+        ['a plain object', { name: 'Error', message: 'x' }, 'not an error'],
+        ['null', null, 'not an error'],
+    ])('%s names its kind and never its message', (_label, error, expected) => {
+        expect(errorKind(error)).toBe(expected);
     });
 });

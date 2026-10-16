@@ -2,8 +2,8 @@
  * When each entry of a challenge entered it, so a boost can wait until its target
  * photo has been in the challenge for `boostFreshEntryWait` (a boost spent on a
  * photo the moment it is entered gets few votes). The API reports no entry time,
- * so the app records one: the instant it first sees an entry id — its own submit
- * reflected into the pass, or the first poll after a manual one.
+ * so the app records one: a photo the app submits is stamped at the submit; any
+ * other entry at the first challenge fetch (a refresh, a pass, the CLI) that shows it.
  *
  * Also remembers the photo a boost fill-new submitted and is waiting on
  * (`pending`), so the next pass boosts that photo instead of submitting another.
@@ -11,7 +11,7 @@
  * Shape, keyed by challenge id:
  *   { "<challengeId>": { closeTime, entered: { "<imageId>": unixSec }, pending, uncertain, exact, memberId, observed } }
  * An `entered` time of 0 means "already there when the app first saw the
- * challenge" — its age is unknown, so it never holds a boost. An id in `exact`
+ * challenge" (or its submit time was never recorded) — its age is unknown, so it never holds a boost. An id in `exact`
  * went in through the app (its time is the submit); any other time is the first
  * fetch that showed the entry, so the entry went in at or before it. The UI
  * shows both (observeAll, services/entryTimes).
@@ -24,14 +24,12 @@
  * Mock mode uses createMemoryEntryAgeLedger() and never touches the file.
  */
 
-import type { EntryAgeRecord, EntryTimes, RawJsonStore } from './types/stores';
+import type { EntryTimes, RawJsonStore } from './types/stores';
 import type { Challenge } from './types/gurushots';
-import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
-import { throughStore } from './settings/storeTransport';
-import { isPlainObject } from './plainObject';
+import { createStateLog, MAX_IDS } from './entryAgeStateLog';
+import type { State, StoredEntryAgeRecord } from './entryAgeStateLog';
 import { finiteOr } from './numbers';
-import { errorMessage } from './errorMessage';
 
 // `shared`: the Android background service records entries too (gs_entry_ages is on its native allow-list), and each
 // change is saved by the native compare-and-write so that neither context erases the other's.
@@ -47,27 +45,8 @@ const entryAgeStore = createJsonStore({
 // submit that never landed stops blocking the boost. An exact (app-submitted) or
 // uncertain photo is kept the same way.
 const PENDING_GRACE_SEC = 600;
-// How many entry ids (and exact / uncertain ids) one record keeps.
-const MAX_IDS = 64;
 // The close time of a record a submit made before any fetch saw the challenge: the next fetch replaces it.
 const PLACEHOLDER_CLOSE_SEC = 31 * 24 * 60 * 60;
-
-type StoredEntryAgeRecord = EntryAgeRecord & { uncertain: string[] };
-type State = Record<string, StoredEntryAgeRecord>;
-// What a file written before the exact times held.
-type LegacyEntryAgeRecord = Pick<EntryAgeRecord, 'closeTime' | 'entered' | 'pending'> & Partial<EntryAgeRecord>;
-
-/**
- * @param r - an untrusted parsed-JSON value
- */
-const isRecord = (r: unknown): r is LegacyEntryAgeRecord =>
-    isPlainObject(r) && Number.isFinite(r.closeTime) && isPlainObject(r.entered);
-
-const messageOf = (error: unknown): string => errorMessage(error) ?? String(error);
-
-const isString = (value: unknown): value is string => typeof value === 'string';
-
-const idList = (value: unknown): string[] => (Array.isArray(value) ? value.slice(0, MAX_IDS).filter(isString) : []);
 
 /** @param challenge @returns */
 const entryIdsOf = (challenge: Challenge): string[] =>
@@ -83,34 +62,6 @@ const memberIdOf = (challenge: Challenge): string | null => {
         if (typeof entry?.member_id === 'string' && entry.member_id !== '') return entry.member_id;
     }
     return null;
-};
-
-/**
- * The ledger's state from its text. An unreadable or corrupt file reads as empty — every entry's
- * age is then unknown, which only means a boost is not held; it never blocks one. A record from a
- * file written before the exact times gets the fields it lacks.
- */
-const parseState = (raw: string | null): State => {
-    try {
-        const parsed: unknown = JSON.parse(raw || '{}');
-        if (!isPlainObject(parsed)) return {};
-        const state: State = {};
-        for (const [id, record] of Object.entries(parsed)) {
-            if (isRecord(record)) {
-                state[id] = {
-                    ...record,
-                    uncertain: idList(record.uncertain),
-                    exact: idList(record.exact),
-                    memberId: typeof record.memberId === 'string' ? record.memberId : null,
-                    observed: record.observed !== false,
-                };
-            }
-        }
-        return state;
-    } catch (error) {
-        logger.withCategory('boost').warning(`entry-age ledger unreadable: ${messageOf(error)}`, null);
-        return {};
-    }
 };
 
 /**
@@ -158,36 +109,26 @@ const sameRecord = (a: StoredEntryAgeRecord, b: StoredEntryAgeRecord): boolean =
 const withinGrace = (at: number | undefined, now: number): boolean =>
     Number.isFinite(at) && now - Number(at) <= PENDING_GRACE_SEC;
 
-/**
- * Whether the listing is the first this record has met: no record, a record a submit made before any fetch saw the
- * challenge, or one of another account (compared only when both accounts are known).
- */
-const isFirstSighting = (existing: StoredEntryAgeRecord | undefined, listingMember: string | null): boolean =>
-    !existing ||
-    !existing.observed ||
-    (existing.memberId !== null && listingMember !== null && existing.memberId !== listingMember);
+/** Whether `existing` is the record of another account than the listing's (compared only when both are known). */
+const isOtherAccount = (existing: StoredEntryAgeRecord | undefined, listingMember: string | null): boolean =>
+    existing?.memberId != null && listingMember !== null && existing.memberId !== listingMember;
 
 /**
  * The time of each listed entry: what the record holds, or `now` for one new to a record already seen. On a first
- * sighting an entry the app did not submit is unknown (0), except the only entry of a challenge, which went in when
- * the member joined.
+ * sighting (no record, or one a submit made before any fetch saw the challenge) an entry the app did not submit is
+ * unknown (0): the API reports no time, and the member's join time says nothing of a photo that may have been swapped
+ * in since.
  */
 const listedTimes = (
     existing: StoredEntryAgeRecord | undefined,
-    challenge: Challenge,
     ids: readonly string[],
-    firstSighting: boolean,
     now: number,
 ): Record<string, number> => {
-    const joinedAt = finiteOr(challenge?.member?.time_joined, 0);
-    const firstAt = ids.length === 1 && joinedAt > 0 ? joinedAt : 0;
+    const firstSighting = !existing || !existing.observed;
     const exactIds = new Set(existing?.exact);
     const entered: Record<string, number> = {};
     for (const id of ids) {
-        entered[id] =
-            firstSighting && !exactIds.has(id)
-                ? firstAt
-                : finiteOr(existing?.entered[id], firstSighting ? firstAt : now);
+        entered[id] = firstSighting && !exactIds.has(id) ? 0 : finiteOr(existing?.entered[id], firstSighting ? 0 : now);
     }
     return entered;
 };
@@ -215,6 +156,9 @@ const heldBack = (existing: StoredEntryAgeRecord | undefined, entered: Record<st
  * The record `challenge` should now hold: an id seen for the first time is
  * stamped `now` (or left unknown, 0, on the challenge's first sighting), an id no longer
  * entered is forgotten. Null when nothing changed from `existing`.
+ *
+ * The record of another account is not carried: the listing is built as if there were none. A listing with no entries
+ * does not replace a record that has some: a challenge the member is in always has an entry, so it is a bad response.
  * @param now - Unix seconds
  */
 const observedRecord = (
@@ -224,8 +168,10 @@ const observedRecord = (
 ): StoredEntryAgeRecord | null => {
     const ids = entryIdsOf(challenge);
     const listingMember = memberIdOf(challenge);
-    const entered = listedTimes(existing, challenge, ids, isFirstSighting(existing, listingMember), now);
-    const { pending, exact, uncertain } = heldBack(existing, entered, now);
+    if (ids.length === 0 && existing && Object.keys(existing.entered).length > 0) return null;
+    const known = isOtherAccount(existing, listingMember) ? undefined : existing;
+    const entered = listedTimes(known, ids, now);
+    const { pending, exact, uncertain } = heldBack(known, entered, now);
     const kept = capped(entered, exact, [...ids, ...(pending ? [pending] : []), ...exact]);
     const record: StoredEntryAgeRecord = {
         closeTime: Number(challenge.close_time),
@@ -233,10 +179,10 @@ const observedRecord = (
         pending,
         uncertain,
         exact: kept.exact,
-        memberId: listingMember ?? existing?.memberId ?? null,
+        memberId: listingMember ?? known?.memberId ?? null,
         observed: true,
     };
-    return existing && sameRecord(existing, record) ? null : record;
+    return known && sameRecord(known, record) ? null : record;
 };
 
 /**
@@ -332,105 +278,15 @@ const submittedEdit = (state: State, challengeId: string, ids: readonly string[]
     return withRecord(state, challengeId, record, now);
 };
 
-type Change = { apply: (current: string | null) => string | null; failed: boolean };
-
-/**
- * The ledger's state over a raw-JSON store, and the writes that change it.
- *
- * Every write is one read-modify-write through the store. The app window saves behind a cache, so a change is only
- * in the stored value once its save has landed: the log keeps the changes it handed over and applies them, in
- * order, over what it reads, so a pass sees its own writes at once (and what a refresh brought in from the service).
- * A change leaves the log when its save settled (saved, or declined); a failed one stays applied until the next
- * refresh that succeeds. Changes are idempotent, so applying one to a value that holds it already is harmless. Where
- * the write is made before it returns (a desktop, the service, an in-memory store) nothing is kept.
- *
- * @param refreshStore - re-reads the stored value where the cache can be behind it (the app window); true when it did
- */
-const createStateLog = (store: RawJsonStore, refreshStore?: () => Promise<boolean>) => {
-    let changes: Change[] = [];
-    store.onDiscard?.(() => {
-        changes = [];
-    });
-
-    const forget = (change: Change) => {
-        changes = changes.filter((c) => c !== change);
-    };
-
-    return {
-        read: (): State => {
-            try {
-                let raw = store.readRaw();
-                for (const change of changes) {
-                    try {
-                        raw = change.apply(raw) ?? raw;
-                    } catch (error) {
-                        logger.withCategory('boost').warning(`entry-age change not applied: ${messageOf(error)}`, null);
-                    }
-                }
-                return parseState(raw);
-            } catch (error) {
-                logger.withCategory('boost').warning(`entry-age ledger unreadable: ${messageOf(error)}`, null);
-                return {};
-            }
-        },
-
-        // Makes `edit` of the stored state (answering null to change nothing); the caller never sees a failure.
-        write: (edit: (state: State) => State | null) => {
-            const change: Change = {
-                apply: (current) => {
-                    const next = edit(parseState(current));
-                    return next ? JSON.stringify(next) : null;
-                },
-                failed: false,
-            };
-            const immediate = store.updateNow?.(change.apply) ?? null;
-            if (immediate !== null) {
-                if (immediate === 'failed') {
-                    change.failed = true;
-                    changes.push(change);
-                }
-                return;
-            }
-            const queued = store.updateThrough !== undefined;
-            if (queued) changes.push(change);
-            throughStore(store, change.apply).then(
-                (result) => {
-                    if (!queued) return;
-                    if (result === 'failed') change.failed = true;
-                    else forget(change);
-                },
-                (error: unknown) => {
-                    logger.withCategory('boost').warning(`entry-age ledger not written: ${messageOf(error)}`, null);
-                    forget(change);
-                },
-            );
-        },
-
-        refresh: async (): Promise<void> => {
-            if (!refreshStore) return;
-            let failure = 'the read failed';
-            try {
-                if (await refreshStore()) {
-                    changes = changes.filter((change) => !change.failed);
-                    return;
-                }
-            } catch (error) {
-                failure = messageOf(error);
-            }
-            logger
-                .withCategory('boost')
-                .warning(`entry-age ledger not refreshed (${failure}) — using the cached copy`, null);
-        },
-    };
-};
-
 /**
  * Ledger over a raw-JSON store ({readRaw, writeRaw}); see createStateLog for how its writes reach the store.
  *
  * @param refreshStore - re-reads the stored value where the cache can be behind it (the app window); true when it did
  */
 const createEntryAgeLedger = (store: RawJsonStore, refreshStore?: () => Promise<boolean>) => {
-    const { read, write, refresh } = createStateLog(store, refreshStore);
+    const { read, write: writeChange, refresh } = createStateLog(store, refreshStore);
+    const observing = (edit: (state: State) => State | null) => writeChange('observe', edit);
+    const write = (edit: (state: State) => State | null) => writeChange('mark', edit);
 
     return {
         /**
@@ -438,7 +294,7 @@ const createEntryAgeLedger = (store: RawJsonStore, refreshStore?: () => Promise<
          * @param now - Unix seconds
          */
         observe: (challenge: Challenge, now: number) => {
-            write((state) => observeChallenges(state, [challenge], now));
+            observing((state) => observeChallenges(state, [challenge], now));
         },
 
         /**
@@ -449,7 +305,7 @@ const createEntryAgeLedger = (store: RawJsonStore, refreshStore?: () => Promise<
         observeAll: (challenges: readonly Challenge[], now: number): EntryTimes => {
             const before = read();
             const after = observeChallenges(before, challenges, now);
-            if (after) write((state) => observeChallenges(state, challenges, now));
+            if (after) observing((state) => observeChallenges(state, challenges, now));
             return knownTimes(after ?? before, challenges);
         },
 
@@ -499,13 +355,14 @@ const createEntryAgeLedger = (store: RawJsonStore, refreshStore?: () => Promise<
         },
 
         /**
-         * The boost landed (or gave up): stop waiting on a pending photo.
+         * The boost landed (or gave up): stop waiting on the pending photo `imageId`. Only that photo: a clear made
+         * again after a failed write must not erase a pending photo another context set meanwhile.
          * @param now - Unix seconds
          */
-        clearPending: (challengeId: string | number, now: number) => {
+        clearPending: (challengeId: string | number, imageId: string | number, now: number) => {
             write((state) => {
                 const record = state[String(challengeId)];
-                if (!record?.pending) return null;
+                if (record?.pending !== String(imageId)) return null;
                 return withRecord(state, String(challengeId), { ...record, pending: null }, now);
             });
         },

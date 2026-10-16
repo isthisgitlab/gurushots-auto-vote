@@ -31,4 +31,10 @@ const fileErrorMessage = (error: unknown): string | undefined => {
     return `${text.slice(0, first)}'${paths.join("' -> '")}'${text.slice(last + 1)}`;
 };
 
-export { errorMessage, fileErrorMessage };
+/**
+ * What kind of error a caught value is (its `name`), for a log line that must not quote it: a JSON parse error's message
+ * quotes the text it could not read, which can hold ids.
+ */
+const errorKind = (error: unknown): string => (error instanceof Error ? error.name : 'not an error');
+
+export { errorKind, errorMessage, fileErrorMessage };

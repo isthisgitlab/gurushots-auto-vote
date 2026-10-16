@@ -1147,7 +1147,7 @@ export const app = {
     entrySubmitted: 'Submitted {time}',
     entrySubmittedOrEarlier: 'Submitted {time} or earlier',
     entrySubmittedOrEarlierLong:
-        "The app didn't record when this photo went in. The time shown is when the app first saw it (or when you joined the challenge), so it went in at or before then.",
+        "The app didn't record when this photo went in. The time shown is when the app first saw it, so it went in at or before then.",
     viewEntryPhoto: 'View entry photo',
     error: 'Error',
     errorCheckingUpdates: 'Error checking for updates',

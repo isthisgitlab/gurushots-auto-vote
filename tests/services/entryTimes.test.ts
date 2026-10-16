@@ -8,10 +8,13 @@ import type * as entryTimesModule from '../../src/ts/services/entryTimes';
 import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
 import type { ActionResult, ActiveChallengesResponse, Challenge } from '../../src/ts/types/gurushots';
 import type { EntryAgeLedger } from '../../src/ts/types/stores';
+import type { ThroughResult } from '../../src/ts/types/stores';
 import { invalid } from '../helpers/invalid';
+import { isNumber, isRecordOf, isShape, isString, nullable, parseJsonAs } from '../helpers/parseJson';
 
 const { annotateEntryTimes, withEntryTimes } = require('../../src/ts/services/entryTimes') as typeof entryTimesModule;
-const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+const { createMemoryEntryAgeLedger, createEntryAgeLedger } =
+    require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
 
 const NOW = 1_800_000_000;
 
@@ -67,7 +70,8 @@ describe('annotateEntryTimes', () => {
         const failing: ActiveChallengesResponse = { challenges: [challenge(1, ['a'], { appEntered: forged })] };
         await expect(annotateEntryTimes(failing, brokenLedger(), NOW)).resolves.toBeUndefined();
         expect(failing.challenges[0].member?.ranking?.entries?.[0]).not.toHaveProperty('appEntered');
-        expect(warnings()).toEqual([expect.stringContaining('ledger down')]);
+        // The refresh and the observation both failed; each is logged, and the response is as it came.
+        expect(warnings()).toEqual(['entry-age ledger not refreshed (Error)', 'entry times not recorded (Error)']);
     });
 
     test('a failed fetch is left alone, and so is a response without a list', async () => {
@@ -101,6 +105,133 @@ describe('annotateEntryTimes', () => {
         await annotateEntryTimes(response, ledger);
         const at = response.challenges[0].member?.ranking?.entries?.[1]?.appEntered?.at ?? 0;
         expect(at).toBeGreaterThanOrEqual(before);
+    });
+});
+
+describe('annotateEntryTimes and a ledger refresh that does not come back', () => {
+    const response = (): ActiveChallengesResponse => ({ challenges: [challenge(1, ['a', 'b'])] });
+    const timeOf = (r: ActiveChallengesResponse, index: number) =>
+        r.challenges[0].member?.ranking?.entries?.[index]?.appEntered;
+
+    // A ledger that holds a record of `a` and `b` (b exact), whose refresh is the one given.
+    const ledgerWith = (refreshStore: () => Promise<boolean>) => {
+        let raw: string | null = null;
+        const ledger = createEntryAgeLedger(
+            {
+                readRaw: () => raw,
+                writeRaw: (data) => {
+                    raw = data;
+                },
+            },
+            refreshStore,
+        );
+        ledger.observe(challenge(1, ['a']), NOW - 100);
+        ledger.markSubmitted(1, ['b'], NOW - 50);
+        return ledger;
+    };
+
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    test('a refresh that reads nothing (false) still annotates from the cache', async () => {
+        const fetched = response();
+        await annotateEntryTimes(
+            fetched,
+            ledgerWith(async () => false),
+            NOW,
+        );
+        expect(timeOf(fetched, 0)).toBeUndefined();
+        expect(timeOf(fetched, 1)).toEqual({ at: NOW - 50, exact: true });
+    });
+
+    test('a refresh that never settles is given up after 5 s: the fetch goes on with the cache', async () => {
+        jest.useFakeTimers();
+        const fetched = response();
+        const done = annotateEntryTimes(
+            fetched,
+            ledgerWith(() => new Promise<boolean>(() => {})),
+            NOW,
+        );
+
+        await jest.advanceTimersByTimeAsync(4999);
+        expect(timeOf(fetched, 1)).toBeUndefined();
+        await jest.advanceTimersByTimeAsync(1);
+        await done;
+
+        expect(timeOf(fetched, 1)).toEqual({ at: NOW - 50, exact: true });
+        expect(warnings()).toEqual(['entry-age ledger refresh timed out — using the cached copy']);
+    });
+
+    test('a refresh that settles after the fetch went on makes the failed marks again, and the end state is right', async () => {
+        jest.useFakeTimers();
+        let raw: string | null = null;
+        const queued: Array<{ update: (current: string | null) => string | null; settle: (r: ThroughResult) => void }> =
+            [];
+        const store = {
+            readRaw: () => raw,
+            writeRaw: jest.fn(),
+            updateThrough: (update: (current: string | null) => string | null) =>
+                new Promise<ThroughResult>((settle) => queued.push({ update, settle })),
+        };
+        const land = (index: number, outcome: ThroughResult) => {
+            if (outcome === 'saved') raw = queued[index].update(raw) ?? raw;
+            queued[index].settle(outcome);
+        };
+        // The service answers late: the refresh outlives the fetch's wait.
+        const ledger = createEntryAgeLedger(
+            store,
+            () => new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 6000)),
+        );
+        ledger.markPending(challenge(1, []), 'p', NOW - 60);
+        ledger.clearPending(1, 'p', NOW - 50);
+        land(0, 'failed');
+        land(1, 'aborted');
+        await jest.advanceTimersByTimeAsync(0);
+        const fetched = response();
+
+        const done = annotateEntryTimes(fetched, ledger, NOW);
+        await jest.advanceTimersByTimeAsync(5000);
+        await done;
+        // The fetch went on with the cache: its observation is in flight (the third write).
+        expect(queued).toHaveLength(3);
+        expect(timeOf(fetched, 0)).toBeUndefined();
+        await jest.advanceTimersByTimeAsync(1000);
+        // The late refresh made both marks again, after the observation.
+        expect(queued).toHaveLength(5);
+        land(2, 'saved');
+        land(3, 'saved');
+        land(4, 'saved');
+        await jest.advanceTimersByTimeAsync(0);
+
+        expect(ledger.pending(1)).toBeNull();
+        expect(ledger.enteredAt(1, 'a')).toBe(0);
+        const stored = parseJsonAs(
+            raw!,
+            isRecordOf(
+                isShape<{ pending: string | null; entered: Record<string, number> }>({
+                    pending: nullable(isString),
+                    entered: isRecordOf(isNumber),
+                }),
+            ),
+        );
+        expect(stored['1'].pending).toBeNull();
+        expect(Object.keys(stored['1'].entered).sort()).toEqual(['a', 'b', 'p']);
+    });
+
+    test('a refresh that settles first clears the timer', async () => {
+        jest.useFakeTimers();
+        const fetched = response();
+
+        await annotateEntryTimes(
+            fetched,
+            ledgerWith(async () => true),
+            NOW,
+        );
+
+        expect(jest.getTimerCount()).toBe(0);
+        expect(timeOf(fetched, 1)).toEqual({ at: NOW - 50, exact: true });
+        expect(warnings()).toEqual([]);
     });
 });
 
@@ -156,7 +287,8 @@ describe('withEntryTimes', () => {
     test('a ledger that throws something that is no error is logged too', async () => {
         const { submitToChallenge } = wrapped(ok, ok, brokenLedger('plain refusal'));
         await expect(submitToChallenge(7, ['a'], 'tok')).resolves.toBe(ok);
-        expect(warnings()).toEqual([expect.stringContaining('plain refusal')]);
+        // The kind of error, never its message.
+        expect(warnings()).toEqual(['submit time not recorded (not an error)']);
     });
 
     test('a ledger failure after a landed submit or swap changes nothing about the result', async () => {
@@ -164,6 +296,6 @@ describe('withEntryTimes', () => {
         await expect(submitToChallenge(7, ['a'], 'tok')).resolves.toBe(ok);
         await expect(swapPhoto(7, 'x', 'y', 'tok')).resolves.toBe(ok);
         expect(warnings()).toHaveLength(2);
-        expect(warnings().every((line) => line.includes('ledger down') && !line.includes('7'))).toBe(true);
+        expect(warnings()).toEqual(['submit time not recorded (Error)', 'submit time not recorded (Error)']);
     });
 });

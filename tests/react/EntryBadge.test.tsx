@@ -69,6 +69,7 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
     test('shows boost button when boostAvailable and entry not actioned', () => {
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}
@@ -83,6 +84,7 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
     test('shows turbo button when turboAvailable and entry not actioned', () => {
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}
@@ -96,6 +98,7 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
     test('hides BOTH buttons when entry.boosted is true (mutual exclusion)', () => {
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry({ boosted: true })}
                 challengeId={777}
@@ -110,6 +113,7 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
     test('hides BOTH buttons when entry.turbo is truthy (mutual exclusion)', () => {
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry({ turbo: { id: 't1' } })}
                 challengeId={777}
@@ -127,6 +131,7 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
         // any entry merely *eligible* for boost.
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry({ boost: true, boosted: false })}
                 challengeId={777}
@@ -144,6 +149,7 @@ describe('EntryBadge — loading state', () => {
         mockBoostState.loading = true;
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}
@@ -163,6 +169,7 @@ describe('EntryBadge — loading state', () => {
         mockTurboState.loading = true;
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}
@@ -189,6 +196,7 @@ describe('EntryBadge — a failed action stays until dismissed', () => {
     const renderBadge = () =>
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}
@@ -229,6 +237,7 @@ describe('EntryBadge — error text', () => {
     const renderBadge = () =>
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}
@@ -264,6 +273,7 @@ describe('EntryBadge — error styling on button', () => {
         mockBoostState.error = 'Boost failed';
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}
@@ -279,6 +289,7 @@ describe('EntryBadge — error styling on button', () => {
     test('boost button gets btn-success class when there is no error', () => {
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}

@@ -138,7 +138,7 @@ export function EntryBadge({
     onChooseSwap,
     swapBack = null,
     pin,
-    timezone = 'local',
+    timezone,
 }: {
     entry: RankingEntry;
     challengeId: Challenge['id'];
@@ -152,7 +152,7 @@ export function EntryBadge({
     onChooseSwap: OpenSwapPick;
     swapBack?: SwapBackOffer | null;
     pin?: EntryPinControls;
-    timezone?: string;
+    timezone: string;
 }) {
     const { t } = useTranslation();
     const { applyBoost, loading: boosting, error: boostError, clearError: clearBoostError } = useBoost();

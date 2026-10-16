@@ -29,6 +29,7 @@ describe('EntryBadge — smoke', () => {
     test('renders rank and vote count from the entry', () => {
         render(
             <EntryBadge
+                timezone="local"
                 entry={{ id: 'e1', rank: 3, votes: 42, boosted: false, turbo: false }}
                 challengeId={777}
                 boostAvailable={false}
@@ -66,6 +67,7 @@ describe('EntryBadge — smoke', () => {
     test('shows no submit time for an entry the app has none for', () => {
         render(
             <EntryBadge
+                timezone="local"
                 entry={{ id: 'e1', rank: 3, votes: 42 }}
                 challengeId={777}
                 boostAvailable={false}

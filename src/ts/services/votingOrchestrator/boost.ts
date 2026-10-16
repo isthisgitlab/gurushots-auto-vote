@@ -213,7 +213,9 @@ const applyAvailableBoost = async (
             ? await boostEntryById(ctx, challenge.id.toString(), target.imageId)
             : await api.applyBoost(challenge, token);
         if (boostResult) {
-            ctx.entryAges?.clearPending(challenge.id, ctx.now);
+            // Whichever photo the boost was waiting on; the clear names it, so it is only that one that goes.
+            const waiting = ctx.entryAges?.pending(challenge.id.toString());
+            if (waiting) ctx.entryAges?.clearPending(challenge.id, waiting, ctx.now);
             const successSuffix = isTimerBasedAvailable
                 ? `${timeDisplay} remaining`
                 : `${timeDisplay} until challenge ends`;

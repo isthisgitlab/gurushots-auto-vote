@@ -38,6 +38,7 @@ const photoEntry = (overrides = {}) => ({
 const renderBadge = (entry: RankingEntry) =>
     render(
         <EntryBadge
+            timezone="local"
             entry={entry}
             challengeId={777}
             boostAvailable={false}

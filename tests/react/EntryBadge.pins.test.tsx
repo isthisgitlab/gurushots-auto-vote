@@ -29,6 +29,7 @@ const controls = (overrides: Partial<EntryPinControls> = {}): EntryPinControls =
 const renderBadge = (pin?: EntryPinControls, props = {}) =>
     render(
         <EntryBadge
+            timezone="local"
             entry={entry()}
             challengeId={7}
             boostAvailable={false}

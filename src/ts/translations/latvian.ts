@@ -1166,7 +1166,7 @@ export const app = {
     entrySubmitted: 'Iesniegts {time}',
     entrySubmittedOrEarlier: 'Iesniegts {time} vai agrāk',
     entrySubmittedOrEarlierLong:
-        'Lietotne nepierakstīja, kad šis foto tika iesniegts. Norādītais laiks ir brīdis, kad lietotne to pirmoreiz ieraudzīja (vai kad pievienojies izaicinājumam), tātad tas iesniegts šajā brīdī vai agrāk.',
+        'Lietotne nepierakstīja, kad šis foto tika iesniegts. Norādītais laiks ir brīdis, kad lietotne to pirmoreiz ieraudzīja, tātad tas iesniegts šajā brīdī vai agrāk.',
     viewEntryPhoto: 'Skatīt iesniegto foto',
     error: 'Kļūda',
     errorCheckingUpdates: 'Kļūda, pārbaudot atjauninājumus',
