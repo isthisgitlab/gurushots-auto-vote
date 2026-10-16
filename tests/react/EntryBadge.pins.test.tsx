@@ -1,7 +1,7 @@
 /**
  * EntryBadge's pin toggles: a fixed-name button per feature with aria-pressed carrying the state, shown
- * only while its feature can still fire and never on a photo that carries the other feature, grouped
- * apart from the spend buttons. The Swap confirm names a live pin.
+ * only while its feature can still fire and never on a photo that carries the other feature. They share the
+ * actions row with the spend buttons, 8px apart by its gap. The Swap confirm names a live pin.
  */
 
 import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
@@ -77,8 +77,8 @@ describe('EntryBadge pin toggles', () => {
     test('the buttons sit in a wrapping actions row, so six of them do not overflow a narrow screen', () => {
         renderBadge(controls(), { boostAvailable: true, swapAvailable: true });
         const row = pinBoost()!.parentElement!;
-        expect(row.className).toContain('flex-wrap');
-        expect(row.className).toContain('gap-2');
+        expect(row.classList.contains('flex-wrap')).toBe(true);
+        expect(row.classList.contains('gap-2')).toBe(true);
     });
 
     test('both toggles show with a fixed name and text label, unpressed by default', () => {
@@ -144,7 +144,7 @@ describe('EntryBadge pin toggles', () => {
     test('the toggles share the actions row with the Boost button, 8px apart, not beside the rank', () => {
         renderBadge(controls(), { boostAvailable: true });
         const row = pinBoost()!.parentElement!;
-        expect(row.className).toContain('gap-2');
+        expect(row.classList.contains('gap-2')).toBe(true);
         expect(row.contains(screen.getByRole('button', { name: /🚀/ }))).toBe(true);
         expect(row.contains(screen.getByText(/app\.rank/))).toBe(false);
     });

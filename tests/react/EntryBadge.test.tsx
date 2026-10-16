@@ -318,23 +318,27 @@ describe('EntryBadge — layout: an info row, then an actions row', () => {
         );
     const badge = (container: Element) => container.querySelector('.badge')!;
 
-    test('the badge is a left-aligned column', () => {
+    test('the badge is a left-aligned column, its rows 8px apart', () => {
         const { container } = renderBadge();
-        const { className } = badge(container);
-        for (const cls of ['flex-col', 'items-start', 'justify-start', 'text-left']) {
-            expect(className).toContain(cls);
+        const { classList } = badge(container);
+        for (const cls of ['flex', 'flex-col', 'items-start', 'text-left', 'gap-2']) {
+            expect(classList.contains(cls)).toBe(true);
+        }
+        // Nothing that undoes it: the stock centring and the narrower gap.
+        for (const cls of ['items-center', 'justify-center', 'gap-1', 'flex-wrap']) {
+            expect(classList.contains(cls)).toBe(false);
         }
     });
 
     test('the info row holds the rank and when it went in; the actions row holds the buttons', () => {
         const { container } = renderBadge({ boostAvailable: true, turboAvailable: true, swapAvailable: true });
         const [info, actions] = Array.from(badge(container).children);
-        expect(info.className).toContain('flex-wrap');
+        expect(info.classList.contains('flex-wrap')).toBe(true);
         expect(info.textContent).toContain('app.rank');
         expect(info.textContent).toContain('app.entrySubmitted');
         expect(info.querySelector('button')).toBeNull();
-        expect(actions.className).toContain('flex-wrap');
-        expect(actions.className).toContain('gap-2');
+        expect(actions.classList.contains('flex-wrap')).toBe(true);
+        expect(actions.classList.contains('gap-2')).toBe(true);
         const labels = Array.from(actions.querySelectorAll('button')).map((button) => button.textContent);
         expect(labels).toEqual([
             expect.stringContaining('app.boost'),
