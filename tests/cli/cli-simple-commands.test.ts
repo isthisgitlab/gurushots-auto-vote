@@ -454,6 +454,7 @@ describe('discover', () => {
             ['not a number', { close_time: 'soon' }],
             ['infinite', { close_time: Infinity }],
             ['null', { close_time: null }],
+            ['beyond the dates a clock can write', { close_time: 1e13 }],
         ])('is left out when close_time is %s', async (_name, item) => {
             expect(await lineOf(item, 'UTC')).toBe('  • [1] A (flash) — free');
         });

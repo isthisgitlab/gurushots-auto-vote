@@ -14,6 +14,18 @@ const FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
 };
 
 /**
+ * A close time worth showing: the number of seconds when `raw` is a number or a numeric string above zero that
+ * makes a date the platform can write (which rules out infinity and NaN). Anything else, such as a boolean, an
+ * unreadable value or one past the latest date the platform can write, gives null, so the server's value shows no
+ * end instead of "Invalid Date".
+ */
+const endTimeOf = (raw: unknown): number | null => {
+    if (typeof raw !== 'number' && typeof raw !== 'string') return null;
+    const seconds = Number(raw);
+    return seconds > 0 && !Number.isNaN(new Date(seconds * 1000).getTime()) ? seconds : null;
+};
+
+/**
  * @param endTime - Unix timestamp, in seconds
  * @param timezone - 'local' or an IANA zone name (e.g. 'Europe/Riga')
  * @param locale - BCP 47 locale the date is written in
@@ -29,4 +41,4 @@ const formatEndTimeIn = (endTime: number, timezone: string, locale: string): str
     }
 };
 
-export { formatEndTimeIn };
+export { endTimeOf, formatEndTimeIn };

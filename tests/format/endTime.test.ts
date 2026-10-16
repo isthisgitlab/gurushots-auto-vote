@@ -3,7 +3,7 @@
  * timezone, in the given locale.
  */
 
-import { formatEndTimeIn } from '../../src/ts/format/endTime';
+import { endTimeOf, formatEndTimeIn } from '../../src/ts/format/endTime';
 
 // 2023-11-14 22:13 UTC.
 const END = 1_700_000_000;
@@ -29,5 +29,35 @@ describe('formatEndTimeIn', () => {
         });
         expect(formatEndTimeIn(END, 'local', 'en-GB')).toBe(device);
         expect(formatEndTimeIn(END, 'Not/AZone', 'en-GB')).toBe(device);
+    });
+});
+
+describe('endTimeOf', () => {
+    test.each([
+        [END, END],
+        [String(END), END],
+        [1.5, 1.5],
+        [8.64e12, 8.64e12],
+    ])('%p is a time worth showing: %p', (raw, seconds) => {
+        expect(endTimeOf(raw)).toBe(seconds);
+    });
+
+    test.each([
+        ['missing', undefined],
+        ['null', null],
+        ['zero', 0],
+        ['negative', -1],
+        ['text', 'soon'],
+        ['blank text', '  '],
+        ['infinite', Infinity],
+        ['not a number', NaN],
+        ['true, which Number() would read as 1', true],
+        ['false', false],
+        ['an object', {}],
+        ['a list', [1, 2]],
+        ['past the dates a clock can write', 1e13],
+        ['just past them', 8.64e12 + 1],
+    ])('%s is not a time', (_name, raw) => {
+        expect(endTimeOf(raw)).toBeNull();
     });
 });

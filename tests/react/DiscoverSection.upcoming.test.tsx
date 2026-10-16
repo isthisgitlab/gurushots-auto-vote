@@ -33,7 +33,7 @@ const english = (key: string, ...rest: unknown[]) => {
 let getMemberChallenges: MemberChallenges;
 let joinChallenge: jest.MockedFunction<WindowApi['joinChallenge']>;
 
-const renderSection = (items: OpenChallenge[], timezone?: string) => {
+const renderSection = (items: OpenChallenge[], timezone = 'Europe/Riga') => {
     getMemberChallenges.mockResolvedValue(invalid(answer(items)));
     return render(
         <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone={timezone} />,
@@ -382,8 +382,12 @@ describe('what a row says about its challenge: type, photos and tags', () => {
 describe('when a row ends', () => {
     // 1700000000 = 2023-11-14 22:13 UTC.
     const CLOSE = 1_700_000_000;
+    // The end texts without their separator, which has its own test.
     const endTexts = () =>
-        [...document.querySelectorAll('li span')].map((el) => el.textContent).filter((t) => t?.startsWith('Ends'));
+        [...document.querySelectorAll('li span')]
+            .map((el) => el.textContent ?? '')
+            .filter((text) => text.startsWith('· Ends'))
+            .map((text) => text.slice(2));
 
     test('every row, open and upcoming, says when it ends, in the app timezone as the challenge cards do', async () => {
         renderSection(
@@ -394,12 +398,12 @@ describe('when a row ends', () => {
         expect(endTexts()).toEqual(['Ends 14/11/2023, 22:13', 'Ends 14/11/2023, 23:13']);
     });
 
-    test('reads in another zone when the setting says so, and in the default zone without one', async () => {
+    test('reads in the zone the setting names', async () => {
         const { unmount } = renderSection([open(1, 'Open One', { close_time: CLOSE })], 'Asia/Tokyo');
         await settle();
         expect(endTexts()).toEqual(['Ends 15/11/2023, 07:13']);
         unmount();
-        renderSection([open(1, 'Open One', { close_time: CLOSE })]);
+        renderSection([open(1, 'Open One', { close_time: CLOSE })], 'Europe/Riga');
         await settle();
         expect(endTexts()).toEqual(['Ends 15/11/2023, 00:13']);
     });
@@ -411,6 +415,7 @@ describe('when a row ends', () => {
         ['not a number', 'soon'],
         ['infinite', Infinity],
         ['null', null],
+        ['beyond the dates a clock can write', 1e13],
     ])('a row whose close_time is %s says nothing about an end', async (_name, closeTime) => {
         renderSection([
             open(1, 'Open One', { close_time: closeTime }),
@@ -428,5 +433,22 @@ describe('when a row ends', () => {
         const line = screen.getByText('Ends 14/11/2023, 22:13').parentElement!;
         expect(line.className).toContain('flex-wrap');
         expect(line.textContent).toContain('free');
+    });
+
+    test('is set apart from the cost by a separator that a screen reader skips, and a row with no end has none', async () => {
+        renderSection([open(1, 'With', { close_time: CLOSE }), open(2, 'Without')], 'UTC');
+        await settle();
+        const rows = screen.getAllByRole('listitem');
+        const dots = (row: HTMLElement) =>
+            [...row.querySelectorAll('span[aria-hidden="true"]')].map((el) => el.textContent);
+        expect(dots(rows[0])).toEqual(['· ']);
+        // The separator is inside the end text, so it wraps with it, and comes after the cost.
+        const line = screen.getByText('Ends 14/11/2023, 22:13').parentElement!;
+        expect([...line.children].map((el) => el.textContent)).toEqual([
+            '🏁 DEFAULT',
+            'free',
+            '· Ends 14/11/2023, 22:13',
+        ]);
+        expect(dots(rows[1])).toEqual([]);
     });
 });

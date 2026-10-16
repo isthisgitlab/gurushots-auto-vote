@@ -58,7 +58,7 @@ beforeEach(() => {
 
 test('renders collapsed by default with an open-count badge', async () => {
     const { container } = render(
-        <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />,
+        <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
     );
     await screen.findByText('Free One');
     const details = container.querySelector('[data-testid="discover-section"]')!;
@@ -72,7 +72,7 @@ test('renders collapsed by default with an open-count badge', async () => {
 test('the count badge is an image named with its count, not a bare number', async () => {
     mockTranslator.t.mockImplementation((key) => (key === 'app.discoverCountLabel' ? '{count} open challenges' : key));
     try {
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
         await screen.findByText('Free One');
         const badge = screen.getByRole('img', { name: '2 open challenges' });
         expect(badge.textContent).toBe('2');
@@ -83,13 +83,13 @@ test('the count badge is an image named with its count, not a bare number', asyn
 
 test('the count badge is hidden when there are no open challenges', async () => {
     window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: true, items: [] }));
-    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
     await screen.findByText('app.discoverEmpty');
     expect(screen.queryByText('0')).toBeNull();
 });
 
 test('free join calls joinChallenge with spendCoins=false, no modal', async () => {
-    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
     await screen.findByText('Free One');
     const joinBtn = screen.getByText('app.discoverJoin');
     fireEvent.click(joinBtn);
@@ -99,7 +99,7 @@ test('free join calls joinChallenge with spendCoins=false, no modal', async () =
 });
 
 test('paid join opens the confirm modal and only spends on confirm', async () => {
-    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
     await screen.findByText('Paid One');
     fireEvent.click(screen.getByText('app.discoverJoinPaid'));
 
@@ -132,7 +132,7 @@ test('a price that rose after it was shown spends nothing: the row says so, and 
     );
     mockTranslator.t.mockImplementation((key) => (key === 'app.discoverPriceChanged' ? 'Now {coins} coins' : key));
     try {
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
         await screen.findByText('Paid One');
         const reads = jest.mocked(window.api.getMemberChallenges).mock.calls.length;
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
@@ -148,7 +148,7 @@ test('a price that rose after it was shown spends nothing: the row says so, and 
 describe('what a join answered is announced', () => {
     const answerWith = async (res: Record<string, unknown>) => {
         window.api.joinChallenge = joinMock().mockResolvedValue(invalid(res));
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
         await screen.findByText('Free One');
         fireEvent.click(screen.getByText('app.discoverJoin'));
     };
@@ -204,7 +204,9 @@ describe('a price that rose', () => {
         );
         mockTranslator.t.mockImplementation(confirmTexts);
         try {
-            render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+            render(
+                <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
+            );
             await screen.findByText('Paid One');
             fireEvent.click(screen.getByText('app.discoverJoinPaid'));
             fireEvent.click(await screen.findByText('Spend 100'));
@@ -235,7 +237,9 @@ describe('a price that rose', () => {
         );
         mockTranslator.t.mockImplementation(confirmTexts);
         try {
-            render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+            render(
+                <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
+            );
             await screen.findByText('Paid One');
             fireEvent.click(screen.getByText('app.discoverJoinPaid'));
             fireEvent.click(await screen.findByText('Spend 100'));
@@ -264,7 +268,9 @@ test.each([
             .mockResolvedValue(invalid({ success: true, status: 'joined' }));
         mockTranslator.t.mockImplementation((key) => (key === 'app.discoverConfirmSpend' ? 'Spend {coins}' : key));
         try {
-            render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+            render(
+                <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
+            );
             await screen.findByText('Paid One');
             fireEvent.click(screen.getByText('app.discoverJoinPaid'));
             // A cost of 0 (what Number(null) would read) must not make the row look free or the modal price 0.
@@ -282,7 +288,7 @@ describe('a paid row that was already charged', () => {
         // An unlock marker is left: the server retries the submit alone and answers joined.
         window.api.joinChallenge = joinMock().mockResolvedValue(invalid({ success: true, status: 'joined' }));
         const onJoined = jest.fn();
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 5 })} onJoined={onJoined} />);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 5 })} onJoined={onJoined} timezone="UTC" />);
         await screen.findByText('Paid One');
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
         expect(await screen.findByText('app.discoverJoined')).toBeTruthy();
@@ -294,7 +300,7 @@ describe('a paid row that was already charged', () => {
 
     test('with a balance too low to pay again it still finishes: no modal that disables the button', async () => {
         window.api.joinChallenge = joinMock().mockResolvedValue(invalid({ success: true, status: 'joined' }));
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 0 })} onJoined={jest.fn()} />);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 0 })} onJoined={jest.fn()} timezone="UTC" />);
         await screen.findByText('Paid One');
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
         await screen.findByText('app.discoverJoined');
@@ -313,7 +319,9 @@ describe('a paid row that was already charged', () => {
                   : key,
         );
         try {
-            render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+            render(
+                <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
+            );
             await screen.findByText('Paid One');
             fireEvent.click(screen.getByText('app.discoverJoinPaid'));
             expect(await screen.findByText('Costs 120')).toBeTruthy();
@@ -328,7 +336,7 @@ describe('a paid row that was already charged', () => {
     test('while a paid row is only being asked what it costs the button says "Checking…", not "Joining…"; a free row says "Joining…"', async () => {
         const pending = new Promise<never>(() => undefined);
         window.api.joinChallenge = joinMock().mockReturnValue(invalid(pending));
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
         await screen.findByText('Paid One');
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
         expect(await screen.findByText('app.discoverChecking')).toBeTruthy();
@@ -344,7 +352,7 @@ describe('a paid row that was already charged', () => {
             await new Promise<void>((resolve) => (release = resolve));
             return invalid({ success: true, status: 'joined' });
         });
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
         await screen.findByText('Paid One');
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
         fireEvent.click(await screen.findByText('app.discoverConfirmSpend'));
@@ -375,7 +383,14 @@ describe('a paid row that was already charged', () => {
                       : key,
             );
             try {
-                render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+                render(
+                    <DiscoverSection
+                        isLoggedIn
+                        bankroll={invalid({ coins: 500 })}
+                        onJoined={jest.fn()}
+                        timezone="UTC"
+                    />,
+                );
                 await screen.findByText('Alpha');
                 const [first, second] = screen.getAllByText('app.discoverJoinPaid');
                 fireEvent.click(first);
@@ -402,13 +417,17 @@ describe('a paid row that was already charged', () => {
         window.api.joinChallenge = joinMock().mockResolvedValue(
             invalid({ success: false, status: 'charged-pending-submit' }),
         );
-        const view = render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        const view = render(
+            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
+        );
         await screen.findByText('Paid One');
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
         await screen.findByText('app.discoverChargedPending');
         // Logged out, and in again as someone else.
-        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={jest.fn()} />);
-        view.rerender(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={jest.fn()} timezone="UTC" />);
+        view.rerender(
+            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
+        );
         await screen.findByText('Paid One');
         expect(screen.queryByText('app.discoverChargedPending')).toBeNull();
         expect(screen.queryByText('app.discoverRetrySubmit')).toBeNull();
@@ -418,12 +437,16 @@ describe('a paid row that was already charged', () => {
         let release!: (answer: Awaited<ReturnType<WindowApi['joinChallenge']>>) => void;
         window.api.joinChallenge = joinMock().mockImplementation(() => new Promise((resolve) => (release = resolve)));
         const onJoined = jest.fn();
-        const view = render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={onJoined} />);
+        const view = render(
+            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={onJoined} timezone="UTC" />,
+        );
         await screen.findByText('Paid One');
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
         await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledTimes(1));
-        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={onJoined} />);
-        view.rerender(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={onJoined} />);
+        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={onJoined} timezone="UTC" />);
+        view.rerender(
+            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={onJoined} timezone="UTC" />,
+        );
         await screen.findByText('Paid One');
         const reads = jest.mocked(window.api.getMemberChallenges).mock.calls.length;
         // The previous account's join comes back saying coins were charged.
@@ -440,12 +463,16 @@ describe('a paid row that was already charged', () => {
     test('an answer from before the account changed that asks for a price opens no dialog for the new account', async () => {
         let release!: (answer: Awaited<ReturnType<WindowApi['joinChallenge']>>) => void;
         window.api.joinChallenge = joinMock().mockImplementation(() => new Promise((resolve) => (release = resolve)));
-        const view = render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        const view = render(
+            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
+        );
         await screen.findByText('Paid One');
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
         await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledTimes(1));
-        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={jest.fn()} />);
-        view.rerender(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={jest.fn()} timezone="UTC" />);
+        view.rerender(
+            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
+        );
         await screen.findByText('Paid One');
         await act(async () => release(invalid(priceAsk(100))));
         expect(screen.queryByText('app.discoverConfirmTitle')).toBeNull();
@@ -454,12 +481,16 @@ describe('a paid row that was already charged', () => {
     test('a failed join that the old session threw is dropped too', async () => {
         let fail!: (error: Error) => void;
         window.api.joinChallenge = joinMock().mockImplementation(() => new Promise((_, reject) => (fail = reject)));
-        const view = render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        const view = render(
+            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
+        );
         await screen.findByText('Paid One');
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
         await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledTimes(1));
-        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={jest.fn()} />);
-        view.rerender(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={jest.fn()} timezone="UTC" />);
+        view.rerender(
+            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
+        );
         await screen.findByText('Paid One');
         await act(async () => fail(new Error('boom')));
         expect(screen.queryByText('boom')).toBeNull();
@@ -467,7 +498,7 @@ describe('a paid row that was already charged', () => {
 
     test('a retry of a paid join that is already charged says "Joining…", not "Checking…"', async () => {
         window.api.joinChallenge = spendLater({ status: 'charged-pending-submit', cost: 100 });
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
         await screen.findByText('Paid One');
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
         fireEvent.click(await screen.findByText('app.discoverConfirmSpend'));
@@ -482,7 +513,7 @@ describe('a paid row that was already charged', () => {
         window.api.joinChallenge = joinMock().mockResolvedValue(
             invalid({ success: false, status: 'failed-no-charge', reason: 'account-unknown', cost: 100 }),
         );
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
         await screen.findByText('Paid One');
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
         const note = await screen.findByText('app.discoverAccountUnknown');
@@ -511,7 +542,9 @@ describe('a paid row that was already charged', () => {
             key === 'app.discoverConfirmBody' ? 'Join {title} for {coins}' : key,
         );
         try {
-            render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+            render(
+                <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
+            );
             await screen.findByText('Alpha');
             const [alpha, beta] = screen.getAllByText('app.discoverJoinPaid');
             fireEvent.click(beta);
@@ -532,7 +565,7 @@ describe('a paid row that was already charged', () => {
     });
 
     test('a free row is joined as before, with no ask of its own', async () => {
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
         await screen.findByText('Free One');
         fireEvent.click(screen.getByText('app.discoverJoin'));
         await screen.findByText('app.discoverJoined');
@@ -560,7 +593,9 @@ describe('two joins at once', () => {
             key === 'app.discoverJoinLabel' ? 'Join {title}' : key === 'app.discoverJoining' ? 'Joining…' : key,
         );
         try {
-            render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+            render(
+                <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
+            );
             await screen.findByText('Alpha');
             fireEvent.click(screen.getByRole('button', { name: 'Join Alpha' }));
             fireEvent.click(screen.getByRole('button', { name: 'Join Beta' }));
@@ -584,7 +619,7 @@ describe('two joins at once', () => {
 });
 
 test('a free join sends no cost to confirm', async () => {
-    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
     await screen.findByText('Free One');
     fireEvent.click(screen.getByText('app.discoverJoin'));
     await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledWith(900001, false));
@@ -594,7 +629,7 @@ test('a statusless failure (auth expiry / handler error) still shows a message',
     window.api.joinChallenge = joinMock().mockResolvedValue(
         invalid({ success: false, error: 'No authentication token found' }),
     );
-    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
     await screen.findByText('Free One');
     fireEvent.click(screen.getByText('app.discoverJoin'));
     // No mapped status → falls back to the result's error, translated; never silent, never raw English.
@@ -603,7 +638,7 @@ test('a statusless failure (auth expiry / handler error) still shows a message',
 });
 
 test('confirm modal blocks the spend when the balance is short', async () => {
-    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 50 })} onJoined={jest.fn()} />);
+    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 50 })} onJoined={jest.fn()} timezone="UTC" />);
     await screen.findByText('Paid One');
     fireEvent.click(screen.getByText('app.discoverJoinPaid'));
     await screen.findByText('app.discoverConfirmTitle');
@@ -618,7 +653,7 @@ test('confirm modal blocks the spend when the balance is short', async () => {
 
 test('charged-pending-submit shows the distinct message + retry action', async () => {
     window.api.joinChallenge = spendLater({ status: 'charged-pending-submit', cost: 100 });
-    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
     await screen.findByText('Paid One');
     fireEvent.click(screen.getByText('app.discoverJoinPaid'));
     await screen.findByText('app.discoverConfirmTitle');
@@ -631,12 +666,22 @@ test('charged-pending-submit shows the distinct message + retry action', async (
 describe('edge paths', () => {
     const renderSection = (props = {}) => {
         const onJoined = jest.fn();
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={onJoined} {...props} />);
+        render(
+            <DiscoverSection
+                isLoggedIn
+                bankroll={invalid({ coins: 500 })}
+                onJoined={onJoined}
+                timezone="UTC"
+                {...props}
+            />,
+        );
         return { onJoined };
     };
 
     test('logged out renders nothing', () => {
-        const { container } = render(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={jest.fn()} />);
+        const { container } = render(
+            <DiscoverSection isLoggedIn={false} bankroll={null} onJoined={jest.fn()} timezone="UTC" />,
+        );
         expect(container.firstChild).toBeNull();
     });
 
@@ -1261,7 +1306,7 @@ describe('chosen photos', () => {
     });
 
     const renderSection = () =>
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
 
     test('a row with no list of its own has no Chosen chip, only the Choose photos action', async () => {
         renderSection();

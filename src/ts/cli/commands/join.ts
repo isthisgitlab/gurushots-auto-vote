@@ -11,7 +11,7 @@ import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
 import { stripTerminalControl } from '../../format/logSafe';
 import { formatDuration } from '../../format/duration';
 import { challengeKind, challengePhotoCount, listedTags } from '../../format/challengeListing';
-import { formatEndTimeIn } from '../../format/endTime';
+import { endTimeOf, formatEndTimeIn } from '../../format/endTime';
 import * as settings from '../../settings';
 import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 
@@ -57,8 +57,8 @@ const discoverLine = (c: DiscoverItem, nowSec: number, timezone: string): string
     const tagList = tags.length > 0 ? ` — tags: ${tags.join(', ')}` : '';
     const timing = c?.status === 'upcoming' ? ` — starts in ${formatDuration(Number(c.start_time) - nowSec)}` : '';
     // The end time, as the challenge card shows it: in the app's timezone setting, not the device clock.
-    const close = Number(c?.close_time);
-    const ends = Number.isFinite(close) && close > 0 ? ` — ends ${formatEndTimeIn(close, timezone, 'en-GB')}` : '';
+    const close = endTimeOf(c?.close_time);
+    const ends = close === null ? '' : ` — ends ${formatEndTimeIn(close, timezone, 'en-GB')}`;
     return `  • [${stripTerminalControl(String(c?.id))}] ${name} (${type})${photos} — ${cost}${tagList}${timing}${ends}`;
 };
 
