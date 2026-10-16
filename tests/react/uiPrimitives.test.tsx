@@ -3,7 +3,7 @@
  * the per-component suites don't reach: unknown size/variant props, the
  * focus-trap edges of Modal, and ErrorBoundary's odd-error handling.
  */
-import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
+import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { LoadingSpinner, PageLoader, InlineLoader, BusyContent } from '@/components/ui/LoadingSpinner';
 import { LEVEL_BADGE_CLASS } from '@/utils/levelBadge';
 import { PulseDot } from '@/components/ui/PulseDot';
@@ -100,6 +100,65 @@ describe('PulseDot', () => {
         const dots = container.querySelectorAll('.status');
         expect(dots).toHaveLength(1);
         expect(dots[0].className).toBe('status status-xs status-info');
+    });
+
+    describe('when the page comes back into view', () => {
+        afterEach(() => jest.restoreAllMocks());
+
+        const fireVisibilityChange = (state: DocumentVisibilityState) => {
+            jest.spyOn(document, 'visibilityState', 'get').mockReturnValue(state);
+            act(() => {
+                document.dispatchEvent(new Event('visibilitychange'));
+            });
+        };
+
+        test('a visible page restarts the halo as a fresh element', () => {
+            const { container } = render(<PulseDot />);
+            const halo = container.querySelectorAll('.status')[0];
+            fireVisibilityChange('visible');
+            const replayed = container.querySelectorAll('.status')[0];
+            expect(replayed).not.toBe(halo);
+            expect(replayed.className).toBe(halo.className);
+            expect(container.querySelectorAll('.status')).toHaveLength(2);
+        });
+
+        test('a focused window restarts the halo as a fresh element', () => {
+            const { container } = render(<PulseDot />);
+            const halo = container.querySelectorAll('.status')[0];
+            act(() => {
+                window.dispatchEvent(new Event('focus'));
+            });
+            const replayed = container.querySelectorAll('.status')[0];
+            expect(replayed).not.toBe(halo);
+            expect(replayed.className).toBe(halo.className);
+            expect(container.querySelectorAll('.status')).toHaveLength(2);
+        });
+
+        test('a hidden page leaves the halo alone', () => {
+            const { container } = render(<PulseDot />);
+            const halo = container.querySelectorAll('.status')[0];
+            fireVisibilityChange('hidden');
+            expect(container.querySelectorAll('.status')[0]).toBe(halo);
+        });
+
+        test('an unmounted dot removes the listeners it added', () => {
+            const addedToDocument = jest.spyOn(document, 'addEventListener');
+            const removedFromDocument = jest.spyOn(document, 'removeEventListener');
+            const addedToWindow = jest.spyOn(window, 'addEventListener');
+            const removedFromWindow = jest.spyOn(window, 'removeEventListener');
+            const { unmount } = render(<PulseDot />);
+            const lastListener = (
+                spy: jest.SpyInstance<void, Parameters<Document['addEventListener']>>,
+                type: string,
+            ) => spy.mock.calls.filter(([calledType]) => calledType === type).at(-1)![1];
+            const visibilityListener = lastListener(addedToDocument, 'visibilitychange');
+            const focusListener = lastListener(addedToWindow, 'focus');
+            act(() => {
+                unmount();
+            });
+            expect(lastListener(removedFromDocument, 'visibilitychange')).toBe(visibilityListener);
+            expect(lastListener(removedFromWindow, 'focus')).toBe(focusListener);
+        });
     });
 });
 
