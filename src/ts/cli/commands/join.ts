@@ -11,6 +11,9 @@ import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
 import { stripTerminalControl } from '../../format/logSafe';
 import { formatDuration } from '../../format/duration';
 import { challengeKind, challengePhotoCount, listedTags } from '../../format/challengeListing';
+import { formatEndTimeIn } from '../../format/endTime';
+import * as settings from '../../settings';
+import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 
 import type { NullEventHandlers } from '../../types/cli';
 import type { ForgetStatus } from '../../types/join';
@@ -25,11 +28,21 @@ const handlers = (): ActionHandlers =>
 
 type DiscoverItem = Pick<
     OpenChallenge,
-    'id' | 'title' | 'url' | 'type' | 'badge' | 'tags' | 'max_photo_submits' | 'status' | 'join_coins' | 'start_time'
+    | 'id'
+    | 'title'
+    | 'url'
+    | 'type'
+    | 'badge'
+    | 'tags'
+    | 'max_photo_submits'
+    | 'status'
+    | 'join_coins'
+    | 'start_time'
+    | 'close_time'
 >;
 
 /** One row of the listing. Everything that came from the server is stripped of terminal control. */
-const discoverLine = (c: DiscoverItem, nowSec: number): string => {
+const discoverLine = (c: DiscoverItem, nowSec: number, timezone: string): string => {
     // A number, whatever the server sent: it is printed as text.
     const coins = Number(c?.join_coins);
     const cost = coins > 0 ? `${coins} coins` : 'free';
@@ -43,7 +56,10 @@ const discoverLine = (c: DiscoverItem, nowSec: number): string => {
         .filter(Boolean);
     const tagList = tags.length > 0 ? ` — tags: ${tags.join(', ')}` : '';
     const timing = c?.status === 'upcoming' ? ` — starts in ${formatDuration(Number(c.start_time) - nowSec)}` : '';
-    return `  • [${stripTerminalControl(String(c?.id))}] ${name} (${type})${photos} — ${cost}${tagList}${timing}`;
+    // The end time, as the challenge card shows it: in the app's timezone setting, not the device clock.
+    const close = Number(c?.close_time);
+    const ends = Number.isFinite(close) && close > 0 ? ` — ends ${formatEndTimeIn(close, timezone, 'en-GB')}` : '';
+    return `  • [${stripTerminalControl(String(c?.id))}] ${name} (${type})${photos} — ${cost}${tagList}${timing}${ends}`;
 };
 
 const showDiscover = async () => {
@@ -60,7 +76,8 @@ const showDiscover = async () => {
         return;
     }
     const nowSec = Date.now() / 1000;
-    items.forEach((c) => logger.withCategory('ui').info(discoverLine(c, nowSec)));
+    const timezone = settings.getSetting('timezone') || DEFAULT_TIMEZONE;
+    items.forEach((c) => logger.withCategory('ui').info(discoverLine(c, nowSec, timezone)));
     logger.withCategory('ui').info('Join with: join <id>          (free challenges)');
     logger.withCategory('ui').info('           join <id> --yes    (paid challenges — spends coins)');
     const upcoming = items.filter((c) => c?.status === 'upcoming');

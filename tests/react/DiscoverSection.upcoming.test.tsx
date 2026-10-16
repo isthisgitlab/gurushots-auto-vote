@@ -33,9 +33,11 @@ const english = (key: string, ...rest: unknown[]) => {
 let getMemberChallenges: MemberChallenges;
 let joinChallenge: jest.MockedFunction<WindowApi['joinChallenge']>;
 
-const renderSection = (items: OpenChallenge[]) => {
+const renderSection = (items: OpenChallenge[], timezone?: string) => {
     getMemberChallenges.mockResolvedValue(invalid(answer(items)));
-    return render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+    return render(
+        <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone={timezone} />,
+    );
 };
 const settle = () => act(async () => void (await jest.advanceTimersByTimeAsync(0)));
 const advance = (ms: number) => act(async () => void (await jest.advanceTimersByTimeAsync(ms)));
@@ -373,6 +375,58 @@ describe('what a row says about its challenge: type, photos and tags', () => {
         const line = screen.getByText('One').parentElement!;
         expect(line.className).toContain('flex-wrap');
         // The cost sits on the same line, after the badges.
+        expect(line.textContent).toContain('free');
+    });
+});
+
+describe('when a row ends', () => {
+    // 1700000000 = 2023-11-14 22:13 UTC.
+    const CLOSE = 1_700_000_000;
+    const endTexts = () =>
+        [...document.querySelectorAll('li span')].map((el) => el.textContent).filter((t) => t?.startsWith('Ends'));
+
+    test('every row, open and upcoming, says when it ends, in the app timezone as the challenge cards do', async () => {
+        renderSection(
+            [open(1, 'Open One', { close_time: CLOSE }), upcoming(2, 'Soon', 3600, { close_time: CLOSE + 3600 })],
+            'UTC',
+        );
+        await settle();
+        expect(endTexts()).toEqual(['Ends 14/11/2023, 22:13', 'Ends 14/11/2023, 23:13']);
+    });
+
+    test('reads in another zone when the setting says so, and in the default zone without one', async () => {
+        const { unmount } = renderSection([open(1, 'Open One', { close_time: CLOSE })], 'Asia/Tokyo');
+        await settle();
+        expect(endTexts()).toEqual(['Ends 15/11/2023, 07:13']);
+        unmount();
+        renderSection([open(1, 'Open One', { close_time: CLOSE })]);
+        await settle();
+        expect(endTexts()).toEqual(['Ends 15/11/2023, 00:13']);
+    });
+
+    test.each([
+        ['missing', undefined],
+        ['zero', 0],
+        ['negative', -1],
+        ['not a number', 'soon'],
+        ['infinite', Infinity],
+        ['null', null],
+    ])('a row whose close_time is %s says nothing about an end', async (_name, closeTime) => {
+        renderSection([
+            open(1, 'Open One', { close_time: closeTime }),
+            upcoming(2, 'Soon', 3600, { close_time: closeTime }),
+        ]);
+        await settle();
+        expect(endTexts()).toEqual([]);
+        expect(screen.getByText('Open One')).toBeTruthy();
+        expect(screen.getByText('Soon')).toBeTruthy();
+    });
+
+    test('sits on the badge line with the cost, which wraps', async () => {
+        renderSection([open(1, 'Open One', { close_time: CLOSE })], 'UTC');
+        await settle();
+        const line = screen.getByText('Ends 14/11/2023, 22:13').parentElement!;
+        expect(line.className).toContain('flex-wrap');
         expect(line.textContent).toContain('free');
     });
 });

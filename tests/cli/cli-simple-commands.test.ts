@@ -29,6 +29,7 @@ jest.mock('../../src/ts/logger', () => {
 });
 
 jest.mock('../../src/ts/settings', () => ({
+    getSetting: jest.fn(),
     loadSettings: jest.fn(() => ({ mock: false })),
     setSetting: jest.fn(),
     isSignOutOwed: jest.fn(() => false),
@@ -413,6 +414,70 @@ describe('discover', () => {
         );
         await showDiscover();
         expect(msgs('info').some((l) => /\(flash\) — 2 photos — free — tags: Comm — starts in/.test(l))).toBe(true);
+    });
+
+    describe('the end time', () => {
+        // 1700000000 = 2023-11-14 22:13 UTC.
+        const CLOSE = 1_700_000_000;
+        const lineOf = async (item: object, timezone?: string) => {
+            settings.getSetting.mockReturnValue(invalid(timezone));
+            handlers['get-member-challenges'].mockResolvedValue(
+                invalid({ success: true, items: [{ id: 1, title: 'A', type: 'flash', join_coins: 0, ...item }] }),
+            );
+            await showDiscover();
+            return msgs('info')
+                .filter((l) => l.startsWith('  • [1]'))
+                .at(-1);
+        };
+
+        test('is written as the challenge card writes it, in the timezone setting and not the device clock', async () => {
+            expect(await lineOf({ close_time: CLOSE }, 'UTC')).toBe(
+                '  • [1] A (flash) — free — ends 14/11/2023, 22:13',
+            );
+            expect(await lineOf({ close_time: CLOSE }, 'Asia/Tokyo')).toBe(
+                '  • [1] A (flash) — free — ends 15/11/2023, 07:13',
+            );
+        });
+
+        test('reads in the default zone when none is set, and in the device zone for “local” or an invalid one', async () => {
+            expect(await lineOf({ close_time: CLOSE })).toBe('  • [1] A (flash) — free — ends 15/11/2023, 00:13');
+            for (const zone of ['local', 'Not/AZone']) {
+                const line = await lineOf({ close_time: CLOSE }, zone);
+                expect(line).toMatch(/^ {2}• \[1\] A \(flash\) — free — ends \d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}$/);
+            }
+        });
+
+        test.each([
+            ['missing', {}],
+            ['zero', { close_time: 0 }],
+            ['negative', { close_time: -5 }],
+            ['not a number', { close_time: 'soon' }],
+            ['infinite', { close_time: Infinity }],
+            ['null', { close_time: null }],
+        ])('is left out when close_time is %s', async (_name, item) => {
+            expect(await lineOf(item, 'UTC')).toBe('  • [1] A (flash) — free');
+        });
+
+        test('follows the start of an upcoming challenge, and the tags and photo count come before it', async () => {
+            const nowSec = Date.now() / 1000;
+            const line = await lineOf(
+                {
+                    status: 'upcoming',
+                    start_time: nowSec + 3600,
+                    close_time: CLOSE,
+                    max_photo_submits: 2,
+                    tags: ['Comm'],
+                },
+                'UTC',
+            );
+            expect(line).toMatch(
+                /^ {2}• \[1\] A \(flash\) — 2 photos — free — tags: Comm — starts in .+ — ends 14\/11\/2023, 22:13$/,
+            );
+        });
+
+        test('a numeric string is a time, like the cost', async () => {
+            expect(await lineOf({ close_time: String(CLOSE) }, 'UTC')).toContain(' — ends 14/11/2023, 22:13');
+        });
     });
 
     test('prints the cost as a number, whatever the server sent', async () => {

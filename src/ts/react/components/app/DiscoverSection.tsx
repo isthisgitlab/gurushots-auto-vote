@@ -11,7 +11,7 @@ import { outcomeMeta } from '@/utils/discoverOutcome';
 import type { OutcomeVariant } from '@/utils/discoverOutcome';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { interp } from '@/utils/interp';
-import { formatDuration } from '@/utils/formatters';
+import { formatDuration, formatEndTime } from '@/utils/formatters';
 import * as ipc from '@/api/ipc';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { listedTags } from '../../../format/challengeListing';
@@ -19,6 +19,8 @@ import { ChallengeKindBadges, ChallengeTagBadges } from './ChallengeKindBadges';
 import { PhotoChooserModal } from './PhotoChooserModal';
 import { ForgetPaymentModal } from './ForgetPaymentModal';
 import { JoinConfirmModal } from './JoinConfirmModal';
+
+import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 
 import type { Bankroll, Challenge, OpenChallenge } from '../../../types/gurushots';
 import type { JoinReason } from '../../../types/join';
@@ -296,6 +298,7 @@ function DiscoverRow({
     outcome,
     busy,
     nowSec,
+    timezone,
     onChoose,
     onJoin,
     onRetry,
@@ -305,6 +308,7 @@ function DiscoverRow({
     outcome: JoinOutcome | undefined;
     busy: JoinPhase | null;
     nowSec: number;
+    timezone: string;
     onChoose: () => void;
     onJoin: () => void;
     onRetry: () => void;
@@ -312,6 +316,7 @@ function DiscoverRow({
 }) {
     const { t } = useTranslation();
     const cost = costOf(c);
+    const closeTime = Number(c.close_time);
     const name = rowName(c, t('app.discoverUntitled'));
     // Upcoming rows wait: until the start, then until the open list shows the challenge.
     const waiting = c.status !== 'upcoming' ? null : secondsToStart(c, nowSec) !== null ? 'notStarted' : 'startingNow';
@@ -325,6 +330,11 @@ function DiscoverRow({
                     <span>
                         {cost > 0 ? interp(t('app.discoverCostPaid'), { coins: cost }) : t('app.discoverCostFree')}
                     </span>
+                    {Number.isFinite(closeTime) && closeTime > 0 && (
+                        <span>
+                            {t('app.ends')} {formatEndTime(closeTime, timezone)}
+                        </span>
+                    )}
                 </div>
                 <StartLine c={c} nowSec={nowSec} />
                 <ChosenMarks c={c} name={name} onChoose={onChoose} />
@@ -390,10 +400,13 @@ export function DiscoverSection({
     isLoggedIn,
     bankroll,
     onJoined,
+    timezone = DEFAULT_TIMEZONE,
 }: {
     isLoggedIn: boolean;
     bankroll: Bankroll | null;
     onJoined: () => void;
+    /** The Timezone setting, which the end times are written in (as on the challenge cards). */
+    timezone?: string;
 }) {
     const { t } = useTranslation();
     const { items, loading, error, refetch } = useMemberChallenges();
@@ -464,6 +477,7 @@ export function DiscoverSection({
                                     outcome={results[c.id]}
                                     busy={busy.get(c.id) ?? null}
                                     nowSec={nowSec}
+                                    timezone={timezone}
                                     onChoose={() => setChoosing(c)}
                                     onJoin={() => ask(c)}
                                     onRetry={() => ask(c)}

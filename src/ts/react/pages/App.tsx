@@ -182,6 +182,36 @@ function AppModals({
 }
 
 /**
+ * The notice for a logout that did not end (the sign-in is still stored): what failed, and whether auto-vote was
+ * stopped on the way. `refused`: the settings did not take the sign-out; otherwise something else failed.
+ */
+function LogoutProblemAlert({
+    problem,
+    onDismiss,
+}: {
+    problem: { refused: boolean; stopped: boolean };
+    onDismiss: () => void;
+}) {
+    const { t } = useTranslation();
+    return (
+        <div role="alert" className="alert alert-error mb-4 text-sm items-start">
+            <div className="flex-1 space-y-1">
+                <p className="font-semibold">
+                    {t(problem.refused ? 'errors.logoutNotSavedTitle' : 'errors.logoutFailedTitle')}
+                </p>
+                <p>
+                    {t(problem.refused ? 'errors.logoutNotSavedDetail' : 'errors.logoutFailedDetail')}
+                    {problem.stopped && ` ${t('errors.logoutNotSavedStopped')}`}
+                </p>
+            </div>
+            <button type="button" className="btn btn-sm" onClick={onDismiss}>
+                {t('errors.dismiss')}
+            </button>
+        </div>
+    );
+}
+
+/**
  * Main app content (inside all providers)
  */
 function AppContent() {
@@ -279,28 +309,7 @@ function AppContent() {
                 <ErrorBoundary>
                     <SettingsRecoveryNotice returnFocusTo={mainRef} />
                     {logoutProblem && (
-                        <div role="alert" className="alert alert-error mb-4 text-sm items-start">
-                            <div className="flex-1 space-y-1">
-                                <p className="font-semibold">
-                                    {t(
-                                        logoutProblem.refused
-                                            ? 'errors.logoutNotSavedTitle'
-                                            : 'errors.logoutFailedTitle',
-                                    )}
-                                </p>
-                                <p>
-                                    {t(
-                                        logoutProblem.refused
-                                            ? 'errors.logoutNotSavedDetail'
-                                            : 'errors.logoutFailedDetail',
-                                    )}
-                                    {logoutProblem.stopped && ` ${t('errors.logoutNotSavedStopped')}`}
-                                </p>
-                            </div>
-                            <button type="button" className="btn btn-sm" onClick={() => setLogoutProblem(null)}>
-                                {t('errors.dismiss')}
-                            </button>
-                        </div>
+                        <LogoutProblemAlert problem={logoutProblem} onDismiss={() => setLogoutProblem(null)} />
                     )}
 
                     {/* Navbar */}
@@ -349,7 +358,12 @@ function AppContent() {
 
                     {/* Discover — un-joined challenges, collapsed below the main list */}
                     <ErrorBoundary>
-                        <DiscoverSection isLoggedIn={isLoggedIn} bankroll={bankroll} onJoined={handleJoined} />
+                        <DiscoverSection
+                            isLoggedIn={isLoggedIn}
+                            bankroll={bankroll}
+                            onJoined={handleJoined}
+                            timezone={timezone}
+                        />
                     </ErrorBoundary>
 
                     <AppModals

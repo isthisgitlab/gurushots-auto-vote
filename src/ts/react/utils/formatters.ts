@@ -8,6 +8,7 @@ import { formatSecondsAsHoursMinutes } from './timeFieldUnits';
 import { formatDuration as formatDurationIn } from '../../format/duration';
 import { rendererTranslator } from '../../translations/renderer';
 import { buildPhotoUrl, entryPhotoUrl } from '../../format/photoUrl';
+import { formatEndTimeIn } from '../../format/endTime';
 import { finiteOr } from '../../numbers';
 import { interp } from './interp';
 import { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } from './levelBadge';
@@ -121,33 +122,8 @@ export const dateLocale = (): string => (rendererTranslator.getCurrentLanguage()
  * @param timezone - Timezone string (e.g., 'local', 'Europe/Riga')
  * @returns Formatted date string
  */
-export const formatEndTime = (endTime: number, timezone: string = 'local'): string => {
-    const date = new Date(endTime * 1000);
-
-    const formatOptions: Intl.DateTimeFormatOptions = {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-    };
-
-    const locale = dateLocale();
-    if (timezone === 'local') {
-        return date.toLocaleString(locale, formatOptions);
-    } else {
-        try {
-            return date.toLocaleString(locale, {
-                ...formatOptions,
-                timeZone: timezone,
-            });
-        } catch {
-            // Fallback to local on invalid timezone
-            return date.toLocaleString(locale, formatOptions);
-        }
-    }
-};
+export const formatEndTime = (endTime: number, timezone: string = 'local'): string =>
+    formatEndTimeIn(endTime, timezone, dateLocale());
 
 /**
  * A challenge-level boost or turbo state as the view words it: a stable `code` (the view picks the translated text
