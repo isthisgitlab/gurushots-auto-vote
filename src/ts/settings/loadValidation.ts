@@ -155,12 +155,13 @@ const dropInvalidAuth = (config: ConfigV2, dropped: string[]) => {
 };
 
 /**
- * Whether a stored `imported` record has the shape the importer writes.
+ * Whether a stored `imported` record has the shape the importer writes (a record an earlier build wrote also holds a
+ * `sha256`, which is accepted and ignored).
  */
 const isImportedRecord = (value: unknown): value is ImportedV2 =>
     isPlainObject(value) &&
     typeof value.at === 'string' &&
-    typeof value.sha256 === 'string' &&
+    (value.sha256 === undefined || typeof value.sha256 === 'string') &&
     typeof value.acknowledged === 'boolean' &&
     isPlainObject(value.report) &&
     Array.isArray(value.report.refsBlocked) &&

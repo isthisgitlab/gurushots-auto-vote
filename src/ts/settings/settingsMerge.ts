@@ -5,9 +5,9 @@
  * writer changed is kept; where both changed one value, `ours` wins.
  *
  * `ours` is the configuration persistence writes: the stored values over the defaults, with the values a load rejects
- * replaced by their defaults. `base` and `theirs` are normalised the same way before they are compared (the file
- * `rebaseConfigText` merges; the legacy settings file is merged as it is), so a setting that is absent from the stored
- * text but filled by its default in `ours`, or a stored value the load replaced, is not a change `ours` made.
+ * replaced by their defaults. `base` and `theirs` are normalised the same way before they are compared, so a setting
+ * that is absent from the stored text but filled by its default in `ours`, or a stored value the load replaced, is not
+ * a change `ours` made.
  */
 
 import { isPlainObject } from '../plainObject';
@@ -46,7 +46,13 @@ const merge = (base: unknown, ours: unknown, theirs: unknown): unknown => {
 // An absent text is no settings at all.
 const parseObject = (text: string | null, what: string): Record<string, unknown> => {
     if (!text) return {};
-    const parsed: unknown = JSON.parse(text);
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(text);
+    } catch {
+        // The parser's message can quote the text (the token among it): only the class of the failure is reported.
+        throw new Error(`the ${what} settings are not valid JSON`);
+    }
     if (!isPlainObject(parsed)) throw new Error(`the ${what} settings are not one JSON object`);
     return parsed;
 };
@@ -59,17 +65,6 @@ const parseConfig = (text: string | null, what: string): Record<string, unknown>
     return { ...config };
 };
 
-type Normalize = (text: string | null, what: string) => Record<string, unknown>;
-
-const rebase = (normalize: Normalize, base: string | null, ours: string, theirs: string | null): string => {
-    if (theirs === base) return ours;
-    return JSON.stringify(
-        merge(normalize(base, 'earlier'), parseObject(ours, 'new'), normalize(theirs, 'stored')),
-        null,
-        2,
-    );
-};
-
 /**
  * The text of `ours` made on `theirs` (JSON, as persistence writes it); `ours` itself when nothing else was saved since
  * `base`.
@@ -78,9 +73,11 @@ const rebase = (normalize: Normalize, base: string | null, ours: string, theirs:
  * @param theirs - what is stored now (null: nothing is)
  * @throws when `base` or `theirs` is not one JSON object: what is stored is unreadable, and is not overwritten
  */
-export const rebaseConfigText = (base: string | null, ours: string, theirs: string | null): string =>
-    rebase(parseConfig, base, ours, theirs);
-
-/** `rebaseConfigText` for a JSON object that is merged as it is, with no defaults (the legacy settings file). */
-export const rebaseJsonText = (base: string | null, ours: string, theirs: string | null): string =>
-    rebase(parseObject, base, ours, theirs);
+export const rebaseConfigText = (base: string | null, ours: string, theirs: string | null): string => {
+    if (theirs === base) return ours;
+    return JSON.stringify(
+        merge(parseConfig(base, 'earlier'), parseObject(ours, 'new'), parseConfig(theirs, 'stored')),
+        null,
+        2,
+    );
+};

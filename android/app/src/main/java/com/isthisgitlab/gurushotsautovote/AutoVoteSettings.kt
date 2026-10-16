@@ -16,9 +16,9 @@ import org.json.JSONObject
  * file named "CapacitorStorage" by default, where each key maps to a
  * String value. The configuration is stored under the single key
  * "gurushots-config" (see CONFIG_KEY in src/ts/settings/storage.ts), the two
- * values read here in its `app` object. Until the app window has imported the
- * 1.x settings into it (the first start after an upgrade), the same two values
- * are read from the top level of the 1.x blob under "gurushots-settings".
+ * values read here in its `app` object. Until the app window has imported
+ * settings.json into it (the first start after an upgrade), the same two values
+ * are read from the top level of the settings.json blob under "gurushots-settings".
  */
 object AutoVoteSettings {
 

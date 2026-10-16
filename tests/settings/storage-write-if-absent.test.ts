@@ -1,5 +1,5 @@
 /**
- * The write of an import (`writeIfAbsent`) and the keyed access to the 1.x settings blob, on the Android side: in the
+ * The write of an import (`writeIfAbsent`) and the keyed access to the settings.json blob, on the Android side: in the
  * background service (the native store's compare-and-write decides which context saved first) and in the app window
  * (the cache shows the import at once; the write-behind finds what the other context saved).
  */
@@ -145,7 +145,7 @@ describe('writeIfAbsent in the Android app window', () => {
     });
 });
 
-describe('the 1.x settings blob in the Android background service (keyed access)', () => {
+describe('settings.json in the Android background service (keyed access)', () => {
     test('is read and written key by key, a write saving only while the key holds what the last read answered', () => {
         const store = installHeadlessStore({ legacy: '{"theme":"dark"}' });
         const { legacyStorage } = loadStorage();
@@ -155,14 +155,14 @@ describe('the 1.x settings blob in the Android background service (keyed access)
         expect(store.legacy).toBe('{"theme":"light"}');
     });
 
-    test('a blob the other writer changed since the read is read again and the change made on it', () => {
+    test('a blob the other writer changed since the read is overwritten whole: nothing of it is merged in', () => {
         const store = installHeadlessStore({ legacy: '{"theme":"dark","language":"en"}' });
         const { legacyStorage } = loadStorage();
         legacyStorage.readRaw();
         store.legacy = '{"theme":"dark","language":"lv"}';
 
         expect(legacyStorage.writeRaw('{"theme":"light","language":"en"}')).toBe(true);
-        expect(JSON.parse(store.legacy ?? 'null')).toEqual({ theme: 'light', language: 'lv' });
+        expect(JSON.parse(store.legacy ?? 'null')).toEqual({ theme: 'light', language: 'en' });
     });
 
     test('a write the store keeps declining is a failed write, said in the log', () => {
@@ -254,7 +254,7 @@ describe('an import the Android app window could not store', () => {
     });
 });
 
-describe('a Preferences write of the 1.x settings blob that fails', () => {
+describe('a Preferences write of the settings.json blob that fails', () => {
     test('is logged and not reported to the window, which only watches the configuration', async () => {
         g.Capacitor = { isNativePlatform: () => true };
         mockPreferences.set.mockRejectedValueOnce(new Error('disk full'));

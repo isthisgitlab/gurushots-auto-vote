@@ -447,7 +447,8 @@ describe('setSetting on the background service', () => {
         const { app } = parse(native.value) as { app: Record<string, unknown> };
         expect(app.checkFrequencyMin).toBe(7);
         expect(app.language).toBe('lv');
-        // One load, a write refused because the window moved, one read to make the change again, and its write.
+        // One load, a write refused because the window moved, one read to make the change again, and its write. (The
+        // mirror of settings.json cannot start here: this bridge has no keyed calls.)
         expect(bridge.read).toHaveBeenCalledTimes(2);
         expect(bridge.write).toHaveBeenCalledTimes(2);
     });

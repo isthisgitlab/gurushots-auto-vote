@@ -16,7 +16,7 @@ import type { RendererGlobals } from '../../types/capacitor';
 (globalThis as RendererGlobals).__capacitorBootstrap = true;
 
 import { installBridge, subscribe } from '../../bridge/capacitor';
-import { initializeAsync as initSettings, checkLegacyDrift, flushPendingWrites, getSetting } from '../../settings';
+import { initializeAsync as initSettings, flushPendingWrites, getSetting } from '../../settings';
 import { initializeMetadataAsync, flushMetadataWrites } from '../../metadata';
 import { initializeJoinStateAsync, flushJoinStateWrites } from '../../joinStateStore';
 import { initializeSwapBackAsync, flushSwapBackWrites } from '../../swapBackStore';
@@ -44,8 +44,6 @@ const bootstrap = async () => {
     if (isCapacitor()) {
         installBridge();
         await initSettings();
-        // The settings.json the configuration was imported from may have changed since: raises a notice, never blocks.
-        await checkLegacyDrift();
         // Metadata rides the same platform-aware transport — hydrate its
         // cache too so per-challenge vote metadata survives relaunches.
         await initializeMetadataAsync();

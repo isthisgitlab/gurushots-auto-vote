@@ -600,19 +600,19 @@ class AutoVoteServiceTest {
     }
 
     @Test
-    fun theOneXSettingsAreReachableThroughTheKeyedCallsByCompareAndSetOnly() {
+    fun theSettingsJsonBlobIsReachableThroughTheKeyedCallsByCompareAndSetOnly() {
         val store = newService().HeadlessStore()
         ShadowLog.clear()
         TestSupport.writeLegacySettings(app, """{"token":"t","language":"lv"}""")
         assertEquals("""{"token":"t","language":"lv"}""", store.readKey("gurushots-settings"))
-        // A plain write would replace what the window blanked (or the import read).
+        // A plain write would replace what the window mirrored (or the import read).
         assertFalse(store.writeKey("gurushots-settings", """{"language":"lv"}"""))
         assertEquals("""{"token":"t","language":"lv"}""", TestSupport.readLegacySettings(app))
         assertEquals(
             listOf("Refusing a plain write of settings blob: it is changed by compare-and-set only"),
             ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
         )
-        // The blanking of the sign-in state is a change of what was read.
+        // The mirror of the configuration is a change of what was read.
         assertFalse(store.compareAndWriteKey("gurushots-settings", """{"token":"other"}""", """{"token":"","language":"lv"}"""))
         assertTrue(store.compareAndWriteKey("gurushots-settings", """{"token":"t","language":"lv"}""", """{"token":"","language":"lv"}"""))
         assertEquals("""{"token":"","language":"lv"}""", TestSupport.readLegacySettings(app))
@@ -626,6 +626,32 @@ class AutoVoteServiceTest {
     }
 
     @Test
+    fun theCopyKeptOfTheFileTheUserHadIsWrittenOnceByCompareAndSetOnly() {
+        val store = newService().HeadlessStore()
+        val key = SideStores.ORIGINAL_SETTINGS_KEY
+        assertEquals("gurushots-settings_original", key)
+        assertTrue(SideStores.isAllowed(key))
+        assertNull(store.readKey(key))
+        ShadowLog.clear()
+        // A plain write would replace the copy: it is taken by compare-and-set only, as "nothing stored yet".
+        assertFalse(store.writeKey(key, """{"token":"t"}"""))
+        assertEquals(
+            listOf("Refusing a plain write of settings copy blob: it is changed by compare-and-set only"),
+            ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
+        )
+        assertTrue(store.compareAndWriteKey(key, "", """{"token":"t"}"""))
+        assertEquals("""{"token":"t"}""", store.readKey(key))
+        // Once it is there, a second copy does not replace it.
+        assertFalse(store.compareAndWriteKey(key, "", """{"token":"other"}"""))
+        assertEquals("""{"token":"t"}""", store.readKey(key))
+        // It keeps the settings cap, not the side stores'.
+        val past = """{"k":"${"x".repeat(SideStores.MAX_BYTES * 4)}"}"""
+        assertTrue(store.compareAndWriteKey(key, """{"token":"t"}""", past))
+        val over = """{"k":"${"x".repeat(SideStores.MAX_SETTINGS_BYTES)}"}"""
+        assertEquals(SideStores.Outcome.TOO_LARGE, SideStores.compareAndSet(app, key, past, over).outcome)
+    }
+
+    @Test
     fun theSetAsideCopiesOfAnUnusableConfigurationAreNotKeysTheBridgeTakes() {
         // They are written and removed by the app window through Preferences itself, and the service never reads them.
         val store = newService().HeadlessStore()
@@ -633,6 +659,7 @@ class AutoVoteServiceTest {
         for (key in listOf(
             "gurushots-config_corrupt-2026-10-16T08-00-00-000Z",
             "gurushots-settings_corrupt-2026-10-16T08-00-00-000Z",
+            "gurushots-settings_unimportable-2026-10-16T08-00-00-000Z",
             "gurushots-config_corrupt",
             "gurushots-config-extra",
             "gs_v2_import_extra"

@@ -1,7 +1,8 @@
 /**
- * Shapes of the 2.x configuration (`config.json`, `version: 2`). Type-only: nothing here exists at runtime. The 1.x
- * importer (settings/importV1) produces a `StoredConfigV2` from a 1.x `settings.json`; loading it (settings/persistence.ts)
- * validates it and fills what it lacks, which makes the `ConfigV2` the whole app reads and writes.
+ * Shapes of the configuration (`config.json`, `version: 2`). Type-only: nothing here exists at runtime. The importer
+ * (settings/importV1) produces a `StoredConfigV2` from a `settings.json` (settings format 1); loading it
+ * (settings/persistence.ts) validates it and fills what it lacks, which makes the `ConfigV2` the whole app reads and
+ * writes.
  *
  * Setting values are stored as the settings facade validates them on read; here they are `unknown` because the
  * file is hand-editable and nothing is validated until it is read.
@@ -28,7 +29,7 @@ export interface ChallengePinsV2 {
 }
 
 /**
- * Everything stored for one challenge id. A field is present only when 1.x held something for the id: `values` iff
+ * Everything stored for one challenge id. A field is present only when `settings.json` held something for the id: `values` iff
  * it had a per-challenge entry (an empty `{}` included), `suppressRuleProfile` iff its rule profile was suppressed,
  * `pins` iff it had a pin record.
  */
@@ -39,7 +40,7 @@ export interface ChallengeRecordV2 {
 }
 
 /**
- * What the 1.x import found that it could not resolve. Key paths and names only, never values other than the name
+ * What the import found that it could not resolve. Key paths and names only, never values other than the name
  * a reference points at. Each entry reads `<path>: <the unresolved name as a JSON string>`, for example
  * `rules[2].profile: "Night owl"`, `profiles["Night"].scenario: "Plan B"` or
  * `challenges.123.values.scenario: "Plan B"`: rule indexes count from 0 in the stored order, profile names are
@@ -62,10 +63,11 @@ export interface ConfigApp extends ReturnType<typeof getUiDefaultSettings> {
     [key: string]: unknown;
 }
 
-/** The record of the one-time 1.x import. */
+/** The record of the import of the first `settings.json`. */
 export interface ImportedV2 {
     at: string;
-    sha256: string;
+    /** Only a record made by an earlier build holds it (a hash it compared `settings.json` with); nothing reads it. */
+    sha256?: string;
     report: ImportReportV2;
     acknowledged: boolean;
 }
@@ -78,7 +80,7 @@ interface ConfigDocument<App, Rule> {
     auth: ConfigAuthV2;
     /** The global defaults of the per-challenge settings. */
     defaults: SettingValuesV2;
-    /** Named setting sets. A value that is not an object is kept as stored (it is unusable, as in 1.x). */
+    /** Named setting sets. A value that is not an object is kept as stored (it is unusable, as it was before the import). */
     profiles: Record<string, unknown>;
     /** Normalized names of the intent profiles already seeded once. */
     seededProfiles: string[];

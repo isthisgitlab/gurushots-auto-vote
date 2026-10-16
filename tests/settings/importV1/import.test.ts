@@ -1,5 +1,5 @@
 /**
- * importV1Settings end to end: settings text in, the 2.x configuration (or the reason there is none) out, in memory
+ * importV1Settings end to end: settings text in, the configuration (or the reason there is none) out, in memory
  * only.
  */
 
@@ -69,7 +69,7 @@ describe('importV1Settings', () => {
         expect(okOf(importV1Settings('{"mock":true}')).config.app.mock).toBe(true);
         expect(okOf(importV1Settings('{"mock":false}')).config.app.mock).toBe(false);
         expect(okOf(importV1Settings('{}')).config.app).not.toHaveProperty('mock');
-        // A value of the wrong type was replaced by the build default when 1.x loaded it: nothing to carry.
+        // A value of the wrong type was replaced by the build default when the old load read it: nothing to carry.
         expect(okOf(importV1Settings('{"mock":"yes"}')).config.app).not.toHaveProperty('mock');
     });
 
@@ -110,8 +110,8 @@ describe('importV1Settings', () => {
     });
 
     test.each([
-        ['text that is not JSON', 'not json {', /^it is not valid JSON \(/],
-        ['an empty text', '', /^it is not valid JSON \(/],
+        ['text that is not JSON', 'not json {', /^it is not valid JSON$/],
+        ['an empty text', '', /^it is not valid JSON$/],
         ['an array root', '[1]', /^its root is not an object$/],
         ['a string root', '"x"', /^its root is not an object$/],
         ['a null root', 'null', /^its root is not an object$/],

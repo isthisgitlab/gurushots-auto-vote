@@ -1,22 +1,31 @@
 /**
- * rebaseJsonText / rebaseConfigText: a settings change made again on the document another writer saved meanwhile. Only
+ * rebaseConfigText: a settings change made again on the document another writer saved meanwhile. Only
  * what the change altered against the text it was made from is applied; what the other writer altered is kept. The
  * configuration's own merge reads both sides as a load does first, so a default is no change.
  */
 
-import { rebaseConfigText, rebaseJsonText } from '../../src/ts/settings/settingsMerge';
+import { rebaseConfigText } from '../../src/ts/settings/settingsMerge';
 import { isPlainObject } from '../../src/ts/plainObject';
 import { getDefaultSettings } from '../../src/ts/settings/defaults';
 
 const text = (value: unknown) => JSON.stringify(value, null, 2);
-const rebase = (base: unknown, ours: unknown, theirs: unknown) =>
-    JSON.parse(rebaseJsonText(text(base), text(ours), text(theirs))) as unknown;
+// The generic cases run over the `defaults` container, which holds any keys: the rest of the configuration is the defaults.
+const inDefaults = (value: unknown) => text({ ...getDefaultSettings(), defaults: value });
+const defaultsOf = (merged: string): unknown => {
+    const parsed: unknown = JSON.parse(merged);
+    if (!isPlainObject(parsed)) throw new Error('not an object');
+    return parsed.defaults;
+};
+const rebaseText = (base: string | null, ours: string, theirs: string | null): string =>
+    JSON.stringify(defaultsOf(rebaseConfigText(base, ours, theirs)), null, 2);
+const rebase = (base: unknown, ours: unknown, theirs: unknown): unknown =>
+    defaultsOf(rebaseConfigText(inDefaults(base), inDefaults(ours), inDefaults(theirs)));
 
-describe('rebaseJsonText', () => {
+describe('rebaseConfigText: a three-way merge of the documents', () => {
     test('with nothing else saved since, the changed text is returned as it is', () => {
         const ours = '{"a":1,   "b":2}';
-        expect(rebaseJsonText('{"a":1}', ours, '{"a":1}')).toBe(ours);
-        expect(rebaseJsonText(null, ours, null)).toBe(ours);
+        expect(rebaseConfigText('{"a":1}', ours, '{"a":1}')).toBe(ours);
+        expect(rebaseConfigText(null, ours, null)).toBe(ours);
     });
 
     test('a setting each side changed, in different keys, survives', () => {
@@ -65,18 +74,21 @@ describe('rebaseJsonText', () => {
         expect(rebase({ a: 1 }, { a: { x: 1 } }, { a: 2 })).toEqual({ a: { x: 1 } });
     });
 
-    test('with no earlier text or nothing stored, the other side counts as empty', () => {
-        expect(JSON.parse(rebaseJsonText(null, '{"a":1}', '{"b":2}'))).toEqual({ a: 1, b: 2 });
-        expect(JSON.parse(rebaseJsonText('{"a":1}', '{"a":1,"c":3}', null))).toEqual({ c: 3 });
-        expect(JSON.parse(rebaseJsonText('', '{"a":1}', '{"b":2}'))).toEqual({ a: 1, b: 2 });
+    test('with no earlier text or nothing stored, the other side counts as the defaults', () => {
+        expect(JSON.parse(rebaseText(null, inDefaults({ a: 1 }), inDefaults({ b: 2 })))).toEqual({ a: 1, b: 2 });
+        expect(JSON.parse(rebaseText(inDefaults({ a: 1 }), inDefaults({ a: 1, c: 3 }), null))).toEqual({ c: 3 });
+        expect(JSON.parse(rebaseText('', inDefaults({ a: 1 }), inDefaults({ b: 2 })))).toEqual({ a: 1, b: 2 });
     });
 
     test('is written as persistence writes it', () => {
-        expect(rebaseJsonText('{"a":1}', '{"a":2}', '{"a":1,"b":1}')).toBe(text({ a: 2, b: 1 }));
+        expect(rebaseText(inDefaults({ a: 1 }), inDefaults({ a: 2 }), inDefaults({ a: 1, b: 1 }))).toBe(
+            text({ a: 2, b: 1 }),
+        );
     });
 
     test('a __proto__ key stays data and never reaches the prototype', () => {
-        const merged: unknown = JSON.parse(rebaseJsonText('{}', '{"a":1}', '{"__proto__":{"polluted":true},"b":1}'));
+        const poisoned: unknown = JSON.parse('{"__proto__":{"polluted":true},"b":1}');
+        const merged = defaultsOf(rebaseConfigText('{}', inDefaults({ a: 1 }), JSON.stringify({ defaults: poisoned })));
         if (!isPlainObject(merged)) throw new Error('not an object');
         expect(Object.hasOwn(merged, '__proto__')).toBe(true);
         expect(Object.getPrototypeOf(merged)).toBe(Object.prototype);
@@ -85,11 +97,27 @@ describe('rebaseJsonText', () => {
     });
 
     test.each([
-        ['an unreadable stored text', '{"a":1}', '{"a":2}', '{broken'],
-        ['a stored text that is not an object', '{"a":1}', '{"a":2}', '[1]'],
-        ['an unreadable earlier text', '{broken', '{"a":2}', '{"a":1}'],
+        ['stored', '{}', '{"a":2}', '{"token":"sekrit"'],
+        ['earlier', '{"token":"sekrit"', '{"a":2}', '{}'],
+        ['new', '{}', '{"token":"sekrit"', '{"a":1}'],
+    ])(
+        'an unreadable %s text is reported by its class: the error never quotes the text',
+        (_name, base, ours, theirs) => {
+            expect(() => rebaseConfigText(base, ours, theirs)).toThrow(/not valid JSON/);
+            try {
+                rebaseConfigText(base, ours, theirs);
+            } catch (error) {
+                expect(String(error)).not.toContain('sekrit');
+            }
+        },
+    );
+
+    test.each([
+        ['an unreadable stored text', '{}', '{"a":2}', '{broken'],
+        ['a stored text that is not an object', '{}', '{"a":2}', '[1]'],
+        ['an unreadable earlier text', '{broken', '{"a":2}', '{}'],
     ])('%s is not overwritten: it throws', (_name, base, ours, theirs) => {
-        expect(() => rebaseJsonText(base, ours, theirs)).toThrow();
+        expect(() => rebaseConfigText(base, ours, theirs)).toThrow();
     });
 
     describe('the configuration: defaults are not changes', () => {

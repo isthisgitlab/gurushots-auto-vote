@@ -1,8 +1,8 @@
 /**
- * The one-time import of a 1.x `settings.json` into the 2.x configuration. The 1.x load pipeline lives here as a
+ * The import of a format-1 `settings.json` into the configuration. The format-1 load pipeline lives here as a
  * frozen copy (frozen schema, merge over the defaults, the eight migrations, load validation, prune), so a later
  * change to the live settings cannot change what an old file imports as. It runs in memory only: it reads the
- * text it is given, writes nothing, and never saves the migrated blob back as 1.x did.
+ * text it is given, writes nothing, and never saves the migrated blob back, as the old load did.
  */
 
 import * as logger from '../../logger';
@@ -23,14 +23,15 @@ const parseV1Settings = (raw: string): { ok: true; value: object } | { ok: false
     let parsed: unknown;
     try {
         parsed = JSON.parse(raw);
-    } catch (error) {
-        return { ok: false, reason: `it is not valid JSON (${errorMessage(error)})` };
+    } catch {
+        // The parser's message can quote the text (the token among it): only the class of the failure is reported.
+        return { ok: false, reason: 'it is not valid JSON' };
     }
     return isPlainObject(parsed) ? { ok: true, value: parsed } : { ok: false, reason: 'its root is not an object' };
 };
 
 /**
- * Merge a parsed 1.x settings object over the defaults, migrate it and drop the values it may not hold: what a 1.x
+ * Merge a parsed format-1 settings object over the defaults, migrate it and drop the values it may not hold: what the old
  * load returned. Returns the blob and the paths whose values were dropped. Throws when a migration cannot handle
  * the file.
  */
@@ -44,12 +45,21 @@ type ImportV1Result =
     | { ok: true; config: StoredConfigV2; titlePins: Record<string, string>; report: ImportReportV2 }
     | { ok: false; code: 'corrupt' | 'migration-failed'; detail: string };
 
+/** What the import is told of the live settings, which the frozen pipeline otherwise knows nothing of. */
+type ImportV1Options = {
+    /**
+     * A per-challenge or global-default key that the frozen schema does not define and that is kept all the same (the
+     * live schema's keys: the settings.json the app writes holds them). Without it such a key is pruned, as the old load pruned it.
+     */
+    keptKey?: (key: string) => boolean;
+};
+
 /**
- * Turn the text of a 1.x `settings.json` into a 2.x configuration. `corrupt`: the text is not JSON, or its root is
- * not an object. `migration-failed`: the 1.x pipeline threw on it. The title pins come back next to the
+ * Turn the text of a format-1 `settings.json` into a configuration. `corrupt`: the text is not JSON, or its root is
+ * not an object. `migration-failed`: the frozen pipeline threw on it. The title pins come back next to the
  * configuration, which does not hold them.
  */
-const importV1Settings = (raw: string): ImportV1Result => {
+const importV1Settings = (raw: string, { keptKey }: ImportV1Options = {}): ImportV1Result => {
     const parsed = parseV1Settings(raw);
     if (!parsed.ok) return { ok: false, code: 'corrupt', detail: parsed.reason };
     try {
@@ -58,10 +68,10 @@ const importV1Settings = (raw: string): ImportV1Result => {
             logger
                 .withCategory('settings')
                 .warning(
-                    `Importing 1.x settings: ignoring stored values that are not valid (defaults apply): ${oneLine(dropped.join(', ')).slice(0, 500)}`,
+                    `Importing settings.json: ignoring stored values that are not valid (defaults apply): ${oneLine(dropped.join(', ')).slice(0, 500)}`,
                 );
         }
-        pruneV1Obsolete(blob);
+        pruneV1Obsolete(blob, keptKey);
         // A `mock` the load had to replace (the wrong type) is one the file did not usefully hold.
         const mockStored = Object.hasOwn(parsed.value, 'mock') && !dropped.includes('mock');
         return { ok: true, ...convertV1Blob(blob, { mockStored }) };

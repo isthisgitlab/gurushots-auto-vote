@@ -124,11 +124,12 @@ describe('the local-data registry', () => {
         expect(listed.filter((entry) => !created.includes(entry))).toEqual([]);
     });
 
-    test('the configuration, the 1.x settings file, the import marker and the title pins are in it', () => {
+    test('the configuration, settings.json and the copy kept of it, the import marker and the title pins are in it', () => {
         expect(LOCAL_DATA_STORES).toEqual(
             expect.arrayContaining([
                 { fileName: 'config.json', prefKey: 'gurushots-config' },
                 { fileName: 'settings.json', prefKey: 'gurushots-settings' },
+                { fileName: 'settings.json.original', prefKey: 'gurushots-settings_original' },
                 { fileName: 'v2-import.json', prefKey: 'gs_v2_import' },
                 { fileName: 'titlePins.json', prefKey: 'gs_title_pins' },
             ]),
@@ -184,6 +185,7 @@ describe('wipeLocalData', () => {
             fs.writeFileSync(path.join(userData, fileName), '{"x":1}');
         }
         fs.writeFileSync(path.join(userData, 'settings.json.corrupt-2026-01-01T00-00-00-000Z'), 'broken');
+        fs.writeFileSync(path.join(userData, 'settings.json.unimportable-2026-01-01T00-00-00-000Z'), 'broken');
         fs.writeFileSync(path.join(userData, 'config.json.corrupt-2026-01-02T00-00-00-000Z'), 'broken');
         fs.writeFileSync(path.join(userData, 'config.json.corrupt-2026-01-03T00-00-00-000Z'), 'broken');
         fs.writeFileSync(path.join(userData, 'statelock-config-import.lock'), 'token');
@@ -264,6 +266,8 @@ describe('wipeLocalData', () => {
                     path.join(userData, 'config.json.corrupt-2026-01-02T00-00-00-000Z'),
                     path.join(userData, 'config.json.corrupt-2026-01-03T00-00-00-000Z'),
                     path.join(userData, 'settings.json'),
+                    path.join(userData, 'settings.json.original'),
+                    path.join(userData, 'settings.json.unimportable-2026-01-01T00-00-00-000Z'),
                     path.join(userData, 'v2-import.json'),
                     path.join(userData, 'titlePins.json'),
                     path.join(userData, 'statelock-config-import.lock'),
@@ -577,6 +581,7 @@ describe('wipeLocalData', () => {
                 'gurushots-config_corrupt-2026-01-02T00-00-00-000Z',
                 'gurushots-config_corrupt-2026-02-03T00-00-00-000Z',
                 'gurushots-settings_corrupt-2026-01-02T00-00-00-000Z',
+                'gurushots-settings_unimportable-2026-01-02T00-00-00-000Z',
             ];
             mockPreferences.keys.mockResolvedValueOnce({ keys: [...aside, 'someone-elses-key', 'gurushots-config'] });
             load();
@@ -605,6 +610,7 @@ describe('wipeLocalData', () => {
                     'gurushots-config_corrupt',
                     'gurushots-settings',
                     'gurushots-settings_corrupt',
+                    'gurushots-settings_original',
                     'gs_v2_import',
                     'gs_v2_import_corrupt',
                     'gs_title_pins',

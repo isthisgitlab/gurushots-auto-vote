@@ -1,7 +1,9 @@
 /**
- * The one-time import on Android: in the app window (Preferences behind a cache, which must have been hydrated before
- * the import can read anything) and in the background service (the native store; the compare-and-write of the
- * configuration decides which context imports first).
+ * The import on Android: in the app window (Preferences behind a cache, which must have been hydrated before the
+ * import can read anything) and in the background service (the native store; the compare-and-write of the
+ * configuration decides which context imports first); and the mirror that keeps settings.json current in both: written
+ * only once the configuration it is made from has landed, as a compare-and-overwrite that is made again from the stored
+ * configuration when settings.json changed under it, and given up quietly after a few tries.
  */
 
 // No test here may touch the real user-data folder: the path is a made-up one that does not exist.
@@ -24,11 +26,21 @@ jest.mock('../../src/ts/logger', () => {
         __cat: cat,
     };
 });
+// What Preferences holds: the mock reads and writes it, so the app window sees what it saved.
+const prefs = new Map<string, string>();
 const mockPreferences = {
-    set: jest.fn<Promise<void>, [{ key: string; value: string }]>(() => Promise.resolve()),
-    get: jest.fn<Promise<{ value: string | null }>, [{ key: string }]>(() => Promise.resolve({ value: null })),
-    remove: jest.fn<Promise<void>, [{ key: string }]>(() => Promise.resolve()),
-    keys: jest.fn<Promise<{ keys: string[] }>, []>(() => Promise.resolve({ keys: [] })),
+    set: jest.fn<Promise<void>, [{ key: string; value: string }]>(({ key, value }) => {
+        prefs.set(key, value);
+        return Promise.resolve();
+    }),
+    get: jest.fn<Promise<{ value: string | null }>, [{ key: string }]>(({ key }) =>
+        Promise.resolve({ value: prefs.get(key) ?? null }),
+    ),
+    remove: jest.fn<Promise<void>, [{ key: string }]>(({ key }) => {
+        prefs.delete(key);
+        return Promise.resolve();
+    }),
+    keys: jest.fn<Promise<{ keys: string[] }>, []>(() => Promise.resolve({ keys: [...prefs.keys()] })),
 };
 jest.mock('@capacitor/preferences', () => ({ Preferences: mockPreferences }), { virtual: true });
 
@@ -54,12 +66,24 @@ const loadSettingsModule = () => {
     return mod!;
 };
 
+const useMemoryPreferences = () => {
+    mockPreferences.set.mockImplementation(({ key, value }) => {
+        prefs.set(key, value);
+        return Promise.resolve();
+    });
+    mockPreferences.get.mockImplementation(({ key }) => Promise.resolve({ value: prefs.get(key) ?? null }));
+};
+
 afterEach(() => {
     delete g.Capacitor;
     removeHeadlessStore();
     jest.clearAllMocks();
-    mockPreferences.get.mockImplementation(() => Promise.resolve({ value: null }));
+    prefs.clear();
+    useMemoryPreferences();
 });
+
+const savedKeys = () => mockPreferences.set.mock.calls.map(([call]) => call.key);
+const saved = (key: string) => parseJsonObject(prefs.get(key) ?? 'null');
 
 describe('the import in the Android app window', () => {
     beforeEach(() => {
@@ -67,9 +91,7 @@ describe('the import in the Android app window', () => {
     });
 
     test('waits for the stored settings to be read, and is not held against a later read', async () => {
-        mockPreferences.get.mockImplementation(({ key }) =>
-            Promise.resolve({ value: key === 'gurushots-settings' ? ONE_X : null }),
-        );
+        prefs.set('gurushots-settings', ONE_X);
         const settings = loadSettingsModule();
 
         // Before the window has hydrated, nothing can be read: saves are refused, but the failure is not remembered.
@@ -87,80 +109,33 @@ describe('the import in the Android app window', () => {
         expect(settings.getSettingsRecovery()).toBeNull();
         expect(settings.getTitlePins()).toEqual({ '7': 'Macro' });
         await settings.flushPendingWrites();
-        const saved = new Map(mockPreferences.set.mock.calls.map(([call]) => [call.key, call.value]));
-        expect(parseJsonObject(saved.get('gurushots-config') ?? 'null')).toMatchObject({ version: 2 });
-        expect(saved.has('gs_v2_import')).toBe(true);
-        expect(parseJsonObject(saved.get('gurushots-settings') ?? 'null')).toMatchObject({ theme: 'dark', token: '' });
-    });
-});
-
-describe('the settings.json the Android import was made from', () => {
-    const latest = () => {
-        const saved = new Map<string, string>();
-        for (const [call] of mockPreferences.set.mock.calls) saved.set(call.key, call.value);
-        return saved;
-    };
-    const importedHash = () => {
-        const { imported } = parseJsonObject(latest().get('gurushots-config') ?? '{}');
-        return typeof imported === 'object' && imported !== null && 'sha256' in imported ? imported.sha256 : undefined;
-    };
-
-    beforeEach(() => {
-        g.Capacitor = { isNativePlatform: () => true };
-    });
-
-    test('its hash is stored with the import, and a change made later raises the notice at the next start', async () => {
-        mockPreferences.get.mockImplementation(({ key }) =>
-            Promise.resolve({ value: key === 'gurushots-settings' ? ONE_X : null }),
-        );
-        const first = loadSettingsModule();
-        await first.initializeAsync();
-        first.loadSettings();
-        for (let attempt = 0; attempt < 200 && !/^[0-9a-f]{64}$/.test(`${importedHash()}`); attempt += 1) {
-            await new Promise((resolve) => setTimeout(resolve, 5));
-            await first.flushPendingWrites();
-        }
-        expect(importedHash()).toMatch(/^[0-9a-f]{64}$/);
-
-        // The next start: the same stores, and a settings.json that was edited meanwhile.
-        const saved = latest();
-        const edited = JSON.stringify({ ...parseJsonObject(ONE_X), theme: 'light' });
-        mockPreferences.get.mockImplementation(({ key }) =>
-            Promise.resolve({ value: key === 'gurushots-settings' ? edited : (saved.get(key) ?? null) }),
-        );
-        const next = loadSettingsModule();
-        await next.initializeAsync();
-        await next.checkLegacyDrift();
-
-        expect(next.getSettingsRecovery()).toEqual({
-            code: 'settings-v1-changed',
-            path: 'gurushots-settings',
-            blocking: false,
-        });
-        expect(next.setSetting('theme', 'light')).toBe(true);
+        expect(saved('gurushots-config')).toMatchObject({ version: 2 });
+        expect(prefs.has('gs_v2_import')).toBe(true);
+        // settings.json is the mirror now, sign-in state kept; the file the user had is kept beside it.
+        expect(saved('gurushots-settings')).toMatchObject({ theme: 'dark', token: 'tok-secret' });
+        expect(prefs.get('gurushots-settings_original')).toBe(ONE_X);
     });
 });
 
 describe('the import in the Android app window is done only once its configuration is stored', () => {
     const hydrated = async () => {
-        mockPreferences.get.mockImplementation(({ key }) =>
-            Promise.resolve({ value: key === 'gurushots-settings' ? ONE_X : null }),
-        );
+        prefs.set('gurushots-settings', ONE_X);
         const settings = loadSettingsModule();
         await settings.initializeAsync();
         return settings;
     };
-    const savedKeys = () => mockPreferences.set.mock.calls.map(([call]) => call.key);
 
     beforeEach(() => {
         g.Capacitor = { isNativePlatform: () => true };
     });
 
-    test('a configuration the store refuses leaves no marker and the sign-in state in settings.json; the next try imports again', async () => {
+    test('a configuration the store refuses leaves no marker and settings.json as it was; the next try imports again', async () => {
         const settings = await hydrated();
-        mockPreferences.set.mockImplementation(({ key }) =>
-            key === 'gurushots-config' ? Promise.reject(new Error('disk full')) : Promise.resolve(),
-        );
+        mockPreferences.set.mockImplementation(({ key, value }) => {
+            if (key === 'gurushots-config') return Promise.reject(new Error('disk full'));
+            prefs.set(key, value);
+            return Promise.resolve();
+        });
 
         // The cache shows the import at once...
         expect(settings.loadSettings().app.theme).toBe('dark');
@@ -178,15 +153,15 @@ describe('the import in the Android app window is done only once its configurati
         expect(settings.setSetting('theme', 'light')).toBe(false);
 
         // The user's retry (or the next start, which finds no marker) imports again, and this time it lands.
-        mockPreferences.set.mockImplementation(() => Promise.resolve());
+        useMemoryPreferences();
         expect(settings.retryImport()).toBe(true);
         await settings.flushPendingWrites();
 
         expect(settings.getSettingsRecovery()).toBeNull();
         expect(settings.loadSettings().app.theme).toBe('dark');
+        await settings.flushPendingWrites();
         expect(savedKeys()).toContain('gs_v2_import');
-        const blanked = mockPreferences.set.mock.calls.find(([call]) => call.key === 'gurushots-settings');
-        expect(parseJsonObject(blanked?.[0].value ?? 'null')).toMatchObject({ theme: 'dark', token: '' });
+        expect(saved('gurushots-settings')).toMatchObject({ theme: 'dark', token: 'tok-secret' });
     });
 
     test('a blob past the size the native store takes fails the import the same way', async () => {
@@ -221,7 +196,7 @@ describe('the import in the Android app window is done only once its configurati
         expect(savedKeys()).not.toContain('gurushots-config');
         expect(settings.getSettingsRecovery()).toBeNull();
         expect(settings.loadSettings().app.theme).toBe('light');
-        // What the winner imported is the same 1.x file: this context's marker and blanking only repeat its own.
+        // What the winner imported is the same file: this context's marker only repeats its own.
         expect(savedKeys()).toContain('gs_v2_import');
     });
 });
@@ -237,7 +212,7 @@ describe('importing again in the Android app window before it has read the store
 });
 
 describe('the import in the Android background service', () => {
-    test('imports into the native store: the configuration, the pins and the marker, with the sign-in state blanked', () => {
+    test('imports into the native store: the configuration, the pins and the marker; settings.json becomes the mirror', () => {
         const store = installHeadlessStore({ legacy: ONE_X });
         const settings = loadSettingsModule();
 
@@ -246,10 +221,12 @@ describe('the import in the Android background service', () => {
         expect(parseJsonObject(store.value ?? 'null')).toMatchObject({ version: 2, auth: { token: 'tok-secret' } });
         expect(store.keys.get('gs_title_pins')).toBe('{\n  "7": "Macro"\n}');
         expect(store.keys.has('gs_v2_import')).toBe(true);
-        expect(parseJsonObject(store.legacy ?? 'null')).toMatchObject({ theme: 'dark', token: '' });
+        expect(parseJsonObject(store.legacy ?? 'null')).toMatchObject({ theme: 'dark', token: 'tok-secret' });
+        expect(store.keys.get('gurushots-settings_original')).toBe(ONE_X);
+        expect(parseJsonObject(store.keys.get('gs_v2_import') ?? 'null')).toHaveProperty('mirrorStartedAt');
     });
 
-    test('adopts the configuration the app window saved first, and leaves settings.json alone', () => {
+    test('adopts the configuration the app window saved first, and mirrors it over settings.json, keeping the file first', () => {
         const store = installHeadlessStore({ legacy: ONE_X });
         const settings = loadSettingsModule();
         // The window's import lands between this context's read of the configuration and its write.
@@ -263,7 +240,13 @@ describe('the import in the Android background service', () => {
 
         expect(settings.getSettingsRecovery()).toBeNull();
         expect(store.keys.has('gs_v2_import')).toBe(false);
-        expect(parseJsonObject(store.legacy ?? 'null')).toMatchObject({ token: 'tok-secret' });
+        expect(parseJsonObject(store.legacy ?? 'null')).toMatchObject({ theme: 'light' });
+        // The file is kept, and the configuration holds no login, so the copy holds none either.
+        expect(parseJsonObject(store.keys.get('gurushots-settings_original') ?? 'null')).toEqual({
+            ...parseJsonObject(ONE_X),
+            token: '',
+            apiHeaders: {},
+        });
     });
 });
 
@@ -276,7 +259,7 @@ describe('an import the Android native store does not take', () => {
         return store;
     };
 
-    test('fails, saying the configuration could not be saved, and marks and blanks nothing', () => {
+    test('fails, saying the configuration could not be saved, and marks nothing and leaves settings.json as it is', () => {
         const store = refusing();
         const settings = loadSettingsModule();
 
@@ -310,6 +293,10 @@ describe('an import the Android native store does not take', () => {
         expect(parseJsonObject(store.value ?? 'null')).toMatchObject({ version: 2 });
         expect(store.keys.has('gs_v2_import')).toBe(true);
         expect(store.legacy).toBe('{broken');
+        // The unimportable file is set aside before the first mirror writes over it.
+        expect(settings.setSetting('theme', 'light')).toBe(true);
+        expect(store.keys.get('gurushots-settings_original')).toBe('{broken');
+        expect(parseJsonObject(store.legacy ?? 'null')).toMatchObject({ theme: 'light' });
     });
 });
 

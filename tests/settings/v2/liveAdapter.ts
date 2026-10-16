@@ -1,6 +1,6 @@
 /**
  * The live settings code behind the oracle's method surface (tests/helpers/v1Oracle), so the equivalence harness
- * compares the two call for call. A reader is built from the text of a 1.x `settings.json` and an environment (the
+ * compares the two call for call. A reader is built from the text of a format-1 `settings.json` and an environment (the
  * active challenge list, the scenario ledger) by `liveFromV1Raw`: the real upgrade path. The text is put where
  * `settings.json` lives and there is no `config.json`, so the first read through the settings facade runs the
  * one-time import (title pins, the configuration and the marker land in the stores) and every later read is of the
@@ -24,7 +24,7 @@ import type { AndroidHeadlessStore } from '../../../src/ts/types/settings';
 import type { ScenarioStateLedger } from '../../../src/ts/types/votingPass';
 import type { Customization, OracleEnv, V1Oracle } from '../../helpers/v1Oracle';
 
-/** The live name of a 1.x setting key: the harness always compares `live[liveKey(k)]` with `oracle[k]`. */
+/** The live name of a format-1 setting key: the harness always compares `live[liveKey(k)]` with `oracle[k]`. */
 const liveKey = (v1Key: string): string => (Object.hasOwn(V1_KEY_RENAMES, v1Key) ? V1_KEY_RENAMES[v1Key] : v1Key);
 
 /**
@@ -205,7 +205,27 @@ const openLive = (text: string, env: OracleEnv): V1Oracle => {
     };
 };
 
-/** The live app upgrading from `raw`, a 1.x `settings.json`, and reading what it made of it. */
+/** The live app upgrading from `raw`, a format-1 `settings.json`, and reading what it made of it. */
 const liveFromV1Raw = (raw: string, env: OracleEnv): V1Oracle => openLive(raw, env);
 
-export { liveFromV1Raw, liveKey, releaseLive };
+/**
+ * The `settings.json` the live app leaves for `raw` once it has imported it and saved: the mirror an older build reads.
+ */
+const mirrorOfRaw = (raw: string): string => {
+    const { settings } = loadModules();
+    const store = memoryBridge(raw);
+    headless.__GS_HEADLESS__ = true;
+    headless.AndroidHeadlessStore = store;
+    try {
+        settings.loadSettings();
+        // A save of what is there: the configuration is written and the mirror made from it.
+        settings.saveAppSettings({});
+        const recovery = settings.getSettingsRecovery();
+        if (recovery) throw new Error(`the import of the fixture did not complete: ${JSON.stringify(recovery)}`);
+        return store.readKey?.('gurushots-settings') ?? '';
+    } finally {
+        releaseLive();
+    }
+};
+
+export { liveFromV1Raw, liveKey, mirrorOfRaw, releaseLive };

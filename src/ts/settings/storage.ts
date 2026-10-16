@@ -11,8 +11,8 @@
  * an async write-behind so the next launch sees the change.
  *
  * Two files go through the same transport (`createSettingsFile`): the configuration (`storage`: read, saved, set
- * aside when it is unusable) and the 1.x `settings.json` it was imported from (`legacyStorage`: read for the import,
- * and written once to blank the sign-in state it still held).
+ * aside when it is unusable) and `settings.json` (`legacyStorage`: read for the import, and overwritten by the mirror
+ * that keeps it current in settings format 1 for older builds).
  *
  * @capacitor/preferences is lazy-required only inside isCapacitor()
  * guards so non-Capacitor bundles never resolve it. The generic JSON store
@@ -36,7 +36,7 @@ import {
     settleStores,
 } from './jsonStore';
 import { headlessSettingsWrite, headlessStore, keyedSettingsBridge, saveThroughCas } from './storeTransport';
-import { rebaseConfigText, rebaseJsonText } from './settingsMerge';
+import { rebaseConfigText } from './settingsMerge';
 import {
     electronApp,
     getDefaultMockSetting,
@@ -49,7 +49,7 @@ import { compareAndWrite } from '../services/NativeAutovoteBridge';
 
 import type { HeadlessSettingsBridge } from './storeTransport';
 
-/** The Preferences key of the 1.x settings blob (what `settings.json` is on a desktop). */
+/** The Preferences key of the settings.json blob (what `settings.json` is on a desktop). */
 const LEGACY_SETTINGS_KEY = 'gurushots-settings';
 /** The Preferences key of the configuration (what `config.json` is on a desktop). */
 const CONFIG_KEY = 'gurushots-config';
@@ -57,6 +57,8 @@ const CONFIG_KEY = 'gurushots-config';
 // The backup of an unparseable Capacitor value lives under its key plus this suffix and the time it was set aside (a
 // later one never replaces an earlier). Before the time was added it was the suffix alone.
 const CORRUPT_SUFFIX = '_corrupt';
+// A copy kept of a settings.json that could not be imported (Start fresh) when `settings.json.original` is taken: under its key plus this suffix and the time.
+const UNIMPORTABLE_SUFFIX = '_unimportable';
 
 // Whether a settings save of the app window was given up: its change is in no store (and the cache is back to what is
 // stored, unless a later write is queued), and `droppedAfter` is the last write issued by then. Cleared by the next
@@ -121,6 +123,16 @@ type WriteIfAbsentResult =
     | { outcome: 'exists'; current: string | null }
     | { outcome: 'failed' };
 
+/**
+ * What a `write` came to: `ok` (the text is saved, or shown by the cache and queued), and, where the save is only
+ * queued (the Android app window), `landed`, which says how the queued write ended once it has: until then the text is
+ * shown by the cache, and nothing that depends on it being stored may be done.
+ */
+type WriteResult = { ok: boolean; landed?: Promise<QueuedWriteOutcome> };
+
+/** What one compare-and-overwrite of a settings file's text came to: `conflict`: it no longer held what was expected. */
+type OverwriteOutcome = 'written' | 'conflict' | 'failed';
+
 type SettingsFileOptions = {
     /** the file in the user-data directory */
     fileName: string;
@@ -128,7 +140,7 @@ type SettingsFileOptions = {
     prefKey: string;
     /** the full path of the file, read at call time */
     filePath: () => string;
-    /** a change made again on the text the other Android context saved meanwhile */
+    /** a change made again on the text the other Android context saved meanwhile (a plain overwrite for `settings.json`) */
     rebase: (base: string | null, ours: string, theirs: string | null) => string;
     /** the Android service reaches the key through the bridge's own read/write pair, not through the keyed calls */
     dedicatedBridge: boolean;
@@ -165,6 +177,11 @@ const createSettingsFile = (options: SettingsFileOptions) => {
 
     // Temp files an earlier crash left beside the file are swept on the first write.
     let swept = false;
+    const sweepOnce = (file: string) => {
+        if (swept) return;
+        swept = true;
+        sweepStaleTemps(file);
+    };
 
     const bridge = (): HeadlessSettingsBridge | undefined => {
         if (dedicatedBridge) return headlessStore();
@@ -224,6 +241,68 @@ const createSettingsFile = (options: SettingsFileOptions) => {
         return ended;
     };
 
+    /**
+     * Runs `task` on this file's write chain, after the writes queued before it; `fallback` when the file was
+     * discarded meanwhile or the task threw (logged).
+     */
+    const enqueue = <T>(task: () => Promise<T>, fallback: T): Promise<T> => {
+        const issuedIn = writeGeneration;
+        const ended = writeChain
+            .then(() => (issuedIn === writeGeneration ? task() : fallback))
+            .catch((err): T => {
+                logger.withCategory('settings').error(`Capacitor ${fileName} write failed:`, err);
+                return fallback;
+            });
+        writeChain = ended.then(() => undefined);
+        return ended;
+    };
+
+    // The stored text where it is the app's own to read: the Android window's cache, or the file.
+    const readHere = (): string | null => {
+        if (runtime.isCapacitor()) return cachedJson;
+        const file = filePath();
+        if (!fs.existsSync(file)) return null;
+        return fs.readFileSync(file, 'utf8');
+    };
+
+    const write = (data: string): WriteResult => {
+        if (areWritesRefused()) return { ok: false };
+        if (runtime.isHeadlessService()) {
+            // Persist through the native bridge to the shared store, as a change of the text this context read: the
+            // app window saves the same blob, and what it saved meanwhile is kept (see headlessSettingsWrite). The
+            // commit is synchronous so a later read() in the same cycle sees the new value.
+            try {
+                const saved = headlessSettingsWrite(bridge(), rebase, headlessBase, data);
+                if (saved === null) {
+                    // The native side says why: the blob is past its size limit, it changed under the write, or the commit failed.
+                    const why = bridge()?.lastWriteRefusal?.();
+                    logger
+                        .withCategory('settings')
+                        .error(`Headless store refused the settings write${why ? ` (${why})` : ''}`, null);
+                    return { ok: false };
+                }
+                headlessBase = saved;
+            } catch (err) {
+                logger.withCategory('settings').error('Headless store write failed:', err);
+                return { ok: false };
+            }
+            return { ok: true };
+        }
+        if (runtime.isCapacitor()) {
+            // Update the cache so synchronous reads see the new value immediately, then fire async write-behind
+            // to Preferences. Do NOT flip capacitorInitialized here — only initializeAsync owns that flag. If a
+            // write happens before initializeAsync resolves and we flipped the flag, initializeAsync would skip
+            // its hydration and previously-persisted settings would be lost on the next read of an unwritten key.
+            const base = cachedJson;
+            cachedJson = data;
+            return { ok: true, landed: queueCapacitorWrite((stored) => rebase(base, data, stored)) };
+        }
+        const file = filePath();
+        sweepOnce(file);
+        writeAtomicOwnerOnly(file, data);
+        return { ok: true };
+    };
+
     return {
         /**
          * Returns the raw JSON string, or null if not yet written.
@@ -235,60 +314,17 @@ const createSettingsFile = (options: SettingsFileOptions) => {
                 headlessBase = bridge()?.read() || null;
                 return headlessBase;
             }
-            if (runtime.isCapacitor()) {
-                return cachedJson;
-            }
-            const file = filePath();
-            if (!fs.existsSync(file)) return null;
-            return fs.readFileSync(file, 'utf8');
+            return readHere();
         },
         /**
          * Writes the raw JSON string. Sync on Electron/CLI (replaced atomically, so a reader or a crash never sees a
-         * cut-off file); cache + async write-behind on Capacitor.
+         * cut-off file); cache + async write-behind on Capacitor, where `landed` says how the queued write ended.
          *
-         * @returns false when the Android service's native store refused the write; true otherwise (a failed fs write throws)
+         * @returns `ok` false when the Android service's native store refused the write; true otherwise (a failed fs write throws)
          */
-        writeRaw: (data: string): boolean => {
-            if (areWritesRefused()) return false;
-            if (runtime.isHeadlessService()) {
-                // Persist through the native bridge to the shared store, as a change of the text this context read: the
-                // app window saves the same blob, and what it saved meanwhile is kept (see headlessSettingsWrite). The
-                // commit is synchronous so a later read() in the same cycle sees the new value.
-                try {
-                    const saved = headlessSettingsWrite(bridge(), rebase, headlessBase, data);
-                    if (saved === null) {
-                        // The native side says why: the blob is past its size limit, it changed under the write, or the commit failed.
-                        const why = bridge()?.lastWriteRefusal?.();
-                        logger
-                            .withCategory('settings')
-                            .error(`Headless store refused the settings write${why ? ` (${why})` : ''}`, null);
-                        return false;
-                    }
-                    headlessBase = saved;
-                } catch (err) {
-                    logger.withCategory('settings').error('Headless store write failed:', err);
-                    return false;
-                }
-                return true;
-            }
-            if (runtime.isCapacitor()) {
-                // Update the cache so synchronous reads see the new value immediately, then fire async write-behind
-                // to Preferences. Do NOT flip capacitorInitialized here — only initializeAsync owns that flag. If a
-                // write happens before initializeAsync resolves and we flipped the flag, initializeAsync would skip
-                // its hydration and previously-persisted settings would be lost on the next read of an unwritten key.
-                const base = cachedJson;
-                cachedJson = data;
-                void queueCapacitorWrite((stored) => rebase(base, data, stored));
-                return true;
-            }
-            const file = filePath();
-            if (!swept) {
-                swept = true;
-                sweepStaleTemps(file);
-            }
-            writeAtomicOwnerOnly(file, data);
-            return true;
-        },
+        write,
+        /** `write`, for the caller that has no use for `landed`. */
+        writeRaw: (data: string): boolean => write(data).ok,
         /**
          * Writes the raw JSON string only if nothing is stored yet: the write of an import, which two contexts (the app
          * window and the background service) may both try. On Android the native compare-and-write decides which
@@ -334,6 +370,109 @@ const createSettingsFile = (options: SettingsFileOptions) => {
             if (fs.existsSync(file)) return { outcome: 'exists', current: fs.readFileSync(file, 'utf8') };
             writeAtomicOwnerOnly(file, data);
             return { outcome: 'saved' };
+        },
+        /**
+         * The stored text as a read that changes nothing: unlike `readRaw`, it does not move what the Android service's
+         * next write is a change of, so it may be made between a read and the write that rests on it. The same text as
+         * `readRaw` everywhere else.
+         */
+        peekRaw: (): string | null => {
+            if (!runtime.isHeadlessService()) return readHere();
+            const answer = headlessStore();
+            return (answer?.readKey ? answer.readKey(prefKey) : answer?.read()) ?? null;
+        },
+        /**
+         * Overwrites the stored text with `data` only while it still is `expected` (null: none is stored): the one
+         * compare-and-set of a file that two processes (the app and the CLI) or contexts (the Android service) may
+         * both write. Where the save is only queued (the Android app window) use `readStored` / `casStored` instead.
+         */
+        overwriteIf: (expected: string | null, data: string): OverwriteOutcome => {
+            if (areWritesRefused()) return 'failed';
+            try {
+                if (runtime.isHeadlessService()) {
+                    const answer = bridge();
+                    if (!answer) return 'failed';
+                    if (answer.read() !== expected) return 'conflict';
+                    if (answer.write(data) === false)
+                        return answer.lastWriteRefusal?.() === 'conflict' ? 'conflict' : 'failed';
+                    headlessBase = data;
+                    return 'written';
+                }
+                const file = filePath();
+                if ((fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null) !== expected) return 'conflict';
+                sweepOnce(file);
+                writeAtomicOwnerOnly(file, data);
+                return 'written';
+            } catch (err) {
+                logger.withCategory('settings').error(`${fileName} could not be overwritten:`, err);
+                return 'failed';
+            }
+        },
+        /**
+         * The Android app window's read of what Preferences holds for the key now (not its cache, which it leaves as
+         * it is): the text another context saved since is seen.
+         */
+        peekStored: async (): Promise<string | null> => (await getCapacitorPreferences().get({ key: prefKey })).value,
+        /**
+         * The Android app window's compare-and-overwrite of the key: saved only while it still holds `expected`
+         * (null: nothing), and the cache then holds `data`.
+         *
+         * @returns whether it was saved (false: the key had changed)
+         * @throws when the store refused the write or it was past the size the native store takes
+         */
+        casStored: async (expected: string | null, data: string): Promise<boolean> => {
+            if (areWritesRefused()) throw new Error('writes are refused while local data is deleted');
+            const answer = compareAndWrite(prefKey, expected, data);
+            let saved: boolean;
+            if (answer === null) {
+                await getCapacitorPreferences().set({ key: prefKey, value: data });
+                saved = true;
+            } else {
+                saved = (await answer).saved;
+            }
+            if (saved) {
+                cachedJson = data;
+                persistedJson = data;
+                writeSerial++;
+            }
+            return saved;
+        },
+        enqueue,
+        /**
+         * Keeps a copy of `raw` (a settings text that could not be imported) beside this file under a name of its own
+         * (`<file>.unimportable-<time>`), owner-only; nothing that is there is replaced or removed. The Android
+         * service cannot make one, so it says so (the app window uses `keepUnimportableOnChain`).
+         */
+        keepUnimportable: (raw: string): QuarantineResult => {
+            if (runtime.isHeadlessService()) {
+                return { ok: false, error: 'the background service cannot keep a copy of a settings value' };
+            }
+            const copy = `${filePath()}.${UNIMPORTABLE_SUFFIX.slice(1)}-${setAsideStamp()}`;
+            try {
+                writeAtomicOwnerOnly(copy, raw);
+                return { ok: true, path: copy };
+            } catch (err) {
+                return { ok: false, error: errorMessage(err) ?? 'unknown error' };
+            }
+        },
+        /**
+         * `keepUnimportable` for the Android app window: the copy is kept in Preferences under
+         * `<key>_unimportable-<time>`. For a task that runs on this file's write chain (`enqueue`), which has the writes
+         * queued before it done already.
+         *
+         * @returns whether it was stored
+         */
+        keepUnimportableOnChain: async (raw: string): Promise<boolean> => {
+            try {
+                await getCapacitorPreferences().set({
+                    key: `${prefKey}${UNIMPORTABLE_SUFFIX}-${setAsideStamp()}`,
+                    value: raw,
+                });
+                return true;
+            } catch (err) {
+                logger.withCategory('settings').error(`Capacitor ${fileName} copy write failed:`, err);
+                return false;
+            }
         },
         /** Where the file lives, for a message: the file, or the preference key where there is no file. */
         location: (): string => (runtime.isHeadlessService() || runtime.isCapacitor() ? prefKey : filePath()),
@@ -440,12 +579,15 @@ const storage = createSettingsFile({
     reportsDroppedSaves: true,
 });
 
-/** The 1.x settings file (`settings.json`, `gurushots-settings`): read for the import, blanked once after it. */
+/**
+ * `settings.json` (`gurushots-settings`): read for the import, and overwritten (never merged) by the mirror that keeps
+ * it current in settings format 1 (formatOneMirror.ts).
+ */
 const legacyStorage = createSettingsFile({
     fileName: 'settings.json',
     prefKey: LEGACY_SETTINGS_KEY,
     filePath: getLegacySettingsPath,
-    rebase: rebaseJsonText,
+    rebase: (_base, ours) => ours,
     dedicatedBridge: false,
     reportsDroppedSaves: false,
 });
@@ -493,6 +635,7 @@ export {
     LEGACY_SETTINGS_KEY,
     CONFIG_KEY,
     CORRUPT_SUFFIX,
+    UNIMPORTABLE_SUFFIX,
     discardPendingWrites,
     resumeWrites,
     listPreferenceKeys,

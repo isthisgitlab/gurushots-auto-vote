@@ -1,26 +1,24 @@
 /**
- * The one-time import of a 1.x `settings.json` into `config.json`, and what surrounds it: the lock it runs under, the
- * marker and the title-pin cache it leaves, the blanking of the sign-in state that `settings.json` still holds, and
- * the explicit recovery paths (start fresh, re-import). The conversion itself is the frozen pipeline in importV1/;
- * this module only decides when it runs and puts down its result. `settings.json` is read as text and never goes
- * through the live load; the only write to it blanks the sign-in state.
+ * The import of a `settings.json` into `config.json`, and what surrounds it: the lock it runs under, the marker and the
+ * title-pin cache it leaves, the restoring of a missing configuration from the mirror, and the explicit recovery paths
+ * (start fresh, re-import). The conversion itself is the frozen pipeline in importV1/; this module only decides when it
+ * runs and puts down its result. `settings.json` is read as text and never goes through the live load, and is never
+ * written here: formatOneMirror.ts keeps it current.
  */
 
-import * as logger from '../logger';
 import { errorMessage } from '../errorMessage';
-import { isPlainObject } from '../plainObject';
 import { acquireUnlockLock } from '../joinStateStore';
 import { acquireWithin } from '../lockWait';
 import { getDefaultSettings } from './defaults';
-import { AUTH_KEYS, authValueAllowed } from './loadValidation';
 import { importV1Settings } from './importV1';
-import { isImportMarked, markImportDone } from './importMarker';
+import { isImportMarked, isMirrorStarted, keptImportedRecord, markImportDone } from './importMarker';
 import { invalidReferences } from './importReport';
-import { recordImportHash } from './importedRecord';
+import { setAsideLegacy } from './formatOneMirror';
+import { schemaEntry } from './schema';
 import { legacyStorage, storage } from './storage';
 import { importTitlePins } from './titlePins';
 
-import type { ConfigAuthV2, ImportedV2 } from '../types/config';
+import type { ImportedV2 } from '../types/config';
 import type { QueuedWriteOutcome } from './storage';
 
 // The lock every import (and every start-fresh or re-import) runs under: two processes sharing the user-data directory
@@ -29,18 +27,21 @@ import type { QueuedWriteOutcome } from './storage';
 const IMPORT_LOCK_ID = 'config-import';
 const LOCK_WAIT_MS = 2000;
 
-/** Why the 1.x settings could not be put into a configuration. */
+/** Why the `settings.json` could not be put into a configuration. */
 type ImportFailureReason = 'busy' | 'not-loaded' | 'unreadable' | 'corrupt' | 'migration-failed' | 'write-failed';
 
 type ImportFailure = { ok: false; reason: ImportFailureReason; detail: string };
 
 /**
- * What an import came to when it did not fail: `imported` (the converted configuration was saved); `fresh` (there was
- * no 1.x file; the marker was written); `adopted` (the configuration is already there, another context or process
- * saved it first); `skipped` (the marker or a set-aside configuration says an import must not run unasked). `text` is
- * the configuration now stored.
+ * What an import came to when it did not fail: `imported` (the converted configuration was saved); `recovered` (the
+ * configuration was gone and was restored from `settings.json`, the mirror of it); `fresh` (there was no
+ * `settings.json`; the marker was written); `adopted` (the configuration is already there, another context or process
+ * saved it first); `skipped` (a set-aside configuration says an import must not run unasked). `text` is the
+ * configuration now stored.
  */
-type ImportDone = { ok: true; kind: 'imported' | 'adopted'; text: string } | { ok: true; kind: 'fresh' | 'skipped' };
+type ImportDone =
+    | { ok: true; kind: 'imported' | 'recovered' | 'adopted'; text: string }
+    | { ok: true; kind: 'fresh' | 'skipped' };
 
 type ImportOutcome = ImportDone | ImportFailure;
 
@@ -62,56 +63,6 @@ const underImportLock = (run: () => ImportOutcome): ImportOutcome => {
         return failure('unreadable', errorMessage(error) ?? 'unknown error');
     } finally {
         lock.release();
-    }
-};
-
-const BLANK_AUTH: Readonly<Record<string, unknown>> = {
-    token: '',
-    apiHeaders: {},
-    lastUsername: '',
-    chosenPhotosMemberId: '',
-};
-
-const isBlank = (value: unknown): boolean => value === '' || (isPlainObject(value) && Object.keys(value).length === 0);
-
-/**
- * Blank the sign-in state `settings.json` still holds (`token`, `apiHeaders`, `lastUsername`, `chosenPhotosMemberId`):
- * the configuration owns it from the import on. Everything else in the file is written back as it was parsed. Nothing
- * is written when there is nothing to blank.
- *
- * @returns whether the file was written
- */
-const blankLegacyAuth = (): boolean => {
-    const raw = legacyStorage.readRaw();
-    if (!raw) return false;
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(raw);
-    } catch {
-        return false; // a file that is not JSON holds no sign-in state to blank
-    }
-    if (!isPlainObject(parsed)) return false;
-    const held = Object.keys(BLANK_AUTH).filter((key) => Object.hasOwn(parsed, key) && !isBlank(parsed[key]));
-    if (held.length === 0) return false;
-    for (const key of held) parsed[key] = BLANK_AUTH[key];
-    return legacyStorage.writeRaw(JSON.stringify(parsed, null, 2));
-};
-
-// Whether this process has looked at `settings.json` for sign-in state a 1.x login left (see blankLegacyAuthOnce).
-let legacyAuthChecked = false;
-
-/**
- * Once per process, while the marker says the import has run: blank the sign-in state `settings.json` holds again,
- * which covers a token a 1.x login wrote after a downgrade and an Android crash between the two writes of an import.
- * A file that cannot be read yet (Android, before the window has hydrated) is looked at on a later call.
- */
-const blankLegacyAuthOnce = (): void => {
-    if (legacyAuthChecked || !legacyStorage.isLoaded() || !isImportMarked()) return;
-    legacyAuthChecked = true;
-    try {
-        if (blankLegacyAuth()) logger.withCategory('settings').info('Cleared the sign-in state left in settings.json');
-    } catch (error) {
-        logger.withCategory('settings').error('Could not clear the sign-in state left in settings.json:', error);
     }
 };
 
@@ -137,47 +88,38 @@ const whenStored = (
     });
 };
 
-/**
- * What an import leaves once the configuration is stored: the marker, the hash of the `settings.json` it was made from,
- * then the legacy sign-in state blanked.
- */
-const markImported = (raw: string): void => {
-    carriedAuth = null;
-    markImportDone();
-    void recordImportHash(raw);
-    try {
-        blankLegacyAuth();
-    } catch (error) {
-        // The configuration is saved and the marker written: the next start blanks it again.
-        logger.withCategory('settings').error('Could not clear the sign-in state left in settings.json:', error);
-    }
+/** What `importLegacyText` is told besides the text. */
+type ImportMode = {
+    /** runs once the text has converted; answers a failure to refuse the import (it may set the configuration in use aside) */
+    replacing?: () => ImportFailure | null;
+    /** the configuration was lost and `settings.json` is the mirror of it: the import record is the one the marker kept, if any */
+    recovering?: true;
 };
 
 /**
  * Convert the text of `settings.json` and put the result down: the title pins, then `config.json`, and once that is
- * stored the marker and the blanking of the legacy sign-in state. The conversion comes first and touches nothing, so a
- * file that cannot be converted leaves everything as it was; `replacing` runs once it has converted (it may refuse).
+ * stored the marker. The conversion comes first and touches nothing, so a file that cannot be converted leaves
+ * everything as it was.
  */
 const importLegacyText = (
     raw: string,
     onLateFailure: LateFailure,
-    replacing?: () => ImportFailure | null,
+    { replacing, recovering }: ImportMode = {},
 ): ImportOutcome => {
-    const result = importV1Settings(raw);
+    // The keys of the live schema are kept whether or not the frozen one knows them: the file holds what this app wrote.
+    const result = importV1Settings(raw, { keptKey: (key) => schemaEntry(key) !== undefined });
     if (!result.ok) return failure(result.code, result.detail);
     const { refsBlocked } = result.report;
-    // The hash is filled once the configuration is stored (markImported); the rest of the record is known now.
-    const imported: ImportedV2 = {
-        at: new Date().toISOString(),
-        sha256: '',
-        report: { refsBlocked: [...refsBlocked, ...invalidReferences(result.config, refsBlocked)] },
-        acknowledged: false,
-    };
+    const imported: ImportedV2 | undefined = recovering
+        ? (keptImportedRecord() ?? undefined)
+        : {
+              at: new Date().toISOString(),
+              report: { refsBlocked: [...refsBlocked, ...invalidReferences(result.config, refsBlocked)] },
+              acknowledged: false,
+          };
     const refused = replacing?.() ?? null;
     if (refused) return refused;
-    // A re-import keeps the sign-in state of the configuration it replaces: the file holds none.
-    if (carriedAuth) Object.assign(result.config.auth, carriedAuth);
-    const text = JSON.stringify({ ...result.config, imported }, null, 2);
+    const text = JSON.stringify({ ...result.config, ...(imported ? { imported } : {}) }, null, 2);
     if (!importTitlePins(result.titlePins)) return failure('write-failed', 'the title pins could not be saved');
     const written = storage.writeIfAbsent(text);
     if (written.outcome === 'failed') return failure('write-failed', 'config.json could not be saved');
@@ -186,8 +128,9 @@ const importLegacyText = (
             ? { ok: true, kind: 'adopted', text: written.current }
             : failure('write-failed', 'config.json could not be read');
     }
-    whenStored(written, () => markImported(raw), onLateFailure);
-    return { ok: true, kind: 'imported', text };
+    // The marker keeps a copy of the record (a recovery leaves the one it has): a lost configuration gets its report back.
+    whenStored(written, () => markImportDone(recovering ? undefined : imported), onLateFailure);
+    return { ok: true, kind: recovering ? 'recovered' : 'imported', text };
 };
 
 /**
@@ -212,77 +155,64 @@ const importFromLegacyFile = (onLateFailure: LateFailure): ImportOutcome => {
     const legacy = readLegacyText();
     if (!legacy.ok) return legacy;
     if (legacy.raw === null) {
-        // A 1.x file that shows up later must not import silently.
-        markImportDone();
+        // A settings.json that shows up later must not import silently.
+        markImportDone(null);
         return { ok: true, kind: 'fresh' };
     }
     return importLegacyText(legacy.raw, onLateFailure);
 };
 
 /**
- * What a load does when there is no configuration: import `settings.json`, unless the marker or a set-aside
- * configuration says it has already been dealt with. Runs under the import lock; a configuration another process
- * saved while it waited is adopted.
+ * What a load does when the configuration is gone although the import has run and the mirror has written
+ * `settings.json` since: that file is current, so the configuration is restored from it (without a report: it is no
+ * news to the user). There is nothing to do when there is no `settings.json` either.
+ */
+const recoverFromMirror = (onLateFailure: LateFailure): ImportOutcome => {
+    const legacy = readLegacyText();
+    if (!legacy.ok) return legacy;
+    if (legacy.raw === null) return { ok: true, kind: 'skipped' };
+    return importLegacyText(legacy.raw, onLateFailure, { recovering: true });
+};
+
+/**
+ * What a load does when there is no configuration: import `settings.json` the first time, restore the configuration
+ * from it once the import has run and the mirror has written it (a missing configuration; a damaged one is set aside
+ * first, see `recoverFromMirror`), and leave the rest (a set-aside configuration, or a marker with no mirror yet) to
+ * the user's explicit import. Runs under the import lock; a configuration another process saved while it waited is
+ * adopted.
  */
 const importWhenAbsent = (onLateFailure: LateFailure): ImportOutcome =>
     underImportLock(() => {
         const existing = storage.readRaw();
         if (existing) return { ok: true, kind: 'adopted', text: existing };
-        if (isImportMarked() || storage.hasQuarantined()) return { ok: true, kind: 'skipped' };
+        if (isImportMarked())
+            return isMirrorStarted() ? recoverFromMirror(onLateFailure) : { ok: true, kind: 'skipped' };
+        if (storage.hasQuarantined()) return { ok: true, kind: 'skipped' };
         return importFromLegacyFile(onLateFailure);
     });
 
 /**
- * Write a default configuration and the marker, and leave `settings.json` as the backup. A configuration that is there
- * already is left as it is.
+ * Write a default configuration and the marker. `settings.json` is set aside first (as `settings.json.original`, or where
+ * that is taken as a copy of its own named by the time), before anything is mirrored over it; where it cannot be set
+ * aside nothing is written. A configuration that is there already is left as it is.
  */
 const startFreshConfig = (onLateFailure: LateFailure): ImportOutcome =>
     underImportLock(() => {
         const existing = storage.readRaw();
         if (existing) return { ok: true, kind: 'adopted', text: existing };
+        const aside = setAsideLegacy();
+        if (!aside.ok) return failure('write-failed', `settings.json could not be set aside: ${aside.error}`);
         const written = storage.writeIfAbsent(JSON.stringify(getDefaultSettings(), null, 2));
         if (written.outcome === 'failed') return failure('write-failed', 'config.json could not be saved');
-        whenStored(
-            written.outcome === 'saved' ? written : {},
-            () => {
-                carriedAuth = null; // a fresh start keeps nothing of what was set aside
-                markImportDone();
-            },
-            onLateFailure,
-        );
+        whenStored(written.outcome === 'saved' ? written : {}, () => markImportDone(null), onLateFailure);
         return { ok: true, kind: 'fresh' };
     });
-
-// The sign-in state of the configuration a re-import set aside, until a configuration is stored again: a re-import that
-// fails after setting the configuration aside is retried without it, and must not sign the user out.
-let carriedAuth: Partial<ConfigAuthV2> | null = null;
-
-/**
- * The sign-in state of a stored configuration that `settings.json` no longer holds (the first import blanked it): the
- * values a configuration can hold, whatever else is wrong with it.
- */
-const authOfConfig = (current: string): Partial<ConfigAuthV2> => {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(current);
-    } catch {
-        return {}; // a configuration that cannot be read has no sign-in state to keep
-    }
-    const auth = isPlainObject(parsed) ? parsed.auth : null;
-    const kept: Partial<ConfigAuthV2> = {};
-    if (!isPlainObject(auth)) return kept;
-    for (const key of AUTH_KEYS) {
-        if (Object.hasOwn(auth, key) && authValueAllowed(key, auth[key])) Object.assign(kept, { [key]: auth[key] });
-    }
-    return kept;
-};
 
 /**
  * Import `settings.json` on request, whatever the marker and a set-aside configuration say (the automatic import ran,
  * or was refused, and this is the user's call). With `replacing` the configuration in use is kept apart the way a
- * damaged one is (`config.json.corrupt-<time>`) once `settings.json` has converted, and its sign-in state goes into the
- * import; without it a configuration that is there is left as it is. A `settings.json` that cannot be converted
- * leaves the configuration as it is.
+ * damaged one is (`config.json.corrupt-<time>`) once `settings.json` has converted; without it a configuration that is
+ * there is left as it is. A `settings.json` that cannot be converted leaves the configuration as it is.
  */
 const importOnRequest = (onLateFailure: LateFailure, replacing: boolean): ImportOutcome =>
     underImportLock(() => {
@@ -291,17 +221,14 @@ const importOnRequest = (onLateFailure: LateFailure, replacing: boolean): Import
         const legacy = readLegacyText();
         if (!legacy.ok) return legacy;
         if (legacy.raw === null) return failure('unreadable', 'settings.json does not exist');
-        return importLegacyText(
-            legacy.raw,
-            onLateFailure,
-            existing
+        return importLegacyText(legacy.raw, onLateFailure, {
+            replacing: existing
                 ? () => {
-                      carriedAuth = authOfConfig(existing);
                       const moved = storage.quarantineRaw(existing);
                       return moved.ok ? null : failure('unreadable', moved.error);
                   }
                 : undefined,
-        );
+        });
     });
 
 /** Import `settings.json` again after an import (or a re-import) failed, as the explicit import it was. */
@@ -311,4 +238,4 @@ const retryLegacyImport = (onLateFailure: LateFailure): ImportOutcome => importO
 const reimportLegacyFile = (onLateFailure: LateFailure): ImportOutcome => importOnRequest(onLateFailure, true);
 
 export type { ImportFailure, ImportOutcome };
-export { blankLegacyAuthOnce, importWhenAbsent, reimportLegacyFile, retryLegacyImport, startFreshConfig };
+export { importWhenAbsent, reimportLegacyFile, retryLegacyImport, startFreshConfig };

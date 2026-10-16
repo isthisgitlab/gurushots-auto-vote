@@ -84,6 +84,19 @@ const _readPins = (): Record<string, string> => _validPins(_readStored());
 const getTitlePins = (): Record<string, string> => _readPins();
 
 /**
+ * Every pin the store holds as a string, as stored (no pin is judged here: the readers do, each by its own rule), for the
+ * mirror of the configuration to carry whole.
+ */
+const storedTitlePins = (): Record<string, string> => {
+    const stored = _readStored();
+    return isPlainObject(stored)
+        ? Object.fromEntries(
+              Object.entries(stored).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+          )
+        : {};
+};
+
+/**
  * The title pinned for one challenge id, or '' when there is none. A pin is a string below the title cap, as the
  * title lookup of a rule match has always read it (a whitespace-only one is a title that matches nothing).
  */
@@ -153,25 +166,35 @@ const mergeTitlePins = (adds: Record<string, string>, removeIds?: readonly strin
     return _writePins(pins);
 };
 
-const _writePins = (pins: Record<string, unknown>): boolean => {
+// Told after every write of the pins (the mirror of the configuration holds them: see persistence.ts).
+let onWritten: (() => void) | null = null;
+
+/** Sets the one listener that hears of every write of the pins. */
+const onTitlePinsChange = (listener: (() => void) | null): void => {
+    onWritten = listener;
+};
+
+const _writePins = (pins: Record<string, unknown>, notify = true): boolean => {
     try {
         titlePinStore.writeRaw(JSON.stringify(pins, null, 2));
-        return true;
     } catch (error) {
         logger.withCategory('settings').error('Could not save the title pins:', error);
         return false;
     }
+    if (notify) onWritten?.();
+    return true;
 };
 
 /**
- * Put the pins a 1.x import found into the cache, as it found them (every read validates what it takes, as 1.x did): a
- * pin the cache holds for the same challenge gives way to the one the 1.x file held, which was seen first.
+ * Put the pins an import found into the cache, as it found them (every read validates what it takes): a pin the cache
+ * holds for the same challenge gives way to the one `settings.json` held, which was seen first.
  *
  * @returns false when the store could not be written
  */
 const importTitlePins = (imported: Record<string, string>): boolean => {
     const stored = _readStored();
-    return _writePins({ ...(isPlainObject(stored) ? stored : {}), ...imported });
+    // Quietly: the configuration they belong to is not stored yet, and the mirror is made once it is.
+    return _writePins({ ...(isPlainObject(stored) ? stored : {}), ...imported }, false);
 };
 
 /**
@@ -181,4 +204,14 @@ const importTitlePins = (imported: Record<string, string>): boolean => {
  */
 const clearTitlePins = (): boolean => _writePins({});
 
-export { clearTitlePins, getTitlePins, importTitlePins, mergeTitlePins, pinnedTitleFor, titlePinStore, MAX_TITLE_PINS };
+export {
+    clearTitlePins,
+    getTitlePins,
+    importTitlePins,
+    mergeTitlePins,
+    onTitlePinsChange,
+    pinnedTitleFor,
+    storedTitlePins,
+    titlePinStore,
+    MAX_TITLE_PINS,
+};

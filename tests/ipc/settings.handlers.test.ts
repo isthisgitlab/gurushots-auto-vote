@@ -483,7 +483,6 @@ describe('the recovery of the stored settings', () => {
         ['retry-settings-import', 'retryImport'],
         ['start-fresh-settings', 'startFresh'],
         ['reimport-settings-from-v1', 'reimportFromV1'],
-        ['keep-current-config', 'keepCurrentConfig'],
         ['acknowledge-import-report', 'acknowledgeImportReport'],
     ] as const;
 
@@ -529,16 +528,6 @@ describe('the recovery of the stored settings', () => {
     test('works without a broadcaster (CLI / Capacitor shape)', async () => {
         settings.retryImport = jest.fn().mockReturnValue(true);
         await expect(handlers['retry-settings-import']()).resolves.toEqual({ success: true });
-    });
-
-    test('keep-current-config waits for the answer of an asynchronous action', async () => {
-        settings.keepCurrentConfig = jest.fn().mockResolvedValue(false);
-        await expect(handlers['keep-current-config']()).resolves.toEqual({
-            success: false,
-            error: 'settings-import-failed',
-        });
-        settings.keepCurrentConfig = jest.fn().mockResolvedValue(true);
-        await expect(handlers['keep-current-config']()).resolves.toEqual({ success: true });
     });
 });
 

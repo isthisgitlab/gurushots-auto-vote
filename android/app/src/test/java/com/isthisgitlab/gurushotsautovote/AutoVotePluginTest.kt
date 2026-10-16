@@ -172,7 +172,7 @@ class AutoVotePluginTest {
             every { it.getString("value") } returns value
             plugin.compareAndWrite(it)
         }
-        for (key in listOf("gurushots-config", "gurushots-settings", "gs_v2_import", "gs_title_pins")) {
+        for (key in listOf("gurushots-config", "gurushots-settings", "gurushots-settings_original", "gs_v2_import", "gs_title_pins")) {
             assertTrue(key, write(key, """{"a":1}""").getBoolean("saved"))
         }
         // The window sets a corrupt copy aside through Preferences itself; the plugin is not a way to write one.
@@ -257,10 +257,12 @@ class AutoVotePluginTest {
             .putString("gs_scenario_state", "{}")
             .putString("photoStats", "{}")
             .putString("gurushots-settings", """{"token":"old"}""")
+            .putString("gurushots-settings_original", """{"token":"older"}""")
             .putString("gs_v2_import", "{}")
             .putString("gs_title_pins", "{}")
             .putString("gurushots-config_corrupt-2026-10-16T08-00-00-000Z", "{")
             .putString("gurushots-settings_corrupt-2026-10-16T08-00-00-000Z", "{")
+            .putString("gurushots-settings_unimportable-2026-10-16T08-00-00-000Z", "{")
             .commit()
         val updates = File(app.cacheDir, "updates").apply { mkdirs() }
         File(updates, "update.apk").writeText("apk")

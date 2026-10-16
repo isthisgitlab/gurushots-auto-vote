@@ -1,10 +1,10 @@
 /**
- * The 1.x resolver and the live code must agree. For every fixture file and every seeded random file, the oracle (a
- * frozen copy of the 1.x resolver, tests/helpers/v1Oracle) and the live code are asked the same questions: the value of
+ * The resolver older builds ran and the live code must agree. For every fixture file and every seeded random file, the oracle (a
+ * frozen copy of that resolver, tests/helpers/v1Oracle) and the live code are asked the same questions: the value of
  * every setting for the global read and for every challenge, under every state of the scenario ledger (none, each
  * phase of the assigned scenario, unreadable, another scenario's, a phase that is gone), the rules, profile and
  * join decisions for every challenge and candidate, the photo tags, the customization badges, the scenario status and
- * the pins. The live code upgrades from the file the way the app does (`liveFromV1Raw`: the 1.x file where
+ * the pins. The live code upgrades from the file the way the app does (`liveFromV1Raw`: the format-1 file where
  * `settings.json` lives, no `config.json`, the one-time import on the first read), which proves the import loses
  * nothing resolution depends on.
  *
@@ -16,7 +16,7 @@ import { TOP_LEVEL_ONLY_KEYS } from '../../../src/ts/settings/importV1/convert';
 import { V1_SETTINGS_SCHEMA } from '../../../src/ts/settings/importV1/schema';
 import { createV1Oracle } from '../../helpers/v1Oracle';
 import { FIXTURES } from './fixtures';
-import { liveFromV1Raw, liveKey, releaseLive } from './liveAdapter';
+import { liveFromV1Raw, liveKey, mirrorOfRaw, releaseLive } from './liveAdapter';
 import { parseSeeds, randomCase } from './random';
 import { diffTrees, OWN_NAMES, snapshot, variantsFor } from './snapshot';
 import { CANDIDATES, CHALLENGES, NOW } from './fixtures/types';
@@ -42,8 +42,8 @@ const KEY_OF_LIVE: Record<string, string> = Object.fromEntries(
 const LIVE_NAMES: Naming = { toReader: liveKey, fromReader: (key) => KEY_OF_LIVE[key] ?? key };
 
 /**
- * A tree without the global reads of the app-state keys 1.x kept at the top level (`autovoteRunning`,
- * `skipUpdateVersion`, ...). 1.x read each from there alone; the copy among the global defaults that the oracle still
+ * A tree without the global reads of the app-state keys format 1 kept at the top level (`autovoteRunning`,
+ * `skipUpdateVersion`, ...). It read each from there alone; the copy among the global defaults that the oracle still
  * resolves was never read by anything, so the import does not carry it and the live code resolves the schema default.
  * Everything else is compared as it is.
  */
@@ -80,7 +80,38 @@ const equivalence = (c: Case) => {
     }
 };
 
-describe('the live resolver against the frozen 1.x oracle', () => {
+/**
+ * What an older build reads once the live app has imported the file and saved: the frozen oracle reading the mirror
+ * the app wrote answers every question as it answers for the file the user had. The mirror carries the app's own key
+ * names (the renames are undone) and every migration marked done, so the old pipeline migrates nothing.
+ */
+const mirrorEquivalence = (c: Case) => {
+    const env = environment(c);
+    const original = createV1Oracle(c.raw, env);
+    const variants = variantsFor(original, c.challenges);
+    const expected = snapshot(original, c, env, variants, OWN_NAMES, { calls: 0 });
+    const olderEnv = environment(c);
+    const older = createV1Oracle(mirrorOfRaw(c.raw), olderEnv);
+    const { mismatches } = diffTrees(
+        withoutAppState(expected),
+        withoutAppState(snapshot(older, c, olderEnv, variants, OWN_NAMES, { calls: 0 })),
+    );
+    if (mismatches.length > 0) {
+        const lines = mismatches.map(
+            ({ path, oracle: want, live }) =>
+                `  ${path}\n    file   ${JSON.stringify(want)}\n    mirror ${JSON.stringify(live)}`,
+        );
+        throw new Error(`${c.name}: an older build reads the mirror differently from the file:\n${lines.join('\n')}`);
+    }
+};
+
+describe('an older build reading the mirror against the file the user had', () => {
+    test.each([...fixtureCases, ...randomCases].map((c) => [c.name, c] as const))('%s', (_name, c) => {
+        mirrorEquivalence(c);
+    });
+});
+
+describe('the live resolver against the frozen oracle', () => {
     afterAll(() => {
         releaseLive();
         process.stdout.write(

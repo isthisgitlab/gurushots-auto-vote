@@ -285,8 +285,8 @@ const buildLocalDataHandlers = ({ afterWipe, broadcastSettingsChange }: Settings
         recovery: settings.getSettingsRecovery() ?? settings.getSettingsSaveDropped(),
     }),
 
-    // Try the import of the 1.x settings again; begin with default settings (the 1.x file stays as a backup); import
-    // the 1.x file again over the settings in use (which are set aside).
+    // Try the import of settings.json again; begin with default settings (settings.json is kept as settings.json.original);
+    // import settings.json again over the settings in use (which are set aside).
     'retry-settings-import': recoveryAction(
         broadcastSettingsChange,
         () => settings.retryImport(),
@@ -302,14 +302,8 @@ const buildLocalDataHandlers = ({ afterWipe, broadcastSettingsChange }: Settings
         () => settings.reimportFromV1(),
         'reimport-settings-from-v1',
     ),
-    // Keep the settings as they are after settings.json changed since the import (the notice goes away).
-    'keep-current-config': recoveryAction(
-        broadcastSettingsChange,
-        () => settings.keepCurrentConfig(),
-        'keep-current-config',
-    ),
 
-    // What the 1.x import left unresolved (names only), and the window's acknowledgement of it; the report stays
+    // What the import left unresolved (names only), and the window's acknowledgement of it; the report stays
     // readable afterwards. `report` is null when the configuration was not imported from a settings.json.
     'get-import-report': async () => {
         try {

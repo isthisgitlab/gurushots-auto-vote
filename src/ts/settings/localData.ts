@@ -1,7 +1,7 @@
 /**
  * Everything the app keeps on this device, and the wipe that deletes it ("Delete all local data").
  *
- * LOCAL_DATA_STORES lists every createJsonStore file and Preferences key plus the configuration and the 1.x settings file: a store that is not
+ * LOCAL_DATA_STORES lists every createJsonStore file and Preferences key plus the configuration and settings.json: a store that is not
  * listed would survive a wipe, so tests/settings/localData.test.ts fails for any createJsonStore call site that is
  * missing here. Directories and marker files live beside them.
  */
@@ -19,6 +19,7 @@ import {
     CONFIG_KEY,
     CORRUPT_SUFFIX,
     LEGACY_SETTINGS_KEY,
+    UNIMPORTABLE_SUFFIX,
     discardPendingWrites,
     getUserDataPath,
     listPreferenceKeys,
@@ -26,6 +27,7 @@ import {
     resumeWrites,
 } from './storage';
 import { isCliSessionActive, isDesktopAppActive } from './cliSessionLock';
+import { ORIGINAL_SETTINGS_KEY } from './formatOneMirror';
 
 import type { CapacitorGlobals } from '../types/capacitor';
 
@@ -33,8 +35,9 @@ type LocalDataStore = { fileName: string; prefKey: string };
 
 const LOCAL_DATA_STORES: readonly LocalDataStore[] = [
     { fileName: 'config.json', prefKey: CONFIG_KEY },
-    // The 1.x file the configuration was imported from (it may still be there, with its sign-in state blanked).
+    // The mirror of the configuration, sign-in state included, and the copy kept of the file the user had before it.
     { fileName: 'settings.json', prefKey: LEGACY_SETTINGS_KEY },
+    { fileName: 'settings.json.original', prefKey: ORIGINAL_SETTINGS_KEY },
     { fileName: 'v2-import.json', prefKey: 'gs_v2_import' },
     { fileName: 'titlePins.json', prefKey: 'gs_title_pins' },
     { fileName: 'autoSpends.json', prefKey: 'gs_auto_spends' },
@@ -175,13 +178,16 @@ const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeRes
         await discardPendingWrites();
 
         if (runtime.isCapacitor()) {
-            // The set-aside copies carry the time they were set aside: found by what exists, not by a fixed name.
+            // The set-aside and kept copies carry the time they were made: found by what exists, not by a fixed name.
             const kept = await listPreferenceKeys();
+            const copySuffixes = [CORRUPT_SUFFIX, UNIMPORTABLE_SUFFIX];
             const keys = [
                 ...new Set([
                     ...LOCAL_DATA_STORES.flatMap((store) => [store.prefKey, `${store.prefKey}${CORRUPT_SUFFIX}`]),
                     ...kept.filter((key) =>
-                        LOCAL_DATA_STORES.some((store) => key.startsWith(`${store.prefKey}${CORRUPT_SUFFIX}`)),
+                        LOCAL_DATA_STORES.some((store) =>
+                            copySuffixes.some((suffix) => key.startsWith(`${store.prefKey}${suffix}`)),
+                        ),
                     ),
                 ]),
             ];

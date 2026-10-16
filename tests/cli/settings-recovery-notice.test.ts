@@ -9,7 +9,6 @@ jest.mock('../../src/ts/settings', () => ({
     retryImport: jest.fn(),
     startFresh: jest.fn(),
     reimportFromV1: jest.fn(),
-    keepCurrentConfig: jest.fn(),
     getImportReport: jest.fn(),
     acknowledgeImportReport: jest.fn(),
 }));
@@ -33,10 +32,19 @@ const { describeSettingsRecovery, reportSettingsRecovery, settingsRecoveryCmd } 
 beforeEach(() => jest.clearAllMocks());
 
 describe('describeSettingsRecovery', () => {
-    test('a damaged file says where it went, that defaults apply, and how to import the 1.x file instead', () => {
+    test('a damaged file that was restored says where the copy went and that the settings came from settings.json', () => {
+        const text = describeSettingsRecovery({ code: 'settings-restored', path: '/u/config.json.corrupt-2026' });
+        expect(text).toContain('config.json was damaged');
+        expect(text).toContain('restored from settings.json');
+        expect(text).toContain('/u/config.json.corrupt-2026');
+        expect(text).not.toContain('default settings');
+    });
+
+    test('a damaged file with nothing to restore it from says where it went, that defaults apply, and how to import settings.json instead', () => {
         const text = describeSettingsRecovery({ code: 'settings-corrupt', path: '/u/config.json.corrupt-2026' });
         expect(text).toContain('config.json was damaged');
         expect(text).toContain('/u/config.json.corrupt-2026');
+        expect(text).toContain('no usable settings.json');
         expect(text).toContain('default settings are in use');
         expect(text).toContain('settings-recovery reimport');
     });
@@ -48,24 +56,14 @@ describe('describeSettingsRecovery', () => {
         expect(text).toContain('can be read and written');
     });
 
-    test('1.x settings that could not be imported say the file was left as it is, and the two ways forward', () => {
+    test('a settings.json that could not be imported says the file was left as it is, and the two ways forward', () => {
         const text = describeSettingsRecovery({ code: 'settings-import-failed', path: '/u/settings.json' });
         expect(text).toContain('/u/settings.json');
         expect(text).toContain('left as it is');
         expect(text).toContain('nothing will be saved');
         expect(text).toContain('settings-recovery retry');
         expect(text).toContain('settings-recovery start-fresh');
-    });
-});
-
-describe('describeSettingsRecovery for a settings.json that changed', () => {
-    test('says it changed after the import, that saving works, and the two ways forward', () => {
-        const text = describeSettingsRecovery({ code: 'settings-v1-changed', path: '/u/settings.json' });
-        expect(text).toContain('/u/settings.json');
-        expect(text).toContain('changed after they were imported');
-        expect(text).toContain('saving works');
-        expect(text).toContain('settings-recovery reimport');
-        expect(text).toContain('settings-recovery keep');
+        expect(text).toContain('settings.json.original');
     });
 });
 
@@ -94,7 +92,7 @@ describe('reportSettingsRecovery', () => {
 
 describe('settingsRecoveryCmd', () => {
     test.each([
-        ['retry', () => settings.retryImport, 'The 1.x settings were imported.'],
+        ['retry', () => settings.retryImport, 'The settings were imported from settings.json.'],
         ['start-fresh', () => settings.startFresh, 'Started with default settings'],
         ['reimport', () => settings.reimportFromV1, 'imported again'],
     ] as const)('%s runs its action and says it worked', async (action, which, said) => {
@@ -122,7 +120,7 @@ describe('settingsRecoveryCmd', () => {
         await expect(COMMANDS['settings-recovery'](['start-fresh'])).resolves.toBe(0);
     });
 
-    test.each([[[]], [['nope']], [['retry', 'extra']], [['constructor']], [['report', 'extra']]])(
+    test.each([[[]], [['nope']], [['retry', 'extra']], [['constructor']], [['keep']], [['report', 'extra']]])(
         '%j is a usage error',
         async (argv) => {
             await expect(settingsRecoveryCmd(argv)).resolves.toBe(1);
@@ -130,23 +128,8 @@ describe('settingsRecoveryCmd', () => {
             expect(settings.retryImport).not.toHaveBeenCalled();
             expect(settings.startFresh).not.toHaveBeenCalled();
             expect(settings.reimportFromV1).not.toHaveBeenCalled();
-            expect(settings.keepCurrentConfig).not.toHaveBeenCalled();
         },
     );
-
-    test('keep waits for the current settings.json to be recorded', async () => {
-        jest.mocked(settings.keepCurrentConfig).mockResolvedValue(true);
-
-        await expect(settingsRecoveryCmd(['keep'])).resolves.toBe(0);
-
-        expect(mockCategory.success).toHaveBeenCalledWith(expect.stringContaining('Kept the current settings'));
-    });
-
-    test('keep that could not record exits 1', async () => {
-        jest.mocked(settings.keepCurrentConfig).mockResolvedValue(false);
-
-        await expect(settingsRecoveryCmd(['keep'])).resolves.toBe(1);
-    });
 
     test('acknowledge marks the import report as seen', async () => {
         jest.mocked(settings.acknowledgeImportReport).mockReturnValue(true);

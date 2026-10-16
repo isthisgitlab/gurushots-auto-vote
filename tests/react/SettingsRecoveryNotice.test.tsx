@@ -1,5 +1,5 @@
 /**
- * The settings-recovery notice: a damaged settings file moved aside, a file that cannot be read, or 1.x settings that could not be imported.
+ * The settings-recovery notice: a damaged settings file moved aside, a file that cannot be read, or a settings.json that could not be imported.
  * Each reads as what happened / why (with the file's path) / what next, and can be dismissed for the session.
  */
 
@@ -254,7 +254,7 @@ describe('SettingsRecoveryNotice actions', () => {
             );
         });
 
-        test('Start fresh asks first, saying settings.json stays as a backup; Cancel leaves everything as it was', async () => {
+        test('Start fresh asks first, saying a copy of settings.json is kept; Cancel leaves everything as it was', async () => {
             answer({ code: 'settings-import-failed', path: '/x' });
             render(<SettingsRecoveryNotice />);
             await screen.findByRole('alert');
@@ -366,75 +366,34 @@ describe('SettingsRecoveryNotice actions', () => {
         });
     });
 
-    describe('a settings.json that changed offers Re-import and Keep current settings', () => {
-        test('says it changed since the import, and that saving works', async () => {
-            mockTranslator.t.mockImplementation((text) => (text === 'notice.recoveryChangedWhy' ? 'At {path}' : text));
-            answer({ code: 'settings-v1-changed', path: '/data/settings.json', blocking: false });
+    describe('a damaged config.json that was restored from settings.json', () => {
+        test('names config.json, says where the damaged copy went, and offers no action', async () => {
+            mockTranslator.t.mockImplementation((text) =>
+                text === 'notice.recoveryRestoredWhy' ? 'Copy at {path}' : text,
+            );
+            answer({ code: 'settings-restored', path: '/data/config.json.corrupt-1', blocking: false });
             render(<SettingsRecoveryNotice />);
 
             const alert = await screen.findByRole('alert');
-            expect(alert.textContent).toContain('notice.recoveryChangedWhat');
-            expect(alert.textContent).toContain('At /data/settings.json');
-            expect(alert.textContent).toContain('notice.recoveryChangedNext');
+            expect(alert.textContent).toContain('notice.recoveryRestoredWhat');
+            expect(alert.textContent).toContain('Copy at /data/config.json.corrupt-1');
+            expect(alert.textContent).toContain('notice.recoveryRestoredNext');
             expect(
                 within(alert)
                     .getAllByRole('button')
                     .map((b) => b.textContent),
-            ).toEqual(['notice.recoveryReimport', 'notice.recoveryKeep', 'errors.dismiss']);
+            ).toEqual(['errors.dismiss']);
         });
 
         test('on Android it names no file', async () => {
             (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
-            answer({ code: 'settings-v1-changed', path: 'gurushots-settings' });
+            answer({ code: 'settings-restored', path: 'gurushots-config_corrupt-2026' });
             render(<SettingsRecoveryNotice />);
 
             const alert = await screen.findByRole('alert');
-            expect(alert.textContent).toContain('notice.recoveryChangedWhyAndroid');
-            expect(alert.textContent).toContain('notice.recoveryChangedNextAndroid');
-            expect(alert.textContent).not.toContain('gurushots-settings');
-        });
-
-        test('Keep current settings needs no question: it runs, says it is kept, and the notice goes', async () => {
-            jest.mocked(window.api.keepCurrentConfig).mockResolvedValue({ success: true });
-            answer({ code: 'settings-v1-changed', path: '/data/settings.json' });
-            render(<SettingsRecoveryNotice />);
-            await screen.findByRole('alert');
-
-            answer(null);
-            fireEvent.click(action('notice.recoveryKeep'));
-
-            expect(screen.queryByRole('dialog')).toBeNull();
-            expect(await screen.findByText('notice.recoveryKeepDone')).toBeTruthy();
-            expect(window.api.keepCurrentConfig).toHaveBeenCalledTimes(1);
-            await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
-        });
-
-        test('Keep that fails says so', async () => {
-            jest.mocked(window.api.keepCurrentConfig).mockResolvedValue({ success: false, error: 'x' });
-            answer({ code: 'settings-v1-changed', path: '/data/settings.json' });
-            render(<SettingsRecoveryNotice />);
-            await screen.findByRole('alert');
-
-            fireEvent.click(action('notice.recoveryKeep'));
-
-            await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(2));
-            expect(screen.getAllByRole('alert')[1].textContent).toContain('notice.recoveryKeepFailed');
-        });
-
-        test('Re-import asks first and replaces the settings in use', async () => {
-            jest.mocked(window.api.reimportSettingsFromV1).mockResolvedValue({ success: true });
-            answer({ code: 'settings-v1-changed', path: '/data/settings.json' });
-            render(<SettingsRecoveryNotice />);
-            await screen.findByRole('alert');
-
-            fireEvent.click(action('notice.recoveryReimport'));
-            expect(screen.getByRole('dialog', { name: 'notice.recoveryReimportTitle' })).toBeTruthy();
-            answer(null);
-            fireEvent.click(
-                within(screen.getByRole('dialog')).getByRole('button', { name: 'notice.recoveryReimportConfirm' }),
-            );
-
-            expect(await screen.findByText('notice.recoveryReimportDone')).toBeTruthy();
+            expect(alert.textContent).toContain('notice.recoveryRestoredWhyAndroid');
+            expect(alert.textContent).toContain('notice.recoveryRestoredNextAndroid');
+            expect(alert.textContent).not.toContain('gurushots-config');
         });
     });
 

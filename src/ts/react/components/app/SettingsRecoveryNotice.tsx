@@ -11,10 +11,10 @@ import { BusyContent } from '@/components/ui/LoadingSpinner';
 import type { IpcQueryTools } from '@/api/useIpcQuery';
 
 type RecoveryCode =
+    | 'settings-restored'
     | 'settings-corrupt'
     | 'settings-unreadable'
     | 'settings-import-failed'
-    | 'settings-v1-changed'
     | 'settings-save-dropped';
 // `cause` (a save the window gave up only): why the change was dropped — `conflict` (the background service wrote at
 // the same time), `too-large` (past the size the store takes) or `storage` (the store refused it). Any other value,
@@ -23,6 +23,11 @@ type Recovery = { code: RecoveryCode; path: string; cause?: string };
 
 // The translation keys of each code's what happened / why / what next text.
 const RECOVERY_KEYS: Record<RecoveryCode, { what: string; why: string; next: string }> = {
+    'settings-restored': {
+        what: 'notice.recoveryRestoredWhat',
+        why: 'notice.recoveryRestoredWhy',
+        next: 'notice.recoveryRestoredNext',
+    },
     'settings-corrupt': {
         what: 'notice.recoveryCorruptWhat',
         why: 'notice.recoveryCorruptWhy',
@@ -37,11 +42,6 @@ const RECOVERY_KEYS: Record<RecoveryCode, { what: string; why: string; next: str
         what: 'notice.recoveryImportWhat',
         why: 'notice.recoveryImportWhy',
         next: 'notice.recoveryImportNext',
-    },
-    'settings-v1-changed': {
-        what: 'notice.recoveryChangedWhat',
-        why: 'notice.recoveryChangedWhy',
-        next: 'notice.recoveryChangedNext',
     },
     'settings-save-dropped': {
         what: 'notice.recoveryDroppedWhat',
@@ -59,10 +59,10 @@ const DROPPED_WHY = new Map([
 // Where the settings are not a file the user can open (Android: app-private storage), the notice names no path and
 // asks for no step on a file.
 const NO_FILE_KEYS: Partial<Record<RecoveryCode, { why: string; next: string }>> = {
+    'settings-restored': { why: 'notice.recoveryRestoredWhyAndroid', next: 'notice.recoveryRestoredNextAndroid' },
     'settings-corrupt': { why: 'notice.recoveryCorruptWhyAndroid', next: 'notice.recoveryCorruptNextAndroid' },
     'settings-unreadable': { why: 'notice.recoveryUnreadableWhyAndroid', next: 'notice.recoveryUnreadableNextAndroid' },
     'settings-import-failed': { why: 'notice.recoveryImportWhyAndroid', next: 'notice.recoveryImportNextAndroid' },
-    'settings-v1-changed': { why: 'notice.recoveryChangedWhyAndroid', next: 'notice.recoveryChangedNextAndroid' },
 };
 
 // The text keys of a notice: its code's, refined by what the platform and the cause make true. A dropped save is
@@ -77,7 +77,7 @@ const keysFor = (recovery: Recovery, settingsFile: boolean) => {
     return keys;
 };
 
-type ActionId = 'retry' | 'start-fresh' | 'reimport' | 'keep';
+type ActionId = 'retry' | 'start-fresh' | 'reimport';
 
 // What each action does and says: `done` and `failed` are the outcome texts (what happened, why, what next).
 const ACTIONS: Record<
@@ -110,12 +110,6 @@ const ACTIONS: Record<
         failed: 'notice.recoveryReimportFailed',
         primary: true,
     },
-    keep: {
-        label: 'notice.recoveryKeep',
-        run: () => ipc.keepCurrentConfig(),
-        done: 'notice.recoveryKeepDone',
-        failed: 'notice.recoveryKeepFailed',
-    },
 };
 
 // The actions that set the current state aside or give up the import ask first: the question's title, text and button.
@@ -138,7 +132,6 @@ const needsConfirm = (action: ActionId): action is ConfirmedAction => Object.has
 const ACTIONS_FOR: Partial<Record<RecoveryCode, ActionId[]>> = {
     'settings-import-failed': ['retry', 'start-fresh'],
     'settings-corrupt': ['reimport'],
-    'settings-v1-changed': ['reimport', 'keep'],
 };
 
 type Outcome = { action: ActionId; ok: boolean };
@@ -156,12 +149,13 @@ const applyRecovery = (
 };
 
 /**
- * Tells the user when their stored settings are not in use: a damaged file moved aside (with where the copy went), or
- * a file that cannot be read, or 1.x settings that could not be imported (saving is off until they can be), or a
- * settings.json that changed after the import, or a change the window could not save. What happened, why, what next;
- * dismissable until the notice goes away. The notices that have a way forward offer it: Retry or Start fresh for an
- * import that failed, Re-import for a damaged configuration, Re-import or Keep current settings for a settings.json
- * that changed. An action shows that it is working, then says inline what came of it. It reads again on every settings
+ * Tells the user when their stored settings are not in use or were restored: a damaged file moved aside (with where
+ * the copy went) and the settings restored from settings.json, or, when there was none to restore from, defaults in
+ * their place; a file that cannot be read; a settings.json that could not be imported (saving is off until it can
+ * be); or a change the window could not save. What happened, why, what next; dismissable until the notice goes away.
+ * The notices that have a way forward offer it: Retry or Start fresh for an import that failed, Re-import for a
+ * damaged configuration with nothing to restore it from. An action shows that it is working, then says inline what
+ * came of it. It reads again on every settings
  * change, which is how a save given up later (or one that lands after) reaches it.
  */
 export function SettingsRecoveryNotice() {

@@ -1,6 +1,6 @@
 /**
- * What a 1.x load accepts of the stored settings, frozen: the merge over the defaults, the removal of values whose
- * type or range a read would misreport, and the prune of keys the 1.x schema does not define.
+ * What the old (format 1) load accepts of the stored settings, frozen: the merge over the defaults, the removal of values whose
+ * type or range a read would misreport, and the prune of keys the frozen schema does not define.
  */
 
 import { isPlainObject } from '../../plainObject';
@@ -132,10 +132,13 @@ const dropInvalidV1Values = (settings: V1Blob): string[] => {
 };
 
 /**
- * Delete the legacy top-level boostConfig key and every globalDefaults / perChallenge key the 1.x schema does not
+ * Delete the legacy top-level boostConfig key and every globalDefaults / perChallenge key the frozen schema does not
  * define, then any per-challenge map left empty. Mutates `settings`; true when anything was removed.
+ *
+ * @param keptKey - a key the frozen schema does not define that is kept all the same: the live settings schema's own,
+ *   for the import of the settings.json the app itself writes (see settings/formatOneMirror.ts)
  */
-const pruneV1Obsolete = (settings: V1Blob): boolean => {
+const pruneV1Obsolete = (settings: V1Blob, keptKey: (key: string) => boolean = () => false): boolean => {
     let hasChanges = false;
     if (settings.boostConfig) {
         delete settings.boostConfig;
@@ -143,7 +146,7 @@ const pruneV1Obsolete = (settings: V1Blob): boolean => {
     }
     const { globalDefaults, perChallenge } = settings.challengeSettings;
     const unknownKeys = (values: V1Values) =>
-        Object.keys(values).filter((key) => !Object.hasOwn(V1_SETTINGS_SCHEMA, key));
+        Object.keys(values).filter((key) => !Object.hasOwn(V1_SETTINGS_SCHEMA, key) && !keptKey(key));
     for (const key of unknownKeys(globalDefaults)) {
         delete globalDefaults[key];
         hasChanges = true;

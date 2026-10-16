@@ -3,11 +3,11 @@
  * surface of the internal ./settings/* modules:
  *
  *   schema.ts             keys, defaults, validation, groups/tiers (entries in schema/)
- *   storage.ts            persistence transport (config.json, and the 1.x settings.json) + runtime/environment detection
+ *   storage.ts            persistence transport (config.json, and settings.json) + runtime/environment detection
  *   defaults.ts           default configuration and shared challenge-value helpers
- *   persistence.ts        load (fill + validate, the one-time 1.x import) / save,
+ *   persistence.ts        load (fill + validate, the import of settings.json) / save + mirror,
  *                         app and auth keys, window bounds, recovery actions
- *   legacyImport.ts       the one-time import of a 1.x settings.json (the conversion is importV1/)
+ *   legacyImport.ts       the import of settings.json (the conversion is importV1/)
  *   challengeOverrides.ts global defaults, per-challenge overrides, effective values
  *   challengeFacts.ts     process-local cache of the active challenges' titles/facts
  *   titleRuleSanitize.ts  write-side validation of challenge rules
@@ -46,6 +46,7 @@ import * as openChallenges from './settings/openChallenges';
 import * as chosenPhotosClear from './settings/chosenPhotosClear';
 import { rememberChallengeTitles } from './settings/challengeFacts';
 import { importMarkerStore } from './settings/importMarker';
+import { originalStore } from './settings/formatOneMirror';
 import { TITLE_RULE_INLINE_KEYS, MAX_TITLE_LENGTH } from './settings/titleRuleSanitize';
 import * as titleRules from './settings/titleRules';
 import * as profiles from './settings/profiles';
@@ -55,13 +56,14 @@ import * as scenarios from './settings/scenarios';
 import * as reset from './settings/reset';
 
 /**
- * Hydrates every store the settings read on Capacitor (the configuration, the 1.x settings file, the import marker and
- * the title pins) before the window mounts. No-op elsewhere.
+ * Hydrates every store the settings read on Capacitor (the configuration, `settings.json` and the copy kept of it, the
+ * import marker and the title pins) before the window mounts. No-op elsewhere.
  */
 const initializeAsync = async (): Promise<void> => {
     await Promise.all([
         initializeStorageAsync(),
         importMarkerStore.initializeAsync(),
+        originalStore.initializeAsync(),
         titlePins.titlePinStore.initializeAsync(),
     ]);
 };
@@ -77,9 +79,7 @@ export const getSettingsRecovery = persistence.getSettingsRecovery;
 export const retryImport = persistence.retryImport;
 export const startFresh = persistence.startFresh;
 export const reimportFromV1 = persistence.reimportFromV1;
-export const checkLegacyDrift = persistence.checkLegacyDrift;
-export const keepCurrentConfig = persistence.keepCurrentConfig;
-// What the 1.x import left unresolved
+// What the import left unresolved
 export const getImportReport = persistence.getImportReport;
 export const acknowledgeImportReport = persistence.acknowledgeImportReport;
 export type SettingsRecovery = persistence.SettingsRecovery;

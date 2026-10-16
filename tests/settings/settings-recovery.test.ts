@@ -1,7 +1,8 @@
 /**
  * Corrupt and unreadable configuration files, against a real temp directory: a file that does not parse is set aside
- * once and defaults apply (saves then work), and a 1.x settings.json beside it is never imported over that; a file
- * that cannot be read is never overwritten while that lasts. Saves replace the file atomically.
+ * once and defaults apply (saves then work), and a settings.json beside it that the mirror has not written is never
+ * imported over that (the restore from one it has written is in formatOne/mirror.test.ts); a file that cannot be read
+ * is never overwritten while that lasts. Saves replace the file atomically.
  */
 
 // A partial mock of the real fs (a builtin's exports are not spy-able as is), so
@@ -272,7 +273,7 @@ describe('settings recovery (real fs)', () => {
             fs.linkSync(settingsFile, before);
             expect(settings.setSetting('theme', 'light')).toBe(true);
 
-            expect(fs.readdirSync(userData).sort()).toEqual(['config.json', 'v2-import.json']);
+            expect(fs.readdirSync(userData).sort()).toEqual(['config.json', 'settings.json', 'v2-import.json']);
             expect(parseJsonObject(fs.readFileSync(before, 'utf8')).app).toEqual(
                 expect.objectContaining({ theme: 'dark' }),
             );
