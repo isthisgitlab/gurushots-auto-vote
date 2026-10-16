@@ -469,13 +469,92 @@ describe('entry times: exact and approximate', () => {
         expect(store.peek()['1'].firstSeen).toBe(NOW + 60);
     });
 
-    test('an old record whose entry has no known age is shown from the first fetch after the file was read', () => {
-        const store = rawStore(JSON.stringify({ 1: { closeTime: NOW + 3600, entered: { a: 0 }, pending: null } }));
+    test('an old record gets the smallest fetch sighting it holds as its first fetch: the unknown-age entries were there before it', () => {
+        const store = rawStore(
+            JSON.stringify({
+                1: { closeTime: NOW + 3600, entered: { a: 0, b: NOW - 500, c: NOW - 200 }, pending: null },
+            }),
+        );
         const ledger = createEntryAgeLedger(store);
-        expect(ledger.observeAll([listing(1, ['a'])], NOW + 60)).toEqual({
-            '1': { a: { at: NOW + 60, exact: false } },
+        expect(ledger.observeAll([listing(1, ['a', 'b', 'c'])], NOW)).toEqual({
+            '1': {
+                a: { at: NOW - 500, exact: false },
+                b: { at: NOW - 500, exact: false },
+                c: { at: NOW - 200, exact: false },
+            },
         });
+        expect(store.peek()['1'].firstSeen).toBe(NOW - 500);
         expect(ledger.enteredAt(1, 'a')).toBe(0);
+    });
+
+    test('the earliest stamp of an old record is taken even when it belongs to an entry the fetch no longer lists', () => {
+        const store = rawStore(
+            JSON.stringify({
+                1: { closeTime: NOW + 3600, entered: { a: 0, gone: NOW - 900, c: NOW - 200 }, pending: null },
+            }),
+        );
+        const ledger = createEntryAgeLedger(store);
+        expect(ledger.observeAll([listing(1, ['a', 'c'])], NOW)).toEqual({
+            '1': { a: { at: NOW - 900, exact: false }, c: { at: NOW - 200, exact: false } },
+        });
+        expect(store.peek()['1'].firstSeen).toBe(NOW - 900);
+    });
+
+    test('an old record whose positive times are all app submits (exact or uncertain) falls back to the fetch time', () => {
+        const store = rawStore(
+            JSON.stringify({
+                1: {
+                    closeTime: NOW + 3600,
+                    entered: { a: 0, x: NOW - 500, u: NOW - 400 },
+                    pending: null,
+                    exact: ['x'],
+                    uncertain: ['u'],
+                },
+            }),
+        );
+        const ledger = createEntryAgeLedger(store);
+        expect(ledger.observeAll([listing(1, ['a', 'x', 'u'])], NOW + 60)).toMatchObject({
+            '1': { a: { at: NOW + 60, exact: false }, x: { at: NOW - 500, exact: true } },
+        });
+        expect(store.peek()['1'].firstSeen).toBe(NOW + 60);
+        // A record with nothing positive at all too.
+        const empty = createEntryAgeLedger(
+            rawStore(JSON.stringify({ 1: { closeTime: NOW + 3600, entered: { a: 0, b: 'soon' }, pending: null } })),
+        );
+        expect(empty.observeAll([listing(1, ['a'])], NOW + 60)).toEqual({ '1': { a: { at: NOW + 60, exact: false } } });
+    });
+
+    test.each<[string, unknown, number]>([
+        ['a number', NOW - 300, NOW - 300],
+        ['a numeric string', String(NOW - 300), 0],
+        ['a negative number', -5, 0],
+        ['NaN (stored as null)', Number.NaN, 0],
+        ['null', null, 0],
+        ['a missing value', undefined, 0],
+    ])('a stored firstSeen that is %s reads as the clamped value', (_label, stored, expected) => {
+        const store = rawStore(
+            JSON.stringify({ 1: { closeTime: NOW + 3600, entered: { a: 0 }, pending: null, firstSeen: stored } }),
+        );
+        // A write that does not observe carries the field on as it was read.
+        createEntryAgeLedger(store).markSubmitted(1, ['x'], NOW);
+        expect(store.peek()['1'].firstSeen).toBe(expected);
+    });
+
+    test.each<[string, unknown, number]>([
+        ['a number', NOW - 300, NOW - 300],
+        ['a numeric string', String(NOW - 300), NOW + 60],
+        ['a negative number', -5, NOW + 60],
+        ['NaN (stored as null)', Number.NaN, NOW + 60],
+        ['null', null, NOW + 60],
+        ['a missing value', undefined, NOW + 60],
+        ['zero', 0, NOW + 60],
+    ])('a stored firstSeen that is %s is kept only when it is a positive number', (_label, stored, expected) => {
+        const store = rawStore(
+            JSON.stringify({ 1: { closeTime: NOW + 3600, entered: { a: 0 }, pending: null, firstSeen: stored } }),
+        );
+        // A second entry makes the observation a change, so the record is written out.
+        createEntryAgeLedger(store).observe(listing(1, ['a', 'b']), NOW + 60);
+        expect(store.peek()['1'].firstSeen).toBe(expected);
     });
 
     test('the record of another account starts again: its entries are shown from the new first sighting', () => {

@@ -155,6 +155,26 @@ const heldBack = (existing: StoredEntryAgeRecord | undefined, entered: Record<st
 };
 
 /**
+ * The first fetch that showed the record's entries, for the time an entry of unknown age is shown at: `now` on a first
+ * sighting; the record's own once it has one. A record from a file written before it was kept has none: the entries of
+ * unknown age were there before the first entry a fetch stamped, so it takes the smallest such time (not an app submit,
+ * exact or uncertain), or `now` when there is none.
+ */
+const firstSeenOf = (known: StoredEntryAgeRecord | undefined, now: number): number => {
+    if (!known?.observed) return now;
+    if (known.firstSeen > 0) return known.firstSeen;
+    // A fold, not Math.min(...): a corrupt file with a huge map must not overflow the arguments.
+    const earliest = Object.entries(known.entered).reduce(
+        (least, [id, at]) =>
+            Number.isFinite(at) && at > 0 && at < least && !known.exact.includes(id) && !known.uncertain.includes(id)
+                ? at
+                : least,
+        Number.POSITIVE_INFINITY,
+    );
+    return Number.isFinite(earliest) ? earliest : now;
+};
+
+/**
  * The record `challenge` should now hold: an id seen for the first time is
  * stamped `now` (or left unknown, 0, on the challenge's first sighting), an id no longer
  * entered is forgotten. Null when nothing changed from `existing`.
@@ -183,9 +203,7 @@ const observedRecord = (
         exact: kept.exact,
         memberId: listingMember ?? known?.memberId ?? null,
         observed: true,
-        // Kept once a fetch has shown the record; set by the first sighting, and by the next observation of a record
-        // that has none (a file from before it was kept: its entries were there by now).
-        firstSeen: known?.observed && known.firstSeen > 0 ? known.firstSeen : now,
+        firstSeen: firstSeenOf(known, now),
     };
     return known && sameRecord(known, record) ? null : record;
 };
@@ -311,7 +329,8 @@ const createEntryAgeLedger = (store: RawJsonStore, refreshStore?: () => Promise<
 
         /**
          * Record the entries of every challenge of one fetch with at most one write, and answer when each entry
-         * went in (the entries whose time is known): per challenge id, per entry id.
+         * went in: per challenge id, per entry id. An entry of unknown age is answered with the record's `firstSeen`
+         * (not exact: it was there by then).
          * @param now - Unix seconds
          */
         observeAll: (challenges: readonly Challenge[], now: number): EntryTimes => {

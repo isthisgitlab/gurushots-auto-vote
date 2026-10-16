@@ -78,7 +78,7 @@ const parseState = (raw: string | null): State => {
                     exact: idList(record.exact),
                     memberId: typeof record.memberId === 'string' ? record.memberId : null,
                     observed: record.observed !== false,
-                    firstSeen: finiteOr(record.firstSeen, 0) > 0 ? Number(record.firstSeen) : 0,
+                    firstSeen: Math.max(finiteOr(record.firstSeen, 0), 0),
                 };
             }
         }

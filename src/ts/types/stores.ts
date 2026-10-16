@@ -100,13 +100,18 @@ export interface EntryAgeRecord {
     /** False for a record a submit created before any fetch had seen the challenge. */
     observed: boolean;
     /**
-     * Unix seconds of the first fetch that showed this record's entries (0: not yet, or a file from before it was
-     * kept). An entry whose `entered` time is 0 was there by then, which is the time the UI shows for it ("or earlier").
+     * Unix seconds of the first fetch that showed this record's entries; for a record from an older file (0 until it is
+     * observed again), the earliest time a fetch stamped one of them. Either way an entry whose `entered` time is 0 was
+     * there by then, which is the time the UI shows for it ("or earlier").
      */
     firstSeen: number;
 }
 
-/** Per challenge id, per entry id: the entry's recorded time (only entries whose time is known). */
+/**
+ * Per challenge id, per entry id: when the entry went in — its recorded time (exact when the app submitted it), or for
+ * an entry of unknown age the record's `firstSeen` (not exact: it was there by then). An entry the ledger does not hold
+ * is left out.
+ */
 export type EntryTimes = Record<string, Record<string, EntryEnteredTime>>;
 
 /** The entry-age ledger a voting pass reads and writes (entryAgeStore). */
