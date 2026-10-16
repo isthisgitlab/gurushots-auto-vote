@@ -1,5 +1,5 @@
 /**
- * Conversion of a migrated 1.x settings blob to the 2.x configuration: the sign-in state, the app preferences, the
+ * Conversion of a migrated format 1 settings blob to the format 2 configuration: the sign-in state, the app preferences, the
  * defaults, profiles, scenarios and rules, and the per-challenge state folded into one record per id, with the
  * setting keys renamed. Pure: it reads the blob and builds new values.
  */
@@ -10,7 +10,14 @@ import { hasV1ProfileNamed, normalizeV1ProfileName, V1_RESERVED_PROFILE_NAMES } 
 import { isReservedChallengeId } from './loadValidation';
 import { renameV1Keys, renameV1ScenarioDocument, renameV1Value } from './renames';
 
-import type { ChallengePinsV2, ChallengeRecordV2, ImportReportV2, StoredConfigV2 } from '../../types/config';
+import type {
+    ChallengePinsV2,
+    ChallengeRecordV2,
+    ImportRef,
+    ImportRefHolder,
+    ImportReportV2,
+    StoredConfigV2,
+} from '../../types/config';
 import type { V1Blob, V1Values } from './types';
 
 type ConvertedV1 = { config: StoredConfigV2; titlePins: Record<string, string>; report: ImportReportV2 };
@@ -18,7 +25,7 @@ type ConvertedV1 = { config: StoredConfigV2; titlePins: Record<string, string>; 
 // The top-level keys that become `auth`.
 const AUTH_KEYS = ['token', 'apiHeaders', 'lastUsername', 'chosenPhotosMemberId'];
 
-// The schema keys of the app-state flags: 1.x kept them at the top level and read them from there only (a copy among
+// The schema keys of the app-state flags: format 1 kept them at the top level and read them from there only (a copy among
 // the global defaults was never read), so they are `app` values, and `chosenPhotosMemberId` an `auth` one.
 const TOP_LEVEL_ONLY_KEYS = new Set([
     'autovoteRunning',
@@ -40,7 +47,7 @@ const stringEntries = (value: unknown): Array<[string, string]> =>
         : [];
 
 /**
- * The `[id, title]` pairs 1.x's title lookup finds in a stored `titlePins`. It reads `pinned[id]` of whatever the file
+ * The `[id, title]` pairs format 1's title lookup finds in a stored `titlePins`. It reads `pinned[id]` of whatever the file
  * holds, for an id the value has as an own property: an object's entries, but also an array's elements by index and
  * a string's characters by index.
  */
@@ -52,7 +59,7 @@ const pinnedTitles = (stored: unknown): Array<[string, string]> =>
 const mapValues = (value: unknown, convert: (item: unknown) => unknown): Record<string, unknown> =>
     isPlainObject(value) ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, convert(item)])) : {};
 
-// The pinned entry ids of one stored pin record: 1.x reads only string `boost` / `turbo` values.
+// The pinned entry ids of one stored pin record: format 1 reads only string `boost` / `turbo` values.
 const pinsOf = (record: unknown): ChallengePinsV2 => {
     const pins: ChallengePinsV2 = {};
     if (isPlainObject(record)) {
@@ -82,31 +89,62 @@ const convertChallenges = (blob: V1Blob): Record<string, ChallengeRecordV2> => {
     return challenges;
 };
 
-const quoted = (name: string): string => JSON.stringify(name.slice(0, 80));
+// A name shown in a report, shortened (a user-authored name can be any length).
+const shortened = (name: string, max: number): string => (name.length > max ? `${name.slice(0, max - 1)}…` : name);
 
-/** The path of a challenge's stored record in a report entry: bracketed and JSON-quoted unless the id is plain. */
-const challengePath = (id: string): string =>
-    /^[\w-]+$/.test(id) ? `challenges.${id}` : `challenges[${JSON.stringify(id)}]`;
+const MAX_NAME_LENGTH = 80;
+const MAX_RULE_TITLE_LENGTH = 40;
+
+/** The holder of a reference in the rule at `index` (counted from 0 in the stored order; shown from 1). */
+const ruleHolder = (rule: unknown, index: number): ImportRefHolder => {
+    const title = isPlainObject(rule) && typeof rule.title === 'string' ? rule.title.trim() : '';
+    return {
+        kind: 'rule',
+        number: index + 1,
+        ...(title === '' ? {} : { title: shortened(title, MAX_RULE_TITLE_LENGTH) }),
+    };
+};
+
+/** The holder of a reference in a challenge's own settings: its title where one is known for the id. */
+const challengeHolder = (id: string, titles: Readonly<Record<string, string>>): ImportRefHolder => {
+    const title = Object.hasOwn(titles, id) ? titles[id].trim() : '';
+    return {
+        kind: 'challenge',
+        id: shortened(id, MAX_NAME_LENGTH),
+        ...(title === '' ? {} : { title: shortened(title, MAX_NAME_LENGTH) }),
+    };
+};
+
+const profileHolder = (name: string): ImportRefHolder => ({ kind: 'profile', name: shortened(name, MAX_NAME_LENGTH) });
+
+/** A reference to the `profile` or `scenario` called `name`, as the report lists it. */
+const refTo = (holder: ImportRefHolder, refers: ImportRef['refers'], name: string, invalid = false): ImportRef => ({
+    holder,
+    refers,
+    name: shortened(name, MAX_NAME_LENGTH),
+    ...(invalid ? { invalid: true as const } : {}),
+});
 
 /**
- * The references 1.x could not resolve, which stay as stored and block as in 1.x: a rule naming a profile that is
+ * The references format 1 could not resolve, which stay as stored and block as in format 1: a rule naming a profile that is
  * missing or reserved, and a `scenario` value naming a scenario that is not stored. A `scenario` among the defaults
- * is no reference: it is challenge-only, so 1.x never applied a global value.
+ * is no reference: it is challenge-only, so format 1 never applied a global value.
  */
-const unresolvedRefs = (config: StoredConfigV2): string[] => {
-    const refs: string[] = [];
-    const unresolvedScenario = (path: string, values: unknown) => {
+const unresolvedRefs = (config: StoredConfigV2, titles: Readonly<Record<string, string>>): ImportRef[] => {
+    const refs: ImportRef[] = [];
+    const unresolvedScenario = (holder: ImportRefHolder, values: unknown) => {
         const name = isPlainObject(values) ? values.scenario : undefined;
         const normalized = normalizeV1ProfileName(name);
         if (normalized !== '' && typeof name === 'string' && !hasV1ProfileNamed(config.scenarios, normalized)) {
-            refs.push(`${path}.scenario: ${quoted(name)}`);
+            refs.push(refTo(holder, 'scenario', name));
         }
     };
     for (const [name, values] of Object.entries(config.profiles)) {
-        unresolvedScenario(`profiles[${JSON.stringify(name)}]`, values);
+        unresolvedScenario(profileHolder(name), values);
     }
     config.rules.forEach((rule, index) => {
-        unresolvedScenario(`rules[${index}]`, rule);
+        const holder = ruleHolder(rule, index);
+        unresolvedScenario(holder, rule);
         const profile = isPlainObject(rule) ? rule.profile : undefined;
         const normalized = normalizeV1ProfileName(profile);
         if (
@@ -114,19 +152,19 @@ const unresolvedRefs = (config: StoredConfigV2): string[] => {
             typeof profile === 'string' &&
             (V1_RESERVED_PROFILE_NAMES.has(normalized) || !hasV1ProfileNamed(config.profiles, normalized))
         ) {
-            refs.push(`rules[${index}].profile: ${quoted(profile)}`);
+            refs.push(refTo(holder, 'profile', profile));
         }
     });
     for (const [id, record] of Object.entries(config.challenges)) {
-        unresolvedScenario(`${challengePath(id)}.values`, record.values);
+        unresolvedScenario(challengeHolder(id, titles), record.values);
     }
     return refs;
 };
 
 /**
- * The 2.x configuration for a merged, migrated, validated and pruned 1.x blob, with the title pins (kept in a cache
- * store, not in the configuration) and the references that could not be resolved. `mockStored`: the 1.x file held a
- * `mock` value; without one the configuration has none, so the build's own default applies at load, as 1.x's merge did.
+ * The format 2 configuration for a merged, migrated, validated and pruned format 1 blob, with the title pins (kept in a cache
+ * store, not in the configuration) and the references that could not be resolved. `mockStored`: the format 1 file held a
+ * `mock` value; without one the configuration has none, so the build's own default applies at load, as format 1's merge did.
  */
 const convertV1Blob = (blob: V1Blob, { mockStored }: { mockStored: boolean }): ConvertedV1 => {
     const { challengeSettings } = blob;
@@ -152,7 +190,7 @@ const convertV1Blob = (blob: V1Blob, { mockStored }: { mockStored: boolean }): C
     const titlePins = Object.fromEntries(
         pinnedTitles(challengeSettings.titlePins).filter(([id]) => !isReservedChallengeId(id)),
     );
-    return { config, titlePins, report: { refsBlocked: unresolvedRefs(config) } };
+    return { config, titlePins, report: { refsBlocked: unresolvedRefs(config, titlePins) } };
 };
 
-export { challengePath, convertV1Blob, quoted, TOP_LEVEL_ONLY_KEYS };
+export { challengeHolder, convertV1Blob, profileHolder, refTo, ruleHolder, TOP_LEVEL_ONLY_KEYS };

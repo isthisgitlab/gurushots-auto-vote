@@ -1,6 +1,6 @@
 /**
- * The 2.x setting-key renames and where they apply. In 1.x `autoFill*` / `emergencyFill*` named submitting a photo
- * while "fill" in the UI and in other keys named a currency; 2.x spells the photo submission "submit". Only keys
+ * The format 2 setting-key renames and where they apply. In format 1 `autoFill*` / `emergencyFill*` named submitting a photo
+ * while "fill" in the UI and in other keys named a currency; format 2 spells the photo submission "submit". Only keys
  * change, never values.
  */
 
@@ -8,7 +8,7 @@ import { isPlainObject } from '../../plainObject';
 
 import type { V1Values } from './types';
 
-/** 1.x key to 2.x key. The currency keys (`autoExposureFill*`, `scheduledFill*`, ...) and `scenario` keep their names. */
+/** Format 1 key to format 2 key. The currency keys (`autoExposureFill*`, `scheduledFill*`, ...) and `scenario` keep their names. */
 const V1_KEY_RENAMES: Readonly<Record<string, string>> = Object.freeze({
     autoFill: 'autoSubmit',
     autoFillSchedule: 'autoSubmitSchedule',
@@ -30,17 +30,17 @@ const V1_RENAME_TARGETS: ReadonlySet<string> = new Set(Object.values(V1_KEY_RENA
 /**
  * What a key named like a rename target (`autoSubmit`, ...) means in the map being renamed.
  *
- * - `drop-targets`: a map of a 1.x settings file. 1.x never read such a key, so it is a stray and goes, whether or
- *   not its 1.x counterpart is there.
- * - `keep-lone-targets`: a map from outside, such as a scenario file a 2.x install exported, which is already
- *   renamed. A target with no 1.x counterpart in the map is a 2.x name and stays; one beside its counterpart
+ * - `drop-targets`: a map of a format 1 settings file. Format 1 never read such a key, so it is a stray and goes, whether or
+ *   not its format 1 counterpart is there.
+ * - `keep-lone-targets`: a map from outside, such as a scenario file exported under settings format 2, which is already
+ *   renamed. A target with no format 1 counterpart in the map is a format 2 name and stays; one beside its counterpart
  *   is a stray and goes.
  */
 type RenameMode = 'drop-targets' | 'keep-lone-targets';
 
 /**
- * A copy of a map with its renamed keys. Where a 1.x key and its 2.x name are both there the 1.x key wins; what a
- * lone 2.x name becomes depends on `mode`.
+ * A copy of a map with its renamed keys. Where a format 1 key and its format 2 name are both there the format 1 key wins; what a
+ * lone format 2 name becomes depends on `mode`.
  */
 const renameV1Keys = (values: V1Values, mode: RenameMode): V1Values => {
     const entries = Object.entries(values);
@@ -60,11 +60,11 @@ const renameV1Value = (value: unknown, mode: RenameMode): unknown =>
     isPlainObject(value) ? renameV1Keys(value, mode) : value;
 
 /**
- * The name a stray 2.x key takes in a scenario phase's `settings` in `drop-targets` mode. Such a key made 1.x refuse
+ * The name a stray format 2 key takes in a scenario phase's `settings` in `drop-targets` mode. Such a key made format 1 refuse
  * the whole document ("not a per-challenge setting"), so it is not dropped, which would make the document valid:
  * under this name no setting answers to it, so the document is refused as it was.
  */
-const V1_REFUSED_KEY_PREFIX = 'ignored by 1.x: ';
+const V1_REFUSED_KEY_PREFIX = 'ignored by settings format 1: ';
 
 const renamePhaseSettings = (settings: V1Values, mode: RenameMode): V1Values => {
     const renamed = renameV1Keys(settings, mode);
@@ -78,7 +78,7 @@ const renamePhaseSettings = (settings: V1Values, mode: RenameMode): V1Values => 
 
 /**
  * A scenario document with the setting keys of every phase's `settings` renamed. For documents from outside the
- * app (a shared file: `keep-lone-targets`, the default) and for the ones in a 1.x settings file (`drop-targets`),
+ * app (a shared file: `keep-lone-targets`, the default) and for the ones in a format 1 settings file (`drop-targets`),
  * so it accepts anything: what is not a scenario-shaped object comes back as it is, nothing throws, and the input
  * is not changed.
  */

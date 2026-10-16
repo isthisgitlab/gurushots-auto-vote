@@ -45,6 +45,7 @@ const mockPreferences = {
 jest.mock('@capacitor/preferences', () => ({ Preferences: mockPreferences }), { virtual: true });
 
 import type * as settingsModule from '../../src/ts/settings';
+import type * as intentProfilesModule from '../../src/ts/settings/intentProfiles';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { parseJsonObject } from '../helpers/parseJson';
 
@@ -82,6 +83,8 @@ afterEach(() => {
     useMemoryPreferences();
 });
 
+// Lets the saves that wait their turn (the pins and the marker, written against what is stored) land.
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 const savedKeys = () => mockPreferences.set.mock.calls.map(([call]) => call.key);
 const saved = (key: string) => parseJsonObject(prefs.get(key) ?? 'null');
 
@@ -92,28 +95,62 @@ describe('the import in the Android app window', () => {
 
     test('waits for the stored settings to be read, and is not held against a later read', async () => {
         prefs.set('gurushots-settings', ONE_X);
-        const settings = loadSettingsModule();
-
-        // Before the window has hydrated, nothing can be read: saves are refused, but the failure is not remembered.
-        expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
-        expect(settings.getSettingsRecovery()).toEqual({
-            code: 'settings-import-failed',
-            path: 'gurushots-settings',
-            blocking: true,
+        let settings!: typeof settingsModule;
+        let cat!: Record<'error' | 'warning', jest.Mock<void, [string, ...unknown[]]>>;
+        jest.isolateModules(() => {
+            settings = require('../../src/ts/settings') as typeof settingsModule;
+            cat = (require('../../src/ts/logger') as unknown as { __cat: typeof cat }).__cat;
         });
+
+        // Before the window has hydrated, nothing can be read: the defaults answer, it is no import failure (nothing
+        // blocking, nothing at error level, nothing remembered), and a save is refused so it cannot replace what is stored.
+        expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
+        expect(settings.getSettingsRecovery()).toBeNull();
         expect(settings.setSetting('theme', 'light')).toBe(false);
+        expect(cat.error).not.toHaveBeenCalled();
+        expect(cat.warning).toHaveBeenCalledWith('Not saving settings: the stored settings have not been read yet');
+        expect(savedKeys()).toEqual([]);
 
         await settings.initializeAsync();
 
         expect(settings.loadSettings().app.theme).toBe('dark');
         expect(settings.getSettingsRecovery()).toBeNull();
-        expect(settings.getTitlePins()).toEqual({ '7': 'Macro' });
         await settings.flushPendingWrites();
+        await settle();
+        // The pins are saved against what is stored, so the cache shows them once they are.
+        expect(settings.getTitlePins()).toEqual({ '7': 'Macro' });
         expect(saved('gurushots-config')).toMatchObject({ version: 2 });
         expect(prefs.has('gs_v2_import')).toBe(true);
         // settings.json is the mirror now, sign-in state kept; the file the user had is kept beside it.
         expect(saved('gurushots-settings')).toMatchObject({ theme: 'dark', token: 'tok-secret' });
         expect(prefs.get('gurushots-settings_original')).toBe(ONE_X);
+    });
+});
+
+describe('the intent profiles in the Android app window', () => {
+    beforeEach(() => {
+        g.Capacitor = { isNativePlatform: () => true };
+    });
+
+    test('seeding before the stored settings are read stores nothing; seeding after it stores every profile', async () => {
+        prefs.set('gurushots-settings', ONE_X);
+        const settings = loadSettingsModule();
+
+        settings.seedIntentProfiles();
+        expect(savedKeys()).toEqual([]);
+        expect(settings.getSettingsRecovery()).toBeNull();
+
+        await settings.initializeAsync();
+        expect(settings.seedIntentProfiles()).toBe(true);
+        await settings.flushPendingWrites();
+
+        const stored = saved('gurushots-config');
+        const { INTENT_PROFILES } = require('../../src/ts/settings/intentProfiles') as typeof intentProfilesModule;
+        expect(Object.keys(settings.getChallengeProfiles()).sort()).toEqual(
+            INTENT_PROFILES.map((intent) => intent.name).sort(),
+        );
+        expect(stored).toMatchObject({ version: 2 });
+        expect(settings.loadSettings().app.theme).toBe('dark');
     });
 });
 
@@ -196,8 +233,9 @@ describe('the import in the Android app window is done only once its configurati
         expect(savedKeys()).not.toContain('gurushots-config');
         expect(settings.getSettingsRecovery()).toBeNull();
         expect(settings.loadSettings().app.theme).toBe('light');
+        await settle();
         // What the winner imported is the same file: this context's marker only repeats its own.
-        expect(savedKeys()).toContain('gs_v2_import');
+        expect(compareAndWrite.mock.calls.map(([call]) => call.key)).toContain('gs_v2_import');
     });
 });
 

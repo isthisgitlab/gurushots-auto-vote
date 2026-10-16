@@ -60,6 +60,7 @@ describe('Capacitor entry', () => {
         const m = {
             subscribers: {} as Record<string, () => void>,
             installBridge: jest.fn(),
+            seedBridgeProfiles: jest.fn(),
             subscribe: jest.fn((event: string, cb: () => void): void => {
                 m.subscribers[event] = cb;
             }),
@@ -94,7 +95,11 @@ describe('Capacitor entry', () => {
             mountLogin: jest.fn(),
         };
         jest.isolateModules(() => {
-            jest.doMock(`${SRC}/bridge/capacitor`, () => ({ installBridge: m.installBridge, subscribe: m.subscribe }));
+            jest.doMock(`${SRC}/bridge/capacitor`, () => ({
+                installBridge: m.installBridge,
+                seedBridgeProfiles: m.seedBridgeProfiles,
+                subscribe: m.subscribe,
+            }));
             jest.doMock(`${SRC}/settings`, () => ({
                 initializeAsync: m.initSettings,
                 flushPendingWrites: m.flushPendingWrites,
@@ -163,6 +168,8 @@ describe('Capacitor entry', () => {
         const order = [
             m.installBridge,
             m.initSettings,
+            // Seeding reads and writes the settings: only after they are hydrated.
+            m.seedBridgeProfiles,
             m.initializeMetadataAsync,
             m.initializeJoinStateAsync,
             m.initializeSwapBackAsync,
@@ -247,6 +254,7 @@ describe('Capacitor entry', () => {
         await flush();
         expect(m.installBridge).not.toHaveBeenCalled();
         expect(m.initSettings).not.toHaveBeenCalled();
+        expect(m.seedBridgeProfiles).not.toHaveBeenCalled();
         expect(docListeners.visibilitychange).toBeUndefined();
         expect(m.mountApp).toHaveBeenCalledTimes(1);
     });

@@ -39,16 +39,33 @@ export interface ChallengeRecordV2 {
     pins?: ChallengePinsV2;
 }
 
+/** Where a reference that cannot be resolved is stored: the one that holds it, named the way the settings show it. */
+export type ImportRefHolder =
+    /** a challenge rule: `number` counts from 1 in the stored order, `title` is its (shortened) title match text */
+    | { kind: 'rule'; number: number; title?: string }
+    /** a saved profile */
+    | { kind: 'profile'; name: string }
+    /** a challenge's own settings: its id, and its title where the import knew it */
+    | { kind: 'challenge'; id: string; title?: string };
+
 /**
- * What the import found that it could not resolve. Key paths and names only, never values other than the name
- * a reference points at. Each entry reads `<path>: <the unresolved name as a JSON string>`, for example
- * `rules[2].profile: "Night owl"`, `profiles["Night"].scenario: "Plan B"` or
- * `challenges.123.values.scenario: "Plan B"`: rule indexes count from 0 in the stored order, profile names are
- * JSON-quoted in brackets, a challenge id is bracketed and JSON-quoted too when it is not made of letters, digits,
- * `_` and `-`.
+ * One reference the import found that does not apply, as the user knows its parts (never a value other than the name a
+ * reference points at): `holder` refers to the `profile` or `scenario` called `name`. `invalid`: it exists, but the
+ * settings reject it as it is stored; without it, it does not exist.
+ */
+export interface ImportRef {
+    holder: ImportRefHolder;
+    refers: 'profile' | 'scenario';
+    name: string;
+    invalid?: true;
+}
+
+/**
+ * What the import found that it could not resolve. A report an earlier build stored lists plain strings (key paths such
+ * as `rules[2].profile: "Night owl"`), which are shown as they are.
  */
 export interface ImportReportV2 {
-    refsBlocked: string[];
+    refsBlocked: Array<string | ImportRef>;
 }
 
 /**

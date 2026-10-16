@@ -21,7 +21,7 @@ Domain terms used throughout, in reader's terms:
 - **trigger** — vote _if_ current exposure is below this value.
 - **target** — vote _up to_ this value (the vote loop's ceiling). Distinct from the trigger.
 - **auto-fill** — automatically submit new photo entries into a challenge's open slots. User-facing text
-  calls this **Auto-Submit** (and `emergencyFill` **Emergency Submit**): to GuruShots players a **fill** is the
+  calls this **Auto-Submit** (and `emergencySubmit` **Emergency Submit**): to GuruShots players a **fill** is the
   currency that tops exposure up to 100% (`autoExposureFill`, the `fills` balance), so the UI, CLI and README
   reserve "fill" for that.
 - **boost** — a one-shot exposure multiplier applied to a single entry.
@@ -79,10 +79,10 @@ Domain terms used throughout, in reader's terms:
       stays **active**, it simply votes up to the trigger value.
       `getEffectiveExposureTarget()` (`services/decisions/thresholds.ts`); schema note in
       the `exposureTarget` entry comment in `settings/schema/general.ts`.
-    - `boostTime` / `emergencyFill` / `keyUnlockedBoostTime`: `0` means **feature off / never auto-apply**.
+    - `boostTime` / `emergencySubmit` / `keyUnlockedBoostTime`: `0` means **feature off / never auto-apply**.
       See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/decisions/thresholds.ts`:
       _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
-      emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill/emergencyFill.ts`:
+      emergencySubmit already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill/emergencyFill.ts`:
       `emergencySeconds <= 0` → `'disabled'`).
 - Magic constants: final-window width defaults to 3600 s — the `finalWindowDuration` setting's default
   (configurable 60 s … 30 d); key-unlock boost default window = 900 s when the setting is
@@ -191,7 +191,7 @@ Domain terms used throughout, in reader's terms:
   where a rule with `autoJoin: true` wins over its skip; the editor warns next to the Sort button. The user can reorder freely in the editor or reset to this order; saving keeps the order given.
   The one-time `_challengeRulesOrderedV1` migration applies this order to saved rules and appends the saved
   `categoryRules` below them; because the cascade lets a lower rule fill keys a higher one leaves unset, it
-  logs a warning for every possibly-overlapping pair where that could newly switch `autoJoin`/`autoFill` on.
+  logs a warning for every possibly-overlapping pair where that could newly switch `autoJoin`/`autoSubmit` on.
   Rules de-duplicate on the whole condition (last wins, at the first one's position), so `abc`/exact and
   `abc`/contains coexist.
 - **A title-less rule may switch joining or auto-submit ON** for everything it matches; the editor warns
@@ -325,7 +325,7 @@ repeated six times is one that gets forgotten at one of them.
 
 - **Resolution.** `runFillAttempt` resolves both from `deps.settings` (as `resolveIgnoreWords` does) and passes them down — **not** into `loadFillCandidates`, which swap's `rankCandidatesForChallenge` shares, so swap's ranking is identical with the settings set. `pickJoinPhoto` resolves them itself through `resolveJoinSetting`, which reads the candidate's **per-id override** for these two keys only (an un-joined challenge has no cached id for `getEffectiveSetting`; the Discover panel saves its list per id), then the rules and the global default as for every join key.
 - **Cleanup exception.** `cleanupStaleChallengeSetting` prunes as before except that it keeps a non-active entry holding a chosen key while its id is in the most recent open list (`settings/openChallenges.ts`, cached in the main process whenever the join pass or Discover fetches it). An empty open fetch is never remembered as a list, so the previous list (or none) stays. While no list is known (after a restart, or a failed fetch) the entry is kept whether or not auto-join is on, because a manual Discover Join reads the per-id list too; once a list is known, ids that are neither active nor open nor upcoming are pruned (see **Discover sources**). The `cleanup-stale-challenge-setting` handler validates its argument (an array of ids) before pruning. Explicit chosen keys are stored per challenge even when they equal the inherited value (`JOIN_KEPT_KEYS`) while that challenge is not active, because a rule cannot be resolved by id for an un-joined challenge; a joined challenge keeps the normal "equal to inherited means no override".
-- **Blocks.** `buildScoredCandidates` runs over the whole pool first, so the hard filters and the `fillWithoutTagMatch` relaxation apply to chosen photos like any other (under Only, the relaxation is judged on the chosen set alone, so whether a chosen photo is used never depends on unrelated photos). Already-entered ids leave the pool as a set. The pool then splits into a **chosen block** and a **rest block**; the pick takes the chosen block first, ordered by the existing tiers, then tops up from the rest. Emergency truncation keeps the head of the list, which is the chosen block.
+- **Blocks.** `buildScoredCandidates` runs over the whole pool first, so the hard filters and the `submitWithoutTagMatch` relaxation apply to chosen photos like any other (under Only, the relaxation is judged on the chosen set alone, so whether a chosen photo is used never depends on unrelated photos). Already-entered ids leave the pool as a set. The pool then splits into a **chosen block** and a **rest block**; the pick takes the chosen block first, ordered by the existing tiers, then tops up from the rest. Emergency truncation keeps the head of the list, which is the chosen block.
 - **Per-block enrichment.** `selectBlockEnrichmentSet` enriches the candidates still competing for each block's last slot: `selectEnrichmentSet(chosen, min(k, want)) ∪ selectEnrichmentSet(rest, want − k)`. A block that fills no slot (`want − k = 0`) enriches nothing. Block membership (`chosenIds`) is returned so `finalizePick`, `verifyFillPick` and the pick logging use it.
 - **Block-bounded visual re-rank.** The re-rank reorders only **within** a block — a chosen photo is never swapped for a top-up photo or the reverse — and is skipped for a _chosen_ block no larger than the slots it fills (the rest block re-ranks as it always did, and an empty chosen set reads exactly like no list). For a join, a usable chosen block is the whole shortlist.
 - **Missing chosen ids and the walk memo.** The themed fetch may not return a chosen photo. When usable chosen photos number fewer than `min(unentered chosen, want)`, one targeted library walk runs (never when the fetch already walked unfiltered, never on the emergency path) and merges in only the matching chosen records. `getEligiblePhotos` has a variant returning `{ items, truncated }`: an id is recorded "not found" only when the walk was complete. Outcomes ("found" / "found but refused" / "not found") are memoised across passes per challenge and per photo id (`services/autoFill/chosenPhotos.ts`) for about 30 minutes; a changed entry count drops only the negative outcomes, so a photo already found stays found (and the emergency probe still sees it after another chosen photo was submitted). A submit the server answered with `success: false` marks as refused only the submitted ids the memo had found; a submit that threw or got no answer teaches nothing, so those ids go back to unresolved (no backoff). A walk cut short, or one that throws, leaves its unresolved ids waiting with an exponential backoff per challenge (5, 10, 20, 40, then 60 minutes) so the walk does not repeat every cycle; the wait covers only the ids it was set for, so a newly chosen id is looked up at once. When every chosen id is already an entry, the chosen tier is skipped before any fetch (Only off) or the challenge skips (Only on).
@@ -593,9 +593,122 @@ repeated six times is one that gets forgotten at one of them.
   keyed preference bridge (`settings/storeTransport.ts`) on the Android headless service. Every consumer is
   listed in the store registry `settings/localData.ts` (`LOCAL_DATA_STORES`) — also what "Delete all local
   data" removes — and `tests/settings/localData.test.ts` fails for a `createJsonStore` call site missing there.
-- **The Android settings blob has two writers and is changed by compare-and-set.** The app window (through the
+- **The configuration (`config.json`, `ConfigV2` in `types/config.ts`, `version: 2`; the `gurushots-config` key on
+  Android) is the app's settings blob and the only source of truth.** It holds `app` (preferences and app-state
+  flags), `auth` (token, API headers, last user name, chosen-photos account), `defaults` (the global per-challenge
+  values), `profiles`, `seededProfiles`, `scenarios`, `rules`, `challenges` (per challenge id: its `values`, a
+  `suppressRuleProfile` flag and its `pins`) and, once an import ran, `imported` (when, the unresolved references as
+  structured entries — the rule number from 1 and its title, the profile name, or the challenge id and title where the
+  import knew it, and the profile or scenario they name — or as the text an earlier build stored; whether the report
+  was seen). Title pins stay in their own cache store. A load validates it and fills what it lacks
+  over the defaults (`loadValidation.ts`); `persistence.ts` owns load and save, `storage.ts` the bytes.
+- **`auth` never reaches a renderer.** `toRendererSettings` (`ipc/rendererSettings.ts`) takes the block out of what
+  a window receives and answers only `hasToken`, derived from the stored token; `withoutRendererHiddenKeys` drops
+  `auth`, `token`, `hasToken` and `apiHeaders` from a renderer's write, and `lastUsername` and `chosenPhotosMemberId`
+  (which a renderer may read one at a time) as well. Only the main process writes the sign-in state.
+- **`settings.json` is a one-way mirror of the configuration, in settings format 1 (`settings/formatOneMirror.ts`).**
+  It exists so that an older build of the app (which applies its own schema, prunes the keys it does not know, resets
+  values it cannot validate and writes the whole file back even unchanged) that runs on the same data starts signed in
+  with the current settings. The invariant: **`config.json` is the only source of truth; `settings.json` is written
+  from it after every save that landed and is never read back, except by the import, the recovery of a missing or
+  damaged configuration, and the one exception for the sign-in below.** What an older build changes in it is
+  overwritten by the next save or start; nothing but the sign-in that the new build holds can be reset by an older one. `toFormatOne(config, titlePins)` derives the text: the renamed keys
+  (`V1_KEY_RENAMES`) under their format 1 names (where a key exists under both names the current one wins, so the same
+  configuration always mirrors to the same text), `auth` back among the top-level keys, `challenges` split into
+  `perChallenge`, `titleProfileSuppressions` and `entryPins`, `defaults` as `globalDefaults`, every one-time migration
+  flag set (an older build never migrates the values again) and no `version` or `imported`. The mirror is written
+  after the configuration is stored, as an overwrite of the text it read, and skipped when it is unchanged:
+    - **Desktop and the CLI (`mirrorSync`)** read `settings.json` first, then the stored configuration, and write with
+      `overwriteIf(current, text)`; a mirror another process wrote in between makes the write a conflict, and it is
+      made again from the configuration as stored then (3 attempts). The compare and the write are made under the
+      settings lock (`settings/settingsLock.ts`, the lock the import runs under) with a short wait: a mirror that cannot
+      take it in time is given up quietly, and the next save or start makes it. Where nothing is stored to mirror no
+      lock is taken.
+    - **Android (`mirrorQueued`)** is chained on the configuration write's `landed` outcome: it waits on it (nothing is
+      mirrored from a write that did not land), then runs on the mirror store's own write chain, reads `settings.json`
+      and the stored configuration from Preferences, and writes with a compare-and-write (`casStored`), again up to 3
+      attempts. The background service makes the same overwrite through the native bridge's compare-and-write. The
+      title pins and the import marker the mirror carries and records are read from Preferences (`peekStored`), not
+      from the window's cache, which may be behind what the service saved.
+    - A failed or given-up mirror is logged (never its text) and made again by the next save and the next start
+      (`_verifyMirror`, once per process, once the stores are read); a title-pin change re-mirrors too. Nothing is
+      mirrored while the stored settings are unusable (`blocked`), so a file the user may need is never written over.
+    - The file the user had is kept once as `settings.json.original` (`gurushots-settings_original`, shared and atomic,
+      never replaced) before the first mirror write; `importMarker` records that the mirror has started, after which
+      `settings.json` is the app's own output. A logout clears the token and API headers from that copy as well, and
+      from every copy set aside of a settings file that parses (`config.json.corrupt-<time>`,
+      `settings.json.unimportable-<time>`, and the Android `gurushots-config_corrupt-…` /
+      `gurushots-settings_unimportable-…` keys): `scrubCopiesSync` / `scrubCopiesQueued`, run whenever the mirror sees a
+      signed-out configuration (a logout, and the start that clears the token when Stay Logged In is off). The last user
+      name and the chosen-photos account go out of the copies too (never out of the configuration or the live mirror: the
+      login form is prefilled from them). A copy that does not parse is left as it is.
+    - **The one thing taken back is the sign-in, at every mirror write.** The marker keeps two fingerprints of the sign-in
+      this build wrote — the hashes of the token, the API headers, the last user name and the chosen-photos account, each
+      of its own (53-bit non-cryptographic hashes, not secrets: a low-entropy field such as the user name can be found
+      by brute force, and the marker sits beside files that hold the same values in plain text): `signInPending`, recorded right before a mirror write (the write is not made when the
+      record fails), and `signInConfirmed`, once it landed. Recording a pending one also keeps the fingerprint of what
+      `settings.json` holds then, when it is this build's, as the confirmed one; confirming clears the pending record only
+      when it is the one confirmed, so the other Android context's pending record is not dropped by this one's
+      confirmation (there is still one pending record, shared by the Android window and the service, and recording a
+      new one replaces the other's). Before every write — inside the settings lock, on the start and on each save, in the window's queued
+      path and in the service's synchronous one — the sign-in fields a `settings.json` that parses holds are compared
+      field by field with the recorded ones: a field whose hash is none a recorded fingerprint has for that field was
+      changed by an older build (a sign-out, or another account, before the start or while the app ran), and those
+      fields, only them, are adopted into `auth` first, the configuration saved before the mirror is made from it
+      (`_adoptSignIn`, answered to the mirror through its hooks). A field the file does not hold, or holds as the wrong
+      kind, was not decided there (an older build drops the keys it does not know), and a field this build changed
+      since it last wrote is not taken for the older build's. If that save fails nothing is written and nothing is
+      recorded until a later attempt adopts it; one line, without values, is logged once it is stored. A sign-in is a
+      decision of the user, not something an older schema can get wrong. Nothing is adopted without a recorded
+      fingerprint, from a file that does not parse, or while the configuration in use is the defaults of a damaged one.
+    - **A `settings.json` that does not import is never mirrored over.** In the `settings-corrupt` state the first save
+      sets it aside as `settings.json.unimportable-<time>` (the Android key `gurushots-settings_unimportable-<time>`)
+      first, then mirrors; the notice says where it went (`settingsSetAside`; in the Android window only once the queued
+      set-aside has landed). If it cannot be set aside nothing is written over it, and the next save tries again. The
+      background service cannot set a file aside and leaves it as it is, quietly, for the window to do. That copy is
+      the file the user fixes in place, so a Re-import in this state imports from that copy (the one
+      of this episode, `legacySetAside`; never an older one in the folder), or from `settings.json` until there is one.
+- **Import and recovery (`settings/legacyImport.ts`, `persistence.ts`).** With no `config.json`, the first load imports
+  `settings.json` under the import lock (Android has none: the native compare-and-write of the configuration decides
+  which context is first) and writes the marker (`v2-import.json`, kept outside `config.json`, so setting the
+  configuration aside never makes the next start import unasked). A damaged `config.json` is set aside
+  (`config.json.corrupt-<time>`; `gurushots-config_corrupt-<time>` on Android) and the configuration is restored from
+  `settings.json`; a missing one, once the import has run and the mirror has started, is restored silently with a log
+  line. A restore keeps the `imported` record the marker holds, so the import report is not shown again. The load
+  answers a recovery state, which a window shows as a notice and the CLI prints (`getSettingsRecovery`):
+  `settings-restored` and `settings-corrupt` (notices; saves work), `settings-unreadable` (`config.json` cannot be read
+  or set aside) and `settings-import-failed` (no `config.json`, and `settings.json` cannot be imported) block saves
+  until fixed. A damaged `config.json` that `settings.json` cannot restore (it is missing or does not import) is
+  `settings-corrupt` for the rest of the process, however often it is read: the failed restore is remembered
+  (`importFailure`), so a later read does not turn it into the blocking `settings-import-failed`. A new process that
+  finds the configuration still missing and the mirror unimportable reports `settings-import-failed`. A read before the Android window has hydrated its stores (`not-loaded`) is not a recovery state: the
+  defaults answer, nothing is blocked or logged as an error, and a save is refused until the stores are read.
+  `retryImport`, `startFresh` (the file is set aside as `settings.json.original`, or as `settings.json.unimportable-<time>`
+  when that is taken, before anything is mirrored over it) and `reimportFromV1` (the configuration in use is set aside)
+  are the explicit ways out (`settings-recovery` in the CLI). A re-import takes everything from `settings.json`, the
+  sign-in included, and sets the configuration it replaces aside with its sign-in (the notice and the CLI say where);
+  it is not offered on Android, where there is no file the user can fix. Start fresh keeps `settings.json` beside it
+  and says where (`startFreshDetailed`: the `keptAt` of the IPC answer and the CLI text), or that there was none.
+- **The importer is frozen (`settings/importV1/`).** The format 1 load pipeline lives there as a copy (schema,
+  merge over the defaults, the eight one-time migrations, load validation, prune, key renames, conversion to a
+  configuration), so a later change to the live settings cannot change what an older file imports as; it runs in
+  memory and writes nothing. It keeps every key the live schema defines (the file may be the app's own mirror). Proofs,
+  all under `tests/settings/`: the oracle (`tests/helpers/v1Oracle`, a frozen copy of the format 1 resolver) and the
+  equivalence harness (`v2/equivalence.test.ts`) ask the oracle and the live code the same questions for every fixture
+  and seeded random file, with `v2/golden.test.ts` pinning the oracle's own answers (`__golden__/oracle.json`);
+  `formatOne/roundTrip.test.ts` generates configurations from the live schema, so a setting the importer would drop
+  fails CI; `formatOne/olderBuild.test.ts` loads the mirror with the 1.12.2 build's key set and load frozen from
+  `master` (`tests/helpers/olderBuild/master1122.ts`), and it must stay signed in with every key that build knows.
+- **The title pins and the import marker are shared stores (`createJsonStore({ shared: true })`).** The Android
+  service writes them too, so every change is made against what is stored when the write is made — never the app
+  window's cache written whole: `updateThrough` (the window) re-reads and saves by the native compare-and-write, made
+  again on what the service saved meanwhile, and the service's `headlessUpdate` does the same through the bridge
+  (`updateNow` where the write is made at once, `peekStored` for a read of what Preferences holds). The native
+  `SideStores` takes both keys by compare-and-set only, like the configuration. `mergeTitlePins` and `importTitlePins`
+  answer once the write is made where that is at once, and once it is queued in the window (a failure there is logged).
+- **The Android configuration blob has two writers and is changed by compare-and-set.** The app window (through the
   plugin's `compareAndWrite`, behind its cache) and the background service (`HeadlessStore.write`) both go through
-  the one synchronized `SideStores.compareAndSet` on the `gurushots-settings` key, which takes one JSON object of at
+  the one synchronized `SideStores.compareAndSet` on the `gurushots-config` key, which takes one JSON object of at
   most 2 MiB and refuses a plain write. A save is accepted only while the blob still holds what the writer last read;
   otherwise the writer reads again and makes **only its own change** again on what is there (`rebaseSettingsText`,
   a three-way merge of the text it was made from, the changed text and the stored one: nested objects merge key by
@@ -605,14 +718,15 @@ repeated six times is one that gets forgotten at one of them.
   the writer's text is not a change the writer made. A blob that cannot be read is
   never overwritten, and a save that is not made is logged and leaves the window cache showing what is stored.
   A window save given up (5 conflicting attempts, a refused save, or a plugin error) is not silent: the window's
-  `get-settings-recovery` answers `{ code: 'settings-save-dropped', path, cause }` (`getSettingsSaveDropped`, below
-  the recovery of the stored settings in precedence), the same `settings-changed` signal a write sends is emitted so
+  `get-settings-recovery` answers the recovery of the stored settings first (`{ code, path, blocking }`, and `settingsSetAside` once an unusable `settings.json` was set aside; one of the
+  four codes in the import-and-recovery bullet above) and else `{ code: 'settings-save-dropped', path, cause }`
+  (`getSettingsSaveDropped`), the same `settings-changed` signal a write sends is emitted so
   `SettingsRecoveryNotice` re-reads, and it tells the user in what / why / next terms that the change was not saved
   and the setting shows its stored value again. `cause` is why the save was given up and words the _why_:
   `conflict` (the background service kept changing the settings), `too-large` (the blob is past the size the native
   store takes; the next step is to remove per-challenge overrides and scenarios) or `storage` (the store refused or
   failed the write); a cause the notice has no wording for reads neutrally. It clears when a write issued after the
-  dropped one lands. On Android the damaged copy of a corrupt blob is kept under the `<key>_corrupt` preference key,
+  dropped one lands. On Android the damaged copy of a corrupt blob is kept under a `<key>_corrupt-<time>` preference key,
   which the user cannot open, so that notice says the app kept the copy and the settings were reset rather than
   naming a path (`usePlatformCapabilities().settingsFile` is false there).
   `setSetting` hands `saveSettings` only the changed key, so the service's own load-and-save has no stale whole blob
@@ -763,9 +877,10 @@ repeated six times is one that gets forgotten at one of them.
   main process). The Android pages (the Capacitor page and `headless.html`) run network code in the WebView,
   so their `connect-src` also allows `https://api.github.com` and the photo CDN, and their `script-src`
   adds `'wasm-unsafe-eval'` for the vision runtime.
-- The settings/token file is written mode `0o600` — but **only at creation. A pre-existing or
-  backup-restored file keeps whatever mode it already had** (the source says as much); don't state 0600 as
-  an always-guarantee.
+- The settings files (`config.json`, its mirror `settings.json` and the copy `settings.json.original`) are written
+  mode `0o600` — but **only at creation. A pre-existing or backup-restored file keeps whatever mode it already
+  had** (the source says as much); don't state 0600 as an always-guarantee. The renderer never receives the `auth`
+  block of the configuration, only `hasToken` (§7).
 - **Log redaction (`logger/sanitize.ts`, through the `logger.ts` facade) is two-layer but credential-key-keyed, not exhaustive.** `sanitizeForLog`
   recursively redacts an **allowlist** of sensitive object keys; `redactMessage` scrubs
   `token=…` / `password=…`-style fragments folded into message strings. Both run on every entry, and
@@ -786,14 +901,20 @@ repeated six times is one that gets forgotten at one of them.
 
 These are known and deliberate; don't describe the app as stronger than this.
 
-- **The login token is stored in plaintext in the settings store.** On desktop and the CLI it is a field of
-  `settings.json` in the app data folder, a file created owner-only (`0o600`); on Android it is a
-  `@capacitor/preferences` entry in app-private storage, excluded from cloud backup and device transfer
-  (`data_extraction_rules.xml`). It is not encrypted because the Node CLI shares `settings.json` with the GUI and
-  cannot read Electron `safeStorage`, and macOS runs Chromium on a mock keychain on purpose
-  (`use-mock-keychain`, `index.ts`), so `safeStorage` would add no real protection there. Anything that can read
-  the owner's files, or run as that user, can read the token; logging out removes it, and so does "Delete all
-  local data".
+- **The login token is stored in plaintext in the settings store, in two places.** On desktop and the CLI it is in
+  the `auth` block of `config.json` and, because `settings.json` mirrors the configuration for older builds (§7), a
+  field of `settings.json`, both in the app data folder, files created owner-only (`0o600`); on Android they are
+  `@capacitor/preferences` entries (`gurushots-config`, `gurushots-settings`) in app-private storage, excluded from
+  cloud backup and device transfer (`data_extraction_rules.xml`). `settings.json.original` (the file the user had
+  before the first mirror write) and the copies set aside of a settings file (`config.json.corrupt-<time>`,
+  `settings.json.unimportable-<time>`) can hold a token as well until the next logout, which clears it from every one
+  that parses (one that does not parse is left as it is). A sign-out made in an older build is taken over at the
+  next start (§7), so an older build cannot leave the sign-in in the mirror either. It
+  is not encrypted because the Node CLI shares the files with the GUI and cannot read Electron `safeStorage`, and
+  macOS runs Chromium on a mock keychain on purpose (`use-mock-keychain`, `index.ts`), so `safeStorage` would add no
+  real protection there. Anything that can read the owner's files, or run as that user, can read the token; logging
+  out removes it from all of them (a mirror write that fails is retried, and the next save or start makes it), and
+  so does "Delete all local data".
 - **Desktop builds are not signed by a publisher** (no Developer ID or notarization on macOS, no publisher
   certificate on Windows). The update trust root is therefore write access to the project's GitHub releases: the
   update check and download go to `api.github.com` and GitHub release downloads, branches and tags are

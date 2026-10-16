@@ -479,33 +479,72 @@ describe('cleanup-stale-challenge-setting', () => {
 });
 
 describe('the recovery of the stored settings', () => {
+    // `startFresh` is answered by `startFreshDetailed`, which also says where settings.json was kept.
     const channels = [
         ['retry-settings-import', 'retryImport'],
-        ['start-fresh-settings', 'startFresh'],
+        ['start-fresh-settings', 'startFreshDetailed'],
         ['reimport-settings-from-v1', 'reimportFromV1'],
         ['acknowledge-import-report', 'acknowledgeImportReport'],
     ] as const;
+    // What each action answers when it worked: a boolean, or the detail the answer carries.
+    const worked = (method: (typeof channels)[number][1]) =>
+        method === 'startFreshDetailed' ? { ok: true, keptAt: '/data/settings.json.original' } : true;
+    const didNot = (method: (typeof channels)[number][1]) =>
+        method === 'startFreshDetailed' ? { ok: false, keptAt: null } : false;
 
     test.each(channels)('%s runs %s, then announces the settings to every window', async (channel, method) => {
         const broadcastSettingsChange = jest.fn();
-        settings[method] = jest.fn().mockReturnValue(true);
+        settings[method] = jest.fn().mockReturnValue(worked(method));
         settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 't' }, app: { theme: 'dark' } });
         const h = buildHandlers({ broadcastSettingsChange });
 
-        await expect(h[channel]()).resolves.toEqual({ success: true });
+        await expect(h[channel]()).resolves.toEqual(
+            channel === 'start-fresh-settings'
+                ? { success: true, keptAt: '/data/settings.json.original' }
+                : { success: true },
+        );
 
         expect(settings[method]).toHaveBeenCalledTimes(1);
         expect(broadcastSettingsChange).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
+    });
+
+    test('start-fresh-settings waits for the key a queued copy is written under (the Android window) and answers it', async () => {
+        settings.startFreshDetailed = jest
+            .fn()
+            .mockReturnValue({ ok: true, keptAt: null, landed: Promise.resolve('gurushots-settings_original') });
+
+        await expect(handlers['start-fresh-settings']()).resolves.toEqual({
+            success: true,
+            keptAt: 'gurushots-settings_original',
+        });
+    });
+
+    test('start-fresh-settings answers no place when the queued copy was not written', async () => {
+        settings.startFreshDetailed = jest
+            .fn()
+            .mockReturnValue({ ok: true, keptAt: null, landed: Promise.resolve(null) });
+
+        await expect(handlers['start-fresh-settings']()).resolves.toEqual({ success: true, keptAt: undefined });
+    });
+
+    test('start-fresh-settings says there was nothing to keep as null', async () => {
+        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null });
+
+        await expect(handlers['start-fresh-settings']()).resolves.toEqual({ success: true, keptAt: null });
     });
 
     test.each(channels)(
         '%s answers the failure code when the action did not work, and announces nothing',
         async (channel, method) => {
             const broadcastSettingsChange = jest.fn();
-            settings[method] = jest.fn().mockReturnValue(false);
+            settings[method] = jest.fn().mockReturnValue(didNot(method));
             const h = buildHandlers({ broadcastSettingsChange });
 
-            await expect(h[channel]()).resolves.toEqual({ success: false, error: 'settings-import-failed' });
+            // A report that could not be saved is not an import that failed.
+            await expect(h[channel]()).resolves.toEqual({
+                success: false,
+                error: channel === 'acknowledge-import-report' ? 'import-report-not-saved' : 'settings-import-failed',
+            });
 
             expect(broadcastSettingsChange).not.toHaveBeenCalled();
         },
@@ -535,7 +574,14 @@ describe('get-import-report', () => {
     test('answers the report the settings hold, or null when there was no import', async () => {
         const report = {
             at: '2026-10-16T09:00:00.000Z',
-            refsBlocked: ['rules[0].profile: "Gone"'],
+            refsBlocked: [
+                'rules[0].profile: "Gone"',
+                {
+                    holder: { kind: 'rule' as const, number: 3, title: 'Macro' },
+                    refers: 'profile' as const,
+                    name: 'Night',
+                },
+            ],
             acknowledged: false,
         };
         settings.getImportReport = jest.fn().mockReturnValue(report);

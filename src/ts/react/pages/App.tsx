@@ -167,9 +167,9 @@ function AppModals({
                 <UnofficialNoticeModal isOpen={noticeOpen} onAcknowledge={() => void onNoticeAcknowledge()} />
             </ErrorBoundary>
 
-            {/* What the import of the previous version's settings left unresolved, once */}
+            {/* What the import of settings.json left unresolved, once */}
             <ErrorBoundary>
-                <ImportReportModal hold={noticeOpen} />
+                <ImportReportModal hold={noticeOpen || welcomeOpen} />
             </ErrorBoundary>
 
             {/* First-run onboarding — after the notice, never on top of it */}

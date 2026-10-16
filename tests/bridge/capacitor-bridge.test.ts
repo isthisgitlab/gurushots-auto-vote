@@ -84,7 +84,8 @@ describe('Capacitor bridge', () => {
     describe('installation', () => {
         test('exposes the api on globalThis and adapts (event, ...args) handlers to (...args)', async () => {
             expect(g.api).toBe(api);
-            expect(settings.seedIntentProfiles).toHaveBeenCalledTimes(1);
+            // Installing reads and writes no setting: the stored ones are not hydrated yet (see seedBridgeProfiles).
+            expect(settings.seedIntentProfiles).not.toHaveBeenCalled();
             await expect(api.getSettings()).resolves.toEqual({ theme: 'dark' });
             await expect(api.guiVote()).resolves.toEqual({ success: true, via: 'gui-vote' });
         });
@@ -97,14 +98,19 @@ describe('Capacitor bridge', () => {
             });
         });
 
-        test('a failing intent-profile seed is logged but does not block installation', () => {
+        test('the intent profiles are seeded by seedBridgeProfiles, not by the installation', () => {
+            bridge.seedBridgeProfiles();
+
+            expect(settings.seedIntentProfiles).toHaveBeenCalledTimes(1);
+        });
+
+        test('a failing intent-profile seed is logged and does not throw', () => {
             settings.seedIntentProfiles.mockImplementationOnce(() => {
                 throw new Error('prefs unavailable');
             });
 
-            const second = bridge.installBridge();
+            expect(() => bridge.seedBridgeProfiles()).not.toThrow();
 
-            expect(typeof second.checkForUpdates).toBe('function');
             expect(log.warning).toHaveBeenCalledWith('Intent profile seeding failed (non-fatal):', expect.any(Error));
         });
     });

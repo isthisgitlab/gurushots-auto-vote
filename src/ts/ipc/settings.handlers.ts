@@ -257,44 +257,61 @@ const buildEnvironmentHandlers = () => ({
 });
 
 // A recovery action of the stored settings (see settings/persistence.ts): what it did is announced to the windows, and a
-// failure answers with its code (what went wrong is described in the log).
-const recoveryAction =
-    (
+// failure answers with its code, `settings-import-failed` unless the action says otherwise (what went wrong is
+// described in the log). The action answers whether it worked, and what else it has to tell, which a success carries.
+const detailedRecoveryAction =
+    <R extends { ok: boolean }, F extends string = 'settings-import-failed'>(
         broadcastSettingsChange: BroadcastSettingsChange | undefined,
-        action: () => boolean | Promise<boolean>,
+        action: () => R | Promise<R>,
         label: string,
+        failure: F = 'settings-import-failed' as F,
     ) =>
     async () => {
         try {
-            if (!(await action())) return { success: false as const, error: 'settings-import-failed' };
+            const { ok, ...details } = await action();
+            if (!ok) return { success: false as const, error: failure };
             if (typeof broadcastSettingsChange === 'function') {
                 broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
             }
-            return { success: true as const };
+            return { success: true as const, ...details };
         } catch (error) {
             logger.withCategory('settings').error(`Error handling the ${label} request:`, error);
             return errorResult(error, 'Failed to recover the settings');
         }
     };
 
+// A recovery action that has nothing to tell beyond whether it worked.
+const recoveryAction = <F extends string = 'settings-import-failed'>(
+    broadcastSettingsChange: BroadcastSettingsChange | undefined,
+    action: () => boolean | Promise<boolean>,
+    label: string,
+    failure?: F,
+) => detailedRecoveryAction(broadcastSettingsChange, async () => ({ ok: await action() }), label, failure);
+
 const buildLocalDataHandlers = ({ afterWipe, broadcastSettingsChange }: SettingsHandlerOptions) => ({
-    // Why the stored settings are not in use (a corrupt file moved aside, or one that cannot be read), or else that the
-    // window's last change was not saved; null when neither.
+    // Why the stored settings are not in use or what a start found worth telling (config.json restored from settings.json
+    // or set aside, config.json that cannot be read, a settings.json that could not be imported), or else that the
+    // window's last change was not saved; null when none.
     'get-settings-recovery': async () => ({
         success: true as const,
         recovery: settings.getSettingsRecovery() ?? settings.getSettingsSaveDropped(),
     }),
 
-    // Try the import of settings.json again; begin with default settings (settings.json is kept as settings.json.original);
+    // Try the import of settings.json again; begin with default settings (settings.json is kept beside it);
     // import settings.json again over the settings in use (which are set aside).
     'retry-settings-import': recoveryAction(
         broadcastSettingsChange,
         () => settings.retryImport(),
         'retry-settings-import',
     ),
-    'start-fresh-settings': recoveryAction(
+    // `keptAt`: where settings.json was kept, or null when there was none to keep.
+    'start-fresh-settings': detailedRecoveryAction(
         broadcastSettingsChange,
-        () => settings.startFresh(),
+        async () => {
+            const { ok, keptAt, landed } = settings.startFreshDetailed();
+            // Where the copy is written later (the Android window) the key it was written under; undefined if it was not.
+            return { ok, keptAt: landed === undefined ? keptAt : ((await landed) ?? undefined) };
+        },
         'start-fresh-settings',
     ),
     'reimport-settings-from-v1': recoveryAction(
@@ -317,6 +334,7 @@ const buildLocalDataHandlers = ({ afterWipe, broadcastSettingsChange }: Settings
         broadcastSettingsChange,
         () => settings.acknowledgeImportReport(),
         'acknowledge-import-report',
+        'import-report-not-saved',
     ),
 
     'get-third-party-notices': async () => {

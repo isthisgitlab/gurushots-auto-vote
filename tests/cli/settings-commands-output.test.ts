@@ -151,9 +151,11 @@ describe('getSetting', () => {
         expect(msgs('error')).toEqual(["Setting 'lastMinuteCheckFrequency' does not support per-challenge overrides"]);
     });
 
-    test('rejects an unknown key when scoped to a challenge', () => {
+    test('rejects an unknown key when scoped to a challenge as unknown, and lists the valid names', () => {
         cmd.getSetting('nope', '7');
-        expect(msgs('error')).toEqual(["Setting 'nope' does not support per-challenge overrides"]);
+        expect(msgs('error')).toEqual(["Unknown setting 'nope'"]);
+        // Only the names that take an override are listed: the ones this command accepts.
+        expect(msgs('info')).toEqual(['Available settings: emergencySubmit, exposure']);
     });
 
     test.each([
@@ -186,6 +188,13 @@ describe('getSetting', () => {
 });
 
 describe('setSetting', () => {
+    test('a name that is no setting is unknown when scoped to a challenge too, not a setting without per-challenge support', () => {
+        expect(cmd.setSetting('nope', '1', '7')).toBe(false);
+        expect(msgs('error')).toEqual(["Unknown setting 'nope'"]);
+        expect(msgs('info')).toEqual(['Available settings: emergencySubmit, exposure']);
+        expect(settings.setChallengeOverride).not.toHaveBeenCalled();
+    });
+
     test('a per-challenge set that fails validation is reported', () => {
         settings.setChallengeOverride.mockReturnValue(false);
         expect(cmd.setSetting('exposure', '999', '7')).toBe(false);
@@ -247,6 +256,10 @@ describe('setSetting', () => {
         settings.getDefaultSettings.mockReturnValue(invalid({ app: { theme: 'light' }, auth: { token: '' } }));
         expect(cmd.setSetting('autoFill', 'true')).toBe(false);
         expect(msgs('error')).toEqual(["Unknown setting 'autoFill'"]);
+        // The list holds every name this command accepts: the schema's, and the app and sign-in ones.
+        expect(msgs('info')).toEqual([
+            'Available settings: emergencySubmit, exposure, lastMinuteCheckFrequency, theme, token',
+        ]);
         expect(settings.setSetting).not.toHaveBeenCalled();
     });
 

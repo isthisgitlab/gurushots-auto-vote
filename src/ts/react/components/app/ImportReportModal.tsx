@@ -1,22 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { useIpcQuery } from '@/api/useIpcQuery';
+import { useImportRefText, useImportReport } from '@/api/useImportReport';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
 import * as ipc from '@/api/ipc';
 import { errorMessage } from '../../../errorMessage';
-
-import type { IpcQueryTools } from '@/api/useIpcQuery';
-
-type ImportReport = { at: string; refsBlocked: string[]; acknowledged: boolean };
-
-const fetchReport = () => ipc.getImportReport();
-
-// A read that fails shows nothing: the report stays stored and is asked for again at the next start.
-const applyReport = (
-    result: Awaited<ReturnType<typeof fetchReport>>,
-    { setData }: Pick<IpcQueryTools<ImportReport | null, Error>, 'setData'>,
-) => setData(result?.success ? result.report : null);
 
 // Whether the report is recorded as seen; a refusal or a throw is logged.
 const acknowledgeReport = async (): Promise<boolean> => {
@@ -31,19 +19,17 @@ const acknowledgeReport = async (): Promise<boolean> => {
 };
 
 /**
- * Tells the user, once, which references of the settings imported from the previous version were kept and still do not
- * apply (a profile or scenario that is missing or no longer valid): the names, what that means, and what to do. OK
+ * Tells the user, once, which references of the settings imported from settings.json were kept and still do not
+ * apply (a profile or scenario that is missing or no longer valid), each as the place it is stored in the app and what
+ * is wrong with it, and what to do. OK
  * acknowledges it; the report stays readable under About and data. An import with nothing to report is acknowledged
  * without showing anything. An acknowledgement that cannot be saved says so and leaves the dialog open. `hold` keeps it
  * back while another notice is up (it shows when that one is gone).
  */
 export function ImportReportModal({ hold = false }: { hold?: boolean }) {
     const { t } = useTranslation();
-    const { data: report, refetch } = useIpcQuery(fetchReport, {
-        initialData: null as ImportReport | null,
-        apply: applyReport,
-        subscribe: true,
-    });
+    const { data: report, refetch } = useImportReport();
+    const refText = useImportRefText();
     const [saving, setSaving] = useState(false);
     const [failed, setFailed] = useState(false);
 
@@ -73,10 +59,9 @@ export function ImportReportModal({ hold = false }: { hold?: boolean }) {
             <div className="space-y-3 text-sm">
                 <p>{t('notice.importReportIntro')}</p>
                 <ul className="list-disc ml-5 break-words">
-                    {report?.refsBlocked.map((ref) => (
-                        <li key={ref}>
-                            <code>{ref}</code>
-                        </li>
+                    {report?.refsBlocked.map((ref, index) => (
+                        // Two entries can read alike (the same name twice), so the position is part of the key.
+                        <li key={`${index}:${typeof ref === 'string' ? 'text' : ref.holder.kind}`}>{refText(ref)}</li>
                     ))}
                 </ul>
                 {failed && (

@@ -53,7 +53,7 @@ const getSettingsPath = () => {
     return path.join(userDataPath, 'config.json');
 };
 
-// The 1.x settings file the configuration is imported from, beside it.
+// The `settings.json` the configuration is imported from, beside it.
 const getLegacySettingsPath = () => path.join(path.dirname(getSettingsPath()), 'settings.json');
 
 /**

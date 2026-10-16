@@ -6,6 +6,8 @@
 
 import * as logger from '../../logger';
 import * as settings from '../../settings';
+import { stripTerminalControl } from '../../format/logSafe';
+import { describeImportRef, IMPORT_REF_ENGLISH } from '../../settings/importRefs';
 import { usageError } from '../commandKit';
 
 import type { SettingsRecovery } from '../../settings';
@@ -15,16 +17,20 @@ const SETTINGS_RECOVERY_USAGE = 'Usage: settings-recovery retry | start-fresh | 
 /**
  * The notice for one recovery state: what happened, why, and what comes next.
  */
-const describeSettingsRecovery = ({ code, path }: Pick<SettingsRecovery, 'code' | 'path'>): string => {
+const describeSettingsRecovery = ({
+    code,
+    path,
+    settingsSetAside,
+}: Pick<SettingsRecovery, 'code' | 'path' | 'settingsSetAside'>): string => {
     switch (code) {
         case 'settings-restored':
             return `The saved settings could not be read (config.json was damaged), so they were restored from settings.json. The damaged file was moved to ${path}; keep it if you want to look at it, or delete it.`;
         case 'settings-corrupt':
-            return `The saved settings could not be read (config.json was damaged). It was moved to ${path} and no usable settings.json was found to restore them from, so the default settings are in use. Keep that file if you want to recover values from it by hand. To import settings.json over the default settings once it is fixed, run "settings-recovery reimport".`;
+            return `The saved settings could not be read (config.json was damaged). It was moved to ${path} and no usable settings.json was found to restore them from, so the default settings are in use. Keep that file if you want to recover values from it by hand. If settings.json exists but cannot be imported, the first save keeps it as settings.json.unimportable-<time> beside it and writes a new settings.json from the saved settings; to bring its values back, fix the file in place and run "settings-recovery reimport": before the first save that file is settings.json, after it the copy named below (settings.json.unimportable-<time>); copies from earlier problems are never used.${settingsSetAside === undefined ? '' : ` The unusable settings.json was kept at ${settingsSetAside}.`}`;
         case 'settings-unreadable':
             return `The saved settings at ${path} cannot be read, or cannot be moved aside, so nothing will be saved until that is fixed. The default settings are in use. Check that the file belongs to this account and can be read and written.`;
         case 'settings-import-failed':
-            return `The settings.json at ${path} could not be imported, so nothing will be saved and the default settings are in use. The file was left as it is. Fix it and run "settings-recovery retry", or run "settings-recovery start-fresh" to begin with default settings (a copy of the file is kept as settings.json.original).`;
+            return `The settings.json at ${path} could not be imported, so nothing will be saved and the default settings are in use. The file was left as it is. Fix it and run "settings-recovery retry", or run "settings-recovery start-fresh" to begin with default settings (a copy of the file is kept beside it, as settings.json.original or, when that name is taken, as settings.json.unimportable-<time>).`;
     }
 };
 
@@ -36,17 +42,36 @@ const reportSettingsRecovery = (): void => {
     if (recovery) logger.printStderr(describeSettingsRecovery(recovery));
 };
 
+/**
+ * What a re-import came to: it replaces the settings in use, the sign-in included, with what settings.json holds, after
+ * setting the settings in use aside (when there were any).
+ */
+const reimport = (): { ok: boolean; done: string } => {
+    const { ok, setAside } = settings.reimportFromV1Detailed();
+    return {
+        ok,
+        done:
+            setAside === null
+                ? 'settings.json was imported again.'
+                : `settings.json was imported again; the settings and sign-in that were in use were set aside at ${setAside}.`,
+    };
+};
+
+/** What Start fresh came to: where settings.json was kept, or that there was none to keep. */
+const startFresh = (): { ok: boolean; done: string } => {
+    const { ok, keptAt } = settings.startFreshDetailed();
+    return {
+        ok,
+        done:
+            keptAt === null
+                ? 'Started with default settings; there was no settings.json, so no copy was kept.'
+                : `Started with default settings; a copy of settings.json was kept at ${keptAt}.`,
+    };
+};
+
 const ACTIONS = {
-    retry: { run: () => settings.retryImport(), done: 'The settings were imported from settings.json.' },
-    'start-fresh': {
-        run: () => settings.startFresh(),
-        done: 'Started with default settings; a copy of settings.json is kept as settings.json.original.',
-    },
-    reimport: {
-        run: () => settings.reimportFromV1(),
-        done: 'settings.json was imported again; the settings that were in use were moved aside to config.json.corrupt-<time>.',
-    },
-    acknowledge: { run: () => settings.acknowledgeImportReport(), done: 'The import report is marked as seen.' },
+    retry: { run: () => settings.retryImport(), done: () => 'The settings were imported from settings.json.' },
+    acknowledge: { run: () => settings.acknowledgeImportReport(), done: () => 'The import report is marked as seen.' },
 } as const;
 
 /**
@@ -58,11 +83,25 @@ const printImportReport = (): number => {
         logger.withCategory('settings').info('The settings were not imported from a settings.json.');
         return 0;
     }
-    logger.printLine(
-        report.refsBlocked.length === 0
-            ? `Imported at ${report.at}: nothing needed attention.`
-            : `Imported at ${report.at}. These references were kept and still do not apply, as before the import; create or fix the named profile or scenario:\n${report.refsBlocked.map((ref) => `  ${ref}`).join('\n')}`,
+    // The names are the user's own: nothing in them reaches the terminal as a control sequence.
+    const lines = report.refsBlocked.map(
+        (ref) => `  ${describeImportRef(ref, IMPORT_REF_ENGLISH, (value) => stripTerminalControl(value))}`,
     );
+    logger.printLine(
+        lines.length === 0
+            ? `Imported at ${report.at}: nothing needed attention.`
+            : `Imported at ${report.at}. These references were kept and still do not apply, as before the import; create or fix the named profile or scenario:\n${lines.join('\n')}`,
+    );
+    return 0;
+};
+
+// The exit code of an action, and its words.
+const finish = ({ ok, done }: { ok: boolean; done: string }): number => {
+    if (!ok) {
+        logger.withCategory('settings').error('The recovery did not work; see the log for why (logs --settings)');
+        return 1;
+    }
+    logger.withCategory('settings').success(done);
     return 0;
 };
 
@@ -76,16 +115,19 @@ const printImportReport = (): number => {
 const settingsRecoveryCmd = async (argv: string[]): Promise<number> => {
     const [action, ...extra] = argv;
     if (action === 'report' && extra.length === 0) return printImportReport();
+    if (action === 'reimport' && extra.length === 0) return finish(reimport());
+    if (action === 'start-fresh' && extra.length === 0) return finish(startFresh());
     if (action === undefined || extra.length > 0 || !Object.hasOwn(ACTIONS, action)) {
         return usageError('Please name the recovery action', SETTINGS_RECOVERY_USAGE);
     }
-    const { run, done } = ACTIONS[action as keyof typeof ACTIONS];
-    if (!run()) {
-        logger.withCategory('settings').error('The recovery did not work; see the log for why (logs --settings)');
-        return 1;
+    if (action === 'acknowledge' && settings.getImportReport() === null) {
+        logger
+            .withCategory('settings')
+            .info('The settings were not imported from a settings.json: nothing to acknowledge.');
+        return 0;
     }
-    logger.withCategory('settings').success(done);
-    return 0;
+    const { run, done } = ACTIONS[action as keyof typeof ACTIONS];
+    return finish({ ok: run(), done: done() });
 };
 
 export { describeSettingsRecovery, reportSettingsRecovery, settingsRecoveryCmd, SETTINGS_RECOVERY_USAGE };

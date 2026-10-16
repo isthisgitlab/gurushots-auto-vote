@@ -265,6 +265,22 @@ const createSettingsFile = (options: SettingsFileOptions) => {
         return fs.readFileSync(file, 'utf8');
     };
 
+    // The copies of this file set aside beside it (a desktop): `<file>.corrupt-<time>` and `<file>.unimportable-<time>`.
+    const setAsideFiles = (): string[] => {
+        try {
+            const file = filePath();
+            const prefixes = [CORRUPT_SUFFIX, UNIMPORTABLE_SUFFIX].map(
+                (suffix) => `${path.basename(file)}.${suffix.slice(1)}-`,
+            );
+            return fs
+                .readdirSync(path.dirname(file))
+                .filter((name) => prefixes.some((prefix) => name.startsWith(prefix)))
+                .map((name) => path.join(path.dirname(file), name));
+        } catch {
+            return [];
+        }
+    };
+
     const write = (data: string): WriteResult => {
         if (areWritesRefused()) return { ok: false };
         if (runtime.isHeadlessService()) {
@@ -460,18 +476,16 @@ const createSettingsFile = (options: SettingsFileOptions) => {
          * `<key>_unimportable-<time>`. For a task that runs on this file's write chain (`enqueue`), which has the writes
          * queued before it done already.
          *
-         * @returns whether it was stored
+         * @returns the key it was stored under; null when it could not be
          */
-        keepUnimportableOnChain: async (raw: string): Promise<boolean> => {
+        keepUnimportableOnChain: async (raw: string): Promise<string | null> => {
+            const key = `${prefKey}${UNIMPORTABLE_SUFFIX}-${setAsideStamp()}`;
             try {
-                await getCapacitorPreferences().set({
-                    key: `${prefKey}${UNIMPORTABLE_SUFFIX}-${setAsideStamp()}`,
-                    value: raw,
-                });
-                return true;
+                await getCapacitorPreferences().set({ key, value: raw });
+                return key;
             } catch (err) {
                 logger.withCategory('settings').error(`Capacitor ${fileName} copy write failed:`, err);
-                return false;
+                return null;
             }
         },
         /** Where the file lives, for a message: the file, or the preference key where there is no file. */
@@ -497,6 +511,43 @@ const createSettingsFile = (options: SettingsFileOptions) => {
                 return fs.readdirSync(path.dirname(filePath())).some((name) => name.startsWith(prefix));
             } catch {
                 return false;
+            }
+        },
+        /** The text of a copy kept of this file (a desktop), by its path; throws when it cannot be read. */
+        readCopy: (copy: string): string => fs.readFileSync(copy, 'utf8'),
+        /**
+         * Changes the copies set aside beside this file (`<file>.corrupt-<time>`, `<file>.unimportable-<time>`) where
+         * the files can be read and written at once (a desktop): `change` gets each copy's text and answers the text to
+         * keep in its place, or null to leave it. A copy that cannot be read or written is logged (never its text) and
+         * left as it is.
+         */
+        rewriteSetAside: (change: (text: string) => string | null): void => {
+            for (const copy of setAsideFiles()) {
+                try {
+                    const next = change(fs.readFileSync(copy, 'utf8'));
+                    if (next !== null) writeAtomicOwnerOnly(copy, next);
+                } catch (err) {
+                    logger.withCategory('settings').error(`${path.basename(copy)} could not be rewritten:`, err);
+                }
+            }
+        },
+        /**
+         * `rewriteSetAside` for the Android app window: the copies are the Preferences keys `<key>_corrupt…` and
+         * `<key>_unimportable…`. For a task that runs on this file's write chain (`enqueue`).
+         */
+        rewriteSetAsideOnChain: async (change: (text: string) => string | null): Promise<void> => {
+            const preferences = getCapacitorPreferences();
+            const copies = (await preferences.keys()).keys.filter((key) =>
+                [CORRUPT_SUFFIX, UNIMPORTABLE_SUFFIX].some((suffix) => key.startsWith(`${prefKey}${suffix}`)),
+            );
+            for (const key of copies) {
+                try {
+                    const { value } = await preferences.get({ key });
+                    const next = value === null ? null : change(value);
+                    if (next !== null) await preferences.set({ key, value: next });
+                } catch (err) {
+                    logger.withCategory('settings').error(`Capacitor ${key} could not be rewritten:`, err);
+                }
             }
         },
         /**

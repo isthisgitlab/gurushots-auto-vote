@@ -64,7 +64,12 @@ const ONE_X = {
 };
 const RAW = `${JSON.stringify(ONE_X, null, 2)}\n`;
 // The same file once its sign-in state is cleared (the configuration that was adopted holds no login).
-const RAW_SIGNED_OUT = JSON.stringify({ ...ONE_X, token: '', apiHeaders: {} }, null, 2);
+// A copy kept of the file, cleared by a logout: the token, the headers, the last user name and the chosen-photos account.
+const RAW_SIGNED_OUT = JSON.stringify(
+    { ...ONE_X, token: '', apiHeaders: {}, lastUsername: '', chosenPhotosMemberId: '' },
+    null,
+    2,
+);
 
 describe('the import of a settings.json (real fs)', () => {
     let root: string;
@@ -143,7 +148,11 @@ describe('the import of a settings.json (real fs)', () => {
             });
             expect(loaded.imported).toEqual({
                 at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
-                report: { refsBlocked: ['rules[0].profile: "Gone"'] },
+                report: {
+                    refsBlocked: [
+                        { holder: { kind: 'rule', number: 1, title: 'Macro' }, refers: 'profile', name: 'Gone' },
+                    ],
+                },
                 acknowledged: false,
             });
 
@@ -156,6 +165,7 @@ describe('the import of a settings.json (real fs)', () => {
                 importedAt: expect.any(String),
                 importedRecord: stored(configFile).imported,
                 mirrorStartedAt: expect.any(String),
+                signInConfirmed: expect.any(String),
             });
 
             // settings.json is the mirror: the sign-in state is still in it, under the format-1 names.
@@ -184,8 +194,8 @@ describe('the import of a settings.json (real fs)', () => {
             loadFresh();
             settings.loadSettings();
             const importedAt = settings.loadSettings().imported?.at;
-            // A change an older build made after the import is not imported again: it is written over by the mirror.
-            fs.writeFileSync(legacyFile, JSON.stringify({ ...ONE_X, theme: 'light', token: '' }));
+            // A setting an older build changed after the import is not imported again: it is written over by the mirror.
+            fs.writeFileSync(legacyFile, JSON.stringify({ ...ONE_X, theme: 'light' }));
 
             loadFresh();
 
@@ -546,12 +556,14 @@ describe('the import of a settings.json (real fs)', () => {
 
             settings.loadSettings();
 
-            expect(acquired).toEqual([{ id: 'config-import', options: { category: 'settings', internal: true } }]);
-            expect(released).toBe(1);
+            // The import, then the mirror of the imported configuration.
+            const lock = { id: 'config-import', options: { category: 'settings', internal: true } };
+            expect(acquired).toEqual([lock, lock]);
+            expect(released).toBe(2);
             expect(fs.readdirSync(userData).filter((name) => name.endsWith('.lock'))).toEqual([]);
             // A load that finds the configuration takes no lock.
             settings.loadSettings();
-            expect(acquired).toHaveLength(1);
+            expect(acquired).toHaveLength(2);
         });
 
         test.each([

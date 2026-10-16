@@ -583,6 +583,77 @@ describe('createJsonStore', () => {
                 });
                 await expect(file.updateThrough(() => '{}')).resolves.toBe('failed');
             });
+
+            test('updateNow answers where the write is made at once, and is null in the app window, where it is only queued', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                expect(strict.updateNow(() => '{"asked":1}')).toBeNull();
+                expect(mockPrefSet).not.toHaveBeenCalled();
+
+                delete g.Capacitor;
+                fs.existsSync.mockReturnValue(false);
+                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const file = createJsonStore({ fileName: 'scenarioResets.json', prefKey: 'gs_scenario_resets' });
+                expect(file.updateNow((current) => `${current}!`)).toBe('saved');
+                expect(file.updateNow(() => null)).toBe('aborted');
+                fs.writeFileSync.mockImplementationOnce(() => {
+                    throw new Error('EACCES');
+                });
+                expect(file.updateNow(() => '{}')).toBe('failed');
+            });
+
+            test('updateNow in the background service is the native compare-and-write where the key is shared', () => {
+                delete g.Capacitor;
+                g.__GS_HEADLESS__ = true;
+                const compareAndWriteKey = jest.fn(() => true);
+                g.AndroidHeadlessStore = invalid<AndroidHeadlessStore>({
+                    readKey: () => '{"a":1}',
+                    compareAndWriteKey,
+                    read: () => null,
+                    write: () => true,
+                });
+                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const shared = createJsonStore({ fileName: 'titlePins.json', prefKey: 'gs_title_pins', shared: true });
+
+                try {
+                    expect(shared.updateNow((current) => `${current}!`)).toBe('saved');
+                    expect(compareAndWriteKey).toHaveBeenCalledWith('gs_title_pins', '{"a":1}', '{"a":1}!');
+                } finally {
+                    delete g.AndroidHeadlessStore;
+                }
+            });
+
+            test('updateNow fails where writes are refused (local data is being deleted)', async () => {
+                const { discardPendingWrites, resumeWrites } =
+                    require('../../src/ts/settings/storage') as typeof storageModule;
+                delete g.Capacitor;
+                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const file = createJsonStore({ fileName: 'scenarioResets.json', prefKey: 'gs_scenario_resets' });
+                await discardPendingWrites();
+
+                expect(file.updateNow(() => '{}')).toBe('failed');
+
+                resumeWrites();
+            });
+
+            test('peekStored reads what Preferences holds in the app window, which the cache may be behind', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                mockPrefGet.mockResolvedValueOnce({ value: '{"service":true}' });
+
+                await expect(strict.peekStored()).resolves.toBe('{"service":true}');
+                expect(strict.readRaw()).toBe('{"persisted":true}');
+            });
+
+            test('peekStored is the plain read elsewhere', async () => {
+                delete g.Capacitor;
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockReturnValue('{"a":1}');
+                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const file = createJsonStore({ fileName: 'scenarioResets.json', prefKey: 'gs_scenario_resets' });
+
+                await expect(file.peekStored()).resolves.toBe('{"a":1}');
+            });
         });
 
         describe('what a refresh reads while a write is queued', () => {

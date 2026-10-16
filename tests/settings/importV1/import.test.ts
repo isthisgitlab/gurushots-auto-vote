@@ -49,7 +49,9 @@ describe('importV1Settings', () => {
             '1': { values: { emergencySubmit: 600 }, suppressRuleProfile: true, pins: { boost: 'e1' } },
         });
         expect(result.titlePins).toEqual({ '1': 'Macro' });
-        expect(result.report).toEqual({ refsBlocked: ['rules[0].profile: "Gone"'] });
+        expect(result.report).toEqual({
+            refsBlocked: [{ holder: { kind: 'rule', number: 1, title: 'Macro' }, refers: 'profile', name: 'Gone' }],
+        });
     });
 
     test('an empty object is the defaults', () => {

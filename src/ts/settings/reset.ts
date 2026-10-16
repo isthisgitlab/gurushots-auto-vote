@@ -50,7 +50,7 @@ const resetAllGlobalDefaults = (): boolean => {
 
 /**
  * Reset all settings to their default values (preserves only essential user data: the whole sign-in state, the mock
- * mode, and the record of the 1.x import), and forget the title pins
+ * mode, and the record of the settings.json import), and forget the title pins
  */
 const resetAllSettings = (): boolean => {
     const currentSettings = loadSettings();
@@ -62,7 +62,7 @@ const resetAllSettings = (): boolean => {
     newSettings.app.mock = currentSettings.app.mock;
     if (currentSettings.imported) newSettings.imported = currentSettings.imported;
 
-    // The pins the cache holds go with the rest, as the 1.x `titlePins` did.
+    // The pins the cache holds go with the rest, as `titlePins` of settings format 1 did.
     return saveSettings(newSettings) && clearTitlePins();
 };
 

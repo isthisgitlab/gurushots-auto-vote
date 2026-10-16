@@ -178,7 +178,7 @@ describe('the mirror of the configuration in settings.json (real fs)', () => {
             expect(stored(legacyFile).token).toBe('');
         });
 
-        test("a logout takes the token and the API headers out of the copy of the user's file too, and says nothing of it", () => {
+        test("a logout takes the token, the API headers and the user name out of the copy of the user's file too, and says nothing of it", () => {
             fs.writeFileSync(legacyFile, RAW);
             loadFresh();
             settings.loadSettings();
@@ -188,7 +188,9 @@ describe('the mirror of the configuration in settings.json (real fs)', () => {
             expect(settings.setSetting('token', '')).toBe(true);
 
             const kept = stored(originalFile);
-            expect(kept).toMatchObject({ token: '', apiHeaders: {}, lastUsername: 'me@example.com', theme: 'dark' });
+            // The copy keeps no user name; the live mirror and the configuration do (the login form is prefilled from them).
+            expect(kept).toMatchObject({ token: '', apiHeaders: {}, lastUsername: '', theme: 'dark' });
+            expect(stored(legacyFile)).toMatchObject({ lastUsername: 'me@example.com' });
             expect(JSON.stringify(cat.info.mock.calls)).not.toContain('tok-secret');
             expect(JSON.stringify(cat.debug.mock.calls)).not.toContain('tok-secret');
             if (process.platform !== 'win32') expect(fs.statSync(originalFile).mode & 0o777).toBe(0o600);
@@ -578,20 +580,21 @@ describe('the mirror of the configuration in settings.json (real fs)', () => {
             expect(settings.getSettingsRecovery()?.code).toBe('settings-corrupt');
         });
 
-        test('before the stores can be read (the Android window before it hydrates) nothing is restored, and it is said', () => {
+        test('before the stores can be read (the Android window before it hydrates) nothing is restored and nothing is said; the next read restores', () => {
             mirrored();
             fs.rmSync(configFile);
             loadFresh();
-            jest.spyOn(storage.legacyStorage, 'isLoaded').mockReturnValue(false);
+            const loadedNow = jest.spyOn(storage.legacyStorage, 'isLoaded').mockReturnValue(false);
 
             settings.loadSettings();
 
-            expect(settings.getSettingsRecovery()).toEqual({
-                code: 'settings-import-failed',
-                path: legacyFile,
-                blocking: true,
-            });
+            expect(settings.getSettingsRecovery()).toBeNull();
             expect(fs.existsSync(configFile)).toBe(false);
+
+            loadedNow.mockRestore();
+            settings.loadSettings();
+
+            expect(fs.existsSync(configFile)).toBe(true);
         });
 
         test('a restore from a lost configuration gives the About-data report back, and what was acknowledged stays so', () => {

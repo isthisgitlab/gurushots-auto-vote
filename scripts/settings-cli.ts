@@ -239,7 +239,7 @@ async function runSetGlobal() {
 
 async function runResetAll() {
     const confirmMessage =
-        'Are you sure you want to reset ALL settings to their default values?\nThis will reset all UI settings, global challenge defaults, window positions, and preferences.\nOnly your login token, last update check time, mock mode setting, and API headers will be preserved.\nType "yes" to confirm:';
+        'Are you sure you want to reset ALL settings to their default values?\nThis will reset all UI settings, global challenge defaults, window positions, and preferences.\nOnly your sign-in (login token, API headers, last username and chosen-photos owner), mock mode setting, the record of the settings.json import and last update check time will be preserved.\nType "yes" to confirm:';
 
     console.log(confirmMessage);
 

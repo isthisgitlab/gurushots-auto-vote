@@ -6,16 +6,49 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
 import { ImportReportModal } from '@/components/app/ImportReportModal';
-import { fireSettingsChanged } from './helpers/setup';
+import { fireSettingsChanged, mockTranslator, defaultTranslate } from './helpers/setup';
+import { IMPORT_REF_ENGLISH } from '../../src/ts/settings/importRefs';
+import type { ImportRefText } from '../../src/ts/settings/importRefs';
 import { invalid } from '../helpers/invalid';
 
-const report = (refsBlocked: string[], acknowledged = false) => ({
+const report = (refsBlocked: unknown[], acknowledged = false) => ({
     success: true as const,
     report: { at: '2026-10-16T09:00:00.000Z', refsBlocked, acknowledged },
 });
 const answer = (result: unknown) => jest.mocked(window.api.getImportReport).mockResolvedValue(invalid(result));
 
 describe('ImportReportModal', () => {
+    afterEach(() => {
+        mockTranslator.t.mockImplementation(defaultTranslate);
+    });
+
+    test('words each reference as where it is stored in the app and what is wrong with it, and shows an old entry as it is', async () => {
+        mockTranslator.t.mockImplementation((key) =>
+            key.startsWith('notice.importRef') ? IMPORT_REF_ENGLISH[key.slice(7) as keyof ImportRefText] : key,
+        );
+        answer(
+            report([
+                { holder: { kind: 'rule', number: 3, title: 'Macro' }, refers: 'profile', name: 'Night' },
+                { holder: { kind: 'challenge', id: '12', title: 'Sunset' }, refers: 'scenario', name: 'Plan B' },
+                { holder: { kind: 'profile', name: 'Day' }, refers: 'scenario', name: 'Plan C', invalid: true },
+                'rules[0].profile: "Gone"',
+            ]),
+        );
+        render(<ImportReportModal />);
+
+        const dialog = await screen.findByRole('dialog');
+        expect(
+            within(dialog)
+                .getAllByRole('listitem')
+                .map((item) => item.textContent),
+        ).toEqual([
+            'Rule 3 (Macro): the profile "Night" doesn\'t exist',
+            'Challenge "Sunset" (12): the scenario "Plan B" doesn\'t exist',
+            'Profile "Day": the scenario "Plan C" can\'t be used',
+            'rules[0].profile: "Gone"',
+        ]);
+    });
+
     test('lists the references that were kept, in a named dialog with OK', async () => {
         answer(report(['rules[2].profile: "Night owl"', 'challenges.123.values.scenario: "Plan B"']));
         render(<ImportReportModal />);
@@ -30,6 +63,20 @@ describe('ImportReportModal', () => {
         expect(within(dialog).getByRole('button', { name: 'common.ok' })).toBeTruthy();
         expect(within(dialog).queryByRole('button', { name: 'common.closeModal' })).toBeNull();
         expect(window.api.acknowledgeImportReport).not.toHaveBeenCalled();
+    });
+
+    test('two entries that read alike are both listed, with no clash of keys', async () => {
+        const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+        const same = { holder: { kind: 'rule', number: 1 }, refers: 'profile', name: 'Gone' };
+        answer(report([same, { ...same }, 'rules[0].profile: "Gone"', 'rules[0].profile: "Gone"']));
+        render(<ImportReportModal />);
+
+        const dialog = await screen.findByRole('dialog');
+
+        expect(within(dialog).getAllByRole('listitem')).toHaveLength(4);
+        expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining('same key'), expect.anything());
+        expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
+        consoleError.mockRestore();
     });
 
     test('OK acknowledges it and the dialog goes', async () => {

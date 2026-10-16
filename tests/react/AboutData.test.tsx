@@ -8,6 +8,8 @@ import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-
 import { AboutDataSection } from '@/components/app/AboutDataSection';
 import { mockTranslator, defaultTranslate } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
+import { IMPORT_REF_ENGLISH } from '../../src/ts/settings/importRefs';
+import type { ImportRefText } from '../../src/ts/settings/importRefs';
 import { about as englishAbout } from '../../src/ts/translations/english';
 import { about as latvianAbout } from '../../src/ts/translations/latvian';
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
@@ -416,6 +418,36 @@ describe('the Android delete failure text', () => {
 describe('the import report in About and data', () => {
     const answer = (result: unknown) => jest.mocked(window.api.getImportReport).mockResolvedValue(invalid(result));
 
+    afterEach(() => {
+        mockTranslator.t.mockImplementation(defaultTranslate);
+    });
+
+    test('words each reference the way the import dialog does, in terms of the app, and an old entry as it is', async () => {
+        mockTranslator.t.mockImplementation((key) =>
+            key.startsWith('notice.importRef') ? IMPORT_REF_ENGLISH[key.slice(7) as keyof ImportRefText] : key,
+        );
+        answer({
+            success: true,
+            report: {
+                at: '2026-10-16T09:00:00.000Z',
+                refsBlocked: [
+                    { holder: { kind: 'rule', number: 1 }, refers: 'scenario', name: 'Plan B', invalid: true },
+                    { holder: { kind: 'challenge', id: '7' }, refers: 'profile', name: 'Night' },
+                    'challenges.123.values.scenario: "Plan B"',
+                ],
+                acknowledged: true,
+            },
+        });
+        render(<AboutDataSection />);
+
+        await screen.findByRole('heading', { name: 'about.importTitle' });
+        expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+            'Rule 1: the scenario "Plan B" can\'t be used',
+            'Challenge 7: the profile "Night" doesn\'t exist',
+            'challenges.123.values.scenario: "Plan B"',
+        ]);
+    });
+
     test('lists the references that were kept and still do not apply, read-only, when they were acknowledged too', async () => {
         answer({
             success: true,
@@ -435,6 +467,26 @@ describe('the import report in About and data', () => {
         ]);
         expect(screen.getByText('about.importAt')).toBeTruthy();
         expect(screen.queryByText('about.importNone')).toBeNull();
+    });
+
+    test('two entries that read alike are both listed, with no clash of keys', async () => {
+        const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+        const same = { holder: { kind: 'rule', number: 1 }, refers: 'profile', name: 'Gone' };
+        answer({
+            success: true,
+            report: {
+                at: '2026-10-16T09:00:00.000Z',
+                refsBlocked: [same, { ...same }, 'rules[0].profile: "Gone"', 'rules[0].profile: "Gone"'],
+                acknowledged: true,
+            },
+        });
+        render(<AboutDataSection />);
+
+        await screen.findByRole('heading', { name: 'about.importTitle' });
+
+        expect(screen.getAllByRole('listitem')).toHaveLength(4);
+        expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
+        consoleError.mockRestore();
     });
 
     test('says when it ran, in the date format of the page language', async () => {

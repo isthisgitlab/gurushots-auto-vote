@@ -1,6 +1,6 @@
 /**
- * The frozen 1.x settings schema: every key's default, zod validator and the flags the 1.x resolver reads
- * (`perChallenge`, `challengeOnly`, `dependsOn`), in the 1.x key order. A copy as of the last 1.x release, holding
+ * The frozen format 1 settings schema: every key's default, zod validator and the flags the format 1 resolver reads
+ * (`perChallenge`, `challengeOnly`, `dependsOn`), in the format 1 key order. Frozen as the last build that wrote settings format 1 had it, holding
  * only data; it never follows the live schema.
  */
 

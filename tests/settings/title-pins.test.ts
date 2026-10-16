@@ -102,9 +102,7 @@ describe('settings facade — first-seen title pins', () => {
             __esModule: true,
             createJsonStore: () => ({
                 readRaw: () => null,
-                writeRaw: () => {
-                    throw new Error('disk full');
-                },
+                updateNow: () => 'failed',
             }),
         }));
         const isolated = require('../../src/ts/settings/titlePins') as typeof titlePinsModule;

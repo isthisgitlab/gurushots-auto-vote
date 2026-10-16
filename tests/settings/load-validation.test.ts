@@ -213,10 +213,75 @@ describe('loadSettings validation', () => {
             expect(warnings()).toEqual([]);
         });
 
+        test('keeps the references it lists as the user knows them, and the text an earlier build stored', () => {
+            const withRefs = {
+                ...imported,
+                report: {
+                    refsBlocked: [
+                        'rules[0].profile: "Gone"',
+                        { holder: { kind: 'rule', number: 2, title: 'Macro' }, refers: 'profile', name: 'Night' },
+                        { holder: { kind: 'rule', number: 3 }, refers: 'scenario', name: 'Plan', invalid: true },
+                        { holder: { kind: 'profile', name: 'Day' }, refers: 'scenario', name: 'Plan' },
+                        { holder: { kind: 'challenge', id: '7', title: 'Sunset' }, refers: 'scenario', name: 'Plan' },
+                        { holder: { kind: 'challenge', id: '8' }, refers: 'scenario', name: 'Plan' },
+                    ],
+                },
+            };
+            seed({ imported: withRefs });
+            expect(settings.loadSettings().imported).toEqual(withRefs);
+            expect(warnings()).toEqual([]);
+        });
+
         test.each([
             ['a string', 'x'],
             ['no report', { ...imported, report: undefined }],
-            ['report refs that are not strings', { ...imported, report: { refsBlocked: [1] } }],
+            ['report refs that are not strings or references', { ...imported, report: { refsBlocked: [1] } }],
+            [
+                'a reference with a holder of no known kind',
+                { ...imported, report: { refsBlocked: [{ holder: { kind: 'other' }, refers: 'profile', name: 'x' }] } },
+            ],
+            [
+                'a reference to something that is neither a profile nor a scenario',
+                {
+                    ...imported,
+                    report: { refsBlocked: [{ holder: { kind: 'rule', number: 1 }, refers: 'rule', name: 'x' }] },
+                },
+            ],
+            [
+                'a reference with a rule number that is not a whole number',
+                {
+                    ...imported,
+                    report: {
+                        refsBlocked: [{ holder: { kind: 'rule', number: 1.5 }, refers: 'profile', name: 'x' }],
+                    },
+                },
+            ],
+            [
+                'a reference whose invalid flag is not true',
+                {
+                    ...imported,
+                    report: {
+                        refsBlocked: [
+                            { holder: { kind: 'rule', number: 1 }, refers: 'profile', name: 'x', invalid: false },
+                        ],
+                    },
+                },
+            ],
+            [
+                'a challenge holder with a title that is not text',
+                {
+                    ...imported,
+                    report: {
+                        refsBlocked: [
+                            { holder: { kind: 'challenge', id: '1', title: 5 }, refers: 'scenario', name: 'x' },
+                        ],
+                    },
+                },
+            ],
+            [
+                'a holder that is not an object',
+                { ...imported, report: { refsBlocked: [{ holder: 'rule', refers: 'profile', name: 'x' }] } },
+            ],
             ['an acknowledged that is not a boolean', { ...imported, acknowledged: 'no' }],
             ['an at that is not a string', { ...imported, at: 4 }],
         ])('is dropped with %s', (_what, value) => {

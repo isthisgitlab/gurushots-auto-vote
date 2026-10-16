@@ -227,14 +227,19 @@ const openExternalUrl = (url: unknown) => {
     return Promise.resolve({ success: true });
 };
 
-const installBridge = (): WindowApi => {
-    // Seed the curated intent presets once (idempotent; never fatal). Mobile
-    // has no main-process startup, so the bridge install is the boot hook.
+/**
+ * Seed the curated intent presets once (idempotent; never fatal). Mobile has no main-process startup, so the window's
+ * boot calls this once the stored settings are hydrated: before that a read finds defaults and a save is refused.
+ */
+const seedBridgeProfiles = (): void => {
     try {
         settings.seedIntentProfiles();
     } catch (err) {
         logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
     }
+};
+
+const installBridge = (): WindowApi => {
     const api: BridgeApi = {};
     addHandlerMethods(api);
     addSendMethods(api);
@@ -261,4 +266,4 @@ const installBridge = (): WindowApi => {
     return api as WindowApi;
 };
 
-export { installBridge, subscribe, emit };
+export { installBridge, seedBridgeProfiles, subscribe, emit };

@@ -322,7 +322,8 @@ describe('the mirror in the Android app window', () => {
         expect(settings.setSetting('token', '')).toBe(true);
         await settings.flushPendingWrites();
 
-        expect(stored(ORIGINAL)).toEqual({ theme: 'dark', token: '', lastUsername: 'me', apiHeaders: {} });
+        // (The copy keeps no user name either; the configuration and the live mirror do, for the login form.)
+        expect(stored(ORIGINAL)).toEqual({ theme: 'dark', token: '', lastUsername: '', apiHeaders: {} });
         expect(callsTo(ORIGINAL)).toHaveLength(1);
         expect(callsTo(ORIGINAL)[0].expected).toBe(USER_FILE);
         expect(JSON.stringify(cat.info.mock.calls) + JSON.stringify(cat.error.mock.calls)).not.toContain('tok-secret');
@@ -423,7 +424,7 @@ describe('Start fresh in the Android app window', () => {
         await settings.flushPendingWrites();
 
         // The configuration holds no login, so the original holds none either; it is the same file.
-        expect(stored(ORIGINAL)).toEqual({ theme: 'dark', token: '', lastUsername: 'me', apiHeaders: {} });
+        expect(stored(ORIGINAL)).toEqual({ theme: 'dark', token: '', lastUsername: '', apiHeaders: {} });
         expect(unimportable()).toHaveLength(1);
         expect(prefs.get(unimportable()[0])).toBe('{broken');
         expect(stored(MIRROR)).toMatchObject({ token: '' });

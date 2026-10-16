@@ -253,7 +253,7 @@ const checkScenario = (doc: unknown) => validateScenario(doc, globalChallengeVal
 const previewScenarioImport = (text: unknown): ScenarioImportPreview => {
     const parsed = parseScenarioJson(text);
     if (!parsed.ok) return failure(parsed.issues);
-    // A shared file from a 1.x install names its settings by their 1.x keys.
+    // A shared file written under settings format 1 names its settings by their format 1 keys.
     const result = validateScenario(renameV1ScenarioDocument(parsed.value), globalChallengeValues(loadSettings()));
     if (!result.ok) return failure(result.issues);
     return {

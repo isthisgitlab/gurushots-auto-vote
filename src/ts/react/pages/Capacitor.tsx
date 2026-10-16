@@ -15,7 +15,7 @@ import type { RendererGlobals } from '../../types/capacitor';
 // must happen after this assignment.
 (globalThis as RendererGlobals).__capacitorBootstrap = true;
 
-import { installBridge, subscribe } from '../../bridge/capacitor';
+import { installBridge, seedBridgeProfiles, subscribe } from '../../bridge/capacitor';
 import { initializeAsync as initSettings, flushPendingWrites, getSetting } from '../../settings';
 import { initializeMetadataAsync, flushMetadataWrites } from '../../metadata';
 import { initializeJoinStateAsync, flushJoinStateWrites } from '../../joinStateStore';
@@ -44,6 +44,8 @@ const bootstrap = async () => {
     if (isCapacitor()) {
         installBridge();
         await initSettings();
+        // Seeding reads and writes the settings, so it waits for them to be hydrated.
+        seedBridgeProfiles();
         // Metadata rides the same platform-aware transport — hydrate its
         // cache too so per-challenge vote metadata survives relaunches.
         await initializeMetadataAsync();

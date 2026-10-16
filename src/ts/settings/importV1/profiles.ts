@@ -1,9 +1,9 @@
 /**
- * The frozen 1.x profile-name rules: which names are reserved, how a name is normalized to an identity, and how a
- * stored name is found. Profile and scenario lookups in 1.x all go through these.
+ * The frozen format 1 profile-name rules: which names are reserved, how a name is normalized to an identity, and how a
+ * stored name is found. Profile and scenario lookups in format 1 all go through these.
  */
 
-// Names that would reassign the prototype of a plain map instead of storing data; 1.x skips them on every read.
+// Names that would reassign the prototype of a plain map instead of storing data; format 1 skips them on every read.
 const V1_RESERVED_PROFILE_NAMES: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
 
 /**

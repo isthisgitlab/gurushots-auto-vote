@@ -1,5 +1,5 @@
 /**
- * The part of the 1.x challenge-rule logic the category-rule migration needs, frozen: how a rule's conditions are
+ * The part of the format 1 challenge-rule logic the category-rule migration needs, frozen: how a rule's conditions are
  * normalized and the default order rules are sorted into.
  */
 
@@ -126,7 +126,7 @@ const compareDefaultOrder = (a: unknown, b: unknown): number => {
 };
 
 /**
- * A copy of `rules` in the 1.x default order: titled rules first, most specific first. Stable.
+ * A copy of `rules` in the format 1 default order: titled rules first, most specific first. Stable.
  */
 const sortRulesByDefaultOrder = (rules: readonly unknown[]): unknown[] => [...rules].sort(compareDefaultOrder);
 

@@ -78,7 +78,9 @@ export const getSettingsRecovery = persistence.getSettingsRecovery;
 // Recovery of a configuration that could not be imported or read (see persistence.ts)
 export const retryImport = persistence.retryImport;
 export const startFresh = persistence.startFresh;
+export const startFreshDetailed = persistence.startFreshDetailed;
 export const reimportFromV1 = persistence.reimportFromV1;
+export const reimportFromV1Detailed = persistence.reimportFromV1Detailed;
 // What the import left unresolved
 export const getImportReport = persistence.getImportReport;
 export const acknowledgeImportReport = persistence.acknowledgeImportReport;

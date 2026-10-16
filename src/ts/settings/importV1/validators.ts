@@ -1,6 +1,6 @@
 /**
- * The zod shapes and list sanitizers of the frozen 1.x settings schema (see ./schema.ts), with the bounds they use.
- * A copy as of the last 1.x release: nothing here follows the live schema.
+ * The zod shapes and list sanitizers of the frozen format 1 settings schema (see ./schema.ts), with the bounds they use.
+ * Frozen as the last build that wrote settings format 1 had them: nothing here follows the live schema.
  */
 
 import { z } from 'zod';

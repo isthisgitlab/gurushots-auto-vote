@@ -54,17 +54,30 @@ export const formatSettingForLog = (key: string, value: unknown): string => {
 // command that validates against SETTINGS_SCHEMA. Self-contained (lists the
 // keys inline) so it stays correct for both hosts — the main CLI and the
 // pnpm settings:* scripts wire different command names for the schema dump.
-export const logUnknownSchemaKey = (key: string) => {
-    logger.withCategory('settings').error(`Unknown schema setting '${key}'`);
+// `valid`: the names the command that failed accepts, when they are not the schema's (the command then says "setting",
+// not "schema setting").
+export const logUnknownSchemaKey = (key: string, valid?: readonly string[]) => {
     logger
         .withCategory('settings')
-        .info(`Available settings: ${Object.keys(settings.SETTINGS_SCHEMA).sort().join(', ')}`);
+        .error(valid === undefined ? `Unknown schema setting '${key}'` : `Unknown setting '${key}'`);
+    logger
+        .withCategory('settings')
+        .info(`Available settings: ${[...(valid ?? Object.keys(settings.SETTINGS_SCHEMA))].sort().join(', ')}`);
 };
 
-// Guard for the per-challenge variants: a key must declare perChallenge in
-// the schema before it can carry an override. Logs and returns false on miss.
+// Guard for the per-challenge variants: a key must be in the schema and declare
+// perChallenge before it can carry an override. Logs and returns false on miss: a
+// name that is no setting is said to be unknown, not to lack a feature.
 export const requirePerChallenge = (key: string) => {
-    if (!schemaEntry(key)?.perChallenge) {
+    const entry = schemaEntry(key);
+    if (!entry) {
+        logUnknownSchemaKey(
+            key,
+            Object.keys(settings.SETTINGS_SCHEMA).filter((name) => schemaEntry(name)?.perChallenge),
+        );
+        return false;
+    }
+    if (!entry.perChallenge) {
         logger.withCategory('settings').error(`Setting '${key}' does not support per-challenge overrides`);
         return false;
     }

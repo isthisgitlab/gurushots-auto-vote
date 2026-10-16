@@ -118,11 +118,9 @@ describe('App page', () => {
         mockAutovote.pendingStartAt = null;
         mockAutovote.cycles = 0;
         originals = Object.fromEntries(API_METHODS.map((m) => [m, window.api[m]]));
-        window.api.getSettings = jest
-            .fn()
-            .mockResolvedValue({
-                app: { onboardingCompleted: true, noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION },
-            });
+        window.api.getSettings = jest.fn().mockResolvedValue({
+            app: { onboardingCompleted: true, noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION },
+        });
         window.api.setSetting = jest.fn().mockResolvedValue(undefined);
         (window.api as { logout: WindowApi['logout'] }).logout = jest.fn().mockResolvedValue(undefined);
         window.api.logError = jest.fn().mockResolvedValue(undefined);
@@ -207,6 +205,35 @@ describe('App page', () => {
         expect(window.api.logError).not.toHaveBeenCalled();
     });
 
+    test('the import report waits for the welcome, so that no two dialogs trap the focus, and shows once it is closed', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValue(
+            invalid({ app: { noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION } }),
+        );
+        const readReport = jest.mocked(window.api.getImportReport);
+        const original = readReport.getMockImplementation();
+        readReport.mockResolvedValue(
+            invalid({
+                success: true,
+                report: {
+                    at: '2026-10-16T09:00:00.000Z',
+                    refsBlocked: ['rules[0].profile: "Gone"'],
+                    acknowledged: false,
+                },
+            }),
+        );
+        await renderReady();
+        await waitFor(() => expect(mockProps.WelcomeModal.isOpen).toBe(true));
+        await waitFor(() => expect(window.api.getImportReport).toHaveBeenCalled());
+        expect(screen.queryByRole('dialog', { name: 'notice.importReportTitle' })).toBeNull();
+
+        await act(async () => {
+            await mockProps.WelcomeModal.onClose();
+        });
+
+        expect(await screen.findByRole('dialog', { name: 'notice.importReportTitle' })).toBeTruthy();
+        readReport.mockImplementation(original);
+    });
+
     test.each([
         [new Error('disk full'), 'Failed to persist onboardingCompleted: disk full'],
         [undefined, 'Failed to persist onboardingCompleted: undefined'],
@@ -230,14 +257,12 @@ describe('App page', () => {
 
     describe('the unofficial-app notice', () => {
         const upgradedWithAutoLogin = (noticeAcknowledgedVersion?: number) =>
-            jest
-                .mocked(window.api.getSettings)
-                .mockResolvedValue(
-                    invalid({
-                        app: { stayLoggedIn: true, onboardingCompleted: true, noticeAcknowledgedVersion },
-                        hasToken: true,
-                    }),
-                );
+            jest.mocked(window.api.getSettings).mockResolvedValue(
+                invalid({
+                    app: { stayLoggedIn: true, onboardingCompleted: true, noticeAcknowledgedVersion },
+                    hasToken: true,
+                }),
+            );
 
         test('an upgrade with auto-login still shows it, once, and acknowledging persists the version', async () => {
             upgradedWithAutoLogin(CURRENT_NOTICE_VERSION - 1);

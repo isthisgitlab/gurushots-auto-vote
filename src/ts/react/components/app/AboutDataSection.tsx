@@ -1,35 +1,20 @@
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { useIpcQuery } from '@/api/useIpcQuery';
-import * as ipc from '@/api/ipc';
+import { useImportRefText, useImportReport } from '@/api/useImportReport';
 import { interp } from '@/utils/interp';
 import { dateLocale } from '@/utils/formatters';
 import { LicensesModal } from './LicensesModal';
 import { DeleteLocalDataModal } from './DeleteLocalDataModal';
 
-import type { IpcQueryTools } from '@/api/useIpcQuery';
-
-type ImportReport = { at: string; refsBlocked: string[]; acknowledged: boolean };
-
-const fetchReport = () => ipc.getImportReport();
-
-// A read that fails shows nothing: the block is a record, and the settings work without it.
-const applyReport = (
-    result: Awaited<ReturnType<typeof fetchReport>>,
-    { setData }: Pick<IpcQueryTools<ImportReport | null, Error>, 'setData'>,
-) => setData(result?.success ? result.report : null);
-
 /**
- * What the import of the previous version's settings left unresolved, read-only: when it ran and the references that
+ * What the import of settings.json left unresolved, read-only: when it ran and the references that
  * were kept and still do not apply (or that nothing needed attention). Nothing when the settings were not imported.
  */
 function ImportReportBlock() {
     const { t } = useTranslation();
-    const { data: report } = useIpcQuery(fetchReport, {
-        initialData: null as ImportReport | null,
-        apply: applyReport,
-        subscribe: true,
-    });
+    // A read that fails shows nothing: the block is a record, and the settings work without it.
+    const { data: report } = useImportReport();
+    const refText = useImportRefText();
     if (!report) return null;
     const date = new Date(report.at);
     return (
@@ -46,9 +31,10 @@ function ImportReportBlock() {
                 <>
                     <p>{t('about.importSome')}</p>
                     <ul className="list-disc ml-5 break-words">
-                        {report.refsBlocked.map((ref) => (
-                            <li key={ref}>
-                                <code>{ref}</code>
+                        {report.refsBlocked.map((ref, index) => (
+                            // Two entries can read alike (the same name twice), so the position is part of the key.
+                            <li key={`${index}:${typeof ref === 'string' ? 'text' : ref.holder.kind}`}>
+                                {refText(ref)}
                             </li>
                         ))}
                     </ul>

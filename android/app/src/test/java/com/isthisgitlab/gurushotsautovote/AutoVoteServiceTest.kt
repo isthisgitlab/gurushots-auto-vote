@@ -535,30 +535,36 @@ class AutoVoteServiceTest {
     }
 
     @Test
-    fun theImportMarkerAndTheTitlePinsAreSideStoresTheServiceWritesPlainly() {
+    fun theImportMarkerAndTheTitlePinsAreChangedByCompareAndSetOnly() {
         val store = newService().HeadlessStore()
         ShadowLog.clear()
-        // Neither is shared with the window by compare-and-set: the service reads and writes each as it is.
+        // Both contexts change them, so each change rests on what its writer read, and a plain write is refused.
         assertNull(store.readKey("gs_v2_import"))
-        assertTrue(store.writeKey("gs_v2_import", """{"importedAt":"2026-10-16T00:00:00.000Z"}"""))
+        assertTrue(store.compareAndWriteKey("gs_v2_import", null, """{"importedAt":"2026-10-16T00:00:00.000Z"}"""))
         assertEquals("""{"importedAt":"2026-10-16T00:00:00.000Z"}""", store.readKey("gs_v2_import"))
-        assertTrue(store.writeKey("gs_title_pins", """{"7":"Sunsets"}"""))
+        assertTrue(store.compareAndWriteKey("gs_title_pins", null, """{"7":"Sunsets"}"""))
         assertEquals("""{"7":"Sunsets"}""", store.readKey("gs_title_pins"))
+        assertFalse(store.writeKey("gs_v2_import", """{"importedAt":"2026-10-17T00:00:00.000Z"}"""))
+        assertFalse(store.writeKey("gs_title_pins", """{"7":"Other"}"""))
+        // A change made on what another context has since replaced is refused, and what is stored stays.
+        assertFalse(store.compareAndWriteKey("gs_title_pins", """{"7":"Stale"}""", """{"7":"Other"}"""))
+        assertTrue(store.compareAndWriteKey("gs_title_pins", """{"7":"Sunsets"}""", """{"7":"Sunsets","8":"Dusk"}"""))
         // Both are held to the shape and the side stores' cap.
-        assertFalse(store.writeKey("gs_v2_import", "invalid JSON"))
-        assertFalse(store.writeKey("gs_title_pins", """{"7":"${"x".repeat(SideStores.MAX_BYTES)}"}"""))
+        assertFalse(store.compareAndWriteKey("gs_v2_import", """{"importedAt":"2026-10-16T00:00:00.000Z"}""", "invalid JSON"))
+        assertFalse(
+            store.compareAndWriteKey("gs_title_pins", """{"7":"Sunsets","8":"Dusk"}""", """{"7":"${"x".repeat(SideStores.MAX_BYTES)}"}""")
+        )
         assertEquals("""{"importedAt":"2026-10-16T00:00:00.000Z"}""", store.readKey("gs_v2_import"))
-        assertEquals("""{"7":"Sunsets"}""", store.readKey("gs_title_pins"))
+        assertEquals("""{"7":"Sunsets","8":"Dusk"}""", store.readKey("gs_title_pins"))
         assertEquals(
             listOf(
+                "Refusing a plain write of import marker blob: it is changed by compare-and-set only",
+                "Refusing a plain write of title pins blob: it is changed by compare-and-set only",
                 "Refusing to persist non-JSON import marker blob",
                 "Refusing to persist oversized title pins blob"
             ),
             ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
         )
-        // The window changes them by compare-and-set too (its plugin call takes the same lock).
-        assertTrue(store.compareAndWriteKey("gs_title_pins", """{"7":"Sunsets"}""", """{"7":"Sunsets","8":"Dusk"}"""))
-        assertFalse(store.compareAndWriteKey("gs_title_pins", """{"7":"Sunsets"}""", """{"7":"Other"}"""))
     }
 
     @Test

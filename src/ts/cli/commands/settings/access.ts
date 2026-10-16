@@ -74,7 +74,13 @@ export const setSetting = (key: string, value: string, challengeId: string | nul
         // as an `app` value nothing reads, and the command would report that as set.
         const known = settings.getDefaultSettings();
         if (!Object.hasOwn(known.app, key) && !Object.hasOwn(known.auth, key)) {
-            logger.withCategory('settings').error(`Unknown setting '${key}'`);
+            logUnknownSchemaKey(key, [
+                ...new Set([
+                    ...Object.keys(settings.SETTINGS_SCHEMA),
+                    ...Object.keys(known.app),
+                    ...Object.keys(known.auth),
+                ]),
+            ]);
             return false;
         }
         if (!settings.setSetting(key, parsedValue)) {

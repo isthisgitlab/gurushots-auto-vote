@@ -72,8 +72,8 @@ Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
 
 Scheduled voting (vote exposure up to 100% at chosen times — per-challenge, set
 with set-global-default or set-setting --challenge=<id>; every entry opens its
-own voting window, all OR'd; a single stored value is converted to an
-array on load):
+own voting window, all OR'd; each list is a JSON array, and a stored value that
+is not valid is replaced by the default when the settings load):
   useScheduledFill           - Master switch (default: false). Inert until a
                                time below is set; never applies to flash or
                                boost-only challenges.

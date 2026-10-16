@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { useIpcQuery } from '@/api/useIpcQuery';
@@ -18,8 +18,9 @@ type RecoveryCode =
     | 'settings-save-dropped';
 // `cause` (a save the window gave up only): why the change was dropped — `conflict` (the background service wrote at
 // the same time), `too-large` (past the size the store takes) or `storage` (the store refused it). Any other value,
-// or none, is worded neutrally.
-type Recovery = { code: RecoveryCode; path: string; cause?: string };
+// or none, is worded neutrally. `settingsSetAside` (a damaged configuration only): where the unusable settings.json
+// was kept once a save mirrored over it (a path where there are files, a storage key where there are none).
+type Recovery = { code: RecoveryCode; path: string; cause?: string; settingsSetAside?: string };
 
 // The translation keys of each code's what happened / why / what next text.
 const RECOVERY_KEYS: Record<RecoveryCode, { what: string; why: string; next: string }> = {
@@ -56,14 +57,34 @@ const DROPPED_WHY = new Map([
     ['storage', 'notice.recoveryDroppedWhyStorage'],
 ]);
 
-// Where the settings are not a file the user can open (Android: app-private storage), the notice names no path and
-// asks for no step on a file.
-const NO_FILE_KEYS: Partial<Record<RecoveryCode, { why: string; next: string }>> = {
-    'settings-restored': { why: 'notice.recoveryRestoredWhyAndroid', next: 'notice.recoveryRestoredNextAndroid' },
-    'settings-corrupt': { why: 'notice.recoveryCorruptWhyAndroid', next: 'notice.recoveryCorruptNextAndroid' },
+// Where the settings are not a file the user can open (Android: app-private storage), the notice names no file and
+// asks for no step on one.
+const NO_FILE_KEYS: Partial<Record<RecoveryCode, { what?: string; why: string; next: string }>> = {
+    'settings-restored': {
+        what: 'notice.recoveryRestoredWhatAndroid',
+        why: 'notice.recoveryRestoredWhyAndroid',
+        next: 'notice.recoveryRestoredNextAndroid',
+    },
+    'settings-corrupt': {
+        what: 'notice.recoveryCorruptWhatAndroid',
+        why: 'notice.recoveryCorruptWhyAndroid',
+        next: 'notice.recoveryCorruptNextAndroid',
+    },
     'settings-unreadable': { why: 'notice.recoveryUnreadableWhyAndroid', next: 'notice.recoveryUnreadableNextAndroid' },
-    'settings-import-failed': { why: 'notice.recoveryImportWhyAndroid', next: 'notice.recoveryImportNextAndroid' },
+    'settings-import-failed': {
+        what: 'notice.recoveryImportWhatAndroid',
+        why: 'notice.recoveryImportWhyAndroid',
+        next: 'notice.recoveryImportNextAndroid',
+    },
 };
+
+// The outcome and question texts that name settings.json, and the wording used where there is no file to name.
+const NO_FILE_TEXT = new Map([
+    ['notice.recoveryRetryDone', 'notice.recoveryRetryDoneAndroid'],
+    ['notice.recoveryRetryFailed', 'notice.recoveryRetryFailedAndroid'],
+    ['notice.recoveryStartFreshBody', 'notice.recoveryStartFreshBodyAndroid'],
+    ['notice.recoveryStartFreshDone', 'notice.recoveryStartFreshDoneAndroid'],
+]);
 
 // The text keys of a notice: its code's, refined by what the platform and the cause make true. A dropped save is
 // worded by why it was dropped.
@@ -84,7 +105,7 @@ const ACTIONS: Record<
     ActionId,
     {
         label: string;
-        run: () => Promise<{ success: boolean; error?: string }>;
+        run: () => Promise<{ success: boolean; error?: string; keptAt?: string | null }>;
         done: string;
         failed: string;
         primary?: true;
@@ -134,7 +155,12 @@ const ACTIONS_FOR: Partial<Record<RecoveryCode, ActionId[]>> = {
     'settings-corrupt': ['reimport'],
 };
 
-type Outcome = { action: ActionId; ok: boolean };
+// Re-import takes the settings from a settings.json the user fixes; where there is no file they can open, it is not offered.
+const actionsFor = (code: RecoveryCode, settingsFile: boolean): ActionId[] =>
+    (ACTIONS_FOR[code] ?? []).filter((action) => settingsFile || action !== 'reimport');
+
+// `keptAt` (Start fresh only): where settings.json was kept, null when there was none to keep.
+type Outcome = { action: ActionId; ok: boolean; keptAt?: string | null };
 
 const fetchRecovery = () => ipc.getSettingsRecovery();
 
@@ -170,6 +196,11 @@ export function SettingsRecoveryNotice() {
     const [busy, setBusy] = useState<ActionId | null>(null);
     const [confirming, setConfirming] = useState<ConfirmedAction | null>(null);
     const [outcome, setOutcome] = useState<Outcome | null>(null);
+    // Where focus goes back to when an outcome is dismissed: the button that ran the action, else the notice's heading.
+    const actionButtons = useRef(new Map<ActionId, HTMLButtonElement>());
+    const heading = useRef<HTMLParagraphElement>(null);
+    // The outcome's own element is always mounted: where focus falls back to when the notice is gone too.
+    const outcomeBox = useRef<HTMLDivElement>(null);
     // A notice that went away and comes back is a new one.
     useEffect(() => {
         if (!recovery) setDismissed(false);
@@ -179,21 +210,40 @@ export function SettingsRecoveryNotice() {
         setBusy(action);
         setOutcome(null);
         let ok = false;
+        let keptAt: string | null | undefined;
         try {
             const result = await ACTIONS[action].run();
             ok = result?.success === true;
+            if (ok) keptAt = result.keptAt;
             if (!ok)
                 void ipc.logRendererWarning(`Settings recovery "${action}" failed: ${result?.error ?? 'no answer'}`);
         } catch (error) {
             void ipc.logRendererError(`Settings recovery "${action}" threw: ${errorMessage(error) || error}`);
         }
-        setOutcome({ action, ok });
+        setOutcome({ action, ok, keptAt });
         setConfirming(null);
         setBusy(null);
         if (ok) await refetch();
     };
 
-    const offered = (recovery && ACTIONS_FOR[recovery.code]) || [];
+    const offered = recovery ? actionsFor(recovery.code, settingsFile) : [];
+    // The text of an outcome or question, in the wording of this platform.
+    // (A text with no no-file wording is one of Re-import, which is not offered where there is no file.)
+    const worded = (key: string) =>
+        t(settingsFile ? key : (NO_FILE_TEXT.get(key) ?? /* istanbul ignore next -- see above */ key));
+    // What an outcome says: Start fresh names where settings.json was kept, or says there was none to keep.
+    const outcomeText = ({ action, ok, keptAt }: Outcome): string => {
+        if (!ok) return worded(ACTIONS[action].failed);
+        if (action === 'start-fresh' && keptAt === null) {
+            return t(settingsFile ? 'notice.recoveryStartFreshDoneNone' : 'notice.recoveryStartFreshDoneNoneAndroid');
+        }
+        return interp(worded(ACTIONS[action].done), { path: keptAt });
+    };
+    const dismissOutcome = () => {
+        const target = (outcome && actionButtons.current.get(outcome.action)) ?? heading.current ?? outcomeBox.current;
+        setOutcome(null);
+        target?.focus();
+    };
     const request = (action: ActionId) => {
         if (needsConfirm(action)) setConfirming(action);
         else void run(action);
@@ -204,14 +254,27 @@ export function SettingsRecoveryNotice() {
             {recovery && keys && (
                 <div role="alert" className="alert alert-warning mb-4 text-sm items-start">
                     <div className="flex-1 space-y-2">
-                        <p className="font-semibold">{t(keys.what)}</p>
+                        <p ref={heading} tabIndex={-1} className="font-semibold">
+                            {t(keys.what)}
+                        </p>
                         <p className="break-words">{interp(t(keys.why), { path: recovery.path })}</p>
                         <p>{t(keys.next)}</p>
+                        {recovery.settingsSetAside !== undefined && (
+                            <p className="break-words">
+                                {settingsFile
+                                    ? interp(t('notice.recoveryCorruptAside'), { path: recovery.settingsSetAside })
+                                    : t('notice.recoveryCorruptAsideAndroid')}
+                            </p>
+                        )}
                         {offered.length > 0 && (
                             <div className="flex flex-wrap gap-2 pt-1">
                                 {offered.map((action) => (
                                     <button
                                         key={action}
+                                        ref={(button) => {
+                                            if (button) actionButtons.current.set(action, button);
+                                            else actionButtons.current.delete(action);
+                                        }}
                                         type="button"
                                         className={`btn btn-sm ${ACTIONS[action].primary ? 'btn-primary' : 'btn-outline'}`}
                                         onClick={() => request(action)}
@@ -223,30 +286,42 @@ export function SettingsRecoveryNotice() {
                                 ))}
                             </div>
                         )}
-                        {busy && !confirming && (
-                            <p role="status" className="text-xs">
-                                {t('notice.recoveryWorking')}
-                            </p>
-                        )}
                     </div>
                     <button type="button" className="btn btn-sm" onClick={() => setDismissed(true)}>
                         {t('errors.dismiss')}
                     </button>
                 </div>
             )}
-            {outcome && (
-                <div
-                    role={outcome.ok ? 'status' : 'alert'}
-                    className={`alert ${outcome.ok ? 'alert-success' : 'alert-error'} mb-4 text-sm items-start`}
-                >
-                    <span className="flex-1">
-                        {t(outcome.ok ? ACTIONS[outcome.action].done : ACTIONS[outcome.action].failed)}
-                    </span>
-                    <button type="button" className="btn btn-sm" onClick={() => setOutcome(null)}>
+            {/* The outcome. Its live regions are mounted whether or not there is anything to say, so that what appears in
+                them is announced: progress and success politely, a failure assertively. The Dismiss button is not in
+                either, so that pressing it does not read the message out again. */}
+            <div
+                ref={outcomeBox}
+                tabIndex={-1}
+                className={`focus:outline-none ${
+                    outcome
+                        ? `alert ${outcome.ok ? 'alert-success' : 'alert-error'} mb-4 text-sm items-start`
+                        : busy && !confirming
+                          ? 'text-xs mb-2'
+                          : ''
+                }`}
+            >
+                {/* One element for the two regions: a DaisyUI alert is a grid, and an empty region of its own would take a cell of it. */}
+                <div className="flex-1">
+                    <div role="status" aria-live="polite" aria-atomic="true">
+                        {busy && !confirming && t('notice.recoveryWorking')}
+                        {outcome?.ok && outcomeText(outcome)}
+                    </div>
+                    <div aria-live="assertive" aria-atomic="true">
+                        {outcome && !outcome.ok && outcomeText(outcome)}
+                    </div>
+                </div>
+                {outcome && (
+                    <button type="button" className="btn btn-sm" onClick={dismissOutcome}>
                         {t('errors.dismiss')}
                     </button>
-                </div>
-            )}
+                )}
+            </div>
             {confirming && (
                 <ConfirmModal
                     isOpen
@@ -258,7 +333,7 @@ export function SettingsRecoveryNotice() {
                     confirmLabel={CONFIRMS[confirming].button}
                     workingLabel="notice.recoveryWorking"
                 >
-                    <p>{t(CONFIRMS[confirming].body)}</p>
+                    <p>{worded(CONFIRMS[confirming].body)}</p>
                 </ConfirmModal>
             )}
         </>

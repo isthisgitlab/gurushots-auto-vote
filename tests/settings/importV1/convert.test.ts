@@ -319,13 +319,31 @@ describe('one record per challenge', () => {
 });
 
 describe('references 1.x could not resolve', () => {
-    test('a rule naming a missing profile is listed with its index and the name', () => {
+    const rule = (number: number, title?: string) => ({ kind: 'rule', number, ...(title ? { title } : {}) });
+
+    test('a rule naming a missing profile is listed with its number (from 1), its title and the name', () => {
         expect(
             refs({
                 titleRules: [{ title: 'a' }, { title: 'b', profile: 'Night owl' }, { title: 'c', profile: 'Day' }],
                 profiles: { day: { exposure: 80 } },
             }),
-        ).toEqual(['rules[1].profile: "Night owl"']);
+        ).toEqual([{ holder: rule(2, 'b'), refers: 'profile', name: 'Night owl' }]);
+    });
+
+    test('a rule with no title is listed by its number only, and a long title is cut', () => {
+        expect(
+            refs({
+                titleRules: [
+                    { profile: 'Gone' },
+                    { title: 'x'.repeat(100), profile: 'Gone' },
+                    { title: '  ', profile: 'Gone' },
+                ],
+            }),
+        ).toEqual([
+            { holder: rule(1), refers: 'profile', name: 'Gone' },
+            { holder: rule(2, `${'x'.repeat(39)}…`), refers: 'profile', name: 'Gone' },
+            { holder: rule(3), refers: 'profile', name: 'Gone' },
+        ]);
     });
 
     test('a profile is found whatever its case and spacing, and a rule with no profile name is not a reference', () => {
@@ -351,7 +369,10 @@ describe('references 1.x could not resolve', () => {
                 titleRules: [{ profile: 'constructor' }, { profile: ' __PROTO__ ' }],
                 profiles: JSON.parse('{"constructor":{"exposure":80},"__proto__":{"exposure":70}}'),
             }),
-        ).toEqual(['rules[0].profile: "constructor"', 'rules[1].profile: " __PROTO__ "']);
+        ).toEqual([
+            { holder: rule(1), refers: 'profile', name: 'constructor' },
+            { holder: rule(2), refers: 'profile', name: ' __PROTO__ ' },
+        ]);
     });
 
     test('a scenario value naming a scenario that is not stored is listed in profiles, rules and challenges, not in the defaults', () => {
@@ -365,13 +386,14 @@ describe('references 1.x could not resolve', () => {
                 ],
                 perChallenge: { '123': { scenario: 'Plan B' }, 'a.b': { scenario: 'Gone' } },
                 scenarios: { 'plan a': { name: 'Plan A' } },
+                titlePins: { '123': 'Sunset' },
             }),
         ).toEqual([
-            'profiles["Night"].scenario: "plan b"',
-            'profiles["Odd \\"name\\""].scenario: "Gone"',
-            'rules[1].scenario: "Gone"',
-            'challenges.123.values.scenario: "Plan B"',
-            'challenges["a.b"].values.scenario: "Gone"',
+            { holder: { kind: 'profile', name: 'Night' }, refers: 'scenario', name: 'plan b' },
+            { holder: { kind: 'profile', name: 'Odd "name"' }, refers: 'scenario', name: 'Gone' },
+            { holder: rule(2, 'b'), refers: 'scenario', name: 'Gone' },
+            { holder: { kind: 'challenge', id: '123', title: 'Sunset' }, refers: 'scenario', name: 'Plan B' },
+            { holder: { kind: 'challenge', id: 'a.b' }, refers: 'scenario', name: 'Gone' },
         ]);
     });
 
@@ -394,19 +416,28 @@ describe('references 1.x could not resolve', () => {
                 perChallenge: { '1': { scenario: 'constructor' } },
                 scenarios: JSON.parse('{"constructor":{}}'),
             }),
-        ).toEqual(['challenges.1.values.scenario: "constructor"']);
+        ).toEqual([{ holder: { kind: 'challenge', id: '1' }, refers: 'scenario', name: 'constructor' }]);
     });
 
     test('a long name is cut and the report holds names, never other values', () => {
         const [entry] = refs({ perChallenge: { '1': { scenario: 'x'.repeat(200) } } });
-        expect(entry).toBe(`challenges.1.values.scenario: "${'x'.repeat(80)}"`);
+        expect(entry).toEqual({
+            holder: { kind: 'challenge', id: '1' },
+            refers: 'scenario',
+            name: `${'x'.repeat(79)}…`,
+        });
         expect(refs({ perChallenge: { '1': { scenario: 'Gone', exposure: 99, autoFill: true } } })).toEqual([
-            'challenges.1.values.scenario: "Gone"',
+            { holder: { kind: 'challenge', id: '1' }, refers: 'scenario', name: 'Gone' },
         ]);
     });
 
-    test('control characters in a name are escaped, so an entry stays one line', () => {
-        const [entry] = refs({ titleRules: [{ profile: 'a\nb\u0007' }] });
-        expect(entry).toBe('rules[0].profile: "a\\nb\\u0007"');
+    test('a challenge id and its title are cut too, and a title of blanks is none', () => {
+        // (An id that is a small integer comes first in an object's order.)
+        const [blank, long] = refs({
+            perChallenge: { ['9'.repeat(100)]: { scenario: 'Gone' }, '2': { scenario: 'Gone' } },
+            titlePins: { ['9'.repeat(100)]: 'T'.repeat(200), '2': '  ' },
+        });
+        expect(long).toMatchObject({ holder: { id: `${'9'.repeat(79)}…`, title: `${'T'.repeat(79)}…` } });
+        expect(blank).toEqual({ holder: { kind: 'challenge', id: '2' }, refers: 'scenario', name: 'Gone' });
     });
 });

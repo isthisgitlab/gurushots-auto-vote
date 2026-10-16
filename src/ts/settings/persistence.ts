@@ -9,6 +9,7 @@
  */
 
 import * as logger from '../logger';
+import * as runtime from '../runtime';
 import { schemaEntry } from './schema';
 import { getSaveDroppedCause, isSaveDropped, legacyStorage, onSaveDroppedChange, storage } from './storage';
 import type { QueuedWriteOutcome, SaveDroppedCause } from './storage';
@@ -25,12 +26,13 @@ import {
 import { importWhenAbsent, reimportLegacyFile, retryLegacyImport, startFreshConfig } from './legacyImport';
 import type { ImportFailure, ImportOutcome } from './legacyImport';
 import { updateImported } from './importedRecord';
-import { mirrorSettings } from './formatOneMirror';
+import { mirrorSettings, setAsideLegacy } from './formatOneMirror';
+import type { SignInAdoption } from './formatOneMirror';
 import { onTitlePinsChange } from './titlePins';
 import { isPlainObject } from '../plainObject';
 import { oneLine } from '../format/logSafe';
 
-import type { ConfigApp, ConfigAuthV2, ConfigV2 } from '../types/config';
+import type { ConfigApp, ConfigAuthV2, ConfigV2, ImportRef } from '../types/config';
 import type { WindowBounds, WindowType } from '../types/settings';
 
 // The last file text found to hold only valid values, so an unchanged file is
@@ -45,8 +47,11 @@ let lastWarning: string | null = null;
  *   - settings-restored (notice): `config.json` was not a parseable configuration; it sits at `path`, set aside, and the
  *     configuration was restored from `settings.json`, which the app keeps current. Saves work.
  *   - settings-corrupt (notice): `config.json` is not a parseable configuration; it sits at `path`, set aside, and there
- *     was no usable `settings.json` to restore from. Defaults apply and saves work. It is never replaced by an import
- *     unasked (`reimportFromV1` is the explicit way).
+ *     was no usable `settings.json` to restore from (none, or one that does not import). Defaults apply and saves work,
+ *     and the state stays this one for the process, however often it is read. It is never replaced by an import
+ *     unasked (`reimportFromV1` is the explicit way). A `settings.json` that does not import is set aside, as
+ *     `settings.json.unimportable-<time>`, before the first save mirrors over it: `settingsSetAside` is where it went
+ *     (a path on a desktop, the preference key where there is no file), present from then on.
  *   - settings-unreadable (blocking): `config.json` cannot be read, or cannot be set aside; `path` is the configuration
  *     file. Saves are refused until it can be read.
  *   - settings-import-failed (blocking): there is no `config.json` and the `settings.json` at `path` could not be
@@ -58,6 +63,7 @@ type SettingsRecovery = {
     code: 'settings-restored' | 'settings-corrupt' | 'settings-unreadable' | 'settings-import-failed';
     path: string;
     blocking: boolean;
+    settingsSetAside?: string;
 };
 
 /**
@@ -66,6 +72,9 @@ type SettingsRecovery = {
  * settings, which are in use; `path` is where they live and `cause` why the save was given up. Cleared by the next save
  * that lands.
  */
+/** What the import left unresolved: `refsBlocked` holds a reference as the user knows its parts, or the text an earlier build stored. */
+type ImportReport = { at: string; refsBlocked: Array<string | ImportRef>; acknowledged: boolean };
+
 type SettingsSaveDropped = { code: 'settings-save-dropped'; path: string; cause: SaveDroppedCause };
 
 // Set while the stored settings cannot be used and must not be overwritten; cleared by the next load that gets through.
@@ -85,6 +94,17 @@ let importFailure: ImportFailure | null = null;
 let importSettled = false;
 // Whether this process has made sure `settings.json` is the mirror of the configuration (see _verifyMirror).
 let mirrorVerified = false;
+// Whether the `settings.json` the configuration could not be restored from is one the import failed on (it is damaged,
+// cannot be converted or read), so the mirror must set it aside before it writes over it: it is what the notice tells
+// the user to look at.
+let legacyUnusable = false;
+// Where the unusable `settings.json` was set aside (a path; the preference key where there is no file), once it was
+// (in the Android window, once the queued write that does it has landed).
+let legacySetAside: string | null = null;
+// Whether the mirror adopted a sign-in an older build changed while _verifyMirror's own mirror ran, which makes the load
+// that is answering out of date (set by _adoptSignIn, read and cleared by _verifyMirror; where the mirror is queued
+// the answer is never out of date this way, the next read has it).
+let signInTakenBack = false;
 
 /**
  * Default configuration for a missing or unreadable file, logging which case applied.
@@ -146,6 +166,8 @@ const _recoverCorrupt = (raw: string, reason: string): ConfigV2 => {
     lastQuarantinedRaw = raw;
     corruptBackupPath = moved.path;
     restoredFromMirror = false;
+    // A new episode: the copy an earlier one set aside is not this one's.
+    legacySetAside = null;
     blocked = null;
     logger
         .withCategory('settings')
@@ -165,7 +187,18 @@ const _recoverCorrupt = (raw: string, reason: string): ConfigV2 => {
  */
 const _restoreFromMirror = (): ConfigV2 | null => {
     const outcome = importWhenAbsent(_importFailedLater);
-    if (!outcome.ok || (outcome.kind !== 'recovered' && outcome.kind !== 'adopted')) return null;
+    if (!outcome.ok) {
+        // Defaults are in use and saves work. That is settled for the process (as a failed import is, see
+        // _loadWithoutConfig): a later read answers the same, instead of turning into a blocked import. The
+        // settings.json that could not be restored from is what the notice tells the user to look at, so the first
+        // save does not mirror over it (see _mirror).
+        if (outcome.reason !== 'not-loaded') {
+            importFailure = outcome;
+            legacyUnusable = true;
+        }
+        return null;
+    }
+    if (outcome.kind !== 'recovered' && outcome.kind !== 'adopted') return null;
     const parsed = _parseSettings(outcome.text);
     return parsed.ok ? _interpretSettings(outcome.text, parsed.value) : null;
 };
@@ -232,6 +265,9 @@ const _loadWithoutConfig = (): ConfigV2 => {
         return _loadDefaults('No settings file found, loaded default settings with keys');
     }
     const outcome = importWhenAbsent(_importFailedLater);
+    // Stores not read yet (the Android window before it hydrates): nothing is wrong with the settings, they are just
+    // not there to be read; the defaults answer, and the read is made again once they are.
+    if (!outcome.ok && outcome.reason === 'not-loaded') return getDefaultSettings();
     if (!outcome.ok) return _importFailed(outcome);
     if (outcome.kind === 'recovered') {
         // A damaged configuration set aside earlier whose restore had to wait (the stores were not read yet) is restored now.
@@ -263,8 +299,7 @@ const loadSettings = (): ConfigV2 => {
         return _blockWrites('settings-unreadable', errorMessage(error) ?? 'unknown error', storage.location());
     }
     const config = settingsData ? _loadFromText(settingsData) : _loadWithoutConfig();
-    if (blocked === null) _verifyMirror();
-    return config;
+    return blocked === null ? _verifyMirror(config) : config;
 };
 
 /**
@@ -277,6 +312,7 @@ const getSettingsRecovery = (): SettingsRecovery | null => {
         code: restoredFromMirror ? 'settings-restored' : 'settings-corrupt',
         path: corruptBackupPath,
         blocking: false,
+        ...(!restoredFromMirror && legacySetAside !== null ? { settingsSetAside: legacySetAside } : {}),
     };
 };
 
@@ -287,42 +323,121 @@ const getSettingsSaveDropped = (): SettingsSaveDropped | null =>
     isSaveDropped() ? { code: 'settings-save-dropped', path: storage.location(), cause: getSaveDroppedCause() } : null;
 
 /**
- * Brings `settings.json` up to date with the configuration, unless the stored settings are not usable: nothing is
- * mirrored from them (and over what they leave in `settings.json`).
+ * Sets the `settings.json` that does not import aside, once a configuration is stored for the mirror to write over it
+ * (as `settings.json.unimportable-<time>`: the file the notice told the user to fix is never overwritten). The
+ * background service cannot (it has no files and no keys to list): the app window does it, and the service writes
+ * nothing over the file meanwhile.
+ *
+ * @returns whether the mirror may go on: false when it could not be set aside, and nothing is written over it
  */
-const _mirror = (landed?: Promise<QueuedWriteOutcome>) => {
-    if (!blocked) mirrorSettings(landed);
+const _setAsideUnusableLegacy = (): boolean => {
+    if (!storage.peekRaw()) return true;
+    if (runtime.isHeadlessService()) {
+        logger
+            .withCategory('settings')
+            .debug('settings.json does not import and only the app window can set it aside, so it is left as it is');
+        return false;
+    }
+    const aside = setAsideLegacy({ asCopy: true });
+    if (!aside.ok) {
+        logger
+            .withCategory('settings')
+            .warning(`settings.json could not be set aside, so it is not overwritten: ${aside.error}`);
+        return false;
+    }
+    legacyUnusable = false;
+    // Where the write is only queued, the notice says where it went once it has (see _mirror).
+    if (!aside.queued) legacySetAside = aside.kept ?? null;
+    return true;
 };
+
+/**
+ * What the mirror does when `settings.json` holds a sign-in this build did not write (a logout or an account switch an
+ * older build made while this one ran, or before it started): the sign-in is the user's decision, not something an older
+ * build's schema can get wrong, so it is saved into the configuration (which the mirror then writes from), and nothing
+ * else in `settings.json` is ever taken back. Not while the configuration in use is the defaults of a damaged one.
+ */
+const _adoptSignIn = (found: Partial<ConfigAuthV2>): SignInAdoption => {
+    if (corruptBackupPath !== null && !restoredFromMirror) return { outcome: 'declined' };
+    const saved = _saveChangeDetailed((current) => ({ auth: { ...current.auth, ...found } }), false);
+    if (!saved.ok) return { outcome: 'failed' };
+    signInTakenBack = true;
+    // Said once it is stored: where the write is only queued, it may yet fail.
+    const say = () =>
+        logger.withCategory('settings').info('The sign-in in settings.json was changed by an older build; it is kept');
+    if (saved.landed) {
+        void saved.landed.then((outcome) => {
+            if (outcome !== 'failed') say();
+        });
+    } else say();
+    return { outcome: 'adopted', landed: saved.landed };
+};
+
+/**
+ * Brings `settings.json` up to date with the configuration, unless the stored settings are not usable: nothing is
+ * mirrored from them (and over what they leave in `settings.json`). A `settings.json` that does not import is set aside
+ * first.
+ */
+const _mirror = (landed?: Promise<QueuedWriteOutcome | undefined>) => {
+    if (blocked || (legacyUnusable && !_setAsideUnusableLegacy())) return;
+    mirrorSettings(landed, {
+        adoptSignIn: _adoptSignIn,
+        onSetAside: (key) => {
+            legacySetAside = key;
+        },
+    });
+};
+
+/**
+ * Whether what a read of the stored settings answers is what is stored (false in the Android window before it
+ * hydrates, and in the service while no bridge answers).
+ */
+const _storesLoaded = (): boolean => storage.isLoaded() && legacyStorage.isLoaded();
 
 /**
  * Once per process (and again after a recovery action), the first time the stored settings are usable: `settings.json`
  * is made the mirror of the configuration when it is not (a start after an older build wrote it, or after a build that
- * did not keep it current), so no start leaves an older build on stale settings and a signed-out one. Where the
- * stores are not read yet (the Android window before it hydrates) it looks again on a later call.
+ * did not keep it current), so no start leaves an older build on stale settings; a sign-in an older build changed in it
+ * is adopted first (see _adoptSignIn, which the mirror asks at every write). Where the stores are not read yet (the
+ * Android window before it hydrates) it looks again on a later call.
+ *
+ * @returns the configuration that was loaded, or the one stored after a sign-in was adopted
  */
-const _verifyMirror = () => {
-    if (mirrorVerified || !storage.isLoaded() || !legacyStorage.isLoaded()) return;
+const _verifyMirror = (config: ConfigV2): ConfigV2 => {
+    if (mirrorVerified || !_storesLoaded()) return config;
     mirrorVerified = true;
-    mirrorSettings(storage.flush().then(() => undefined));
+    signInTakenBack = false;
+    _mirror(storage.flush().then(() => undefined));
+    if (!signInTakenBack) return config;
+    signInTakenBack = false;
+    return loadSettings();
 };
 
 // A change of the title pins is a change of what settings.json holds.
 onTitlePinsChange(() => _mirror());
 
+/** What saving the configuration came to: whether it was written, and where the write is only queued (the Android app window) how it ends. */
+type Persisted = { ok: boolean; landed?: Promise<QueuedWriteOutcome> };
+
 /**
  * Write the whole configuration, unless the stored settings are not usable (writing then would erase them); then the
- * mirror, once the write has landed.
+ * mirror, once the write has landed (unless the caller is the mirror itself).
  */
-const _persist = (config: ConfigV2): boolean => {
+const _persist = (config: ConfigV2, withMirror: boolean): Persisted => {
+    if (!_storesLoaded()) {
+        // What this was built on is the defaults a read answered before the stored settings were there: saving would replace them.
+        logger.withCategory('settings').warning('Not saving settings: the stored settings have not been read yet');
+        return { ok: false };
+    }
     if (blocked) {
         logger
             .withCategory('settings')
             .error(`Not saving settings: ${blocked.code}; the stored settings at ${blocked.path} are left as they are`);
-        return false;
+        return { ok: false };
     }
     const written = storage.write(JSON.stringify({ ...config, version: 2 }, null, 2));
-    if (written.ok) _mirror(written.landed);
-    return written.ok;
+    if (written.ok && withMirror) _mirror(written.landed);
+    return written;
 };
 
 /**
@@ -339,24 +454,27 @@ const _refusedKey = (settings: Partial<ConfigV2>): string | undefined => {
 /**
  * Save what `change` makes of the configuration as it is stored now: it is loaded once, here, and the change is made on
  * it, so what another writer saved between two reads is not written back over. A key that names an Object.prototype
- * member, or a value its schema entry or range rejects, refuses the whole save.
+ * member, or a value its schema entry or range rejects, refuses the whole save. `withMirror` false is for the mirror's
+ * own call, which writes `settings.json` itself once this is stored.
  */
-const _saveChange = (change: (current: ConfigV2) => Partial<ConfigV2>): boolean => {
+const _saveChangeDetailed = (change: (current: ConfigV2) => Partial<ConfigV2>, withMirror: boolean): Persisted => {
     try {
         const current = loadSettings();
         const changed = change(current);
         const refused = _refusedKey(changed);
         if (refused !== undefined) {
             logger.withCategory('settings').error(`Invalid setting not saved: ${oneLine(refused)}`, null);
-            return false;
+            return { ok: false };
         }
         // Write via storage adapter (sync fs on Electron/CLI; cache + async write-behind on Capacitor)
-        return _persist({ ...current, ...changed });
+        return _persist({ ...current, ...changed }, withMirror);
     } catch (error) {
         logger.withCategory('settings').error('Error saving settings:', error);
-        return false;
+        return { ok: false };
     }
 };
+
+const _saveChange = (change: (current: ConfigV2) => Partial<ConfigV2>): boolean => _saveChangeDetailed(change, true).ok;
 
 /**
  * Save the configuration: the containers given replace the stored ones whole, the others stay. Callers load, change
@@ -438,6 +556,8 @@ const _recovered = (run: () => ImportOutcome): boolean => {
             importFailure = null;
             importSettled = false;
             mirrorVerified = false;
+            legacyUnusable = false;
+            legacySetAside = null;
             blocked = null;
             return true;
         }
@@ -462,35 +582,70 @@ const _recovered = (run: () => ImportOutcome): boolean => {
 const retryImport = (): boolean => _recovered(() => retryLegacyImport(_importFailedLater));
 
 /**
- * Begin with a default configuration instead of importing: `settings.json` is kept as `settings.json.original` before
- * the mirror writes over it, and is not imported later unasked.
+ * Begin with a default configuration instead of importing: `settings.json` is kept (as `settings.json.original`, or as
+ * `settings.json.unimportable-<time>` when that is taken) before the mirror writes over it, and is not imported later
+ * unasked.
  *
- * @returns whether the configuration was written
+ * @returns whether the configuration was written, and where `settings.json` was kept (`keptAt`: null when there was none
+ *   to keep); in the Android window, where the copy is written later, `landed` says under which key it was
  */
-const startFresh = (): boolean => _recovered(() => startFreshConfig(_importFailedLater));
+const startFreshDetailed = (): { ok: boolean; keptAt: string | null; landed?: Promise<string | null> } => {
+    let keptAt: string | null = null;
+    let landed: Promise<string | null> | undefined;
+    const ok = _recovered(() =>
+        startFreshConfig(_importFailedLater, (kept) => {
+            if (typeof kept === 'string') keptAt = kept;
+            else landed = kept;
+        }),
+    );
+    return { ok, keptAt, ...(landed === undefined ? {} : { landed }) };
+};
+
+/**
+ * `startFreshDetailed`, for the caller that wants to know only whether the configuration was written.
+ */
+const startFresh = (): boolean => startFreshDetailed().ok;
 
 /**
  * Import `settings.json` again on request: the configuration in use is set aside the way a damaged one is
- * (`config.json.corrupt-<time>`) and the import is saved in its place. `settings.json` is the mirror of what was in
- * use, sign-in state included, unless an older build changed it since.
+ * (`config.json.corrupt-<time>`) and the import is saved in its place, the sign-in included. `settings.json` is the
+ * mirror of what was in use, unless an older build changed it since.
  *
- * @returns whether the import was saved
+ * @returns whether the import was saved, and where the configuration that was in use was set aside (null: none was)
  */
-const reimportFromV1 = (): boolean => {
-    const recovered = _recovered(() => reimportLegacyFile(_importFailedLater));
+const reimportFromV1Detailed = (): { ok: boolean; setAside: string | null } => {
+    let setAside: string | null = null;
+    // In the damaged-configuration state the file to fix is the copy kept of the unusable settings.json in this episode,
+    // once there is one (a file: where there are none, the key of one is not a path to read), else settings.json itself.
+    const copy = corruptBackupPath !== null && !restoredFromMirror && !runtime.isCapacitor() ? legacySetAside : null;
+    const ok = _recovered(() =>
+        reimportLegacyFile(
+            _importFailedLater,
+            (path) => {
+                setAside = path;
+            },
+            copy,
+        ),
+    );
     // The damaged configuration the notice was about is not the one in use any more.
-    if (recovered) {
+    if (ok) {
         corruptBackupPath = null;
         restoredFromMirror = false;
+        legacySetAside = null;
     }
-    return recovered;
+    return { ok, setAside };
 };
+
+/**
+ * `reimportFromV1Detailed`, for the caller that wants to know only whether the import was saved.
+ */
+const reimportFromV1 = (): boolean => reimportFromV1Detailed().ok;
 
 /**
  * What the import left unresolved, or null when the configuration was not imported from a `settings.json`. The
  * report stays after it is acknowledged (About and data shows it).
  */
-const getImportReport = (): { at: string; refsBlocked: string[]; acknowledged: boolean } | null => {
+const getImportReport = (): ImportReport | null => {
     const { imported } = loadSettings();
     return imported
         ? { at: imported.at, refsBlocked: [...imported.report.refsBlocked], acknowledged: imported.acknowledged }
@@ -521,7 +676,9 @@ export {
     getWindowBounds,
     retryImport,
     startFresh,
+    startFreshDetailed,
     reimportFromV1,
+    reimportFromV1Detailed,
     getImportReport,
     acknowledgeImportReport,
 };

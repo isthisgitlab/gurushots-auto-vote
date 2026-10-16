@@ -154,6 +154,23 @@ const dropInvalidAuth = (config: ConfigV2, dropped: string[]) => {
     }
 };
 
+const isImportRefHolder = (value: unknown): boolean => {
+    if (!isPlainObject(value)) return false;
+    const optionalText = (text: unknown) => text === undefined || typeof text === 'string';
+    if (value.kind === 'rule') return Number.isInteger(value.number) && optionalText(value.title);
+    if (value.kind === 'profile') return typeof value.name === 'string';
+    return value.kind === 'challenge' && typeof value.id === 'string' && optionalText(value.title);
+};
+
+// An entry of a report: a structured reference, or the text an earlier build stored.
+const isImportRef = (value: unknown): boolean =>
+    typeof value === 'string' ||
+    (isPlainObject(value) &&
+        isImportRefHolder(value.holder) &&
+        (value.refers === 'profile' || value.refers === 'scenario') &&
+        typeof value.name === 'string' &&
+        (value.invalid === undefined || value.invalid === true));
+
 /**
  * Whether a stored `imported` record has the shape the importer writes (a record an earlier build wrote also holds a
  * `sha256`, which is accepted and ignored).
@@ -165,7 +182,7 @@ const isImportedRecord = (value: unknown): value is ImportedV2 =>
     typeof value.acknowledged === 'boolean' &&
     isPlainObject(value.report) &&
     Array.isArray(value.report.refsBlocked) &&
-    value.report.refsBlocked.every((ref) => typeof ref === 'string');
+    value.report.refsBlocked.every(isImportRef);
 
 const dropInvalidContainers = (config: ConfigV2, dropped: string[]) => {
     const defaults = getDefaultSettings();

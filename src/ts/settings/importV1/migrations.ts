@@ -1,7 +1,7 @@
 /**
- * The eight load-time migrations of a 1.x settings blob, frozen, in the 1.x order. Each one is gated by a one-time
- * flag in the blob, mutates the merged blob in place and reports whether it changed anything. A copy as of the last
- * 1.x release; the importer runs them in memory and never writes the result back. Written as they ran in 1.x — a
+ * The eight load-time migrations of a format 1 settings blob, frozen, in the format 1 order. Each one is gated by a one-time
+ * flag in the blob, mutates the merged blob in place and reports whether it changed anything. Frozen as the
+ * last build that wrote settings format 1 ran them; the importer runs them in memory and never writes the result back. Written as they ran in format 1 — a
  * hand-edited blob a pass cannot handle throws, which the importer reports as a failed migration.
  */
 
@@ -11,7 +11,7 @@ import { sanitizeBeforeEndList, sanitizeFillSchedule, sanitizeTimeOfDayList } fr
 
 import type { V1Blob, V1Values } from './types';
 
-// The one-time flags the passes set. They are 1.x bookkeeping: the converted config carries none of them.
+// The one-time flags the passes set. They are format 1 bookkeeping: the converted config carries none of them.
 const V1_MIGRATION_FLAGS = [
     '_timeUnitMigratedV1',
     '_emergencyFillTimeMigratedV1',
@@ -191,7 +191,7 @@ const migrateFinalWindowExposureRename = (blob: V1Blob): boolean => {
     return true;
 };
 
-// Category rules (a type / photo-count rule) move into the title rules, which are put in the 1.x default order;
+// Category rules (a type / photo-count rule) move into the title rules, which are put in the format 1 default order;
 // each category rule is appended as a title-less rule, most conditions first, below every title rule.
 const CATEGORY_RULE_KEYS = ['type', 'pics', 'autoJoinWithinHoursOfEnd', 'autoJoinAfterPercentElapsed'];
 
@@ -223,7 +223,7 @@ const migrateCategoryRulesIntoChallengeRules = (blob: V1Blob): boolean => {
 };
 
 /**
- * Run every migration over the merged blob, in place, in the 1.x order. The order matters: the interval-to-schedule
+ * Run every migration over the merged blob, in place, in the format 1 order. The order matters: the interval-to-schedule
  * pass precedes the schedule-bounds pass, the scalar-to-list pass its bounds pass.
  */
 const runV1Migrations = (blob: V1Blob): void => {

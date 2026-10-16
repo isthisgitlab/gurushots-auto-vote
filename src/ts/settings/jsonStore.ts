@@ -45,11 +45,11 @@ const settleStores = async (): Promise<void> => {
 };
 
 /** Writes a value made from a store's current one at once (not behind a cache); `failed` when the write threw. */
-const writeBeforeAnswering = async (
+const writeNow = (
     prefKey: string,
     store: { readRaw: () => string | null; writeRaw: (data: string) => void },
     update: (current: string | null) => string | null,
-): Promise<ThroughResult> => {
+): ThroughResult => {
     try {
         const data = update(store.readRaw());
         if (data === null) return 'aborted';
@@ -187,14 +187,29 @@ const createJsonStore = ({
                 return false;
             }
         },
+        /**
+         * `updateThrough` where the store is read and written in one step (a desktop, the background service): the
+         * write is made when this returns, and its outcome is the answer. Null where the write is only queued (the
+         * Android app window): use `updateThrough`.
+         */
+        updateNow: (update: (current: string | null) => string | null): ThroughResult | null => {
+            if (writesRefused) return 'failed';
+            if (runtime.isHeadlessService() && shared) return headlessUpdate(prefKey, update);
+            return runtime.isCapacitor() && !runtime.isHeadlessService() ? null : writeNow(prefKey, store, update);
+        },
         /** Writes a value made from the current one that nothing reads before it is saved (see RawJsonStore). */
         updateThrough: (update: (current: string | null) => string | null): Promise<ThroughResult> => {
-            if (writesRefused) return Promise.resolve('failed');
-            if (runtime.isHeadlessService() && shared) return Promise.resolve(headlessUpdate(prefKey, update));
-            return runtime.isCapacitor() && !runtime.isHeadlessService()
-                ? writes.updateThrough(update)
-                : writeBeforeAnswering(prefKey, store, update);
+            const now = store.updateNow(update);
+            return now === null ? writes.updateThrough(update) : Promise.resolve(now);
         },
+        /**
+         * What is stored now, where the cache of the Android app window may be behind it (the background service
+         * writes the key too): read from Preferences, the cache left as it is. The same as `readRaw` elsewhere.
+         */
+        peekStored: async (): Promise<string | null> =>
+            runtime.isCapacitor() && !runtime.isHeadlessService()
+                ? (await getCapacitorPreferences().get({ key: prefKey })).value
+                : store.readRaw(),
         /**
          * Await to guarantee the write-behind queue has drained. A `strict` store rejects when a write since the last
          * flush did not persist, so a caller that waits for it can tell.

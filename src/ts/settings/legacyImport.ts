@@ -7,14 +7,13 @@
  */
 
 import { errorMessage } from '../errorMessage';
-import { acquireUnlockLock } from '../joinStateStore';
-import { acquireWithin } from '../lockWait';
 import { getDefaultSettings } from './defaults';
 import { importV1Settings } from './importV1';
 import { isImportMarked, isMirrorStarted, keptImportedRecord, markImportDone } from './importMarker';
 import { invalidReferences } from './importReport';
 import { setAsideLegacy } from './formatOneMirror';
 import { schemaEntry } from './schema';
+import { acquireSettingsLock } from './settingsLock';
 import { legacyStorage, storage } from './storage';
 import { importTitlePins } from './titlePins';
 
@@ -24,7 +23,6 @@ import type { QueuedWriteOutcome } from './storage';
 // The lock every import (and every start-fresh or re-import) runs under: two processes sharing the user-data directory
 // (the app and the CLI) never import at once. Android has no file lock; there the native compare-and-write of the
 // configuration decides which context is first.
-const IMPORT_LOCK_ID = 'config-import';
 const LOCK_WAIT_MS = 2000;
 
 /** Why the `settings.json` could not be put into a configuration. */
@@ -51,10 +49,7 @@ type LateFailure = (failure: ImportFailure) => void;
 const failure = (reason: ImportFailureReason, detail: string): ImportFailure => ({ ok: false, reason, detail });
 
 const underImportLock = (run: () => ImportOutcome): ImportOutcome => {
-    const lock = acquireWithin(
-        () => acquireUnlockLock(IMPORT_LOCK_ID, { category: 'settings', internal: true }),
-        LOCK_WAIT_MS,
-    );
+    const lock = acquireSettingsLock(LOCK_WAIT_MS);
     if (lock === 'busy') return failure('busy', 'another process is importing the settings');
     if (lock === 'unavailable') return failure('busy', 'the import lock cannot be taken');
     try {
@@ -114,7 +109,9 @@ const importLegacyText = (
         ? (keptImportedRecord() ?? undefined)
         : {
               at: new Date().toISOString(),
-              report: { refsBlocked: [...refsBlocked, ...invalidReferences(result.config, refsBlocked)] },
+              report: {
+                  refsBlocked: [...refsBlocked, ...invalidReferences(result.config, refsBlocked, result.titlePins)],
+              },
               acknowledged: false,
           };
     const refused = replacing?.() ?? null;
@@ -193,49 +190,81 @@ const importWhenAbsent = (onLateFailure: LateFailure): ImportOutcome =>
 
 /**
  * Write a default configuration and the marker. `settings.json` is set aside first (as `settings.json.original`, or where
- * that is taken as a copy of its own named by the time), before anything is mirrored over it; where it cannot be set
- * aside nothing is written. A configuration that is there already is left as it is.
+ * that is taken as a copy of its own named by the time; `onKept` is told where, or in the Android window, where it will
+ * be, once it has landed), before anything is mirrored over it;
+ * where it cannot be set aside nothing is written. A configuration that is there already is left as it is.
  */
-const startFreshConfig = (onLateFailure: LateFailure): ImportOutcome =>
+const startFreshConfig = (
+    onLateFailure: LateFailure,
+    onKept: (kept: string | Promise<string | null>) => void,
+): ImportOutcome =>
     underImportLock(() => {
         const existing = storage.readRaw();
         if (existing) return { ok: true, kind: 'adopted', text: existing };
         const aside = setAsideLegacy();
         if (!aside.ok) return failure('write-failed', `settings.json could not be set aside: ${aside.error}`);
+        // (Nothing is kept when there was no settings.json.)
+        const kept = aside.landed ?? aside.kept;
+        if (kept !== undefined) onKept(kept);
         const written = storage.writeIfAbsent(JSON.stringify(getDefaultSettings(), null, 2));
         if (written.outcome === 'failed') return failure('write-failed', 'config.json could not be saved');
         whenStored(written.outcome === 'saved' ? written : {}, () => markImportDone(null), onLateFailure);
         return { ok: true, kind: 'fresh' };
     });
 
+/** The text of the copy kept of the settings.json that did not import (see importOnRequest). */
+const readCopyText = (copy: string): { ok: true; raw: string | null } | ImportFailure => {
+    try {
+        return { ok: true, raw: legacyStorage.readCopy(copy) };
+    } catch (error) {
+        return failure('unreadable', errorMessage(error) ?? 'unknown error');
+    }
+};
+
 /**
  * Import `settings.json` on request, whatever the marker and a set-aside configuration say (the automatic import ran,
- * or was refused, and this is the user's call). With `replacing` the configuration in use is kept apart the way a
- * damaged one is (`config.json.corrupt-<time>`) once `settings.json` has converted; without it a configuration that is
- * there is left as it is. A `settings.json` that cannot be converted leaves the configuration as it is.
+ * or was refused, and this is the user's call). With `setAside` the configuration in use is kept apart the way a
+ * damaged one is (`config.json.corrupt-<time>`, and `setAside` is told where) once `settings.json` has converted;
+ * without it a configuration that is there is left as it is. A `settings.json` that cannot be converted leaves the
+ * configuration as it is. `copy`: the path of the copy kept of an unimportable `settings.json` in this episode (the
+ * file the user was told to fix): the text comes from it, else from `settings.json`.
  */
-const importOnRequest = (onLateFailure: LateFailure, replacing: boolean): ImportOutcome =>
+const importOnRequest = (
+    onLateFailure: LateFailure,
+    setAside: ((path: string) => void) | null,
+    copy: string | null,
+): ImportOutcome =>
     underImportLock(() => {
         const existing = storage.readRaw();
-        if (existing && !replacing) return { ok: true, kind: 'adopted', text: existing };
-        const legacy = readLegacyText();
+        if (existing && !setAside) return { ok: true, kind: 'adopted', text: existing };
+        const legacy = copy === null ? readLegacyText() : readCopyText(copy);
         if (!legacy.ok) return legacy;
         if (legacy.raw === null) return failure('unreadable', 'settings.json does not exist');
         return importLegacyText(legacy.raw, onLateFailure, {
-            replacing: existing
-                ? () => {
-                      const moved = storage.quarantineRaw(existing);
-                      return moved.ok ? null : failure('unreadable', moved.error);
-                  }
-                : undefined,
+            replacing:
+                existing && setAside
+                    ? () => {
+                          const moved = storage.quarantineRaw(existing);
+                          if (moved.ok) setAside(moved.path);
+                          return moved.ok ? null : failure('unreadable', moved.error);
+                      }
+                    : undefined,
         });
     });
 
 /** Import `settings.json` again after an import (or a re-import) failed, as the explicit import it was. */
-const retryLegacyImport = (onLateFailure: LateFailure): ImportOutcome => importOnRequest(onLateFailure, false);
+const retryLegacyImport = (onLateFailure: LateFailure): ImportOutcome => importOnRequest(onLateFailure, null, null);
 
-/** Import `settings.json` again over the configuration in use. */
-const reimportLegacyFile = (onLateFailure: LateFailure): ImportOutcome => importOnRequest(onLateFailure, true);
+/**
+ * Import `settings.json` again over the configuration in use, which is set aside (`setAside` is told where). `copy`: the
+ * path of the copy kept of the settings.json that did not import in this episode, which the user fixed in place and is
+ * the one to import; a copy of an earlier episode is never taken for it.
+ */
+const reimportLegacyFile = (
+    onLateFailure: LateFailure,
+    setAside: (path: string) => void,
+    copy: string | null,
+): ImportOutcome => importOnRequest(onLateFailure, setAside, copy);
 
 export type { ImportFailure, ImportOutcome };
 export { importWhenAbsent, reimportLegacyFile, retryLegacyImport, startFreshConfig };

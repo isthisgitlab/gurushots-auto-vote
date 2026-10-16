@@ -124,16 +124,19 @@ describe('after the import of a settings.json (real fs)', () => {
             const report = settings.getImportReport();
 
             expect(report).toEqual({ at: expect.any(String), refsBlocked: expect.any(Array), acknowledged: false });
+            const rule = (number: number, title: string) => ({ kind: 'rule' as const, number, title });
+            const challenge = (id: string) => ({ kind: 'challenge' as const, id });
             expect(report?.refsBlocked).toEqual([
                 // what the importer finds: names that are not stored
-                'rules[0].profile: "Ghost"',
-                'challenges.102.values.scenario: "Ghost"',
+                // (the rules are stored in the order the file's migrations leave them: Street Life first)
+                { holder: rule(1, 'Street Life'), refers: 'profile', name: 'Ghost' },
+                { holder: challenge('102'), refers: 'scenario', name: 'Ghost' },
                 // what the live validators refuse: a profile that fails whole-set validation, and stored scenarios that are not valid
-                'profiles["Armed"].scenario: "Broken"',
-                'rules[1].scenario: "Broken"',
-                'rules[1].profile: "Nulls"',
-                'challenges.101.values.scenario: "Broken"',
-                'challenges["a b"].values.scenario: "broken"',
+                { holder: { kind: 'profile', name: 'Armed' }, refers: 'scenario', name: 'Broken', invalid: true },
+                { holder: rule(2, 'Night Sky'), refers: 'scenario', name: 'Broken', invalid: true },
+                { holder: rule(2, 'Night Sky'), refers: 'profile', name: 'Nulls', invalid: true },
+                { holder: challenge('101'), refers: 'scenario', name: 'Broken', invalid: true },
+                { holder: challenge('a b'), refers: 'scenario', name: 'broken', invalid: true },
             ]);
             // The document is stored as listed, and nothing of the values is in it.
             expect(JSON.stringify(stored(configFile).imported)).not.toContain('exposureTarget');
@@ -160,7 +163,7 @@ describe('after the import of a settings.json (real fs)', () => {
             expect(settings.acknowledgeImportReport()).toBe(true);
             expect(settings.getImportReport()).toEqual({
                 at: expect.any(String),
-                refsBlocked: ['rules[0].profile: "Gone"'],
+                refsBlocked: [{ holder: { kind: 'rule', number: 1, title: 'Macro' }, refers: 'profile', name: 'Gone' }],
                 acknowledged: true,
             });
             expect(settings.acknowledgeImportReport()).toBe(true);

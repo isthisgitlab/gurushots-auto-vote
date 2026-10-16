@@ -1,6 +1,6 @@
 /**
- * The frozen 1.x default settings blob, the base a 1.x settings file is merged over. A copy as of the last 1.x
- * release.
+ * The frozen format 1 default settings blob, the base a format 1 settings file is merged over. Frozen as the last build that
+ * wrote settings format 1 had it.
  */
 
 import { isDevelopment } from '../../runtime';
@@ -9,7 +9,7 @@ import { V1_SETTINGS_SCHEMA } from './schema';
 import type { V1Blob, V1Values } from './types';
 
 /**
- * A fresh default blob. The `mock` default follows the environment, as in 1.x: development builds default to mock.
+ * A fresh default blob. The `mock` default follows the environment, as in format 1: development builds default to mock.
  */
 const getV1Defaults = (): V1Blob => {
     const globalDefaults: V1Values = {};

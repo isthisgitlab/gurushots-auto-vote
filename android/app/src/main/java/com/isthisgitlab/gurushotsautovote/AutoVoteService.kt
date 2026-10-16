@@ -727,7 +727,8 @@ internal object SideStores {
     // autoExposureFillMax counts against: a service that started from an empty one after every restart would spend
     // past the cap) and the swap-back offers; the paid-join claims (an unlock that was charged and not yet submitted:
     // forgotten on a restart, it would be charged again); the marker that the settings import has run (the service reads
-    // it to know not to import again) and the title pins the import seeds.
+    // it to know not to import again, and it records what the mirror of settings.json last wrote) and the title pins
+    // (the import seeds them, and both contexts pin titles).
     private val names = mapOf(
         CONFIG_KEY to "config",
         LEGACY_SETTINGS_KEY to "settings",
@@ -793,9 +794,18 @@ internal object SideStores {
 
     // Stores that are changed only by `compareAndSet`: a plain write would replace what another context saved (a spend
     // or a claim that one context recorded and the other, writing from an older read, then lost; a setting one context
-    // toggled and the other, writing the whole blob from an older read, then undid).
+    // toggled and the other, writing the whole blob from an older read, then undid; a title pin or the marker's record
+    // of the mirror that one context saved and the other, writing from the cache it hydrated at start, then dropped).
     private val compareAndSetOnly =
-        setOf("gs_join_state", "gs_auto_spends", CONFIG_KEY, LEGACY_SETTINGS_KEY, ORIGINAL_SETTINGS_KEY)
+        setOf(
+            "gs_join_state",
+            "gs_auto_spends",
+            "gs_v2_import",
+            "gs_title_pins",
+            CONFIG_KEY,
+            LEGACY_SETTINGS_KEY,
+            ORIGINAL_SETTINGS_KEY
+        )
 
     @Synchronized
     fun write(context: Context, key: String, data: String): Boolean {
