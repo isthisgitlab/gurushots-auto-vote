@@ -19,13 +19,16 @@ import { isPlainObject } from '../plainObject';
 import { V1_KEY_RENAMES } from './importV1/renames';
 import { V1_MIGRATION_FLAGS } from './importV1/migrations';
 import {
+    clearSignOutScrubPending,
     isMirrorStarted,
     isMirrorStartedNow,
     markMirrored,
     markMirrorPending,
     markMirrorPendingQueued,
+    markSignOutScrubPending,
     mirroredSignIns,
     mirroredSignInsNow,
+    signOutScrubPendingNow,
 } from './importMarker';
 import { dropInvalidValues, mergeWithDefaults } from './loadValidation';
 import { acquireSettingsLock } from './settingsLock';
@@ -219,9 +222,10 @@ const keepOriginalQueued = async (current: string): Promise<boolean> =>
 /**
  * A logout takes the sign-in state out of every copy kept of a settings file that holds one: the user's own file
  * (`settings.json.original`) and the files set aside (`config.json.corrupt-<time>`, `settings.json.unimportable-<time>`).
- * Only a sign-out that was saved does (a token that was stored and is cleared): a configuration that merely holds no
- * token, as the defaults of a damaged one do, is no reason to take the sign-in out of the copy the user is fixing.
- * A copy that does not parse is left as it is. Where the files are read and written in one step.
+ * Only a sign-out that was saved does (a token that was stored and is cleared; see scrubCopiesAfterSignOut): a
+ * configuration that merely holds no token, as the defaults of a damaged one do, is no reason to take the sign-in out of
+ * the copy the user is fixing. A copy that does not parse is left as it is. Where the files are read and written in one
+ * step.
  */
 const scrubCopiesSync = (): void => {
     void throughStore(originalStore, (kept) => (kept === null ? null : withoutSignIn(kept)));
@@ -338,8 +342,6 @@ type SignInAdoption = { outcome: 'adopted'; landed?: Promise<QueuedWriteOutcome>
 type MirrorHooks = {
     adoptSignIn: (found: Partial<ConfigAuthV2>) => SignInAdoption;
     onSetAside: (key: string) => void;
-    /** Whether a sign-out was saved that the copies kept of the settings files have not been cleared of yet (told once). */
-    takeSignOut: () => boolean;
 };
 
 // settings.json is read before the configuration it is made from: a mirror the other process or context writes between
@@ -348,7 +350,7 @@ type MirrorHooks = {
 // follow this order (an import) is not interleaved with it either. Each time, before the write, a sign-in that
 // `settings.json` holds and this build did not write (a logout or an account switch in an older build, while this one
 // ran) is adopted into the configuration first, so the write does not undo it.
-const mirrorSync = ({ adoptSignIn, takeSignOut }: MirrorHooks): MirrorOutcome => {
+const mirrorSync = ({ adoptSignIn }: MirrorHooks): MirrorOutcome => {
     const outcome = ((): MirrorOutcome => {
         // Nothing is stored to mirror (a fresh install, or the configuration was set aside): no lock is taken for it
         // (the service has no lock to take).
@@ -382,13 +384,12 @@ const mirrorSync = ({ adoptSignIn, takeSignOut }: MirrorHooks): MirrorOutcome =>
             lock.release();
         }
     })();
-    if (takeSignOut()) scrubCopiesSync();
     return outcome;
 };
 
 const mirrorQueued = (
     landed: Promise<QueuedWriteOutcome | undefined> | undefined,
-    { adoptSignIn, onSetAside, takeSignOut }: MirrorHooks,
+    { adoptSignIn, onSetAside }: MirrorHooks,
 ): Promise<MirrorOutcome> =>
     legacyStorage.enqueue<MirrorOutcome>(async () => {
         if ((await landed) === 'failed') return 'skipped';
@@ -424,9 +425,63 @@ const mirrorQueued = (
             }
             return 'gave-up';
         })();
-        if (takeSignOut()) await scrubCopiesQueued();
         return outcome;
     }, 'failed');
+
+/**
+ * Clears the sign-in out of the copies kept of the settings files, right after a sign-out was saved — not whenever the
+ * mirror next runs, which it may not, or may find busy. Where the configuration's own write is only queued (the Android
+ * app window) it waits for `landed`: a write that did not land signed nothing out, and there is nothing to clear
+ * (nothing is carried to a later save). The copies are cleared one by one, and one that cannot be read or written is
+ * logged and left (see storage.rewriteSetAside), so nothing here throws.
+ *
+ * @param landed - how the configuration's queued write ended
+ */
+const scrubCopiesAfterSignOut = (landed: Promise<QueuedWriteOutcome | undefined> | undefined): void => {
+    if (runtime.isCapacitor() && !runtime.isHeadlessService()) {
+        void legacyStorage.enqueue(async () => {
+            if ((await landed) !== 'failed') await scrubCopiesQueued();
+        }, undefined);
+    } else {
+        scrubCopiesSync();
+        // The service has no way to list the copies in Preferences: the app window clears them when it next starts.
+        if (runtime.isHeadlessService()) markSignOutScrubPending();
+    }
+};
+
+// Whether a look for the clearing the app window owes is under way, and whether another was asked for meanwhile (the
+// service may have recorded one after the running look read the marker).
+let deferredScrubRunning = false;
+let deferredScrubAgain = false;
+
+/**
+ * What the app window owes for a sign-out the background service saved: clears the copies in Preferences the service
+ * could not reach (see scrubCopiesAfterSignOut). Asked at the window's start and again at each change it saves, since
+ * the service may sign out while the window is open. Nothing elsewhere; one look at a time, and a look asked for
+ * while one runs is made when it ends.
+ */
+const finishDeferredScrub = (): void => {
+    if (!runtime.isCapacitor() || runtime.isHeadlessService()) return;
+    if (deferredScrubRunning) {
+        deferredScrubAgain = true;
+        return;
+    }
+    deferredScrubRunning = true;
+    void legacyStorage
+        .enqueue(async () => {
+            const pending = await signOutScrubPendingNow();
+            if (pending === null) return;
+            await scrubCopiesQueued();
+            clearSignOutScrubPending(pending);
+        }, undefined)
+        .finally(() => {
+            deferredScrubRunning = false;
+            if (deferredScrubAgain) {
+                deferredScrubAgain = false;
+                finishDeferredScrub();
+            }
+        });
+};
 
 /**
  * Brings `settings.json` up to date with the stored configuration. Where the configuration's own write is only queued
@@ -452,4 +507,13 @@ const mirrorSettings = (landed: Promise<QueuedWriteOutcome | undefined> | undefi
 };
 
 export type { SignInAdoption };
-export { ORIGINAL_SETTINGS_KEY, mirrorSettings, mirrorTextOf, originalStore, setAsideLegacy, toFormatOne };
+export {
+    ORIGINAL_SETTINGS_KEY,
+    mirrorSettings,
+    mirrorTextOf,
+    finishDeferredScrub,
+    originalStore,
+    scrubCopiesAfterSignOut,
+    setAsideLegacy,
+    toFormatOne,
+};

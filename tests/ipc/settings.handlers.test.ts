@@ -479,18 +479,34 @@ describe('cleanup-stale-challenge-setting', () => {
 });
 
 describe('the recovery of the stored settings', () => {
-    // `startFresh` is answered by `startFreshDetailed`, which also says where settings.json was kept.
+    // Start fresh and re-import are answered by their detailed forms, which also say what became of settings.json and which
+    // file was read.
     const channels = [
         ['retry-settings-import', 'retryImport'],
         ['start-fresh-settings', 'startFreshDetailed'],
-        ['reimport-settings-from-v1', 'reimportFromV1'],
+        ['reimport-settings-from-v1', 'reimportFromV1Detailed'],
         ['acknowledge-import-report', 'acknowledgeImportReport'],
     ] as const;
+    type Method = (typeof channels)[number][1];
     // What each action answers when it worked: a boolean, or the detail the answer carries.
-    const worked = (method: (typeof channels)[number][1]) =>
-        method === 'startFreshDetailed' ? { ok: true, keptAt: '/data/settings.json.original' } : true;
-    const didNot = (method: (typeof channels)[number][1]) =>
-        method === 'startFreshDetailed' ? { ok: false, keptAt: null } : false;
+    const worked = (method: Method) =>
+        method === 'startFreshDetailed'
+            ? { ok: true, keptAt: '/data/settings.json.original' }
+            : method === 'reimportFromV1Detailed'
+              ? { ok: true, setAside: null, source: '/data/settings.json.unimportable-1' }
+              : true;
+    const didNot = (method: Method) =>
+        method === 'startFreshDetailed'
+            ? { ok: false, keptAt: null }
+            : method === 'reimportFromV1Detailed'
+              ? { ok: false, setAside: null, source: '/data/settings.json' }
+              : false;
+    const answerOf = (channel: (typeof channels)[number][0]) =>
+        channel === 'start-fresh-settings'
+            ? { success: true, kept: { kind: 'path', path: '/data/settings.json.original' } }
+            : channel === 'reimport-settings-from-v1'
+              ? { success: true, source: '/data/settings.json.unimportable-1' }
+              : { success: true };
 
     test.each(channels)('%s runs %s, then announces the settings to every window', async (channel, method) => {
         const broadcastSettingsChange = jest.fn();
@@ -498,39 +514,34 @@ describe('the recovery of the stored settings', () => {
         settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 't' }, app: { theme: 'dark' } });
         const h = buildHandlers({ broadcastSettingsChange });
 
-        await expect(h[channel]()).resolves.toEqual(
-            channel === 'start-fresh-settings'
-                ? { success: true, keptAt: '/data/settings.json.original' }
-                : { success: true },
-        );
+        await expect(h[channel]()).resolves.toEqual(answerOf(channel));
 
         expect(settings[method]).toHaveBeenCalledTimes(1);
         expect(broadcastSettingsChange).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 
-    test('start-fresh-settings waits for the key a queued copy is written under (the Android window) and answers it', async () => {
-        settings.startFreshDetailed = jest
-            .fn()
-            .mockReturnValue({ ok: true, keptAt: null, landed: Promise.resolve('gurushots-settings_original') });
+    test.each([
+        ['a copy written under a key (the Android window)', Promise.resolve('gurushots-settings_original'), 'stored'],
+        ['a copy that could not be written yet', Promise.resolve(null), 'pending'],
+    ])('start-fresh-settings waits for %s and says %s', async (_name, landed, kind) => {
+        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null, landed });
+
+        await expect(handlers['start-fresh-settings']()).resolves.toEqual({ success: true, kept: { kind } });
+    });
+
+    test('start-fresh-settings says nothing was reset when a configuration was in place already (a restore that came through)', async () => {
+        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null, adopted: true });
 
         await expect(handlers['start-fresh-settings']()).resolves.toEqual({
             success: true,
-            keptAt: 'gurushots-settings_original',
+            kept: { kind: 'adopted' },
         });
     });
 
-    test('start-fresh-settings answers no place when the queued copy was not written', async () => {
-        settings.startFreshDetailed = jest
-            .fn()
-            .mockReturnValue({ ok: true, keptAt: null, landed: Promise.resolve(null) });
-
-        await expect(handlers['start-fresh-settings']()).resolves.toEqual({ success: true, keptAt: undefined });
-    });
-
-    test('start-fresh-settings says there was nothing to keep as null', async () => {
+    test('start-fresh-settings says there was nothing to keep', async () => {
         settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null });
 
-        await expect(handlers['start-fresh-settings']()).resolves.toEqual({ success: true, keptAt: null });
+        await expect(handlers['start-fresh-settings']()).resolves.toEqual({ success: true, kept: { kind: 'none' } });
     });
 
     test.each(channels)(
@@ -658,8 +669,23 @@ describe('a save the window gave up', () => {
 
     test('is not listened for where nothing is announced', () => {
         settings.onSettingsSaveDroppedChange.mockClear();
+        settings.onSettingsRecoveryChange.mockClear();
         buildHandlers();
         expect(settings.onSettingsSaveDroppedChange).not.toHaveBeenCalled();
+        expect(settings.onSettingsRecoveryChange).not.toHaveBeenCalled();
+    });
+});
+
+describe('a block a read cleared', () => {
+    test('is announced like a settings change, so that a notice shown for it is read again', () => {
+        const broadcast = jest.fn();
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 'secret' }, app: { theme: 'dark' } });
+        buildHandlers({ broadcastSettingsChange: broadcast });
+
+        const [listener] = settings.onSettingsRecoveryChange.mock.calls.at(-1) ?? [];
+        listener?.();
+
+        expect(broadcast).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 });
 

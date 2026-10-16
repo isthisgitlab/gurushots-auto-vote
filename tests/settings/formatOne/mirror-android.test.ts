@@ -407,6 +407,9 @@ describe('Start fresh in the Android app window', () => {
         expect(settings.startFresh()).toBe(true);
         settings.loadSettings();
         await settings.flushPendingWrites();
+        // The mirror is made on the first read of the configuration once it is stored.
+        settings.loadSettings();
+        await settings.flushPendingWrites();
 
         expect(prefs.get(ORIGINAL)).toBe('{broken');
         expect(unimportable()).toEqual([]);
@@ -420,6 +423,9 @@ describe('Start fresh in the Android app window', () => {
         const settings = await freshStart({ [MIRROR]: '{broken', [ORIGINAL]: USER_FILE });
 
         expect(settings.startFresh()).toBe(true);
+        settings.loadSettings();
+        await settings.flushPendingWrites();
+        // The mirror is made on the first read of the configuration once it is stored.
         settings.loadSettings();
         await settings.flushPendingWrites();
 

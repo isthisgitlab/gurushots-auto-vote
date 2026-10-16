@@ -489,6 +489,16 @@ describe('the import report in About and data', () => {
         consoleError.mockRestore();
     });
 
+    test('on Android the date line does not name a settings.json the user never sees', async () => {
+        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        answer({ success: true, report: { at: '2026-10-16T12:00:00.000Z', refsBlocked: [], acknowledged: true } });
+        render(<AboutDataSection />);
+
+        expect(await screen.findByText('about.importAtAndroid')).toBeTruthy();
+        expect(screen.queryByText('about.importAt')).toBeNull();
+        delete (globalThis as RendererGlobals).Capacitor;
+    });
+
     test('says when it ran, in the date format of the page language', async () => {
         mockTranslator.t.mockImplementation((text) => (text === 'about.importAt' ? 'On {date}' : text));
         answer({ success: true, report: { at: '2026-10-16T12:00:00.000Z', refsBlocked: [], acknowledged: true } });

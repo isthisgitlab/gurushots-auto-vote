@@ -184,6 +184,8 @@ function AppModals({
  * Main app content (inside all providers)
  */
 function AppContent() {
+    // Where focus goes when the settings notice has nothing of its own left to return it to.
+    const mainRef = useRef<HTMLElement>(null);
     const { ready, t } = useTranslation();
     const { settings, loading: settingsLoading, updateSetting } = useSettings();
     const { challenges, refetch: refetchChallenges } = useChallenges();
@@ -259,9 +261,14 @@ function AppContent() {
 
     return (
         <div className="min-h-screen bg-base-200">
-            <div className="container mx-auto px-4 py-4 max-w-4xl">
+            <main
+                ref={mainRef}
+                aria-label={t('app.mainContent')}
+                tabIndex={-1}
+                className="container mx-auto px-4 py-4 max-w-4xl focus-visible:ring-primary focus-visible:ring-2 focus-visible:outline-none"
+            >
                 <ErrorBoundary>
-                    <SettingsRecoveryNotice />
+                    <SettingsRecoveryNotice returnFocusTo={mainRef} />
 
                     {/* Navbar */}
                     <Navbar
@@ -322,7 +329,7 @@ function AppContent() {
                         onNoticeAcknowledge={notice.acknowledge}
                     />
                 </ErrorBoundary>
-            </div>
+            </main>
 
             {/* Back-to-top for the long challenges list */}
             <ScrollToTopButton />

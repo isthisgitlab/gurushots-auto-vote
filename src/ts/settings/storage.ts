@@ -104,8 +104,11 @@ const onSaveDroppedChange = (listener: (() => void) | null): void => {
     saveDroppedListener = listener;
 };
 
-/** What moving an unusable settings value aside came to: where it went, or why it did not. */
-type QuarantineResult = { ok: true; path: string } | { ok: false; error: string };
+/**
+ * What moving an unusable settings value aside came to: where it went, or why it did not. Where the move is only queued
+ * (the Android app window) `moved` says later whether it was made.
+ */
+type QuarantineResult = { ok: true; path: string; moved?: Promise<boolean> } | { ok: false; error: string };
 
 /**
  * How a queued Capacitor write ended: `written` (Preferences holds the text), `declined` (the compare-and-write found
@@ -500,6 +503,13 @@ const createSettingsFile = (options: SettingsFileOptions) => {
             return true;
         },
         /**
+         * Whether what a read answers is stored: false only in the Android app window while a write of its own, queued
+         * and not landed yet, is what the cache shows (it is stored when it lands, and the cache goes back to what is
+         * stored when it fails).
+         */
+        isPersisted: (): boolean =>
+            !runtime.isCapacitor() || runtime.isHeadlessService() || cachedJson === persistedJson,
+        /**
          * Whether an unusable copy of this file was set aside earlier (`<file>.corrupt-<time>`; on Capacitor a
          * `<key>_corrupt…` preference, which the window learns when it hydrates, and the service cannot see).
          */
@@ -517,6 +527,24 @@ const createSettingsFile = (options: SettingsFileOptions) => {
         readCopy: (copy: string): string => fs.readFileSync(copy, 'utf8'),
         /** Whether a copy kept of this file (a desktop) is still there. */
         hasCopy: (copy: string): boolean => fs.existsSync(copy),
+        /**
+         * Where a path leads when it is where this file keeps a copy of an unusable one: beside it, and named as such
+         * (`<file>.unimportable-<time>`); null otherwise. A path the marker remembers is taken as one only if it is.
+         * The path is judged by where it leads (a `..` in it is resolved), and the resolved path is the answer.
+         */
+        keptCopyPath: (copy: string): string | null => {
+            const resolved = path.resolve(copy);
+            return path.dirname(resolved) === path.dirname(path.resolve(filePath())) &&
+                path.basename(resolved).startsWith(`${path.basename(filePath())}.${UNIMPORTABLE_SUFFIX.slice(1)}-`)
+                ? resolved
+                : null;
+        },
+        /** When a copy kept of this file was made (ms since the epoch), from the time in its name; null if the name has none. */
+        keptCopyMadeAt: (copy: string): number | null => {
+            const stamp = /-(\d{4}-\d\d-\d\dT\d\d)-(\d\d)-(\d\d)-(\d{3}Z)$/.exec(path.basename(copy));
+            const madeAt = stamp ? Date.parse(`${stamp[1]}:${stamp[2]}:${stamp[3]}.${stamp[4]}`) : Number.NaN;
+            return Number.isNaN(madeAt) ? null : madeAt;
+        },
         /**
          * Changes the copies set aside beside this file (`<file>.corrupt-<time>`, `<file>.unimportable-<time>`) where
          * the files can be read and written at once (a desktop): `change` gets each copy's text and answers the text to
@@ -566,18 +594,24 @@ const createSettingsFile = (options: SettingsFileOptions) => {
                 const backupKey = `${prefKey}${CORRUPT_SUFFIX}-${setAsideStamp()}`;
                 cachedJson = null;
                 hasBackupKey = true;
-                writeSerial++;
-                writeChain = writeChain
+                const serial = ++writeSerial;
+                const moved = writeChain
                     .then(async () => {
                         const preferences = getCapacitorPreferences();
                         await preferences.set({ key: backupKey, value: raw });
                         await preferences.remove({ key: prefKey });
                         persistedJson = null;
+                        return true;
                     })
                     .catch((err) => {
                         logger.withCategory('settings').error('Capacitor preferences backup write failed:', err);
+                        // The value was not moved: Preferences still holds it, and the cache shows what is stored again
+                        // (unless a write since has made it show its own).
+                        if (serial === writeSerial) cachedJson = persistedJson;
+                        return false;
                     });
-                return { ok: true, path: backupKey };
+                writeChain = moved.then(() => undefined);
+                return { ok: true, path: backupKey, moved };
             }
             const file = filePath();
             const backupPath = `${file}.corrupt-${setAsideStamp()}`;

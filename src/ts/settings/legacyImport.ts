@@ -35,10 +35,11 @@ type ImportFailure = { ok: false; reason: ImportFailureReason; detail: string };
  * configuration was gone and was restored from `settings.json`, the mirror of it); `fresh` (there was no
  * `settings.json`; the marker was written); `adopted` (the configuration is already there, another context or process
  * saved it first); `skipped` (a set-aside configuration says an import must not run unasked). `text` is the
- * configuration now stored.
+ * configuration now stored; `landed` (the Android app window) says it is only shown by the cache until its queued
+ * write lands, which it may not, and tells how that ends.
  */
 type ImportDone =
-    | { ok: true; kind: 'imported' | 'recovered' | 'adopted'; text: string }
+    | { ok: true; kind: 'imported' | 'recovered' | 'adopted'; text: string; landed?: Promise<QueuedWriteOutcome> }
     | { ok: true; kind: 'fresh' | 'skipped' };
 
 type ImportOutcome = ImportDone | ImportFailure;
@@ -127,7 +128,12 @@ const importLegacyText = (
     }
     // The marker keeps a copy of the record (a recovery leaves the one it has): a lost configuration gets its report back.
     whenStored(written, () => markImportDone(recovering ? undefined : imported), onLateFailure);
-    return { ok: true, kind: recovering ? 'recovered' : 'imported', text };
+    return {
+        ok: true,
+        kind: recovering ? 'recovered' : 'imported',
+        text,
+        ...(written.landed ? { landed: written.landed } : {}),
+    };
 };
 
 /**

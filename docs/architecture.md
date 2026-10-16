@@ -638,10 +638,14 @@ repeated six times is one that gets forgotten at one of them.
       `settings.json` is the app's own output. A logout clears the token and API headers from that copy as well, and
       from every copy set aside of a settings file that parses (`config.json.corrupt-<time>`,
       `settings.json.unimportable-<time>`, and the Android `gurushots-config_corrupt-…` /
-      `gurushots-settings_unimportable-…` keys): `scrubCopiesSync` / `scrubCopiesQueued`, run only for a sign-out that was
-      saved (a token that was stored and is cleared: a logout, the start that clears the token when Stay Logged In is
-      off and one is stored, a sign-out adopted from an older build; `signOutPending` in `persistence.ts`, told to the
-      mirror once), never because the configuration merely holds no token, as the defaults of a damaged one do: the
+      `gurushots-settings_unimportable-…` keys): `scrubCopiesAfterSignOut`, run at once after a sign-out
+      was saved (a token that was stored and is cleared: a logout, the start that clears the token when Stay Logged In
+      is off and one is stored, a sign-out adopted from an older build), not whenever the mirror next runs, which it may
+      not, or may find busy; the Android window waits for the configuration's write to land and clears nothing when it
+      did not. The background service can reach none of the copies in Preferences it cannot list, so after saving a
+      sign-out it records `signOutScrubPending` (a value of its own for each sign-out) in the import marker, and the app window clears them when it next starts
+      and again at each change it saves (`finishDeferredScrub`), since the service may sign out while the window is open; a look asked for while one runs is
+      made when it ends, and only the record a look has seen to is cleared, against what is stored (a sign-out recorded since stays owed). Never because the configuration merely holds no token, as the defaults of a damaged one do: the
       sign-in in the copy the user is fixing is not theirs to lose. The last user
       name and the chosen-photos account go out of the copies too (never out of the configuration or the live mirror: the
       login form is prefilled from them). A copy that does not parse is left as it is.
@@ -673,9 +677,13 @@ repeated six times is one that gets forgotten at one of them.
       is the one of the last episode only (`legacySetAside`; never an older one in the folder), and where it was set
       aside is recorded in the import marker (`unimportableCopy`, written when the set-aside lands, by compare-and-write
       like the rest of it; the Android key on Android), so that a re-import in another process (the CLI) or after a
-      restart of the app finds it again. It is forgotten when a re-import, Start fresh or a retry succeeds, when another
-      episode begins, and when the copy is gone (settings.json is imported then). Until one of those, a later re-import
-      takes that copy, even if the user left the episode alone.
+      restart of the app finds it again; the marker is a file the user can edit, so the path is taken only if it is beside
+      settings.json and named as such. It is forgotten when a re-import, Start fresh or a retry succeeds, when another
+      episode begins, and when the copy is gone (settings.json is imported then). A save never forgets it, in any process
+      (a CLI vote that saves while the GUI's episode runs leaves it), and a recorded copy older than 14 days is no
+      longer used: a much later re-import reads settings.json. The notice and the CLI name the
+      file a Re-import would read (`reimportSource`; the IPC answer of a re-import says which it read), and the
+      guidance says "fix settings.json" before a set-aside and "fix the file at {path}" after it.
 - **Import and recovery (`settings/legacyImport.ts`, `persistence.ts`).** With no `config.json`, the first load imports
   `settings.json` under the import lock (Android has none: the native compare-and-write of the configuration decides
   which context is first) and writes the marker (`v2-import.json`, kept outside `config.json`, so setting the
@@ -686,17 +694,45 @@ repeated six times is one that gets forgotten at one of them.
   answers a recovery state, which a window shows as a notice and the CLI prints (`getSettingsRecovery`):
   `settings-restored` and `settings-corrupt` (notices; saves work), `settings-unreadable` (`config.json` cannot be read
   or set aside) and `settings-import-failed` (no `config.json`, and `settings.json` cannot be imported) block saves
-  until fixed. A damaged `config.json` that `settings.json` cannot restore (it is missing or does not import) is
-  `settings-corrupt` for the rest of the process, however often it is read: the failed restore is remembered
-  (`importFailure`), so a later read does not turn it into the blocking `settings-import-failed`. A new process that
-  finds the configuration still missing and the mirror unimportable reports `settings-import-failed`. A read before the Android window has hydrated its stores (`not-loaded`) is not a recovery state: the
+  until fixed. A damaged `config.json` that `settings.json` cannot restore because the file itself cannot be imported
+  (`corrupt`, `migration-failed`) is `settings-corrupt` for the rest of the process, however often it is read: the
+  failed restore is remembered (`importFailure`), so a later read does not turn it into the blocking
+  `settings-import-failed`. A new process that finds the configuration still missing and the mirror unimportable reports
+  `settings-import-failed`. A restore that could not be tried just now (the import lock held by another process, a read
+  or a write that failed once) says nothing of the file: saves are refused (`settings-import-failed`, blocking), nothing
+  is mirrored over it, and a later read tries again after a wait that doubles from one second up to five minutes
+  (`retryNotBefore`), the failure logged once per distinct failure, with no title-pin rewrite in between. A file that
+  turns out damaged on a retry settles like one found damaged at the first try (`settings-corrupt`, not blocking). On
+  Android a configuration the window only holds in its cache until the queued write lands (`storage.isPersisted`
+  false) is no proof of anything: a read of it leaves the block, the wait, the log and the notice as they are and
+  mirrors nothing; once a read finds it stored they are cleared, and `settings.json` is brought up to date. A restore
+  counts as one when its own write has landed (`_awaitRestore`): while it is in flight the notice has nothing to say
+  (`getSettingsRecovery` answers null unless an earlier try left its block), and when it lands the block of an earlier
+  try is lifted and the window is told, so the notice says restored. Each import attempt has a number, and only the
+  latest one hears how its write ends (`_beginImport`): the late failure of an attempt that a later one has
+  replaced (the read a dropped save causes begins the next attempt before the failure is reported) says nothing of the
+  state now. A restore that fails late is a restore that did not happen, and is tried again like any other, so a
+  `settings.json` found unusable then settles like a first-try failure (`restoreRetryPending`, which only a restore
+  still to be retried sets, never a Start fresh or a re-import that fails late: a configuration that goes missing
+  later, with an unimportable `settings.json`, is a blocked import). A damaged configuration the window could not move aside (the copy in Preferences was refused) is handled as a failed
+  move is on a desktop: it is still what is stored, so nothing restored over it counts as restored (the restore queued
+  behind the move would only be declined), saves are refused (`settings-unreadable`, blocking, announced to the window)
+  and `settings.json` is not mirrored over; the cache shows what Preferences holds. A restore's late failure is announced
+  too (a dropped save reports only once), and only an import that has started takes the place of an attempt in flight:
+  Retry, Start fresh or Re-import that fail at once, or find the configuration there, leave a restore's landing alone. The window is told (`onSettingsRecoveryChange`,
+  broadcast by the handlers) when a block ends or the state changes, so an open notice refetches and shows the
+  restored notice. The notice is a named region only while it has something in it; a dismissed outcome returns focus to the
+  button that ran the action, else the notice's heading, else the element the page gives it (`returnFocusTo`: the
+  Login heading, the App `main`, named by the page title; the page makes it focusable), never an empty element. A read before the Android window has hydrated its stores (`not-loaded`) is not a recovery state: the
   defaults answer, nothing is blocked or logged as an error, and a save is refused until the stores are read.
   `retryImport`, `startFresh` (the file is set aside as `settings.json.original`, or as `settings.json.unimportable-<time>`
   when that is taken, before anything is mirrored over it) and `reimportFromV1` (the configuration in use is set aside)
   are the explicit ways out (`settings-recovery` in the CLI). A re-import takes everything from `settings.json`, the
   sign-in included, and sets the configuration it replaces aside with its sign-in (the notice and the CLI say where);
   it is not offered on Android, where there is no file the user can fix. Start fresh keeps `settings.json` beside it
-  and says where (`startFreshDetailed`: the `keptAt` of the IPC answer and the CLI text), or that there was none.
+  and says where (`startFreshDetailed`; the IPC answer carries `kept`: `path` with the path, `stored` for the Android
+  copy in the app's own storage, `pending` when that copy could not be written yet, `none`, or `adopted` when a
+  configuration was in place already, such as a restore that came through meanwhile: nothing is reset and nothing kept), or that there was none.
 - **The importer is frozen (`settings/importV1/`).** The format 1 load pipeline lives there as a copy (schema,
   merge over the defaults, the eight one-time migrations, load validation, prune, key renames, conversion to a
   configuration), so a later change to the live settings cannot change what an older file imports as; it runs in

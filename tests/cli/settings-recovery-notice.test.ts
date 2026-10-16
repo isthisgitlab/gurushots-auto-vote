@@ -48,8 +48,12 @@ describe('describeSettingsRecovery', () => {
             path: '/u/config.json.corrupt-2026',
             settingsSetAside: '/u/settings.json.unimportable-2026',
         });
-        expect(text).toContain('settings.json.unimportable-<time>');
-        expect(text).toContain('The unusable settings.json was kept at /u/settings.json.unimportable-2026.');
+        expect(text).toContain('The unusable settings.json was kept at /u/settings.json.unimportable-2026');
+        // After the set-aside the guidance names that file, and no placeholder.
+        expect(text).toContain(
+            'fix the file at /u/settings.json.unimportable-2026 and run "settings-recovery reimport"',
+        );
+        expect(text).not.toContain('<time>');
     });
 
     test('a damaged file with nothing to restore it from says where it went, that defaults apply, and how to import settings.json instead', () => {
@@ -58,7 +62,8 @@ describe('describeSettingsRecovery', () => {
         expect(text).toContain('/u/config.json.corrupt-2026');
         expect(text).toContain('no usable settings.json');
         expect(text).toContain('default settings are in use');
-        expect(text).toContain('settings-recovery reimport');
+        expect(text).toContain('fix settings.json and run "settings-recovery reimport"');
+        expect(text).not.toContain('<time>');
     });
 
     test('an unreadable file says that nothing will be saved until it is fixed, and what to check', () => {
@@ -76,7 +81,7 @@ describe('describeSettingsRecovery', () => {
         expect(text).toContain('settings-recovery retry');
         expect(text).toContain('settings-recovery start-fresh');
         expect(text).toContain('settings.json.original');
-        expect(text).toContain('settings.json.unimportable-<time>');
+        expect(text).toContain('settings.json.unimportable-<timestamp>');
     });
 });
 
@@ -124,6 +129,16 @@ describe('settingsRecoveryCmd', () => {
             );
         });
 
+        test('says nothing was reset when the settings were in place already (a restore that came through)', async () => {
+            settings.startFreshDetailed.mockReturnValue({ ok: true, keptAt: null, adopted: true });
+
+            await expect(settingsRecoveryCmd(['start-fresh'])).resolves.toBe(0);
+
+            expect(mockCategory.success).toHaveBeenCalledWith(
+                'Nothing was reset: the settings were already in place (restored or imported meanwhile), and they are in use.',
+            );
+        });
+
         test('says nothing was kept when there was no settings.json', async () => {
             settings.startFreshDetailed.mockReturnValue({ ok: true, keptAt: null });
 
@@ -145,25 +160,29 @@ describe('settingsRecoveryCmd', () => {
 
     describe('reimport', () => {
         test('says where the settings and sign-in that were in use were set aside', async () => {
-            settings.reimportFromV1Detailed.mockReturnValue({ ok: true, setAside: '/u/config.json.corrupt-2026' });
+            settings.reimportFromV1Detailed.mockReturnValue({
+                ok: true,
+                setAside: '/u/config.json.corrupt-2026',
+                source: '/u/settings.json.unimportable-2026',
+            });
 
             await expect(settingsRecoveryCmd(['reimport'])).resolves.toBe(0);
 
             expect(mockCategory.success).toHaveBeenCalledWith(
-                'settings.json was imported again; the settings and sign-in that were in use were set aside at /u/config.json.corrupt-2026.',
+                '/u/settings.json.unimportable-2026 was imported again; the settings and sign-in that were in use were set aside at /u/config.json.corrupt-2026.',
             );
         });
 
         test('says nothing of a move when nothing was set aside', async () => {
-            settings.reimportFromV1Detailed.mockReturnValue({ ok: true, setAside: null });
+            settings.reimportFromV1Detailed.mockReturnValue({ ok: true, setAside: null, source: '/u/settings.json' });
 
             await expect(settingsRecoveryCmd(['reimport'])).resolves.toBe(0);
 
-            expect(mockCategory.success).toHaveBeenCalledWith('settings.json was imported again.');
+            expect(mockCategory.success).toHaveBeenCalledWith('/u/settings.json was imported again.');
         });
 
         test('that did not work exits 1 and points to the log', async () => {
-            settings.reimportFromV1Detailed.mockReturnValue({ ok: false, setAside: null });
+            settings.reimportFromV1Detailed.mockReturnValue({ ok: false, setAside: null, source: '/u/settings.json' });
 
             await expect(settingsRecoveryCmd(['reimport'])).resolves.toBe(1);
 

@@ -5,7 +5,7 @@
  * transitions via window.api.login(). Also covers the module-load auto-mount,
  * which the Capacitor entry suppresses with __capacitorBootstrap.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { invalid } from '../helpers/invalid';
 import { pickOption } from './helpers/test-utils';
 import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
@@ -192,6 +192,29 @@ describe('Login page', () => {
         );
         await renderReady();
         expect((await screen.findByRole('alert')).textContent).toContain('notice.recoveryUnreadableWhat');
+    });
+
+    test('dismissing the outcome of a recovery on the login page moves focus to the heading of the page, not to the body or an empty element (the page has an h2 and no h1)', async () => {
+        jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(
+            invalid({ success: true, recovery: { code: 'settings-import-failed', path: '/data/settings.json' } }),
+        );
+        jest.mocked(window.api.retrySettingsImport).mockResolvedValue({ success: true });
+        await renderReady();
+        await screen.findByRole('alert');
+        expect(document.querySelector('h1')).toBeNull();
+        // The retry worked: the notice goes, its outcome stays until dismissed.
+        jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(invalid({ success: true, recovery: null }));
+        fireEvent.click(screen.getByRole('button', { name: 'notice.recoveryRetry' }));
+        const done = await screen.findByText('notice.recoveryRetryDone');
+        await waitFor(() => expect(screen.queryByText('notice.recoveryImportWhat')).toBeNull());
+
+        fireEvent.click(within(done.closest('.alert') as HTMLElement).getByRole('button', { name: 'errors.dismiss' }));
+
+        // The page's own heading takes it (the page made it focusable; the notice touched no markup of the page's).
+        const heading = screen.getByRole('heading', { name: 'login.heading' });
+        expect(document.activeElement).toBe(heading);
+        expect(heading.getAttribute('tabindex')).toBe('-1');
+        expect(document.activeElement).not.toBe(document.body);
     });
 
     test('rejected credentials get their own translated text', async () => {

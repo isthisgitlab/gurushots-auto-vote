@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useImportRefText, useImportReport } from '@/api/useImportReport';
+import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { interp } from '@/utils/interp';
 import { dateLocale } from '@/utils/formatters';
 import { LicensesModal } from './LicensesModal';
@@ -12,6 +13,8 @@ import { DeleteLocalDataModal } from './DeleteLocalDataModal';
  */
 function ImportReportBlock() {
     const { t } = useTranslation();
+    // Where there is no settings.json for the user to know of (Android), the text does not name one.
+    const { settingsFile } = usePlatformCapabilities();
     // A read that fails shows nothing: the block is a record, and the settings work without it.
     const { data: report } = useImportReport();
     const refText = useImportRefText();
@@ -21,7 +24,7 @@ function ImportReportBlock() {
         <div className="mb-4 text-sm">
             <h5 className="font-medium mb-1">{t('about.importTitle')}</h5>
             <p className="text-xs text-base-content/60 mb-1">
-                {interp(t('about.importAt'), {
+                {interp(t(settingsFile ? 'about.importAt' : 'about.importAtAndroid'), {
                     date: Number.isNaN(date.getTime()) ? report.at : date.toLocaleDateString(dateLocale()),
                 })}
             </p>

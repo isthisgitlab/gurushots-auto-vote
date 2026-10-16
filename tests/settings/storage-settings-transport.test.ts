@@ -160,8 +160,11 @@ describe('an unusable settings value in the Android app (Preferences)', () => {
         await initializeAsync();
         expect(storage.readRaw()).toBe('{broken');
 
-        expect(storage.quarantineRaw('{broken')).toEqual({ ok: true, path: expect.stringMatching(SET_ASIDE_KEY) });
+        const result = storage.quarantineRaw('{broken');
+        expect(result).toEqual({ ok: true, path: expect.stringMatching(SET_ASIDE_KEY), moved: expect.any(Promise) });
         await flushPendingWrites();
+        // The move was made.
+        expect(await (result.ok ? result.moved : undefined)).toBe(true);
 
         expect(storage.readRaw()).toBeNull();
         expect(mockPreferences.set).toHaveBeenCalledWith({
@@ -235,9 +238,12 @@ describe('an unusable settings value in the Android app (Preferences)', () => {
         mockPreferences.set.mockRejectedValueOnce(new Error('disk full'));
         const { storage, flushPendingWrites } = loadStorage();
 
-        expect(storage.quarantineRaw('{broken').ok).toBe(true);
+        const result = storage.quarantineRaw('{broken');
+        expect(result.ok).toBe(true);
         await flushPendingWrites();
 
+        // The move says it was not made.
+        expect(await (result.ok ? result.moved : undefined)).toBe(false);
         expect(cat.error).toHaveBeenCalledWith('Capacitor preferences backup write failed:', expect.any(Error));
         expect(mockPreferences.remove).not.toHaveBeenCalled();
     });

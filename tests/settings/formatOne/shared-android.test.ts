@@ -495,6 +495,37 @@ describe('a logout in the Android app window clears the sign-in out of the set-a
             { settled: false },
         );
 
+    test('is done once the configuration has landed, whether or not the mirror can write', async () => {
+        const settings = await arranged();
+        settings.loadSettings();
+        await drain(settings);
+        hook = (call) => (call.key === MIRROR ? Promise.reject(new Error('quota')) : undefined);
+
+        expect(settings.setSetting('token', '')).toBe(true);
+        await drain(settings);
+
+        expect(stored(SETTINGS_COPY)).toMatchObject({ token: '' });
+        expect(stored(CONFIG_COPY).auth).toMatchObject({ token: '' });
+    });
+
+    test('is not done, and not carried to a later save, when the configuration did not land', async () => {
+        const settings = await arranged();
+        settings.loadSettings();
+        await drain(settings);
+        // The save that signs out is refused; the app signed nothing out.
+        hook = (call) => (call.key === CONFIG ? Promise.reject(new Error('disk full')) : undefined);
+        expect(settings.setSetting('token', '')).toBe(true);
+        await drain(settings);
+        expect(stored(SETTINGS_COPY)).toMatchObject({ token: 'tok-u' });
+        expect(stored(CONFIG).auth).toMatchObject({ token: 'tok-secret' });
+
+        hook = null;
+        expect(settings.setSetting('theme', 'light')).toBe(true);
+        await drain(settings);
+
+        expect(stored(SETTINGS_COPY)).toMatchObject({ token: 'tok-u' });
+    });
+
     test('every copy that parses and holds one is cleared, the others are left, and the log holds no token', async () => {
         const settings = await arranged();
         settings.loadSettings();
@@ -785,6 +816,537 @@ describe('Re-import in the Android app window', () => {
 
         expect(settings.getSettingsRecovery()).toBeNull();
         expect(stored(CONFIG).app).toMatchObject({ theme: 'light' });
+    });
+});
+
+describe('a configuration restored in the app window from the settings copy', () => {
+    test('is in use at once and, once it is stored, stands as restored', async () => {
+        const settings = await appWindow(
+            {
+                [CONFIG]: '{"app":{"theme":',
+                [MIRROR]: JSON.stringify({ theme: 'dark' }),
+                [MARKER]: JSON.stringify({ importedAt: RECORD.at, mirrorStartedAt: '2026-10-02T00:00:00.000Z' }),
+            },
+            { settled: false },
+        );
+
+        expect(settings.loadSettings().app.theme).toBe('dark');
+        await drain(settings);
+
+        expect(settings.getSettingsRecovery()?.code).toBe('settings-restored');
+        expect(stored(CONFIG).app).toMatchObject({ theme: 'dark' });
+    });
+});
+
+describe('a configuration the app window can never write', () => {
+    test('is tried a bounded number of times, said once, and the notice does not flap', async () => {
+        const settings = await appWindow(
+            { [MIRROR]: JSON.stringify({ theme: 'dark', token: 'tok-1' }) },
+            { settled: false },
+        );
+        // No configuration is ever stored: the native store refuses it.
+        hook = (call) => (call.key === CONFIG ? Promise.reject(new Error('disk full')) : undefined);
+        let now = 1_000_000;
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
+
+        let broadcasts = 0;
+        settings.onSettingsRecoveryChange(() => broadcasts++);
+        settings.loadSettings();
+        await drain(settings);
+        const seen = new Set<string>();
+        for (let step = 0; step < 60; step++) {
+            now += 10_000;
+            clock.mockReturnValue(now);
+            // Reads while the import is on its way (the cache shows it), as the app makes them, and after it failed.
+            settings.loadSettings();
+            settings.loadSettings();
+            await Promise.resolve();
+            settings.loadSettings();
+            await drain(settings);
+            settings.loadSettings();
+            seen.add(`${settings.getSettingsRecovery()?.code}`);
+        }
+
+        // 10 s steps over ten minutes: tries after 1 s, 2 s, 4 s ... up to five minutes apart (without a wait, one per step).
+        expect(callsTo(CONFIG).length).toBeLessThanOrEqual(11);
+        expect(callsTo(CONFIG).length).toBeGreaterThanOrEqual(3);
+        expect([...seen]).toEqual(['settings-import-failed']);
+        expect(
+            cat.error.mock.calls.filter(([message]) => String(message).includes('Settings cannot be used')),
+        ).toHaveLength(1);
+        // The block was never lifted by a configuration that was only shown; the window was told once, when it was put up.
+        expect(broadcasts).toBe(1);
+        expect(prefs.get(MIRROR)).toContain('tok-1');
+        // Nothing is spent on settings.json for text that was never stored. The title pins are written by the import
+        // itself, once per try, so there is one write of them for each write of the configuration: none in between.
+        expect(callsTo(MIRROR)).toHaveLength(0);
+        expect(callsTo(PINS)).toHaveLength(callsTo(CONFIG).length);
+        settings.onSettingsRecoveryChange(null);
+        clock.mockRestore();
+    });
+});
+
+describe('a restore in the app window whose write is refused once', () => {
+    const DAMAGED_WITH_MIRROR = () => ({
+        [CONFIG]: '{"app":{"theme":',
+        [MIRROR]: JSON.stringify({ theme: 'dark', token: 'tok-1' }),
+        [MARKER]: JSON.stringify({ importedAt: RECORD.at, mirrorStartedAt: '2026-10-02T00:00:00.000Z' }),
+    });
+    // The wiring of the shipped handlers (settings.handlers.buildHandlers): a save given up, and a block a read clears,
+    // each make the window read the settings again, and tell the renderer, which asks for the recovery state.
+    const shippedWiring = (settings: typeof settingsModule) => {
+        const heard: Array<string | null> = [];
+        const tell = () => {
+            settings.loadSettings();
+            heard.push(settings.getSettingsRecovery()?.code ?? null);
+        };
+        settings.onSettingsSaveDroppedChange(tell);
+        settings.onSettingsRecoveryChange(tell);
+        return heard;
+    };
+
+    test('is tried again at once by the read the dropped save causes, and when that lands it is the restore: restored, not corrupt, not blocked', async () => {
+        const settings = await appWindow(DAMAGED_WITH_MIRROR(), { settled: false });
+        const heard = shippedWiring(settings);
+        // The first write is refused; the ones after it are taken.
+        let refused = false;
+        hook = (call) => {
+            if (call.key !== CONFIG || refused) return undefined;
+            refused = true;
+            return Promise.reject(new Error('disk full'));
+        };
+
+        expect(settings.loadSettings().app.theme).toBe('dark');
+        // In flight: the settings in use are the restore's, shown by the cache; there is no verdict on it yet.
+        expect(settings.getSettingsRecovery()).toBeNull();
+        await drain(settings);
+
+        expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-restored', blocking: false });
+        expect(stored(CONFIG).app).toMatchObject({ theme: 'dark' });
+        expect(settings.setSetting('theme', 'light')).toBe(true);
+        // The renderer was told when it came true, and nothing after that took it back.
+        expect(heard.at(-1)).toBe('settings-restored');
+        expect(heard).not.toContain('settings-corrupt');
+        // The refused try is not said to be a blocked import any more once the restore has landed.
+        await drain(settings);
+        expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-restored' });
+    });
+
+    test('is tried again and, when settings.json then cannot be imported, settled like a first-try failure: settings-corrupt, not a blocked import', async () => {
+        const actual = jest.requireActual<typeof import('../../../src/ts/settings/importV1')>(
+            '../../../src/ts/settings/importV1',
+        );
+        let converts = true;
+        jest.doMock('../../../src/ts/settings/importV1', () => ({
+            ...actual,
+            importV1Settings: (...args: Parameters<typeof actual.importV1Settings>) =>
+                converts ? actual.importV1Settings(...args) : { ok: false, code: 'migration-failed', detail: 'x' },
+        }));
+        try {
+            const settings = await appWindow(DAMAGED_WITH_MIRROR(), { settled: false });
+            shippedWiring(settings);
+            // The write is refused, and the file cannot be converted any more when the read the refusal causes tries again.
+            hook = (call) => {
+                if (call.key !== CONFIG) return undefined;
+                converts = false;
+                return Promise.reject(new Error('disk full'));
+            };
+
+            settings.loadSettings();
+            await drain(settings);
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt', blocking: false });
+        } finally {
+            jest.dontMock('../../../src/ts/settings/importV1');
+        }
+    });
+
+    test('without the re-read (a refusal nothing reports), the refused restore is a blocked import, tried again after its wait, and settled when settings.json then cannot be imported', async () => {
+        const actual = jest.requireActual<typeof import('../../../src/ts/settings/importV1')>(
+            '../../../src/ts/settings/importV1',
+        );
+        let converts = true;
+        jest.doMock('../../../src/ts/settings/importV1', () => ({
+            ...actual,
+            importV1Settings: (...args: Parameters<typeof actual.importV1Settings>) =>
+                converts ? actual.importV1Settings(...args) : { ok: false, code: 'migration-failed', detail: 'x' },
+        }));
+        try {
+            const settings = await appWindow(DAMAGED_WITH_MIRROR(), { settled: false });
+            hook = (call) => (call.key === CONFIG ? Promise.reject(new Error('disk full')) : undefined);
+            let now = 1_000_000;
+            const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
+
+            settings.loadSettings();
+            await drain(settings);
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-failed', blocking: true });
+
+            converts = false;
+            now += 10_000;
+            clock.mockReturnValue(now);
+            settings.loadSettings();
+            await drain(settings);
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt', blocking: false });
+            clock.mockRestore();
+        } finally {
+            jest.dontMock('../../../src/ts/settings/importV1');
+        }
+    });
+
+    test('refused every time, it is a block the renderer is told of, though the dropped save reports only once', async () => {
+        const settings = await appWindow(DAMAGED_WITH_MIRROR(), { settled: false });
+        const heard = shippedWiring(settings);
+        hook = (call) => (call.key === CONFIG ? Promise.reject(new Error('disk full')) : undefined);
+
+        settings.loadSettings();
+        await drain(settings);
+
+        expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-failed', blocking: true });
+        // (Left at "restored" or nothing, the notice would not have shown the block.)
+        expect(heard.at(-1)).toBe('settings-import-failed');
+    });
+
+    describe('while it is in flight', () => {
+        const unconvertible = () => {
+            const actual = jest.requireActual<typeof import('../../../src/ts/settings/importV1')>(
+                '../../../src/ts/settings/importV1',
+            );
+            let converts = true;
+            jest.doMock('../../../src/ts/settings/importV1', () => ({
+                ...actual,
+                importV1Settings: (...args: Parameters<typeof actual.importV1Settings>) =>
+                    converts ? actual.importV1Settings(...args) : { ok: false, code: 'migration-failed', detail: 'x' },
+            }));
+            return () => {
+                converts = false;
+            };
+        };
+
+        test('Start fresh says that the restored configuration was kept, not that defaults were started', async () => {
+            const settings = await appWindow(DAMAGED_WITH_MIRROR(), { settled: false });
+            let release: () => void = () => {};
+            const gate = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            hook = async (call) => {
+                if (call.key === CONFIG) await gate;
+                return undefined;
+            };
+            settings.loadSettings();
+
+            expect(settings.startFreshDetailed()).toEqual({ ok: true, keptAt: null, adopted: true });
+
+            release();
+            await drain(settings);
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-restored' });
+            expect(stored(CONFIG).app).toMatchObject({ theme: 'dark' });
+        });
+
+        test('the restore Start fresh adopted is then refused: the blocking notice comes back', async () => {
+            const settings = await appWindow(DAMAGED_WITH_MIRROR(), { settled: false });
+            const heard = shippedWiring(settings);
+            let refuse: () => void = () => {};
+            const gate = new Promise<void>((resolve) => {
+                refuse = resolve;
+            });
+            hook = async (call) => {
+                if (call.key !== CONFIG) return undefined;
+                await gate;
+                throw new Error('disk full');
+            };
+            settings.loadSettings();
+            expect(settings.startFreshDetailed()).toMatchObject({ ok: true, adopted: true });
+            // ("Saving works": the restore is shown by the cache and nothing blocks.)
+            expect(settings.getSettingsRecovery()).toBeNull();
+
+            refuse();
+            await drain(settings);
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-failed', blocking: true });
+            expect(heard.at(-1)).toBe('settings-import-failed');
+        });
+
+        test.each<[string, (settings: typeof settingsModule) => unknown]>([
+            ['Retry, whose import cannot convert settings.json', (settings) => settings.retryImport()],
+            ['Start fresh, which finds the configuration there', (settings) => settings.startFresh()],
+            ['Re-import, whose import cannot convert settings.json', (settings) => settings.reimportFromV1()],
+        ])('%s does not take its place: when its write lands it is still the restore', async (_name, act) => {
+            const stopConverting = unconvertible();
+            try {
+                const settings = await appWindow(DAMAGED_WITH_MIRROR(), { settled: false });
+                let release: () => void = () => {};
+                const gate = new Promise<void>((resolve) => {
+                    release = resolve;
+                });
+                hook = async (call) => {
+                    if (call.key === CONFIG) await gate;
+                    return undefined;
+                };
+                settings.loadSettings();
+                expect(settings.getSettingsRecovery()).toBeNull();
+
+                stopConverting();
+                act(settings);
+                release();
+                await drain(settings);
+
+                expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-restored', blocking: false });
+            } finally {
+                jest.dontMock('../../../src/ts/settings/importV1');
+            }
+        });
+    });
+
+    test('a Start fresh that fails late after an episode is not a restore that failed: it is retried as a blocked import, not settled as the first try would have', async () => {
+        // The episode: the configuration is damaged and settings.json cannot be imported (settled: settings-corrupt).
+        const settings = await appWindow({ ...DAMAGED_WITH_MIRROR(), [MIRROR]: '{broken' }, { settled: false });
+        settings.loadSettings();
+        await drain(settings);
+        expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt', blocking: false });
+
+        // Start fresh: its write is refused, late.
+        hook = (call) => (call.key === CONFIG ? Promise.reject(new Error('disk full')) : undefined);
+        expect(settings.startFresh()).toBe(true);
+        await drain(settings);
+        expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-failed', blocking: true });
+
+        // Tried again later, settings.json still cannot be imported: a blocked import, as it was before.
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 10_000);
+        settings.loadSettings();
+        await drain(settings);
+
+        expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-failed', blocking: true });
+        clock.mockRestore();
+    });
+});
+
+describe('a damaged configuration the app window cannot set aside', () => {
+    const refuseTheCopy = () => {
+        const set = mockPreferences.set.getMockImplementation();
+        mockPreferences.set.mockImplementation(({ key, value }) =>
+            key.includes('_corrupt-')
+                ? Promise.reject(new Error('quota'))
+                : (set?.({ key, value }) ?? Promise.resolve()),
+        );
+    };
+    const DAMAGED = { [CONFIG]: '{"app":{"theme":' };
+    const MARKED = { [MARKER]: JSON.stringify({ importedAt: RECORD.at, mirrorStartedAt: '2026-10-02T00:00:00.000Z' }) };
+
+    test('with nothing to restore it from blocks saving, as a move that fails at once does, and the cache shows what Preferences still holds', async () => {
+        const settings = await appWindow({ ...DAMAGED, ...MARKED }, { settled: false });
+        refuseTheCopy();
+
+        settings.loadSettings();
+        await drain(settings);
+
+        expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-unreadable', blocking: true });
+        expect(storageApi.storage.isPersisted()).toBe(true);
+        expect(prefs.get(CONFIG)).toBe('{"app":{"theme":');
+        expect(settings.setSetting('theme', 'light')).toBe(false);
+    });
+
+    test('with a mirror to restore it from is not restored (the restore would only be declined over the damaged text): saving is blocked, and settings.json is not mirrored over', async () => {
+        const good = JSON.stringify({ theme: 'dark', token: 'tok-1' });
+        const settings = await appWindow({ ...DAMAGED, ...MARKED, [MIRROR]: good }, { settled: false });
+        const heard: Array<string | null> = [];
+        settings.onSettingsRecoveryChange(() => heard.push(settings.getSettingsRecovery()?.code ?? null));
+        refuseTheCopy();
+
+        settings.loadSettings();
+        await drain(settings);
+
+        // Not "restored": nothing was moved, so there is nothing a restore could stand on.
+        expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-unreadable', blocking: true });
+        expect(heard).toContain('settings-unreadable');
+        // The damaged value is untouched, and a save is refused, so the good settings.json is not written over.
+        expect(prefs.get(CONFIG)).toBe('{"app":{"theme":');
+        expect(settings.setSetting('theme', 'light')).toBe(false);
+        await drain(settings);
+        expect(prefs.get(MIRROR)).toBe(good);
+        expect(callsTo(MIRROR)).toHaveLength(0);
+    });
+
+    test('a change made before the refusal is known is not written over the damaged value, and settings.json is not mirrored from it', async () => {
+        const good = JSON.stringify({ theme: 'dark', token: 'tok-1' });
+        const settings = await appWindow({ ...DAMAGED, ...MARKED, [MIRROR]: good }, { settled: false });
+        refuseTheCopy();
+
+        settings.loadSettings();
+        // The window still shows the restore, so this save is accepted; the copy has not been refused yet.
+        expect(settings.setSetting('theme', 'light')).toBe(true);
+        await drain(settings);
+
+        expect(prefs.get(CONFIG)).toBe('{"app":{"theme":');
+        expect(callsTo(CONFIG).some((call) => call.value.includes('light'))).toBe(false);
+        expect(prefs.get(MIRROR)).toBe(good);
+        expect(callsTo(MIRROR)).toHaveLength(0);
+        expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-unreadable', blocking: true });
+    });
+});
+
+describe('a sign-out the background service saves', () => {
+    const CONFIG_COPY = 'gurushots-config_corrupt-2026-10-16T08-00-00-000Z';
+    const SETTINGS_COPY = 'gurushots-settings_unimportable-2026-10-16T08-00-00-000Z';
+
+    test('clears what the service can reach, leaves the Preferences copies to the window, and the window clears them at its next start', async () => {
+        // The service adopts a sign-out an older build made in settings.json (the one way it saves a sign-out).
+        const store = installHeadlessStore({
+            config: STORED_CONFIG,
+            legacy: JSON.stringify({ theme: 'dark', token: 'tok-secret', lastUsername: 'me' }),
+        });
+        store.keys.set(MARKER, MARKER_TEXT);
+        const service = loadSettingsModule();
+        service.setSetting('theme', 'light');
+        store.legacy = JSON.stringify({ theme: 'light', token: '', apiHeaders: {}, lastUsername: 'me' });
+        expect(service.setSetting('theme', 'dark')).toBe(true);
+        expect(parseJsonObject(store.value ?? 'null').auth).toMatchObject({ token: '' });
+        // What the service could reach: the copy of the user's file. The marker says the rest is owed.
+        expect(parseJsonObject(store.keys.get(MARKER) ?? 'null')).toMatchObject({
+            signOutScrubPending: expect.any(String),
+        });
+        removeHeadlessStore();
+
+        // The window's next start: the copies in Preferences, which only it can list, still hold the sign-in.
+        const window = await appWindow(
+            {
+                [CONFIG]: store.value ?? '',
+                [MIRROR]: store.legacy ?? '',
+                [MARKER]: store.keys.get(MARKER) ?? '',
+                [CONFIG_COPY]: JSON.stringify({
+                    version: 2,
+                    auth: { token: 'tok-old', apiHeaders: {}, lastUsername: 'me' },
+                }),
+                [SETTINGS_COPY]: JSON.stringify({ token: 'tok-u', theme: 'dark' }),
+            },
+            { settled: false },
+        );
+        window.loadSettings();
+        await drain(window);
+
+        expect(stored(CONFIG_COPY).auth).toMatchObject({ token: '', lastUsername: '' });
+        expect(stored(SETTINGS_COPY)).toMatchObject({ token: '' });
+        expect(stored(MARKER)).not.toHaveProperty('signOutScrubPending');
+        // Once: a window that finds nothing owed does nothing.
+        prefs.set(SETTINGS_COPY, JSON.stringify({ token: 'tok-again' }));
+        const next = await appWindow({}, { settled: false });
+        next.loadSettings();
+        await drain(next);
+        expect(stored(SETTINGS_COPY)).toMatchObject({ token: 'tok-again' });
+    });
+
+    test("a sign-out the service saves while the window is open is finished at the window's next change, not only at its next start", async () => {
+        const window = await appWindow({
+            [CONFIG]: STORED_CONFIG,
+            [MIRROR]: USER_FILE,
+            [MARKER]: JSON.stringify({ importedAt: RECORD.at, mirrorStartedAt: '2026-10-02T00:00:00.000Z' }),
+            [CONFIG_COPY]: JSON.stringify({
+                version: 2,
+                auth: { token: 'tok-old', apiHeaders: {}, lastUsername: 'me' },
+            }),
+            [SETTINGS_COPY]: JSON.stringify({ token: 'tok-u', theme: 'dark' }),
+        });
+        // Nothing is owed yet: a change of the window leaves the copies as they are.
+        expect(window.setSetting('theme', 'light')).toBe(true);
+        await drain(window);
+        expect(stored(SETTINGS_COPY)).toMatchObject({ token: 'tok-u' });
+
+        // The service signs out, and records what it left to the window (the window has no way to hear of it).
+        prefs.set(MARKER, JSON.stringify({ ...stored(MARKER), signOutScrubPending: 'service-1' }));
+        expect(window.setSetting('theme', 'dark')).toBe(true);
+        await drain(window);
+
+        expect(stored(CONFIG_COPY).auth).toMatchObject({ token: '', lastUsername: '' });
+        expect(stored(SETTINGS_COPY)).toMatchObject({ token: '' });
+        expect(stored(MARKER)).not.toHaveProperty('signOutScrubPending');
+    });
+
+    describe('a look at what the service left, while another is running', () => {
+        const COPY = 'gurushots-settings_unimportable-2026-10-16T08-00-00-000Z';
+        // Waits for `condition` (the work is queued behind other writes and has no event to wait on).
+        const until = async (what: string, condition: () => boolean) => {
+            for (let round = 0; round < 50 && !condition(); round++)
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            if (!condition()) throw new Error(`never happened: ${what}`);
+        };
+        // The window with the marker read gated: the first read of it is held until `release`, and says when it was made.
+        const gatedMarkerRead = () => {
+            const read = mockPreferences.get.getMockImplementation();
+            let release: () => void = () => {};
+            const gate = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            let reading: () => void = () => {};
+            const wasRead = new Promise<void>((resolve) => {
+                reading = resolve;
+            });
+            let gated = false;
+            mockPreferences.get.mockImplementation(async (options) => {
+                const answer = await read?.(options);
+                if (options.key === MARKER && !gated) {
+                    gated = true;
+                    reading();
+                    await gate;
+                }
+                return answer ?? { value: null };
+            });
+            return { release, wasRead };
+        };
+        const windowWithCopy = () =>
+            appWindow({
+                [CONFIG]: STORED_CONFIG,
+                [MIRROR]: USER_FILE,
+                [MARKER]: JSON.stringify({ importedAt: RECORD.at, mirrorStartedAt: '2026-10-02T00:00:00.000Z' }),
+                [COPY]: JSON.stringify({ token: 'tok-u', theme: 'dark' }),
+            });
+
+        test('is made when it ends: what the service recorded after the running look read the marker is not missed', async () => {
+            await windowWithCopy();
+            const { release, wasRead } = gatedMarkerRead();
+            mirrorApi.finishDeferredScrub();
+            await wasRead;
+            // Meanwhile the service signs out and records what it left to the window; the window asks again.
+            prefs.set(MARKER, JSON.stringify({ ...stored(MARKER), signOutScrubPending: 'service-1' }));
+            mirrorApi.finishDeferredScrub();
+            release();
+            await until('the record is cleared from the marker', () => !('signOutScrubPending' in stored(MARKER)));
+
+            expect(stored(COPY)).toMatchObject({ token: '' });
+            expect(stored(MARKER)).not.toHaveProperty('signOutScrubPending');
+        });
+
+        test('clears the record it scrubbed for and no other: a sign-out recorded after it read the marker stays owed', async () => {
+            const window = await windowWithCopy();
+            prefs.set(MARKER, JSON.stringify({ ...stored(MARKER), signOutScrubPending: 'service-1' }));
+            const { release, wasRead } = gatedMarkerRead();
+            mirrorApi.finishDeferredScrub();
+            await wasRead;
+            // The look has read the first record; the service signs out again before the window has cleared it.
+            prefs.set(MARKER, JSON.stringify({ ...stored(MARKER), signOutScrubPending: 'service-2' }));
+            release();
+            await until('the copy is cleared of the sign-in', () => stored(COPY).token === '');
+            await drain(window);
+
+            expect(stored(MARKER).signOutScrubPending).toBe('service-2');
+            // The next look finds it and clears it.
+            mirrorApi.finishDeferredScrub();
+            await until('the record is cleared from the marker', () => !('signOutScrubPending' in stored(MARKER)));
+            expect(stored(MARKER)).not.toHaveProperty('signOutScrubPending');
+        });
+    });
+
+    test('with no marker to record it in, nothing is owed', () => {
+        const store = installHeadlessStore({
+            config: STORED_CONFIG,
+            legacy: JSON.stringify({ theme: 'dark', token: 'tok-secret', lastUsername: 'me' }),
+        });
+        const service = loadSettingsModule();
+        service.setSetting('theme', 'light');
+        store.legacy = JSON.stringify({ theme: 'light', token: '', apiHeaders: {}, lastUsername: 'me' });
+
+        expect(service.setSetting('theme', 'dark')).toBe(true);
+
+        expect(store.keys.has(MARKER)).toBe(false);
     });
 });
 

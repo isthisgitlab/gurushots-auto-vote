@@ -36,6 +36,7 @@ export const logMessages = {
     m0dceb51716aa: 'Atjaunināti izaicinājuma {0} metadati: sākotnējā redzamība {1} %',
     m0fc649a6905e: 'Ārkārtas iesniegšana: izaicinājumā {2} īsi pirms termiņa iesniegti foto: {0}',
     m109401cd242b: 'Lūdzu, norādi izaicinājumu',
+    m110c228a275f: 'Sākts ar noklusētajiem uzstādījumiem; faila settings.json kopija ir paturēta šeit: {0}.',
     m111666f74c7e:
         'Par izaicinājumu {0} monētas iekasētas, bet pievienošanās nav pabeigta. Palaid vēlreiz "join {1} --yes", lai atkārtotu iesniegšanu — atkārtoti monētas NETIKS iekasētas.',
     m112a7ffc5ce9: 'Kļūda, iegūstot uzstādījumu shēmu:',
@@ -106,6 +107,7 @@ export const logMessages = {
     m242ed6b08a3d: 'Lejupielādes progress: {0} %',
     m2432f84c64ff: 'Manuālā iesniegšana: izaicinājumā {1} iesniegti foto: {0}',
     m2444c60b5de3: '🔄 Atsvaidzina API, jo mainīti uzstādījumi',
+    m2482ae4539b8: 'Fails {0} ir importēts vēlreiz.',
     m248f0056ca94: '  Pēdējās minūtes pārbaudes biežums: {0} min',
     m2497a09109d4: 'Testa režīms: {0}',
     m249a66ab6fb4: 'Izmanto Boost izaicinājumā {0} (atbloķēts ar atslēgu)',
@@ -185,6 +187,7 @@ export const logMessages = {
     m42f218b86441: 'Lietotne tūlīt aizvērsies. Piespiedu iziešana...',
     m43720acfbd52: '=== GuruShots Auto Voter — CLI manuālā balsošana (līdz 100 %) ===',
     m446023c05bef: 'Izlaista nodoma profila "{0}" sākotnējā izveide (šai instalācijai nederīgs)',
+    m448e6fe1f380: 'Uzstādījumi netika importēti no settings.json: nav, ko atzīmēt kā redzētu.',
     m45a520c33383: 'Pieejams atjauninājums:',
     m463ef69443aa: '📋 Atrasti apstrādājamie izaicinājumi: {0}',
     m47085424884d: 'Kļūda, manuāli palaižot automātisko Turbo:',
@@ -351,8 +354,6 @@ export const logMessages = {
     m86c75225f4ff: 'Norādīta nederīga redzamības vērtība',
     m8718f42df151: '[App] Lietotāja datu ceļš: {0}',
     m877c18527998: '\nIzaicinājuma uzstādījumi:',
-    m877eb39a0211:
-        'Fails settings.json tika importēts vēlreiz; lietotie uzstādījumi tika pārvietoti uz config.json.corrupt-<time>.',
     m87944a8db690: '🔍 Meklē izaicinājumu ID:',
     m87c04591e4d0:
         '⏰ Tuvojas pēdējās minūtes logs izaicinājumā "{0}" — nākamais cikls pēc {1} s (ne vēlāk kā {2} min pirms beigām)',
@@ -447,7 +448,6 @@ export const logMessages = {
     m9db79122ca50: '{0} Balsis netika iesniegtas: redzamība jau ir {1} % (mērķis {2} %)',
     m9e832b7e790b: 'Profilu nosaukumus ar atstarpēm liec pēdiņās: {0} "2-pic tactic"{1}',
     m9e98677f6b1d: 'Vēl nav atrasts {0} žurnāla fails.',
-    m9ee39490ffb7: 'Sākts ar noklusētajiem uzstādījumiem; settings.json kopija ir paturēta kā settings.json.original.',
     m9efdcb3f203c: 'Konstatēta macOS — automātiskā lejupielāde bez koda paraksta var nedarboties',
     ma1987ae4f9e6: 'Kļūda, apstrādājot get-bankroll pieprasījumu:',
     ma201c52c144f: '  • {0}: {1} → {2} (vajadzīga pārlādēšana)',
@@ -459,6 +459,7 @@ export const logMessages = {
     ma3ec8b21dab6: 'Boost veiksmīgi izmantots izvēlētajam foto',
     ma4a849154f5e: 'Noraidīts IPC "logout" pieprasījums no neuzticama loga ietvara',
     ma4cc2c7b75fe: 'Noraidīts open-external-url izsaukums URL bez HTTPS: {0}',
+    ma4e5138b9a68: 'Sākts ar noklusētajiem uzstādījumiem; faila settings.json nebija, tāpēc kopija netika paturēta.',
     ma55da53ffbe9: '  (nav pieejams — {0})',
     ma60994855a5b: '❌ Nav atrasts pieteikšanās tokens balsošanai',
     ma630257923b5: 'stopForegroundService neizdevās',
@@ -467,7 +468,10 @@ export const logMessages = {
     ma74b7d44e5d6: 'Kļūda, apstrādājot get-member-challenges pieprasījumu:',
     ma756637d0a9e: 'Neizdevās importēt settings.json: {0}',
     ma7843a2f8271: 'Atsakās saglabāt entryIds izaicinājumam {0}: {1}',
+    ma87a6c919dfd: 'Uzstādījumi netika importēti no settings.json.',
     ma9133ae7775d: 'Profils nav atrasts: "{0}"',
+    ma9cc5abc39a3:
+        'Nekas netika atiestatīts: uzstādījumi jau bija savā vietā (atjaunoti vai importēti pa to laiku), un tie tiek izmantoti.',
     maa2d3401e212:
         '{0} Nevienam foto nevar izmantot Boost (katram foto ir Turbo vai tas ir piesprausts Turbo) — Boost izlaists',
     maad546889f09: 'Starpprocesu pievienošanās bloķēšana nav pieejama izaicinājumam {0}: {1}',
@@ -630,12 +634,14 @@ export const logMessages = {
     me438c2d3abfc:
         '{0} Jauna foto iesniegšana Turbo izmantošanai: katram foto ir Boost vai tas ir piesprausts Boost — Turbo izlaists',
     me48953f7d846: 'Ar --image=<id> norādi foto, kas pašlaik atrodas šajā vietā',
+    me4955e638fd2: 'Importa pārskats ir atzīmēts kā redzēts.',
     me4e3ea625618:
         '⏰ Tuvojas redzamības uzpilde pirms Boost izaicinājumā "{0}" — nākamais cikls pēc {1} s (ne vēlāk kā {2} min pirms Boost)',
     me518785e7e2f: '❌ {0} Balsošanas kļūda:',
     me55acfad2b92: '{0} Sāk balsošanu — {1}',
     me574e830cf6f: 'Kļūda plānotajā balsošanas ciklā',
     me5aa4b569a2c: '{0} Turbo saglabāts misijai',
+    me5d193efc730: 'Fails {0} ir importēts vēlreiz; lietotie uzstādījumi un pieteikšanās ir novietoti malā šeit: {1}.',
     me62feb22135b: 'Boost veiksmīgi izmantots foto {0}',
     me648c2aaaba9: '✅ Iesniedz manuālās balsis...',
     me64f12743d74: '{0}: serveris noraidīja iesniegšanu izaicinājumam {1}: {2}',

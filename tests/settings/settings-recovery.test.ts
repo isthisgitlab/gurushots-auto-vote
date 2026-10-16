@@ -100,6 +100,8 @@ describe('settings recovery (real fs)', () => {
                 code: 'settings-corrupt',
                 path: path.join(userData, backup),
                 blocking: false,
+                // (What a Re-import would read: settings.json, there being no copy of an unusable one.)
+                reimportSource: legacyFile,
             });
 
             // Saves work normally, including the token write a login makes.

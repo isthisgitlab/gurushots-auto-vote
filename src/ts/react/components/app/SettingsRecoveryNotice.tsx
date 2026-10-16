@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { useIpcQuery } from '@/api/useIpcQuery';
@@ -20,7 +21,14 @@ type RecoveryCode =
 // the same time), `too-large` (past the size the store takes) or `storage` (the store refused it). Any other value,
 // or none, is worded neutrally. `settingsSetAside` (a damaged configuration only): where the unusable settings.json
 // was kept once a save mirrored over it (a path where there are files, a storage key where there are none).
-type Recovery = { code: RecoveryCode; path: string; cause?: string; settingsSetAside?: string };
+// `reimportSource` (the same, where there are files): the file a Re-import would read.
+type Recovery = {
+    code: RecoveryCode;
+    path: string;
+    cause?: string;
+    settingsSetAside?: string;
+    reimportSource?: string;
+};
 
 // The translation keys of each code's what happened / why / what next text.
 const RECOVERY_KEYS: Record<RecoveryCode, { what: string; why: string; next: string }> = {
@@ -84,6 +92,7 @@ const NO_FILE_TEXT = new Map([
     ['notice.recoveryRetryFailed', 'notice.recoveryRetryFailedAndroid'],
     ['notice.recoveryStartFreshBody', 'notice.recoveryStartFreshBodyAndroid'],
     ['notice.recoveryStartFreshDone', 'notice.recoveryStartFreshDoneAndroid'],
+    ['notice.recoveryStartFreshDoneAdopted', 'notice.recoveryStartFreshDoneAdoptedAndroid'],
 ]);
 
 // The text keys of a notice: its code's, refined by what the platform and the cause make true. A dropped save is
@@ -91,6 +100,10 @@ const NO_FILE_TEXT = new Map([
 const keysFor = (recovery: Recovery, settingsFile: boolean) => {
     const keys = { ...RECOVERY_KEYS[recovery.code] };
     if (!settingsFile) Object.assign(keys, NO_FILE_KEYS[recovery.code]);
+    // Once the unusable settings.json was set aside, the guidance names where it went (it is the file to fix).
+    if (recovery.settingsSetAside !== undefined) {
+        keys.next = settingsFile ? 'notice.recoveryCorruptNextAside' : 'notice.recoveryCorruptNextAsideAndroid';
+    }
     if (recovery.code === 'settings-save-dropped') {
         keys.why = DROPPED_WHY.get(recovery.cause ?? '') ?? 'notice.recoveryDroppedWhyUnknown';
         if (recovery.cause === 'too-large') keys.next = 'notice.recoveryDroppedNextTooLarge';
@@ -105,7 +118,7 @@ const ACTIONS: Record<
     ActionId,
     {
         label: string;
-        run: () => Promise<{ success: boolean; error?: string; keptAt?: string | null }>;
+        run: () => Promise<{ success: boolean; error?: string; kept?: StartFreshKept; source?: string }>;
         done: string;
         failed: string;
         primary?: true;
@@ -159,8 +172,15 @@ const ACTIONS_FOR: Partial<Record<RecoveryCode, ActionId[]>> = {
 const actionsFor = (code: RecoveryCode, settingsFile: boolean): ActionId[] =>
     (ACTIONS_FOR[code] ?? []).filter((action) => settingsFile || action !== 'reimport');
 
-// `keptAt` (Start fresh only): where settings.json was kept, null when there was none to keep.
-type Outcome = { action: ActionId; ok: boolean; keptAt?: string | null };
+// What became of settings.json at a fresh start, as the main process answers it (see 'start-fresh-settings': kept at a
+// path, kept in the app's own storage, to be kept as soon as it can be written, or there was none).
+type StartFreshKept = Extract<
+    NonNullable<Awaited<ReturnType<typeof ipc.startFreshSettings>>>,
+    { success: true }
+>['kept'];
+
+// `kept` (Start fresh only) and `source` (Re-import: the file it read, or would have read when it failed).
+type Outcome = { action: ActionId; ok: boolean; kept?: StartFreshKept; source?: string };
 
 const fetchRecovery = () => ipc.getSettingsRecovery();
 
@@ -180,11 +200,12 @@ const applyRecovery = (
  * their place; a file that cannot be read; a settings.json that could not be imported (saving is off until it can
  * be); or a change the window could not save. What happened, why, what next; dismissable until the notice goes away.
  * The notices that have a way forward offer it: Retry or Start fresh for an import that failed, Re-import for a
- * damaged configuration with nothing to restore it from. An action shows that it is working, then says inline what
+ * damaged configuration with nothing to restore it from. `returnFocusTo` is the page's own element that takes focus when
+ * a dismissed outcome has no button or heading of the notice left to return it to (the page makes it focusable). An action shows that it is working, then says inline what
  * came of it. It reads again on every settings
  * change, which is how a save given up later (or one that lands after) reaches it.
  */
-export function SettingsRecoveryNotice() {
+export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefObject<HTMLElement | null> }) {
     const { t } = useTranslation();
     const { settingsFile } = usePlatformCapabilities();
     const { data: recovery, refetch } = useIpcQuery(fetchRecovery, {
@@ -196,11 +217,10 @@ export function SettingsRecoveryNotice() {
     const [busy, setBusy] = useState<ActionId | null>(null);
     const [confirming, setConfirming] = useState<ConfirmedAction | null>(null);
     const [outcome, setOutcome] = useState<Outcome | null>(null);
-    // Where focus goes back to when an outcome is dismissed: the button that ran the action, else the notice's heading.
+    // Where focus goes back to when an outcome is dismissed: the button that ran the action, else the notice's
+    // heading, else the page's own place (`returnFocusTo`: the notice is gone, a success took it away).
     const actionButtons = useRef(new Map<ActionId, HTMLButtonElement>());
     const heading = useRef<HTMLParagraphElement>(null);
-    // The outcome's own element is always mounted: where focus falls back to when the notice is gone too.
-    const outcomeBox = useRef<HTMLDivElement>(null);
     // A notice that went away and comes back is a new one.
     useEffect(() => {
         if (!recovery) setDismissed(false);
@@ -210,17 +230,21 @@ export function SettingsRecoveryNotice() {
         setBusy(action);
         setOutcome(null);
         let ok = false;
-        let keptAt: string | null | undefined;
+        let kept: StartFreshKept | undefined;
+        let source = recovery?.reimportSource;
         try {
             const result = await ACTIONS[action].run();
             ok = result?.success === true;
-            if (ok) keptAt = result.keptAt;
+            if (ok) {
+                kept = result.kept;
+                source = result.source ?? source;
+            }
             if (!ok)
                 void ipc.logRendererWarning(`Settings recovery "${action}" failed: ${result?.error ?? 'no answer'}`);
         } catch (error) {
             void ipc.logRendererError(`Settings recovery "${action}" threw: ${errorMessage(error) || error}`);
         }
-        setOutcome({ action, ok, keptAt });
+        setOutcome({ action, ok, kept, source });
         setConfirming(null);
         setBusy(null);
         if (ok) await refetch();
@@ -231,16 +255,21 @@ export function SettingsRecoveryNotice() {
     // (A text with no no-file wording is one of Re-import, which is not offered where there is no file.)
     const worded = (key: string) =>
         t(settingsFile ? key : (NO_FILE_TEXT.get(key) ?? /* istanbul ignore next -- see above */ key));
-    // What an outcome says: Start fresh names where settings.json was kept, or says there was none to keep.
-    const outcomeText = ({ action, ok, keptAt }: Outcome): string => {
-        if (!ok) return worded(ACTIONS[action].failed);
-        if (action === 'start-fresh' && keptAt === null) {
+    // What an outcome says: Start fresh names where settings.json was kept (or that it is not yet, or there was none);
+    // Re-import names the file it read.
+    const outcomeText = ({ action, ok, kept, source }: Outcome): string => {
+        if (!ok) return interp(worded(ACTIONS[action].failed), { path: source });
+        if (action === 'start-fresh' && kept?.kind === 'none') {
             return t(settingsFile ? 'notice.recoveryStartFreshDoneNone' : 'notice.recoveryStartFreshDoneNoneAndroid');
         }
-        return interp(worded(ACTIONS[action].done), { path: keptAt });
+        if (action === 'start-fresh' && kept?.kind === 'adopted') return worded('notice.recoveryStartFreshDoneAdopted');
+        if (action === 'start-fresh' && kept?.kind === 'pending')
+            return t('notice.recoveryStartFreshDonePendingAndroid');
+        return interp(worded(ACTIONS[action].done), { path: kept?.kind === 'path' ? kept.path : source });
     };
     const dismissOutcome = () => {
-        const target = (outcome && actionButtons.current.get(outcome.action)) ?? heading.current ?? outcomeBox.current;
+        const target =
+            (outcome && actionButtons.current.get(outcome.action)) ?? heading.current ?? returnFocusTo?.current;
         setOutcome(null);
         target?.focus();
     };
@@ -249,8 +278,10 @@ export function SettingsRecoveryNotice() {
         else void run(action);
     };
     const keys = recovery && !dismissed ? keysFor(recovery, settingsFile) : null;
+    // A landmark only while there is something in it: an empty one is noise for a screen reader.
+    const hasContent = Boolean(recovery && keys) || Boolean(outcome) || Boolean(busy);
     return (
-        <>
+        <div {...(hasContent ? { role: 'region', 'aria-label': t('notice.recoveryRegion') } : {})}>
             {recovery && keys && (
                 <div role="alert" className="alert alert-warning mb-4 text-sm items-start">
                     <div className="flex-1 space-y-2">
@@ -258,14 +289,7 @@ export function SettingsRecoveryNotice() {
                             {t(keys.what)}
                         </p>
                         <p className="break-words">{interp(t(keys.why), { path: recovery.path })}</p>
-                        <p>{t(keys.next)}</p>
-                        {recovery.settingsSetAside !== undefined && (
-                            <p className="break-words">
-                                {settingsFile
-                                    ? interp(t('notice.recoveryCorruptAside'), { path: recovery.settingsSetAside })
-                                    : t('notice.recoveryCorruptAsideAndroid')}
-                            </p>
-                        )}
+                        <p className="break-words">{interp(t(keys.next), { path: recovery.settingsSetAside })}</p>
                         {offered.length > 0 && (
                             <div className="flex flex-wrap gap-2 pt-1">
                                 {offered.map((action) => (
@@ -296,15 +320,13 @@ export function SettingsRecoveryNotice() {
                 them is announced: progress and success politely, a failure assertively. The Dismiss button is not in
                 either, so that pressing it does not read the message out again. */}
             <div
-                ref={outcomeBox}
-                tabIndex={-1}
-                className={`focus:outline-none ${
+                className={
                     outcome
                         ? `alert ${outcome.ok ? 'alert-success' : 'alert-error'} mb-4 text-sm items-start`
                         : busy && !confirming
                           ? 'text-xs mb-2'
-                          : ''
-                }`}
+                          : undefined
+                }
             >
                 {/* One element for the two regions: a DaisyUI alert is a grid, and an empty region of its own would take a cell of it. */}
                 <div className="flex-1">
@@ -333,9 +355,11 @@ export function SettingsRecoveryNotice() {
                     confirmLabel={CONFIRMS[confirming].button}
                     workingLabel="notice.recoveryWorking"
                 >
-                    <p>{worded(CONFIRMS[confirming].body)}</p>
+                    <p className="break-words">
+                        {interp(worded(CONFIRMS[confirming].body), { path: recovery?.reimportSource })}
+                    </p>
                 </ConfirmModal>
             )}
-        </>
+        </div>
     );
 }

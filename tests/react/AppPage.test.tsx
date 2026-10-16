@@ -7,7 +7,7 @@
  * assert what App does. Settings flow through the real useSettings hook over
  * the window.api mock.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/preact';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { DEFAULT_TIMEZONE } from '../../src/ts/settings/uiDefaults';
 import { invalid } from '../helpers/invalid';
 import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
@@ -232,6 +232,27 @@ describe('App page', () => {
 
         expect(await screen.findByRole('dialog', { name: 'notice.importReportTitle' })).toBeTruthy();
         readReport.mockImplementation(original);
+    });
+
+    test("dismissing the outcome of a settings recovery, which took the notice away, moves focus to the page's main element", async () => {
+        jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(
+            invalid({ success: true, recovery: { code: 'settings-import-failed', path: '/data/settings.json' } }),
+        );
+        jest.mocked(window.api.retrySettingsImport).mockResolvedValue({ success: true });
+        await renderReady();
+        await screen.findByRole('alert');
+        jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(invalid({ success: true, recovery: null }));
+        fireEvent.click(screen.getByRole('button', { name: 'notice.recoveryRetry' }));
+        const done = await screen.findByText('notice.recoveryRetryDone');
+        await waitFor(() => expect(screen.queryByText('notice.recoveryImportWhat')).toBeNull());
+
+        fireEvent.click(within(done.closest('.alert') as HTMLElement).getByRole('button', { name: 'errors.dismiss' }));
+
+        // (The page made its main element focusable; the notice touched no markup of the page's.)
+        // (Named, so that a screen reader announces where focus came to.)
+        const main = screen.getByRole('main', { name: 'app.mainContent' });
+        expect(document.activeElement).toBe(main);
+        expect(main.getAttribute('tabindex')).toBe('-1');
     });
 
     test.each([

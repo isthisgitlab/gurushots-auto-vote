@@ -1,6 +1,6 @@
 import type { RendererGlobals } from '../../types/capacitor';
 import { createRoot } from 'react-dom/client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
 import { useSettings, useEnvironmentInfo } from '@/api/useSettings';
 import { useAuth } from '@/api/useAuth';
@@ -28,6 +28,8 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
     const notice = useNoticeGate(settings, settingsLoading, updateSetting);
     const { authenticate, login, loading: authLoading, error: authError } = useAuth();
     const { settingsFile } = usePlatformCapabilities();
+    // Where focus goes when the settings notice has nothing of its own left to return it to.
+    const headingRef = useRef<HTMLHeadingElement>(null);
 
     // Local state
     const [theme, setTheme] = useState('light');
@@ -119,10 +121,16 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
                     {/* Language Switcher */}
                     <LanguageSwitcher />
 
-                    <SettingsRecoveryNotice />
+                    <SettingsRecoveryNotice returnFocusTo={headingRef} />
 
                     {/* Title */}
-                    <h2 className="card-title text-2xl font-bold text-center mb-6">{t('login.heading')}</h2>
+                    <h2
+                        ref={headingRef}
+                        tabIndex={-1}
+                        className="card-title text-2xl font-bold text-center mb-6 focus-visible:ring-primary focus-visible:ring-2 focus-visible:outline-none"
+                    >
+                        {t('login.heading')}
+                    </h2>
 
                     {/* Auth Error */}
                     {shownError && (

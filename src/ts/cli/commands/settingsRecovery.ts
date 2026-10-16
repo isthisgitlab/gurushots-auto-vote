@@ -26,11 +26,15 @@ const describeSettingsRecovery = ({
         case 'settings-restored':
             return `The saved settings could not be read (config.json was damaged), so they were restored from settings.json. The damaged file was moved to ${path}; keep it if you want to look at it, or delete it.`;
         case 'settings-corrupt':
-            return `The saved settings could not be read (config.json was damaged). It was moved to ${path} and no usable settings.json was found to restore them from, so the default settings are in use. Keep that file if you want to recover values from it by hand. If settings.json exists but cannot be imported, the first save keeps it as settings.json.unimportable-<time> beside it and writes a new settings.json from the saved settings; to bring its values back, fix the file in place and run "settings-recovery reimport": before the first save that file is settings.json, after it the copy named below (settings.json.unimportable-<time>); copies from earlier problems are never used.${settingsSetAside === undefined ? '' : ` The unusable settings.json was kept at ${settingsSetAside}.`}`;
+            return `The saved settings could not be read (config.json was damaged). It was moved to ${path} and no usable settings.json was found to restore them from, so the default settings are in use. Keep that file if you want to recover values from it by hand. ${
+                settingsSetAside === undefined
+                    ? 'To bring the values of settings.json back, fix settings.json and run "settings-recovery reimport". If it cannot be imported, the first save keeps it as a copy beside it before a new settings.json is written; the notice then names the copy to fix.'
+                    : `The unusable settings.json was kept at ${settingsSetAside}, and a new settings.json was written from the saved settings. To bring its values back, fix the file at ${settingsSetAside} and run "settings-recovery reimport".`
+            }`;
         case 'settings-unreadable':
             return `The saved settings at ${path} cannot be read, or cannot be moved aside, so nothing will be saved until that is fixed. The default settings are in use. Check that the file belongs to this account and can be read and written.`;
         case 'settings-import-failed':
-            return `The settings.json at ${path} could not be imported, so nothing will be saved and the default settings are in use. The file was left as it is. Fix it and run "settings-recovery retry", or run "settings-recovery start-fresh" to begin with default settings (a copy of the file is kept beside it, as settings.json.original or, when that name is taken, as settings.json.unimportable-<time>).`;
+            return `The settings.json at ${path} could not be imported, so nothing will be saved and the default settings are in use. The file was left as it is. Fix it and run "settings-recovery retry", or run "settings-recovery start-fresh" to begin with default settings (a copy of the file is kept beside it, as settings.json.original or, when that name is taken, as settings.json.unimportable-<timestamp>).`;
     }
 };
 
@@ -47,25 +51,26 @@ const reportSettingsRecovery = (): void => {
  * setting the settings in use aside (when there were any).
  */
 const reimport = (): { ok: boolean; done: string } => {
-    const { ok, setAside } = settings.reimportFromV1Detailed();
+    const { ok, setAside, source } = settings.reimportFromV1Detailed();
     return {
         ok,
         done:
             setAside === null
-                ? 'settings.json was imported again.'
-                : `settings.json was imported again; the settings and sign-in that were in use were set aside at ${setAside}.`,
+                ? `${source} was imported again.`
+                : `${source} was imported again; the settings and sign-in that were in use were set aside at ${setAside}.`,
     };
 };
 
 /** What Start fresh came to: where settings.json was kept, or that there was none to keep. */
 const startFresh = (): { ok: boolean; done: string } => {
-    const { ok, keptAt } = settings.startFreshDetailed();
+    const { ok, keptAt, adopted } = settings.startFreshDetailed();
     return {
         ok,
-        done:
-            keptAt === null
-                ? 'Started with default settings; there was no settings.json, so no copy was kept.'
-                : `Started with default settings; a copy of settings.json was kept at ${keptAt}.`,
+        done: adopted
+            ? 'Nothing was reset: the settings were already in place (restored or imported meanwhile), and they are in use.'
+            : keptAt === null
+              ? 'Started with default settings; there was no settings.json, so no copy was kept.'
+              : `Started with default settings; a copy of settings.json was kept at ${keptAt}.`,
     };
 };
 

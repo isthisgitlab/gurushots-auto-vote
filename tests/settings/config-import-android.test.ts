@@ -117,6 +117,10 @@ describe('the import in the Android app window', () => {
         expect(settings.getSettingsRecovery()).toBeNull();
         await settings.flushPendingWrites();
         await settle();
+        // settings.json is brought up to date by the first read of what is stored, not of the import still on its way.
+        settings.loadSettings();
+        await settings.flushPendingWrites();
+        await settle();
         // The pins are saved against what is stored, so the cache shows them once they are.
         expect(settings.getTitlePins()).toEqual({ '7': 'Macro' });
         expect(saved('gurushots-config')).toMatchObject({ version: 2 });

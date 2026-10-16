@@ -3,6 +3,7 @@
  * Each reads as what happened / why (with the file's path) / what next, and can be dismissed for the session.
  */
 
+import { useRef } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
 import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice';
 import { mockTranslator, defaultTranslate, fireSettingsChanged } from './helpers/setup';
@@ -146,6 +147,19 @@ describe('SettingsRecoveryNotice actions', () => {
     const failureText = () => failureRegion()?.textContent ?? '';
     // The box an outcome is shown in: its message regions and its Dismiss button.
     const outcomeBox = () => announced().parentElement?.parentElement as HTMLElement;
+    // A page that gives the notice a place of its own for focus to return to (it makes it focusable itself).
+    const PageWithNotice = () => {
+        const target = useRef<HTMLHeadingElement>(null);
+        return (
+            <>
+                <h2 ref={target} tabIndex={-1}>
+                    Page heading
+                </h2>
+                <SettingsRecoveryNotice returnFocusTo={target} />
+            </>
+        );
+    };
+    const pageHeading = () => screen.getByRole('heading', { name: 'Page heading' });
     const settle = async <T,>(value: T) => {
         // A pending call the test resolves itself, to look at the state while it runs.
         let finish: (result: T) => void = () => {};
@@ -280,7 +294,10 @@ describe('SettingsRecoveryNotice actions', () => {
         });
 
         test('confirming Start fresh runs it, shows progress in the dialog and then the result in the page', async () => {
-            const call = await settle({ success: true as const, keptAt: '/x/settings.json.original' });
+            const call = await settle({
+                success: true as const,
+                kept: { kind: 'path' as const, path: '/x/settings.json.original' },
+            });
             jest.mocked(window.api.startFreshSettings).mockReturnValue(call.pending);
             answer({ code: 'settings-import-failed', path: '/x' });
             render(<SettingsRecoveryNotice />);
@@ -349,7 +366,10 @@ describe('SettingsRecoveryNotice actions', () => {
             expect(within(dialog).getByText('notice.recoveryReimportBody')).toBeTruthy();
             expect(window.api.reimportSettingsFromV1).not.toHaveBeenCalled();
 
-            jest.mocked(window.api.reimportSettingsFromV1).mockResolvedValue({ success: true });
+            jest.mocked(window.api.reimportSettingsFromV1).mockResolvedValue({
+                success: true,
+                source: '/data/settings.json',
+            });
             answer(null);
             fireEvent.click(within(dialog).getByRole('button', { name: 'notice.recoveryReimportConfirm' }));
 
@@ -474,7 +494,7 @@ describe('SettingsRecoveryNotice actions', () => {
         });
 
         test('Start fresh says where settings.json was kept, or that there was none to keep', async () => {
-            jest.mocked(window.api.startFreshSettings).mockResolvedValue({ success: true, keptAt: null });
+            jest.mocked(window.api.startFreshSettings).mockResolvedValue({ success: true, kept: { kind: 'none' } });
             answer({ code: 'settings-import-failed', path: '/x' });
             render(<SettingsRecoveryNotice />);
             await screen.findByRole('alert');
@@ -486,13 +506,25 @@ describe('SettingsRecoveryNotice actions', () => {
             expect(announced().textContent).not.toContain('DoneNoneAndroid');
         });
 
+        test('Start fresh that found the settings restored meanwhile says nothing was reset, not that defaults were started', async () => {
+            jest.mocked(window.api.startFreshSettings).mockResolvedValue({ success: true, kept: { kind: 'adopted' } });
+            answer({ code: 'settings-import-failed', path: '/x' });
+            render(<SettingsRecoveryNotice />);
+            await screen.findByRole('alert');
+            fireEvent.click(action('notice.recoveryStartFresh'));
+            fireEvent.click(
+                within(screen.getByRole('dialog')).getByRole('button', { name: 'notice.recoveryStartFresh' }),
+            );
+            await waitFor(() => expect(announced().textContent).toBe('notice.recoveryStartFreshDoneAdopted'));
+        });
+
         test('Start fresh names the path of the copy', async () => {
             mockTranslator.t.mockImplementation((text) =>
                 text === 'notice.recoveryStartFreshDone' ? 'Kept at {path}' : text,
             );
             jest.mocked(window.api.startFreshSettings).mockResolvedValue({
                 success: true,
-                keptAt: '/data/settings.json.original',
+                kept: { kind: 'path', path: '/data/settings.json.original' },
             });
             answer({ code: 'settings-import-failed', path: '/x' });
             render(<SettingsRecoveryNotice />);
@@ -505,9 +537,32 @@ describe('SettingsRecoveryNotice actions', () => {
             await waitFor(() => expect(announced().textContent).toContain('Kept at /data/settings.json.original'));
         });
 
+        test.each([
+            ['on a desktop', undefined, 'notice.recoveryStartFreshDoneAdopted'],
+            ['on Android', { isNativePlatform: () => true }, 'notice.recoveryStartFreshDoneAdoptedAndroid'],
+        ])(
+            'a Start fresh that found the settings in place says so %s, in the wording of the platform',
+            async (_name, capacitor, text) => {
+                if (capacitor) (globalThis as RendererGlobals).Capacitor = capacitor;
+                jest.mocked(window.api.startFreshSettings).mockResolvedValue({
+                    success: true,
+                    kept: { kind: 'adopted' },
+                });
+                answer({ code: 'settings-import-failed', path: '/x' });
+                render(<SettingsRecoveryNotice />);
+                await screen.findByRole('alert');
+                fireEvent.click(action('notice.recoveryStartFresh'));
+                fireEvent.click(
+                    within(screen.getByRole('dialog')).getByRole('button', { name: 'notice.recoveryStartFresh' }),
+                );
+
+                await waitFor(() => expect(announced().textContent).toBe(text));
+            },
+        );
+
         test('on Android a Start fresh with nothing kept says so in the no-file wording', async () => {
             (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
-            jest.mocked(window.api.startFreshSettings).mockResolvedValue({ success: true, keptAt: null });
+            jest.mocked(window.api.startFreshSettings).mockResolvedValue({ success: true, kept: { kind: 'none' } });
             answer({ code: 'settings-import-failed', path: 'gurushots-settings' });
             render(<SettingsRecoveryNotice />);
             await screen.findByRole('alert');
@@ -553,10 +608,10 @@ describe('SettingsRecoveryNotice actions', () => {
             expect(document.activeElement).toBe(screen.getByText('notice.recoveryCorruptWhat'));
         });
 
-        test("Dismiss puts focus on the outcome's own element when there is no button and no heading to put it on", async () => {
+        test("Dismiss puts focus on the page's own place when there is no button and no notice heading to put it on", async () => {
             jest.mocked(window.api.retrySettingsImport).mockResolvedValue({ success: false, error: 'x' });
             answer({ code: 'settings-import-failed', path: '/x' });
-            render(<SettingsRecoveryNotice />);
+            render(<PageWithNotice />);
             await screen.findByRole('alert');
             fireEvent.click(action('notice.recoveryRetry'));
             await waitFor(() => expect(failureText()).toContain('notice.recoveryRetryFailed'));
@@ -565,24 +620,85 @@ describe('SettingsRecoveryNotice actions', () => {
 
             fireEvent.click(within(outcomeBox()).getByRole('button', { name: 'errors.dismiss' }));
 
-            expect(document.activeElement).toBe(outcomeBox());
+            expect(document.activeElement).toBe(pageHeading());
             expect(failureText()).toBe('');
         });
 
-        test('Dismiss of a success, which took the notice away with it, keeps focus on the page instead of dropping it to the body', async () => {
+        test("a success, which took the notice away, stays on screen as a named message until it is dismissed, and Dismiss moves focus to the page's own place, not to the body or an empty element", async () => {
+            jest.mocked(window.api.retrySettingsImport).mockResolvedValue({ success: true });
+            answer({ code: 'settings-import-failed', path: '/x' });
+            render(<PageWithNotice />);
+            await screen.findByRole('alert');
+            answer(null);
+            fireEvent.click(action('notice.recoveryRetry'));
+            await waitFor(() => expect(announced().textContent).toContain('notice.recoveryRetryDone'));
+            await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+            // The message is still there, in a named region, until the user has seen it.
+            expect(
+                within(screen.getByRole('region', { name: 'notice.recoveryRegion' })).getByRole('status').textContent,
+            ).toContain('notice.recoveryRetryDone');
+
+            fireEvent.click(within(outcomeBox()).getByRole('button', { name: 'errors.dismiss' }));
+
+            expect(document.activeElement).toBe(pageHeading());
+            expect(document.activeElement?.textContent).not.toBe('');
+            expect(screen.queryByRole('region')).toBeNull();
+        });
+
+        test('with no place given by the page, Dismiss moves focus nowhere (never to an empty element)', async () => {
             jest.mocked(window.api.retrySettingsImport).mockResolvedValue({ success: true });
             answer({ code: 'settings-import-failed', path: '/x' });
             render(<SettingsRecoveryNotice />);
             await screen.findByRole('alert');
             answer(null);
             fireEvent.click(action('notice.recoveryRetry'));
-            await waitFor(() => expect(announced().textContent).toContain('notice.recoveryRetryDone'));
             await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+            await waitFor(() => expect(announced().textContent).toContain('notice.recoveryRetryDone'));
 
             fireEvent.click(within(outcomeBox()).getByRole('button', { name: 'errors.dismiss' }));
 
-            expect(document.activeElement).toBe(outcomeBox());
-            expect(document.activeElement).not.toBe(document.body);
+            expect(document.querySelector('[tabindex]:focus')).toBeNull();
+        });
+
+        test('the container is a named region only while it has something in it', async () => {
+            jest.mocked(window.api.retrySettingsImport).mockResolvedValue({ success: false, error: 'x' });
+            answer(null);
+            const empty = render(<SettingsRecoveryNotice />);
+            await waitFor(() => expect(window.api.getSettingsRecovery).toHaveBeenCalledTimes(1));
+            // Nothing to say: no landmark for a screen reader to stop at.
+            expect(screen.queryByRole('region')).toBeNull();
+            empty.unmount();
+
+            answer({ code: 'settings-import-failed', path: '/x' });
+            render(<SettingsRecoveryNotice />);
+            await screen.findByRole('alert');
+            expect(screen.getByRole('region', { name: 'notice.recoveryRegion' })).toBeTruthy();
+
+            // Dismissed, and its failure dismissed: empty again.
+            fireEvent.click(action('notice.recoveryRetry'));
+            await waitFor(() => expect(failureText()).toContain('notice.recoveryRetryFailed'));
+            expect(screen.getByRole('region', { name: 'notice.recoveryRegion' })).toBeTruthy();
+            fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'errors.dismiss' }));
+            fireEvent.click(within(outcomeBox()).getByRole('button', { name: 'errors.dismiss' }));
+            expect(screen.queryByRole('region')).toBeNull();
+        });
+
+        test("touches no other component's markup: a heading of the page keeps its attributes", async () => {
+            jest.mocked(window.api.retrySettingsImport).mockResolvedValue({ success: true });
+            answer({ code: 'settings-import-failed', path: '/x' });
+            render(
+                <>
+                    <h1>Page title</h1>
+                    <SettingsRecoveryNotice />
+                </>,
+            );
+            await screen.findByRole('alert');
+            answer(null);
+            fireEvent.click(action('notice.recoveryRetry'));
+            await waitFor(() => expect(announced().textContent).toContain('notice.recoveryRetryDone'));
+            fireEvent.click(within(outcomeBox()).getByRole('button', { name: 'errors.dismiss' }));
+
+            expect(screen.getByRole('heading', { name: 'Page title' }).hasAttribute('tabindex')).toBe(false);
         });
 
         test('the two regions share one element, so that an empty one takes no cell of a grid alert', async () => {
@@ -612,27 +728,76 @@ describe('SettingsRecoveryNotice actions', () => {
     });
 
     describe('a damaged config.json whose unusable settings.json was set aside', () => {
-        test('says where it went, by path, and still offers Re-import', async () => {
+        test('the guidance names the file to fix by its path, and Re-import is still offered', async () => {
             mockTranslator.t.mockImplementation((text) =>
-                text === 'notice.recoveryCorruptAside' ? 'Kept at {path}' : text,
+                text === 'notice.recoveryCorruptNextAside' ? 'Fix {path}' : text,
             );
             answer({
                 code: 'settings-corrupt',
                 path: '/data/config.json.corrupt-1',
                 settingsSetAside: '/data/settings.json.unimportable-1',
+                reimportSource: '/data/settings.json.unimportable-1',
             });
             render(<SettingsRecoveryNotice />);
 
             const alert = await screen.findByRole('alert');
-            expect(alert.textContent).toContain('Kept at /data/settings.json.unimportable-1');
+            expect(alert.textContent).toContain('Fix /data/settings.json.unimportable-1');
+            expect(alert.textContent).not.toContain('notice.recoveryCorruptNext');
             expect(within(alert).getByRole('button', { name: 'notice.recoveryReimport' })).toBeTruthy();
         });
 
-        test('says nothing of it before the first save, when nothing was set aside', async () => {
-            answer({ code: 'settings-corrupt', path: '/data/config.json.corrupt-1' });
+        test('before a set-aside the guidance is the plain one: fix settings.json', async () => {
+            answer({
+                code: 'settings-corrupt',
+                path: '/data/config.json.corrupt-1',
+                reimportSource: '/data/settings.json',
+            });
             render(<SettingsRecoveryNotice />);
 
-            expect((await screen.findByRole('alert')).textContent).not.toContain('notice.recoveryCorruptAside');
+            const alert = await screen.findByRole('alert');
+            expect(alert.textContent).toContain('notice.recoveryCorruptNext');
+            expect(alert.textContent).not.toContain('notice.recoveryCorruptNextAside');
+        });
+
+        test('Re-import asks about, and says it imported, the file it reads, and says when it did not work', async () => {
+            mockTranslator.t.mockImplementation((text) =>
+                text === 'notice.recoveryReimportBody'
+                    ? 'Import {path}? Old?'
+                    : text === 'notice.recoveryReimportDone'
+                      ? '{path} imported'
+                      : text === 'notice.recoveryReimportFailed'
+                        ? '{path} failed'
+                        : text,
+            );
+            jest.mocked(window.api.reimportSettingsFromV1)
+                .mockResolvedValueOnce({ success: false, error: 'x' })
+                .mockResolvedValueOnce({ success: true, source: '/data/settings.json.unimportable-1' });
+            answer({
+                code: 'settings-corrupt',
+                path: '/data/config.json.corrupt-1',
+                settingsSetAside: '/data/settings.json.unimportable-1',
+                reimportSource: '/data/settings.json.unimportable-1',
+            });
+            render(<SettingsRecoveryNotice />);
+            await screen.findByRole('alert');
+
+            fireEvent.click(action('notice.recoveryReimport'));
+            expect(
+                within(screen.getByRole('dialog')).getByText('Import /data/settings.json.unimportable-1? Old?'),
+            ).toBeTruthy();
+            fireEvent.click(
+                within(screen.getByRole('dialog')).getByRole('button', { name: 'notice.recoveryReimportConfirm' }),
+            );
+            await waitFor(() => expect(failureText()).toContain('/data/settings.json.unimportable-1 failed'));
+
+            answer(null);
+            fireEvent.click(action('notice.recoveryReimport'));
+            fireEvent.click(
+                within(screen.getByRole('dialog')).getByRole('button', { name: 'notice.recoveryReimportConfirm' }),
+            );
+            await waitFor(() =>
+                expect(announced().textContent).toContain('/data/settings.json.unimportable-1 imported'),
+            );
         });
 
         test('on Android it names no path, and offers no Re-import: there is no file the user can fix', async () => {
@@ -646,7 +811,7 @@ describe('SettingsRecoveryNotice actions', () => {
 
             const alert = await screen.findByRole('alert');
             expect(alert.textContent).toContain('notice.recoveryCorruptWhatAndroid');
-            expect(alert.textContent).toContain('notice.recoveryCorruptAsideAndroid');
+            expect(alert.textContent).toContain('notice.recoveryCorruptNextAsideAndroid');
             expect(alert.textContent).not.toContain('gurushots-settings');
             expect(
                 within(alert)
@@ -662,7 +827,7 @@ describe('SettingsRecoveryNotice actions', () => {
         });
 
         test('Start fresh asks, and says it worked, in the no-file wording', async () => {
-            jest.mocked(window.api.startFreshSettings).mockResolvedValue({ success: true, keptAt: '/x' });
+            jest.mocked(window.api.startFreshSettings).mockResolvedValue({ success: true, kept: { kind: 'stored' } });
             answer({ code: 'settings-import-failed', path: 'gurushots-settings' });
             render(<SettingsRecoveryNotice />);
             await screen.findByRole('alert');
@@ -676,9 +841,8 @@ describe('SettingsRecoveryNotice actions', () => {
             expect(await screen.findByText('notice.recoveryStartFreshDoneAndroid')).toBeTruthy();
         });
 
-        test('Start fresh whose copy could not be written (no place known) says the plain no-file Done, not that nothing was kept', async () => {
-            // (keptAt is absent, not null: null would say there was nothing to keep.)
-            jest.mocked(window.api.startFreshSettings).mockResolvedValue({ success: true, keptAt: undefined });
+        test('Start fresh whose copy could not be written yet says it is made with the next save or start, not that nothing was kept', async () => {
+            jest.mocked(window.api.startFreshSettings).mockResolvedValue({ success: true, kept: { kind: 'pending' } });
             answer({ code: 'settings-import-failed', path: 'gurushots-settings' });
             render(<SettingsRecoveryNotice />);
             await screen.findByRole('alert');
@@ -687,7 +851,7 @@ describe('SettingsRecoveryNotice actions', () => {
                 within(screen.getByRole('dialog')).getByRole('button', { name: 'notice.recoveryStartFresh' }),
             );
 
-            await waitFor(() => expect(announced().textContent).toBe('notice.recoveryStartFreshDoneAndroid'));
+            await waitFor(() => expect(announced().textContent).toBe('notice.recoveryStartFreshDonePendingAndroid'));
             expect(announced().textContent).not.toContain('None');
         });
 

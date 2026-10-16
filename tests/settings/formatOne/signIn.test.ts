@@ -116,6 +116,40 @@ describe('the sign-in in the mirror (real fs)', () => {
         fs.rmSync(root, { recursive: true, force: true });
     });
 
+    describe('the record that the copies still owe a clearing', () => {
+        const marker = () =>
+            require('../../../src/ts/settings/importMarker') as typeof import('../../../src/ts/settings/importMarker');
+
+        test('is recorded anew by each sign-out, only where a marker exists, and forgotten only for the record that was seen', () => {
+            loadFresh();
+            // No marker: nothing is recorded or forgotten.
+            marker().markSignOutScrubPending();
+            marker().clearSignOutScrubPending('x');
+            expect(fs.existsSync(markerFile)).toBe(false);
+
+            settings.setSetting('theme', 'dark');
+            const untouched = fs.readFileSync(markerFile, 'utf8');
+            marker().markSignOutScrubPending();
+            const first = stored(markerFile).signOutScrubPending;
+            expect(first).toEqual(expect.any(String));
+            // A second sign-out is a record of its own.
+            marker().markSignOutScrubPending();
+            const second = stored(markerFile).signOutScrubPending;
+            expect(second).toEqual(expect.any(String));
+            expect(second).not.toBe(first);
+
+            // Clearing the record that was seen first leaves the newer one owed.
+            const written = fs.statSync(markerFile).ino;
+            marker().clearSignOutScrubPending(String(first));
+            expect(stored(markerFile).signOutScrubPending).toBe(second);
+            // (Not even written again: the marker is read as stored here, so a record that is not the one seen is left alone.
+            // The inode tells, as the marker is written atomically: a temp file renamed over it.)
+            expect(fs.statSync(markerFile).ino).toBe(written);
+            marker().clearSignOutScrubPending(String(second));
+            expect(fs.readFileSync(markerFile, 'utf8')).toBe(untouched);
+        });
+    });
+
     describe('a sign-in an older build changed in settings.json', () => {
         test('a sign-out stays: the token is cleared in the configuration, the mirror keeps it so, and the log holds no value', () => {
             signedIn();
@@ -453,7 +487,12 @@ describe('the sign-in in the mirror (real fs)', () => {
 
             const [backup] = fs.readdirSync(userData).filter((name) => name.startsWith('config.json.corrupt-'));
             for (const state of states) {
-                expect(state).toEqual({ code: 'settings-corrupt', path: path.join(userData, backup), blocking: false });
+                expect(state).toEqual({
+                    code: 'settings-corrupt',
+                    path: path.join(userData, backup),
+                    blocking: false,
+                    reimportSource: legacyFile,
+                });
             }
             expect(fs.readFileSync(legacyFile, 'utf8')).toBe('{broken');
             expect(unimportable()).toEqual([]);
@@ -487,6 +526,8 @@ describe('the sign-in in the mirror (real fs)', () => {
                     path: path.join(userData, backup),
                     blocking: false,
                     settingsSetAside: path.join(userData, copy),
+                    // (And the copy is what a Re-import reads now.)
+                    reimportSource: path.join(userData, copy),
                 });
                 // Once: the next save mirrors, and keeps no second copy.
                 expect(settings.setSetting('theme', 'dark')).toBe(true);
@@ -534,16 +575,13 @@ describe('the sign-in in the mirror (real fs)', () => {
             expect(stored(legacyFile)).toMatchObject({ theme: 'dark' });
         });
 
-        test('a restore that could not run (the import lock was busy) with no settings.json leaves nothing to set aside, and says none was', () => {
+        test('a settings.json that is gone by the first save leaves nothing to set aside, and says none was', () => {
             damaged();
-            fs.rmSync(legacyFile);
-            loadFresh(() => {
-                jest.doMock('../../../src/ts/lockWait', () => ({ acquireWithin: () => 'busy' }));
-            });
+            loadFresh();
             settings.loadSettings();
             expect(settings.getSettingsRecovery()?.code).toBe('settings-corrupt');
+            fs.rmSync(legacyFile);
 
-            // (The mirror finds the lock busy too, and tries again with the next save.)
             expect(settings.setSetting('theme', 'light')).toBe(true);
 
             expect(unimportable()).toEqual([]);
@@ -655,6 +693,120 @@ describe('the sign-in in the mirror (real fs)', () => {
             expect(stored(legacyFile)).toMatchObject({ theme: 'dark', token: 'tok-fixed' });
         });
 
+        test.each([
+            [
+                'a file elsewhere',
+                () => path.join(root, 'elsewhere', 'settings.json.unimportable-2026-01-01T00-00-00-000Z'),
+            ],
+            ['a file here that is not named as a copy', () => path.join(userData, 'config.json')],
+            ['a path with a parent segment', () => path.join(userData, '..', 'userData', 'x', '..', 'config.json')],
+            [
+                'a raw path named as a copy whose `..` leads to another directory',
+                // (The text starts with the data folder and ends in the right name; it resolves to a sibling folder.)
+                () =>
+                    `${userData}/sub/../../elsewhere/settings.json.unimportable-${new Date().toISOString().replace(/[:.]/g, '-')}`,
+            ],
+        ])(
+            'a remembered path that is %s is not a copy to fix: settings.json is imported instead',
+            (_name, remembered) => {
+                damaged();
+                loadFresh();
+                settings.loadSettings();
+                settings.setSetting('theme', 'light');
+                const target = remembered();
+                // (A path with `..` leads through a directory that exists.)
+                fs.mkdirSync(path.join(userData, 'sub'), { recursive: true });
+                fs.mkdirSync(path.join(root, 'elsewhere'), { recursive: true });
+                fs.mkdirSync(path.dirname(target), { recursive: true });
+                if (!fs.existsSync(target))
+                    fs.writeFileSync(target, JSON.stringify({ theme: 'other', token: 'tok-other' }));
+                expect(fs.existsSync(target)).toBe(true);
+                fs.writeFileSync(markerFile, JSON.stringify({ ...stored(markerFile), unimportableCopy: target }));
+                fs.writeFileSync(legacyFile, JSON.stringify({ theme: 'dark', token: 'tok-fixed' }));
+                loadFresh();
+
+                expect(settings.reimportFromV1Detailed()).toMatchObject({ ok: true, source: legacyFile });
+
+                expect(settings.loadSettings().auth.token).toBe('tok-fixed');
+            },
+        );
+
+        test('a raw path with `..` that resolves to the copy beside settings.json is that copy', () => {
+            damaged();
+            loadFresh();
+            settings.loadSettings();
+            settings.setSetting('theme', 'light');
+            const [copy] = unimportable();
+            fs.writeFileSync(path.join(userData, copy), JSON.stringify({ token: 'tok-fixed' }));
+            fs.mkdirSync(path.join(userData, 'sub'));
+            fs.writeFileSync(
+                markerFile,
+                JSON.stringify({ ...stored(markerFile), unimportableCopy: `${userData}/sub/../${copy}` }),
+            );
+
+            loadFresh();
+
+            expect(settings.reimportFromV1Detailed()).toMatchObject({ ok: true, source: path.join(userData, copy) });
+            expect(settings.loadSettings().auth.token).toBe('tok-fixed');
+        });
+
+        test("a save in another process does not end the episode: a CLI run during the GUI's keeps the copy a re-import takes", () => {
+            damaged();
+            loadFresh();
+            settings.loadSettings();
+            settings.setSetting('theme', 'light');
+            const [copy] = unimportable();
+            fs.writeFileSync(path.join(userData, copy), JSON.stringify({ token: 'tok-fixed' }));
+
+            // Another process (a CLI vote) saves meanwhile.
+            loadFresh();
+            settings.loadSettings();
+            expect(settings.setSetting('theme', 'dark')).toBe(true);
+            expect(settings.mergeTitlePins({ '5': 'Sunset' })).toBe(true);
+
+            expect(stored(markerFile).unimportableCopy).toBe(path.join(userData, copy));
+            loadFresh();
+            expect(settings.reimportFromV1Detailed()).toMatchObject({ ok: true, source: path.join(userData, copy) });
+            expect(settings.loadSettings().auth.token).toBe('tok-fixed');
+        });
+
+        test('a remembered copy is not the one to fix for ever: after two weeks a re-import reads settings.json', () => {
+            damaged();
+            loadFresh();
+            settings.loadSettings();
+            settings.setSetting('theme', 'light');
+            const [copy] = unimportable();
+            fs.writeFileSync(path.join(userData, copy), JSON.stringify({ token: 'tok-old-copy' }));
+            fs.writeFileSync(legacyFile, JSON.stringify({ theme: 'later', token: 'tok-later' }));
+            loadFresh();
+            const made = Date.parse(
+                copy
+                    .replace('settings.json.unimportable-', '')
+                    .replace(/T(\d\d)-(\d\d)-(\d\d)-(\d{3}Z)/, 'T$1:$2:$3.$4'),
+            );
+            const clock = jest.spyOn(Date, 'now').mockReturnValue(made + 13 * 24 * 3600 * 1000);
+            expect(settings.getSettingsRecovery()).toBeNull();
+            clock.mockReturnValue(made + 15 * 24 * 3600 * 1000);
+
+            expect(settings.reimportFromV1Detailed()).toMatchObject({ ok: true, source: legacyFile });
+
+            expect(settings.loadSettings().auth.token).toBe('tok-later');
+        });
+
+        test('a copy with no time in its name is not aged out', () => {
+            damaged();
+            loadFresh();
+            settings.loadSettings();
+            settings.setSetting('theme', 'light');
+            const named = path.join(userData, 'settings.json.unimportable-by-hand');
+            fs.writeFileSync(named, JSON.stringify({ token: 'tok-by-hand' }));
+            fs.writeFileSync(markerFile, JSON.stringify({ ...stored(markerFile), unimportableCopy: named }));
+            loadFresh();
+            jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 400 * 24 * 3600 * 1000);
+
+            expect(settings.reimportFromV1Detailed()).toMatchObject({ ok: true, source: named });
+        });
+
         test('with no marker to record it in, the set-aside is made all the same, and a re-import then reads settings.json', () => {
             damaged();
             loadFresh();
@@ -747,8 +899,13 @@ describe('the sign-in in the mirror (real fs)', () => {
             loadFresh();
             settings.loadSettings();
             settings.setSetting('theme', 'light');
+            const [copy] = unimportable();
 
-            expect(settings.reimportFromV1Detailed()).toEqual({ ok: false, setAside: null });
+            expect(settings.reimportFromV1Detailed()).toEqual({
+                ok: false,
+                setAside: null,
+                source: path.join(userData, copy),
+            });
 
             expect(settings.getSettingsRecovery()?.code).toBe('settings-corrupt');
             expect(stored(configFile).app).toMatchObject({ theme: 'light' });
@@ -764,7 +921,7 @@ describe('the sign-in in the mirror (real fs)', () => {
             const result = settings.reimportFromV1Detailed();
 
             const [copy] = fs.readdirSync(userData).filter((name) => name.startsWith('config.json.corrupt-'));
-            expect(result).toEqual({ ok: true, setAside: path.join(userData, copy) });
+            expect(result).toEqual({ ok: true, setAside: path.join(userData, copy), source: legacyFile });
             expect(settings.loadSettings().auth).toMatchObject({ token: 'tok-9', lastUsername: 'other@example.com' });
             // What was in use went to the copy, sign-in included, until the next logout clears it.
             expect(stored(path.join(userData, copy)).auth).toMatchObject({ token: 'tok-1' });
@@ -775,11 +932,11 @@ describe('the sign-in in the mirror (real fs)', () => {
             signedIn();
             fs.rmSync(configFile);
 
-            expect(settings.reimportFromV1Detailed()).toEqual({ ok: true, setAside: null });
+            expect(settings.reimportFromV1Detailed()).toEqual({ ok: true, setAside: null, source: legacyFile });
 
             fs.rmSync(legacyFile);
             fs.rmSync(configFile);
-            expect(settings.reimportFromV1Detailed()).toEqual({ ok: false, setAside: null });
+            expect(settings.reimportFromV1Detailed()).toEqual({ ok: false, setAside: null, source: legacyFile });
         });
     });
 
@@ -1052,6 +1209,305 @@ describe('the sign-in in the mirror (real fs)', () => {
             expect(settings.startFreshDetailed()).toEqual({ ok: true, keptAt: null });
             expect(settings.startFresh()).toBe(true);
             expect(fs.existsSync(path.join(userData, 'settings.json.original'))).toBe(false);
+        });
+    });
+
+    describe('a restore that could not be tried just now', () => {
+        // The mirror has written; then the configuration alone is damaged: settings.json is the good copy to restore from.
+        const damagedConfig = () => {
+            signedIn();
+            fs.writeFileSync(configFile, '{"app":{"theme":');
+        };
+        const clockAt = (now: number) => jest.spyOn(Date, 'now').mockReturnValue(now);
+        const unimportable = () =>
+            fs.readdirSync(userData).filter((name) => name.startsWith('settings.json.unimportable-'));
+
+        test('the import lock busy once: nothing is saved over settings.json meanwhile, and the next read restores it, signed in', () => {
+            damagedConfig();
+            const mirror = fs.readFileSync(legacyFile, 'utf8');
+            let busy = true;
+            loadFresh(() => {
+                const actual =
+                    jest.requireActual<typeof import('../../../src/ts/lockWait')>('../../../src/ts/lockWait');
+                jest.doMock('../../../src/ts/lockWait', () => ({
+                    acquireWithin: (...args: Parameters<typeof actual.acquireWithin>) =>
+                        busy ? 'busy' : actual.acquireWithin(...args),
+                }));
+            });
+            clockAt(1_000_000);
+
+            // The first read cannot restore: defaults, saving refused, and nothing is written over the good file.
+            expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-failed', blocking: true });
+            expect(settings.setSetting('theme', 'light')).toBe(false);
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(mirror);
+            expect(unimportable()).toEqual([]);
+            // Reads inside the retry delay answer the same without trying the lock again.
+            expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
+
+            busy = false;
+            clockAt(1_000_000 + 5000);
+            const restored = settings.loadSettings();
+
+            expect(restored.auth.token).toBe('tok-1');
+            expect(restored.app.theme).toBe('dark');
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-restored', blocking: false });
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(mirror);
+            expect(unimportable()).toEqual([]);
+            expect(settings.setSetting('theme', 'light')).toBe(true);
+        });
+
+        test('a read of settings.json that failed once is the same: tried again, not taken for an unusable file', () => {
+            damagedConfig();
+            const mirror = fs.readFileSync(legacyFile, 'utf8');
+            loadFresh();
+            const real = fs.readFileSync;
+            let failing = true;
+            jest.spyOn(fs, 'readFileSync').mockImplementation(((file: fs.PathLike | number, ...rest: unknown[]) => {
+                if (failing && String(file) === legacyFile) throw new Error('EBUSY');
+                return (real as (...args: unknown[]) => unknown)(file, ...rest);
+            }) as typeof fs.readFileSync);
+            clockAt(2_000_000);
+
+            settings.loadSettings();
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-failed', blocking: true });
+            expect(settings.setSetting('theme', 'light')).toBe(false);
+            // Said once, however often it is read.
+            settings.loadSettings();
+            expect(cat.error.mock.calls.filter(([message]) => String(message).includes('EBUSY'))).toHaveLength(1);
+
+            failing = false;
+            clockAt(2_000_000 + 5000);
+
+            expect(settings.loadSettings().auth.token).toBe('tok-1');
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(mirror);
+            expect(unimportable()).toEqual([]);
+        });
+
+        test('busy once, then settings.json found damaged: settled like a first-try failure (settings-corrupt, saves allowed, set aside at the first save), not a blocked import', () => {
+            damagedConfig();
+            let busy = true;
+            loadFresh(() => {
+                const actual =
+                    jest.requireActual<typeof import('../../../src/ts/lockWait')>('../../../src/ts/lockWait');
+                jest.doMock('../../../src/ts/lockWait', () => ({
+                    acquireWithin: (...args: Parameters<typeof actual.acquireWithin>) =>
+                        busy ? 'busy' : actual.acquireWithin(...args),
+                }));
+            });
+            clockAt(1_000_000);
+            settings.loadSettings();
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-failed', blocking: true });
+            // Meanwhile the good copy is damaged (by hand, an older build, a disk fault).
+            fs.writeFileSync(legacyFile, '{broken');
+            busy = false;
+            clockAt(1_000_000 + 5000);
+
+            expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt', blocking: false });
+            // Said as the first try says it: once, as a warning.
+            const noMirror = () =>
+                cat.warning.mock.calls.filter(([message]) => String(message).includes('no usable settings.json'));
+            expect(noMirror()).toHaveLength(1);
+            settings.loadSettings();
+            expect(noMirror()).toHaveLength(1);
+            expect(settings.setSetting('theme', 'light')).toBe(true);
+            expect(unimportable()).toHaveLength(1);
+            expect(fs.readFileSync(path.join(userData, unimportable()[0]), 'utf8')).toBe('{broken');
+            expect(stored(legacyFile)).toMatchObject({ theme: 'light' });
+            // And it stays one state however often it is read.
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt' });
+        });
+
+        test('a configuration that goes missing later, with an unimportable settings.json, is a blocked import: only a restore still to be retried settles', () => {
+            signedIn();
+            fs.writeFileSync(configFile, '{"app":{"theme":');
+            fs.writeFileSync(legacyFile, '{broken');
+            loadFresh();
+            // The episode is settled first (no usable settings.json), then the user fixes the file and retries.
+            settings.loadSettings();
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt', blocking: false });
+            fs.writeFileSync(legacyFile, JSON.stringify({ theme: 'dark', token: 'tok-fixed' }));
+            expect(settings.retryImport()).toBe(true);
+            expect(settings.loadSettings().auth.token).toBe('tok-fixed');
+
+            // Later, in the same process, the configuration is gone and settings.json is damaged again.
+            fs.rmSync(configFile);
+            fs.writeFileSync(legacyFile, '{broken');
+            settings.loadSettings();
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-failed', blocking: true });
+            expect(settings.setSetting('theme', 'light')).toBe(false);
+        });
+
+        test('the block a read clears is announced, so that the notice shown for it is read again and is the restored one', async () => {
+            damagedConfig();
+            let busy = true;
+            loadFresh(() => {
+                const actual =
+                    jest.requireActual<typeof import('../../../src/ts/lockWait')>('../../../src/ts/lockWait');
+                jest.doMock('../../../src/ts/lockWait', () => ({
+                    acquireWithin: (...args: Parameters<typeof actual.acquireWithin>) =>
+                        busy ? 'busy' : actual.acquireWithin(...args),
+                }));
+            });
+            const heard = jest.fn();
+            settings.onSettingsRecoveryChange(heard);
+            clockAt(1_000_000);
+            settings.loadSettings();
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-import-failed', blocking: true });
+            // (A read that only stays blocked says nothing.)
+            settings.loadSettings();
+            await Promise.resolve();
+            expect(heard).not.toHaveBeenCalled();
+
+            busy = false;
+            clockAt(1_000_000 + 5000);
+            settings.loadSettings();
+
+            // Not inside the read that cleared it, but right after.
+            expect(heard).not.toHaveBeenCalled();
+            await Promise.resolve();
+            expect(heard).toHaveBeenCalledTimes(1);
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-restored', blocking: false });
+            // And a read that finds nothing blocked says nothing.
+            settings.loadSettings();
+            await Promise.resolve();
+            expect(heard).toHaveBeenCalledTimes(1);
+        });
+
+        test('a write that always fails is tried a bounded number of times, said once, and never flaps the state', () => {
+            signedIn();
+            fs.rmSync(configFile);
+            fs.rmSync(markerFile);
+            // settings.json is importable (the user\'s file from before), and the configuration can never be written.
+            fs.writeFileSync(legacyFile, JSON.stringify({ theme: 'dark', token: 'tok-1' }));
+            loadFresh();
+            const failing = failingWrites(CONFIG_TMP);
+            let now = 1_000_000;
+            const clock = clockAt(now);
+
+            const seen = new Set<string>();
+            for (let second = 0; second < 600; second++) {
+                now += 1000;
+                clock.mockReturnValue(now);
+                settings.loadSettings();
+                seen.add(`${settings.getSettingsRecovery()?.code}`);
+            }
+
+            // (Every try opens the temporary file once: 1 s, 2 s, 4 s ... up to five minutes apart.)
+            expect(failing.seen).toBeLessThanOrEqual(12);
+            expect(failing.seen).toBeGreaterThanOrEqual(5);
+            expect([...seen]).toEqual(['settings-import-failed']);
+            expect(
+                cat.error.mock.calls.filter(([message]) => String(message).includes('Settings cannot be used')),
+            ).toHaveLength(1);
+            expect(fs.readFileSync(legacyFile, 'utf8')).toContain('tok-1');
+        });
+
+        test('a settings.json that cannot be imported at all is still settled: not tried again, and the notice is the corrupt one', () => {
+            damagedConfig();
+            fs.writeFileSync(legacyFile, '{broken');
+            loadFresh();
+            clockAt(3_000_000);
+
+            settings.loadSettings();
+            settings.loadSettings();
+            clockAt(3_000_000 + 60_000);
+            settings.loadSettings();
+
+            expect(settings.getSettingsRecovery()).toMatchObject({ code: 'settings-corrupt', blocking: false });
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe('{broken');
+        });
+    });
+
+    describe('the logout scrub of the copies', () => {
+        const COPY = 'settings.json.unimportable-2026-10-16T08-00-00-000Z';
+        const withCopy = () => {
+            signedIn();
+            fs.writeFileSync(
+                path.join(userData, COPY),
+                JSON.stringify({ theme: 'dark', token: 'tok-copy', lastUsername: 'me', chosenPhotosMemberId: 'm-7' }),
+            );
+        };
+
+        test('does not wait for the mirror: it is done when the mirror cannot run (the settings lock is busy)', () => {
+            withCopy();
+            loadFresh(() => {
+                jest.doMock('../../../src/ts/lockWait', () => ({ acquireWithin: () => 'busy' }));
+            });
+            settings.loadSettings();
+
+            expect(settings.setSetting('token', '')).toBe(true);
+
+            expect(stored(path.join(userData, COPY))).toEqual({
+                theme: 'dark',
+                token: '',
+                apiHeaders: {},
+                lastUsername: '',
+                chosenPhotosMemberId: '',
+            });
+            // (settings.json itself is made again with the next save or start.)
+            expect(stored(legacyFile)).toMatchObject({ token: 'tok-1' });
+        });
+
+        test('is done for the startup clear of a stored token (Stay Logged In off), and a sign-out saved by a whole-configuration save', () => {
+            withCopy();
+            loadFresh();
+            const config = settings.loadSettings();
+
+            expect(settings.saveSettings({ auth: { ...config.auth, token: '' } })).toBe(true);
+
+            expect(stored(path.join(userData, COPY))).toMatchObject({ token: '' });
+        });
+
+        test('is not done for a save that failed', () => {
+            withCopy();
+            loadFresh();
+            settings.loadSettings();
+            failingWrites(CONFIG_TMP);
+
+            expect(settings.setSetting('token', '')).toBe(false);
+
+            expect(stored(path.join(userData, COPY))).toMatchObject({ token: 'tok-copy' });
+        });
+
+        test('is not carried to a later save: the sign-out of a failed save is not done again by the next one', () => {
+            withCopy();
+            loadFresh();
+            settings.loadSettings();
+            const failing = failingWrites(CONFIG_TMP);
+            expect(settings.setSetting('token', '')).toBe(false);
+            failing.failing = false;
+
+            expect(settings.setSetting('theme', 'light')).toBe(true);
+
+            expect(stored(path.join(userData, COPY))).toMatchObject({ token: 'tok-copy' });
+        });
+
+        test('never throws into the logout: a copy that cannot be listed is logged', () => {
+            withCopy();
+            loadFresh();
+            settings.loadSettings();
+            jest.spyOn(fs, 'readdirSync').mockImplementation(() => {
+                throw new Error('EACCES');
+            });
+
+            expect(settings.setSetting('token', '')).toBe(true);
+            expect(stored(configFile).auth).toMatchObject({ token: '' });
+        });
+    });
+
+    describe('a 1.12.2-style logout', () => {
+        test('that blanks only the token (the headers stay): only the token is adopted', () => {
+            signedIn();
+            olderBuildChanges((file) => ({ ...file, token: '' }));
+
+            loadFresh();
+
+            expect(settings.loadSettings().auth).toEqual({ ...AUTH, token: '' });
+            expect(stored(legacyFile)).toMatchObject({ token: '', apiHeaders: { 'x-a': 'b' } });
         });
     });
 

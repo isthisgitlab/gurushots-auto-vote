@@ -256,6 +256,9 @@ const buildEnvironmentHandlers = () => ({
     },
 });
 
+/** What became of settings.json when a fresh start was made (see 'start-fresh-settings'). */
+type StartFreshKept = { kind: 'path'; path: string } | { kind: 'stored' | 'pending' | 'none' | 'adopted' };
+
 // A recovery action of the stored settings (see settings/persistence.ts): what it did is announced to the windows, and a
 // failure answers with its code, `settings-import-failed` unless the action says otherwise (what went wrong is
 // described in the log). The action answers whether it worked, and what else it has to tell, which a success carries.
@@ -304,19 +307,27 @@ const buildLocalDataHandlers = ({ afterWipe, broadcastSettingsChange }: Settings
         () => settings.retryImport(),
         'retry-settings-import',
     ),
-    // `keptAt`: where settings.json was kept, or null when there was none to keep.
+    // `kept`: what became of settings.json — `path` (a copy kept at `path`), `stored` (a copy kept in the app's own
+    // storage, which has no path to show), `pending` (that copy could not be written yet and is made with the next save
+    // or start), `none` (there was no settings.json to keep) or `adopted` (a configuration was in place already, a
+    // restore that came through meanwhile: nothing was reset, and nothing was kept).
     'start-fresh-settings': detailedRecoveryAction(
         broadcastSettingsChange,
-        async () => {
-            const { ok, keptAt, landed } = settings.startFreshDetailed();
-            // Where the copy is written later (the Android window) the key it was written under; undefined if it was not.
-            return { ok, keptAt: landed === undefined ? keptAt : ((await landed) ?? undefined) };
+        async (): Promise<{ ok: boolean; kept: StartFreshKept }> => {
+            const { ok, keptAt, landed, adopted } = settings.startFreshDetailed();
+            if (adopted) return { ok, kept: { kind: 'adopted' } };
+            if (landed !== undefined) return { ok, kept: { kind: (await landed) === null ? 'pending' : 'stored' } };
+            return { ok, kept: keptAt === null ? { kind: 'none' } : { kind: 'path', path: keptAt } };
         },
         'start-fresh-settings',
     ),
-    'reimport-settings-from-v1': recoveryAction(
+    // `source`: the file that was read (the copy the user fixed, or settings.json).
+    'reimport-settings-from-v1': detailedRecoveryAction(
         broadcastSettingsChange,
-        () => settings.reimportFromV1(),
+        () => {
+            const { ok, source } = settings.reimportFromV1Detailed();
+            return { ok, source };
+        },
         'reimport-settings-from-v1',
     ),
 
@@ -412,9 +423,10 @@ const buildHandlers = (options: SettingsHandlerOptions = {}) => {
     // A save the window gave up (and the next one that lands) changes what get-settings-recovery answers, so the
     // window re-reads on the same signal a settings change sends.
     if (broadcastSettingsChange) {
-        settings.onSettingsSaveDroppedChange(() =>
-            broadcastSettingsChange(toRendererSettings(settings.loadSettings())),
-        );
+        const tell = () => broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
+        settings.onSettingsSaveDroppedChange(tell);
+        // So does a block a read clears: a restore that had to wait came through, and the notice for it changes.
+        settings.onSettingsRecoveryChange(tell);
     }
     const handlers = {
         ...buildSettingsHandlers(options),

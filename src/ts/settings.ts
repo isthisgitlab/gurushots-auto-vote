@@ -87,6 +87,7 @@ export const acknowledgeImportReport = persistence.acknowledgeImportReport;
 export type SettingsRecovery = persistence.SettingsRecovery;
 export const getSettingsSaveDropped = persistence.getSettingsSaveDropped;
 export const onSettingsSaveDroppedChange = persistence.onSettingsSaveDroppedChange;
+export const onSettingsRecoveryChange = persistence.onSettingsRecoveryChange;
 export const saveWindowBounds = persistence.saveWindowBounds;
 export const getWindowBounds = persistence.getWindowBounds;
 // Challenge-specific settings

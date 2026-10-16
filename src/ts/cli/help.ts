@@ -94,7 +94,8 @@ Commands:
              desktop app and stop any CLI session first: it refuses to delete while either is running.
   reset-windows  - Reset window positions to default
   settings-recovery retry|start-fresh|reimport|report|acknowledge - When the saved settings are not in use: try importing
-             settings.json again, begin with default settings (a copy of settings.json is kept as settings.json.original),
+             settings.json again, begin with default settings (a copy of settings.json is kept as settings.json.original, or as
+             settings.json.unimportable-<timestamp> when that name is taken),
              import settings.json over the settings in use, print what the import left unresolved (report), or mark that
              report as seen (acknowledge)
   help     - Show this help message

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useImportRefText, useImportReport } from '@/api/useImportReport';
+import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
 import * as ipc from '@/api/ipc';
@@ -28,6 +29,8 @@ const acknowledgeReport = async (): Promise<boolean> => {
  */
 export function ImportReportModal({ hold = false }: { hold?: boolean }) {
     const { t } = useTranslation();
+    // Where there is no settings.json for the user to know of (Android), the dialog does not name one.
+    const { settingsFile } = usePlatformCapabilities();
     const { data: report, refetch } = useImportReport();
     const refText = useImportRefText();
     const [saving, setSaving] = useState(false);
@@ -57,7 +60,7 @@ export function ImportReportModal({ hold = false }: { hold?: boolean }) {
             showCloseButton={false}
         >
             <div className="space-y-3 text-sm">
-                <p>{t('notice.importReportIntro')}</p>
+                <p>{t(settingsFile ? 'notice.importReportIntro' : 'notice.importReportIntroAndroid')}</p>
                 <ul className="list-disc ml-5 break-words">
                     {report?.refsBlocked.map((ref, index) => (
                         // Two entries can read alike (the same name twice), so the position is part of the key.

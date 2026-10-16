@@ -10,6 +10,7 @@
  * (see createJsonStore `shared`), never on the app window's cache.
  */
 
+import * as runtime from '../runtime';
 import { isPlainObject } from '../plainObject';
 import { isImportedRecord } from './loadValidation';
 import { createJsonStore } from './storage';
@@ -101,6 +102,40 @@ const forgetUnimportableCopy = (): void =>
         return Object.fromEntries(Object.entries(marker).filter(([key]) => key !== 'unimportableCopy'));
     });
 
+/**
+ * Records that the background service saved a sign-out and cleared what it could of the copies kept of the settings files:
+ * the copies in Preferences (`gurushots-config_corrupt-…`, …) it cannot list, so the app window clears them when it next
+ * starts or saves. Each sign-out records a record of its own (a new value), so that the window can clear exactly the one
+ * it has seen to. Nothing when there is no marker to record it in.
+ */
+const markSignOutScrubPending = (): void =>
+    changeMarker((marker) =>
+        marker === null
+            ? null
+            : { ...marker, signOutScrubPending: `${Date.now()}-${Math.random().toString(36).slice(2)}` },
+    );
+
+/**
+ * Forgets the record `seen` (what the app window read, and cleared the copies for), and no other: a sign-out the service
+ * recorded since is still owed. Where the change is made on the marker as it is stored (a desktop, the service) a marker
+ * that does not hold `seen` is left alone. In the app window the change is first made on its cache of the marker, which
+ * may be behind the service: a change that declines there never sees what is stored, so it leaves the marker as it is
+ * (a write of the same text), and the compare-and-write finds the stored one and makes the change again on it.
+ */
+const clearSignOutScrubPending = (seen: string): void =>
+    changeMarker((marker) => {
+        if (marker === null) return null;
+        if (marker.signOutScrubPending !== seen)
+            return runtime.isCapacitor() && !runtime.isHeadlessService() ? marker : null;
+        return Object.fromEntries(Object.entries(marker).filter(([key]) => key !== 'signOutScrubPending'));
+    });
+
+/** The record of the sign-out the app window owes a clearing for, read from what Preferences holds (the service wrote it); null when none. */
+const signOutScrubPendingNow = async (): Promise<string | null> => {
+    const record = parseMarker(await importMarkerStore.peekStored())?.signOutScrubPending;
+    return typeof record === 'string' ? record : null;
+};
+
 /** The fingerprints a marker holds of the sign-in this build wrote to `settings.json`: the one it was about to write, and the last that landed. */
 const signInsOf = (marker: Record<string, unknown> | null): string[] =>
     [marker?.signInPending, marker?.signInConfirmed].filter((fingerprint) => typeof fingerprint === 'string');
@@ -171,6 +206,7 @@ const markMirrored = (signIn: string): void => {
 };
 
 export {
+    clearSignOutScrubPending,
     importMarkerStore,
     isImportMarked,
     isMirrorStarted,
@@ -183,7 +219,9 @@ export {
     markMirrored,
     markMirrorPending,
     markMirrorPendingQueued,
+    markSignOutScrubPending,
     mirroredSignIns,
     rememberUnimportableCopy,
+    signOutScrubPendingNow,
     mirroredSignInsNow,
 };

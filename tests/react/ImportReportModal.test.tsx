@@ -10,6 +10,7 @@ import { fireSettingsChanged, mockTranslator, defaultTranslate } from './helpers
 import { IMPORT_REF_ENGLISH } from '../../src/ts/settings/importRefs';
 import type { ImportRefText } from '../../src/ts/settings/importRefs';
 import { invalid } from '../helpers/invalid';
+import type { RendererGlobals } from '../../src/ts/types/capacitor';
 
 const report = (refsBlocked: unknown[], acknowledged = false) => ({
     success: true as const,
@@ -77,6 +78,18 @@ describe('ImportReportModal', () => {
         expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining('same key'), expect.anything());
         expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
         consoleError.mockRestore();
+    });
+
+    test('on Android the dialog does not name a settings.json the user never sees', async () => {
+        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        answer(report(['rules[0].profile: "Gone"']));
+        render(<ImportReportModal />);
+
+        const dialog = await screen.findByRole('dialog');
+
+        expect(within(dialog).getByText('notice.importReportIntroAndroid')).toBeTruthy();
+        expect(within(dialog).queryByText('notice.importReportIntro')).toBeNull();
+        delete (globalThis as RendererGlobals).Capacitor;
     });
 
     test('OK acknowledges it and the dialog goes', async () => {

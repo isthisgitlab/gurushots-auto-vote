@@ -13,7 +13,7 @@ import type { ConfigAuthV2 } from '../types/config';
 
 const emptySignIn: ConfigAuthV2 = { token: '', apiHeaders: {}, lastUsername: '', chosenPhotosMemberId: '' };
 
-// A 53-bit non-cryptographic hash (cyrb53 by bryc, public domain): it tells two values apart. It is not a secret: a
+// A 53-bit non-cryptographic hash (cyrb53 by bryc, public domain; https://github.com/bryc/code/blob/master/jshash/experimental/cyrb53.js): it tells two values apart. It is not a secret: a
 // low-entropy value (a user name) can be found by brute force, which is why the marker sits beside files that hold the
 // same values in plain text.
 const hash = (text: string): string => {
