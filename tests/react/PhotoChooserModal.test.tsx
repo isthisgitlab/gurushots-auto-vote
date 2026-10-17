@@ -198,13 +198,16 @@ afterEach(() => {
 });
 
 describe('listing and tiles', () => {
-    test('a selected tile is told by its border alone; an unselected one keeps the quiet border', async () => {
+    test('a selected tile has a base-content border and ring, no background change; an unselected one keeps the quiet border', async () => {
         setup({ value: [idOf(1)] });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(tile(1).className).toContain('border-base-content');
         expect(tile(1).className).not.toContain('border-base-300');
+        expect(tile(1).className).toContain('ring-base-content');
+        expect(tile(1).className).not.toContain('bg-base-200');
         expect(tile(2).className).toContain('border-base-300');
         expect(tile(2).className).not.toContain('border-base-content');
+        expect(tile(2).className).not.toContain('ring-base-content');
     });
 
     test('renders nothing while closed', () => {
@@ -452,6 +455,14 @@ describe('selection', () => {
             const missing = screen.getByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) });
             expect(missing.querySelector('.badge')).toBeNull();
             expect(missing.getAttribute('aria-label')).not.toMatch(/Number/);
+        });
+
+        test('an unnumbered selected tile has no badge, so it is marked by the border and ring', () => {
+            grid({ numbered: false });
+            expect(tile(1).className).toContain('border-base-content');
+            expect(tile(1).className).toContain('ring-base-content');
+            expect(tile(1).className).not.toContain('bg-base-200');
+            expect(tile(2).className).not.toContain('ring-base-content');
         });
 
         test('by default selected tiles are numbered', () => {

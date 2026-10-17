@@ -173,7 +173,7 @@ describe('the reset button', () => {
 
     test('the reset is a destructive (filled error) button', () => {
         render(<ScenarioStatusLine status={stoppedStatus()} onReset={jest.fn()} />);
-        const button = screen.getByText('app.scenarioReset');
+        const button = screen.getByRole('button', { name: 'app.scenarioReset' });
         expect(button.className).toContain('btn-error');
         expect(button.className).not.toContain('btn-outline');
     });
