@@ -715,6 +715,12 @@ describe('SettingsModal — timezone select and custom zones', () => {
     const tzSelect = () => screen.getByRole('option', { name: 'Europe/Riga' }).parentElement as HTMLSelectElement;
     const removeButton = () => document.querySelector('button[title="app.removeCurrentTimezone"]')!;
 
+    test('the remove button is a filled destructive one', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(removeButton().className).toContain('btn-error');
+        expect(removeButton().className).not.toContain('btn-outline');
+    });
+
     test('the default zone hides the remove button', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         expect(removeButton().className).toContain('invisible');

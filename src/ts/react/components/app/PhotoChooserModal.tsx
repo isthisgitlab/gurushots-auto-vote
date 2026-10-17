@@ -33,7 +33,10 @@ const shortId = (id: string): string => id.slice(0, SHORT_ID_LENGTH);
  */
 const labelsOf = (photo: LibraryPhoto, noTags: string): string => photo.labels.join(', ') || noTags;
 
-const TILE_BASE = 'rounded-box border p-1 text-left flex flex-col gap-1 w-full';
+// The focus outline is offset past the 2px ring of a selected tile, so keyboard focus shows on a selected one and
+// an unselected focused tile does not look selected.
+const TILE_BASE =
+    'rounded-box border p-1 text-left flex flex-col gap-1 w-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-base-content';
 
 /**
  * The short text under a tile saying whether the photo can be added: the

@@ -204,10 +204,20 @@ describe('listing and tiles', () => {
         expect(tile(1).className).toContain('border-base-content');
         expect(tile(1).className).not.toContain('border-base-300');
         expect(tile(1).className).toContain('ring-base-content');
-        expect(tile(1).className).not.toContain('bg-base-200');
+        expect(tile(1).className).not.toMatch(/\bbg-/);
         expect(tile(2).className).toContain('border-base-300');
         expect(tile(2).className).not.toContain('border-base-content');
         expect(tile(2).className).not.toContain('ring-base-content');
+    });
+
+    test('every tile carries an offset focus outline that clears the selection ring', async () => {
+        setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        for (const n of [1, 2]) {
+            expect(tile(n).className).toContain(
+                'focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-base-content',
+            );
+        }
     });
 
     test('renders nothing while closed', () => {
@@ -461,7 +471,7 @@ describe('selection', () => {
             grid({ numbered: false });
             expect(tile(1).className).toContain('border-base-content');
             expect(tile(1).className).toContain('ring-base-content');
-            expect(tile(1).className).not.toContain('bg-base-200');
+            expect(tile(1).className).not.toMatch(/\bbg-/);
             expect(tile(2).className).not.toContain('ring-base-content');
         });
 
@@ -726,6 +736,9 @@ describe('selection', () => {
     test('Clear empties the selection and Cancel closes without saving', async () => {
         const { onSave, onClose } = setup({ value: [idOf(1)] });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        const clear = screen.getByRole('button', { name: 'Clear' });
+        expect(clear.className).toContain('btn-error');
+        expect(clear.className).not.toContain('btn-outline');
         fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
         expect(tile(1).getAttribute('aria-pressed')).toBe('false');
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));

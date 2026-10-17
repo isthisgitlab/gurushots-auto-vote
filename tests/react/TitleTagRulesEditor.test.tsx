@@ -98,6 +98,8 @@ describe('TitleTagRulesEditor', () => {
         ];
         render(<TitleTagRulesEditor value={value} onChange={onChange} />);
         const removeButtons = screen.getAllByRole('button', { name: 'app.removeTitleTagRule' });
+        expect(removeButtons[0].className).toContain('btn-error');
+        expect(removeButtons[0].className).not.toContain('btn-outline');
         fireEvent.click(removeButtons[0]);
         expect(onChange).toHaveBeenCalledWith([{ title: 'B', mustIncludeTags: ['y'], shouldIncludeTags: [] }]);
     });

@@ -8,6 +8,7 @@ import { act, render, screen, fireEvent } from './helpers/test-utils';
 import { DiscoverSection } from '@/components/app/DiscoverSection';
 import { mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
+import { isKindBadgeText } from '../helpers/kindBadges';
 import { app } from '../../src/ts/translations/english';
 import type { OpenChallenge } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
@@ -315,8 +316,8 @@ test('the "Starts in" text counts down as time passes', async () => {
 describe('what a row says about its challenge: type, photos and tags', () => {
     // Kind badges (🏁 type, 🖼 photo count) are ghost like the tags; the icon tells them apart.
     const ghostTexts = () => [...document.querySelectorAll('span.badge.badge-ghost')].map((el) => el.textContent ?? '');
-    const tagBadges = () => ghostTexts().filter((text) => !/^[🏁🖼]/u.test(text));
-    const kindBadges = () => ghostTexts().filter((text) => /^[🏁🖼]/u.test(text));
+    const tagBadges = () => ghostTexts().filter((text) => !isKindBadgeText(text));
+    const kindBadges = () => ghostTexts().filter(isKindBadgeText);
 
     test('every row, open and upcoming, shows its type as on the cards, and its photo count from two photos', async () => {
         renderSection([

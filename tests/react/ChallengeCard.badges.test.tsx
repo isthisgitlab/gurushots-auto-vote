@@ -20,6 +20,7 @@ import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { ChallengeBadgeRow } from '@/components/app/ChallengeBadgeRow';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
+import { isKindBadgeText } from '../helpers/kindBadges';
 import type { Challenge } from '../../src/ts/types/gurushots';
 
 const mockChallengeSettings = {
@@ -179,7 +180,7 @@ describe('ChallengeCard badge row — logical/state badges', () => {
 const tagTexts = (container: Element) =>
     [...container.querySelectorAll('span.badge-ghost')]
         .map((el) => el.textContent)
-        .filter((text) => !/^[🏁🖼]/u.test(text ?? ''));
+        .filter((text) => !isKindBadgeText(text ?? ''));
 
 describe('ChallengeCard badge row — shared with the Discover rows', () => {
     test('the detail card lists every tag as given, repeats of the type and photo-count tags included', () => {

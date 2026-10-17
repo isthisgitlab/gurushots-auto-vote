@@ -42,6 +42,14 @@ const deleteButton = () =>
 const nameInput = () => screen.getByPlaceholderText('app.profileNamePlaceholder');
 
 describe('ChallengeProfilesBar', () => {
+    test('the delete button is a filled destructive one', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue({ tactic: {} });
+        renderBar();
+        await act(async () => {});
+        expect(deleteButton().className).toContain('btn-error');
+        expect(deleteButton().className).not.toContain('btn-outline');
+    });
+
     test('lists profiles with their override counts', async () => {
         mockApi.getChallengeProfiles.mockResolvedValue({
             '2-pic tactic': { exposure: 80, autoSubmit: true },

@@ -110,6 +110,13 @@ describe('third-party licenses', () => {
 });
 
 describe('Delete all local data', () => {
+    test('the delete button is a filled destructive one', () => {
+        render(<AboutDataSection />);
+        const button = screen.getByRole('button', { name: 'about.deleteButton' });
+        expect(button.className).toContain('btn-error');
+        expect(button.className).not.toContain('btn-outline');
+    });
+
     const openDelete = () => open('about.deleteButton');
     const confirm = () => fireEvent.click(within(dialog()).getByRole('button', { name: 'about.deleteConfirm' }));
 
