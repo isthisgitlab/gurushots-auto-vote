@@ -161,8 +161,10 @@ const turboGameSummary = (result: TurboGameResult): string =>
         : `played=${result.played} correct=${result.correct} flipped=${result.flipped} doubleFailed=${result.doubleFailed} won=${result.won}`;
 
 /**
- * Auto-earn turbo by playing the mini-game when eligible. This has no
- * close-time threshold (it plays whenever a turbo is winnable). It runs ahead
+ * Auto-earn turbo by playing the mini-game when eligible. A classic game has no
+ * close-time threshold (it plays whenever a turbo is winnable); a Snap game is
+ * skipped under 15 minutes to close (SNAP_MIN_SECONDS_TO_CLOSE), in the Android
+ * headless service, and after the pass's first Snap game. It runs ahead
  * of the timer-ordered deadline actions so a win can be applied in this pass.
  * With Save Turbos for Missions on, the earn waits (isTurboEarnSaved) unless a
  * "Win Turbo" mission still needs wins; every win counts down that mission.
@@ -184,7 +186,7 @@ export const playAutoTurbo = async (
         logger
             .withCategory('turbo')
             .debug(
-                `${logger.challengeTag(challenge)} Snap turbo skipped: the challenge closes within 15 minutes`,
+                `${logger.challengeTag(challenge)} Snap turbo skipped: the challenge closes within ${SNAP_MIN_SECONDS_TO_CLOSE / 60} minutes`,
                 null,
             );
         return;
@@ -218,8 +220,11 @@ export const playAutoTurbo = async (
         .startOperation(`turbo-earn-${challenge.id}`, `Playing turbo mini-game on ${challenge.title}${purpose}`);
     try {
         const result = await api.runTurboGame(challenge, token, { isCancelled });
-        // Only a game that landed an answer takes the pass's Snap slot: one that fails first leaves it to the rest.
-        if (result.kind === 'snap' && result.answered > 0) snapGames.played++;
+        // Only a game that landed an answer, or may have (an unclear one), takes the pass's Snap slot: one that fails
+        // first leaves it to the rest.
+        if (result.kind === 'snap' && (result.answered > 0 || result.stopReason === 'vote-unclear')) {
+            snapGames.played++;
+        }
         if (result.won) {
             consumeMission(missions, 'turbo');
             // The API confirmed the win; let this pass's apply decision see it.

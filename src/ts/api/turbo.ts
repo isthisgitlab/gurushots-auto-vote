@@ -82,7 +82,7 @@ const submitTurboSelection = async (
  * Opens (or reopens) a turbo session. A half-played Snap session comes back with the same id and images and its
  * `position`. Repeating an open is harmless, so it keeps the default retry.
  *
- * @returns null when the request failed or the answer is not a usable session
+ * @returns null when the request failed or the answer is not a playable session (no photos, or all answered)
  */
 const startTurboSession = async (challengeId: string | number, token: string): Promise<TurboSession | null> => {
     requireValue(challengeId, 'challengeId');
@@ -113,7 +113,7 @@ const startTurboSession = async (challengeId: string | number, token: string): P
         images.push({ imageId: image.image_id, memberId: image.member_id });
     }
     const { position } = response;
-    if (images.length === 0 || !isInteger(position) || position < 0 || position > images.length) return null;
+    if (images.length === 0 || !isInteger(position) || position < 0 || position >= images.length) return null;
     return { kind: 'snap', sessionId: response.session_id, position, caption: response.caption, images };
 };
 
@@ -139,6 +139,7 @@ const submitSnapVote = async (
             communityPct: null,
             errorCode: null,
             unclear: outcome.kind === 'unclear',
+            serverAnswered: false,
         };
     }
     const { body } = outcome;
@@ -148,6 +149,7 @@ const submitSnapVote = async (
         communityPct: typeof body.community_pct === 'number' ? body.community_pct : null,
         errorCode: typeof body.error_code === 'number' ? body.error_code : null,
         unclear: false,
+        serverAnswered: true,
     };
 };
 

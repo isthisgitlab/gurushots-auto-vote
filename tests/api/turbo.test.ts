@@ -197,12 +197,12 @@ describe('turbo', () => {
             expect(await startTurboSession(1, mockToken)).toBeNull();
         });
 
-        test('null when the position is not an integer from 0 to the image count', async () => {
-            for (const position of [-1, 3, 1.5, '1', null, undefined]) {
+        test('null when the position is not an integer below the image count (every photo answered is not playable)', async () => {
+            for (const position of [-1, 2, 3, 1.5, '1', null, undefined]) {
                 makePostRequest.mockResolvedValueOnce({ ...snap, position });
                 expect(await startTurboSession(1, mockToken)).toBeNull();
             }
-            for (const position of [0, 2]) {
+            for (const position of [0, 1]) {
                 makePostRequest.mockResolvedValueOnce({ ...snap, position });
                 expect(await startTurboSession(1, mockToken)).toEqual(expect.objectContaining({ position }));
             }
@@ -246,7 +246,14 @@ describe('turbo', () => {
                 'session_id=sess-1&image_id=i1&vote=yes',
             );
             expect(makePostRequest).not.toHaveBeenCalled();
-            expect(result).toEqual({ ok: true, completed: false, communityPct: 67, errorCode: null, unclear: false });
+            expect(result).toEqual({
+                ok: true,
+                completed: false,
+                communityPct: 67,
+                errorCode: null,
+                unclear: false,
+                serverAnswered: true,
+            });
         });
 
         test('the last answer reports completed', async () => {
@@ -260,6 +267,7 @@ describe('turbo', () => {
                 communityPct: 40,
                 errorCode: null,
                 unclear: false,
+                serverAnswered: true,
             });
         });
 
@@ -274,6 +282,7 @@ describe('turbo', () => {
                 communityPct: null,
                 errorCode: 1105,
                 unclear: false,
+                serverAnswered: true,
             });
         });
 
@@ -285,6 +294,7 @@ describe('turbo', () => {
                 communityPct: null,
                 errorCode: null,
                 unclear: false,
+                serverAnswered: false,
             });
             postOnce.mockResolvedValueOnce({ kind: 'unclear' });
             expect(await submitSnapVote('s', 'i', 'yes', mockToken)).toEqual({
@@ -293,6 +303,7 @@ describe('turbo', () => {
                 communityPct: null,
                 errorCode: null,
                 unclear: true,
+                serverAnswered: false,
             });
         });
 

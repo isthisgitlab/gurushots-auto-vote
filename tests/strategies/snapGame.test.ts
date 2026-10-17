@@ -12,6 +12,7 @@ jest.mock('../../src/ts/services/visionVerifier', () => ({
     hasBundledModel: jest.fn(),
     judgeSnapImage: jest.fn(),
     snapPrompts: jest.fn(),
+    SNAP_CAPTION_MAX_CHARS: 200,
 }));
 jest.mock('../../src/ts/timing', () => ({
     sleep: jest.fn(() => Promise.resolve()),
@@ -23,7 +24,7 @@ import visionModule = require('../../src/ts/services/visionVerifier');
 import timingModule = require('../../src/ts/timing');
 import cancellation = require('../../src/ts/voting/cancellation');
 import logger = require('../../src/ts/logger');
-import { runSnapGame } from '../../src/ts/strategies/real/snapGame';
+import { __resetSnapTransientRunsForTests, runSnapGame } from '../../src/ts/strategies/real/snapGame';
 import { __resetSnapUnavailableForTests, isSnapUnavailable } from '../../src/ts/services/turboRunLock';
 import type { CategoryLogger } from '../../src/ts/logger';
 import type { Challenge, SnapVoteResult, TurboSession } from '../../src/ts/types/gurushots';
@@ -50,6 +51,7 @@ const landed = (overrides: Partial<SnapVoteResult> = {}): SnapVoteResult => ({
     communityPct: 60,
     errorCode: null,
     unclear: false,
+    serverAnswered: true,
     ...overrides,
 });
 
@@ -90,6 +92,7 @@ beforeEach(() => {
     sleeps.length = 0;
     cancellation.reset();
     __resetSnapUnavailableForTests();
+    __resetSnapTransientRunsForTests();
     vision.hasBundledModel.mockResolvedValue(true);
     vision.snapPrompts.mockReturnValue({ yes: 'y', no: 'n' });
     vision.judgeSnapImage.mockResolvedValue(judgment);
@@ -204,6 +207,7 @@ describe('runSnapGame', () => {
 
             expect(result.stopReason).toBe('request-failed');
             expect(isSnapUnavailable(77)).toBe(false);
+            expect(warnings()).toEqual([expect.stringContaining('could not open a usable Snap session')]);
         });
 
         test('withdrawn: a classic session marks Snap unavailable and never opens the classic game', async () => {
@@ -305,7 +309,7 @@ describe('runSnapGame', () => {
             expect(warnings()[0]).not.toContain('x'.repeat(201));
         });
 
-        test('request-failed: any other refused answer marks Snap unavailable', async () => {
+        test('request-failed: an answer the server refused marks Snap unavailable', async () => {
             turbo.submitSnapVote
                 .mockResolvedValueOnce(landed())
                 .mockResolvedValueOnce(landed({ ok: false, errorCode: 9, communityPct: null }));
@@ -348,6 +352,128 @@ describe('runSnapGame', () => {
                 stopReason: 'request-failed',
             });
             expect(vision.judgeSnapImage).not.toHaveBeenCalled();
+        });
+
+        test('request-failed: an answer that got no response from the server leaves Snap available', async () => {
+            turbo.submitSnapVote
+                .mockResolvedValueOnce(landed())
+                .mockResolvedValueOnce(landed({ ok: false, serverAnswered: false, communityPct: null }));
+
+            const result = await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(result).toEqual({
+                answered: 1,
+                total: 3,
+                meanAgreement: 60,
+                won: false,
+                stopReason: 'request-failed',
+            });
+            expect(isSnapUnavailable(77)).toBe(false);
+            expect(warnings()).toEqual([expect.stringContaining('got no answer from the server')]);
+        });
+    });
+
+    describe('transient failures', () => {
+        const noSession = () => turbo.startTurboSession.mockResolvedValue(null);
+
+        test('the third run in a row that lands nothing marks Snap unavailable and says so', async () => {
+            vision.judgeSnapImage.mockResolvedValue(null);
+
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            expect(isSnapUnavailable(77)).toBe(false);
+            await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(isSnapUnavailable(77)).toBe(true);
+            expect(warnings().filter((line) => line.includes('3 runs in a row'))).toHaveLength(1);
+        });
+
+        test('session failures and transport refusals count the same way', async () => {
+            noSession();
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            turbo.startTurboSession.mockResolvedValue(snapSession());
+            turbo.submitSnapVote.mockResolvedValue(landed({ ok: false, serverAnswered: false, communityPct: null }));
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            expect(isSnapUnavailable(77)).toBe(false);
+            await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(isSnapUnavailable(77)).toBe(true);
+        });
+
+        test('a landed answer in between starts the count again', async () => {
+            noSession();
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            turbo.startTurboSession.mockResolvedValue(snapSession());
+            turbo.submitSnapVote.mockResolvedValue(landed({ completed: true }));
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            noSession();
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(isSnapUnavailable(77)).toBe(false);
+        });
+
+        test('a run that lands answers before failing does not count', async () => {
+            vision.judgeSnapImage.mockResolvedValue(null);
+
+            for (let run = 0; run < 4; run++) {
+                vision.judgeSnapImage.mockResolvedValueOnce(judgment).mockResolvedValue(null);
+                await runSnapGame(CHALLENGE, 'tok', deps());
+            }
+
+            expect(isSnapUnavailable(77)).toBe(false);
+        });
+
+        test('running out of photos counts although answers landed, and the unusable session after it adds up', async () => {
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            noSession();
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            expect(isSnapUnavailable(77)).toBe(false);
+            await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(isSnapUnavailable(77)).toBe(true);
+        });
+
+        test('three runs in a row that answer every photo without a win mark Snap unavailable', async () => {
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            expect(isSnapUnavailable(77)).toBe(false);
+            const third = await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(third.answered).toBe(3);
+            expect(isSnapUnavailable(77)).toBe(true);
+        });
+
+        test('a win between runs that ran out of photos starts the count again', async () => {
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            turbo.submitSnapVote.mockResolvedValueOnce(landed()).mockResolvedValueOnce(landed());
+            turbo.submitSnapVote.mockResolvedValueOnce(landed({ completed: true }));
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(isSnapUnavailable(77)).toBe(false);
+        });
+
+        test('a 4xx answer with no body is transient: the first run leaves Snap available', async () => {
+            turbo.submitSnapVote.mockResolvedValue(landed({ ok: false, serverAnswered: false, communityPct: null }));
+
+            const result = await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(result).toMatchObject({ answered: 0, stopReason: 'request-failed' });
+            expect(isSnapUnavailable(77)).toBe(false);
+        });
+
+        test('counts are kept per challenge', async () => {
+            noSession();
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            await runSnapGame(invalid<Challenge>({ id: 78, title: 'Other' }), 'tok', deps());
+
+            expect(isSnapUnavailable(77)).toBe(false);
+            expect(isSnapUnavailable(78)).toBe(false);
         });
     });
 });

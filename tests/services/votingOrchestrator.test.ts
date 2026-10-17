@@ -362,6 +362,69 @@ describe('mock-parity behaviors on the shared path', () => {
             expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([1, 2]);
         });
 
+        test('a Snap game that answered some photos but did not win takes the pass its Snap slot', async () => {
+            const api = makeApi([snapChallenge(1), snapChallenge(2)]);
+            api.runTurboGame.mockResolvedValueOnce({
+                kind: 'snap',
+                answered: 3,
+                total: 10,
+                meanAgreement: 60,
+                won: false,
+                stopReason: 'judge-failed',
+            });
+            api.runTurboGame.mockResolvedValue(snapWon);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+            await runVotingPass('tok', null, deps(api));
+
+            expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([1]);
+        });
+
+        test('an unclear Snap answer takes the Snap slot although none is known to have landed', async () => {
+            const api = makeApi([snapChallenge(1), snapChallenge(2)]);
+            api.runTurboGame.mockResolvedValueOnce({
+                kind: 'snap',
+                answered: 0,
+                total: 10,
+                meanAgreement: null,
+                won: false,
+                stopReason: 'vote-unclear',
+            });
+            api.runTurboGame.mockResolvedValue(snapWon);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+            await runVotingPass('tok', null, deps(api));
+
+            expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([1]);
+        });
+
+        test('a Snap game starts at exactly 15 minutes to close and not a second sooner', async () => {
+            const api = makeApi([
+                makeChallenge({ id: 1, close_time: NOW + 899, member: SNAP_MEMBER }),
+                makeChallenge({ id: 2, close_time: NOW + 900, member: SNAP_MEMBER }),
+            ]);
+            api.runTurboGame.mockResolvedValue(snapWon);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+            // The pass reads whole seconds, so pin the clock to NOW for the boundary to be exact.
+            const dateNow = jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+            try {
+                await runVotingPass('tok', null, deps(api));
+            } finally {
+                dateNow.mockRestore();
+            }
+
+            expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([2]);
+        });
+
+        test('a classic turbo closing in 5 minutes is still played', async () => {
+            const api = makeApi([makeChallenge({ id: 1, close_time: NOW + 300 })]);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+            await runVotingPass('tok', null, deps(api));
+
+            expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+        });
+
         test('a Snap game is not started on a challenge that closes within 15 minutes', async () => {
             const api = makeApi([makeChallenge({ id: 1, close_time: NOW + 600, member: SNAP_MEMBER })]);
             votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);

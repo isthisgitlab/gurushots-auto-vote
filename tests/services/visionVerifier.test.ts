@@ -441,6 +441,7 @@ describe('snapPrompts', () => {
         ['Are the colors seem Realistic?', 'colors', 'Realistic', POSITIVE_NO],
         ['Does the sky look fake?', 'sky', 'fake', NEGATIVE_NO],
         ['Do the edges look over-edited?', 'edges', 'over-edited', NEGATIVE_NO],
+        ['Does the sky look un-natural?', 'sky', 'un-natural', NEGATIVE_NO],
     ])('%s', (caption, subject, predicate, no) => {
         expect(snapPrompts(caption)).toEqual({
             yes: `a photo where the ${subject} look ${predicate}`,
@@ -451,6 +452,8 @@ describe('snapPrompts', () => {
     test.each([
         ['an unknown predicate', 'Does the soft light look dramatic?'],
         ['a predicate that only contains a known word', 'Does the light look supernatural?'],
+        ['a negated predicate', 'Does the light look natural, not over-edited?'],
+        ['a predicate with a negative and a positive word', 'Does the light look natural but fake?'],
         ['a statement', 'The soft light looks natural.'],
         ['an empty caption', ''],
         ['a caption over 200 characters', `Does the ${'soft '.repeat(50)}light look natural?`],

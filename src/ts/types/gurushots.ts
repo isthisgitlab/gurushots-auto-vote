@@ -390,6 +390,8 @@ export interface SnapVoteResult {
     communityPct: number | null;
     errorCode: number | null;
     unclear: boolean;
+    /** True only when a response body came back; false for a request that was refused before an answer or never left. */
+    serverAnswered: boolean;
 }
 
 /** The outcome of playing one challenge's Turbo mini-game. */

@@ -271,26 +271,30 @@ const SNAP_CAPTION_RE = /^(?:do|does|is|are)\s+(?:the\s+)?(.+?)\s+(?:look|looks|
 const SNAP_NEGATIVE_RE =
     /\b(?:unnatural|unrealistic|fake|artificial|edited|over-edited|overdone|overprocessed|over-processed|exaggerated)\b/;
 const SNAP_POSITIVE_RE = /\b(?:natural|realistic|believable|real|authentic|convincing|plausible)\b/;
+// A negation flips what the words around it mean, so a predicate that has one is not read.
+const SNAP_NEGATION_RE = /\b(?:not|never|no|hardly|less)\b/;
+/** How much of a Snap caption is read (and logged). */
 const SNAP_CAPTION_MAX_CHARS = 200;
 
 /**
  * The two text prompts a Snap caption ("Does the soft, even light look natural?") is judged against.
  *
- * @returns null when the caption is not a question of a known shape
+ * @returns null when the caption is not a question of a known shape, or its predicate is negated or mixes a
+ * negative word with a positive one
  */
 const snapPrompts = (caption: string): { yes: string; no: string } | null => {
     const match = SNAP_CAPTION_RE.exec(caption.trim().slice(0, SNAP_CAPTION_MAX_CHARS));
     if (!match) return null;
     const [, subject, predicate] = match;
-    const words = predicate.toLowerCase();
+    const words = predicate.toLowerCase().replace(/\bun-/g, 'un');
+    if (SNAP_NEGATION_RE.test(words)) return null;
+    const negative = SNAP_NEGATIVE_RE.test(words);
+    const positive = SNAP_POSITIVE_RE.test(words);
+    if (negative === positive) return null;
     const yes = `a photo where the ${subject} look ${predicate}`;
-    if (SNAP_NEGATIVE_RE.test(words)) {
-        return { yes, no: `a photo where the ${subject} look natural and realistic` };
-    }
-    if (SNAP_POSITIVE_RE.test(words)) {
-        return { yes, no: `a photo where the ${subject} look artificial, fake and over-edited` };
-    }
-    return null;
+    return negative
+        ? { yes, no: `a photo where the ${subject} look natural and realistic` }
+        : { yes, no: `a photo where the ${subject} look artificial, fake and over-edited` };
 };
 
 export interface SnapJudgment {
@@ -339,6 +343,7 @@ export {
     challengePrompts,
     descriptionLead,
     snapPrompts,
+    SNAP_CAPTION_MAX_CHARS,
     judgeSnapImage,
     __resetForTests,
 };
