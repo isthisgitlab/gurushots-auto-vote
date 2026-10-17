@@ -214,9 +214,13 @@ describe('listing and tiles', () => {
         setup({ value: [idOf(1)] });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         for (const n of [1, 2]) {
-            expect(tile(n).className).toContain(
-                'focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-base-content',
-            );
+            for (const cls of [
+                'focus-visible:outline-2',
+                'focus-visible:outline-offset-4',
+                'focus-visible:outline-base-content',
+            ]) {
+                expect(tile(n).className).toContain(cls);
+            }
         }
     });
 
