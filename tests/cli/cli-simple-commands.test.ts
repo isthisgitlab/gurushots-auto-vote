@@ -445,9 +445,17 @@ describe('discover', () => {
             expect(await lineOf({ close_time: CLOSE }, DEFAULT_TIMEZONE)).toBe(
                 '  • [1] A (flash) — free — ends 15/11/2023, 00:13',
             );
+            // The device clock, written independently of the code under test (no timeZone option).
+            const device = new Date(CLOSE * 1000).toLocaleString('en-GB', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            });
             for (const zone of ['local', 'Not/AZone']) {
-                const line = await lineOf({ close_time: CLOSE }, zone);
-                expect(line).toMatch(/^ {2}• \[1\] A \(flash\) — free — ends \d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}$/);
+                expect(await lineOf({ close_time: CLOSE }, zone)).toBe(`  • [1] A (flash) — free — ends ${device}`);
             }
         });
 
