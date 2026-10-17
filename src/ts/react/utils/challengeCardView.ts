@@ -98,7 +98,9 @@ export function deriveChallengeCardView(
         turboState === 'TIMER' && typeof member.turbo?.time_to_open === 'number' && member.turbo.time_to_open <= now;
     const challengeStillOpen = challenge.close_time > now;
     const canPlayAutoTurbo =
-        challengeStillOpen && (turboState === 'FREE' || turboState === 'IN_PROGRESS' || turboCooldownPassed);
+        challengeStillOpen &&
+        member.turbo?.mode !== 'snap' &&
+        (turboState === 'FREE' || turboState === 'IN_PROGRESS' || turboCooldownPassed);
 
     const slotsRemaining = Math.max(0, (challenge.max_photo_submits || 0) - entries.length);
 

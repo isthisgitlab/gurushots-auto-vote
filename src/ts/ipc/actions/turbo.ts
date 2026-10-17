@@ -31,6 +31,9 @@ type ApplyTurboResult = {
  */
 const turboUnplayableError = (liveChallenge: Challenge, now: number): string | null => {
     const turboState = liveChallenge.member?.turbo?.state;
+    if (liveChallenge.member?.turbo?.mode === 'snap') {
+        return `Turbo is a Snap game (state=${turboState || 'unknown'}); play it on GuruShots`;
+    }
     const cooldownPassed =
         turboState === 'TIMER' &&
         typeof liveChallenge.member?.turbo?.time_to_open === 'number' &&

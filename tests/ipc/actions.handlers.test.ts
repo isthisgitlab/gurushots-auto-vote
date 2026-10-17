@@ -1725,6 +1725,58 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
         expect(strategy.runTurboMiniGame).not.toHaveBeenCalled();
     });
 
+    test.each([
+        ['FREE', 'FREE'],
+        ['IN_PROGRESS', 'IN_PROGRESS'],
+        ['TIMER', 'TIMER'],
+    ])('refuses a Snap-mode %s turbo without playing it', async (state) => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [
+                    liveTurboChallenge({ member: { turbo: { state, mode: 'snap', time_to_open: NOW() - 10 } } }),
+                ],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toEqual({
+            success: false,
+            error: `Turbo is a Snap game (state=${state}); play it on GuruShots`,
+        });
+        expect(strategy.runTurboMiniGame).not.toHaveBeenCalled();
+    });
+
+    test('names an unknown state when refusing a Snap-mode turbo that has none', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { mode: 'snap' } } })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toEqual({ success: false, error: 'Turbo is a Snap game (state=unknown); play it on GuruShots' });
+        expect(strategy.runTurboMiniGame).not.toHaveBeenCalled();
+    });
+
+    test('a classic-mode FREE turbo still plays through the manual bypass', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { state: 'FREE', mode: 'classic' } } })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        strategy.runTurboMiniGame.mockResolvedValue({ played: 3, correct: 3, won: true, flipped: 0, doubleFailed: 0 });
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toMatchObject({ success: true });
+        expect(strategy.runTurboMiniGame).toHaveBeenCalledTimes(1);
+    });
+
     test('reports state=unknown when the challenge has no turbo state', async () => {
         setToken('tok');
         stubStrategy({

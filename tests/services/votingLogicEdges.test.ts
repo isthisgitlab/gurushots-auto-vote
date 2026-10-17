@@ -173,6 +173,20 @@ describe('shouldPlayAutoTurbo', () => {
         expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'TIMER' }), NOW)).toBe(false);
     });
 
+    test.each([
+        ['FREE', {}],
+        ['IN_PROGRESS', {}],
+        ['TIMER', { time_to_open: NOW }],
+    ])('never plays a Snap-mode %s turbo', (state, extra) => {
+        mockSettings({ autoTurbo: true });
+        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state, mode: 'snap', ...extra }), NOW)).toBe(false);
+    });
+
+    test('a classic-mode turbo plays as before', () => {
+        mockSettings({ autoTurbo: true });
+        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'FREE', mode: 'classic' }), NOW)).toBe(true);
+    });
+
     test('an id-less challenge with no member reads autoTurbo under the empty id and does not play', () => {
         mockSettings({ autoTurbo: true });
         expect(VotingLogic.shouldPlayAutoTurbo(invalid({ close_time: NOW + 60 }), NOW)).toBe(false);

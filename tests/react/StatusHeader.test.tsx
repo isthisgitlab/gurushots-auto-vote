@@ -260,6 +260,20 @@ describe('StatusHeader', () => {
         expect(stats.slice(0, 3)).toEqual(['4', '0', '1']);
     });
 
+    test('a Snap-mode turbo is not offered as playable, but a won one still counts', () => {
+        const nowSec = BASE_MS / 1000;
+        const challenges = invalid<Challenge[]>([
+            { id: 'a', member: { turbo: { state: 'FREE', mode: 'snap' } } },
+            { id: 'b', member: { turbo: { state: 'IN_PROGRESS', mode: 'snap' } } },
+            { id: 'c', member: { turbo: { state: 'TIMER', mode: 'snap', time_to_open: nowSec - 1 } } },
+            { id: 'd', member: { turbo: { state: 'WON', mode: 'snap' } } },
+            { id: 'e', member: { turbo: { state: 'FREE', mode: 'classic' } } },
+        ]);
+        const { container } = wrap(<StatusHeader challenges={challenges} nextRunAt={null} running={true} />);
+        const stats = Array.from(container.querySelectorAll('.font-semibold')).map((n) => n.textContent);
+        expect(stats.slice(0, 3)).toEqual(['5', '0', '2']);
+    });
+
     test('an overdue next run reads as due', () => {
         wrap(<StatusHeader challenges={oneChallenge} nextRunAt={BASE_MS - 5000} running={true} />);
         expect(screen.getByTestId('status-header').textContent).toContain('app.deadlineDue');

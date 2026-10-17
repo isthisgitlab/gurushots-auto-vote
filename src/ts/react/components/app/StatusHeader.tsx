@@ -18,7 +18,9 @@ import type { Bankroll, Challenge, MemberTurbo } from '../../../types/gurushots'
  */
 const isTurboAvailable = (turbo: MemberTurbo | undefined, now: number) => {
     const state = turbo?.state;
-    if (state === 'WON' || state === 'FREE' || state === 'IN_PROGRESS') return true;
+    if (state === 'WON') return true;
+    if (turbo?.mode === 'snap') return false;
+    if (state === 'FREE' || state === 'IN_PROGRESS') return true;
     return state === 'TIMER' && typeof turbo?.time_to_open === 'number' && turbo.time_to_open <= now;
 };
 

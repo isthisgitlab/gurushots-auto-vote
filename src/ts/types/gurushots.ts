@@ -69,6 +69,8 @@ export interface MemberRanking {
 }
 
 export type BoostState = 'LOCKED' | 'MISSED' | 'AVAILABLE' | 'AVAILABLE_KEY' | 'USED' | 'UNAVAILABLE' | (string & {});
+/** Which game a turbo session is: the classic one, or Snap (yes/no questions), which the bot does not play. */
+type TurboMode = 'classic' | 'snap' | (string & {});
 type TurboState = 'FREE' | 'IN_PROGRESS' | 'TIMER' | 'WON' | 'LOCKED' | 'USED' | 'UNAVAILABLE' | (string & {});
 
 export interface MemberBoost {
@@ -79,6 +81,8 @@ export interface MemberBoost {
 
 export interface MemberTurbo {
     state?: TurboState;
+    /** Which game the next turbo session is; a 'snap' one is not played by the bot. */
+    mode?: TurboMode;
     /** Unix seconds the turbo timer opens; null when not on a timer. */
     time_to_open?: UnixSeconds | null;
     max_selections?: number;
