@@ -92,7 +92,7 @@ test('no alternative: the card swap picker opens with the reason; no modal, no i
     expect(swapButton().className).not.toContain('btn-error');
 });
 
-const pickButton = () => screen.getByText('app.swapPick').closest('button')!;
+const pickButton = () => screen.getByText(/app\.swapPick$/).closest('button')!;
 
 test('Pick… opens the card picker straight away with the entry, the warnings and the Pick button', () => {
     const { onChoose } = renderButton({ warnActioned: true, warnPinned: 'boost' });
@@ -124,8 +124,8 @@ test('Pick… is disabled while the preview is in flight', async () => {
     expect(pickButton().disabled).toBe(false);
     fireEvent.click(swapButton());
     await waitFor(() => expect(pickButton().disabled).toBe(true));
-    resolve!({ success: true, outcome: 'ok', candidate: CANDIDATE });
-    await screen.findByText('app.currencySwapTitle');
+    resolve!({ success: false, outcome: 'api-failed', error: 'api-failed' });
+    await waitFor(() => expect(pickButton().disabled).toBe(false));
 });
 
 test('Choose another photo… closes the suggestion and hands over to the card picker', async () => {

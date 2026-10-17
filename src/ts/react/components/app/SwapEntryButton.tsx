@@ -248,7 +248,7 @@ export function SwapEntryButton({
                     disabled={preview.loading || commit.loading}
                     onClick={handlePick}
                 >
-                    {t('app.swapPick')}
+                    {`🔄 ${t('app.swapPick')}`}
                 </button>
                 <span id={pickHintId} className="sr-only">
                     {t('app.swapPickLabel')}
