@@ -68,11 +68,7 @@ export function AboutDataSection() {
             <div className="rounded-lg border border-error/50 p-3">
                 <h5 className="font-medium text-sm text-error mb-1">{t('about.dangerTitle')}</h5>
                 <div className="flex flex-wrap items-center gap-3">
-                    <button
-                        type="button"
-                        className="btn btn-outline btn-error btn-sm"
-                        onClick={() => setDeleteOpen(true)}
-                    >
+                    <button type="button" className="btn btn-error btn-sm" onClick={() => setDeleteOpen(true)}>
                         {t('about.deleteButton')}
                     </button>
                     <span className="text-xs text-base-content/60">{t('about.deleteDesc')}</span>

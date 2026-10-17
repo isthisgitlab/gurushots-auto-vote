@@ -177,7 +177,7 @@ function FooterActions({
                 {saving && <LoadingSpinner size="xs" decorative />}
                 {t('app.photoChooserUse')}
             </HeldButton>
-            <HeldButton held={locked} hintId={clearHintId} className="btn-outline btn-error" onPress={onClear}>
+            <HeldButton held={locked} hintId={clearHintId} className="btn-error" onPress={onClear}>
                 {t('app.photosClear')}
             </HeldButton>
             {locked && (

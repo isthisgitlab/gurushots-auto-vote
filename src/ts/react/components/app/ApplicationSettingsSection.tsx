@@ -305,7 +305,7 @@ function TimezoneSetting({
                     +
                 </button>
                 <button
-                    className={`btn btn-outline btn-error btn-sm ${timezone !== DEFAULT_TIMEZONE ? '' : 'invisible'}`}
+                    className={`btn btn-error btn-sm ${timezone !== DEFAULT_TIMEZONE ? '' : 'invisible'}`}
                     title={t('app.removeCurrentTimezone')}
                     aria-label={t('app.removeCurrentTimezone')}
                     onClick={timezoneInput.remove}

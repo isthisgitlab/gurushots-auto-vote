@@ -136,7 +136,7 @@ export function ChallengeCard({
     // edge after scrollIntoView. Keep `challenge-${id}` in sync with
     // scrollToChallenge. Shared by both layouts.
     const cardId = `challenge-${challenge.id}`;
-    const cardClass = `${view.cardAlertClass} rounded-lg p-3 bg-base-100 scroll-mt-4 focus:outline focus:outline-4 focus:outline-info focus:outline-offset-4`;
+    const cardClass = `${view.cardAlertClass} rounded-lg p-3 bg-base-100 scroll-mt-4 focus:outline focus:outline-4 focus:outline-base-content focus:outline-offset-4`;
     const badgeRowProps = {
         challenge,
         boostOpen: view.boostOpen,

@@ -86,6 +86,7 @@ test('a scenario, auto-join and chosen photos a rule sets show as inherited, wit
     await open();
     expect(scenarioSelect().value).toBe('Plan');
     expect(cell('app.scenario').textContent).toContain('From rule: Seaside');
+    expect(cell('app.scenario').textContent).toContain('📏 From rule: Seaside');
     expect(cell('app.autoJoin').textContent).toContain('From rule: Seaside');
     expect(document.querySelector<HTMLInputElement>('#challenge-setting-autoJoin')!.checked).toBe(true);
     expect(cell('app.chosenPhotos').textContent).toContain('From rule: Seaside');

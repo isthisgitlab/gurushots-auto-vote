@@ -176,7 +176,7 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
                     <h2
                         ref={headingRef}
                         tabIndex={-1}
-                        className="card-title text-2xl font-bold text-center mb-6 focus-visible:ring-info focus-visible:ring-2 focus-visible:outline-none"
+                        className="card-title text-2xl font-bold text-center mb-6 focus-visible:ring-base-content focus-visible:ring-2 focus-visible:outline-none"
                     >
                         {t('login.heading')}
                     </h2>

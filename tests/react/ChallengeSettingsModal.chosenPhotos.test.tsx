@@ -61,6 +61,7 @@ test('the chooser reads the library through the challenge being edited, and the 
     fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
     // The edit is held in the form until the modal's own Save.
     await waitFor(() => expect(screen.getByText('app.overridden')).toBeTruthy());
+    expect(screen.getByText('app.overridden').querySelector('[aria-hidden="true"]')?.textContent).toBe('⚙️ ');
     expect(mockApi.replaceChallengeOverrides).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'app.save' }));
     await waitFor(() =>

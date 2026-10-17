@@ -54,7 +54,7 @@ export function ModalActionRow({
                     <StrokeIcon d={ICON_PATHS.save} className={ROW_ICON_CLASS} />
                     {t('app.save')}
                 </button>
-                <button className="btn btn-outline btn-error btn-sm" onClick={() => void onSecondary()}>
+                <button className="btn btn-error btn-sm" onClick={() => void onSecondary()}>
                     {secondaryIcon === 'trash' ? (
                         <StrokeIcon d={ICON_PATHS.trash} className={ROW_ICON_CLASS} />
                     ) : (

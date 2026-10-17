@@ -327,6 +327,7 @@ describe('editing and saving', () => {
         expect(body()).not.toContain('app.usingProfile: Auto');
         fireEvent.click(screen.getByRole('button', { name: 'app.clearAll' }));
         await waitFor(() => expect(body()).toContain('app.usingProfile: Auto'));
+        expect(body()).toContain('🔄 app.usingProfile');
         fireEvent.click(screen.getByRole('button', { name: 'app.save' }));
         await waitFor(() => expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('1', {}, false));
     });

@@ -191,7 +191,7 @@ describe('header', () => {
         const { container } = renderCard(makeChallenge());
         const card = container.querySelector('#challenge-101')!;
         expect(card.getAttribute('tabindex')).toBe('-1');
-        expect(card.className).toContain('focus:outline-info');
+        expect(card.className).toContain('focus:outline-base-content');
         expect(card.className).toContain('focus:outline-4');
         expect(card.className).toContain('focus:outline-offset-4');
     });
@@ -934,7 +934,7 @@ describe('entries, tags and alerts', () => {
         const card = container.querySelector('#challenge-101')!;
         expect(card.className).toContain('border-2 border-error');
         expect(card.className).toContain('ring-2 ring-info ring-offset-2');
-        expect(card.className).toContain('focus:outline-4 focus:outline-info focus:outline-offset-4');
+        expect(card.className).toContain('focus:outline-4 focus:outline-base-content focus:outline-offset-4');
         card.scrollIntoView = jest.fn();
         scrollToChallenge(101);
         expect(document.activeElement).toBe(card);

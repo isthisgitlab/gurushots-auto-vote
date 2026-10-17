@@ -48,7 +48,7 @@ export function Navbar({
                     <StrokeIcon className="w-4 h-4" d={ICON_PATHS.cog} />
                 </button>
                 <button
-                    className="btn btn-outline btn-error btn-sm"
+                    className="btn btn-error btn-sm"
                     onClick={() => void onLogout()}
                     title={t('app.logout')}
                     aria-label={t('app.logout')}

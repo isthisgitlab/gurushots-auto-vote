@@ -121,7 +121,7 @@ export function AutoVoteControls({
                     {!pending && (
                         <button
                             ref={toggleRef}
-                            className={`btn btn-sm ${running ? 'btn-outline btn-error' : 'btn-neutral'}`}
+                            className={`btn btn-sm ${running ? 'btn-error' : 'btn-neutral'}`}
                             onClick={() => void onToggle()}
                         >
                             {running ? (

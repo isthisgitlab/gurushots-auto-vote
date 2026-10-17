@@ -116,7 +116,7 @@ describe('compact ChallengeCard tile', () => {
         const { container } = renderCard(makeChallenge());
         const card = container.querySelector('#challenge-202')!;
         expect(card.getAttribute('tabindex')).toBe('-1');
-        expect(card.className).toContain('focus:outline-info');
+        expect(card.className).toContain('focus:outline-base-content');
         expect(card.className).toContain('focus:outline-4');
         expect(card.className).toContain('focus:outline-offset-4');
     });

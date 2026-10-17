@@ -223,7 +223,7 @@ export function ChallengeProfilesBar({
                     {t('app.applyProfile')}
                 </button>
                 <button
-                    className="btn btn-sm btn-outline btn-error"
+                    className="btn btn-sm btn-error"
                     onClick={() => void handleDelete()}
                     disabled={!selectedProfile || busy}
                 >

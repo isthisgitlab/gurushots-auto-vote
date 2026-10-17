@@ -49,7 +49,7 @@ function RuleHeader({
                 ↓
             </button>
             <button
-                className="btn btn-outline btn-error btn-sm"
+                className="btn btn-error btn-sm"
                 title={t('app.removeTitleTagRule')}
                 aria-label={t('app.removeTitleTagRule')}
                 onClick={onRemove}
