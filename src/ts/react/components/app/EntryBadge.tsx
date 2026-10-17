@@ -53,7 +53,7 @@ function PinToggle({
     const pinnedName = t(kind === 'boost' ? 'app.pinnedForBoost' : 'app.pinnedForTurbo');
     return (
         <ActionButton
-            variant={kind === 'boost' ? 'success' : 'warning'}
+            variant="neutral"
             className={[pressed ? '' : 'btn-outline', busy ? 'btn-disabled' : ''].filter(Boolean).join(' ')}
             aria-pressed={pressed}
             // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body> mid-write.
@@ -219,7 +219,7 @@ export function EntryBadge({
                 <div className="flex flex-wrap items-center gap-2">
                     {showBoostButton && (
                         <ActionButton
-                            variant="success"
+                            variant="neutral"
                             error={boostError}
                             onClick={() => void handleBoost()}
                             disabled={boosting}
@@ -232,7 +232,7 @@ export function EntryBadge({
                     )}
                     {showTurboButton && (
                         <ActionButton
-                            variant="warning"
+                            variant="neutral"
                             error={turboError}
                             onClick={() => void handleTurbo()}
                             disabled={turboing}

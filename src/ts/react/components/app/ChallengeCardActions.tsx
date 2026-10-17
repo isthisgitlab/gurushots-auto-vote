@@ -48,7 +48,7 @@ function EarnTurboButton({
 }) {
     return (
         <ActionButton
-            variant="info"
+            variant="neutral"
             error={turboError}
             className="mt-1"
             onClick={() => void onPlay()}
@@ -93,7 +93,7 @@ export function FillButtons({
     return (
         <>
             <ActionButton
-                variant="info"
+                variant="neutral"
                 error={fillError}
                 onClick={() => void onFill('one')}
                 disabled={filling || picking}
@@ -106,7 +106,7 @@ export function FillButtons({
             </ActionButton>
             {slotsRemaining > 1 && (
                 <button
-                    className="btn btn-sm btn-warning"
+                    className="btn btn-sm btn-neutral"
                     onClick={() => void onFill('all')}
                     disabled={filling || picking}
                     aria-busy={filling}

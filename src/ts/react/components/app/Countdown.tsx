@@ -13,7 +13,7 @@ const isSignal = (source: TimeRemaining): source is Signal<string | null> =>
 
 /**
  * The countdown text. This leaf alone reads the signal's value, so the once-a-second update re-renders this span and
- * not the card around it; green while time is left, red once the challenge has ended.
+ * not the card around it; uncoloured while time is left, red once the challenge has ended.
  *
  * @param props.source - the card's `timeRemaining`
  * @param props.className - extra classes for the span
@@ -23,5 +23,5 @@ export function Countdown({ source, className = '' }: { source: TimeRemaining; c
     const value = isSignal(source) ? source.value : source;
     const ended = value === null;
     const text = ended ? t('app.ended') : value || t('common.loading');
-    return <span className={`${ended ? 'text-error' : 'text-success'} ${className}`.trim()}>{text}</span>;
+    return <span className={`${ended ? 'text-error' : ''} ${className}`.trim()}>{text}</span>;
 }

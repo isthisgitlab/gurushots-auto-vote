@@ -386,7 +386,7 @@ describe('ChallengeProfilesBar', () => {
             await waitFor(() => expect(document.body.textContent).toContain('★ app.intentJustParticipate (6)'));
             await act(async () => changeSelect(selectEl(), 'Just Participate'));
             const badge = screen.getByText('app.intentBuiltIn');
-            expect(badge.className).toContain('badge-info');
+            expect(badge.className).toContain('badge-ghost');
             expect(document.body.textContent).toContain('app.intentJustParticipateDesc');
         });
 

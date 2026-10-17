@@ -79,7 +79,7 @@ function SubmitFooter({
             </button>
             <button
                 type="button"
-                className="btn btn-latvian btn-sm"
+                className="btn btn-neutral btn-sm"
                 disabled={count === 0 || held || submitting}
                 aria-busy={submitting}
                 onClick={onSubmit}

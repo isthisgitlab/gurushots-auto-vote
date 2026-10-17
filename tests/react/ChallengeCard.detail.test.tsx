@@ -244,10 +244,10 @@ describe('header', () => {
         await waitFor(() => expect(onVoteComplete).toHaveBeenCalledTimes(2));
     });
 
-    test('Vote and Run are green: they cost nothing', () => {
+    test('Vote and Run are main actions (neutral): they cost nothing', () => {
         renderCard(makeChallenge());
-        expect(screen.getByText('app.vote').closest('button')!.className).toContain('btn-success');
-        expect(screen.getByText('app.run').closest('button')!.className).toContain('btn-success');
+        expect(screen.getByText('app.vote').closest('button')!.className).toContain('btn-neutral');
+        expect(screen.getByText('app.run').closest('button')!.className).toContain('btn-neutral');
     });
 
     test('Compact and Settings are ghost view controls, grouped to the right of Vote and Run', () => {
@@ -295,7 +295,7 @@ describe('header', () => {
 describe('time text', () => {
     test('reads a signal value', () => {
         renderCard(makeChallenge(), { timeRemaining: signal('5m') });
-        expect(screen.getByText('5m').className).toBe('text-success');
+        expect(screen.getByText('5m').className).toBe('');
     });
 
     test('marks an ended challenge (null) in red, worded in the UI language', () => {
@@ -303,9 +303,9 @@ describe('time text', () => {
         expect(screen.getByText('app.ended').className).toBe('text-error');
     });
 
-    test('a plain countdown string is shown in green', () => {
+    test('a plain countdown string carries no colour', () => {
         renderCard(makeChallenge(), { timeRemaining: '1h 2m' });
-        expect(screen.getByText('1h 2m').className).toBe('text-success');
+        expect(screen.getByText('1h 2m').className).toBe('');
     });
 
     test('falls back to the loading label', () => {

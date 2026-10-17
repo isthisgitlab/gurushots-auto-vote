@@ -72,7 +72,7 @@ function ChosenChip({
     return (
         <button
             type="button"
-            className="badge badge-info badge-sm mt-0.5"
+            className="badge badge-outline badge-sm mt-0.5"
             title={t(foreign ? 'app.discoverChosenForeignHint' : 'app.discoverChosenChipHint')}
             aria-label={interp(t(foreign ? 'app.discoverChosenForeignLabel' : 'app.discoverChosenChipLabel'), {
                 title: name,
@@ -153,7 +153,7 @@ function JoinButton({
     );
     return (
         <button
-            className={`btn btn-sm ${paid ? 'btn-warning' : 'btn-primary'}`}
+            className={`btn btn-sm ${paid ? 'btn-latvian' : 'btn-neutral'}`}
             id={`discover-join-${id}`}
             aria-label={busy ? undefined : label}
             onClick={onClick}

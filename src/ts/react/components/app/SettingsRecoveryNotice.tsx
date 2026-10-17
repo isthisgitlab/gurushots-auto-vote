@@ -375,7 +375,7 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
                                             else actionButtons.current.delete(action);
                                         }}
                                         type="button"
-                                        className={`btn btn-sm ${ACTIONS[action].primary ? 'btn-primary' : 'btn-outline'}`}
+                                        className={`btn btn-sm ${ACTIONS[action].primary ? 'btn-neutral' : 'btn-outline'}`}
                                         onClick={() => request(action)}
                                         disabled={busy !== null}
                                         aria-busy={busy === action}

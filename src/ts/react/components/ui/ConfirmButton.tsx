@@ -22,7 +22,7 @@ export function ConfirmButton({
     const { t } = useTranslation();
     return (
         <button
-            className={`btn btn-warning btn-sm ${working ? 'btn-disabled' : ''}`}
+            className={`btn btn-error btn-sm ${working ? 'btn-disabled' : ''}`}
             onClick={() => {
                 if (!working) onConfirm();
             }}

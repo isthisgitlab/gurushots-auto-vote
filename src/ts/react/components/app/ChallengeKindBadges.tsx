@@ -21,10 +21,10 @@ export function ChallengeKindBadges({
     const photos = showPhotoCount ? challengePhotoCount(challenge) : null;
     return (
         <>
-            {kind?.isType && <StatusBadge variant="warning">🏁 {kind.label.toUpperCase()}</StatusBadge>}
-            {kind && !kind.isType && <StatusBadge variant="info">🏁 {kind.label}</StatusBadge>}
+            {kind?.isType && <StatusBadge variant="neutral">🏁 {kind.label.toUpperCase()}</StatusBadge>}
+            {kind && !kind.isType && <StatusBadge variant="neutral">🏁 {kind.label}</StatusBadge>}
             {photos !== null && (
-                <StatusBadge variant="warning">
+                <StatusBadge variant="neutral">
                     🖼 {photos} {t('app.photos')}
                 </StatusBadge>
             )}

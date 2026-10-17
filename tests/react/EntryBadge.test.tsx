@@ -283,10 +283,10 @@ describe('EntryBadge — error styling on button', () => {
         );
         const button = screen.getByRole('button', { name: /🚀/ });
         expect(button.className).toMatch(/btn-error/);
-        expect(button.className).not.toMatch(/btn-success/);
+        expect(button.className).not.toMatch(/btn-neutral/);
     });
 
-    test('boost button gets btn-success class when there is no error', () => {
+    test('boost button gets btn-neutral class when there is no error', () => {
         render(
             <EntryBadge
                 timezone="local"
@@ -298,7 +298,7 @@ describe('EntryBadge — error styling on button', () => {
             />,
         );
         const button = screen.getByRole('button');
-        expect(button.className).toMatch(/btn-success/);
+        expect(button.className).toMatch(/btn-neutral/);
         expect(button.className).not.toMatch(/btn-error/);
     });
 });

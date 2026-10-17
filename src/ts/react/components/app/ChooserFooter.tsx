@@ -169,7 +169,7 @@ function FooterActions({
             <HeldButton
                 held={saveWaits}
                 hintId={hintId}
-                className="btn-latvian"
+                className="btn-neutral"
                 disabled={saving}
                 buttonRef={saveRef}
                 onPress={onSave}
@@ -177,7 +177,7 @@ function FooterActions({
                 {saving && <LoadingSpinner size="xs" decorative />}
                 {t('app.photoChooserUse')}
             </HeldButton>
-            <HeldButton held={locked} hintId={clearHintId} className="btn-warning" onPress={onClear}>
+            <HeldButton held={locked} hintId={clearHintId} className="btn-outline btn-error" onPress={onClear}>
                 {t('app.photosClear')}
             </HeldButton>
             {locked && (

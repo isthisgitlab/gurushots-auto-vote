@@ -71,12 +71,10 @@ describe('ChallengeNav', () => {
         const tuned = screen.getByRole('button', { name: /Tuned/ });
         const plain = screen.getByRole('button', { name: /Plain/ });
 
-        await waitFor(() => expect(tuned.className).toMatch(/btn-accent/));
-        expect(tuned.textContent).toMatch(/⚙️/);
-        expect(tuned.className).not.toMatch(/btn-info/);
+        await waitFor(() => expect(tuned.textContent).toMatch(/⚙️/));
+        expect(tuned.className).toBe('btn btn-sm max-w-full whitespace-nowrap');
         expect(tuned.querySelector('.truncate')!.getAttribute('title')).toMatch(/^Tuned — ./);
 
-        expect(plain.className).not.toMatch(/btn-accent/);
         expect(plain.textContent).not.toMatch(/⚙️/);
         expect(plain.querySelector('.truncate')!.getAttribute('title')).toBe('Plain');
     });
@@ -105,17 +103,11 @@ describe('ChallengeNav', () => {
         );
 
         const profiled = screen.getByRole('button', { name: /Profiled/ });
-        const plain = screen.getByRole('button', { name: /Plain/ });
         const suppressed = screen.getByRole('button', { name: /Suppressed/ });
         const mixed = screen.getByRole('button', { name: /Mixed/ });
-        await waitFor(() => expect(profiled.className).toMatch(/btn-info/));
-        expect(profiled.textContent).toMatch(/🔄/);
-        expect(profiled.className).not.toMatch(/btn-accent/);
+        await waitFor(() => expect(profiled.textContent).toMatch(/🔄/));
         expect(profiled.querySelector('.truncate')!.getAttribute('title')).toContain('app.titleRuleProfile');
-        expect(plain.className).not.toMatch(/btn-accent/);
-        expect(suppressed.className).not.toMatch(/btn-info/);
         expect(suppressed.textContent).not.toMatch(/🔄/);
-        expect(mixed.className).toMatch(/btn-info/);
         expect(mixed.textContent).toMatch(/⚙️.*🔄/);
         expect(mixed.querySelector('.truncate')!.getAttribute('title')).toContain(
             'app.customSettingsHint · app.titleRuleProfile',
@@ -136,13 +128,10 @@ describe('ChallengeNav', () => {
 
         const ruled = screen.getByRole('button', { name: /Ruled/ });
         const joinOnly = screen.getByRole('button', { name: /Join only/ });
-        await waitFor(() => expect(ruled.className).toMatch(/btn-secondary/));
-        expect(ruled.textContent).toMatch(/📏/);
-        expect(ruled.className).not.toMatch(/btn-info|btn-accent/);
+        await waitFor(() => expect(ruled.textContent).toMatch(/📏/));
         expect(ruled.querySelector('.truncate')!.getAttribute('title')).toContain('app.ruleSettingsHint');
         expect(ruled.textContent).toContain('app.ruleSettingsHint');
         expect(ruled.textContent).not.toContain('app.titleRuleProfile');
-        expect(joinOnly.className).not.toMatch(/btn-secondary/);
         expect(joinOnly.textContent).not.toMatch(/📏/);
     });
 
@@ -154,7 +143,7 @@ describe('ChallengeNav', () => {
         render(<ChallengeNav challenges={[challenge(7, 'Solo')]} />);
 
         await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalledWith('7'));
-        expect(screen.getByRole('button', { name: /Solo/ }).className).not.toMatch(/btn-accent/);
+        expect(screen.getByRole('button', { name: /Solo/ }).textContent).not.toMatch(/⚙️/);
     });
 
     test('picks up an override saved after mount, via settings-changed', async () => {
@@ -164,15 +153,14 @@ describe('ChallengeNav', () => {
 
         const chip = screen.getByRole('button', { name: /Later/ });
         await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalledWith('5'));
-        expect(chip.className).not.toMatch(/btn-accent/);
+        expect(chip.textContent).not.toMatch(/⚙️/);
 
         jest.mocked(window.api.getChallengeOverrides).mockResolvedValue({ exposureTarget: 80 });
         await act(async () => {
             fireSettingsChanged();
         });
 
-        await waitFor(() => expect(chip.className).toMatch(/btn-accent/));
-        expect(chip.textContent).toMatch(/⚙️/);
+        await waitFor(() => expect(chip.textContent).toMatch(/⚙️/));
     });
 
     test('picks up a newly assigned automatic profile via settings-changed', async () => {
@@ -180,7 +168,7 @@ describe('ChallengeNav', () => {
 
         const chip = screen.getByRole('button', { name: /Later Profile/ });
         await waitFor(() => expect(window.api.getTitleProfile).toHaveBeenCalledWith('Later Profile', '6'));
-        expect(chip.className).not.toMatch(/btn-accent/);
+        expect(chip.textContent).not.toMatch(/🔄/);
 
         jest.mocked(window.api.getTitleProfile).mockResolvedValue(
             titleRuleInfo({ profile: { name: '4 pics', values: {} } }),
@@ -189,7 +177,7 @@ describe('ChallengeNav', () => {
             fireSettingsChanged();
         });
 
-        await waitFor(() => expect(chip.className).toMatch(/btn-info/));
+        await waitFor(() => expect(chip.textContent).toMatch(/🔄/));
     });
 
     test('reads each id once when the list repeats one', async () => {

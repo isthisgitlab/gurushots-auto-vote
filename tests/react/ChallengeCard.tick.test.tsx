@@ -226,7 +226,7 @@ describe('ChallengeCard rendering', () => {
     test('the countdown text updates through its signal without re-rendering the card', () => {
         const time = signal<string | null>('5m 0s');
         renderCard(challengeWith({ turbo: { state: 'FREE' }, boost: { state: 'USED' } }), time);
-        expect(screen.getByText('5m 0s').className).toBe('text-success');
+        expect(screen.getByText('5m 0s').className).toBe('');
         const afterMount = mockRenders.count;
 
         act(() => {
@@ -243,18 +243,18 @@ describe('ChallengeCard rendering', () => {
 
 describe('Countdown', () => {
     test.each([
-        ['a plain value', '3h', 'text-success', '3h'],
-        ['no value yet', undefined, 'text-success', 'common.loading'],
-        ['an empty value', '', 'text-success', 'common.loading'],
+        ['a plain value', '3h', '', '3h'],
+        ['no value yet', undefined, '', 'common.loading'],
+        ['an empty value', '', '', 'common.loading'],
         ['an ended challenge', null, 'text-error', 'app.ended'],
     ])('%s', (_name, source, className, text) => {
         render(<Countdown source={source} className="font-medium" />);
         const el = screen.getByText(text);
-        expect(el.className).toBe(`${className} font-medium`);
+        expect(el.className).toBe(`${className} font-medium`.trim());
     });
 
-    test('without extra classes the span carries only its colour', () => {
+    test('without extra classes the span carries no class while time is left', () => {
         render(<Countdown source="1h" />);
-        expect(screen.getByText('1h').className).toBe('text-success');
+        expect(screen.getByText('1h').className).toBe('');
     });
 });

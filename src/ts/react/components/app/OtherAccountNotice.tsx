@@ -33,7 +33,7 @@ export function OtherAccountNotice({ onRemoved }: { onRemoved: () => void }) {
         <>
             <div role="alert" className="alert alert-warning py-2 text-sm">
                 <span className="flex-1">{t('app.photoChooserOtherAccount')}</span>
-                <button type="button" className="btn btn-sm" onClick={() => setConfirming(true)}>
+                <button type="button" className="btn btn-sm btn-error" onClick={() => setConfirming(true)}>
                     {t('app.photoChooserOtherAccountClear')}
                 </button>
             </div>
@@ -60,7 +60,7 @@ export function OtherAccountNotice({ onRemoved }: { onRemoved: () => void }) {
                     </button>
                     <button
                         type="button"
-                        className="btn btn-warning btn-sm"
+                        className="btn btn-error btn-sm"
                         disabled={removing}
                         onClick={() => void remove()}
                     >

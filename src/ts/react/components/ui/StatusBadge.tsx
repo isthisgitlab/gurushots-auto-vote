@@ -9,9 +9,6 @@ export type StatusBadgeVariant =
     | 'warning'
     | 'info'
     | 'ghost'
-    | 'primary'
-    | 'secondary'
-    | 'accent'
     | 'popular'
     | 'skilled'
     | 'premier'
@@ -40,9 +37,6 @@ export function StatusBadge({
             warning: 'badge-warning',
             info: 'badge-info',
             ghost: 'badge-ghost',
-            primary: 'badge-primary',
-            secondary: 'badge-secondary',
-            accent: 'badge-accent',
             // Level badges
             popular: LEVEL_BADGE_CLASS.popular,
             skilled: LEVEL_BADGE_CLASS.skilled,

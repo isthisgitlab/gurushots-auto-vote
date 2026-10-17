@@ -315,7 +315,9 @@ test('the "Starts in" text counts down as time passes', async () => {
 describe('what a row says about its challenge: type, photos and tags', () => {
     const tagBadges = () => [...document.querySelectorAll('span.badge.badge-ghost')].map((el) => el.textContent);
     const kindBadges = () =>
-        [...document.querySelectorAll('span.badge-warning, span.badge-info')].map((el) => el.textContent);
+        [...document.querySelectorAll('span.badge-neutral')]
+            .filter((el) => !el.closest('summary'))
+            .map((el) => el.textContent);
 
     test('every row, open and upcoming, shows its type as on the cards, and its photo count from two photos', async () => {
         renderSection([
@@ -334,7 +336,6 @@ describe('what a row says about its challenge: type, photos and tags', () => {
         ]);
         await settle();
         expect(kindBadges()).toEqual(['🏁 Team match']);
-        expect(document.querySelector('span.badge-info')?.className).toContain('badge-info');
     });
 
     test('its tags show as small badges, without a repeat of the type or badge shown or a photo-count tag', async () => {

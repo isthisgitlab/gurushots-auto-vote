@@ -122,7 +122,7 @@ export function LoginForm({
 
             {/* Submit button */}
             <div className="flex flex-col w-full mt-6">
-                <button type="submit" className="btn btn-latvian btn-sm w-full" disabled={loading}>
+                <button type="submit" className="btn btn-neutral btn-sm w-full" disabled={loading}>
                     {loading ? (
                         <>
                             <span>{t('login.loggingIn')}</span>

@@ -37,7 +37,7 @@ export function WelcomeModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
             </div>
 
             <ModalActions>
-                <button type="button" className="btn btn-primary btn-sm" onClick={close}>
+                <button type="button" className="btn btn-neutral btn-sm" onClick={close}>
                     {t('onboarding.gotIt')}
                 </button>
             </ModalActions>

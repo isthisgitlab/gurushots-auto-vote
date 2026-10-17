@@ -19,7 +19,7 @@ export function UnofficialNoticeModal({ isOpen, onAcknowledge }: { isOpen: boole
                 <p>{t('notice.updates')}</p>
             </div>
             <ModalActions>
-                <button type="button" className="btn btn-latvian btn-sm" onClick={onAcknowledge}>
+                <button type="button" className="btn btn-neutral btn-sm" onClick={onAcknowledge}>
                     {t('notice.acknowledge')}
                 </button>
             </ModalActions>

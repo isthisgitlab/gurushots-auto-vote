@@ -52,7 +52,7 @@ function ResumeHold({
                 <ResumeCountdown startAt={startAt} /> <span id={noteId}>{t('app.resumeHoldNote')}</span>
             </div>
             <div className="flex flex-wrap gap-2">
-                <button className="btn btn-sm btn-latvian" aria-describedby={noteId} onClick={() => void onStartNow()}>
+                <button className="btn btn-sm btn-neutral" aria-describedby={noteId} onClick={() => void onStartNow()}>
                     {t('app.resumeStartNow')}
                 </button>
                 <button className="btn btn-sm" aria-describedby={noteId} onClick={() => void onCancelResume()}>
@@ -121,7 +121,7 @@ export function AutoVoteControls({
                     {!pending && (
                         <button
                             ref={toggleRef}
-                            className={`btn btn-sm ${running ? 'btn-error' : 'btn-latvian'}`}
+                            className={`btn btn-sm ${running ? 'btn-outline btn-error' : 'btn-neutral'}`}
                             onClick={() => void onToggle()}
                         >
                             {running ? (

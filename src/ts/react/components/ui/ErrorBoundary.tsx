@@ -87,7 +87,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                     <button type="button" className="btn btn-outline btn-sm" onClick={this.handleDismiss}>
                         {tr('errors.dismiss')}
                     </button>
-                    <button type="button" className="btn btn-sm btn-primary" onClick={this.handleReload}>
+                    <button type="button" className="btn btn-sm btn-neutral" onClick={this.handleReload}>
                         {tr('errors.reload')}
                     </button>
                 </div>

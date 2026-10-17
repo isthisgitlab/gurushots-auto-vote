@@ -66,7 +66,7 @@ export function JoinConfirmModal({
                                 {t('app.cancel')}
                             </button>
                             <button
-                                className="btn btn-warning btn-sm"
+                                className="btn btn-latvian btn-sm"
                                 onClick={() => void onConfirm()}
                                 disabled={insufficient}
                             >

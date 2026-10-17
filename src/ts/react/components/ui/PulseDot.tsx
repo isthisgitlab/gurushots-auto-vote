@@ -6,14 +6,12 @@ import { useSyncExternalStore } from 'react';
  * low exposure (error). The halo pings a few times when the dot appears and again
  * when the window or page comes back (focus, or becoming visible), then rests
  * under the dot (an endless animation keeps the renderer compositing).
- * `variant` is a DaisyUI status colour name. Decorative: callers carry the
+ * `variant` is `info` (blue) or `error` (red), the two meanings a dot carries. Decorative: callers carry the
  * meaning in text (visible or sr-only).
  */
 const VARIANT_CLASS = {
     info: 'status-info',
     error: 'status-error',
-    warning: 'status-warning',
-    success: 'status-success',
 };
 
 export type PulseDotVariant = keyof typeof VARIANT_CLASS;

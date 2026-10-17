@@ -131,7 +131,7 @@ export function UpdateDialog() {
                         <button className="btn btn-outline btn-sm" onClick={hideDialog}>
                             {t('app.remindLater')}
                         </button>
-                        <button className="btn btn-latvian btn-sm" onClick={() => void startDownload()}>
+                        <button className="btn btn-neutral btn-sm" onClick={() => void startDownload()}>
                             {t('app.download')}
                         </button>
                     </>
@@ -150,7 +150,7 @@ export function UpdateDialog() {
                         <button className="btn btn-outline btn-sm" onClick={hideDialog}>
                             {t('app.restartLater')}
                         </button>
-                        <button className="btn btn-latvian btn-sm" onClick={() => void installUpdate()}>
+                        <button className="btn btn-neutral btn-sm" onClick={() => void installUpdate()}>
                             {t('app.restartNow')}
                         </button>
                     </>
@@ -163,7 +163,7 @@ export function UpdateDialog() {
                             {t('app.close')}
                         </button>
                         {(error as NonNullable<typeof error>).kind === 'update' && (
-                            <button className="btn btn-latvian btn-sm" onClick={() => void openBrowserDownload()}>
+                            <button className="btn btn-neutral btn-sm" onClick={() => void openBrowserDownload()}>
                                 {t('app.downloadInBrowser')}
                             </button>
                         )}

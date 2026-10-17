@@ -155,7 +155,7 @@ export type TurboStatusCode = 'unavailable' | 'free' | 'timer' | 'inProgress' | 
  */
 export const getBoostStatus = (boost: MemberBoost | null | undefined): ResourceStatus<BoostStatusCode> => {
     if (!boost || !boost.state) {
-        return { code: 'unknown', colorClass: 'text-secondary' };
+        return { code: 'unknown', colorClass: 'text-base-content/60' };
     }
 
     if (boost.state === 'AVAILABLE' || boost.state === 'AVAILABLE_KEY') {
@@ -169,12 +169,12 @@ export const getBoostStatus = (boost: MemberBoost | null | undefined): ResourceS
     } else if (boost.state === 'USED') {
         return { code: 'used', colorClass: 'text-success' };
     } else if (boost.state === 'UNAVAILABLE') {
-        return { code: 'unavailable', colorClass: 'text-error' };
+        return { code: 'unavailable', colorClass: 'text-base-content/60' };
     } else if (boost.state === 'LOCKED') {
-        return { code: 'locked', colorClass: 'text-error' };
+        return { code: 'locked', colorClass: 'text-base-content/60' };
     } else {
         // state is non-empty here (guarded above), so it is shown verbatim.
-        return { code: 'other', colorClass: 'text-secondary', raw: boost.state };
+        return { code: 'other', colorClass: 'text-base-content/60', raw: boost.state };
     }
 };
 
@@ -226,10 +226,11 @@ export const getEntryStatus = (
     const isBoosted = entry?.boosted === true;
     const isTurboed = !!entry?.turbo;
     const base = { isBoosted, isTurboed };
-    if (isBoosted) return { ...base, icon: '🚀', className: 'border-info text-info', textClass: 'text-info' };
-    if (isTurboed) return { ...base, icon: '⚡', className: 'border-warning text-warning', textClass: 'text-warning' };
-    if (entry?.guru_pick) return { ...base, icon: '⭐', className: 'badge-secondary', textClass: 'text-secondary' };
-    return { ...base, icon: '📷', className: 'border-success text-success', textClass: 'text-success' };
+    const neutral = { className: 'border-base-300', textClass: '' };
+    if (isBoosted) return { ...base, icon: '🚀', ...neutral };
+    if (isTurboed) return { ...base, icon: '⚡', ...neutral };
+    if (entry?.guru_pick) return { ...base, icon: '⭐', ...neutral };
+    return { ...base, icon: '📷', ...neutral };
 };
 
 /**
@@ -246,27 +247,27 @@ export { isBoostWindowOpen } from '../../voting/boostWindow';
  */
 export const getTurboStatus = (turbo: MemberTurbo | null | undefined): ResourceStatus<TurboStatusCode> => {
     if (!turbo || !turbo.state) {
-        return { code: 'unavailable', colorClass: 'text-error' };
+        return { code: 'unavailable', colorClass: 'text-base-content/60' };
     }
 
     switch (turbo.state) {
         case 'FREE':
             return { code: 'free', colorClass: 'text-info' };
         case 'TIMER':
-            return { code: 'timer', colorClass: 'text-error' };
+            return { code: 'timer', colorClass: 'text-base-content/60' };
         case 'IN_PROGRESS':
             return { code: 'inProgress', colorClass: 'text-warning' };
         case 'WON':
-            return { code: 'won', colorClass: 'text-accent' };
+            return { code: 'won', colorClass: 'text-success' };
         case 'USED':
             return { code: 'used', colorClass: 'text-success' };
         case 'UNAVAILABLE':
-            return { code: 'unavailable', colorClass: 'text-error' };
+            return { code: 'unavailable', colorClass: 'text-base-content/60' };
         case 'LOCKED':
-            return { code: 'locked', colorClass: 'text-latvian' };
+            return { code: 'locked', colorClass: 'text-base-content/60' };
         default:
             // state is non-empty here (guarded above), so it is shown verbatim.
-            return { code: 'other', colorClass: 'text-secondary', raw: turbo.state };
+            return { code: 'other', colorClass: 'text-base-content/60', raw: turbo.state };
     }
 };
 

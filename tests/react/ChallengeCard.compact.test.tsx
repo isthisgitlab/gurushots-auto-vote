@@ -129,13 +129,13 @@ describe('compact ChallengeCard tile', () => {
         expect(buttons[0].textContent).toContain('app.details');
     });
 
-    test('an ended countdown is shown in red, a running one in green', () => {
+    test('an ended countdown is shown in red, a running one uncoloured', () => {
         // null is the countdown of a challenge that has ended; the card words it in the UI's language.
         const { unmount } = renderCard(makeChallenge(), null);
         expect(screen.getByText('app.ended').className).toContain('text-error');
         unmount();
         renderCard();
-        expect(screen.getByText('2h 30m').className).toContain('text-success');
+        expect(screen.getByText('2h 30m').className).not.toContain('text-');
     });
 
     test('toggle calls toggleCompact', () => {

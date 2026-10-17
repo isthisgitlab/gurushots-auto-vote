@@ -105,17 +105,17 @@ beforeEach(() => {
 });
 
 describe('ChallengeCard badge row — logical/state badges', () => {
-    test('type, photo-count and auto-fill all render icon + text with solid colors', () => {
+    test('type, photo-count and auto-fill all render icon + text, the kind badges solid neutral', () => {
         mockChallengeSettings.autoSubmitEnabled = true;
         const { container } = renderCard(makeChallenge());
 
         const type = badgeByText(container, '🏁 FLASH');
         expect(type).toBeTruthy();
-        expect(type!.className).toMatch(/badge-warning/);
+        expect(type!.className).toMatch(/badge-neutral/);
 
         const photos = badgeByText(container, '🖼 4 app.photos');
         expect(photos).toBeTruthy();
-        expect(photos!.className).toMatch(/badge-warning/);
+        expect(photos!.className).toMatch(/badge-neutral/);
 
         const autoSubmit = badgeByText(container, '📥 app.autoSubmitBadge');
         expect(autoSubmit).toBeTruthy();
@@ -141,11 +141,11 @@ describe('ChallengeCard badge row — logical/state badges', () => {
         expect([...badges].every((badge) => badge.classList.contains('badge-sm'))).toBe(true);
     });
 
-    test('badge fallback (no type) also gets the icon and the info variant', () => {
+    test('badge fallback (no type) also gets the icon and the neutral variant', () => {
         const { container } = renderCard(makeChallenge({ type: null, badge: 'Special' }));
         const fallback = badgeByText(container, '🏁 Special');
         expect(fallback).toBeTruthy();
-        expect(fallback!.className).toMatch(/badge-info/);
+        expect(fallback!.className).toMatch(/badge-neutral/);
     });
 
     test('auto-fill badge is hidden once all slots are filled', () => {
@@ -160,7 +160,7 @@ describe('ChallengeCard badge row — logical/state badges', () => {
         const { container } = renderCard(makeChallenge());
         const manual = badgeByText(container, '✋ app.manualPhotosBadge');
         expect(manual).toBeTruthy();
-        expect(manual!.className).toMatch(/badge-info/);
+        expect(manual!.className).toMatch(/badge-ghost/);
         expect(badgeByText(container, '📥 app.autoSubmitBadge')).toBeFalsy();
     });
 

@@ -73,7 +73,7 @@ export function ChallengeBadgeRow({
             )}
             <ChallengeKindBadges challenge={challenge} showPhotoCount={showPhotoCount} />
             {showAutoSubmitBadge && <StatusBadge variant="success">📥 {t('app.autoSubmitBadge')}</StatusBadge>}
-            {showManualPhotosBadge && <StatusBadge variant="info">✋ {t('app.manualPhotosBadge')}</StatusBadge>}
+            {showManualPhotosBadge && <StatusBadge variant="ghost">✋ {t('app.manualPhotosBadge')}</StatusBadge>}
             {hasLogicalBadge && hasCustomSettings && (
                 <span data-testid="badge-divider" className="w-px h-3 bg-base-300 mx-0.5 self-center" />
             )}

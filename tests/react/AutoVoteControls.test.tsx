@@ -23,7 +23,7 @@ describe('AutoVoteControls', () => {
         );
 
         const button = screen.getByText('app.startAutoVote').closest('button')!;
-        expect(button.className).toContain('btn-latvian');
+        expect(button.className).toContain('btn-neutral');
         expect(screen.getByText('common.stopped').className).toContain('badge-neutral');
         expect(screen.getByText('-')).toBeTruthy();
         expect(screen.getByText('0')).toBeTruthy();
@@ -48,7 +48,7 @@ describe('AutoVoteControls', () => {
             />,
         );
 
-        expect(screen.getByText('app.stopAutoVote').closest('button')!.className).toContain('btn-error');
+        expect(screen.getByText('app.stopAutoVote').closest('button')!.className).toContain('btn-outline btn-error');
         expect(screen.queryByText('app.startAutoVote')).toBeNull();
         expect(screen.getByText('common.running').className).toContain('badge-success');
         expect(screen.getByText('12:34:56')).toBeTruthy();

@@ -135,12 +135,12 @@ describe('formatEndTime', () => {
 
 describe('getBoostStatus', () => {
     test.each([
-        [null, { code: 'unknown', colorClass: 'text-secondary' }],
-        [{}, { code: 'unknown', colorClass: 'text-secondary' }],
+        [null, { code: 'unknown', colorClass: 'text-base-content/60' }],
+        [{}, { code: 'unknown', colorClass: 'text-base-content/60' }],
         [{ state: 'USED' }, { code: 'used', colorClass: 'text-success' }],
-        [{ state: 'UNAVAILABLE' }, { code: 'unavailable', colorClass: 'text-error' }],
-        [{ state: 'LOCKED' }, { code: 'locked', colorClass: 'text-error' }],
-        [{ state: 'WEIRD' }, { code: 'other', colorClass: 'text-secondary', raw: 'WEIRD' }],
+        [{ state: 'UNAVAILABLE' }, { code: 'unavailable', colorClass: 'text-base-content/60' }],
+        [{ state: 'LOCKED' }, { code: 'locked', colorClass: 'text-base-content/60' }],
+        [{ state: 'WEIRD' }, { code: 'other', colorClass: 'text-base-content/60', raw: 'WEIRD' }],
     ])('%j → %j', (boost, status) => {
         expect(getBoostStatus(boost)).toEqual(status);
     });
@@ -193,16 +193,16 @@ describe('statusText', () => {
 
 describe('getTurboStatus', () => {
     test.each([
-        [undefined, { code: 'unavailable', colorClass: 'text-error' }],
-        [{ state: '' }, { code: 'unavailable', colorClass: 'text-error' }],
+        [undefined, { code: 'unavailable', colorClass: 'text-base-content/60' }],
+        [{ state: '' }, { code: 'unavailable', colorClass: 'text-base-content/60' }],
         [{ state: 'FREE' }, { code: 'free', colorClass: 'text-info' }],
-        [{ state: 'TIMER' }, { code: 'timer', colorClass: 'text-error' }],
+        [{ state: 'TIMER' }, { code: 'timer', colorClass: 'text-base-content/60' }],
         [{ state: 'IN_PROGRESS' }, { code: 'inProgress', colorClass: 'text-warning' }],
-        [{ state: 'WON' }, { code: 'won', colorClass: 'text-accent' }],
+        [{ state: 'WON' }, { code: 'won', colorClass: 'text-success' }],
         [{ state: 'USED' }, { code: 'used', colorClass: 'text-success' }],
-        [{ state: 'UNAVAILABLE' }, { code: 'unavailable', colorClass: 'text-error' }],
-        [{ state: 'LOCKED' }, { code: 'locked', colorClass: 'text-latvian' }],
-        [{ state: 'NEW_STATE' }, { code: 'other', colorClass: 'text-secondary', raw: 'NEW_STATE' }],
+        [{ state: 'UNAVAILABLE' }, { code: 'unavailable', colorClass: 'text-base-content/60' }],
+        [{ state: 'LOCKED' }, { code: 'locked', colorClass: 'text-base-content/60' }],
+        [{ state: 'NEW_STATE' }, { code: 'other', colorClass: 'text-base-content/60', raw: 'NEW_STATE' }],
     ])('%j → %j', (turbo, status) => {
         expect(getTurboStatus(turbo)).toEqual(status);
     });
@@ -228,6 +228,14 @@ describe('getLevelStatus', () => {
 });
 
 describe('getEntryStatus', () => {
+    test('every state carries the same neutral colour: the icon says which it is', () => {
+        const states = [{ boosted: true }, { turbo: true }, { guru_pick: true }, {}].map((entry) =>
+            getEntryStatus(invalid(entry)),
+        );
+        expect(states.map((state) => state.icon)).toEqual(['🚀', '⚡', '⭐', '📷']);
+        for (const state of states) expect(state).toMatchObject({ className: 'border-base-300', textClass: '' });
+    });
+
     test('guru pick and plain entries', () => {
         expect(getEntryStatus(invalid({ guru_pick: true })).icon).toBe('⭐');
         expect(getEntryStatus(undefined)).toMatchObject({ isBoosted: false, isTurboed: false, icon: '📷' });

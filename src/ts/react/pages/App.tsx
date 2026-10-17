@@ -320,7 +320,7 @@ function AppContent() {
                 ref={mainRef}
                 aria-label={t('app.mainContent')}
                 tabIndex={-1}
-                className="container mx-auto px-4 pb-4 max-w-4xl focus-visible:ring-primary focus-visible:ring-2 focus-visible:outline-none"
+                className="container mx-auto px-4 pb-4 max-w-4xl focus-visible:ring-info focus-visible:ring-2 focus-visible:outline-none"
             >
                 <ErrorBoundary>
                     {/* Autovote Controls */}

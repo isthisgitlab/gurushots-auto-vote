@@ -91,10 +91,7 @@ function DetailHeader({
                 <ChallengeBadgeRow {...badgeRowProps} />
                 {challenge.url && (
                     <div className="text-xs text-base-content/40 mt-1">
-                        <button
-                            onClick={handleOpenUrl}
-                            className="font-mono hover:text-latvian hover:underline text-left"
-                        >
+                        <button onClick={handleOpenUrl} className="font-mono hover:text-info hover:underline text-left">
                             {challengePageUrl(challenge.url).replace('https://', '')}
                         </button>
                     </div>

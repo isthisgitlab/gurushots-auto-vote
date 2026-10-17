@@ -67,7 +67,7 @@ export function EntryPhoto({ entry }: { entry: RankingEntry }) {
                 visible edge to read as a control rather than decoration. */}
             <button
                 type="button"
-                className="ring-base-300 hover:ring-primary focus-visible:ring-primary block h-8 w-8 pointer-coarse:h-11 pointer-coarse:w-11 overflow-hidden rounded ring-1 focus:outline-none focus-visible:ring-2"
+                className="ring-base-300 hover:ring-info focus-visible:ring-info block h-8 w-8 pointer-coarse:h-11 pointer-coarse:w-11 overflow-hidden rounded ring-1 focus:outline-none focus-visible:ring-2"
                 onClick={() => setFullOpen(true)}
                 onMouseEnter={() => setHovered(true)}
                 onMouseLeave={() => setHovered(false)}

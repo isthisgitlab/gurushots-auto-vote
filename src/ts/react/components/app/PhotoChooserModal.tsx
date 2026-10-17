@@ -78,7 +78,7 @@ const withPosition = (label: string, t: (key: string) => string, position: numbe
 /** The visible number on a selected tile: the order the photos are saved in (named in the tile's label too). */
 function PositionBadge({ position }: { position: number | null }) {
     return position === null ? null : (
-        <span aria-hidden="true" className="badge badge-primary badge-sm self-start">
+        <span aria-hidden="true" className="badge badge-neutral badge-sm self-start">
             {position}
         </span>
     );
@@ -95,7 +95,7 @@ function RankBadge({ rank }: { rank: number | null }) {
         <span
             role="img"
             aria-label={interp(t('app.pickSuggestionRank'), { n: rank })}
-            className="badge badge-secondary badge-sm self-start"
+            className="badge badge-outline badge-sm self-start"
         >
             #{rank}
         </span>
@@ -146,7 +146,7 @@ export function PhotoTile({
     // Only the picture and its tags are dimmed: the reason line stays at full contrast, since it is
     // what says why the tile cannot be added.
     const dim = unavailable ? 'opacity-50' : '';
-    const tone = selected ? 'border-primary bg-primary/10' : 'border-base-300';
+    const tone = selected ? 'border-info bg-info/10' : 'border-base-300';
     return (
         <button
             type="button"

@@ -233,7 +233,7 @@ export function ChallengeProfilesBar({
 
             {selectedIntent && selectedProfile && (
                 <p className="text-xs">
-                    <span className={`badge badge-sm mr-1 ${selectedIntentModified ? 'badge-warning' : 'badge-info'}`}>
+                    <span className={`badge badge-sm mr-1 ${selectedIntentModified ? 'badge-warning' : 'badge-ghost'}`}>
                         {selectedIntentModified ? t('app.intentModified') : t('app.intentBuiltIn')}
                     </span>
                     {t(selectedIntent.descKey)}
@@ -254,7 +254,7 @@ export function ChallengeProfilesBar({
                     }}
                 />
                 <button
-                    className="btn btn-sm btn-latvian"
+                    className="btn btn-sm btn-neutral"
                     onClick={() => void handleSave()}
                     disabled={busy}
                     aria-busy={busy}

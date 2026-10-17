@@ -1,9 +1,7 @@
 import type { ComponentChildren, JSX } from 'preact';
 const VARIANT_CLASSES = {
-    latvian: 'btn-latvian',
-    info: 'btn-info',
-    success: 'btn-success',
-    warning: 'btn-warning',
+    neutral: 'btn-neutral',
+    cost: 'btn-latvian',
 };
 
 export type ActionButtonVariant = keyof typeof VARIANT_CLASSES;

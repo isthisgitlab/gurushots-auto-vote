@@ -86,7 +86,7 @@ export function ImportReportModal({ hold = false }: { hold?: boolean }) {
             <ModalActions>
                 <button
                     type="button"
-                    className="btn btn-primary btn-sm"
+                    className="btn btn-neutral btn-sm"
                     onClick={() => void acknowledge()}
                     disabled={saving}
                     aria-busy={saving}

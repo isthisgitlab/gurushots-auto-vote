@@ -559,7 +559,7 @@ export function ScenarioBuilder({
             <SimulatePanel draft={draft} />
             <ScenarioError error={error} />
             <div className="flex gap-2">
-                <button type="button" className="btn btn-sm btn-primary" onClick={() => void save()}>
+                <button type="button" className="btn btn-sm btn-neutral" onClick={() => void save()}>
                     {t('app.sbSave')}
                 </button>
                 <button type="button" className="btn btn-sm btn-ghost" onClick={onCancel}>

@@ -142,7 +142,7 @@ function ImportPanel({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
                 </button>
                 <button
                     type="button"
-                    className="btn btn-sm btn-primary"
+                    className="btn btn-sm btn-neutral"
                     onClick={() => void runImport()}
                     disabled={!preview || (preview.exists && !overwrite)}
                 >
@@ -297,7 +297,7 @@ function ScenarioRow({
                         value={renaming}
                         onChange={(e) => setRenaming(e.currentTarget.value)}
                     />
-                    <button type="button" className="btn btn-sm btn-primary" onClick={() => void runRename(renaming)}>
+                    <button type="button" className="btn btn-sm btn-neutral" onClick={() => void runRename(renaming)}>
                         {t('app.scenarioRenameSave')}
                     </button>
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => setRenaming(null)}>
@@ -398,7 +398,7 @@ export function ScenariosSection({ isOpen }: { isOpen: boolean }) {
                     <div className="flex flex-wrap gap-2 items-center">
                         <button
                             type="button"
-                            className="btn btn-sm btn-primary"
+                            className="btn btn-sm btn-neutral"
                             onClick={() =>
                                 setEditing({
                                     initial: newScenario(freeName(t('app.sbNew'), names)),

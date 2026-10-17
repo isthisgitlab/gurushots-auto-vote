@@ -169,7 +169,7 @@ export function ChallengesSection({
                 {!autovoteRunning && (
                     <>
                         <IconActionButton
-                            className="btn btn-latvian btn-sm"
+                            className="btn btn-neutral btn-sm"
                             action={() => ipc.voteAllChallengesManual()}
                             onSuccess={refetchAfterAction}
                             failureLogPrefix="Vote All failed"
@@ -179,7 +179,7 @@ export function ChallengesSection({
                             label={t('app.voteAll')}
                         />
                         <IconActionButton
-                            className="btn btn-latvian btn-sm"
+                            className="btn btn-neutral btn-sm"
                             action={() => ipc.runVotingCycle()}
                             onSuccess={refetchAfterAction}
                             failureLogPrefix="Run failed"
