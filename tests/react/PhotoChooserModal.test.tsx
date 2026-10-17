@@ -219,7 +219,7 @@ describe('listing and tiles', () => {
                 'focus-visible:outline-offset-4',
                 'focus-visible:outline-base-content',
             ]) {
-                expect(tile(n).className).toContain(cls);
+                expect(tile(n).classList.contains(cls)).toBe(true);
             }
         }
     });
