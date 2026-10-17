@@ -2,6 +2,7 @@
 
 import { makePostRequest, postOnce } from './api-client';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
+import { ID_PATTERN } from '../format/photoUrl';
 import { isInteger } from '../numbers';
 import { isPlainObject } from '../plainObject';
 
@@ -22,6 +23,8 @@ import type {
 const TURBO_SELECTION_DELAY_MS = 1200;
 
 const requireValue = makeRequireValue('turbo');
+
+const isHexId = (value: unknown): value is string => typeof value === 'string' && ID_PATTERN.test(value);
 
 /**
  * Fetches the current Turbo battle set for a challenge.
@@ -102,19 +105,15 @@ const startTurboSession = async (challengeId: string | number, token: string): P
     ) {
         return null;
     }
+    // `position` indexes the server's list, so an image dropped here would shift it onto the wrong photo: one
+    // malformed element makes the whole session unusable.
     const images: SnapImage[] = [];
     for (const image of response.images) {
-        if (
-            isPlainObject(image) &&
-            typeof image.image_id === 'string' &&
-            image.image_id !== '' &&
-            typeof image.member_id === 'string' &&
-            image.member_id !== ''
-        ) {
-            images.push({ imageId: image.image_id, memberId: image.member_id });
-        }
+        if (!isPlainObject(image) || !isHexId(image.image_id) || !isHexId(image.member_id)) return null;
+        images.push({ imageId: image.image_id, memberId: image.member_id });
     }
-    const position = isInteger(response.position) && response.position >= 0 ? response.position : 0;
+    const { position } = response;
+    if (images.length === 0 || !isInteger(position) || position < 0 || position > images.length) return null;
     return { kind: 'snap', sessionId: response.session_id, position, caption: response.caption, images };
 };
 

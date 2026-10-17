@@ -266,13 +266,12 @@ const rankVisually = async (
     }
 };
 
-// How each Snap question predicate reads as a (yes, no) description of the subject.
-const SNAP_PREDICATES: Record<string, [string, string]> = {
-    natural: ['natural and realistic', 'artificial and over-edited'],
-    realistic: ['realistic', 'fake and over-edited'],
-};
-const SNAP_CAPTION_RE =
-    /^(?:do|does|is|are)\s+(?:the\s+)?(.+?)\s+(?:look|looks|seem|seems|appear|appears)\s+([a-z-]+)\?$/i;
+// A Snap question is "Does the <subject> look <predicate>?"; the predicate's words decide which way it reads.
+const SNAP_CAPTION_RE = /^(?:do|does|is|are)\s+(?:the\s+)?(.+?)\s+(?:look|looks|seem|seems|appear|appears)\s+(.+?)\?$/i;
+const SNAP_NEGATIVE_RE =
+    /\b(?:unnatural|unrealistic|fake|artificial|edited|over-edited|overdone|overprocessed|over-processed|exaggerated)\b/;
+const SNAP_POSITIVE_RE = /\b(?:natural|realistic|believable|real|authentic|convincing|plausible)\b/;
+const SNAP_CAPTION_MAX_CHARS = 200;
 
 /**
  * The two text prompts a Snap caption ("Does the soft, even light look natural?") is judged against.
@@ -280,17 +279,18 @@ const SNAP_CAPTION_RE =
  * @returns null when the caption is not a question of a known shape
  */
 const snapPrompts = (caption: string): { yes: string; no: string } | null => {
-    const match = SNAP_CAPTION_RE.exec(caption.trim());
+    const match = SNAP_CAPTION_RE.exec(caption.trim().slice(0, SNAP_CAPTION_MAX_CHARS));
     if (!match) return null;
-    const predicate = Object.hasOwn(SNAP_PREDICATES, match[2].toLowerCase())
-        ? SNAP_PREDICATES[match[2].toLowerCase()]
-        : null;
-    if (!predicate) return null;
-    const [positive, negative] = predicate;
-    return {
-        yes: `a photo where the ${match[1]} look ${positive}`,
-        no: `a photo where the ${match[1]} look ${negative}`,
-    };
+    const [, subject, predicate] = match;
+    const words = predicate.toLowerCase();
+    const yes = `a photo where the ${subject} look ${predicate}`;
+    if (SNAP_NEGATIVE_RE.test(words)) {
+        return { yes, no: `a photo where the ${subject} look natural and realistic` };
+    }
+    if (SNAP_POSITIVE_RE.test(words)) {
+        return { yes, no: `a photo where the ${subject} look artificial, fake and over-edited` };
+    }
+    return null;
 };
 
 export interface SnapJudgment {

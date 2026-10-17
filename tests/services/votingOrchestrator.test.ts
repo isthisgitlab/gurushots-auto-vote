@@ -249,7 +249,8 @@ describe('mock-parity behaviors on the shared path', () => {
     });
 
     describe('Snap games', () => {
-        const snapChallenge = (id: number) => makeChallenge({ id, member: { turbo: { state: 'FREE', mode: 'snap' } } });
+        const SNAP_MEMBER = { turbo: { state: 'FREE', mode: 'snap' } };
+        const snapChallenge = (id: number) => makeChallenge({ id, member: SNAP_MEMBER });
         const snapWon = {
             kind: 'snap',
             answered: 10,
@@ -341,6 +342,48 @@ describe('mock-parity behaviors on the shared path', () => {
             expect(earnSummaries()).toEqual([
                 ['turbo-earn-1', 'answered=3/10 meanAgreement=n/a stopReason=judge-failed won=false'],
             ]);
+        });
+
+        test('a Snap game that answered nothing leaves the pass its Snap slot', async () => {
+            const api = makeApi([snapChallenge(1), snapChallenge(2)]);
+            api.runTurboGame.mockResolvedValueOnce({
+                kind: 'snap',
+                answered: 0,
+                total: 10,
+                meanAgreement: null,
+                won: false,
+                stopReason: 'request-failed',
+            });
+            api.runTurboGame.mockResolvedValue(snapWon);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+            await runVotingPass('tok', null, deps(api));
+
+            expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([1, 2]);
+        });
+
+        test('a Snap game is not started on a challenge that closes within 15 minutes', async () => {
+            const api = makeApi([makeChallenge({ id: 1, close_time: NOW + 600, member: SNAP_MEMBER })]);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+            await runVotingPass('tok', null, deps(api));
+
+            expect(api.runTurboGame).not.toHaveBeenCalled();
+        });
+
+        test('a Snap game is not started in the Android headless service', async () => {
+            const api = makeApi([snapChallenge(1), makeChallenge({ id: 2 })]);
+            api.runTurboGame.mockResolvedValue(snapWon);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+            const globals = globalThis as { __GS_HEADLESS__?: boolean };
+            globals.__GS_HEADLESS__ = true;
+            try {
+                await runVotingPass('tok', null, deps(api));
+            } finally {
+                delete globals.__GS_HEADLESS__;
+            }
+
+            expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([2]);
         });
 
         test('a classic result keeps the classic summary', async () => {

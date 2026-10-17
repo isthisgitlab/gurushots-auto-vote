@@ -17,6 +17,8 @@ const SNAP_PACE_MIN_MS = 3000;
 const SNAP_PACE_MAX_MS = 6000;
 // submit_snap_vote's answer for a session that no longer exists.
 const SNAP_SESSION_DEAD = 1105;
+// How much of a caption the log keeps when it is not understood.
+const SNAP_CAPTION_LOG_CHARS = 200;
 
 /** What a caller can tell a turbo game. */
 export interface TurboGameOptions {
@@ -33,7 +35,9 @@ export interface SnapGameDeps extends TurboGameOptions {
 }
 
 /**
- * Plays (or resumes) the Snap game of one challenge.
+ * Plays (or resumes) the Snap game of one challenge. A missing model, a withdrawn game, an unreadable question, a
+ * dead session and a refused answer mark the challenge unavailable; a failed judgment or a failed session open is
+ * transient and leaves it open for the next pass.
  */
 const runSnapGame = async (
     challenge: Challenge,
@@ -60,6 +64,7 @@ const runSnapGame = async (
 
     // The model answers every photo; without it nothing is asked of the server, so the session stays untouched.
     if (!(await hasBundledModel())) {
+        markSnapUnavailable(challenge.id);
         log.info(`${tag} Snap needs the vision model, which this build does not include`, null);
         return stop('no-model');
     }
@@ -75,7 +80,10 @@ const runSnapGame = async (
     total = session.images.length;
     if (!snapPrompts(session.caption)) {
         markSnapUnavailable(challenge.id);
-        log.warning(`${tag} Snap question not understood: ${JSON.stringify(session.caption)}`, null);
+        log.warning(
+            `${tag} Snap question not understood: ${JSON.stringify(session.caption.slice(0, SNAP_CAPTION_LOG_CHARS))}`,
+            null,
+        );
         return stop('unparsed-caption');
     }
 
@@ -105,6 +113,8 @@ const runSnapGame = async (
             return stop('unavailable');
         }
         if (!vote.ok) {
+            // A server that refuses an answer keeps refusing it, so the challenge is left alone for the session.
+            markSnapUnavailable(challenge.id);
             log.warning(`${tag} Snap answer ${index + 1}/${total} was refused`, null);
             return stop('request-failed');
         }

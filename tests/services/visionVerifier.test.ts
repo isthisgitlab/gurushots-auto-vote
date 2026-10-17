@@ -415,38 +415,45 @@ describe('hasBundledModel', () => {
 });
 
 describe('snapPrompts', () => {
+    const POSITIVE_NO = 'artificial, fake and over-edited';
+    const NEGATIVE_NO = 'natural and realistic';
+
     test.each([
         [
             'Do the colored / neon lights and their reflections look natural?',
             'colored / neon lights and their reflections',
-            'natural and realistic',
-            'artificial and over-edited',
+            'natural',
+            POSITIVE_NO,
         ],
-        [
-            'Does the soft, even light look natural?',
-            'soft, even light',
-            'natural and realistic',
-            'artificial and over-edited',
-        ],
+        ['Does the soft, even light look natural?', 'soft, even light', 'natural', POSITIVE_NO],
         [
             '  Does the dramatic low light and shadow look natural?  ',
             'dramatic low light and shadow',
-            'natural and realistic',
-            'artificial and over-edited',
+            'natural',
+            POSITIVE_NO,
         ],
-        ['Are the colors seem Realistic?', 'colors', 'realistic', 'fake and over-edited'],
-    ])('%s', (caption, subject, positive, negative) => {
+        [
+            'Do the light rays and shadows look natural and believable?',
+            'light rays and shadows',
+            'natural and believable',
+            POSITIVE_NO,
+        ],
+        ['Are the colors seem Realistic?', 'colors', 'Realistic', POSITIVE_NO],
+        ['Does the sky look fake?', 'sky', 'fake', NEGATIVE_NO],
+        ['Do the edges look over-edited?', 'edges', 'over-edited', NEGATIVE_NO],
+    ])('%s', (caption, subject, predicate, no) => {
         expect(snapPrompts(caption)).toEqual({
-            yes: `a photo where the ${subject} look ${positive}`,
-            no: `a photo where the ${subject} look ${negative}`,
+            yes: `a photo where the ${subject} look ${predicate}`,
+            no: `a photo where the ${subject} look ${no}`,
         });
     });
 
     test.each([
         ['an unknown predicate', 'Does the soft light look dramatic?'],
-        ['an inherited property as predicate', 'Does the light look constructor?'],
+        ['a predicate that only contains a known word', 'Does the light look supernatural?'],
         ['a statement', 'The soft light looks natural.'],
         ['an empty caption', ''],
+        ['a caption over 200 characters', `Does the ${'soft '.repeat(50)}light look natural?`],
     ])('%s is not understood', (_name, caption) => {
         expect(snapPrompts(caption)).toBeNull();
     });

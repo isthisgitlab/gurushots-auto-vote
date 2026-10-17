@@ -191,6 +191,7 @@ describe('runSnapGame', () => {
             const result = await runSnapGame(CHALLENGE, 'tok', deps());
 
             expect(result).toEqual({ answered: 0, total: 0, meanAgreement: null, won: false, stopReason: 'no-model' });
+            expect(isSnapUnavailable(77)).toBe(true);
             expect(turbo.startTurboSession).not.toHaveBeenCalled();
             expect(turbo.submitSnapVote).not.toHaveBeenCalled();
             expect(turbo.getChallengeTurbo).not.toHaveBeenCalled();
@@ -216,7 +217,7 @@ describe('runSnapGame', () => {
             expect(turbo.submitSnapVote).not.toHaveBeenCalled();
         });
 
-        test('unparsed-caption: marks Snap unavailable and logs the caption', async () => {
+        test('unparsed-caption: marks Snap unavailable and logs the caption cut to 200 characters', async () => {
             vision.snapPrompts.mockReturnValue(null);
 
             const result = await runSnapGame(CHALLENGE, 'tok', deps());
@@ -293,7 +294,18 @@ describe('runSnapGame', () => {
             expect(isSnapUnavailable(77)).toBe(true);
         });
 
-        test('request-failed: any other refused answer', async () => {
+        test('an over-long unparsed caption is logged cut to 200 characters', async () => {
+            const long = 'x'.repeat(500);
+            turbo.startTurboSession.mockResolvedValue({ ...snapSession(), caption: long });
+            vision.snapPrompts.mockReturnValue(null);
+
+            await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(warnings()).toEqual([expect.stringContaining(JSON.stringify('x'.repeat(200)))]);
+            expect(warnings()[0]).not.toContain('x'.repeat(201));
+        });
+
+        test('request-failed: any other refused answer marks Snap unavailable', async () => {
             turbo.submitSnapVote
                 .mockResolvedValueOnce(landed())
                 .mockResolvedValueOnce(landed({ ok: false, errorCode: 9, communityPct: null }));
@@ -307,7 +319,7 @@ describe('runSnapGame', () => {
                 won: false,
                 stopReason: 'request-failed',
             });
-            expect(isSnapUnavailable(77)).toBe(false);
+            expect(isSnapUnavailable(77)).toBe(true);
         });
 
         test('request-failed when every photo is answered but no win is reported', async () => {

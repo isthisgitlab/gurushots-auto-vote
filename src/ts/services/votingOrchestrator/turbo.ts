@@ -1,4 +1,5 @@
 import * as logger from '../../logger';
+import * as runtime from '../../runtime';
 import * as settings from '../../settings';
 import * as votingLogic from '../VotingLogic';
 import * as autoFill from '../autoFill';
@@ -150,6 +151,9 @@ export const runTurboApply = async (ctx: ActionContext) => {
 
 // Snap answers are paced at seconds each, so a pass plays one game and the rest wait for the next pass.
 const MAX_SNAP_GAMES_PER_PASS = 1;
+// A Snap game takes up to ~75 s and the challenge's own deadline actions run after it in the same pass, so a
+// challenge closing sooner than this does not start one.
+const SNAP_MIN_SECONDS_TO_CLOSE = 15 * 60;
 
 const turboGameSummary = (result: TurboGameResult): string =>
     result.kind === 'snap'
@@ -176,6 +180,25 @@ export const playAutoTurbo = async (
             .debug(`${logger.challengeTag(challenge)} Snap turbo left for a later pass (one Snap game per pass)`, null);
         return;
     }
+    if (isSnap && challenge.close_time - now < SNAP_MIN_SECONDS_TO_CLOSE) {
+        logger
+            .withCategory('turbo')
+            .debug(
+                `${logger.challengeTag(challenge)} Snap turbo skipped: the challenge closes within 15 minutes`,
+                null,
+            );
+        return;
+    }
+    // The Android headless cycle is capped at 120 s; Snap plays from the app, the desktop and the CLI.
+    if (isSnap && runtime.isHeadlessService()) {
+        logger
+            .withCategory('turbo')
+            .debug(
+                `${logger.challengeTag(challenge)} Snap turbo skipped: the background service cycle is too short`,
+                null,
+            );
+        return;
+    }
     const savedForMission = votingLogic.isTurboEarnSaved(challenge, now);
     if (savedForMission && missions && missions.turbo > 0 && refreshMissionNeeds) {
         const fresh = await refreshMissionNeeds();
@@ -189,13 +212,14 @@ export const playAutoTurbo = async (
         return;
     }
     if (!claimTurboRun(challenge.id)) return;
-    if (isSnap) snapGames.played++;
     const purpose = missionWants ? ` for the turbo mission (${missions?.turbo} to go)` : '';
     logger
         .withCategory('turbo')
         .startOperation(`turbo-earn-${challenge.id}`, `Playing turbo mini-game on ${challenge.title}${purpose}`);
     try {
         const result = await api.runTurboGame(challenge, token, { isCancelled });
+        // Only a game that landed an answer takes the pass's Snap slot: one that fails first leaves it to the rest.
+        if (result.kind === 'snap' && result.answered > 0) snapGames.played++;
         if (result.won) {
             consumeMission(missions, 'turbo');
             // The API confirmed the win; let this pass's apply decision see it.

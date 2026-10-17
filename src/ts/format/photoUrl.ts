@@ -86,4 +86,4 @@ const entryPhotoUrl = (
     options: { size?: number; fit?: boolean } = {},
 ): string | null => buildPhotoUrl(entry?.member_id ?? '', entry?.id ?? '', options);
 
-export { buildPhotoUrl, entryPhotoUrl };
+export { ID_PATTERN, buildPhotoUrl, entryPhotoUrl };

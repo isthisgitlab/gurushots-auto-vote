@@ -137,15 +137,17 @@ describe('turbo', () => {
     });
 
     describe('startTurboSession', () => {
-        const IMG = { image_id: 'i1', member_id: 'm1', width: 1024, height: 1024 };
+        const hex = (seed: string) => seed.repeat(32).slice(0, 32);
+        const IMG = { image_id: hex('a'), member_id: hex('b'), width: 1024, height: 1024 };
+        const IMG2 = { image_id: hex('c'), member_id: hex('d') };
         const snap = {
             success: true,
             session_type: '2.0',
             session_id: 'sess-1',
-            position: 3,
+            position: 1,
             caption: 'Does the soft, even light look natural?',
             sub_caption: null,
-            images: [IMG, { image_id: 'i2', member_id: 'm2' }],
+            images: [IMG, IMG2],
         };
 
         test('posts the challenge id and normalizes a Snap session', async () => {
@@ -161,11 +163,11 @@ describe('turbo', () => {
             expect(result).toEqual({
                 kind: 'snap',
                 sessionId: 'sess-1',
-                position: 3,
+                position: 1,
                 caption: 'Does the soft, even light look natural?',
                 images: [
-                    { imageId: 'i1', memberId: 'm1' },
-                    { imageId: 'i2', memberId: 'm2' },
+                    { imageId: hex('a'), memberId: hex('b') },
+                    { imageId: hex('c'), memberId: hex('d') },
                 ],
             });
         });
@@ -195,24 +197,35 @@ describe('turbo', () => {
             expect(await startTurboSession(1, mockToken)).toBeNull();
         });
 
-        test('keeps only images with string ids and reads position 0 unless it is a non-negative integer', async () => {
-            const images = [IMG, { image_id: 5, member_id: 'm' }, { image_id: 'x' }, { member_id: 'y' }];
-            for (const position of [-1, 1.5, '2', null, undefined]) {
-                makePostRequest.mockResolvedValueOnce({ ...snap, images, position });
-                expect(await startTurboSession(1, mockToken)).toEqual(
-                    expect.objectContaining({ position: 0, images: [{ imageId: 'i1', memberId: 'm1' }] }),
-                );
+        test('null when the position is not an integer from 0 to the image count', async () => {
+            for (const position of [-1, 3, 1.5, '1', null, undefined]) {
+                makePostRequest.mockResolvedValueOnce({ ...snap, position });
+                expect(await startTurboSession(1, mockToken)).toBeNull();
             }
-            makePostRequest.mockResolvedValueOnce({ ...snap, position: 0 });
-            expect(await startTurboSession(1, mockToken)).toEqual(expect.objectContaining({ position: 0 }));
+            for (const position of [0, 2]) {
+                makePostRequest.mockResolvedValueOnce({ ...snap, position });
+                expect(await startTurboSession(1, mockToken)).toEqual(expect.objectContaining({ position }));
+            }
         });
 
-        test('drops images that are not objects or have an empty id, without throwing', async () => {
-            const images = [null, 'i9', 7, [], { image_id: '', member_id: 'm' }, { image_id: 'x', member_id: '' }, IMG];
-            makePostRequest.mockResolvedValueOnce({ ...snap, images });
-            expect(await startTurboSession(1, mockToken)).toEqual(
-                expect.objectContaining({ images: [{ imageId: 'i1', memberId: 'm1' }] }),
-            );
+        test('null when the list is empty or any image is malformed, so the position never shifts', async () => {
+            const malformed = [
+                null,
+                'i9',
+                7,
+                [],
+                { image_id: '', member_id: hex('b') },
+                { image_id: hex('a'), member_id: '' },
+                { image_id: 5, member_id: hex('b') },
+                { image_id: 'i1', member_id: 'm1' },
+                { image_id: hex('a') },
+            ];
+            makePostRequest.mockResolvedValueOnce({ ...snap, images: [], position: 0 });
+            expect(await startTurboSession(1, mockToken)).toBeNull();
+            for (const bad of malformed) {
+                makePostRequest.mockResolvedValueOnce({ ...snap, images: [IMG, bad] });
+                expect(await startTurboSession(1, mockToken)).toBeNull();
+            }
         });
 
         test('requires a challenge id and a token', async () => {
