@@ -168,7 +168,8 @@ const turboGameSummary = (result: TurboGameResult): string =>
  * of the timer-ordered deadline actions so a win can be applied in this pass.
  * With Save Turbos for Missions on, starting a game waits (isTurboEarnSaved)
  * unless a "Win Turbo" mission still needs wins; a game already in progress is
- * finished regardless. Every win counts down that mission.
+ * never held for a mission (the Snap gates above still apply). Every win counts
+ * down that mission.
  */
 export const playAutoTurbo = async (
     challenge: Challenge,

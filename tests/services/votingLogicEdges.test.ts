@@ -231,9 +231,9 @@ describe('isTurboEarnSaved', () => {
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('missionSaveTurbos', null);
     });
 
-    test('never holds a game already in progress, far from close', () => {
+    test.each(['classic', 'snap'])('never holds a %s game already in progress, far from close', (mode) => {
         mockSettings({ missionSaveTurbos: true });
-        const inProgress = closingIn(100_000, { member: { turbo: { state: 'IN_PROGRESS', mode: 'classic' } } });
+        const inProgress = closingIn(100_000, { member: { turbo: { state: 'IN_PROGRESS', mode } } });
         expect(VotingLogic.isTurboEarnSaved(inProgress, NOW)).toBe(false);
     });
 
