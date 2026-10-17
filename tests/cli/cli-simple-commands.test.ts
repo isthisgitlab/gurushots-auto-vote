@@ -68,6 +68,7 @@ const mockHasBundledModel = jest.fn(async () => true);
 jest.mock('../../src/ts/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
 
 import { invalid } from '../helpers/invalid';
+import { DEFAULT_TIMEZONE } from '../../src/ts/settings/uiDefaults';
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import loggerModule = require('../../src/ts/logger');
@@ -419,8 +420,8 @@ describe('discover', () => {
     describe('the end time', () => {
         // 1700000000 = 2023-11-14 22:13 UTC.
         const CLOSE = 1_700_000_000;
-        const lineOf = async (item: object, timezone?: string) => {
-            settings.getSetting.mockReturnValue(invalid(timezone));
+        const lineOf = async (item: object, timezone: string) => {
+            settings.getSetting.mockReturnValue(timezone);
             handlers['get-member-challenges'].mockResolvedValue(
                 invalid({ success: true, items: [{ id: 1, title: 'A', type: 'flash', join_coins: 0, ...item }] }),
             );
@@ -439,8 +440,11 @@ describe('discover', () => {
             );
         });
 
-        test('reads in the default zone when none is set, and in the device zone for “local” or an invalid one', async () => {
-            expect(await lineOf({ close_time: CLOSE })).toBe('  • [1] A (flash) — free — ends 15/11/2023, 00:13');
+        test('reads in the default timezone setting (Europe/Riga), and in the device zone for “local” or an invalid one', async () => {
+            // The settings facade answers the default when none is stored, so that is what the command is given.
+            expect(await lineOf({ close_time: CLOSE }, DEFAULT_TIMEZONE)).toBe(
+                '  • [1] A (flash) — free — ends 15/11/2023, 00:13',
+            );
             for (const zone of ['local', 'Not/AZone']) {
                 const line = await lineOf({ close_time: CLOSE }, zone);
                 expect(line).toMatch(/^ {2}• \[1\] A \(flash\) — free — ends \d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}$/);
