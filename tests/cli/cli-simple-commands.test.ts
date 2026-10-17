@@ -440,23 +440,35 @@ describe('discover', () => {
             );
         });
 
-        test('reads in the default timezone setting (Europe/Riga), and in the device zone for “local” or an invalid one', async () => {
+        test('reads in the default timezone setting (Europe/Riga)', async () => {
             // The settings facade answers the default when none is stored, so that is what the command is given.
             expect(await lineOf({ close_time: CLOSE }, DEFAULT_TIMEZONE)).toBe(
                 '  • [1] A (flash) — free — ends 15/11/2023, 00:13',
             );
-            // The device clock, written independently of the code under test (no timeZone option).
-            const device = new Date(CLOSE * 1000).toLocaleString('en-GB', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false,
+        });
+
+        describe('the device clock', () => {
+            afterEach(() => {
+                jest.restoreAllMocks();
             });
-            for (const zone of ['local', 'Not/AZone']) {
-                expect(await lineOf({ close_time: CLOSE }, zone)).toBe(`  • [1] A (flash) — free — ends ${device}`);
-            }
+
+            // Without a timeZone option toLocaleString reads the device clock. A sentinel makes that branch observable
+            // on any host (process.env.TZ does not reach Node under Jest); a call that names a zone goes through, so an
+            // invalid one still throws its real RangeError into the fallback.
+            test.each([['local'], ['Not/AZone']])(
+                '“%s” is written on the device clock, in no named zone',
+                async (zone) => {
+                    const real = Date.prototype.toLocaleString;
+                    jest.spyOn(Date.prototype, 'toLocaleString').mockImplementation(function (
+                        this: Date,
+                        locales?: Intl.LocalesArgument,
+                        options?: Intl.DateTimeFormatOptions,
+                    ) {
+                        return options?.timeZone ? real.call(this, locales, options) : 'DEVICE';
+                    });
+                    expect(await lineOf({ close_time: CLOSE }, zone)).toBe('  • [1] A (flash) — free — ends DEVICE');
+                },
+            );
         });
 
         test.each([
