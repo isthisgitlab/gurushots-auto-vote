@@ -349,6 +349,49 @@ export interface TurboSelectionResult {
     raw: TurboSelectionResponse | null;
 }
 
+/** start_turbo_session: '2.0' is a Snap session, '1.0' the classic game. */
+export interface StartTurboSessionResponse {
+    success?: boolean;
+    session_type?: string;
+    session_id?: string;
+    /** Answers already given in this session. */
+    position?: number;
+    caption?: string | null;
+    sub_caption?: string | null;
+    /** Untrusted elements: narrowed to well-formed photos by startTurboSession. */
+    images?: unknown[];
+}
+
+/** submit_snap_vote. */
+export interface SnapVoteResponse {
+    success?: boolean;
+    /** True on the last answer of the session. */
+    completed?: boolean;
+    community_pct?: number | null;
+    error_code?: number | null;
+    message?: string | null;
+}
+
+/** One photo of a Snap session. */
+export interface SnapImage {
+    imageId: string;
+    memberId: string;
+}
+
+/** A started turbo session, normalized from start_turbo_session. */
+export type TurboSession =
+    | { kind: 'classic' }
+    | { kind: 'snap'; sessionId: string; position: number; caption: string; images: SnapImage[] };
+
+/** The outcome of one Snap answer; `unclear` means it was sent and may have been processed. */
+export interface SnapVoteResult {
+    ok: boolean;
+    completed: boolean;
+    communityPct: number | null;
+    errorCode: number | null;
+    unclear: boolean;
+}
+
 /** The outcome of playing one challenge's Turbo mini-game. */
 export interface TurboMiniGameResult {
     played: number;

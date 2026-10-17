@@ -13,6 +13,7 @@ const mockRuntime = {
 };
 const mockSea = { isSea: jest.fn(() => false), getAsset: jest.fn(() => 'sha') };
 const mockClassifier = jest.fn();
+const mockLog = { warning: jest.fn() };
 const mockTransformers = {
     env: { backends: { onnx: { wasm: {} } } } as MockEnv,
     pipeline: jest.fn(async () => mockClassifier),
@@ -26,6 +27,7 @@ const mockExtract = jest.fn(() => ({ root: '/vision/root', modulePath: '/vision/
 
 jest.mock('path', () => jest.requireActual<typeof import('path')>('path'));
 jest.mock('../../src/ts/runtime', () => mockRuntime);
+jest.mock('../../src/ts/logger', () => ({ withCategory: jest.fn(() => mockLog) }));
 jest.mock('node:sea', () => mockSea, { virtual: true });
 jest.mock('node:module', () => ({ createRequire: mockCreateRequire }));
 jest.mock('@huggingface/transformers', () => mockTransformers);
@@ -36,8 +38,16 @@ const fs = jest.mocked(fsModule);
 import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
 import type * as visionVerifierModule from '../../src/ts/services/visionVerifier';
-const { rankVisually, hasBundledModel, orderByVisualFit, challengePrompts, descriptionLead, __resetForTests } =
-    require('../../src/ts/services/visionVerifier') as typeof visionVerifierModule;
+const {
+    rankVisually,
+    hasBundledModel,
+    orderByVisualFit,
+    challengePrompts,
+    descriptionLead,
+    snapPrompts,
+    judgeSnapImage,
+    __resetForTests,
+} = require('../../src/ts/services/visionVerifier') as typeof visionVerifierModule;
 
 const hex = (seed: string) => seed.repeat(32).slice(0, 32);
 const photo = (id: string) => ({ id: hex(id), member_id: hex('f') });
@@ -401,5 +411,101 @@ describe('hasBundledModel', () => {
         expect(fs.existsSync).toHaveBeenCalledWith(
             path.join(path.join(__dirname, '..', '..', '.cache') + path.sep, 'vision-model', 'config.json'),
         );
+    });
+});
+
+describe('snapPrompts', () => {
+    test.each([
+        [
+            'Do the colored / neon lights and their reflections look natural?',
+            'colored / neon lights and their reflections',
+            'natural and realistic',
+            'artificial and over-edited',
+        ],
+        [
+            'Does the soft, even light look natural?',
+            'soft, even light',
+            'natural and realistic',
+            'artificial and over-edited',
+        ],
+        [
+            '  Does the dramatic low light and shadow look natural?  ',
+            'dramatic low light and shadow',
+            'natural and realistic',
+            'artificial and over-edited',
+        ],
+        ['Are the colors seem Realistic?', 'colors', 'realistic', 'fake and over-edited'],
+    ])('%s', (caption, subject, positive, negative) => {
+        expect(snapPrompts(caption)).toEqual({
+            yes: `a photo where the ${subject} look ${positive}`,
+            no: `a photo where the ${subject} look ${negative}`,
+        });
+    });
+
+    test.each([
+        ['an unknown predicate', 'Does the soft light look dramatic?'],
+        ['an inherited property as predicate', 'Does the light look constructor?'],
+        ['a statement', 'The soft light looks natural.'],
+        ['an empty caption', ''],
+    ])('%s is not understood', (_name, caption) => {
+        expect(snapPrompts(caption)).toBeNull();
+    });
+});
+
+describe('judgeSnapImage', () => {
+    const CAPTION = 'Does the soft, even light look natural?';
+    const prompts = snapPrompts(CAPTION)!;
+    const image = { imageId: hex('a'), memberId: hex('f') };
+    const scores = (yes: number, no: number) =>
+        mockClassifier.mockResolvedValue([
+            { label: prompts.yes, score: sigmoid(yes) },
+            { label: prompts.no, score: sigmoid(no) },
+        ]);
+
+    test('answers yes when the yes prompt has the higher logit', async () => {
+        scores(1.5, -0.5);
+        const judgment = await judgeSnapImage(CAPTION, image);
+        expect(judgment).toEqual({ answer: 'yes', yesLogit: expect.closeTo(1.5), noLogit: expect.closeTo(-0.5) });
+        expect(mockClassifier).toHaveBeenCalledWith(expect.stringContaining('/fit-in/512x512/'), [
+            prompts.yes,
+            prompts.no,
+        ]);
+    });
+
+    test('answers no when the no prompt has the higher logit, and yes on a tie', async () => {
+        scores(-2, 0.5);
+        expect(await judgeSnapImage(CAPTION, image)).toEqual(expect.objectContaining({ answer: 'no' }));
+        scores(1, 1);
+        expect(await judgeSnapImage(CAPTION, image)).toEqual(expect.objectContaining({ answer: 'yes' }));
+    });
+
+    test('is null for a caption it does not understand or a photo with no URL, without loading the model', async () => {
+        expect(await judgeSnapImage('Is it Tuesday?', image)).toBeNull();
+        expect(await judgeSnapImage(CAPTION, { imageId: 'not-an-md5', memberId: hex('f') })).toBeNull();
+        expect(mockTransformers.pipeline).not.toHaveBeenCalled();
+    });
+
+    test('is null when the model is not bundled', async () => {
+        fs.existsSync.mockReturnValue(false);
+        expect(await judgeSnapImage(CAPTION, image)).toBeNull();
+        expect(mockClassifier).not.toHaveBeenCalled();
+    });
+
+    test.each([[undefined], [[]], [[{ label: 'something else', score: 0.5 }]]])(
+        'an unusable classifier result %p is null and warns',
+        async (output) => {
+            mockClassifier.mockResolvedValue(output);
+            expect(await judgeSnapImage(CAPTION, image)).toBeNull();
+            expect(mockLog.warning).toHaveBeenCalledWith('Snap judgment found invalid model scores', null);
+        },
+    );
+
+    test.each([
+        [new Error('onnx missing'), 'onnx missing'],
+        [null, 'null'],
+    ])('a classifier failure (%p) is null and warns', async (failure, detail) => {
+        mockClassifier.mockRejectedValue(failure);
+        expect(await judgeSnapImage(CAPTION, image)).toBeNull();
+        expect(mockLog.warning).toHaveBeenCalledWith(`Snap judgment unavailable: ${detail}`, null);
     });
 });

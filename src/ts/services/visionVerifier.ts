@@ -18,9 +18,11 @@ import { stripTags, visualSubjectWords } from './photoPicker';
 
 import type { ChallengeText, IgnoreWords, PickerPhoto } from '../types/photoPicker';
 import type { FillLogger } from '../types/autoFill';
+import type { SnapImage } from '../types/gurushots';
 import type * as Transformers from '@huggingface/transformers';
 import type { ZeroShotImageClassificationPipeline } from '@huggingface/transformers';
 import { errorMessage } from '../errorMessage';
+import * as logger from '../logger';
 
 const MAX_IMAGES = 12;
 // Thresholds are on SigLIP's logit scale, measured on live GuruShots
@@ -264,10 +266,79 @@ const rankVisually = async (
     }
 };
 
+// How each Snap question predicate reads as a (yes, no) description of the subject.
+const SNAP_PREDICATES: Record<string, [string, string]> = {
+    natural: ['natural and realistic', 'artificial and over-edited'],
+    realistic: ['realistic', 'fake and over-edited'],
+};
+const SNAP_CAPTION_RE =
+    /^(?:do|does|is|are)\s+(?:the\s+)?(.+?)\s+(?:look|looks|seem|seems|appear|appears)\s+([a-z-]+)\?$/i;
+
+/**
+ * The two text prompts a Snap caption ("Does the soft, even light look natural?") is judged against.
+ *
+ * @returns null when the caption is not a question of a known shape
+ */
+const snapPrompts = (caption: string): { yes: string; no: string } | null => {
+    const match = SNAP_CAPTION_RE.exec(caption.trim());
+    if (!match) return null;
+    const predicate = Object.hasOwn(SNAP_PREDICATES, match[2].toLowerCase())
+        ? SNAP_PREDICATES[match[2].toLowerCase()]
+        : null;
+    if (!predicate) return null;
+    const [positive, negative] = predicate;
+    return {
+        yes: `a photo where the ${match[1]} look ${positive}`,
+        no: `a photo where the ${match[1]} look ${negative}`,
+    };
+};
+
+export interface SnapJudgment {
+    answer: 'yes' | 'no';
+    yesLogit: number;
+    noLogit: number;
+}
+
+/**
+ * Answers a Snap question about one photo: whichever of the two prompts the model scores higher.
+ *
+ * @returns null when the caption is not understood, the model is unavailable or it gives no valid score
+ */
+const judgeSnapImage = async (caption: string, image: SnapImage): Promise<SnapJudgment | null> => {
+    const prompts = snapPrompts(caption);
+    if (!prompts) return null;
+    const url = entryPhotoUrl({ id: image.imageId, member_id: image.memberId }, { size: 512, fit: true });
+    if (!url) return null;
+    try {
+        if (!(await hasBundledModel())) return null;
+        const classifier = await getClassifier();
+        const results = await classifier(url, [prompts.yes, prompts.no]);
+        const yesLogit = toLogit(results?.find?.((r) => r.label === prompts.yes)?.score);
+        const noLogit = toLogit(results?.find?.((r) => r.label === prompts.no)?.score);
+        if (!Number.isFinite(yesLogit) || !Number.isFinite(noLogit)) {
+            logger.withCategory('turbo').warning('Snap judgment found invalid model scores', null);
+            return null;
+        }
+        return { answer: yesLogit >= noLogit ? 'yes' : 'no', yesLogit, noLogit };
+    } catch (error) {
+        logger.withCategory('turbo').warning(`Snap judgment unavailable: ${errorMessage(error) || error}`, null);
+        return null;
+    }
+};
+
 const __resetForTests = () => {
     classifierPromise = undefined;
     bundledPromise = undefined;
     cliAssetRoot = undefined;
 };
 
-export { rankVisually, hasBundledModel, orderByVisualFit, challengePrompts, descriptionLead, __resetForTests };
+export {
+    rankVisually,
+    hasBundledModel,
+    orderByVisualFit,
+    challengePrompts,
+    descriptionLead,
+    snapPrompts,
+    judgeSnapImage,
+    __resetForTests,
+};
