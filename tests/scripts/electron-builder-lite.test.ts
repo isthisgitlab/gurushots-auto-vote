@@ -56,6 +56,10 @@ describe('scripts/electron-builder-lite.ts', () => {
         // keychain, putting its owner's name on the app; afterPack's ad-hoc signature is the only one.
         expect(build.mac.identity).toBeNull();
         expect(lite.mac.identity).toBeNull();
+        // The pkg and mas targets look a certificate up on their own, past the null identity.
+        for (const { target } of [...build.mac.target, ...lite.mac.target]) {
+            expect(['pkg', 'mas', 'mas-dev']).not.toContain(target);
+        }
     });
 
     test('uses the project app id', () => {
