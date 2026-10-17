@@ -398,40 +398,17 @@ describe('mock-parity behaviors on the shared path', () => {
             expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([1]);
         });
 
-        test('a Snap game starts at exactly 15 minutes to close and not a second sooner', async () => {
-            const api = makeApi([
-                makeChallenge({ id: 1, close_time: NOW + 899, member: SNAP_MEMBER }),
-                makeChallenge({ id: 2, close_time: NOW + 900, member: SNAP_MEMBER }),
-            ]);
+        test.each([
+            ['classic', undefined],
+            ['snap', SNAP_MEMBER],
+        ])('a turbo closing in 5 minutes is played (%s)', async (_mode, member) => {
+            const api = makeApi([makeChallenge({ id: 1, close_time: NOW + 300, member })]);
             api.runTurboGame.mockResolvedValue(snapWon);
-            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
-            // The pass reads whole seconds, so pin the clock to NOW for the boundary to be exact.
-            const dateNow = jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
-            try {
-                await runVotingPass('tok', null, deps(api));
-            } finally {
-                dateNow.mockRestore();
-            }
-
-            expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([2]);
-        });
-
-        test('a classic turbo closing in 5 minutes is still played', async () => {
-            const api = makeApi([makeChallenge({ id: 1, close_time: NOW + 300 })]);
             votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
 
             await runVotingPass('tok', null, deps(api));
 
             expect(api.runTurboGame).toHaveBeenCalledTimes(1);
-        });
-
-        test('a Snap game is not started on a challenge that closes within 15 minutes', async () => {
-            const api = makeApi([makeChallenge({ id: 1, close_time: NOW + 600, member: SNAP_MEMBER })]);
-            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
-
-            await runVotingPass('tok', null, deps(api));
-
-            expect(api.runTurboGame).not.toHaveBeenCalled();
         });
 
         test('a Snap game is not started in the Android headless service', async () => {
@@ -602,7 +579,24 @@ describe('mock-parity behaviors on the shared path', () => {
         }
     });
 
-    test('with Save Turbos for Missions on and a turbo mission active, a game in progress is played without a mission refresh and counts down', async () => {
+    test('an in-progress game refreshes the mission count before it is played and counts down on a win', async () => {
+        const api = makeApi([
+            makeChallenge({
+                id: 1,
+                close_time: NOW + 100_000,
+                member: { boost: { state: 'LOCKED', timeout: 0 }, turbo: { state: 'IN_PROGRESS', mode: 'classic' } },
+            }),
+        ]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        const missions = { join: 0, fill: 0, turbo: 3, boost: 0, vote: 0 };
+        const refreshMissionNeeds = jest.fn(async () => ({ join: 0, fill: 0, turbo: 2, boost: 0, vote: 0 }));
+        await runVotingPass('tok', null, deps(api, { missions, refreshMissionNeeds }));
+        expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+        expect(refreshMissionNeeds).toHaveBeenCalledTimes(1);
+        expect(missions.turbo).toBe(1);
+    });
+
+    test('an in-progress game is still played when the mission count cannot be refreshed', async () => {
         const { isTurboEarnSaved } = jest.requireActual<typeof votingLogicModule>('../../src/ts/services/VotingLogic');
         const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
         const api = makeApi([
@@ -622,7 +616,7 @@ describe('mock-parity behaviors on the shared path', () => {
         try {
             await runVotingPass('tok', null, deps(api, { missions, refreshMissionNeeds }));
             expect(api.runTurboGame).toHaveBeenCalledTimes(1);
-            expect(refreshMissionNeeds).not.toHaveBeenCalled();
+            expect(refreshMissionNeeds).toHaveBeenCalledTimes(1);
             expect(missions.turbo).toBe(0);
         } finally {
             votingLogic.isTurboEarnSaved.mockReturnValue(false);

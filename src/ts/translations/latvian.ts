@@ -1118,7 +1118,7 @@ export const app = {
         'Automātiski saņem balvas par noslēgtajiem izaicinājumiem un izpildītajām misijām (automātiskajai balsošanai jādarbojas). Pārbauda ne biežāk kā reizi stundā. Pēc noklusējuma izslēgts.',
     missionSaveTurbos: 'Taupīt Turbo misijām',
     missionSaveTurbosDesc:
-        'Neiegūst katra izaicinājuma Turbo uzreiz, lai misijai „Win Turbo” paliktu, ko iegūt. Pietaupīto Turbo lietotne iegūst, kad šī misija ir aktīva, vai stundu pirms tā automātiskās izmantošanas laika, tāpēc to joprojām iegūst un izmanto kā parasti. Pēc noklusējuma izslēgts.',
+        'Neiegūst katra izaicinājuma Turbo uzreiz, lai misijai „Win Turbo” paliktu, ko iegūt. Pietaupīto Turbo lietotne iegūst, kad šī misija ir aktīva, vai stundu pirms tā automātiskās izmantošanas laika, tāpēc to joprojām iegūst un izmanto kā parasti. Jau iesāktu Turbo spēli lietotne pabeidz uzreiz. Pēc noklusējuma izslēgts.',
     missionJoinEarly: 'Pievienoties nekavējoties misiju laikā',
     missionJoinEarlyDesc:
         'Kamēr aktīva misija „Join challenges” vai „Win Turbo”, lietotne pievienojas izaicinājumiem, negaidot automātiskās pievienošanās laiku (stundas pirms beigām / % no izaicinājuma), līdz misija izpildīta, — katrs jauns izaicinājums dod vēl vienu Turbo, ko iegūt. Tipu, tagu un monētu filtri joprojām darbojas. Pēc noklusējuma izslēgts.',

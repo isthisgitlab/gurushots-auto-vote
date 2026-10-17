@@ -151,9 +151,6 @@ export const runTurboApply = async (ctx: ActionContext) => {
 
 // Snap answers are paced at seconds each, so a pass plays one game and the rest wait for the next pass.
 const MAX_SNAP_GAMES_PER_PASS = 1;
-// A Snap game takes up to ~75 s and the challenge's own deadline actions run after it in the same pass, so a
-// challenge closing sooner than this does not start one.
-const SNAP_MIN_SECONDS_TO_CLOSE = 15 * 60;
 
 const turboGameSummary = (result: TurboGameResult): string =>
     result.kind === 'snap'
@@ -161,11 +158,10 @@ const turboGameSummary = (result: TurboGameResult): string =>
         : `played=${result.played} correct=${result.correct} flipped=${result.flipped} doubleFailed=${result.doubleFailed} won=${result.won}`;
 
 /**
- * Auto-earn turbo by playing the mini-game when eligible. A classic game has no
+ * Auto-earn turbo by playing the mini-game when eligible. No game has a
  * close-time threshold (it plays whenever a turbo is winnable); a Snap game is
- * skipped under 15 minutes to close (SNAP_MIN_SECONDS_TO_CLOSE), in the Android
- * headless service, and after the pass's first Snap game. It runs ahead
- * of the timer-ordered deadline actions so a win can be applied in this pass.
+ * skipped in the Android headless service and after the pass's first Snap game.
+ * It runs ahead of the timer-ordered deadline actions so a win can be applied in this pass.
  * With Save Turbos for Missions on, starting a game waits (isTurboEarnSaved)
  * unless a "Win Turbo" mission still needs wins; a game already in progress is
  * never held for a mission (the Snap gates above still apply). Every win counts
@@ -184,15 +180,6 @@ export const playAutoTurbo = async (
             .debug(`${logger.challengeTag(challenge)} Snap turbo left for a later pass (one Snap game per pass)`, null);
         return;
     }
-    if (isSnap && challenge.close_time - now < SNAP_MIN_SECONDS_TO_CLOSE) {
-        logger
-            .withCategory('turbo')
-            .debug(
-                `${logger.challengeTag(challenge)} Snap turbo skipped: the challenge closes within ${SNAP_MIN_SECONDS_TO_CLOSE / 60} minutes`,
-                null,
-            );
-        return;
-    }
     // The Android headless cycle is capped at 120 s; Snap plays from the app, the desktop and the CLI.
     if (isSnap && runtime.isHeadlessService()) {
         logger
@@ -204,10 +191,12 @@ export const playAutoTurbo = async (
         return;
     }
     const savedForMission = votingLogic.isTurboEarnSaved(challenge, now);
-    if (savedForMission && missions && missions.turbo > 0 && refreshMissionNeeds) {
+    const inProgress = challenge.member?.turbo?.state === 'IN_PROGRESS';
+    if ((savedForMission || inProgress) && missions && missions.turbo > 0 && refreshMissionNeeds) {
         const fresh = await refreshMissionNeeds();
-        if (!fresh) return;
-        missions.turbo = Math.min(missions.turbo, fresh.turbo);
+        // A saved turbo waits on a fresh count; a game already in progress is finished with the count it has.
+        if (!fresh && !inProgress) return;
+        if (fresh) missions.turbo = Math.min(missions.turbo, fresh.turbo);
     }
     if (wasManualTurboRunSince(challenge.id, turboSnapshot)) return;
     const missionWants = (missions?.turbo ?? 0) > 0;
