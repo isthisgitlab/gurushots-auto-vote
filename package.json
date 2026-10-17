@@ -217,6 +217,7 @@
             "icon": "src/assets/logo.png",
             "gatekeeperAssess": false,
             "hardenedRuntime": false,
+            "identity": null,
             "artifactName": "GuruShotsAutoVote-v${version}-${arch}.${ext}"
         },
         "win": {

@@ -51,6 +51,13 @@ describe('scripts/electron-builder-lite.ts', () => {
         }
     });
 
+    test('never signs with a keychain certificate', () => {
+        // Without an identity electron-builder signs with any certificate it finds in the
+        // keychain, putting its owner's name on the app; afterPack's ad-hoc signature is the only one.
+        expect(build.mac.identity).toBeNull();
+        expect(lite.mac.identity).toBeNull();
+    });
+
     test('uses the project app id', () => {
         expect(build.appId).toBe('com.isthisgitlab.gurushotsautovote');
         expect(lite.appId).toBe(build.appId);
