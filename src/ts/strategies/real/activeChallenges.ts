@@ -17,9 +17,8 @@ import type { ActiveChallengesResponse } from '../../types/gurushots';
  * read when it covers that challenge and the mobile read succeeded; otherwise
  * the mobile turbo (no `mode`) stays. First-seen titles are pinned onto a
  * successful response and the time each entry went in is put on it
- * (services/entryTimes). A failed mobile
- * fetch (flagged `fetchFailed`) must never reach the pin/prune logic — a
- * network blip would wipe pins. The server mutates `title` while an event
+ * (services/entryTimes). A failed mobile fetch (flagged `fetchFailed`) must
+ * never reach the pin/prune logic — a network blip would wipe pins. The server mutates `title` while an event
  * (turbo) is active; pinning keeps display and title-rule matching stable
  * (see services/challengeTitlePin).
  */
