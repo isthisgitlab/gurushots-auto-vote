@@ -201,26 +201,28 @@ describe('listing and tiles', () => {
     test('a selected tile has a base-content border and ring, no background change; an unselected one keeps the quiet border', async () => {
         setup({ value: [idOf(1)] });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(tile(1).className).toContain('border-base-content');
-        expect(tile(1).className).not.toContain('border-base-300');
-        expect(tile(1).className).toContain('ring-base-content');
+        const selected = tile(1).classList;
+        const unselected = tile(2).classList;
+        expect(selected.contains('border-base-content')).toBe(true);
+        expect(selected.contains('border-base-300')).toBe(false);
+        expect(selected.contains('ring-base-content')).toBe(true);
         expect(tile(1).className).not.toMatch(/\bbg-/);
-        expect(tile(2).className).toContain('border-base-300');
-        expect(tile(2).className).not.toContain('border-base-content');
-        expect(tile(2).className).not.toContain('ring-base-content');
+        expect(unselected.contains('border-base-300')).toBe(true);
+        expect(unselected.contains('border-base-content')).toBe(false);
+        expect(unselected.contains('ring-base-content')).toBe(false);
     });
 
     test('every tile carries an offset focus outline that clears the selection ring', async () => {
         setup({ value: [idOf(1)] });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        const outline = [
+            'focus-visible:outline-2',
+            'focus-visible:outline-offset-4',
+            'focus-visible:outline-base-content',
+        ];
         for (const n of [1, 2]) {
-            for (const cls of [
-                'focus-visible:outline-2',
-                'focus-visible:outline-offset-4',
-                'focus-visible:outline-base-content',
-            ]) {
-                expect(tile(n).classList.contains(cls)).toBe(true);
-            }
+            // The missing classes are named, so a failure says which one went.
+            expect(outline.filter((cls) => !tile(n).classList.contains(cls))).toEqual([]);
         }
     });
 
