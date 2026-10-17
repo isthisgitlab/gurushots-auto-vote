@@ -74,7 +74,7 @@ const makeChallenge = () =>
         welcome_message: 'Show us the harbour at night',
         member: {
             boost: { state: 'AVAILABLE', timeout: nowSec() + 600 },
-            turbo: { state: 'FREE', time_to_open: null },
+            turbo: { state: 'FREE', mode: 'classic', time_to_open: null },
             ranking: {
                 entries: [
                     { id: 'e1', rank: 12, votes: 40, boosted: true },

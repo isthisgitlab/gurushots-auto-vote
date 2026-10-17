@@ -15,6 +15,10 @@ const API_BASE = 'https://api.gurushots.com';
 const ENDPOINTS = {
     signup: `${API_BASE}/rest_mobile/signup`,
     activeChallenges: `${API_BASE}/rest_mobile/get_my_active_challenges`,
+    // The WEB-profile twin of activeChallenges: only it reports the snap-aware
+    // member.turbo (state + `mode`); the mobile read has no `mode` and a wrong
+    // turbo state for a snap challenge. See api/challenges.ts fetchWebActiveTurbos.
+    webActiveChallenges: `${API_BASE}/rest/get_my_active_challenges`,
     voteImages: `${API_BASE}/rest_mobile/get_vote_images`,
     submitVote: `${API_BASE}/rest_mobile/submit_vote`,
     boostPhoto: `${API_BASE}/rest_mobile/boost_photo`,

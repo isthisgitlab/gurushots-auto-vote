@@ -5,6 +5,7 @@
  */
 
 import type * as activeChallengesModule from '../../src/ts/strategies/real/activeChallenges';
+import type * as challengesModule from '../../src/ts/api/challenges';
 import type * as api_clientModule from '../../src/ts/api/api-client';
 import type * as challengeTitlePinModule from '../../src/ts/services/challengeTitlePin';
 import type * as loggerModule from '../../src/ts/logger';
@@ -16,10 +17,12 @@ import { invalid } from '../helpers/invalid';
 type LoggerMock = typeof loggerModule & {
     __mockDebugFn: jest.MockedFunction<CategoryLogger['debug']>;
     __mockEndOperationFn: jest.MockedFunction<CategoryLogger['endOperation']>;
+    __mockWarningFn: jest.MockedFunction<CategoryLogger['warning']>;
 };
 
 const { getActiveChallenges } =
     require('../../src/ts/strategies/real/activeChallenges') as typeof activeChallengesModule;
+const { fetchWebActiveTurbos } = require('../../src/ts/api/challenges') as typeof challengesModule;
 
 // Mock the api-client module
 jest.mock('../../src/ts/api/api-client', () => ({
@@ -43,6 +46,7 @@ jest.mock('../../src/ts/services/challengeTitlePin', () => ({
 jest.mock('../../src/ts/logger', () => {
     const mockDebugFn = jest.fn();
     const mockEndOperationFn = jest.fn();
+    const mockWarningFn = jest.fn();
 
     return {
         debug: jest.fn(),
@@ -54,7 +58,7 @@ jest.mock('../../src/ts/logger', () => {
             error: jest.fn(),
             debug: mockDebugFn,
             success: jest.fn(),
-            warning: jest.fn(),
+            warning: mockWarningFn,
             api: jest.fn(),
             apiRequest: jest.fn(),
             startOperation: jest.fn(),
@@ -64,6 +68,7 @@ jest.mock('../../src/ts/logger', () => {
         // Export the mock functions for testing
         __mockDebugFn: mockDebugFn,
         __mockEndOperationFn: mockEndOperationFn,
+        __mockWarningFn: mockWarningFn,
     };
 });
 
@@ -301,7 +306,8 @@ describe('challenges', () => {
             resolveRequest!({ challenges: [{ id: '1' }] });
             const [r1, r2] = await Promise.all([first, second]);
 
-            expect(makePostRequest).toHaveBeenCalledTimes(1);
+            // One mobile read plus its web turbo read, shared by both callers.
+            expect(makePostRequest).toHaveBeenCalledTimes(2);
             expect(r1).toEqual({ challenges: [{ id: '1' }] });
             expect(r2).toBe(r1);
         });
@@ -309,13 +315,87 @@ describe('challenges', () => {
         test('does not coalesce sequential calls (no stale caching)', async () => {
             makePostRequest
                 .mockResolvedValueOnce({ challenges: [] })
-                .mockResolvedValueOnce({ challenges: [{ id: '2' }] });
+                .mockResolvedValueOnce({ challenges: [] })
+                .mockResolvedValueOnce({ challenges: [{ id: '2' }] })
+                .mockResolvedValueOnce({ challenges: [] });
 
             await getActiveChallenges(mockToken);
             const second = await getActiveChallenges(mockToken);
 
-            expect(makePostRequest).toHaveBeenCalledTimes(2);
+            expect(makePostRequest).toHaveBeenCalledTimes(4);
             expect(second).toEqual({ challenges: [{ id: '2' }] });
+        });
+
+        describe('turbo from the web read', () => {
+            const WEB_URL = 'https://api.gurushots.com/rest/get_my_active_challenges';
+            const mobileTurbo = { state: 'WON', time_to_open: null };
+            const mobileResponse = () => ({
+                challenges: [
+                    { id: 1, title: 'A', member: { turbo: { ...mobileTurbo }, boost: { state: 'USED' } } },
+                    { id: '2', title: 'B', member: { turbo: { ...mobileTurbo } } },
+                    { id: 3, title: 'C' },
+                ],
+            });
+
+            test('the web turbo replaces the mobile turbo; every other field stays from mobile', async () => {
+                const snapTurbo = { state: 'IN_PROGRESS', mode: 'snap' };
+                makePostRequest.mockResolvedValueOnce(mobileResponse());
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        { id: 1, member: { turbo: snapTurbo, boost: { state: 'AVAILABLE' } } },
+                        { id: 3, member: { turbo: { state: 'FREE', mode: 'classic' } } },
+                    ],
+                });
+
+                const result = await getActiveChallenges(mockToken);
+
+                expect(result.challenges[0].member).toEqual({ turbo: snapTurbo, boost: { state: 'USED' } });
+                expect(result.challenges[0].title).toBe('A');
+                // Absent from the web read: the mobile turbo (no mode) is left as it was.
+                expect(result.challenges[1].member?.turbo).toEqual(mobileTurbo);
+                // A challenge with no member gets none made up for it.
+                expect(result.challenges[2].member).toBeUndefined();
+                expect(makePostRequest).toHaveBeenNthCalledWith(
+                    2,
+                    WEB_URL,
+                    expect.objectContaining({ 'x-env': 'WEB', 'x-token': mockToken }),
+                    '',
+                );
+            });
+
+            test('a challenge the web read reports without a turbo keeps the mobile turbo', async () => {
+                makePostRequest.mockResolvedValueOnce(mobileResponse());
+                makePostRequest.mockResolvedValueOnce({ challenges: [{ id: 1, member: { turbo: null } }, { id: 2 }] });
+
+                const result = await getActiveChallenges(mockToken);
+
+                expect(result.challenges[0].member?.turbo).toEqual(mobileTurbo);
+                expect(result.challenges[1].member?.turbo).toEqual(mobileTurbo);
+            });
+
+            test.each([
+                ['fails', null],
+                ['has no challenge list', { success: true }],
+            ])('leaves the mobile turbos untouched when the web read %s', async (_label, webBody) => {
+                makePostRequest.mockResolvedValueOnce(mobileResponse());
+                makePostRequest.mockResolvedValueOnce(webBody);
+
+                const result = await getActiveChallenges(mockToken);
+
+                expect(result.fetchFailed).toBeUndefined();
+                expect(result.challenges[0].member?.turbo).toEqual(mobileTurbo);
+                expect(result.challenges[1].member?.turbo).toEqual(mobileTurbo);
+                expect(pinChallengeTitles).toHaveBeenCalledWith(result.challenges);
+            });
+
+            test('a failed mobile fetch never reaches the web read', async () => {
+                makePostRequest.mockResolvedValueOnce(null);
+
+                await getActiveChallenges(mockToken);
+
+                expect(makePostRequest).toHaveBeenCalledTimes(1);
+                expect(makePostRequest).not.toHaveBeenCalledWith(WEB_URL, expect.anything(), expect.anything());
+            });
         });
 
         test('never writes any part of the token into the debug log payload', async () => {
@@ -338,6 +418,48 @@ describe('challenges', () => {
                 const serialised = JSON.stringify(call);
                 expect(serialised).not.toContain(longToken.slice(0, 10));
             }
+        });
+    });
+
+    describe('fetchWebActiveTurbos', () => {
+        test('maps each challenge id (as a string) to its turbo, null when it has none', async () => {
+            const snap = { state: 'IN_PROGRESS', mode: 'snap' };
+            makePostRequest.mockResolvedValueOnce({
+                challenges: [{ id: 11, member: { turbo: snap } }, { id: '12', member: { turbo: null } }, { id: 13 }],
+            });
+
+            const turbos = await fetchWebActiveTurbos(mockToken);
+
+            expect(turbos).toEqual(
+                new Map([
+                    ['11', snap],
+                    ['12', null],
+                    ['13', null],
+                ]),
+            );
+            expect(makePostRequest).toHaveBeenCalledWith(
+                'https://api.gurushots.com/rest/get_my_active_challenges',
+                expect.objectContaining({ 'x-env': 'WEB', 'x-token': mockToken }),
+                '',
+            );
+        });
+
+        test.each([
+            ['a failed request', null, true],
+            ['a body without a challenge list', { success: true }, false],
+            ['a challenge list that is not an array', { challenges: 'none' }, false],
+        ])('is null on %s, with a warning that carries no token', async (_label, body, requestFailed) => {
+            makePostRequest.mockResolvedValueOnce(invalid(body));
+
+            await expect(fetchWebActiveTurbos(mockToken)).resolves.toBeNull();
+
+            expect(logger.__mockWarningFn).toHaveBeenCalledWith(
+                'Web active challenges unavailable; turbo mode unknown',
+                {
+                    requestFailed,
+                },
+            );
+            expect(JSON.stringify(logger.__mockWarningFn.mock.calls)).not.toContain(mockToken);
         });
     });
 });

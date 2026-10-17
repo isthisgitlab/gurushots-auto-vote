@@ -1,6 +1,7 @@
 /**
  * The card offers the play-turbo button (canPlayAutoTurbo) for an open challenge whose turbo can be earned now — and
- * never for a Snap-mode turbo, which the bot does not play.
+ * only when its mode is known to be classic: a Snap-mode turbo, which the bot does not play, and one with no mode
+ * (GuruShots web data unavailable) are never offered.
  */
 
 import { deriveChallengeCardView } from '@/utils/challengeCardView';
@@ -22,9 +23,16 @@ describe('canPlayAutoTurbo', () => {
         ['FREE', {}],
         ['IN_PROGRESS', {}],
         ['TIMER', { time_to_open: NOW - 1 }],
-    ])('a %s turbo is playable with no mode and in classic mode', (state, extra) => {
-        expect(canPlay({ state, ...extra })).toBe(true);
+    ])('a classic-mode %s turbo is playable', (state, extra) => {
         expect(canPlay({ state, mode: 'classic', ...extra })).toBe(true);
+    });
+
+    test.each([
+        ['FREE', {}],
+        ['IN_PROGRESS', {}],
+        ['TIMER', { time_to_open: NOW - 1 }],
+    ])('a %s turbo with no mode is not playable', (state, extra) => {
+        expect(canPlay({ state, ...extra })).toBe(false);
     });
 
     test.each([
@@ -36,7 +44,7 @@ describe('canPlayAutoTurbo', () => {
     });
 
     test('a TIMER turbo is not playable before its cooldown elapses, nor on a closed challenge', () => {
-        expect(canPlay({ state: 'TIMER', time_to_open: NOW + 60 })).toBe(false);
-        expect(canPlay({ state: 'FREE' }, NOW)).toBe(false);
+        expect(canPlay({ state: 'TIMER', mode: 'classic', time_to_open: NOW + 60 })).toBe(false);
+        expect(canPlay({ state: 'FREE', mode: 'classic' }, NOW)).toBe(false);
     });
 });

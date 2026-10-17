@@ -3,7 +3,7 @@
  * first-seen title pinning, with concurrent calls coalesced per token.
  */
 
-import { fetchActiveChallenges } from '../../api/challenges';
+import { fetchActiveChallenges, fetchWebActiveTurbos } from '../../api/challenges';
 import { pinChallengeTitles } from '../../services/challengeTitlePin';
 import { annotateEntryTimes } from '../../services/entryTimes';
 import { entryAgeLedger } from '../../entryAgeStore';
@@ -11,7 +11,10 @@ import { entryAgeLedger } from '../../entryAgeStore';
 import type { ActiveChallengesResponse } from '../../types/gurushots';
 
 /**
- * One fetch, then pin first-seen titles onto a successful response and put the
+ * One fetch, then take each challenge's turbo from the web read (the mobile
+ * one has no turbo `mode`, and a wrong state for a Snap turbo; a challenge the
+ * web read does not cover keeps the mobile turbo, which has no `mode`), pin
+ * first-seen titles onto a successful response and put the
  * time each entry went in on it (services/entryTimes). A failed
  * fetch (flagged `fetchFailed`) must never reach the pin/prune logic — a
  * network blip would wipe pins. The server mutates `title` while an event
@@ -21,6 +24,13 @@ import type { ActiveChallengesResponse } from '../../types/gurushots';
 const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => {
     const response = await fetchActiveChallenges(token);
     if (!response.fetchFailed && Array.isArray(response.challenges)) {
+        const webTurbos = await fetchWebActiveTurbos(token);
+        for (const challenge of response.challenges) {
+            const turbo = webTurbos?.get(String(challenge.id));
+            if (turbo && challenge.member) {
+                challenge.member.turbo = turbo;
+            }
+        }
         pinChallengeTitles(response.challenges);
         await annotateEntryTimes(response, entryAgeLedger);
     }

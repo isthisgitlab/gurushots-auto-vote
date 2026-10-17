@@ -308,7 +308,7 @@ describe('play-auto-turbo', () => {
                         id: 123,
                         title: 'C',
                         close_time: now + 3600,
-                        member: { turbo: { state: 'WON' } },
+                        member: { turbo: { state: 'WON', mode: 'classic' } },
                     },
                 ],
             }),
@@ -333,7 +333,7 @@ describe('play-auto-turbo', () => {
                         id: 123,
                         title: 'C',
                         close_time: now + 3600,
-                        member: { turbo: { state: 'FREE' } },
+                        member: { turbo: { state: 'FREE', mode: 'classic' } },
                     },
                 ],
             }),
@@ -585,7 +585,7 @@ describe('id-taking action handlers — invalid args', () => {
             id,
             title: 'C',
             close_time: NOW() + 3600,
-            member: { turbo: { state: 'FREE' } },
+            member: { turbo: { state: 'FREE', mode: 'classic' } },
         });
 
         test('play-auto-turbo plays the mini-game', async () => {
@@ -1690,7 +1690,7 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
         id: 123,
         title: 'Live Title',
         close_time: NOW() + 3600,
-        member: { turbo: { state: 'FREE' } },
+        member: { turbo: { state: 'FREE', mode: 'classic' } },
         ...overrides,
     });
 
@@ -1698,7 +1698,11 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
         setToken('tok');
         const strategy = stubStrategy({
             getActiveChallenges: jest.fn().mockResolvedValue({
-                challenges: [liveTurboChallenge({ member: { turbo: { state: 'TIMER', time_to_open: NOW() - 10 } } })],
+                challenges: [
+                    liveTurboChallenge({
+                        member: { turbo: { state: 'TIMER', mode: 'classic', time_to_open: NOW() - 10 } },
+                    }),
+                ],
             }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
@@ -1715,7 +1719,11 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
         setToken('tok');
         const strategy = stubStrategy({
             getActiveChallenges: jest.fn().mockResolvedValue({
-                challenges: [liveTurboChallenge({ member: { turbo: { state: 'TIMER', time_to_open: NOW() + 600 } } })],
+                challenges: [
+                    liveTurboChallenge({
+                        member: { turbo: { state: 'TIMER', mode: 'classic', time_to_open: NOW() + 600 } },
+                    }),
+                ],
             }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
@@ -1777,10 +1785,29 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
         expect(strategy.runTurboMiniGame).toHaveBeenCalledTimes(1);
     });
 
+    test('refuses a turbo with no mode without playing it', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { state: 'FREE' } } })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toEqual({
+            success: false,
+            error: 'Turbo mode unknown (GuruShots web data unavailable); try again later',
+        });
+        expect(strategy.runTurboMiniGame).not.toHaveBeenCalled();
+    });
+
     test('reports state=unknown when the challenge has no turbo state', async () => {
         setToken('tok');
         stubStrategy({
-            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveTurboChallenge({ member: {} })] }),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { mode: 'classic' } } })],
+            }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
         const handlers = buildHandlers();

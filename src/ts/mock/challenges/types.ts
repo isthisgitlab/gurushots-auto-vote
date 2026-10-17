@@ -43,7 +43,7 @@ interface ChallengeSpec {
     boostEnabled: boolean;
     timeLeft: { days: number; hours: number; minutes: number; seconds: number };
     boost: { state: 'AVAILABLE' | 'AVAILABLE_KEY' | 'LOCKED' | 'UNAVAILABLE' | 'USED'; timeout: BoostTimeout };
-    turbo: { state: string; opensIn: number | null };
+    turbo: { state: string; opensIn: number | null; mode?: 'classic' | 'snap' };
     total: {
         votes: number;
         rank: number;

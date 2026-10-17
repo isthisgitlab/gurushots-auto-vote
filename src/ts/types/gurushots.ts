@@ -69,7 +69,7 @@ export interface MemberRanking {
 }
 
 export type BoostState = 'LOCKED' | 'MISSED' | 'AVAILABLE' | 'AVAILABLE_KEY' | 'USED' | 'UNAVAILABLE' | (string & {});
-/** Which game a turbo session is: the classic one, or Snap (yes/no questions), which the bot does not play. */
+/** Which game a turbo session is: the classic one, or Snap (yes/no questions), which the bot does not play. Only the web read reports it. */
 type TurboMode = 'classic' | 'snap' | (string & {});
 type TurboState = 'FREE' | 'IN_PROGRESS' | 'TIMER' | 'WON' | 'LOCKED' | 'USED' | 'UNAVAILABLE' | (string & {});
 
@@ -81,7 +81,7 @@ export interface MemberBoost {
 
 export interface MemberTurbo {
     state?: TurboState;
-    /** Which game the next turbo session is; a 'snap' one is not played by the bot. */
+    /** Which game the next turbo session is; the bot plays a turbo only when this is 'classic'. */
     mode?: TurboMode;
     /** Unix seconds the turbo timer opens; null when not on a timer. */
     time_to_open?: UnixSeconds | null;
@@ -158,6 +158,11 @@ export interface Challenge {
 export interface ActiveChallengesResponse {
     challenges: Challenge[];
     fetchFailed?: boolean;
+}
+
+/** The WEB get_my_active_challenges: only each challenge's id and turbo are read. */
+export interface WebActiveChallengesResponse {
+    challenges?: Array<{ id: number | string; member?: { turbo?: MemberTurbo | null } }>;
 }
 
 /** One photo offered for voting. */

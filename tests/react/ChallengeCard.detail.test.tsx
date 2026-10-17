@@ -416,7 +416,8 @@ describe('progress', () => {
 });
 
 describe('earn turbo', () => {
-    const turboChallenge = (turbo: MemberTurbo, extra = {}) => makeChallenge({ member: { turbo }, ...extra });
+    const turboChallenge = (turbo: MemberTurbo, extra = {}) =>
+        makeChallenge({ member: { turbo: { mode: 'classic', ...turbo } }, ...extra });
 
     test('plays turbo and refreshes on success; spinner while in flight', async () => {
         const d = deferred<Awaited<ReturnType<WindowApi['playAutoTurbo']>>>();

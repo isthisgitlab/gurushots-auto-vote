@@ -249,9 +249,9 @@ describe('StatusHeader', () => {
     test('a TIMER turbo counts once its cooldown has elapsed, not before or without a time', () => {
         const nowSec = BASE_MS / 1000;
         const challenges = invalid<Challenge[]>([
-            { id: 'a', member: { turbo: { state: 'TIMER', time_to_open: nowSec - 1 } } },
-            { id: 'b', member: { turbo: { state: 'TIMER', time_to_open: nowSec + 60 } } },
-            { id: 'c', member: { turbo: { state: 'TIMER' } } },
+            { id: 'a', member: { turbo: { state: 'TIMER', mode: 'classic', time_to_open: nowSec - 1 } } },
+            { id: 'b', member: { turbo: { state: 'TIMER', mode: 'classic', time_to_open: nowSec + 60 } } },
+            { id: 'c', member: { turbo: { state: 'TIMER', mode: 'classic' } } },
             { id: 'd', member: {} },
         ]);
         const { container } = wrap(<StatusHeader challenges={challenges} nextRunAt={null} running={true} />);
@@ -260,7 +260,7 @@ describe('StatusHeader', () => {
         expect(stats.slice(0, 3)).toEqual(['4', '0', '1']);
     });
 
-    test('a Snap-mode turbo is not offered as playable, but a won one still counts', () => {
+    test('a Snap-mode or mode-less turbo is not offered as playable, but a won one counts whatever its mode', () => {
         const nowSec = BASE_MS / 1000;
         const challenges = invalid<Challenge[]>([
             { id: 'a', member: { turbo: { state: 'FREE', mode: 'snap' } } },
@@ -268,10 +268,12 @@ describe('StatusHeader', () => {
             { id: 'c', member: { turbo: { state: 'TIMER', mode: 'snap', time_to_open: nowSec - 1 } } },
             { id: 'd', member: { turbo: { state: 'WON', mode: 'snap' } } },
             { id: 'e', member: { turbo: { state: 'FREE', mode: 'classic' } } },
+            { id: 'f', member: { turbo: { state: 'FREE' } } },
+            { id: 'g', member: { turbo: { state: 'WON' } } },
         ]);
         const { container } = wrap(<StatusHeader challenges={challenges} nextRunAt={null} running={true} />);
         const stats = Array.from(container.querySelectorAll('.font-semibold')).map((n) => n.textContent);
-        expect(stats.slice(0, 3)).toEqual(['5', '0', '2']);
+        expect(stats.slice(0, 3)).toEqual(['7', '0', '3']);
     });
 
     test('an overdue next run reads as due', () => {

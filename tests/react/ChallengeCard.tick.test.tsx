@@ -154,7 +154,7 @@ describe('ChallengeCard rendering', () => {
     });
 
     test('a card in a turbo cooldown re-renders every second, so the Earn turbo button appears when it elapses', () => {
-        renderCard(challengeWith({ turbo: { state: 'TIMER', time_to_open: nowSec() + 3 } }), '2h 0m');
+        renderCard(challengeWith({ turbo: { state: 'TIMER', mode: 'classic', time_to_open: nowSec() + 3 } }), '2h 0m');
         expect(screen.queryByText(/app\.earnTurbo/)).toBeNull();
         const afterMount = mockRenders.count;
         act(() => {

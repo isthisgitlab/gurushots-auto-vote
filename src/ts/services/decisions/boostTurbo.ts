@@ -157,8 +157,9 @@ const shouldPlayAutoTurbo = (challenge: Challenge, now: number): boolean => {
     if (!settings.getEffectiveSetting('autoTurbo', challengeId)) return false;
 
     const turbo = challenge.member?.turbo || {};
-    // The classic turbo call on a Snap challenge makes the server swap in a classic game.
-    if (turbo.mode === 'snap') return false;
+    // The classic turbo call on a Snap challenge makes the server swap in a classic
+    // game, so only a turbo known to be classic is played (no mode = unknown).
+    if (turbo.mode !== 'classic') return false;
     const state = turbo.state;
     if (state === 'FREE' || state === 'IN_PROGRESS') return true;
     if (state === 'TIMER' && typeof turbo.time_to_open === 'number' && turbo.time_to_open <= now) {

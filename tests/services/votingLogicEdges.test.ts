@@ -161,16 +161,24 @@ describe('shouldPlayAutoTurbo', () => {
 
     test.each(['FREE', 'IN_PROGRESS'])('plays a %s turbo', (state) => {
         mockSettings({ autoTurbo: true });
-        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state }), NOW)).toBe(true);
+        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state, mode: 'classic' }), NOW)).toBe(true);
     });
 
     test('plays a TIMER turbo only once its open time has arrived', () => {
         mockSettings({ autoTurbo: true });
-        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'TIMER', time_to_open: NOW }), NOW)).toBe(true);
-        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'TIMER', time_to_open: NOW + 1 }), NOW)).toBe(
-            false,
-        );
-        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'TIMER' }), NOW)).toBe(false);
+        expect(
+            VotingLogic.shouldPlayAutoTurbo(
+                turboChallenge({ state: 'TIMER', mode: 'classic', time_to_open: NOW }),
+                NOW,
+            ),
+        ).toBe(true);
+        expect(
+            VotingLogic.shouldPlayAutoTurbo(
+                turboChallenge({ state: 'TIMER', mode: 'classic', time_to_open: NOW + 1 }),
+                NOW,
+            ),
+        ).toBe(false);
+        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'TIMER', mode: 'classic' }), NOW)).toBe(false);
     });
 
     test.each([
@@ -182,9 +190,9 @@ describe('shouldPlayAutoTurbo', () => {
         expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state, mode: 'snap', ...extra }), NOW)).toBe(false);
     });
 
-    test('a classic-mode turbo plays as before', () => {
+    test.each(['FREE', 'IN_PROGRESS'])('never plays a %s turbo whose mode is unknown', (state) => {
         mockSettings({ autoTurbo: true });
-        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'FREE', mode: 'classic' }), NOW)).toBe(true);
+        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state }), NOW)).toBe(false);
     });
 
     test('an id-less challenge with no member reads autoTurbo under the empty id and does not play', () => {

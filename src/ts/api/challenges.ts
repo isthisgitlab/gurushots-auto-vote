@@ -5,10 +5,10 @@
  */
 
 import { makePostRequest, createCommonHeaders } from './api-client';
-import { ENDPOINTS } from './constants';
+import { ENDPOINTS, createWebHeaders } from './constants';
 import * as logger from '../logger';
 
-import type { ActiveChallengesResponse } from '../types/gurushots';
+import type { ActiveChallengesResponse, MemberTurbo, WebActiveChallengesResponse } from '../types/gurushots';
 
 /**
  * Fetches all active challenges for the authenticated user — one request per
@@ -58,4 +58,28 @@ const fetchActiveChallenges = async (token: string): Promise<ActiveChallengesRes
     return response;
 };
 
-export { fetchActiveChallenges };
+/**
+ * Reads each active challenge's turbo from the WEB get_my_active_challenges —
+ * the only read that reports the turbo `mode` ('classic' | 'snap') and the
+ * snap-aware turbo state; the mobile read has neither.
+ *
+ * @param token - Authentication token
+ * @returns Challenge id (string) → its turbo (null when it has none), or null
+ *   when the request failed or the body carries no challenge list
+ */
+const fetchWebActiveTurbos = async (token: string): Promise<Map<string, MemberTurbo | null> | null> => {
+    const response = await makePostRequest<WebActiveChallengesResponse>(
+        ENDPOINTS.webActiveChallenges,
+        createWebHeaders(token),
+        '',
+    );
+    if (!response || !Array.isArray(response.challenges)) {
+        logger.withCategory('api').warning('Web active challenges unavailable; turbo mode unknown', {
+            requestFailed: !response,
+        });
+        return null;
+    }
+    return new Map(response.challenges.map((challenge) => [String(challenge.id), challenge.member?.turbo ?? null]));
+};
+
+export { fetchActiveChallenges, fetchWebActiveTurbos };
