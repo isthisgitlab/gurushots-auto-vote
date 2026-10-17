@@ -92,6 +92,42 @@ test('no alternative: the card swap picker opens with the reason; no modal, no i
     expect(swapButton().className).not.toContain('btn-error');
 });
 
+const pickButton = () => screen.getByText('app.swapPick').closest('button')!;
+
+test('Pick… opens the card picker straight away with the entry, the warnings and the Pick button', () => {
+    const { onChoose } = renderButton({ warnActioned: true, warnPinned: 'boost' });
+    expect(pickButton().getAttribute('title')).toBe('app.swapPickLabel');
+    expect(screen.getByText('app.swapPickLabel').id).toBe(pickButton().getAttribute('aria-describedby'));
+    fireEvent.click(pickButton());
+    expect(onChoose).toHaveBeenCalledTimes(1);
+    expect(onChoose).toHaveBeenCalledWith(ENTRY, { actioned: true, pinned: 'boost' }, pickButton());
+    expect(window.api.previewSwapPhoto).not.toHaveBeenCalled();
+    expect(screen.queryByText('app.currencySwapTitle')).toBeNull();
+});
+
+test('Pick… clears a failure shown under the Swap button', async () => {
+    window.api.previewSwapPhoto = jest
+        .fn()
+        .mockResolvedValue({ success: false, outcome: 'api-failed', error: 'api-failed' });
+    const { onChoose } = renderButton();
+    fireEvent.click(swapButton());
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    fireEvent.click(pickButton());
+    expect(onChoose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).toBeNull();
+});
+
+test('Pick… is disabled while the preview is in flight', async () => {
+    let resolve: ((value: Awaited<ReturnType<Window['api']['previewSwapPhoto']>>) => void) | undefined;
+    window.api.previewSwapPhoto = jest.fn(() => new Promise((r) => (resolve = r)));
+    renderButton();
+    expect(pickButton().disabled).toBe(false);
+    fireEvent.click(swapButton());
+    await waitFor(() => expect(pickButton().disabled).toBe(true));
+    resolve!({ success: true, outcome: 'ok', candidate: CANDIDATE });
+    await screen.findByText('app.currencySwapTitle');
+});
+
 test('Choose another photo… closes the suggestion and hands over to the card picker', async () => {
     const { onChoose, onSpent } = renderButton({ warnPinned: 'boost' });
     fireEvent.click(swapButton());

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSwapPhoto, useSwapBack } from '@/api/useCurrencyActions';
 import { interp } from '@/utils/interp';
@@ -15,7 +15,7 @@ import type { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots
 import type { SwapCandidate } from '../../../services/currencyActions';
 import type { EntryPinKind } from '../../../types/settings';
 import type { SwapBackOffer } from '@/api/useSwapBacks';
-import type { Ref } from 'preact';
+import type { ComponentChildren, Ref } from 'preact';
 import type { ActionButtonVariant } from '@/components/ui/ActionButton';
 import type { CurrencyConfirmModalProps } from './CurrencyConfirmModal';
 
@@ -56,6 +56,7 @@ function SwapTrigger({
     buttonRef,
     onClick,
     onDismiss,
+    children,
 }: {
     variant: ActionButtonVariant;
     label: string;
@@ -64,6 +65,8 @@ function SwapTrigger({
     buttonRef?: Ref<HTMLButtonElement>;
     onClick: () => void | Promise<void>;
     onDismiss: () => void;
+    /** Sits right after the button, before the inline error. */
+    children?: ComponentChildren;
 }) {
     const { t } = useTranslation();
     return (
@@ -78,6 +81,7 @@ function SwapTrigger({
             >
                 <BusyContent busy={busy} label={label} />
             </ActionButton>
+            {children}
             {error && <InlineError onDismiss={onDismiss}>{currencyOutcomeText(t, error)}</InlineError>}
         </>
     );
@@ -147,7 +151,8 @@ export type OpenSwapPick = (
 ) => void;
 
 /**
- * Per-entry Swap button. Click → the app suggests a replacement (spends
+ * Per-entry Swap button, with a "Pick…" button beside it that opens the card's swap picker straight away.
+ * Swap click → the app suggests a replacement (spends
  * nothing; the button spins meanwhile) → confirm modal shows current vs
  * replacement → Spend swaps exactly that suggestion. The modal's "Choose
  * another photo…" hands over to the card's swap picker (`onChoose`), which owns
@@ -181,6 +186,8 @@ export function SwapEntryButton({
     const { preview, commit } = useSwapPhoto();
     const [candidate, setCandidate] = useState<SwapCandidate | null>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
+    const pickRef = useRef<HTMLButtonElement>(null);
+    const pickHintId = useId();
     const error = preview.error || commit.error;
 
     const warnings = { actioned: warnActioned, pinned: warnPinned };
@@ -199,6 +206,11 @@ export function SwapEntryButton({
             preview.clearError();
             onChoose(entry, warnings, triggerRef.current, t('app.swapPickNoSuggestion'));
         }
+    };
+
+    const handlePick = () => {
+        dismissError();
+        onChoose(entry, warnings, pickRef.current);
     };
 
     const handleChoose = () => {
@@ -225,7 +237,23 @@ export function SwapEntryButton({
                 buttonRef={triggerRef}
                 onClick={handlePreview}
                 onDismiss={dismissError}
-            />
+            >
+                {/* "Pick…" alone does not say what it does; the sentence is its description (a title is lost on touch). */}
+                <button
+                    ref={pickRef}
+                    type="button"
+                    className="btn btn-sm btn-outline"
+                    title={t('app.swapPickLabel')}
+                    aria-describedby={pickHintId}
+                    disabled={preview.loading || commit.loading}
+                    onClick={handlePick}
+                >
+                    {t('app.swapPick')}
+                </button>
+                <span id={pickHintId} className="sr-only">
+                    {t('app.swapPickLabel')}
+                </span>
+            </SwapTrigger>
             <SwapConfirmModal
                 isOpen={candidate !== null}
                 onClose={() => setCandidate(null)}

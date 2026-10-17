@@ -922,6 +922,8 @@ export const app = {
     pickSuggestionRank: 'Suggestion #{n}',
     pickAddSuggestions: 'Add suggestions',
     pickAddSuggestionsFull: 'No free slots',
+    swapPick: 'Pick…',
+    swapPickLabel: 'Choose the photo to swap in from your library',
     swapPickTitle: 'Choose the photo to swap in',
     swapPickHelp:
         "The photo you pick replaces the current one as is: your tag filters and Chosen Photos setting don't apply. GuruShots checks whether the challenge accepts it only when the swap is spent.",

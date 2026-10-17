@@ -344,6 +344,7 @@ describe('EntryBadge — layout: an info row, then an actions row', () => {
             expect.stringContaining('app.boost'),
             expect.stringContaining('app.turbo'),
             expect.stringContaining('app.currencySwap'),
+            'app.swapPick',
         ]);
         expect(actions.textContent).not.toContain('app.rank');
     });
@@ -354,7 +355,7 @@ describe('EntryBadge — layout: an info row, then an actions row', () => {
             swapBack: { currentId: 'e1', previousId: 'old', previousMemberId: 'm', kind: 'boost' },
         });
         const actions = badge(container).children[1];
-        expect(actions.querySelectorAll('button')).toHaveLength(2);
+        expect(actions.querySelectorAll('button')).toHaveLength(3);
     });
 
     test('no actions row renders when no action is available', () => {

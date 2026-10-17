@@ -934,6 +934,8 @@ export const app = {
     pickSuggestionRank: 'Ieteikums Nr. {n}',
     pickAddSuggestions: 'Pievienot ieteikumus',
     pickAddSuggestionsFull: 'Nav brīvu vietu',
+    swapPick: 'Izvēlēties…',
+    swapPickLabel: 'Izvēlēties foto no bibliotēkas, ar ko apmainīt',
     swapPickTitle: 'Izvēlies foto, ar ko apmainīt',
     swapPickHelp:
         'Izvēlētais foto aizstās pašreizējo bez tagu filtriem un uzstādījuma „Izvēlētie foto”. Vai izaicinājums to pieņem, GuruShots pārbauda tikai tad, kad apmaiņa tiek veikta.',
