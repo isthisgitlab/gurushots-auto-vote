@@ -231,6 +231,17 @@ describe('isTurboEarnSaved', () => {
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('missionSaveTurbos', null);
     });
 
+    test('never holds a game already in progress, far from close', () => {
+        mockSettings({ missionSaveTurbos: true });
+        const inProgress = closingIn(100_000, { member: { turbo: { state: 'IN_PROGRESS', mode: 'classic' } } });
+        expect(VotingLogic.isTurboEarnSaved(inProgress, NOW)).toBe(false);
+    });
+
+    test.each(['FREE', 'TIMER'])('still saves a %s turbo far from close', (state) => {
+        mockSettings({ missionSaveTurbos: true });
+        expect(VotingLogic.isTurboEarnSaved(closingIn(100_000, { member: { turbo: { state } } }), NOW)).toBe(true);
+    });
+
     test('an id-less challenge reads turboTime under the empty id', () => {
         mockSettings({ missionSaveTurbos: true });
         expect(VotingLogic.isTurboEarnSaved(invalid({ close_time: NOW + 100_000 }), NOW)).toBe(true);

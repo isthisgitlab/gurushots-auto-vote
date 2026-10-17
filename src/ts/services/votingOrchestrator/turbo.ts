@@ -166,8 +166,9 @@ const turboGameSummary = (result: TurboGameResult): string =>
  * skipped under 15 minutes to close (SNAP_MIN_SECONDS_TO_CLOSE), in the Android
  * headless service, and after the pass's first Snap game. It runs ahead
  * of the timer-ordered deadline actions so a win can be applied in this pass.
- * With Save Turbos for Missions on, the earn waits (isTurboEarnSaved) unless a
- * "Win Turbo" mission still needs wins; every win counts down that mission.
+ * With Save Turbos for Missions on, starting a game waits (isTurboEarnSaved)
+ * unless a "Win Turbo" mission still needs wins; a game already in progress is
+ * finished regardless. Every win counts down that mission.
  */
 export const playAutoTurbo = async (
     challenge: Challenge,

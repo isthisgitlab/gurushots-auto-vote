@@ -574,6 +574,34 @@ describe('mock-parity behaviors on the shared path', () => {
         expect(api.runTurboGame).not.toHaveBeenCalled();
     });
 
+    test('with Save Turbos for Missions on and no turbo mission, a game in progress is played and a free one is not', async () => {
+        const { isTurboEarnSaved } = jest.requireActual<typeof votingLogicModule>('../../src/ts/services/VotingLogic');
+        const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
+        const turboChallenge = (id: number, state: string) =>
+            makeChallenge({
+                id,
+                close_time: NOW + 100_000,
+                member: { boost: { state: 'LOCKED', timeout: 0 }, turbo: { state, mode: 'classic' } },
+            });
+        const api = makeApi([turboChallenge(1, 'FREE'), turboChallenge(2, 'IN_PROGRESS')]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockImplementation(isTurboEarnSaved);
+        settings.getEffectiveSetting.mockImplementation((key: string) =>
+            key === 'missionSaveTurbos' ? true : key === 'turboTime' ? 7200 : false,
+        );
+        const missions = { join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 };
+        try {
+            await runVotingPass('tok', null, deps(api, { missions }));
+            expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+            expect(api.runTurboGame).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }), 'tok', {
+                isCancelled: expect.any(Function),
+            });
+        } finally {
+            votingLogic.isTurboEarnSaved.mockReturnValue(false);
+            settings.getEffectiveSetting.mockImplementation(() => false);
+        }
+    });
+
     test('an active turbo mission earns a saved turbo and a win counts it down', async () => {
         const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);

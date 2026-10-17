@@ -183,12 +183,15 @@ const SAVED_TURBO_EARN_LEAD_SEC = 3600;
  * is on and the challenge is still more than SAVED_TURBO_EARN_LEAD_SEC ahead of
  * its turbo apply window. A turbo can be earned only once per challenge, so an
  * earn held back now is one a later "Win Turbo" mission can still count. The
- * caller lifts the hold while such a mission is active.
+ * hold is only on starting a game: one already IN_PROGRESS (classic or Snap)
+ * is finished, never saved. The caller lifts the hold while a "Win Turbo"
+ * mission is active.
  *
  * @param now - Unix timestamp in seconds
  */
 const isTurboEarnSaved = (challenge: Challenge, now: number): boolean => {
     if (settings.getEffectiveSetting('missionSaveTurbos', null) !== true) return false;
+    if (challenge.member?.turbo?.state === 'IN_PROGRESS') return false;
     const challengeId = challenge.id?.toString?.() || '';
     return challenge.close_time - now > getEffectiveTurboTime(challengeId) + SAVED_TURBO_EARN_LEAD_SEC;
 };
