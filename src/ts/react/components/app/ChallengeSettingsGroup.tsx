@@ -10,6 +10,7 @@ import { SettingHintList } from './SettingHints';
 
 import type { SerializableSchemaEntry } from '../../../ipc/settings.handlers';
 import type { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
+import type { ComponentChildren } from 'preact';
 import type { Challenge } from '../../../types/gurushots';
 import type { RuleSource } from '../../../types/settings';
 import type { FillSchedule } from '../../../services/scheduleRemap';
@@ -26,6 +27,16 @@ export interface ChallengeGroupContext {
     hintsFor: HintsFor;
 }
 
+/** A source badge led by the icon of its marker in ChallengeNav (decorative: the text names the source). */
+function SourceBadge({ icon, children }: { icon: string; children: ComponentChildren }) {
+    return (
+        <span className="badge badge-ghost badge-sm">
+            <span aria-hidden="true">{icon} </span>
+            {children}
+        </span>
+    );
+}
+
 /**
  * Where a setting's shown value comes from: override, a rule that sets it directly (named), the
  * rule's profile, or the global default.
@@ -40,32 +51,13 @@ function ValueSourceBadge({
     hasProfileValue: boolean;
 }) {
     const { t } = useTranslation();
-    if (hasOverride) {
-        return (
-            <span className="badge badge-ghost badge-sm">
-                <span aria-hidden="true">⚙️ </span>
-                {t('app.overridden')}
-            </span>
-        );
-    }
+    if (hasOverride) return <SourceBadge icon="⚙️">{t('app.overridden')}</SourceBadge>;
     if (ruleSource !== undefined) {
         // A rule without a title is named by its place in the list, in the UI's language.
         const title = ruleSource.title ?? interp(t('app.ruleNumber'), { n: ruleSource.index });
-        return (
-            <span className="badge badge-ghost badge-sm">
-                <span aria-hidden="true">📏 </span>
-                {interp(t('app.fromRule'), { title })}
-            </span>
-        );
+        return <SourceBadge icon="📏">{interp(t('app.fromRule'), { title })}</SourceBadge>;
     }
-    if (hasProfileValue) {
-        return (
-            <span className="badge badge-ghost badge-sm">
-                <span aria-hidden="true">🔄 </span>
-                {t('app.usingProfile')}
-            </span>
-        );
-    }
+    if (hasProfileValue) return <SourceBadge icon="🔄">{t('app.usingProfile')}</SourceBadge>;
     return <span className="badge badge-ghost badge-sm">{t('app.usingGlobal')}</span>;
 }
 

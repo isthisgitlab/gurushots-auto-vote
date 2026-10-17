@@ -171,6 +171,13 @@ describe('the reset button', () => {
         expect(onReset).toHaveBeenCalledTimes(1);
     });
 
+    test('the reset is a destructive (filled error) button', () => {
+        render(<ScenarioStatusLine status={stoppedStatus()} onReset={jest.fn()} />);
+        const button = screen.getByText('app.scenarioReset');
+        expect(button.className).toContain('btn-error');
+        expect(button.className).not.toContain('btn-outline');
+    });
+
     test('is offered, for every challenge, when the whole file of progress cannot be read', () => {
         const onReset = jest.fn();
         render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'file' }} onReset={onReset} />);

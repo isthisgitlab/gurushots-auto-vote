@@ -49,6 +49,7 @@ describe('AutoVoteControls', () => {
         );
 
         expect(screen.getByText('app.stopAutoVote').closest('button')!.className).toContain('btn-error');
+        expect(screen.getByText('app.stopAutoVote').closest('button')!.className).not.toContain('btn-outline');
         expect(screen.queryByText('app.startAutoVote')).toBeNull();
         expect(screen.getByText('common.running').className).toContain('badge-success');
         expect(screen.getByText('12:34:56')).toBeTruthy();

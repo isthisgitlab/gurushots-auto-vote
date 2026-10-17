@@ -198,6 +198,15 @@ afterEach(() => {
 });
 
 describe('listing and tiles', () => {
+    test('a selected tile is told by its border alone; an unselected one keeps the quiet border', async () => {
+        setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(tile(1).className).toContain('border-base-content');
+        expect(tile(1).className).not.toContain('border-base-300');
+        expect(tile(2).className).toContain('border-base-300');
+        expect(tile(2).className).not.toContain('border-base-content');
+    });
+
     test('renders nothing while closed', () => {
         render(<PhotoChooserModal isOpen={false} onClose={jest.fn()} value={[]} onSave={jest.fn()} />);
         // The dialog is portalled to the body, so that is where it would show up.

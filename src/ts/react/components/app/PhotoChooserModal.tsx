@@ -146,7 +146,7 @@ export function PhotoTile({
     // Only the picture and its tags are dimmed: the reason line stays at full contrast, since it is
     // what says why the tile cannot be added.
     const dim = unavailable ? 'opacity-50' : '';
-    const tone = selected ? 'border-base-content bg-base-200' : 'border-base-300';
+    const tone = selected ? 'border-base-content' : 'border-base-300';
     return (
         <button
             type="button"
