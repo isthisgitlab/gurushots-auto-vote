@@ -159,8 +159,8 @@ const shouldPlayAutoTurbo = (challenge: Challenge, now: number): boolean => {
     if (!settings.getEffectiveSetting('autoTurbo', challengeId)) return false;
 
     // Classic and Snap each have a runner; a turbo without a mode is unknown and never played. A challenge
-    // marked Snap-unavailable is left alone (the active-challenge read keeps a challenge ever seen as Snap at
-    // 'snap', so a withdrawn Snap is never won as a classic game either).
+    // marked Snap-unavailable is left alone whatever mode the web read reports for it now: a Snap that was
+    // withdrawn must not be won as a classic game.
     const turbo = challenge.member?.turbo;
     if (!turbo || !isKnownTurboMode(turbo)) return false;
     if (isSnapUnavailable(challenge.id)) return false;

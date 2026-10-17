@@ -7,42 +7,8 @@ import { fetchActiveChallenges, fetchWebActiveTurbos } from '../../api/challenge
 import { pinChallengeTitles } from '../../services/challengeTitlePin';
 import { annotateEntryTimes } from '../../services/entryTimes';
 import { entryAgeLedger } from '../../entryAgeStore';
-import { snapLedger } from '../../snapChallengeStore';
-import type { ListedChallenge } from '../../snapChallengeStore';
-import * as logger from '../../logger';
-import { isKnownTurboMode } from '../../voting/turboMode';
 
-import type { ActiveChallengesResponse, Challenge } from '../../types/gurushots';
-
-/**
- * A challenge seen as Snap stays Snap (snapChallengeStore): the ones the web read reports as Snap are recorded, and a
- * recorded one the read now reports as classic (GuruShots does after a Snap is withdrawn, after a dead session and
- * for the game after a won Snap) is put back at 'snap', its state and timer as reported. Only the Snap runner ever
- * plays it, and it marks the challenge unavailable once GuruShots no longer offers Snap, so a Snap turbo is never
- * earned as classic. While the record cannot be read, no classic turbo that can still be earned is left playable
- * (its mode is dropped, like one the web read did not cover); a won one keeps its mode, so it can still be applied.
- * The record keeps each id's close_time current and forgets an id an hour after its challenge closed
- * (snapChallengeStore); a challenge missing from this read is kept.
- */
-const keepSnapMode = async (challenges: Challenge[]): Promise<void> => {
-    const recorded = await snapLedger.read();
-    const listing: ListedChallenge[] = [];
-    for (const challenge of challenges) {
-        const turbo = challenge.member?.turbo;
-        const id = String(challenge.id);
-        listing.push({ id, closeTime: Number(challenge.close_time), snap: turbo?.mode === 'snap' });
-        if (!turbo || turbo.mode === 'snap') continue;
-        if (isKnownTurboMode(turbo)) {
-            if (recorded === null) {
-                if (turbo.state !== 'WON') turbo.mode = undefined;
-            } else if (recorded.has(id)) {
-                turbo.mode = 'snap';
-                logger.withCategory('turbo').debug(`${logger.challengeTag(challenge)} Turbo kept as Snap`, null);
-            }
-        }
-    }
-    await snapLedger.record(listing);
-};
+import type { ActiveChallengesResponse } from '../../types/gurushots';
 
 /**
  * Two reads, started together: the mobile active-challenges list and the web
@@ -51,7 +17,7 @@ const keepSnapMode = async (challenges: Challenge[]): Promise<void> => {
  * read when it covers that challenge and the mobile read succeeded; otherwise
  * the mobile turbo (no `mode`) stays. First-seen titles are pinned onto a
  * successful response and the time each entry went in is put on it
- * (services/entryTimes). A turbo ever reported as Snap stays Snap (keepSnapMode). A failed mobile
+ * (services/entryTimes). A failed mobile
  * fetch (flagged `fetchFailed`) must never reach the pin/prune logic — a
  * network blip would wipe pins. The server mutates `title` while an event
  * (turbo) is active; pinning keeps display and title-rule matching stable
@@ -70,7 +36,6 @@ const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => 
                 challenge.member.turbo = turbo;
             }
         }
-        await keepSnapMode(response.challenges);
         pinChallengeTitles(response.challenges);
         await annotateEntryTimes(response, entryAgeLedger);
     }

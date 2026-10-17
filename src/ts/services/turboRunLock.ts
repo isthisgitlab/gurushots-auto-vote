@@ -23,9 +23,8 @@ export const releaseTurboRun = (challengeId: string | number, source: 'manual' |
 };
 
 // Challenges whose Snap game turned out not to be playable (no longer offered, an unreadable question, a dead
-// session): the bot leaves this challenge's turbo alone for the rest of the process. The web read may report such a
-// challenge as classic, but the overlay keeps a challenge ever seen as Snap at 'snap' (snapChallengeStore), so it never
-// reaches the classic game. A manual run ignores the marker, so the user can retry.
+// session): the bot leaves this challenge's turbo alone for the rest of the process, whatever mode the web read
+// reports for it later. A manual run ignores the marker, so the user can retry.
 const snapUnavailable = new Set<string>();
 
 export const markSnapUnavailable = (challengeId: string | number): void => {

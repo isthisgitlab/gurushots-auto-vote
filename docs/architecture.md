@@ -244,18 +244,6 @@ Domain terms used throughout, in reader's terms:
   unreadable question, a dead session, an answer the server refused, no vision model, or three transient
   failures in a row — is remembered in-process (`markSnapUnavailable`, `services/turboRunLock.ts`), and
   `shouldPlayAutoTurbo` leaves that challenge's turbo alone in any mode; a manual run ignores the marker.
-  A challenge seen as Snap stays Snap for good — the ids are persisted (`snapChallengeStore.ts`, `gs_snap_challenges`,
-  a `shared` store the Android service writes through compare-and-set too, unreadable reads as unknown and plays no
-  classic turbo that can still be earned; a won one keeps its mode), and the overlay keeps their mode at `'snap'`
-  whatever the web read says later — so its turbo is never earned as classic. The record maps each id to its
-  challenge's `close_time` (kept current from every list that has it) and forgets an id an hour after that time,
-  whether or not a list still has it, so a challenge missing from some reads stays recorded while it is open (a value
-  above `FIRST_SEEN_MS_FLOOR` is a first-seen time in ms, stored for a Snap seen without a usable `close_time`: it is
-  replaced by the `close_time` on sight and forgotten 30 days after it if the challenge is never listed again). An id
-  seen as Snap in this process holds even when its save failed, and is saved with the next change. The limits: only a
-  challenge this build has seen as Snap is kept as Snap — one withdrawn before the bot first saw it, or seen only
-  while every web read failed, cannot be recognised — and the forgetting relies on the device clock (a clock more than
-  an hour ahead can forget an open challenge early).
 - Every POST goes through `api/api-client.ts`. `makePostRequest<T>()`, used by every request but a spend, has this
   **contract: it returns the response body as `T` on success and `null` on ultimate failure or when the body is
   not a JSON object — it never throws.** Every caller branches on `null`, not on a catch. Only the object check
@@ -1198,12 +1186,10 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   context records the claim of a challenge, and nothing is paid before the claim was saved. A decision that only reads
   (is this challenge paid for?) re-reads the claims first, and a paid one refuses when that fails. A build without the
   plugin has one writer and keeps the write-behind.
-  The swap-back ledger (`gs_swap_backs`) still has two writers, and losing an offer is harmless by design. The Snap
-  record (`gs_snap_challenges` / `snapChallenges.json`) is also a two-writer side store changed by compare-and-set
-  (`shared`, `updateThrough`): the window re-reads it before it decides, and a store that cannot be read reads as
-  unknown, never as none. The other service stores can stay unpersisted: `gs_entry_ages` only times a boost (a lost
-  age never holds one) and remembers a submitted photo, and `gurushots-metadata` and `gurushots-photo-stats` hold
-  last-vote times and statistics. None of them guards a spend.
+  The swap-back ledger (`gs_swap_backs`) still has two writers, and losing an offer is harmless by design. The other
+  service stores can stay unpersisted: `gs_entry_ages` only times a boost (a lost age never holds one) and remembers a
+  submitted photo, and `gurushots-metadata` and `gurushots-photo-stats` hold last-vote times and statistics. None of
+  them guards a spend.
 - **Engine** (`scenarios/conditions.ts`, `selectors.ts`, `evaluate.ts`, `nextWake.ts`, pure): unknown data
   fails closed (never makes a condition true); entry ids are compared as strings, never by position (except
   the explicit `slot` selector); an in-flight rule resumes first; a phase or in-flight rule the edited

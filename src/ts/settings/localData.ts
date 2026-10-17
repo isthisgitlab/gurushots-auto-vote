@@ -55,7 +55,6 @@ const LOCAL_DATA_STORES: readonly LocalDataStore[] = [
     { fileName: 'photo-stats.json', prefKey: 'gurushots-photo-stats' },
     { fileName: 'lexicon-diagnostics.json', prefKey: 'gs_lexicon_diagnostics' },
     { fileName: 'swapBacks.json', prefKey: 'gs_swap_backs' },
-    { fileName: 'snapChallenges.json', prefKey: 'gs_snap_challenges' },
 ];
 
 // The directories (under the user-data directory) the app fills: its logs, and the CLI's extracted vision runtime.

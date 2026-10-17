@@ -10,7 +10,6 @@ import type * as api_clientModule from '../../src/ts/api/api-client';
 import type * as challengeTitlePinModule from '../../src/ts/services/challengeTitlePin';
 import type * as loggerModule from '../../src/ts/logger';
 import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
-import type * as snapChallengeStoreModule from '../../src/ts/snapChallengeStore';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 
@@ -43,11 +42,6 @@ jest.mock('../../src/ts/services/challengeTitlePin', () => ({
     pinChallengeTitles: jest.fn((challenges: unknown) => challenges),
 }));
 
-// The record of the challenges seen as Snap is unit-tested in tests/snapChallengeStore.test.ts; here it is driven.
-jest.mock('../../src/ts/snapChallengeStore', () => ({
-    snapLedger: { read: jest.fn(), record: jest.fn() },
-}));
-
 // Mock the logger module
 jest.mock('../../src/ts/logger', () => {
     const mockDebugFn = jest.fn();
@@ -57,7 +51,6 @@ jest.mock('../../src/ts/logger', () => {
     return {
         debug: jest.fn(),
         error: jest.fn(),
-        challengeTag: jest.fn((challenge: { id: number }) => `[Challenge ${challenge.id}]`),
         startOperation: jest.fn(),
         endOperation: jest.fn(),
         withCategory: jest.fn(() => ({
@@ -88,12 +81,9 @@ describe('challenges', () => {
         require('../../src/ts/services/challengeTitlePin') as typeof challengeTitlePinModule,
     );
     const logger: LoggerMock = invalid(require('../../src/ts/logger'));
-    const { snapLedger } = jest.mocked(require('../../src/ts/snapChallengeStore') as typeof snapChallengeStoreModule);
 
     beforeEach(() => {
         jest.clearAllMocks();
-        snapLedger.read.mockResolvedValue(new Set());
-        snapLedger.record.mockResolvedValue(undefined);
     });
 
     describe('getActiveChallenges', () => {
@@ -421,125 +411,6 @@ describe('challenges', () => {
                 expect(makePostRequest).toHaveBeenNthCalledWith(2, WEB_URL, expect.anything(), '');
                 resolveMobile!({ challenges: [] });
                 await pending;
-            });
-        });
-
-        describe('a Snap stays a Snap', () => {
-            const mobile = () => ({
-                challenges: [
-                    { id: 1, title: 'A', close_time: 100, member: { turbo: { state: 'WON' } } },
-                    { id: 2, title: 'B', close_time: 200, member: { turbo: { state: 'WON' } } },
-                    { id: 3, title: 'C', close_time: 300, member: { turbo: { state: 'WON' } } },
-                ],
-            });
-            // What the record is given: every challenge of the list, with its close_time and whether it is Snap now.
-            const listed = (...snap: boolean[]) =>
-                snap.map((isSnap, index) => ({ id: String(index + 1), closeTime: (index + 1) * 100, snap: isSnap }));
-            const web = (...turbos: Array<{ mode?: string; state: string; time_to_open?: number }>) => ({
-                challenges: turbos.map((turbo, index) => ({ id: index + 1, member: { turbo } })),
-            });
-
-            test('a turbo the web read reports as Snap is recorded, with the close_time of every challenge of the active list', async () => {
-                makePostRequest.mockResolvedValueOnce(mobile());
-                makePostRequest.mockResolvedValueOnce(
-                    web({ mode: 'snap', state: 'FREE' }, { mode: 'classic', state: 'FREE' }, { state: 'FREE' }),
-                );
-
-                const result = await getActiveChallenges(mockToken);
-
-                expect(snapLedger.record).toHaveBeenCalledWith(listed(true, false, false));
-                expect(result.challenges[0].member?.turbo?.mode).toBe('snap');
-                // Never seen as Snap: classic stays classic. No mode at all stays unknown.
-                expect(result.challenges[1].member?.turbo?.mode).toBe('classic');
-                expect(result.challenges[2].member?.turbo?.mode).toBeUndefined();
-            });
-
-            test('a recorded Snap that is reported as classic is put back at Snap, its state and timer as reported', async () => {
-                snapLedger.read.mockResolvedValue(new Set(['1', '2']));
-                makePostRequest.mockResolvedValueOnce(mobile());
-                makePostRequest.mockResolvedValueOnce(
-                    web(
-                        { mode: 'classic', state: 'TIMER', time_to_open: 99 },
-                        { mode: 'classic', state: 'WON' },
-                        { mode: 'classic', state: 'FREE' },
-                    ),
-                );
-
-                const result = await getActiveChallenges(mockToken);
-
-                expect(result.challenges[0].member?.turbo).toEqual({ mode: 'snap', state: 'TIMER', time_to_open: 99 });
-                // A won one stays applicable: its mode stays known.
-                expect(result.challenges[1].member?.turbo).toEqual({ mode: 'snap', state: 'WON' });
-                // Not recorded: untouched.
-                expect(result.challenges[2].member?.turbo).toEqual({ mode: 'classic', state: 'FREE' });
-                expect(snapLedger.record).toHaveBeenCalledWith(listed(false, false, false));
-                expect(logger.__mockDebugFn).toHaveBeenCalledWith('[Challenge 1] Turbo kept as Snap', null);
-            });
-
-            test('a recorded Snap the web read does not cover (no mode) stays without one', async () => {
-                snapLedger.read.mockResolvedValue(new Set(['1', '2', '3']));
-                makePostRequest.mockResolvedValueOnce(mobile());
-                makePostRequest.mockResolvedValueOnce(null);
-
-                const result = await getActiveChallenges(mockToken);
-
-                expect(result.challenges.map((c) => c.member?.turbo)).toEqual([
-                    { state: 'WON' },
-                    { state: 'WON' },
-                    { state: 'WON' },
-                ]);
-                expect(snapLedger.record).toHaveBeenCalledWith(listed(false, false, false));
-            });
-
-            test('a challenge without a turbo is left alone', async () => {
-                snapLedger.read.mockResolvedValue(new Set(['3']));
-                makePostRequest.mockResolvedValueOnce({ challenges: [{ id: 3, title: 'C' }] });
-                makePostRequest.mockResolvedValueOnce({ challenges: [{ id: 3 }] });
-
-                const result = await getActiveChallenges(mockToken);
-
-                expect(result.challenges[0].member).toBeUndefined();
-                expect(snapLedger.record).toHaveBeenCalledWith([{ id: '3', closeTime: NaN, snap: false }]);
-            });
-
-            test('while the record cannot be read, a turbo reported as classic loses its mode; a Snap stays', async () => {
-                snapLedger.read.mockResolvedValue(null);
-                makePostRequest.mockResolvedValueOnce(mobile());
-                makePostRequest.mockResolvedValueOnce(
-                    web({ mode: 'snap', state: 'FREE' }, { mode: 'classic', state: 'FREE' }, { state: 'FREE' }),
-                );
-
-                const result = await getActiveChallenges(mockToken);
-
-                expect(result.challenges.map((c) => c.member?.turbo?.mode)).toEqual(['snap', undefined, undefined]);
-                expect(result.challenges[1].member?.turbo?.state).toBe('FREE');
-                expect(snapLedger.record).toHaveBeenCalledWith(listed(true, false, false));
-            });
-
-            test('while the record cannot be read, a won classic turbo keeps its mode (it can still be applied)', async () => {
-                snapLedger.read.mockResolvedValue(null);
-                makePostRequest.mockResolvedValueOnce(mobile());
-                makePostRequest.mockResolvedValueOnce(
-                    web({ mode: 'classic', state: 'WON' }, { mode: 'classic', state: 'FREE' }, { state: 'WON' }),
-                );
-
-                const result = await getActiveChallenges(mockToken);
-
-                expect(result.challenges.map((c) => c.member?.turbo)).toEqual([
-                    { mode: 'classic', state: 'WON' },
-                    { state: 'FREE' },
-                    { state: 'WON' },
-                ]);
-            });
-
-            test('a failed mobile fetch neither reads nor changes the record', async () => {
-                makePostRequest.mockResolvedValueOnce(null);
-                makePostRequest.mockResolvedValueOnce(web({ mode: 'snap', state: 'FREE' }));
-
-                await getActiveChallenges(mockToken);
-
-                expect(snapLedger.read).not.toHaveBeenCalled();
-                expect(snapLedger.record).not.toHaveBeenCalled();
             });
         });
 
