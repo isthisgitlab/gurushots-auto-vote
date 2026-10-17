@@ -40,6 +40,7 @@ import type * as mockModule from '../../src/ts/mock';
 import type * as turboPassModule from '../../src/ts/services/votingOrchestrator/turbo';
 import type * as turboRunLockModule from '../../src/ts/services/turboRunLock';
 import type * as settingsModule from '../../src/ts/settings';
+import type * as turboActionsModule from '../../src/ts/ipc/actions/turbo';
 import type { PassContext } from '../../src/ts/services/votingOrchestrator/context';
 import { invalid } from '../helpers/invalid';
 
@@ -52,6 +53,7 @@ const { playAutoTurbo } = require('../../src/ts/services/votingOrchestrator/turb
 const { __resetSnapUnavailableForTests, markSnapUnavailable } =
     require('../../src/ts/services/turboRunLock') as typeof turboRunLockModule;
 const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
+const { handlePlayAutoTurbo } = require('../../src/ts/ipc/actions/turbo') as typeof turboActionsModule;
 
 const NOW = Math.floor(Date.now() / 1000);
 
@@ -83,6 +85,7 @@ beforeEach(() => {
     jest.clearAllMocks();
     __resetSnapUnavailableForTests();
     settings.getEffectiveSetting = invalid(jest.fn((key: string) => key === 'autoTurbo'));
+    settings.loadSettings = invalid(jest.fn(() => ({ auth: { token: 'tok' }, app: { mock: false } })));
     snapLedger.read.mockResolvedValue(new Set(['43']));
     snapLedger.record.mockResolvedValue(undefined);
     getChallengeTurbo.mockResolvedValue({ battles: [] });
@@ -120,7 +123,36 @@ describe('a challenge recorded as Snap', () => {
 
         await play(await read(43, { state: 'FREE', mode: 'snap' }));
 
-        expect(snapLedger.record).toHaveBeenCalledWith(['43'], ['43']);
+        expect(snapLedger.record).toHaveBeenCalledWith([{ id: '43', closeTime: NOW + 7200, snap: true }]);
+        expect(runSnapGame).toHaveBeenCalledTimes(1);
+        expect(getChallengeTurbo).not.toHaveBeenCalled();
+    });
+});
+
+describe('the manual turbo button on a challenge recorded as Snap', () => {
+    const press = () => {
+        makePostRequest.mockResolvedValueOnce({
+            challenges: [{ id: 43, title: 'T', close_time: NOW + 7200, member: { turbo: { state: 'WON' } } }],
+        });
+        makePostRequest.mockResolvedValueOnce({
+            challenges: [{ id: 43, member: { turbo: { state: 'FREE', mode: 'classic' } } }],
+        });
+        return handlePlayAutoTurbo(null, 43, 'T');
+    };
+
+    test('a classic FREE report goes to the Snap runner, never to get_challenge_turbo', async () => {
+        const reply = await press();
+
+        expect(runSnapGame).toHaveBeenCalledTimes(1);
+        expect(getChallengeTurbo).not.toHaveBeenCalled();
+        expect(reply).toMatchObject({ success: false, error: 'Snap is no longer offered for this challenge' });
+    });
+
+    test('also after the challenge was marked Snap-unavailable', async () => {
+        markSnapUnavailable(43);
+
+        await press();
+
         expect(runSnapGame).toHaveBeenCalledTimes(1);
         expect(getChallengeTurbo).not.toHaveBeenCalled();
     });

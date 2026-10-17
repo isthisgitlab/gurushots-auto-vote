@@ -8,6 +8,7 @@ import { pinChallengeTitles } from '../../services/challengeTitlePin';
 import { annotateEntryTimes } from '../../services/entryTimes';
 import { entryAgeLedger } from '../../entryAgeStore';
 import { snapLedger } from '../../snapChallengeStore';
+import type { ListedChallenge } from '../../snapChallengeStore';
 import * as logger from '../../logger';
 import { isKnownTurboMode } from '../../voting/turboMode';
 
@@ -18,31 +19,29 @@ import type { ActiveChallengesResponse, Challenge } from '../../types/gurushots'
  * recorded one the read now reports as classic (GuruShots does after a Snap is withdrawn, after a dead session and
  * for the game after a won Snap) is put back at 'snap', its state and timer as reported. Only the Snap runner ever
  * plays it, and it marks the challenge unavailable once GuruShots no longer offers Snap, so a Snap turbo is never
- * earned as classic. While the record cannot be read, no turbo reported as classic is left playable (its mode is
- * dropped, like one the web read did not cover). Recorded ids that left `challenges` are forgotten.
+ * earned as classic. While the record cannot be read, no classic turbo that can still be earned is left playable
+ * (its mode is dropped, like one the web read did not cover); a won one keeps its mode, so it can still be applied.
+ * The record keeps each id's close_time current and forgets an id an hour after its challenge closed
+ * (snapChallengeStore); a challenge missing from this read is kept.
  */
 const keepSnapMode = async (challenges: Challenge[]): Promise<void> => {
     const recorded = await snapLedger.read();
-    const seen: string[] = [];
+    const listing: ListedChallenge[] = [];
     for (const challenge of challenges) {
         const turbo = challenge.member?.turbo;
-        if (!turbo) continue;
         const id = String(challenge.id);
-        if (turbo.mode === 'snap') {
-            seen.push(id);
-        } else if (isKnownTurboMode(turbo)) {
+        listing.push({ id, closeTime: Number(challenge.close_time), snap: turbo?.mode === 'snap' });
+        if (!turbo || turbo.mode === 'snap') continue;
+        if (isKnownTurboMode(turbo)) {
             if (recorded === null) {
-                turbo.mode = undefined;
+                if (turbo.state !== 'WON') turbo.mode = undefined;
             } else if (recorded.has(id)) {
                 turbo.mode = 'snap';
                 logger.withCategory('turbo').debug(`${logger.challengeTag(challenge)} Turbo kept as Snap`, null);
             }
         }
     }
-    await snapLedger.record(
-        seen,
-        challenges.map((challenge) => String(challenge.id)),
-    );
+    await snapLedger.record(listing);
 };
 
 /**
