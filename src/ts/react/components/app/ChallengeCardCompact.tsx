@@ -155,12 +155,11 @@ export function ChallengeCardCompact({
                     aria-label={t('app.entryDetails')}
                 >
                     {entries.map((entry) => {
-                        const { icon, textClass } = getEntryStatus(entry);
+                        const { icon } = getEntryStatus(entry);
                         const pinned = livePinKindOf(challenge, entry, pins);
                         return (
                             <span
                                 key={entry.id}
-                                className={textClass}
                                 title={`${t('app.rank')} ${entry.rank} (${entry.votes} ${t('app.votes')})`}
                             >
                                 {icon} #{entry.rank}

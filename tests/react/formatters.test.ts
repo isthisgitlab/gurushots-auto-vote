@@ -228,12 +228,12 @@ describe('getLevelStatus', () => {
 });
 
 describe('getEntryStatus', () => {
-    test('every state carries the same neutral colour: the icon says which it is', () => {
+    test('every state is told by its icon alone, with no colour fields', () => {
         const states = [{ boosted: true }, { turbo: true }, { guru_pick: true }, {}].map((entry) =>
             getEntryStatus(invalid(entry)),
         );
         expect(states.map((state) => state.icon)).toEqual(['🚀', '⚡', '⭐', '📷']);
-        for (const state of states) expect(state).toMatchObject({ className: 'border-base-300', textClass: '' });
+        for (const state of states) expect(Object.keys(state).sort()).toEqual(['icon', 'isBoosted', 'isTurboed']);
     });
 
     test('guru pick and plain entries', () => {

@@ -164,12 +164,7 @@ export function EntryBadge({
     const { applyTurbo, loading: turboing, error: turboError, clearError: clearTurboError } = useTurbo();
 
     // Shared with the compact card's glyph row so both read one mapping.
-    const {
-        isBoosted: isEntryBoosted,
-        isTurboed: isEntryTurboed,
-        className: entryTypeClass,
-        icon,
-    } = getEntryStatus(entry);
+    const { isBoosted: isEntryBoosted, isTurboed: isEntryTurboed, icon } = getEntryStatus(entry);
     // Boost and turbo are mutually exclusive on a single entry —
     // applying one locks out the other on the same photo. Hide both
     // buttons whenever the entry is already in either state.
@@ -204,9 +199,7 @@ export function EntryBadge({
         // up to six buttons with longer translated labels do not overflow a narrow (Android) width. gap-2 (8px) keeps
         // adjacent touch targets apart, both between the buttons of the actions row and between the rows: the photo
         // chip (44px on touch) sits right above the first button, and Boost / Turbo spend at once.
-        <div
-            className={`badge badge-outline badge-sm ${entryTypeClass} flex h-auto flex-col items-start gap-2 px-2 py-1 text-left`}
-        >
+        <div className={`badge badge-outline badge-sm flex h-auto flex-col items-start gap-2 px-2 py-1 text-left`}>
             <div className="flex flex-wrap items-center gap-1">
                 <EntryPhoto entry={entry} />
                 <span>{icon}</span>

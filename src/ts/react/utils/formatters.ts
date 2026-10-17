@@ -218,19 +218,20 @@ export const statusText = (status: ResourceStatus<string>, t: (key: string) => s
  * an applied boost with the separate boolean entry.boosted. Reading entry.boost
  * would light the rocket on entries that are merely eligible.
  *
+ * The icon alone says which state it is; no colour varies with it.
+ *
  * @param entry - Entry record from challenge.member.ranking.entries
  */
 export const getEntryStatus = (
     entry: RankingEntry | null | undefined,
-): { isBoosted: boolean; isTurboed: boolean; icon: string; className: string; textClass: string } => {
+): { isBoosted: boolean; isTurboed: boolean; icon: string } => {
     const isBoosted = entry?.boosted === true;
     const isTurboed = !!entry?.turbo;
     const base = { isBoosted, isTurboed };
-    const neutral = { className: 'border-base-300', textClass: '' };
-    if (isBoosted) return { ...base, icon: '🚀', ...neutral };
-    if (isTurboed) return { ...base, icon: '⚡', ...neutral };
-    if (entry?.guru_pick) return { ...base, icon: '⭐', ...neutral };
-    return { ...base, icon: '📷', ...neutral };
+    if (isBoosted) return { ...base, icon: '🚀' };
+    if (isTurboed) return { ...base, icon: '⚡' };
+    if (entry?.guru_pick) return { ...base, icon: '⭐' };
+    return { ...base, icon: '📷' };
 };
 
 /**
