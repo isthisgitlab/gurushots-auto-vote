@@ -20,6 +20,7 @@ import { initializeAsync as initSettings, flushPendingWrites, getSetting } from 
 import { initializeMetadataAsync, flushMetadataWrites } from '../../metadata';
 import { initializeJoinStateAsync, flushJoinStateWrites } from '../../joinStateStore';
 import { initializeSwapBackAsync, flushSwapBackWrites } from '../../swapBackStore';
+import { initializeSnapChallengesAsync, flushSnapChallengeWrites } from '../../snapChallengeStore';
 import { initializeAutoSpendAsync, flushAutoSpendWrites } from '../../currencyAutoStore';
 import { initializeEntryAgesAsync, flushEntryAgeWrites } from '../../entryAgeStore';
 import { initializeScenarioStateAsync, flushScenarioStateWrites } from '../../scenarioStateStore';
@@ -55,6 +56,8 @@ const bootstrap = async () => {
         await initializeJoinStateAsync();
         // Swap-back records (which slot can restore a boosted/turbo'd photo).
         await initializeSwapBackAsync();
+        // The challenges ever seen as Snap, which a classic game must never earn a turbo on.
+        await initializeSnapChallengesAsync();
         // Automatic exposure-fill counts (the per-challenge fill cap).
         await initializeAutoSpendAsync();
         // When each entry entered its challenge (the boost fresh-entry wait).
@@ -75,6 +78,7 @@ const bootstrap = async () => {
                 void flushMetadataWrites();
                 void flushJoinStateWrites();
                 void flushSwapBackWrites();
+                void flushSnapChallengeWrites();
                 void flushAutoSpendWrites();
                 void flushEntryAgeWrites();
                 // The scenario stores' flush says when a write did not persist: logged, and nothing to undo here.

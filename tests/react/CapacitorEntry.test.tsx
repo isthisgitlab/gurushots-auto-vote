@@ -78,6 +78,8 @@ describe('Capacitor entry', () => {
             flushJoinStateWrites: jest.fn(),
             initializeSwapBackAsync: jest.fn().mockResolvedValue(undefined),
             flushSwapBackWrites: jest.fn(),
+            initializeSnapChallengesAsync: jest.fn().mockResolvedValue(undefined),
+            flushSnapChallengeWrites: jest.fn(),
             initializeAutoSpendAsync: jest.fn().mockResolvedValue(undefined),
             flushAutoSpendWrites: jest.fn(),
             initializeEntryAgesAsync: jest.fn().mockResolvedValue(undefined),
@@ -116,6 +118,10 @@ describe('Capacitor entry', () => {
             jest.doMock(`${SRC}/swapBackStore`, () => ({
                 initializeSwapBackAsync: m.initializeSwapBackAsync,
                 flushSwapBackWrites: m.flushSwapBackWrites,
+            }));
+            jest.doMock(`${SRC}/snapChallengeStore`, () => ({
+                initializeSnapChallengesAsync: m.initializeSnapChallengesAsync,
+                flushSnapChallengeWrites: m.flushSnapChallengeWrites,
             }));
             jest.doMock(`${SRC}/currencyAutoStore`, () => ({
                 initializeAutoSpendAsync: m.initializeAutoSpendAsync,
@@ -173,6 +179,7 @@ describe('Capacitor entry', () => {
             m.initializeMetadataAsync,
             m.initializeJoinStateAsync,
             m.initializeSwapBackAsync,
+            m.initializeSnapChallengesAsync,
             m.initializeAutoSpendAsync,
             m.initializeEntryAgesAsync,
             m.initializeScenarioStateAsync,
@@ -194,6 +201,7 @@ describe('Capacitor entry', () => {
             m.flushMetadataWrites,
             m.flushJoinStateWrites,
             m.flushSwapBackWrites,
+            m.flushSnapChallengeWrites,
             m.flushAutoSpendWrites,
             m.flushEntryAgeWrites,
             m.flushScenarioStateWrites,

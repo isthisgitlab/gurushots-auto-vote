@@ -244,6 +244,10 @@ Domain terms used throughout, in reader's terms:
   unreadable question, a dead session, an answer the server refused, no vision model, or three transient
   failures in a row — is remembered in-process (`markSnapUnavailable`, `services/turboRunLock.ts`), and
   `shouldPlayAutoTurbo` leaves that challenge's turbo alone in any mode; a manual run ignores the marker.
+  A challenge seen as Snap stays Snap for good — the ids are persisted (`snapChallengeStore.ts`, `gs_snap_challenges`,
+  a `shared` store the Android service writes through compare-and-set too, unreadable reads as unknown and plays no
+  classic turbo), and the overlay keeps their mode at `'snap'` whatever the web read says later — so its turbo is
+  never earned as classic.
 - Every POST goes through `api/api-client.ts`. `makePostRequest<T>()`, used by every request but a spend, has this
   **contract: it returns the response body as `T` on success and `null` on ultimate failure or when the body is
   not a JSON object — it never throws.** Every caller branches on `null`, not on a catch. Only the object check

@@ -746,7 +746,8 @@ internal object SideStores {
     // it to know not to import again, and it records what the mirror of settings.json last wrote) and the title pins
     // (the import seeds them, and both contexts pin titles); the entry-age ledger (when each entry went into a
     // challenge: the window records the photos it submits, the service the ones it submits and what it first sees, and
-    // the boost hold and the fill-new `pending` photo must outlast a cycle).
+    // the boost hold and the fill-new `pending` photo must outlast a cycle); the challenges ever seen as Snap (both
+    // contexts record them, and a pin lost to the other's write would let a classic game earn a Snap turbo).
     private val names = mapOf(
         CONFIG_KEY to "config",
         LEGACY_SETTINGS_KEY to "settings",
@@ -759,6 +760,7 @@ internal object SideStores {
         "gs_auto_spends" to "auto-spend ledger",
         "gs_swap_backs" to "swap-back ledger",
         "gs_join_state" to "join-state",
+        "gs_snap_challenges" to "snap challenges",
         "gs_entry_ages" to "entry-age ledger"
     )
 
@@ -818,6 +820,7 @@ internal object SideStores {
     private val compareAndSetOnly =
         setOf(
             "gs_join_state",
+            "gs_snap_challenges",
             "gs_auto_spends",
             "gs_entry_ages",
             "gs_v2_import",

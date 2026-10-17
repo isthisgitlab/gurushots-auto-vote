@@ -600,6 +600,29 @@ class AutoVoteServiceTest {
     }
 
     @Test
+    fun theSnapChallengesAreASideStoreChangedByCompareAndSetOnly() {
+        val store = newService().HeadlessStore()
+        ShadowLog.clear()
+        assertTrue(SideStores.isAllowed("gs_snap_challenges"))
+        assertNull(store.readKey("gs_snap_challenges"))
+        // Both contexts record the challenges seen as Snap, so each change rests on what its writer read.
+        assertFalse(store.writeKey("gs_snap_challenges", """{"7":1}"""))
+        assertNull(store.readKey("gs_snap_challenges"))
+        assertTrue(store.compareAndWriteKey("gs_snap_challenges", null, """{"7":1}"""))
+        assertEquals("""{"7":1}""", store.readKey("gs_snap_challenges"))
+        assertFalse(store.compareAndWriteKey("gs_snap_challenges", """{"8":1}""", """{"7":1,"8":2}"""))
+        assertFalse(store.compareAndWriteKey("gs_snap_challenges", """{"7":1}""", "invalid JSON"))
+        assertEquals("""{"7":1}""", store.readKey("gs_snap_challenges"))
+        assertEquals(
+            listOf(
+                "Refusing a plain write of snap challenges blob: it is changed by compare-and-set only",
+                "Refusing to persist non-JSON snap challenges blob"
+            ),
+            ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
+        )
+    }
+
+    @Test
     fun theImportMarkerAndTheTitlePinsAreChangedByCompareAndSetOnly() {
         val store = newService().HeadlessStore()
         ShadowLog.clear()
