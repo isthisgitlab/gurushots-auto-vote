@@ -75,7 +75,7 @@ describe('ModalActionRow', () => {
         );
     });
 
-    test('secondaryIcon="trash" swaps the warning-button glyph', () => {
+    test('secondaryIcon="trash" swaps the destructive-button glyph', () => {
         const { container } = renderRow({ secondaryIcon: 'trash', secondaryLabel: 'app.clearAll' });
         const secondary = container.querySelectorAll('button')[1];
         const path = secondary.querySelector('svg path')!;

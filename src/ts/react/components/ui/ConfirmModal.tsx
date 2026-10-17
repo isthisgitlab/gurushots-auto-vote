@@ -4,7 +4,7 @@ import { ConfirmButton } from './ConfirmButton';
 import type { ComponentChildren } from 'preact';
 
 /**
- * A dialog that asks for confirmation of something with a cost: its text (`children`), the problem the last attempt
+ * A dialog that asks for confirmation of something destructive: its text (`children`), the problem the last attempt
  * left (an alert), Cancel, and a confirming button that stays focusable while the call is out. Nothing can dismiss
  * it while the call is out.
  *

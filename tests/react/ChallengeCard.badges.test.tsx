@@ -105,17 +105,17 @@ beforeEach(() => {
 });
 
 describe('ChallengeCard badge row — logical/state badges', () => {
-    test('type, photo-count and auto-fill all render icon + text, the kind badges solid neutral', () => {
+    test('type, photo-count and auto-fill all render icon + text, the kind badges ghost like any category', () => {
         mockChallengeSettings.autoSubmitEnabled = true;
         const { container } = renderCard(makeChallenge());
 
         const type = badgeByText(container, '🏁 FLASH');
         expect(type).toBeTruthy();
-        expect(type!.className).toMatch(/badge-neutral/);
+        expect(type!.className).toMatch(/badge-ghost/);
 
         const photos = badgeByText(container, '🖼 4 app.photos');
         expect(photos).toBeTruthy();
-        expect(photos!.className).toMatch(/badge-neutral/);
+        expect(photos!.className).toMatch(/badge-ghost/);
 
         const autoSubmit = badgeByText(container, '📥 app.autoSubmitBadge');
         expect(autoSubmit).toBeTruthy();
@@ -141,11 +141,11 @@ describe('ChallengeCard badge row — logical/state badges', () => {
         expect([...badges].every((badge) => badge.classList.contains('badge-sm'))).toBe(true);
     });
 
-    test('badge fallback (no type) also gets the icon and the neutral variant', () => {
+    test('badge fallback (no type) also gets the icon and the ghost variant', () => {
         const { container } = renderCard(makeChallenge({ type: null, badge: 'Special' }));
         const fallback = badgeByText(container, '🏁 Special');
         expect(fallback).toBeTruthy();
-        expect(fallback!.className).toMatch(/badge-neutral/);
+        expect(fallback!.className).toMatch(/badge-ghost/);
     });
 
     test('auto-fill badge is hidden once all slots are filled', () => {
@@ -175,15 +175,17 @@ describe('ChallengeCard badge row — logical/state badges', () => {
     });
 });
 
+// Kind badges (🏁 type, 🖼 photo count) are ghost like the tags; the tags are the ghost badges without their icon.
+const tagTexts = (container: Element) =>
+    [...container.querySelectorAll('span.badge-ghost')]
+        .map((el) => el.textContent)
+        .filter((text) => !/^[🏁🖼]/u.test(text ?? ''));
+
 describe('ChallengeCard badge row — shared with the Discover rows', () => {
     test('the detail card lists every tag as given, repeats of the type and photo-count tags included', () => {
         const challenge = { ...makeChallenge(), tags: ['FLASH', '4 photos', 'Comm'] };
         const { container } = renderCard(challenge);
-        expect([...container.querySelectorAll('span.badge-ghost')].map((el) => el.textContent)).toEqual([
-            'FLASH',
-            '4 photos',
-            'Comm',
-        ]);
+        expect(tagTexts(container)).toEqual(['FLASH', '4 photos', 'Comm']);
     });
 
     test('the compact tile leaves the photo count out, where the entries cell already reads N/max', () => {
@@ -216,7 +218,7 @@ describe('ChallengeCard badge row — shared with the Discover rows', () => {
         'the detail card draws only the text tags of a tags value that is %s, and does not crash',
         (_name, tags, shown) => {
             const { container } = renderCard({ ...makeChallenge(), tags: invalid<string[]>(tags) });
-            expect([...container.querySelectorAll('span.badge-ghost')].map((el) => el.textContent)).toEqual(shown);
+            expect(tagTexts(container)).toEqual(shown);
         },
     );
 

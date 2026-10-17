@@ -313,11 +313,10 @@ test('the "Starts in" text counts down as time passes', async () => {
 });
 
 describe('what a row says about its challenge: type, photos and tags', () => {
-    const tagBadges = () => [...document.querySelectorAll('span.badge.badge-ghost')].map((el) => el.textContent);
-    const kindBadges = () =>
-        [...document.querySelectorAll('span.badge-neutral')]
-            .filter((el) => !el.closest('summary'))
-            .map((el) => el.textContent);
+    // Kind badges (🏁 type, 🖼 photo count) are ghost like the tags; the icon tells them apart.
+    const ghostTexts = () => [...document.querySelectorAll('span.badge.badge-ghost')].map((el) => el.textContent ?? '');
+    const tagBadges = () => ghostTexts().filter((text) => !/^[🏁🖼]/u.test(text));
+    const kindBadges = () => ghostTexts().filter((text) => /^[🏁🖼]/u.test(text));
 
     test('every row, open and upcoming, shows its type as on the cards, and its photo count from two photos', async () => {
         renderSection([

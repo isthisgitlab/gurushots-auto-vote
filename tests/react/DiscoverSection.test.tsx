@@ -99,6 +99,18 @@ test('free join calls joinChallenge with spendCoins=false, no modal', async () =
     expect(screen.queryByText('app.discoverConfirmTitle')).toBeNull();
 });
 
+test('a paid Join row button and the confirm button are carmine (they spend); a free Join is neutral', async () => {
+    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+    await screen.findByText('Paid One');
+    expect(screen.getByText('app.discoverJoin').closest('button')!.className).toContain('btn-neutral');
+    expect(screen.getByText('app.discoverJoin').closest('button')!.className).not.toContain('btn-latvian');
+    const paid = screen.getByText('app.discoverJoinPaid').closest('button')!;
+    expect(paid.className).toContain('btn-latvian');
+    fireEvent.click(paid);
+    const confirm = (await screen.findByText('app.discoverConfirmSpend')).closest('button')!;
+    expect(confirm.className).toContain('btn-latvian');
+});
+
 test('paid join opens the confirm modal and only spends on confirm', async () => {
     render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
     await screen.findByText('Paid One');
@@ -888,7 +900,8 @@ describe('edge paths', () => {
                 fireEvent.click(screen.getByText('app.discoverJoinPaid'));
                 const retry = await screen.findByRole('button', { name: 'Retry submit for Paid One' });
                 expect(retry.textContent).toBe('app.discoverRetrySubmit');
-                expect(retry.className).not.toContain('btn-warning');
+                expect(retry.className).not.toContain('btn-latvian');
+                expect(retry.className).toContain('btn-neutral');
                 expect(screen.getAllByText('app.discoverRetrySubmit')).toHaveLength(1);
                 expect(screen.queryByRole('button', { name: /coins/ })).toBeNull();
                 fireEvent.click(retry);
