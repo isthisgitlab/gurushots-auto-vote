@@ -7,6 +7,7 @@
 import { makePostRequest, createCommonHeaders } from './api-client';
 import { ENDPOINTS, createWebHeaders } from './constants';
 import * as logger from '../logger';
+import { isPlainObject } from '../plainObject';
 
 import type { ActiveChallengesResponse, MemberTurbo, WebActiveChallengesResponse } from '../types/gurushots';
 
@@ -58,6 +59,8 @@ const fetchActiveChallenges = async (token: string): Promise<ActiveChallengesRes
     return response;
 };
 
+const isMemberTurbo = (value: unknown): value is MemberTurbo => isPlainObject(value);
+
 /**
  * Reads each active challenge's turbo from the WEB get_my_active_challenges —
  * the only read that reports the turbo `mode` ('classic' | 'snap') and the
@@ -79,7 +82,14 @@ const fetchWebActiveTurbos = async (token: string): Promise<Map<string, MemberTu
         });
         return null;
     }
-    return new Map(response.challenges.map((challenge) => [String(challenge.id), challenge.member?.turbo ?? null]));
+    const turbos = new Map<string, MemberTurbo | null>();
+    const elements: unknown[] = response.challenges;
+    for (const element of elements) {
+        if (!isPlainObject(element) || (typeof element.id !== 'string' && typeof element.id !== 'number')) continue;
+        const turbo = isPlainObject(element.member) ? element.member.turbo : null;
+        turbos.set(String(element.id), isMemberTurbo(turbo) ? turbo : null);
+    }
+    return turbos;
 };
 
 export { fetchActiveChallenges, fetchWebActiveTurbos };

@@ -236,7 +236,7 @@ describe('StatusHeader', () => {
 
     test('counts active challenges and available boosts/turbos', () => {
         const challenges = invalid<Challenge[]>([
-            { id: 'a', member: { boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' } } },
+            { id: 'a', member: { boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON', mode: 'classic' } } },
             { id: 'b', member: { boost: { state: 'USED' }, turbo: { state: 'NONE' } } },
             { id: 'c', member: { boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'FREE' } } },
         ]);
@@ -260,7 +260,7 @@ describe('StatusHeader', () => {
         expect(stats.slice(0, 3)).toEqual(['4', '0', '1']);
     });
 
-    test('a Snap-mode or mode-less turbo is not offered as playable, but a won one counts whatever its mode', () => {
+    test('a Snap-mode or mode-less turbo is not offered as playable, and a won one counts only in a known mode', () => {
         const nowSec = BASE_MS / 1000;
         const challenges = invalid<Challenge[]>([
             { id: 'a', member: { turbo: { state: 'FREE', mode: 'snap' } } },
@@ -270,10 +270,11 @@ describe('StatusHeader', () => {
             { id: 'e', member: { turbo: { state: 'FREE', mode: 'classic' } } },
             { id: 'f', member: { turbo: { state: 'FREE' } } },
             { id: 'g', member: { turbo: { state: 'WON' } } },
+            { id: 'h', member: { turbo: { state: 'WON', mode: 'classic' } } },
         ]);
         const { container } = wrap(<StatusHeader challenges={challenges} nextRunAt={null} running={true} />);
         const stats = Array.from(container.querySelectorAll('.font-semibold')).map((n) => n.textContent);
-        expect(stats.slice(0, 3)).toEqual(['7', '0', '3']);
+        expect(stats.slice(0, 3)).toEqual(['8', '0', '3']);
     });
 
     test('an overdue next run reads as due', () => {

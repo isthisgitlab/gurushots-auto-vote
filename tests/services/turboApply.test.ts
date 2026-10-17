@@ -19,12 +19,14 @@ jest.mock('../../src/ts/settings');
 
 const buildChallenge = ({
     turboState = 'WON',
+    turboMode = 'classic',
     closeInSeconds = 600,
     entries = [{ id: 'entry-1' }, { id: 'entry-2' }, { id: 'entry-3' }],
     boostState = 'NONE',
     boostTimeout = 0,
 }: {
     turboState?: string;
+    turboMode?: string;
     closeInSeconds?: number;
     entries?: RankingEntry[];
     boostState?: string;
@@ -34,7 +36,7 @@ const buildChallenge = ({
         id: '222',
         close_time: Math.floor(Date.now() / 1000) + closeInSeconds,
         member: {
-            turbo: { state: turboState },
+            turbo: { state: turboState, mode: turboMode },
             boost: { state: boostState, timeout: boostTimeout },
             ranking: { entries },
         },
@@ -77,6 +79,24 @@ describe('shouldApplyTurbo', () => {
         mockSettings();
         const challenge = buildChallenge({ turboState: 'TIMER' });
         expect(VotingLogic.shouldApplyTurbo(challenge, NOW()).apply).toBe(false);
+    });
+
+    test('does not apply a won turbo whose mode is unknown (the mobile copy)', () => {
+        mockSettings();
+        const challenge = buildBaseChallenge({
+            id: '222',
+            close_time: NOW() + 600,
+            member: { turbo: { state: 'WON' }, ranking: { entries: [{ id: 'entry-1' }] } },
+        });
+        const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
+        expect(result.apply).toBe(false);
+        expect(result.reason).toBe('turbo mode unknown');
+    });
+
+    test('applies a won Snap-mode turbo', () => {
+        mockSettings();
+        const challenge = buildChallenge({ turboMode: 'snap' });
+        expect(VotingLogic.shouldApplyTurbo(challenge, NOW()).apply).toBe(true);
     });
 
     test('does not apply when challenge has ended', () => {

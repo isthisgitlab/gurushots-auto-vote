@@ -230,6 +230,8 @@ const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergenc
 
     const turbo = challenge.member?.turbo || {};
     if (turbo.state !== 'WON') return noop(`turbo state ${turbo.state || 'unknown'}`);
+    // A turbo without a mode is the mobile copy, whose WON can be false for a Snap game.
+    if (turbo.mode !== 'classic' && turbo.mode !== 'snap') return noop('turbo mode unknown');
 
     if (!emergency) {
         const effectiveTurboTime = getEffectiveTurboTime(challengeId);

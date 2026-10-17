@@ -57,7 +57,7 @@ const challenge = (): Challenge =>
         swap_locked: false,
         member: {
             boost: { state: 'AVAILABLE_KEY' },
-            turbo: { state: 'WON' },
+            turbo: { state: 'WON', mode: 'classic' },
             ranking: {
                 entries: [
                     { id: 'e1', member_id: 'm', votes: 40 },

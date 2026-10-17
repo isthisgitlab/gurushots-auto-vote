@@ -388,13 +388,29 @@ describe('challenges', () => {
                 expect(pinChallengeTitles).toHaveBeenCalledWith(result.challenges);
             });
 
-            test('a failed mobile fetch never reaches the web read', async () => {
+            test('a failed mobile fetch is returned as it is; the web result is not applied', async () => {
                 makePostRequest.mockResolvedValueOnce(null);
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [{ id: 1, member: { turbo: { state: 'FREE' } } }],
+                });
 
-                await getActiveChallenges(mockToken);
+                const result = await getActiveChallenges(mockToken);
 
-                expect(makePostRequest).toHaveBeenCalledTimes(1);
-                expect(makePostRequest).not.toHaveBeenCalledWith(WEB_URL, expect.anything(), expect.anything());
+                expect(result).toEqual({ challenges: [], fetchFailed: true });
+                expect(pinChallengeTitles).not.toHaveBeenCalled();
+            });
+
+            test('the web read starts before the mobile read settles', async () => {
+                let resolveMobile: (value: { challenges: [] }) => void;
+                makePostRequest.mockReturnValueOnce(new Promise((resolve) => (resolveMobile = resolve)));
+                makePostRequest.mockResolvedValueOnce({ challenges: [] });
+
+                const pending = getActiveChallenges(mockToken);
+
+                expect(makePostRequest).toHaveBeenCalledTimes(2);
+                expect(makePostRequest).toHaveBeenNthCalledWith(2, WEB_URL, expect.anything(), '');
+                resolveMobile!({ challenges: [] });
+                await pending;
             });
         });
 
@@ -441,6 +457,33 @@ describe('challenges', () => {
                 'https://api.gurushots.com/rest/get_my_active_challenges',
                 expect.objectContaining({ 'x-env': 'WEB', 'x-token': mockToken }),
                 '',
+            );
+        });
+
+        test('skips elements that are not objects or have no usable id, and a turbo that is not an object', async () => {
+            const snap = { state: 'IN_PROGRESS', mode: 'snap' };
+            makePostRequest.mockResolvedValueOnce(
+                invalid({
+                    challenges: [
+                        null,
+                        'text',
+                        { member: { turbo: snap } },
+                        { id: null, member: { turbo: snap } },
+                        { id: 21, member: 'none' },
+                        { id: 22, member: { turbo: 'WON' } },
+                        { id: 23, member: { turbo: snap } },
+                    ],
+                }),
+            );
+
+            const turbos = await fetchWebActiveTurbos(mockToken);
+
+            expect(turbos).toEqual(
+                new Map([
+                    ['21', null],
+                    ['22', null],
+                    ['23', snap],
+                ]),
             );
         });
 

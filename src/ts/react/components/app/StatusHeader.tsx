@@ -11,15 +11,16 @@ import { useId } from 'react';
 import type { ComponentChildren } from 'preact';
 import type { Bankroll, Challenge, MemberTurbo } from '../../../types/gurushots';
 
-// A turbo is "available" for this challenge when it's ready to apply (WON) or
-// ready to earn (FREE / in progress / cooldown elapsed) as a classic game; one
-// whose mode is Snap or unknown is not counted.
+// A turbo is "available" for this challenge when it's ready to apply (WON, in a
+// known mode — a mode-less one is the mobile copy, whose WON can be false for a
+// Snap game) or ready to earn (FREE / in progress / cooldown elapsed) as a
+// classic game; an earnable one whose mode is Snap or unknown is not counted.
 /**
  * @param now - Unix seconds
  */
 const isTurboAvailable = (turbo: MemberTurbo | undefined, now: number) => {
     const state = turbo?.state;
-    if (state === 'WON') return true;
+    if (state === 'WON') return turbo?.mode === 'classic' || turbo?.mode === 'snap';
     if (turbo?.mode !== 'classic') return false;
     if (state === 'FREE' || state === 'IN_PROGRESS') return true;
     return state === 'TIMER' && typeof turbo?.time_to_open === 'number' && turbo.time_to_open <= now;

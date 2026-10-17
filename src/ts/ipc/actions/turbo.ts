@@ -33,10 +33,10 @@ const turboUnplayableError = (liveChallenge: Challenge, now: number): string | n
     const turboState = liveChallenge.member?.turbo?.state;
     const turboMode = liveChallenge.member?.turbo?.mode;
     if (turboMode === 'snap') {
-        return `Turbo is a Snap game (state=${turboState || 'unknown'}); play it on GuruShots`;
+        return 'Turbo is a Snap game; play it on GuruShots';
     }
     if (turboMode !== 'classic') {
-        return 'Turbo mode unknown (GuruShots web data unavailable); try again later';
+        return 'Turbo mode unknown; try again later';
     }
     const cooldownPassed =
         turboState === 'TIMER' &&

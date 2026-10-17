@@ -43,7 +43,10 @@ const setup = (pins: Partial<EntryPins> = {}, values: Record<string, unknown> = 
 
 const build = (
     entries: RankingEntry[],
-    { boost = { state: 'AVAILABLE_KEY' }, turbo = { state: 'WON' } }: Record<string, Record<string, unknown>> = {},
+    {
+        boost = { state: 'AVAILABLE_KEY' },
+        turbo = { state: 'WON', mode: 'classic' },
+    }: Record<string, Record<string, unknown>> = {},
 ): Challenge =>
     buildChallenge({
         id: '42',
@@ -421,7 +424,11 @@ describe('a pin for a feature that can never fire on the challenge protects noth
             type,
             close_time: CLOSE,
             max_photo_submits: maxPhotoSubmits,
-            member: { boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' }, ranking: { entries } },
+            member: {
+                boost: { state: 'AVAILABLE_KEY' },
+                turbo: { state: 'WON', mode: 'classic' },
+                ranking: { entries },
+            },
         });
 
     test.each([

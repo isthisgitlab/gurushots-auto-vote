@@ -1749,10 +1749,7 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
-        expect(result).toEqual({
-            success: false,
-            error: `Turbo is a Snap game (state=${state}); play it on GuruShots`,
-        });
+        expect(result).toEqual({ success: false, error: 'Turbo is a Snap game; play it on GuruShots' });
         expect(strategy.runTurboMiniGame).not.toHaveBeenCalled();
     });
 
@@ -1766,7 +1763,7 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
-        expect(result).toEqual({ success: false, error: 'Turbo is a Snap game (state=unknown); play it on GuruShots' });
+        expect(result).toEqual({ success: false, error: 'Turbo is a Snap game; play it on GuruShots' });
         expect(strategy.runTurboMiniGame).not.toHaveBeenCalled();
     });
 
@@ -1795,10 +1792,7 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
-        expect(result).toEqual({
-            success: false,
-            error: 'Turbo mode unknown (GuruShots web data unavailable); try again later',
-        });
+        expect(result).toEqual({ success: false, error: 'Turbo mode unknown; try again later' });
         expect(strategy.runTurboMiniGame).not.toHaveBeenCalled();
     });
 

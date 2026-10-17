@@ -22,7 +22,7 @@ jest.mock('../../src/ts/settings');
 const buildChallenge = (entries: RankingEntry[]) =>
     buildBaseChallenge({
         member: {
-            turbo: { state: 'WON' },
+            turbo: { state: 'WON', mode: 'classic' },
             ranking: { entries },
         },
     });

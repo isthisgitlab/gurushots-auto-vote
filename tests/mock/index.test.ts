@@ -679,7 +679,7 @@ describe('mock/index', () => {
                         fillableChallenge({
                             member: {
                                 boost: { state: 'LOCKED', timeout: 0 }, // isolate from boost
-                                turbo: { state: 'WON' },
+                                turbo: { state: 'WON', mode: 'classic' },
                                 ranking: { entries: [{ id: 'e1' }], exposure: { exposure_factor: 100 } },
                             },
                         }),
@@ -713,7 +713,7 @@ describe('mock/index', () => {
                             max_photo_submits: 2, // 1 entry below → exactly one free slot
                             member: {
                                 boost: { state: 'AVAILABLE', timeout: now + 120 },
-                                turbo: { state: 'WON' },
+                                turbo: { state: 'WON', mode: 'classic' },
                                 ranking: { entries: [{ id: 'e1' }], exposure: { exposure_factor: 100 } },
                             },
                         },
