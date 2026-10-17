@@ -133,7 +133,7 @@ describe('compact ChallengeCard tile', () => {
     test('an ended countdown is a red badge, a running one a green, yellow or red badge by time left', () => {
         // null is the countdown of a challenge that has ended; the card words it in the UI's language.
         const { unmount } = renderCard(makeChallenge(), null);
-        expect(screen.getByText('app.ended').className).toBe('badge badge-xs badge-error font-medium');
+        expect(screen.getByText('app.ended').className).toBe('badge badge-sm badge-error font-medium');
         unmount();
         const cases: Array<[number, string]> = [
             [30_000, 'badge-success'],
@@ -142,9 +142,71 @@ describe('compact ChallengeCard tile', () => {
         ];
         for (const [secondsLeft, tone] of cases) {
             const view = renderCard(makeChallenge({ close_time: nowSec() + secondsLeft }));
-            expect(screen.getByText('2h 30m').className).toBe(`badge badge-xs ${tone} font-medium`);
+            expect(screen.getByText('2h 30m').className).toBe(`badge badge-sm ${tone} font-medium`);
             view.unmount();
         }
+    });
+
+    test('boost and turbo statuses are badges in their tone, and a muted state stays plain text', () => {
+        const states = (boost: string, turbo: string) => ({
+            member: {
+                boost: { state: boost, timeout: 0 },
+                turbo: { state: turbo, mode: 'classic', time_to_open: null },
+                ranking: {
+                    entries: [],
+                    exposure: { exposure_factor: 55 },
+                    total: { votes: 0, rank: 0, level: 0, percent: 0, next_message: '' },
+                },
+            },
+        });
+        const cases: Array<[string, string, string, string, string, string]> = [
+            [
+                'AVAILABLE_KEY',
+                'app.available',
+                'IN_PROGRESS',
+                'app.stateInProgress',
+                'badge badge-sm badge-info',
+                'badge badge-sm badge-warning',
+            ],
+            ['USED', 'app.used', 'FREE', 'app.stateFree', 'badge badge-sm badge-success', 'badge badge-sm badge-info'],
+            [
+                'LOCKED',
+                'app.stateLocked',
+                'UNAVAILABLE',
+                'app.unavailable',
+                'text-base-content/60',
+                'text-base-content/60',
+            ],
+        ];
+        for (const [boost, boostText, turbo, turboText, boostClass, turboClass] of cases) {
+            const view = renderCard(makeChallenge(states(boost, turbo)));
+            expect(screen.getByText(boostText).parentElement!.className).toBe(`${boostClass} max-w-full`);
+            expect(screen.getByText(turboText).parentElement!.className).toBe(`${turboClass} max-w-full`);
+            view.unmount();
+        }
+    });
+
+    test('a long boost status shrinks inside its cell: the badge caps its width, the text truncates, the full text is the title', () => {
+        renderCard(
+            makeChallenge({
+                member: {
+                    boost: { state: 'AVAILABLE', timeout: nowSec() + 3_540 },
+                    turbo: { state: 'WON', mode: 'classic', time_to_open: null },
+                    ranking: {
+                        entries: [],
+                        exposure: { exposure_factor: 55 },
+                        total: { votes: 0, rank: 0, level: 0, percent: 0, next_message: '' },
+                    },
+                },
+            }),
+        );
+        const text = screen.getByText('app.stateAvailableMinutes');
+        expect(text.className).toBe('truncate');
+        expect(text.parentElement!.className).toBe('badge badge-sm badge-info max-w-full');
+        expect(text.parentElement!.getAttribute('title')).toBe('app.stateAvailableMinutes');
+        expect(screen.getByText('app.stateWon').parentElement!.className).toBe(
+            'badge badge-sm badge-success max-w-full',
+        );
     });
 
     test('the exposure figure is a badge by its band, and plain before the start or after the close', () => {
@@ -152,9 +214,9 @@ describe('compact ChallengeCard tile', () => {
             member: { ranking: { entries: [], exposure: { exposure_factor: factor } } },
         });
         const cases: Array<[number, string]> = [
-            [5, 'badge badge-xs badge-error'],
-            [30, 'badge badge-xs badge-warning'],
-            [55, 'badge badge-xs badge-success'],
+            [5, 'badge badge-sm badge-error'],
+            [30, 'badge badge-sm badge-warning'],
+            [55, 'badge badge-sm badge-success'],
         ];
         for (const [factor, className] of cases) {
             const view = renderCard(makeChallenge(exposureOf(factor)));

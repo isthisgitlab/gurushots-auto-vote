@@ -30,12 +30,12 @@ export function Countdown({
     source,
     className = '',
     closeTime,
-    size = 'sm',
+    size = 'md',
 }: {
     source: TimeRemaining;
     className?: string;
     closeTime?: number;
-    size?: 'sm' | 'xs';
+    size?: 'md' | 'sm';
 }) {
     const { t } = useTranslation();
     const value = isSignal(source) ? source.value : source;

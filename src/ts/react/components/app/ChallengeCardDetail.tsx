@@ -3,7 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getLevelStatus, isBoostAvailable, statusText } from '@/utils/formatters';
 import { getNextLevelInfo } from '@/utils/challengeCardView';
 import { sanitizeWelcomeMessage } from '@/utils/sanitizeWelcomeMessage';
-import { toneBadgeClass } from '@/utils/statTone';
+import { statusBadgeClass, toneBadgeClass } from '@/utils/statTone';
 import { Countdown } from './Countdown';
 import type { TimeRemaining } from './Countdown';
 import { DeadlineTimeline } from './DeadlineTimeline';
@@ -35,6 +35,9 @@ import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 
 export type SwapBackOffers = ReturnType<typeof useSwapBacksModule.useSwapBacks>;
 export type EntryPinsState = ReturnType<typeof useEntryPinsModule.useEntryPins>;
+
+// The value line of a stat cell; Ends alone drops to text-xs, since a long date string needs the room.
+const STAT_VALUE = 'text-sm font-semibold tabular-nums';
 
 /**
  * One labelled cell of the detailed card's stat grids.
@@ -191,7 +194,7 @@ function StatusCells({
     return (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
             <StatCell label={t('app.time')}>
-                <div className="text-sm font-semibold tabular-nums">
+                <div className={STAT_VALUE}>
                     <Countdown source={timeRemaining} closeTime={challenge.close_time} />
                 </div>
             </StatCell>
@@ -201,26 +204,30 @@ function StatusCells({
                 </div>
             </StatCell>
             <StatCell label={t('app.exposure')}>
-                <div className="text-sm font-semibold tabular-nums">
-                    <span className={toneBadgeClass(view.exposureTone, 'sm')}>{view.exposureFactor}%</span>
+                <div className={STAT_VALUE}>
+                    <span className={toneBadgeClass(view.exposureTone, 'md')}>{view.exposureFactor}%</span>
                 </div>
                 {actions.fillExposureButton}
             </StatCell>
             <StatCell label={t('app.boost')}>
-                <div className={`text-sm font-semibold tabular-nums ${view.boostStatus.colorClass}`}>
-                    {statusText(view.boostStatus, t)}
+                <div className={STAT_VALUE}>
+                    <span className={statusBadgeClass(view.boostStatus.colorClass, 'md')}>
+                        {statusText(view.boostStatus, t)}
+                    </span>
                 </div>
                 {actions.keyUnlockButton}
             </StatCell>
             <StatCell label={t('app.turbo')}>
-                <div className={`text-sm font-semibold tabular-nums ${view.turboStatus.colorClass}`}>
-                    {statusText(view.turboStatus, t)}
+                <div className={STAT_VALUE}>
+                    <span className={statusBadgeClass(view.turboStatus.colorClass, 'md')}>
+                        {statusText(view.turboStatus, t)}
+                    </span>
                 </div>
                 {actions.earnTurboButton}
                 {turboError && <InlineError onDismiss={clearTurboError}>{turboError}</InlineError>}
             </StatCell>
             <StatCell label={t('app.yourEntries')}>
-                <div className="text-sm font-semibold tabular-nums">
+                <div className={STAT_VALUE}>
                     {view.entries.length}/{challenge.max_photo_submits}
                 </div>
                 {view.canFill && (
@@ -474,16 +481,16 @@ export function ChallengeCardDetail({
             {/* Challenge Statistics — stacks 2-up on phones, 4-up on tablets+. */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <StatCell label={t('app.entries')}>
-                    <div className="text-sm font-semibold tabular-nums">{challenge.entries.toLocaleString()}</div>
+                    <div className={STAT_VALUE}>{challenge.entries.toLocaleString()}</div>
                 </StatCell>
                 <StatCell label={t('app.players')}>
-                    <div className="text-sm font-semibold tabular-nums">{challenge.players.toLocaleString()}</div>
+                    <div className={STAT_VALUE}>{challenge.players.toLocaleString()}</div>
                 </StatCell>
                 <StatCell label={t('app.votes')}>
-                    <div className="text-sm font-semibold tabular-nums">{(challenge.votes ?? 0).toLocaleString()}</div>
+                    <div className={STAT_VALUE}>{(challenge.votes ?? 0).toLocaleString()}</div>
                 </StatCell>
                 <StatCell label={t('app.prize')}>
-                    <div className="text-sm font-semibold tabular-nums">{challenge.prizes_worth}</div>
+                    <div className={STAT_VALUE}>{challenge.prizes_worth}</div>
                 </StatCell>
             </div>
 

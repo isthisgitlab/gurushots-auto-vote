@@ -226,7 +226,7 @@ describe('ChallengeCard rendering', () => {
     test('the countdown text updates through its signal without re-rendering the card', () => {
         const time = signal<string | null>('5m 0s');
         renderCard(challengeWith({ turbo: { state: 'FREE' }, boost: { state: 'USED' } }), time);
-        expect(screen.getByText('5m 0s').className).toBe('badge badge-sm h-auto badge-success');
+        expect(screen.getByText('5m 0s').className).toBe('badge h-auto badge-success');
         const afterMount = mockRenders.count;
 
         act(() => {
@@ -236,7 +236,7 @@ describe('ChallengeCard rendering', () => {
         act(() => {
             time.value = null;
         });
-        expect(screen.getByText('app.ended').className).toBe('badge badge-sm h-auto badge-error');
+        expect(screen.getByText('app.ended').className).toBe('badge h-auto badge-error');
         expect(mockRenders.count).toBe(afterMount);
     });
 });
@@ -267,39 +267,39 @@ describe('Countdown', () => {
         });
 
         test('an ended challenge is the red badge, at the requested size', () => {
-            render(<Countdown source={null} closeTime={nowSec() + 100} size="xs" />);
-            expect(screen.getByText('app.ended').className).toBe('badge badge-xs badge-error');
+            render(<Countdown source={null} closeTime={nowSec() + 100} size="sm" />);
+            expect(screen.getByText('app.ended').className).toBe('badge badge-sm badge-error');
         });
 
         test('the badge steps green, yellow, red as the clock nears the close, flipping at the hour boundaries', () => {
             const closeTime = nowSec() + 25_000;
             const time = signal<string | null>('6h 56m');
             render(<Countdown source={time} closeTime={closeTime} />);
-            expect(screen.getByText('6h 56m').className).toBe('badge badge-sm h-auto badge-success');
+            expect(screen.getByText('6h 56m').className).toBe('badge h-auto badge-success');
 
             // 21600s left: still green; one second more and it is yellow, as the text drops to 5h 59m.
             act(() => {
                 setNow(3_400);
                 time.value = '6h 0m';
             });
-            expect(screen.getByText('6h 0m').className).toBe('badge badge-sm h-auto badge-success');
+            expect(screen.getByText('6h 0m').className).toBe('badge h-auto badge-success');
             act(() => {
                 setNow(3_401);
                 time.value = '5h 59m';
             });
-            expect(screen.getByText('5h 59m').className).toBe('badge badge-sm h-auto badge-warning');
+            expect(screen.getByText('5h 59m').className).toBe('badge h-auto badge-warning');
 
             // 3600s left: still yellow; one second more and it is red, as the text drops to 59m 59s.
             act(() => {
                 setNow(21_400);
                 time.value = '1h 0m';
             });
-            expect(screen.getByText('1h 0m').className).toBe('badge badge-sm h-auto badge-warning');
+            expect(screen.getByText('1h 0m').className).toBe('badge h-auto badge-warning');
             act(() => {
                 setNow(21_401);
                 time.value = '59m 59s';
             });
-            expect(screen.getByText('59m 59s').className).toBe('badge badge-sm h-auto badge-error');
+            expect(screen.getByText('59m 59s').className).toBe('badge h-auto badge-error');
         });
     });
 });

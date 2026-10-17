@@ -29,20 +29,32 @@ export const timeLeftTone = (closeTime: number, nowSec: number): StatTone => {
  */
 export const exposureBand = (factor: number): StatTone => (factor < 50 ? 'warning' : 'success');
 
-// The sm badge is `h-auto` so a long countdown (Latvian `2d 3h 5min` in a narrow cell) wraps to two lines instead of
-// spilling out of daisyUI's fixed badge height.
-const BADGE_CLASS: Record<'sm' | 'xs', Record<StatTone, string>> = {
-    sm: {
-        success: 'badge badge-sm h-auto badge-success',
-        warning: 'badge badge-sm h-auto badge-warning',
-        error: 'badge badge-sm h-auto badge-error',
+type BadgeTone = StatTone | 'info';
+type BadgeSize = 'md' | 'sm';
+
+// The md badge is `h-auto` so a long countdown (Latvian `2d 3h 5min`) or boost/turbo status in a narrow cell wraps to
+// two lines instead of spilling out of daisyUI's fixed badge height.
+const BADGE_CLASS: Record<BadgeSize, Record<BadgeTone, string>> = {
+    md: {
+        success: 'badge h-auto badge-success',
+        warning: 'badge h-auto badge-warning',
+        error: 'badge h-auto badge-error',
+        info: 'badge h-auto badge-info',
     },
-    xs: {
-        success: 'badge badge-xs badge-success',
-        warning: 'badge badge-xs badge-warning',
-        error: 'badge badge-xs badge-error',
+    sm: {
+        success: 'badge badge-sm badge-success',
+        warning: 'badge badge-sm badge-warning',
+        error: 'badge badge-sm badge-error',
+        info: 'badge badge-sm badge-info',
     },
 };
+
+const STATUS_TONE = new Map<string, BadgeTone>([
+    ['text-info', 'info'],
+    ['text-success', 'success'],
+    ['text-warning', 'warning'],
+    ['text-error', 'error'],
+]);
 
 /**
  * The daisyUI badge classes for a tone, or an empty string when there is no tone (nothing to colour).
@@ -50,5 +62,17 @@ const BADGE_CLASS: Record<'sm' | 'xs', Record<StatTone, string>> = {
  * @param tone - The stat's tone, or null for none
  * @param size - Badge size
  */
-export const toneBadgeClass = (tone: StatTone | null, size: 'sm' | 'xs'): string =>
+export const toneBadgeClass = (tone: StatTone | null, size: BadgeSize): string =>
     tone === null ? '' : BADGE_CLASS[size][tone];
+
+/**
+ * A boost or turbo status as a badge when its text colour is a tone, else the colour class unchanged: a muted state
+ * such as "Locked" stays muted text.
+ *
+ * @param colorClass - The status's text colour class from the formatters
+ * @param size - Badge size
+ */
+export const statusBadgeClass = (colorClass: string, size: BadgeSize): string => {
+    const tone = STATUS_TONE.get(colorClass);
+    return tone === undefined ? colorClass : BADGE_CLASS[size][tone];
+};

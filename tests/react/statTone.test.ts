@@ -3,9 +3,11 @@
  * flag, and the exposure tone the card view derives from them.
  */
 
-import { exposureBand, timeLeftTone, toneBadgeClass } from '@/utils/statTone';
+import { exposureBand, statusBadgeClass, timeLeftTone, toneBadgeClass } from '@/utils/statTone';
 import { isChallengeLive } from '@/utils/challengeAlerts';
 import { deriveChallengeCardView } from '@/utils/challengeCardView';
+import { getBoostStatus, getTurboStatus } from '@/utils/formatters';
+import { invalid } from '../helpers/invalid';
 import { buildChallenge } from '../helpers/challengeFixtures';
 
 const NOW = 500_000;
@@ -33,19 +35,71 @@ describe('exposureBand', () => {
 
 describe('toneBadgeClass', () => {
     test.each([
-        ['success', 'sm', 'badge badge-sm h-auto badge-success'],
-        ['warning', 'sm', 'badge badge-sm h-auto badge-warning'],
-        ['error', 'sm', 'badge badge-sm h-auto badge-error'],
-        ['success', 'xs', 'badge badge-xs badge-success'],
-        ['warning', 'xs', 'badge badge-xs badge-warning'],
-        ['error', 'xs', 'badge badge-xs badge-error'],
+        ['success', 'md', 'badge h-auto badge-success'],
+        ['warning', 'md', 'badge h-auto badge-warning'],
+        ['error', 'md', 'badge h-auto badge-error'],
+        ['success', 'sm', 'badge badge-sm badge-success'],
+        ['warning', 'sm', 'badge badge-sm badge-warning'],
+        ['error', 'sm', 'badge badge-sm badge-error'],
     ] as const)('%s at %s', (tone, size, expected) => {
         expect(toneBadgeClass(tone, size)).toBe(expected);
     });
 
     test('no tone is no class', () => {
+        expect(toneBadgeClass(null, 'md')).toBe('');
         expect(toneBadgeClass(null, 'sm')).toBe('');
-        expect(toneBadgeClass(null, 'xs')).toBe('');
+    });
+});
+
+describe('statusBadgeClass', () => {
+    test.each([
+        ['text-info', 'md', 'badge h-auto badge-info'],
+        ['text-success', 'md', 'badge h-auto badge-success'],
+        ['text-warning', 'md', 'badge h-auto badge-warning'],
+        ['text-error', 'md', 'badge h-auto badge-error'],
+        ['text-info', 'sm', 'badge badge-sm badge-info'],
+        ['text-success', 'sm', 'badge badge-sm badge-success'],
+        ['text-warning', 'sm', 'badge badge-sm badge-warning'],
+        ['text-error', 'sm', 'badge badge-sm badge-error'],
+    ] as const)('%s at %s is a badge', (colorClass, size, expected) => {
+        expect(statusBadgeClass(colorClass, size)).toBe(expected);
+    });
+
+    test('a name from the object prototype stays as it is', () => {
+        expect(statusBadgeClass('constructor', 'md')).toBe('constructor');
+    });
+
+    test('a muted colour stays as it is', () => {
+        expect(statusBadgeClass('text-base-content/60', 'md')).toBe('text-base-content/60');
+        expect(statusBadgeClass('text-base-content/60', 'sm')).toBe('text-base-content/60');
+    });
+});
+
+describe('formatter colour classes', () => {
+    const inFuture = Math.floor(Date.now() / 1000) + 600;
+    const boosts = [
+        null,
+        { state: '' },
+        { state: 'AVAILABLE', timeout: inFuture },
+        { state: 'AVAILABLE', timeout: 0 },
+        { state: 'AVAILABLE_KEY', timeout: 0 },
+        { state: 'USED' },
+        { state: 'UNAVAILABLE' },
+        { state: 'LOCKED' },
+        { state: 'SOMETHING_NEW' },
+    ];
+    const turbos = [
+        null,
+        ...['FREE', 'TIMER', 'IN_PROGRESS', 'WON', 'USED', 'UNAVAILABLE', 'LOCKED', 'SOMETHING_NEW'],
+    ].map((state) => (state === null ? null : { state }));
+
+    // A new colour class from the formatters must either become a badge in statusBadgeClass or be the muted one.
+    test.each([
+        ...boosts.map((boost) => [`boost ${JSON.stringify(boost)}`, getBoostStatus(invalid(boost)).colorClass]),
+        ...turbos.map((turbo) => [`turbo ${JSON.stringify(turbo)}`, getTurboStatus(invalid(turbo)).colorClass]),
+    ])('%s', (_name, colorClass) => {
+        const rendered = statusBadgeClass(colorClass, 'md');
+        expect(rendered.startsWith('badge ') || rendered === 'text-base-content/60').toBe(true);
     });
 });
 
@@ -62,7 +116,7 @@ describe('isChallengeLive', () => {
 });
 
 describe('deriveChallengeCardView exposureTone', () => {
-    const toneOf = (factor: number, times: { start_time?: number; close_time?: number } = {}) =>
+    const toneOf = (factor: number | undefined, times: { start_time?: number; close_time?: number } = {}) =>
         deriveChallengeCardView(
             buildChallenge({
                 start_time: NOW - 100,
@@ -77,6 +131,10 @@ describe('deriveChallengeCardView exposureTone', () => {
         expect(toneOf(10)).toBe('error');
         expect(toneOf(10.5)).toBe('warning');
         expect(toneOf(50)).toBe('success');
+    });
+
+    test('has no tone when the exposure figure is missing', () => {
+        expect(toneOf(undefined)).toBeNull();
     });
 
     test('has no tone before the start or after the close', () => {

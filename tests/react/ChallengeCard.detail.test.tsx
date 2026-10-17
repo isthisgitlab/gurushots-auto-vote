@@ -295,22 +295,22 @@ describe('header', () => {
 describe('time text', () => {
     test('reads a signal value, in a green badge with more than six hours left', () => {
         renderCard(makeChallenge({ close_time: nowSec() + 30_000 }), { timeRemaining: signal('5m') });
-        expect(screen.getByText('5m').className).toBe('badge badge-sm h-auto badge-success');
+        expect(screen.getByText('5m').className).toBe('badge h-auto badge-success');
     });
 
     test('marks an ended challenge (null) with the red badge, worded in the UI language', () => {
         renderCard(makeChallenge(), { timeRemaining: null });
-        expect(screen.getByText('app.ended').className).toBe('badge badge-sm h-auto badge-error');
+        expect(screen.getByText('app.ended').className).toBe('badge h-auto badge-error');
     });
 
     test('a plain countdown string is a yellow badge between one and six hours left', () => {
         renderCard(makeChallenge({ close_time: nowSec() + 7_200 }), { timeRemaining: '1h 2m' });
-        expect(screen.getByText('1h 2m').className).toBe('badge badge-sm h-auto badge-warning');
+        expect(screen.getByText('1h 2m').className).toBe('badge h-auto badge-warning');
     });
 
     test('the countdown is a red badge under an hour left', () => {
         renderCard(makeChallenge({ close_time: nowSec() + 600 }), { timeRemaining: '9m' });
-        expect(screen.getByText('9m').className).toBe('badge badge-sm h-auto badge-error');
+        expect(screen.getByText('9m').className).toBe('badge h-auto badge-error');
     });
 
     test('falls back to the loading label', () => {
@@ -944,7 +944,7 @@ describe('entries, tags and alerts', () => {
         card.scrollIntoView = jest.fn();
         scrollToChallenge(101);
         expect(document.activeElement).toBe(card);
-        expect(screen.getByText('5%').className).toBe('badge badge-sm h-auto badge-error');
+        expect(screen.getByText('5%').className).toBe('badge h-auto badge-error');
     });
 
     test('a healthy card has a plain border and no ring', () => {
@@ -952,12 +952,51 @@ describe('entries, tags and alerts', () => {
         const card = container.querySelector('#challenge-101')!;
         expect(card.className).toMatch(/^border rounded-lg/);
         expect(card.className).not.toContain('ring-2');
-        expect(screen.getByText('80%').className).toBe('badge badge-sm h-auto badge-success');
+        expect(screen.getByText('80%').className).toBe('badge h-auto badge-success');
+    });
+
+    test('boost and turbo statuses are badges in their tone, and a muted state stays plain text', () => {
+        const states = (boost: string, turbo: string) => ({
+            member: {
+                boost: { state: boost, timeout: 0 },
+                turbo: { state: turbo, mode: 'classic', time_to_open: null },
+                ranking: {
+                    entries: [],
+                    exposure: { exposure_factor: 55 },
+                    total: { votes: 0, rank: 0, level: 0, percent: 0, next_message: '' },
+                },
+            },
+        });
+        const cases: Array<[string, string, string, string, string, string]> = [
+            [
+                'AVAILABLE_KEY',
+                'app.available',
+                'IN_PROGRESS',
+                'app.stateInProgress',
+                'badge h-auto badge-info',
+                'badge h-auto badge-warning',
+            ],
+            ['USED', 'app.used', 'FREE', 'app.stateFree', 'badge h-auto badge-success', 'badge h-auto badge-info'],
+            [
+                'LOCKED',
+                'app.stateLocked',
+                'UNAVAILABLE',
+                'app.unavailable',
+                'text-base-content/60',
+                'text-base-content/60',
+            ],
+        ];
+        for (const [boost, boostText, turbo, turboText, boostClass, turboClass] of cases) {
+            const view = renderCard(makeChallenge(states(boost, turbo)));
+            expect(screen.getByText(boostText).className).toBe(boostClass);
+            expect(screen.getByText(turboText).className).toBe(turboClass);
+            view.unmount();
+        }
     });
 
     test('exposure is a yellow badge under 50%, and plain before the start or after the close', () => {
         const low = renderCard(makeChallenge({ member: { ranking: { exposure: { exposure_factor: 30 } } } }));
-        expect(screen.getByText('30%').className).toBe('badge badge-sm h-auto badge-warning');
+        expect(screen.getByText('30%').className).toBe('badge h-auto badge-warning');
         low.unmount();
         const notStarted = renderCard(makeChallenge({ start_time: nowSec() + 600 }));
         expect(screen.getByText('80%').className).toBe('');
