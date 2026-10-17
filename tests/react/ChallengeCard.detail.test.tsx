@@ -293,19 +293,24 @@ describe('header', () => {
 });
 
 describe('time text', () => {
-    test('reads a signal value', () => {
-        renderCard(makeChallenge(), { timeRemaining: signal('5m') });
-        expect(screen.getByText('5m').className).toBe('');
+    test('reads a signal value, in a green badge with more than six hours left', () => {
+        renderCard(makeChallenge({ close_time: nowSec() + 30_000 }), { timeRemaining: signal('5m') });
+        expect(screen.getByText('5m').className).toBe('badge badge-sm h-auto badge-success');
     });
 
-    test('marks an ended challenge (null) in red, worded in the UI language', () => {
+    test('marks an ended challenge (null) with the red badge, worded in the UI language', () => {
         renderCard(makeChallenge(), { timeRemaining: null });
-        expect(screen.getByText('app.ended').className).toBe('text-error');
+        expect(screen.getByText('app.ended').className).toBe('badge badge-sm h-auto badge-error');
     });
 
-    test('a plain countdown string carries no colour', () => {
-        renderCard(makeChallenge(), { timeRemaining: '1h 2m' });
-        expect(screen.getByText('1h 2m').className).toBe('');
+    test('a plain countdown string is a yellow badge between one and six hours left', () => {
+        renderCard(makeChallenge({ close_time: nowSec() + 7_200 }), { timeRemaining: '1h 2m' });
+        expect(screen.getByText('1h 2m').className).toBe('badge badge-sm h-auto badge-warning');
+    });
+
+    test('the countdown is a red badge under an hour left', () => {
+        renderCard(makeChallenge({ close_time: nowSec() + 600 }), { timeRemaining: '9m' });
+        expect(screen.getByText('9m').className).toBe('badge badge-sm h-auto badge-error');
     });
 
     test('falls back to the loading label', () => {
@@ -939,7 +944,7 @@ describe('entries, tags and alerts', () => {
         card.scrollIntoView = jest.fn();
         scrollToChallenge(101);
         expect(document.activeElement).toBe(card);
-        expect(screen.getByText('5%').className).toBe('text-error font-bold');
+        expect(screen.getByText('5%').className).toBe('badge badge-sm h-auto badge-error');
     });
 
     test('a healthy card has a plain border and no ring', () => {
@@ -947,6 +952,17 @@ describe('entries, tags and alerts', () => {
         const card = container.querySelector('#challenge-101')!;
         expect(card.className).toMatch(/^border rounded-lg/);
         expect(card.className).not.toContain('ring-2');
+        expect(screen.getByText('80%').className).toBe('badge badge-sm h-auto badge-success');
+    });
+
+    test('exposure is a yellow badge under 50%, and plain before the start or after the close', () => {
+        const low = renderCard(makeChallenge({ member: { ranking: { exposure: { exposure_factor: 30 } } } }));
+        expect(screen.getByText('30%').className).toBe('badge badge-sm h-auto badge-warning');
+        low.unmount();
+        const notStarted = renderCard(makeChallenge({ start_time: nowSec() + 600 }));
+        expect(screen.getByText('80%').className).toBe('');
+        notStarted.unmount();
+        renderCard(makeChallenge({ close_time: nowSec() - 600 }));
         expect(screen.getByText('80%').className).toBe('');
     });
 

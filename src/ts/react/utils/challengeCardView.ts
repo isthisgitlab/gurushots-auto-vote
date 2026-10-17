@@ -1,7 +1,9 @@
 import type { Bankroll, Challenge } from '../../types/gurushots';
 import type { RankedChallenge } from '../../types/rendererUtils';
 import { formatDuration, getBoostStatus, getTurboStatus, isBoostWindowOpen } from '@/utils/formatters';
-import { isLowExposure } from '@/utils/challengeAlerts';
+import { isChallengeLive, isLowExposure } from '@/utils/challengeAlerts';
+import { exposureBand } from '@/utils/statTone';
+import type { StatTone } from '@/utils/statTone';
 import { canKeyUnlock, canSwapEntry, canFillExposure } from '../../voting/currencyActions';
 import { finiteOr } from '../../numbers';
 import { isKnownTurboMode } from '../../voting/turboMode';
@@ -110,6 +112,11 @@ export function deriveChallengeCardView(
     // exposure figure, so the card stands out in a long list without reading it.
     const boostOpen = isBoostWindowOpen(member.boost, now);
     const lowExposure = isLowExposure(challenge, now);
+    let exposureTone: StatTone | null = null;
+    if (lowExposure) exposureTone = 'error';
+    else if (isChallengeLive(challenge, now) && typeof exposureFactor === 'number') {
+        exposureTone = exposureBand(exposureFactor);
+    }
 
     return {
         member,
@@ -134,7 +141,7 @@ export function deriveChallengeCardView(
                 ? formatDuration(finiteOr(member.boost.timeout, 0) - now)
                 : null,
         lowExposure,
-        exposureClass: lowExposure ? 'text-error font-bold' : '',
+        exposureTone,
         cardAlertClass: `${lowExposure ? 'border-2 border-error' : 'border'}${boostOpen ? ' ring-2 ring-info ring-offset-2 ring-offset-base-100' : ''}`,
         // Manual Only stops the auto-submit, so its badge gives way to the manual-only one.
         showAutoSubmitBadge: autoSubmitEnabled && !manualPhotosOnly && slotsRemaining > 0,

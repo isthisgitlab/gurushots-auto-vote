@@ -57,7 +57,7 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 // A running challenge where every action would be offered in detailed mode:
 // started, exposure < 100 (Vote), free turbo (Earn turbo), open slots (+1),
 // available boost + an un-actioned entry (per-entry Boost).
-const makeChallenge = () =>
+const makeChallenge = (overrides = {}) =>
     buildChallenge({
         id: 202,
         title: 'Harbour Lights',
@@ -85,6 +85,7 @@ const makeChallenge = () =>
                 total: { votes: 46, rank: 17, level: 1, level_name: 'POPULAR', percent: 30, next_message: '' },
             },
         },
+        ...overrides,
     });
 
 const renderCard = (
@@ -129,13 +130,42 @@ describe('compact ChallengeCard tile', () => {
         expect(buttons[0].textContent).toContain('app.details');
     });
 
-    test('an ended countdown is shown in red, a running one uncoloured', () => {
+    test('an ended countdown is a red badge, a running one a green, yellow or red badge by time left', () => {
         // null is the countdown of a challenge that has ended; the card words it in the UI's language.
         const { unmount } = renderCard(makeChallenge(), null);
-        expect(screen.getByText('app.ended').className).toContain('text-error');
+        expect(screen.getByText('app.ended').className).toBe('badge badge-xs badge-error font-medium');
         unmount();
-        renderCard();
-        expect(screen.getByText('2h 30m').className).not.toContain('text-');
+        const cases: Array<[number, string]> = [
+            [30_000, 'badge-success'],
+            [7_200, 'badge-warning'],
+            [600, 'badge-error'],
+        ];
+        for (const [secondsLeft, tone] of cases) {
+            const view = renderCard(makeChallenge({ close_time: nowSec() + secondsLeft }));
+            expect(screen.getByText('2h 30m').className).toBe(`badge badge-xs ${tone} font-medium`);
+            view.unmount();
+        }
+    });
+
+    test('the exposure figure is a badge by its band, and plain before the start or after the close', () => {
+        const exposureOf = (factor: number) => ({
+            member: { ranking: { entries: [], exposure: { exposure_factor: factor } } },
+        });
+        const cases: Array<[number, string]> = [
+            [5, 'badge badge-xs badge-error'],
+            [30, 'badge badge-xs badge-warning'],
+            [55, 'badge badge-xs badge-success'],
+        ];
+        for (const [factor, className] of cases) {
+            const view = renderCard(makeChallenge(exposureOf(factor)));
+            expect(screen.getByText(`${factor}%`).className).toBe(className);
+            view.unmount();
+        }
+        const notStarted = renderCard(makeChallenge({ ...exposureOf(55), start_time: nowSec() + 600 }));
+        expect(screen.getByText('55%').className).toBe('');
+        notStarted.unmount();
+        renderCard(makeChallenge({ ...exposureOf(55), close_time: nowSec() - 600 }));
+        expect(screen.getByText('55%').className).toBe('');
     });
 
     test('toggle calls toggleCompact', () => {

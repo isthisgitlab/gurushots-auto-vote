@@ -3,6 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getLevelStatus, isBoostAvailable, statusText } from '@/utils/formatters';
 import { getNextLevelInfo } from '@/utils/challengeCardView';
 import { sanitizeWelcomeMessage } from '@/utils/sanitizeWelcomeMessage';
+import { toneBadgeClass } from '@/utils/statTone';
 import { Countdown } from './Countdown';
 import type { TimeRemaining } from './Countdown';
 import { DeadlineTimeline } from './DeadlineTimeline';
@@ -40,8 +41,8 @@ export type EntryPinsState = ReturnType<typeof useEntryPinsModule.useEntryPins>;
  */
 function StatCell({ label, children }: { label: string; children: ComponentChildren }) {
     return (
-        <div className="text-center p-2 bg-base-200 rounded">
-            <div className="font-medium">{label}</div>
+        <div className="bg-base-200 rounded-box p-2 text-center flex flex-col gap-1">
+            <div className="text-xs font-medium text-base-content/70">{label}</div>
             {children}
         </div>
     );
@@ -190,44 +191,44 @@ function StatusCells({
     return (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
             <StatCell label={t('app.time')}>
-                <div>
-                    <Countdown source={timeRemaining} />
+                <div className="text-sm font-semibold tabular-nums">
+                    <Countdown source={timeRemaining} closeTime={challenge.close_time} />
                 </div>
             </StatCell>
             <StatCell label={t('app.ends')}>
-                <div className="text-xs">{formatEndTime(challenge.close_time, timezone)}</div>
+                <div className="text-xs font-semibold tabular-nums">
+                    {formatEndTime(challenge.close_time, timezone)}
+                </div>
             </StatCell>
             <StatCell label={t('app.exposure')}>
-                <div className={view.exposureClass}>{view.exposureFactor}%</div>
+                <div className="text-sm font-semibold tabular-nums">
+                    <span className={toneBadgeClass(view.exposureTone, 'sm')}>{view.exposureFactor}%</span>
+                </div>
                 {actions.fillExposureButton}
             </StatCell>
             <StatCell label={t('app.boost')}>
-                <div className={view.boostStatus.colorClass}>{statusText(view.boostStatus, t)}</div>
+                <div className={`text-sm font-semibold tabular-nums ${view.boostStatus.colorClass}`}>
+                    {statusText(view.boostStatus, t)}
+                </div>
                 {actions.keyUnlockButton}
             </StatCell>
             <StatCell label={t('app.turbo')}>
-                <div className={view.turboStatus.colorClass}>{statusText(view.turboStatus, t)}</div>
+                <div className={`text-sm font-semibold tabular-nums ${view.turboStatus.colorClass}`}>
+                    {statusText(view.turboStatus, t)}
+                </div>
                 {actions.earnTurboButton}
-                {turboError && (
-                    <InlineError className="mt-1" onDismiss={clearTurboError}>
-                        {turboError}
-                    </InlineError>
-                )}
+                {turboError && <InlineError onDismiss={clearTurboError}>{turboError}</InlineError>}
             </StatCell>
             <StatCell label={t('app.yourEntries')}>
-                <div>
+                <div className="text-sm font-semibold tabular-nums">
                     {view.entries.length}/{challenge.max_photo_submits}
                 </div>
                 {view.canFill && (
-                    <div className="flex flex-wrap gap-1 mt-1 justify-center">
+                    <div className="flex flex-wrap gap-1 justify-center">
                         <FillButtons {...actions.fillButtonProps} />
                     </div>
                 )}
-                {fillError && (
-                    <InlineError className="mt-1" onDismiss={clearFillError}>
-                        {fillError}
-                    </InlineError>
-                )}
+                {fillError && <InlineError onDismiss={clearFillError}>{fillError}</InlineError>}
             </StatCell>
         </div>
     );
@@ -473,16 +474,16 @@ export function ChallengeCardDetail({
             {/* Challenge Statistics — stacks 2-up on phones, 4-up on tablets+. */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <StatCell label={t('app.entries')}>
-                    <div>{challenge.entries.toLocaleString()}</div>
+                    <div className="text-sm font-semibold tabular-nums">{challenge.entries.toLocaleString()}</div>
                 </StatCell>
                 <StatCell label={t('app.players')}>
-                    <div>{challenge.players.toLocaleString()}</div>
+                    <div className="text-sm font-semibold tabular-nums">{challenge.players.toLocaleString()}</div>
                 </StatCell>
                 <StatCell label={t('app.votes')}>
-                    <div>{(challenge.votes ?? 0).toLocaleString()}</div>
+                    <div className="text-sm font-semibold tabular-nums">{(challenge.votes ?? 0).toLocaleString()}</div>
                 </StatCell>
                 <StatCell label={t('app.prize')}>
-                    <div>{challenge.prizes_worth}</div>
+                    <div className="text-sm font-semibold tabular-nums">{challenge.prizes_worth}</div>
                 </StatCell>
             </div>
 

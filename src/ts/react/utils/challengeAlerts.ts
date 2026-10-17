@@ -20,6 +20,15 @@ import type { RankedChallenge } from '../../types/rendererUtils';
 export const LOW_EXPOSURE_THRESHOLD = 10;
 
 /**
+ * Whether a challenge is running: started and not yet closed.
+ *
+ * @param challenge - Active challenge from the API
+ * @param now - Current time (Unix seconds)
+ */
+export const isChallengeLive = (challenge: Challenge, now: number): boolean =>
+    challenge.start_time < now && challenge.close_time > now;
+
+/**
  * Whether a challenge's exposure is low enough to flag. Only running
  * challenges count: before start there is nothing to vote for, and after close
  * a 0% is final rather than actionable.
@@ -30,7 +39,7 @@ export const LOW_EXPOSURE_THRESHOLD = 10;
 export const isLowExposure = (challenge: Challenge, now: number): boolean => {
     const exposure = challenge?.member?.ranking?.exposure?.exposure_factor;
     if (typeof exposure !== 'number') return false;
-    if (!(challenge.start_time < now) || !(challenge.close_time > now)) return false;
+    if (!isChallengeLive(challenge, now)) return false;
     return exposure <= LOW_EXPOSURE_THRESHOLD;
 };
 

@@ -6,6 +6,7 @@ import type { ChallengeCardView } from './ChallengeCard';
 import type { ChallengeBadgeRowProps } from './ChallengeBadgeRow';
 import type { DeadlineAction } from './DeadlineTimeline';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { toneBadgeClass } from '@/utils/statTone';
 import { getEntryStatus, statusText } from '@/utils/formatters';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
 import { CardDensityToggle } from './CardDensityToggle';
@@ -63,7 +64,7 @@ export function ChallengeCardCompact({
     badgeRowProps,
     timeRemaining,
     exposureFactor,
-    exposureClass,
+    exposureTone,
     boostStatus,
     turboStatus,
     entries,
@@ -81,7 +82,7 @@ export function ChallengeCardCompact({
     badgeRowProps: ChallengeBadgeRowProps;
     timeRemaining: TimeRemaining;
     exposureFactor: ChallengeCardView['exposureFactor'];
-    exposureClass: ChallengeCardView['exposureClass'];
+    exposureTone: ChallengeCardView['exposureTone'];
     boostStatus: ChallengeCardView['boostStatus'];
     turboStatus: ChallengeCardView['turboStatus'];
     entries: ChallengeCardView['entries'];
@@ -127,10 +128,15 @@ export function ChallengeCardCompact({
 
             <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-base-content/80">
                 <Stat icon="⏱" label={t('app.time')}>
-                    <Countdown source={timeRemaining} className="font-medium" />
+                    <Countdown
+                        source={timeRemaining}
+                        className="font-medium"
+                        closeTime={challenge.close_time}
+                        size="xs"
+                    />
                 </Stat>
-                <Stat icon="📊" label={t('app.exposure')} className={exposureClass}>
-                    {exposureFactor}%
+                <Stat icon="📊" label={t('app.exposure')}>
+                    <span className={toneBadgeClass(exposureTone, 'xs')}>{exposureFactor}%</span>
                 </Stat>
                 <Stat icon="🏆" label={t('app.rank')}>
                     {hasRank ? `${rank.toLocaleString()} / ${challenge.players.toLocaleString()}` : '—'}

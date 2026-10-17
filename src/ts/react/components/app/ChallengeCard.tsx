@@ -157,7 +157,7 @@ export function ChallengeCard({
                 badgeRowProps={badgeRowProps}
                 timeRemaining={timeRemaining}
                 exposureFactor={view.exposureFactor}
-                exposureClass={view.exposureClass}
+                exposureTone={view.exposureTone}
                 boostStatus={view.boostStatus}
                 turboStatus={view.turboStatus}
                 entries={view.entries}
