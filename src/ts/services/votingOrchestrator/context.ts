@@ -62,6 +62,8 @@ export type PassContext = {
     missionVoteQuota: number;
     allChallenges: Challenge[];
     turboSnapshot: number;
+    /** Snap games played so far this pass: one per pass, so the pass is not held up by ten paced answers per challenge. */
+    snapGames: { played: number };
 };
 
 type FillDeps = ReturnType<typeof buildFillDeps>;

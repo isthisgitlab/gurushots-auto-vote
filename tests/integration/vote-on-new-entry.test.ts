@@ -56,7 +56,14 @@ const makeApi = (challenge: Challenge) => ({
     applyTurbo: jest.fn(async () => ({ ok: true })),
     getEligiblePhotos: jest.fn(async () => []),
     submitToChallenge: jest.fn(async () => ({ ok: true })),
-    runTurboMiniGame: jest.fn(async () => ({ played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false })),
+    runTurboGame: jest.fn(async () => ({
+        kind: 'classic',
+        played: 0,
+        correct: 0,
+        flipped: 0,
+        doubleFailed: 0,
+        won: false,
+    })),
 });
 
 const SETTING_DEFAULTS = {

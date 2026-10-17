@@ -86,9 +86,9 @@ describe('no-token contract for every endpoint not covered elsewhere', () => {
     test.each([
         ['applyTurbo', () => mockApiClient.applyTurbo(1, 'img', invalid(null)), { ok: false, raw: null }],
         [
-            'runTurboMiniGame',
-            () => mockApiClient.runTurboMiniGame(invalid({ id: 1 }), invalid(null)),
-            { played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false },
+            'runTurboGame',
+            () => mockApiClient.runTurboGame(invalid({ id: 1 }), invalid(null)),
+            { kind: 'classic', played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false },
         ],
         ['getEligiblePhotos', () => mockApiClient.getEligiblePhotos(1, invalid(null)), []],
         [
@@ -132,15 +132,29 @@ describe('turbo', () => {
         expect(cat.debug).toHaveBeenCalledWith('Image ID: img', null);
     });
 
-    test('runTurboMiniGame reports one won battle', async () => {
-        await expect(settle(mockApiClient.runTurboMiniGame(invalid({ id: 5 }), 'tok'))).resolves.toEqual({
+    test('runTurboGame reports a won Snap game for a Snap challenge', async () => {
+        await expect(
+            settle(mockApiClient.runTurboGame(invalid({ id: 5, member: { turbo: { mode: 'snap' } } }), 'tok')),
+        ).resolves.toEqual({
+            kind: 'snap',
+            answered: 10,
+            total: 10,
+            meanAgreement: 72,
+            won: true,
+            stopReason: 'completed',
+        });
+    });
+
+    test('runTurboGame reports one won battle for a classic challenge', async () => {
+        await expect(settle(mockApiClient.runTurboGame(invalid({ id: 5 }), 'tok'))).resolves.toEqual({
+            kind: 'classic',
             played: 1,
             correct: 1,
             flipped: 0,
             doubleFailed: 0,
             won: true,
         });
-        expect(cat.api).toHaveBeenCalledWith('Mock runTurboMiniGame', null);
+        expect(cat.api).toHaveBeenCalledWith('Mock runTurboGame', null);
     });
 });
 

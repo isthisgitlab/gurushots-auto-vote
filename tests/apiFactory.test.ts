@@ -42,7 +42,7 @@ jest.mock('../src/ts/mock', () => ({
         authenticate: jest.fn(),
         fetchChallengesAndVote: jest.fn(),
         applyBoostsOnSuspend: jest.fn(),
-        runTurboMiniGame: jest.fn(),
+        runTurboGame: jest.fn(),
         getActiveChallenges: jest.fn(),
         getVoteImages: jest.fn(),
         submitVotes: jest.fn(),

@@ -146,7 +146,14 @@ const makeApi = (live: Challenge) => ({
     getEligiblePhotos: jest.fn(async () => photos()),
     getImageData: jest.fn(async () => null),
     submitToChallenge: jest.fn(async () => ({ ok: true, raw: { success: true } })),
-    runTurboMiniGame: jest.fn(async () => ({ played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false })),
+    runTurboGame: jest.fn(async () => ({
+        kind: 'classic',
+        played: 0,
+        correct: 0,
+        flipped: 0,
+        doubleFailed: 0,
+        won: false,
+    })),
 });
 
 const run = (api: ReturnType<typeof makeApi>) =>
@@ -233,7 +240,7 @@ describe('a pass over a challenge every automatic photo path wants', () => {
         expect(api.applyBoost).not.toHaveBeenCalled();
         expect(api.applyBoostToEntry).not.toHaveBeenCalled();
         expect(api.applyTurbo).not.toHaveBeenCalled();
-        expect(api.runTurboMiniGame).not.toHaveBeenCalled();
+        expect(api.runTurboGame).not.toHaveBeenCalled();
         expect(api.submitVotes).not.toHaveBeenCalled();
     });
 

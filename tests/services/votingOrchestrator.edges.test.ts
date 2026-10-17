@@ -100,7 +100,14 @@ const makeApi = (challenges: Challenge[]) => ({
     applyBoost: jest.fn(async () => ({ success: true })),
     applyBoostToEntry: jest.fn(async () => ({ success: true })),
     applyTurbo: jest.fn(async () => ({ ok: true })),
-    runTurboMiniGame: jest.fn(async () => ({ played: 1 })),
+    runTurboGame: jest.fn(async () => ({
+        kind: 'classic',
+        played: 1,
+        correct: 0,
+        flipped: 0,
+        doubleFailed: 0,
+        won: false,
+    })),
 });
 
 const run = (api: ReturnType<typeof makeApi>, over: Partial<VotingPassDeps> = {}) =>
@@ -611,7 +618,7 @@ describe('emergency fill and turbo mini-game', () => {
     test('a turbo mini-game Error is reported by message and the pass continues', async () => {
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         const api = makeApi([withBoost({ state: 'LOCKED', timeout: 0 })]);
-        api.runTurboMiniGame.mockRejectedValue(new Error('game crashed'));
+        api.runTurboGame.mockRejectedValue(new Error('game crashed'));
         const result = await run(api);
         expect(result.success).toBe(true);
         expect(log.endOperation).toHaveBeenCalledWith('turbo-earn-101', null, 'game crashed');
@@ -620,7 +627,7 @@ describe('emergency fill and turbo mini-game', () => {
     test('a turbo mini-game non-Error throw is reported verbatim', async () => {
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         const api = makeApi([withBoost({ state: 'LOCKED', timeout: 0 })]);
-        api.runTurboMiniGame.mockRejectedValue('nope');
+        api.runTurboGame.mockRejectedValue('nope');
         await run(api);
         expect(log.endOperation).toHaveBeenCalledWith('turbo-earn-101', null, 'nope');
     });

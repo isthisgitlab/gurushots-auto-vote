@@ -56,7 +56,7 @@ const VOTING_PASS_ENDPOINTS = [
     'getEligiblePhotosWalk',
     'getImageData',
     'submitToChallenge',
-    'runTurboMiniGame',
+    'runTurboGame',
     'searchTagAutocomplete',
     'getCurrentMemberProfile',
 ] as const;

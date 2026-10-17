@@ -11,7 +11,7 @@ import { authenticate } from './endpoints/login';
 import { getActiveChallenges as getActiveChallengesRaw } from './endpoints/challenges';
 import { getVoteImages, submitVotes } from './endpoints/voting';
 import { applyBoost, applyBoostToEntry } from './endpoints/boost';
-import { applyTurbo, runTurboMiniGame } from './endpoints/turbo';
+import { applyTurbo, runTurboGame } from './endpoints/turbo';
 import {
     getEligiblePhotos,
     getEligiblePhotosWalk,
@@ -54,7 +54,7 @@ const endpoints = {
     applyBoost,
     applyBoostToEntry,
     applyTurbo,
-    runTurboMiniGame,
+    runTurboGame,
     getEligiblePhotos,
     getEligiblePhotosWalk,
     getImageData,

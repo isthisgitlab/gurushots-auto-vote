@@ -1,6 +1,7 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
 import { openBoostWindows } from '../../../voting/boostWindow';
+import { isKnownTurboMode } from '../../../voting/turboMode';
 import { useTick } from '@/hooks/useTick';
 import { lowExposureChallenges, missedBoostChallenges } from '@/utils/challengeAlerts';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
@@ -13,16 +14,15 @@ import type { Bankroll, Challenge, MemberTurbo } from '../../../types/gurushots'
 
 // A turbo is "available" for this challenge when it's ready to apply (WON, in a
 // known mode — a mode-less one is the mobile copy, whose WON can be false for a
-// Snap game) or ready to earn (FREE / in progress / cooldown elapsed) as a
-// classic game; an earnable one whose mode is Snap or unknown is not counted.
+// Snap game) or ready to earn (FREE / in progress / cooldown elapsed) in a known
+// mode (classic or Snap); an earnable one whose mode is unknown is not counted.
 /**
  * @param now - Unix seconds
  */
 const isTurboAvailable = (turbo: MemberTurbo | undefined, now: number) => {
     const state = turbo?.state;
-    if (state === 'WON') return turbo?.mode === 'classic' || turbo?.mode === 'snap';
-    if (turbo?.mode !== 'classic') return false;
-    if (state === 'FREE' || state === 'IN_PROGRESS') return true;
+    if (!isKnownTurboMode(turbo)) return false;
+    if (state === 'WON' || state === 'FREE' || state === 'IN_PROGRESS') return true;
     return state === 'TIMER' && typeof turbo?.time_to_open === 'number' && turbo.time_to_open <= now;
 };
 

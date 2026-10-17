@@ -3,10 +3,11 @@ import * as settings from '../../settings';
 import * as votingLogic from '../VotingLogic';
 import * as autoFill from '../autoFill';
 import { consumeMission } from '../missions';
+import { isCancelled } from '../../voting/cancellation';
 import { claimTurboRun, releaseTurboRun, wasManualTurboRunSince } from '../turboRunLock';
 import { failureText, oneLine } from '../../format/logSafe';
 
-import type { Challenge } from '../../types/gurushots';
+import type { Challenge, TurboGameResult } from '../../types/gurushots';
 import type { ActionContext, PassContext } from './context';
 
 /**
@@ -147,6 +148,14 @@ export const runTurboApply = async (ctx: ActionContext) => {
     await applyTurboToEntry(ctx, target.imageId, turboApply.pinFallback);
 };
 
+// Snap answers are paced at seconds each, so a pass plays one game and the rest wait for the next pass.
+const MAX_SNAP_GAMES_PER_PASS = 1;
+
+const turboGameSummary = (result: TurboGameResult): string =>
+    result.kind === 'snap'
+        ? `answered=${result.answered}/${result.total} meanAgreement=${result.meanAgreement === null ? 'n/a' : `${result.meanAgreement.toFixed(0)}%`} stopReason=${result.stopReason} won=${result.won}`
+        : `played=${result.played} correct=${result.correct} flipped=${result.flipped} doubleFailed=${result.doubleFailed} won=${result.won}`;
+
 /**
  * Auto-earn turbo by playing the mini-game when eligible. This has no
  * close-time threshold (it plays whenever a turbo is winnable). It runs ahead
@@ -157,9 +166,16 @@ export const runTurboApply = async (ctx: ActionContext) => {
 export const playAutoTurbo = async (
     challenge: Challenge,
     now: number,
-    { api, token, missions, refreshMissionNeeds, turboSnapshot }: PassContext,
+    { api, token, missions, refreshMissionNeeds, turboSnapshot, snapGames }: PassContext,
 ) => {
     if (!votingLogic.shouldPlayAutoTurbo(challenge, now)) return;
+    const isSnap = challenge.member?.turbo?.mode === 'snap';
+    if (isSnap && snapGames.played >= MAX_SNAP_GAMES_PER_PASS) {
+        logger
+            .withCategory('turbo')
+            .debug(`${logger.challengeTag(challenge)} Snap turbo left for a later pass (one Snap game per pass)`, null);
+        return;
+    }
     const savedForMission = votingLogic.isTurboEarnSaved(challenge, now);
     if (savedForMission && missions && missions.turbo > 0 && refreshMissionNeeds) {
         const fresh = await refreshMissionNeeds();
@@ -173,19 +189,19 @@ export const playAutoTurbo = async (
         return;
     }
     if (!claimTurboRun(challenge.id)) return;
+    if (isSnap) snapGames.played++;
     const purpose = missionWants ? ` for the turbo mission (${missions?.turbo} to go)` : '';
     logger
         .withCategory('turbo')
         .startOperation(`turbo-earn-${challenge.id}`, `Playing turbo mini-game on ${challenge.title}${purpose}`);
     try {
-        const result = await api.runTurboMiniGame(challenge, token);
+        const result = await api.runTurboGame(challenge, token, { isCancelled });
         if (result.won) {
             consumeMission(missions, 'turbo');
             // The API confirmed the win; let this pass's apply decision see it.
             if (challenge.member?.turbo) challenge.member.turbo.state = 'WON';
         }
-        const summary = `played=${result.played} correct=${result.correct} flipped=${result.flipped} doubleFailed=${result.doubleFailed} won=${result.won}`;
-        logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, summary);
+        logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, turboGameSummary(result));
     } catch (error) {
         logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, null, failureText(error));
     } finally {

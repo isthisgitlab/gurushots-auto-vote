@@ -11,6 +11,7 @@ import * as settings from '../../settings';
 // cycle: autoFill.ts does not require VotingLogic).
 import { getNextScheduleThresholdSec, evaluateEmergencyFill, getSlotsRemaining } from '../autoFill';
 import { boostApplyThreshold } from '../../voting/boostWindow';
+import { isKnownTurboMode } from '../../voting/turboMode';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
 import { isBoostWindowOpen } from './boostTurbo';
 import {
@@ -183,6 +184,7 @@ const describeConflicts = (challenge: Challenge, challengeId: string, now: numbe
     const rawBoostBlocked = isBoostBlocked(challenge, challengeId, now);
     const rawTurboBlocked =
         challenge?.member?.turbo?.state === 'WON' &&
+        isKnownTurboMode(challenge.member.turbo) &&
         hasEntries &&
         pickTurboEntry(challenge, challengeId, now) === null &&
         !(hasFreeSlot && resolveTurboFillNewMode(challenge, challengeId) !== 'no');
@@ -265,6 +267,7 @@ const describeDeadlineActions = (
                 // A turbo that can't be placed must not appear as an upcoming action either.
                 return (
                     turboState === 'WON' &&
+                    isKnownTurboMode(challenge?.member?.turbo) &&
                     settings.getEffectiveSetting('useTurbo', challengeId) === true &&
                     !turboRowHidden
                 );

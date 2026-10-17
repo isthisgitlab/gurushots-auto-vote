@@ -6,6 +6,8 @@ import type { Challenge } from '../../types/gurushots';
 
 import * as settings from '../../settings';
 import { isBoostWindowOpen as boostWindowOpen } from '../../voting/boostWindow';
+import { isKnownTurboMode } from '../../voting/turboMode';
+import { isSnapUnavailable } from '../turboRunLock';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
 import { isWithinEmergencyWindow, pickTurboEntry, resolvePin, resolveTurboFillNewMode } from './entryPick';
 
@@ -156,10 +158,12 @@ const shouldPlayAutoTurbo = (challenge: Challenge, now: number): boolean => {
     const challengeId = challenge.id?.toString?.() || '';
     if (!settings.getEffectiveSetting('autoTurbo', challengeId)) return false;
 
-    const turbo = challenge.member?.turbo || {};
-    // The classic turbo call on a Snap challenge makes the server swap in a classic
-    // game, so only a turbo known to be classic is played (no mode = unknown).
-    if (turbo.mode !== 'classic') return false;
+    // Classic and Snap each have a runner; a turbo without a mode is unknown and never played. A challenge
+    // marked Snap-unavailable is left alone whatever mode the web read reports for it now: a Snap that was
+    // withdrawn must not be won as a classic game.
+    const turbo = challenge.member?.turbo;
+    if (!turbo || !isKnownTurboMode(turbo)) return false;
+    if (isSnapUnavailable(challenge.id)) return false;
     const state = turbo.state;
     if (state === 'FREE' || state === 'IN_PROGRESS') return true;
     if (state === 'TIMER' && typeof turbo.time_to_open === 'number' && turbo.time_to_open <= now) {
@@ -230,8 +234,7 @@ const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergenc
 
     const turbo = challenge.member?.turbo || {};
     if (turbo.state !== 'WON') return noop(`turbo state ${turbo.state || 'unknown'}`);
-    // A turbo without a mode is the mobile copy, whose WON can be false for a Snap game.
-    if (turbo.mode !== 'classic' && turbo.mode !== 'snap') return noop('turbo mode unknown');
+    if (!isKnownTurboMode(turbo)) return noop('turbo mode unknown');
 
     if (!emergency) {
         const effectiveTurboTime = getEffectiveTurboTime(challengeId);

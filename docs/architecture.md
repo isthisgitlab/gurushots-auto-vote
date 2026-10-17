@@ -230,6 +230,17 @@ Domain terms used throughout, in reader's terms:
   `getActiveChallenges` calls per token and pins first-seen titles via `services/challengeTitlePin.ts` on a
   successful fetch only). `apiFactory.ts` assembles the real surface from these and selects it or
   `mock/index.ts#mockApiClient`.
+- **Turbo games**: which game a turbo is — `member.turbo.mode`, `'classic'` or `'snap'` — comes only from the web
+  read overlaid in `strategies/real/activeChallenges.ts`; a turbo without a mode is unknown and is never played,
+  nor is its WON trusted (`isKnownTurboMode`, `voting/turboMode.ts`). `runTurboGame` (`strategies/real/index.ts`)
+  dispatches on the mode: classic runs the battle loop over `get_challenge_turbo` exactly as before, Snap
+  (`strategies/real/snapGame.ts`) opens `start_turbo_session` and answers each photo with `submit_snap_vote`,
+  yes or no by the local vision model (`judgeSnapImage`), paced at 3–6 s a photo; the tenth answer wins, and a
+  reopened session resumes at the server's `position`. A Snap is **never** played as classic —
+  `get_challenge_turbo` on a Snap challenge makes the server swap a classic game in — and an answer is sent
+  once, an unclear one never resent. The automatic pass plays one Snap game per pass; one that turns out not
+  playable (withdrawn, unreadable question, dead session) is remembered in-process (`markSnapUnavailable`,
+  `services/turboRunLock.ts`) and skipped by `shouldPlayAutoTurbo`, while a manual run ignores the marker.
 - Every POST goes through `api/api-client.ts`. `makePostRequest<T>()`, used by every request but a spend, has this
   **contract: it returns the response body as `T` on success and `null` on ultimate failure or when the body is
   not a JSON object — it never throws.** Every caller branches on `null`, not on a catch. Only the object check

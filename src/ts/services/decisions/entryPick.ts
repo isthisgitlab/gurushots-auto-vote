@@ -13,6 +13,7 @@ import { boostDeadline, isBoostWindowOpen } from '../../voting/boostWindow';
 // 0 = last / 1-4 = slot addressing, shared with the swap automation.
 import { resolveEntryIndex } from '../../voting/entrySlot';
 import { canStillFire, findPinnedEntry } from '../../voting/entryPins';
+import { isKnownTurboMode } from '../../voting/turboMode';
 import { isManualPhotosOnly } from '../manualPhotosOnly';
 
 /**
@@ -89,7 +90,9 @@ const pinBlockOf = (challenge: Challenge, challengeId: string, kind: EntryPinKin
     const id = livePinnedId(challenge, challengeId, kind);
     if (id === null) return null;
     const ready =
-        kind === 'turbo' ? challenge?.member?.turbo?.state === 'WON' : isBoostWindowOpen(challenge?.member?.boost, now);
+        kind === 'turbo'
+            ? challenge?.member?.turbo?.state === 'WON' && isKnownTurboMode(challenge.member.turbo)
+            : isBoostWindowOpen(challenge?.member?.boost, now);
     const emergencySeconds = settings.getEffectiveSetting('emergencySubmit', challengeId);
     // A pin for Turbo blocks a Boost, so the deadline is the boost's; a pin for Boost blocks a Turbo.
     const deadline = kind === 'turbo' ? boostDeadline(challenge) : Number(challenge?.close_time);

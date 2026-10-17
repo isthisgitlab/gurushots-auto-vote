@@ -20,10 +20,16 @@ jest.mock('../../src/ts/windows/quitGuard', () => ({ rememberChallenges: jest.fn
 
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
-import { claimTurboRun, releaseTurboRun } from '../../src/ts/services/turboRunLock';
+import {
+    __resetSnapUnavailableForTests,
+    claimTurboRun,
+    markSnapUnavailable,
+    releaseTurboRun,
+} from '../../src/ts/services/turboRunLock';
 import { registerMissionNeeds } from '../../src/ts/services/missions';
 import { clearOpenChallenges } from '../../src/ts/services/openChallengeCache';
 import { isPlainObject } from '../../src/ts/plainObject';
+import type { TurboGameResult } from '../../src/ts/types/gurushots';
 import type { JoinSingleResult } from '../../src/ts/services/joinChallenges/shared';
 import type { ForgetOutcome } from '../../src/ts/services/joinChallenges/forgetPayment';
 
@@ -68,7 +74,7 @@ const stubStrategy = <O extends object = {}>(overrides: O = invalid<O>({})) => {
         applyBoostToEntry: jest.fn(),
         getEligiblePhotos: jest.fn(),
         submitToChallenge: jest.fn(),
-        runTurboMiniGame: jest.fn(),
+        runTurboGame: jest.fn(),
         getCurrentMemberProfile: jest.fn(),
         ...overrides,
     };
@@ -339,14 +345,21 @@ describe('play-auto-turbo', () => {
             }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
-        strategy.runTurboMiniGame.mockResolvedValue({ played: 5, correct: 5, won: true, flipped: 0, doubleFailed: 0 });
+        strategy.runTurboGame.mockResolvedValue({
+            kind: 'classic',
+            played: 5,
+            correct: 5,
+            won: true,
+            flipped: 0,
+            doubleFailed: 0,
+        });
         const handlers = buildHandlers();
         const needs = { join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 };
         const unregister = registerMissionNeeds('tok', needs);
         try {
             const result = await handlers['play-auto-turbo']({}, '123', 'C');
             expect(result.success).toBe(true);
-            expect(strategy.runTurboMiniGame).toHaveBeenCalled();
+            expect(strategy.runTurboGame).toHaveBeenCalled();
             expect(needs.turbo).toBe(0);
         } finally {
             unregister?.();
@@ -362,7 +375,7 @@ describe('play-auto-turbo', () => {
                 .mockResolvedValue({ challenges: [{ id: 123, title: 'C', close_time: now + 3600 }] }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-        strategy.runTurboMiniGame.mockResolvedValue({ played: 0, correct: 0, won: false });
+        strategy.runTurboGame.mockResolvedValue({ kind: 'classic', played: 0, correct: 0, won: false });
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result).toMatchObject({ success: false, error: 'No battles to play right now' });
@@ -377,14 +390,21 @@ describe('play-auto-turbo', () => {
                 .mockResolvedValue({ challenges: [{ id: 123, title: 'C', close_time: now + 3600 }] }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-        strategy.runTurboMiniGame.mockResolvedValue({ played: 5, correct: 0, won: false, flipped: 5, doubleFailed: 1 });
+        strategy.runTurboGame.mockResolvedValue({
+            kind: 'classic',
+            played: 5,
+            correct: 0,
+            won: false,
+            flipped: 5,
+            doubleFailed: 1,
+        });
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result.success).toBe(false);
         expect(result.error).toMatch(/not earned/i);
         // Whitelist check: only the documented fields are forwarded.
         expect(Object.keys((result as Extract<typeof result, { result: unknown }>).result || {}).sort()).toEqual(
-            ['correct', 'doubleFailed', 'flipped', 'played', 'won'].sort(),
+            ['correct', 'doubleFailed', 'flipped', 'kind', 'played', 'won'].sort(),
         );
     });
 
@@ -398,7 +418,7 @@ describe('play-auto-turbo', () => {
         });
         const strategy = stubStrategy({ getActiveChallenges: jest.fn().mockReturnValue(firstHang) });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-        strategy.runTurboMiniGame.mockResolvedValue({ played: 5, correct: 5, won: true });
+        strategy.runTurboGame.mockResolvedValue({ kind: 'classic', played: 5, correct: 5, won: true });
         const handlers = buildHandlers();
 
         const firstPromise = handlers['play-auto-turbo']({}, '123', 'C');
@@ -568,7 +588,7 @@ describe('id-taking action handlers — invalid args', () => {
                 for (const fn of [
                     strategy.applyTurbo,
                     strategy.applyBoostToEntry,
-                    strategy.runTurboMiniGame,
+                    strategy.runTurboGame,
                     strategy.joinChallenge,
                 ]) {
                     expect(fn).not.toHaveBeenCalled();
@@ -594,7 +614,7 @@ describe('id-taking action handlers — invalid args', () => {
                 getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge()] }),
             });
             votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-            strategy.runTurboMiniGame.mockResolvedValue({
+            strategy.runTurboGame.mockResolvedValue({
                 played: 1,
                 correct: 1,
                 won: false,
@@ -602,7 +622,7 @@ describe('id-taking action handlers — invalid args', () => {
                 doubleFailed: 0,
             });
             await buildHandlers()['play-auto-turbo']({}, id, 'Title');
-            expect(strategy.runTurboMiniGame).toHaveBeenCalledTimes(1);
+            expect(strategy.runTurboGame).toHaveBeenCalledTimes(1);
         });
 
         test('fill-challenge-now fills the challenge', async () => {
@@ -1686,6 +1706,18 @@ describe('authenticate — error fallback', () => {
 });
 
 describe('play-auto-turbo — manual bypass and result shaping', () => {
+    beforeEach(() => __resetSnapUnavailableForTests());
+
+    const snapResult = (overrides: Partial<Extract<TurboGameResult, { kind: 'snap' }>> = {}) => ({
+        kind: 'snap' as const,
+        answered: 10,
+        total: 10,
+        meanAgreement: 72,
+        won: true,
+        stopReason: 'completed' as const,
+        ...overrides,
+    });
+
     const liveTurboChallenge = (overrides = {}) => ({
         id: 123,
         title: 'Live Title',
@@ -1706,12 +1738,19 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
             }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
-        strategy.runTurboMiniGame.mockResolvedValue({ played: 3, correct: 3, won: true, flipped: 0, doubleFailed: 0 });
+        strategy.runTurboGame.mockResolvedValue({
+            kind: 'classic',
+            played: 3,
+            correct: 3,
+            won: true,
+            flipped: 0,
+            doubleFailed: 0,
+        });
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result).toEqual({
             success: true,
-            result: { played: 3, correct: 3, won: true, flipped: 0, doubleFailed: 0 },
+            result: { kind: 'classic', played: 3, correct: 3, won: true, flipped: 0, doubleFailed: 0 },
         });
     });
 
@@ -1730,14 +1769,14 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result).toEqual({ success: false, error: 'Turbo not playable (state=TIMER)' });
-        expect(strategy.runTurboMiniGame).not.toHaveBeenCalled();
+        expect(strategy.runTurboGame).not.toHaveBeenCalled();
     });
 
     test.each([
         ['FREE', 'FREE'],
         ['IN_PROGRESS', 'IN_PROGRESS'],
         ['TIMER', 'TIMER'],
-    ])('refuses a Snap-mode %s turbo without playing it', async (state) => {
+    ])('plays a Snap-mode %s turbo through the manual bypass', async (state) => {
         setToken('tok');
         const strategy = stubStrategy({
             getActiveChallenges: jest.fn().mockResolvedValue({
@@ -1747,13 +1786,14 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
             }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        strategy.runTurboGame.mockResolvedValue(snapResult());
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
-        expect(result).toEqual({ success: false, error: 'Turbo is a Snap game; play it on GuruShots' });
-        expect(strategy.runTurboMiniGame).not.toHaveBeenCalled();
+        expect(result).toEqual({ success: true, result: snapResult() });
+        expect(strategy.runTurboGame).toHaveBeenCalledTimes(1);
     });
 
-    test('names an unknown state when refusing a Snap-mode turbo that has none', async () => {
+    test('a Snap turbo that is not playable is refused with its state', async () => {
         setToken('tok');
         const strategy = stubStrategy({
             getActiveChallenges: jest.fn().mockResolvedValue({
@@ -1763,8 +1803,77 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
-        expect(result).toEqual({ success: false, error: 'Turbo is a Snap game; play it on GuruShots' });
-        expect(strategy.runTurboMiniGame).not.toHaveBeenCalled();
+        expect(result).toEqual({ success: false, error: 'Turbo not playable (state=unknown)' });
+        expect(strategy.runTurboGame).not.toHaveBeenCalled();
+    });
+
+    test('a manual run ignores the unavailable marker, so the user can retry a Snap', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { state: 'FREE', mode: 'snap' } } })],
+            }),
+        });
+        markSnapUnavailable(123);
+        // The real decision (autoTurbo off in the stubbed settings) declines; the manual path still plays.
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        strategy.runTurboGame.mockResolvedValue(snapResult());
+        const handlers = buildHandlers();
+        await expect(handlers['play-auto-turbo']({}, '123', 'C')).resolves.toMatchObject({ success: true });
+        expect(strategy.runTurboGame).toHaveBeenCalledTimes(1);
+    });
+
+    test('a manual run passes no cancellation, so a stopped autovote does not stop it', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { state: 'FREE', mode: 'snap' } } })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
+        strategy.runTurboGame.mockResolvedValue(snapResult());
+        await buildHandlers()['play-auto-turbo']({}, '123', 'C');
+        expect(strategy.runTurboGame.mock.calls[0]).toHaveLength(2);
+    });
+
+    test.each([
+        ['no-model', 'Snap needs the vision model, which this build does not include'],
+        ['withdrawn', 'Snap is no longer offered for this challenge'],
+        ['unavailable', 'Snap is no longer offered for this challenge'],
+        ['unparsed-caption', 'Snap question could not be answered'],
+        ['judge-failed', 'Snap question could not be answered'],
+        ['request-failed', 'Snap was interrupted; try again later'],
+        ['vote-unclear', 'Snap was interrupted; try again later'],
+        ['cancelled', 'Snap was interrupted; try again later'],
+    ] as const)('a Snap game that stopped on %s answers with a fixed error', async (stopReason, error) => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { state: 'FREE', mode: 'snap' } } })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
+        const stopped = snapResult({ answered: 4, meanAgreement: 61, won: false, stopReason });
+        strategy.runTurboGame.mockResolvedValue(stopped);
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toEqual({ success: false, error, result: stopped });
+    });
+
+    test('a Snap result is whitelisted field by field', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { state: 'FREE', mode: 'snap' } } })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
+        strategy.runTurboGame.mockResolvedValue({ ...snapResult(), secret: 'leak' } as ReturnType<typeof snapResult>);
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(Object.keys((result as Extract<typeof result, { result: unknown }>).result || {}).sort()).toEqual(
+            ['answered', 'kind', 'meanAgreement', 'stopReason', 'total', 'won'].sort(),
+        );
     });
 
     test('a classic-mode FREE turbo still plays through the manual bypass', async () => {
@@ -1775,11 +1884,18 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
             }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
-        strategy.runTurboMiniGame.mockResolvedValue({ played: 3, correct: 3, won: true, flipped: 0, doubleFailed: 0 });
+        strategy.runTurboGame.mockResolvedValue({
+            kind: 'classic',
+            played: 3,
+            correct: 3,
+            won: true,
+            flipped: 0,
+            doubleFailed: 0,
+        });
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result).toMatchObject({ success: true });
-        expect(strategy.runTurboMiniGame).toHaveBeenCalledTimes(1);
+        expect(strategy.runTurboGame).toHaveBeenCalledTimes(1);
     });
 
     test('refuses a turbo with no mode without playing it', async () => {
@@ -1793,7 +1909,7 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result).toEqual({ success: false, error: 'Turbo mode unknown; try again later' });
-        expect(strategy.runTurboMiniGame).not.toHaveBeenCalled();
+        expect(strategy.runTurboGame).not.toHaveBeenCalled();
     });
 
     test('reports state=unknown when the challenge has no turbo state', async () => {
@@ -1828,17 +1944,17 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
             getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveTurboChallenge({ title: '' })] }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-        strategy.runTurboMiniGame.mockResolvedValue({ played: 1, correct: 1 });
+        strategy.runTurboGame.mockResolvedValue({ kind: 'classic', played: 1, correct: 1 });
         const handlers = buildHandlers();
 
         await handlers['play-auto-turbo']({}, '123', 'Caller Title');
-        expect(strategy.runTurboMiniGame).toHaveBeenLastCalledWith(
+        expect(strategy.runTurboGame).toHaveBeenLastCalledWith(
             expect.objectContaining({ id: 123, title: 'Caller Title' }),
             'tok',
         );
 
         await handlers['play-auto-turbo']({}, '123', invalid(undefined));
-        expect(strategy.runTurboMiniGame).toHaveBeenLastCalledWith(
+        expect(strategy.runTurboGame).toHaveBeenLastCalledWith(
             expect.objectContaining({ id: 123, title: 'challenge 123' }),
             'tok',
         );
@@ -1850,7 +1966,7 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
             getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveTurboChallenge()] }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-        strategy.runTurboMiniGame.mockResolvedValue(null);
+        strategy.runTurboGame.mockResolvedValue(null);
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result).toEqual({ success: false, error: 'Turbo not earned — try again later', result: null });

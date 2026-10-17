@@ -1,7 +1,8 @@
 /**
  * Unit tests for the real-strategy binder in src/ts/strategies/real/index.ts:
- *   - runTurboMiniGame: the pair-by-pair Turbo mini-game loop (first pick, flip
- *     on a wrong pick, early stop on WON, skip of resolved / malformed battles);
+ *   - runTurboGame: the classic pair-by-pair Turbo mini-game loop (first pick, flip
+ *     on a wrong pick, early stop on WON, skip of resolved / malformed battles)
+ *     and the dispatch by turbo mode (classic / Snap / unknown);
  *   - joinChallenge: the manual single-join wrapper (spendCoins must be `true`
  *     exactly — anything truthy-but-not-true must not spend coins);
  *   - fetchChallengesAndVote: the join and claim pre-step gating and the deps it hands to
@@ -13,6 +14,7 @@
 jest.mock('../../src/ts/strategies/real/activeChallenges', () => ({ getActiveChallenges: jest.fn() }));
 jest.mock('../../src/ts/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
 jest.mock('../../src/ts/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
+jest.mock('../../src/ts/strategies/real/snapGame', () => ({ runSnapGame: jest.fn() }));
 jest.mock('../../src/ts/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
 jest.mock('../../src/ts/api/turbo', () => ({
     getChallengeTurbo: jest.fn(),
@@ -106,14 +108,17 @@ import type * as votingOrchestratorModule from '../../src/ts/services/votingOrch
 import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
 import type * as autoClaimModule from '../../src/ts/services/autoClaim';
 import type * as missionsModule from '../../src/ts/services/missions';
+import type * as snapGameModule from '../../src/ts/strategies/real/snapGame';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 
-const { runTurboMiniGame, joinChallenge, fetchChallengesAndVote } = main;
+const { runTurboGame, joinChallenge, fetchChallengesAndVote } = main;
+const { runSnapGame } = jest.mocked(require('../../src/ts/strategies/real/snapGame') as typeof snapGameModule);
 
-// A partial challenge: the mini-game reads only its id and title.
-const CHALLENGE = invalid<Challenge>({ id: 42, title: 'Turbo Test' });
+// A partial challenge: the mini-game reads only its id, title and turbo mode.
+const CHALLENGE = invalid<Challenge>({ id: 42, title: 'Turbo Test', member: { turbo: { mode: 'classic' } } });
+const SNAP_CHALLENGE = invalid<Challenge>({ id: 43, title: 'Snap Test', member: { turbo: { mode: 'snap' } } });
 
 const scopedWarnings = () =>
     jest
@@ -155,13 +160,13 @@ describe('module wiring', () => {
     });
 });
 
-describe('runTurboMiniGame', () => {
+describe('runTurboGame (classic)', () => {
     test('returns an all-zero summary and warns when no battle set is returned', async () => {
         turbo.getChallengeTurbo.mockResolvedValue(null);
 
-        const result = await runTurboMiniGame(CHALLENGE, 'tok');
+        const result = await runTurboGame(CHALLENGE, 'tok');
 
-        expect(result).toEqual({ played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false });
+        expect(result).toEqual({ kind: 'classic', played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false });
         expect(turbo.getChallengeTurbo).toHaveBeenCalledWith(42, 'tok');
         expect(turbo.submitTurboSelection).not.toHaveBeenCalled();
         expect(scopedWarnings()).toEqual([expect.stringContaining('No turbo battle set returned')]);
@@ -177,9 +182,9 @@ describe('runTurboMiniGame', () => {
             ],
         });
 
-        const result = await runTurboMiniGame(CHALLENGE, 'tok');
+        const result = await runTurboGame(CHALLENGE, 'tok');
 
-        expect(result).toEqual({ played: 0, correct: 0, flipped: 0, doubleFailed: 2, won: false });
+        expect(result).toEqual({ kind: 'classic', played: 0, correct: 0, flipped: 0, doubleFailed: 2, won: false });
         expect(turbo.submitTurboSelection).not.toHaveBeenCalled();
         expect(timing.sleep).not.toHaveBeenCalled();
     });
@@ -190,9 +195,9 @@ describe('runTurboMiniGame', () => {
         });
         turbo.submitTurboSelection.mockResolvedValue(invalid({ ok: true, state: 'PLAYING' }));
 
-        const result = await runTurboMiniGame(CHALLENGE, 'tok');
+        const result = await runTurboGame(CHALLENGE, 'tok');
 
-        expect(result).toEqual({ played: 2, correct: 2, flipped: 0, doubleFailed: 0, won: false });
+        expect(result).toEqual({ kind: 'classic', played: 2, correct: 2, flipped: 0, doubleFailed: 0, won: false });
         expect(turbo.submitTurboSelection.mock.calls).toEqual([
             [42, 'a1', 'tok'],
             [42, 'b1', 'tok'],
@@ -205,9 +210,9 @@ describe('runTurboMiniGame', () => {
         turbo.getChallengeTurbo.mockResolvedValue({ battles: [battle(), battle({ firstImageId: 'never' })] });
         turbo.submitTurboSelection.mockResolvedValue(invalid({ ok: true, state: 'WON' }));
 
-        const result = await runTurboMiniGame(CHALLENGE, 'tok');
+        const result = await runTurboGame(CHALLENGE, 'tok');
 
-        expect(result).toEqual({ played: 1, correct: 1, flipped: 0, doubleFailed: 0, won: true });
+        expect(result).toEqual({ kind: 'classic', played: 1, correct: 1, flipped: 0, doubleFailed: 0, won: true });
         expect(turbo.submitTurboSelection).toHaveBeenCalledTimes(1);
         expect(timing.sleep).not.toHaveBeenCalled();
     });
@@ -218,9 +223,9 @@ describe('runTurboMiniGame', () => {
             .mockResolvedValueOnce(invalid({ ok: false }))
             .mockResolvedValueOnce(invalid({ ok: true, state: 'PLAYING' }));
 
-        const result = await runTurboMiniGame(CHALLENGE, 'tok');
+        const result = await runTurboGame(CHALLENGE, 'tok');
 
-        expect(result).toEqual({ played: 1, correct: 1, flipped: 1, doubleFailed: 0, won: false });
+        expect(result).toEqual({ kind: 'classic', played: 1, correct: 1, flipped: 1, doubleFailed: 0, won: false });
         expect(turbo.submitTurboSelection.mock.calls).toEqual([
             [42, 'x1', 'tok'],
             [42, 'x2', 'tok'],
@@ -235,9 +240,9 @@ describe('runTurboMiniGame', () => {
             .mockResolvedValueOnce(invalid({ ok: false }))
             .mockResolvedValueOnce(invalid({ ok: true, state: 'WON' }));
 
-        const result = await runTurboMiniGame(CHALLENGE, 'tok');
+        const result = await runTurboGame(CHALLENGE, 'tok');
 
-        expect(result).toEqual({ played: 1, correct: 1, flipped: 1, doubleFailed: 0, won: true });
+        expect(result).toEqual({ kind: 'classic', played: 1, correct: 1, flipped: 1, doubleFailed: 0, won: true });
         expect(turbo.submitTurboSelection).toHaveBeenCalledTimes(2);
         expect(timing.sleep).toHaveBeenCalledTimes(1);
     });
@@ -248,9 +253,9 @@ describe('runTurboMiniGame', () => {
             .mockResolvedValueOnce(invalid({ ok: false, errorCode: 'FIRST' }))
             .mockResolvedValueOnce(invalid({ ok: false, errorCode: 'SECOND' }));
 
-        const result = await runTurboMiniGame(CHALLENGE, 'tok');
+        const result = await runTurboGame(CHALLENGE, 'tok');
 
-        expect(result).toEqual({ played: 1, correct: 0, flipped: 0, doubleFailed: 1, won: false });
+        expect(result).toEqual({ kind: 'classic', played: 1, correct: 0, flipped: 0, doubleFailed: 1, won: false });
         expect(scopedWarnings()).toEqual([expect.stringContaining('error_code=SECOND')]);
     });
 
@@ -260,7 +265,7 @@ describe('runTurboMiniGame', () => {
             .mockResolvedValueOnce(invalid({ ok: false, errorCode: 'FIRST' }))
             .mockResolvedValueOnce(invalid({ ok: false }));
 
-        await runTurboMiniGame(CHALLENGE, 'tok');
+        await runTurboGame(CHALLENGE, 'tok');
 
         expect(scopedWarnings()).toEqual([expect.stringContaining('error_code=FIRST')]);
     });
@@ -269,10 +274,60 @@ describe('runTurboMiniGame', () => {
         turbo.getChallengeTurbo.mockResolvedValue({ battles: [battle()] });
         turbo.submitTurboSelection.mockResolvedValue(invalid({ ok: false }));
 
-        const result = await runTurboMiniGame(CHALLENGE, 'tok');
+        const result = await runTurboGame(CHALLENGE, 'tok');
 
-        expect(result.doubleFailed).toBe(1);
+        expect(result).toMatchObject({ doubleFailed: 1 });
         expect(scopedWarnings()).toEqual([]);
+    });
+});
+
+describe('runTurboGame (dispatch)', () => {
+    test('a Snap turbo goes to the Snap runner and never opens the classic game', async () => {
+        const snap = {
+            answered: 10,
+            total: 10,
+            meanAgreement: 70,
+            won: true,
+            stopReason: 'completed',
+        } as const;
+        runSnapGame.mockResolvedValue(snap);
+
+        await expect(runTurboGame(SNAP_CHALLENGE, 'tok')).resolves.toEqual({ kind: 'snap', ...snap });
+
+        expect(runSnapGame).toHaveBeenCalledWith(SNAP_CHALLENGE, 'tok', {});
+        expect(turbo.getChallengeTurbo).not.toHaveBeenCalled();
+    });
+
+    test('hands the caller its options to the Snap runner', async () => {
+        const options = { isCancelled: () => true };
+        runSnapGame.mockResolvedValue({
+            answered: 0,
+            total: 0,
+            meanAgreement: null,
+            won: false,
+            stopReason: 'cancelled',
+        });
+
+        await runTurboGame(SNAP_CHALLENGE, 'tok', options);
+
+        expect(runSnapGame).toHaveBeenCalledWith(SNAP_CHALLENGE, 'tok', options);
+    });
+
+    test.each([[undefined], ['other']])('a turbo of mode %p is not played and is warned about', async (mode) => {
+        const challenge = invalid<Challenge>({ id: 44, title: 'Mystery', member: { turbo: { mode } } });
+
+        await expect(runTurboGame(challenge, 'tok')).resolves.toEqual({
+            kind: 'classic',
+            played: 0,
+            correct: 0,
+            flipped: 0,
+            doubleFailed: 0,
+            won: false,
+        });
+
+        expect(turbo.getChallengeTurbo).not.toHaveBeenCalled();
+        expect(runSnapGame).not.toHaveBeenCalled();
+        expect(scopedWarnings()).toEqual([expect.stringContaining('Turbo mode unknown')]);
     });
 });
 
@@ -511,7 +566,7 @@ describe('fetchChallengesAndVote', () => {
         // Real mode must keep the real cleanup — only the mock binder passes null.
         expect(deps.cleanupStaleMetadata).toBe(metadata.cleanupStaleMetadata);
         expect(deps.entryTracker).toEqual({ kind: 'metadata-tracker' });
-        expect(deps.api.runTurboMiniGame).toBe(runTurboMiniGame);
+        expect(deps.api.runTurboGame).toBe(runTurboGame);
         expect(deps.api.getCurrentMemberProfile).toBe(tags.getCurrentMemberProfile);
         expect(deps.api.searchTagAutocomplete).toBe(tags.searchTagAutocomplete);
         expect(deps.api.getImageData).toBe(submissions.getImageData);
@@ -526,7 +581,7 @@ describe('fetchChallengesAndVote', () => {
                 'getEligiblePhotosWalk',
                 'getImageData',
                 'getVoteImages',
-                'runTurboMiniGame',
+                'runTurboGame',
                 'searchTagAutocomplete',
                 'submitToChallenge',
                 'submitVotes',

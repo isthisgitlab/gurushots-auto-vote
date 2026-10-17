@@ -7,6 +7,7 @@ import * as logger from '../../logger';
 import * as settings from '../../settings';
 import * as cancellation from '../../voting/cancellation';
 import { shouldJoinChallenge } from '../VotingLogic';
+import { isKnownTurboMode } from '../../voting/turboMode';
 import { consumeMission } from '../missions';
 import type { Bankroll, Challenge } from '../../types/gurushots';
 import type { MissionNeeds } from '../missions';
@@ -74,7 +75,8 @@ const turboJoinsNeeded = async (
     for (const { remaining, expiresAtSec: deadline } of requirements) {
         const pending = challenges.filter((c) => {
             const state = c?.member?.turbo?.state ?? '';
-            if (!PENDING_TURBO_STATES.has(state)) return false;
+            // A turbo without a known mode is never played, so it earns nothing toward the mission.
+            if (!PENDING_TURBO_STATES.has(state) || !isKnownTurboMode(c?.member?.turbo)) return false;
             if (deadline === null) return true;
             const closes = Number(c?.close_time);
             if (!Number.isFinite(closes) || closes <= nowSec) return false;

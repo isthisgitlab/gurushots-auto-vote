@@ -4,6 +4,7 @@ import { formatDuration, getBoostStatus, getTurboStatus, isBoostWindowOpen } fro
 import { isLowExposure } from '@/utils/challengeAlerts';
 import { canKeyUnlock, canSwapEntry, canFillExposure } from '../../voting/currencyActions';
 import { finiteOr } from '../../numbers';
+import { isKnownTurboMode } from '../../voting/turboMode';
 
 const LEVEL_NAMES = ['', 'POPULAR', 'SKILLED', 'PREMIER', 'ELITE', 'ALL STAR'];
 
@@ -99,7 +100,7 @@ export function deriveChallengeCardView(
     const challengeStillOpen = challenge.close_time > now;
     const canPlayAutoTurbo =
         challengeStillOpen &&
-        member.turbo?.mode === 'classic' &&
+        isKnownTurboMode(member.turbo) &&
         (turboState === 'FREE' || turboState === 'IN_PROGRESS' || turboCooldownPassed);
 
     const slotsRemaining = Math.max(0, (challenge.max_photo_submits || 0) - entries.length);

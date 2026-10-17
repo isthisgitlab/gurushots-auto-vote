@@ -11,6 +11,7 @@ import { isManualPhotosOnly } from '../manualPhotosOnly';
 import { submitNewEntryForAction, reflectNewEntry, reflectEntryFlag, getSlotsRemaining } from '../autoFill';
 import { selectEntry, entriesOf } from '../../scenarios/selectors';
 import { isKeyUnlockedBoost } from '../../voting/boostWindow';
+import { isKnownTurboMode } from '../../voting/turboMode';
 import type {
     ActedChallenge,
     ActionHandler,
@@ -151,6 +152,8 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
         if (challenge.member?.turbo?.state !== 'WON') {
             return skipped(`no won turbo to apply (${challenge.member?.turbo?.state ?? 'unknown'})`);
         }
+        // A turbo without a mode is the mobile copy, whose WON can be false for a Snap game.
+        if (!isKnownTurboMode(challenge.member.turbo)) return skipped('the turbo mode is unknown');
         const target = selectEntry(action.entry, challenge, selectContext(state));
         if (!target) return skipped('no entry matches the turbo target');
         const result = await pass.api.applyTurbo(challenge.id, String(target.id), pass.token);

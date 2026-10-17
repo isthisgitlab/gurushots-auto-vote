@@ -317,6 +317,7 @@ const runVotingPass = async (
             ),
             allChallenges,
             turboSnapshot,
+            snapGames: { played: 0 },
         };
 
         // Process each challenge

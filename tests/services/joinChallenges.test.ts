@@ -1033,7 +1033,10 @@ describe('runJoinPass — join window', () => {
             makeDeps({
                 getMemberChallenges: openList([far(1), far(2), far(3)]),
                 getActiveChallenges: double<'getActiveChallenges'>(async () => ({
-                    challenges: joinedTurbos.map((state, i) => ({ id: 100 + i, member: { turbo: { state } } })),
+                    challenges: joinedTurbos.map((state, i) => ({
+                        id: 100 + i,
+                        member: { turbo: { state, mode: 'classic' } },
+                    })),
                 })),
             });
         const withJoinEarly = (on: boolean) =>
@@ -1142,6 +1145,22 @@ describe('runJoinPass — join window', () => {
             expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
         });
 
+        test('only a pending turbo of a known mode covers the mission (a mode-less one is never played)', async () => {
+            withJoinEarly(true);
+            const turbos = [
+                { id: 100, member: { turbo: { state: 'FREE', mode: 'snap' } } },
+                { id: 101, member: { turbo: { state: 'FREE' } } },
+                { id: 102, member: { turbo: { state: 'FREE', mode: 'other' } } },
+            ];
+            const deps = makeDeps({
+                getMemberChallenges: openList([far(1), far(2), far(3)]),
+                getActiveChallenges: double<'getActiveChallenges'>(async () => ({ challenges: turbos })),
+            });
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 3, boost: 0, vote: 0 });
+            // 3 wins needed, one pending Snap turbo counts: two early joins.
+            expect(statuses(res)).toEqual(['joined', 'joined', 'skipped:too-early']);
+        });
+
         test('a turbo whose timer opens after the mission expires does not suppress a timely join', async () => {
             withJoinEarly(true);
             settings.getEffectiveSetting.mockImplementation((k) =>
@@ -1154,7 +1173,7 @@ describe('runJoinPass — join window', () => {
                         {
                             id: 100,
                             close_time: NOW_SEC + 48 * HOUR,
-                            member: { turbo: { state: 'TIMER', time_to_open: NOW_SEC + 24 * HOUR } },
+                            member: { turbo: { mode: 'classic', state: 'TIMER', time_to_open: NOW_SEC + 24 * HOUR } },
                         },
                     ],
                 })),
@@ -1180,35 +1199,55 @@ describe('runJoinPass — join window', () => {
             withJoinEarly(true);
             const deadline = NOW_SEC + 3 * HOUR;
             const cases = [
-                { name: 'free now', turbo: { state: 'FREE' }, close: NOW_SEC + 48 * HOUR, joins: 0 },
-                { name: 'playing now', turbo: { state: 'IN_PROGRESS' }, close: NOW_SEC + 48 * HOUR, joins: 0 },
+                { name: 'free now', turbo: { mode: 'classic', state: 'FREE' }, close: NOW_SEC + 48 * HOUR, joins: 0 },
+                {
+                    name: 'playing now',
+                    turbo: { mode: 'classic', state: 'IN_PROGRESS' },
+                    close: NOW_SEC + 48 * HOUR,
+                    joins: 0,
+                },
                 {
                     name: 'timer opens in time',
-                    turbo: { state: 'TIMER', time_to_open: NOW_SEC + HOUR },
+                    turbo: { mode: 'classic', state: 'TIMER', time_to_open: NOW_SEC + HOUR },
                     close: NOW_SEC + 48 * HOUR,
                     joins: 0,
                 },
                 {
                     name: 'timer opens at deadline',
-                    turbo: { state: 'TIMER', time_to_open: deadline },
+                    turbo: { mode: 'classic', state: 'TIMER', time_to_open: deadline },
                     close: NOW_SEC + 48 * HOUR,
                     joins: 1,
                 },
                 {
                     name: 'timer opens after close',
-                    turbo: { state: 'TIMER', time_to_open: NOW_SEC + HOUR },
+                    turbo: { mode: 'classic', state: 'TIMER', time_to_open: NOW_SEC + HOUR },
                     close: NOW_SEC + 30 * 60,
                     joins: 1,
                 },
-                { name: 'timer has no open time', turbo: { state: 'TIMER' }, close: NOW_SEC + 48 * HOUR, joins: 1 },
                 {
-                    name: 'timer has invalid open time',
-                    turbo: { state: 'TIMER', time_to_open: 0 },
+                    name: 'timer has no open time',
+                    turbo: { mode: 'classic', state: 'TIMER' },
                     close: NOW_SEC + 48 * HOUR,
                     joins: 1,
                 },
-                { name: 'challenge already closed', turbo: { state: 'FREE' }, close: NOW_SEC - 1, joins: 1 },
-                { name: 'challenge close time missing', turbo: { state: 'FREE' }, close: undefined, joins: 1 },
+                {
+                    name: 'timer has invalid open time',
+                    turbo: { mode: 'classic', state: 'TIMER', time_to_open: 0 },
+                    close: NOW_SEC + 48 * HOUR,
+                    joins: 1,
+                },
+                {
+                    name: 'challenge already closed',
+                    turbo: { mode: 'classic', state: 'FREE' },
+                    close: NOW_SEC - 1,
+                    joins: 1,
+                },
+                {
+                    name: 'challenge close time missing',
+                    turbo: { mode: 'classic', state: 'FREE' },
+                    close: undefined,
+                    joins: 1,
+                },
             ];
             for (const { name, turbo, close, joins } of cases) {
                 const deps = makeDeps({
@@ -1246,7 +1285,7 @@ describe('runJoinPass — join window', () => {
                     challenges: [1, 2, 3, 4].map((id) => ({
                         id: 100 + id,
                         close_time: NOW_SEC + 48 * HOUR,
-                        member: { turbo: { state: 'TIMER', time_to_open: NOW_SEC + 3 * HOUR } },
+                        member: { turbo: { mode: 'classic', state: 'TIMER', time_to_open: NOW_SEC + 3 * HOUR } },
                     })),
                 })),
             });

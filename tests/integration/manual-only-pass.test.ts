@@ -202,7 +202,7 @@ const recorder = (calls: Call[], live: Challenge[]) =>
                             return { ok: true, raw: { success: true } };
                         case 'applyTurbo':
                             return { ok: true };
-                        case 'runTurboMiniGame':
+                        case 'runTurboGame':
                             return { played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false };
                         case 'getBankroll':
                             return { keys: 3, swaps: 3, fills: 3, coins: 0 };

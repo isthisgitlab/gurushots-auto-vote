@@ -48,6 +48,16 @@ export const errors = {
     turboNoBattles:
         'There are no battles to play right now. GuruShots has none ready for you. Try again in a few minutes.',
     turboRunInProgress: 'A turbo run is already in progress for this challenge. Wait for it to finish, then try again.',
+    turboModeUnknown:
+        'Turbo mode is not known yet. GuruShots has not told the app which game this Turbo is. Try again in a moment.',
+    snapNeedsModel:
+        'Snap was not played. It needs the vision model, which this build does not include. Play it on GuruShots, or use a build with the model.',
+    snapNotOffered:
+        'Snap was not played. GuruShots no longer offers it for this challenge. Refresh the list to see the current Turbo.',
+    snapUnanswerable:
+        'Snap was not finished. The app could not answer its question about the photo. Try again later, or play it on GuruShots.',
+    snapInterrupted:
+        'Snap was not finished. The game was interrupted, or GuruShots did not confirm an answer. Try again later; it continues where it stopped.',
     challengeNoLongerActive:
         'This challenge is no longer open, so the action was not made. Refresh the list to see the current challenges.',
     boostFailed: 'The boost was not applied. GuruShots refused it or did not answer. Try again in a moment.',

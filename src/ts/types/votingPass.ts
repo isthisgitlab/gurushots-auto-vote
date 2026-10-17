@@ -12,7 +12,7 @@
 import type { Challenge } from './gurushots';
 import type { getActiveChallenges as GetActiveChallenges } from '../strategies/real/activeChallenges';
 import type { applyBoost as ApplyBoost } from '../strategies/real/applyBoost';
-import type { runTurboMiniGame as RunTurboMiniGame } from '../strategies/real';
+import type { runTurboGame as RunTurboGame } from '../strategies/real';
 import type { getVoteImages as GetVoteImages, submitVotes as SubmitVotes } from '../api/voting';
 import type { applyBoostToEntry as ApplyBoostToEntry } from '../api/boost';
 import type { applyTurbo as ApplyTurbo } from '../api/turbo';
@@ -45,7 +45,7 @@ export interface VotingPassApi {
     getEligiblePhotosWalk?(...args: Parameters<typeof GetEligiblePhotosWalk>): ReturnType<typeof GetEligiblePhotosWalk>;
     getImageData(...args: Parameters<typeof GetImageData>): ReturnType<typeof GetImageData>;
     submitToChallenge(...args: Parameters<typeof SubmitToChallenge>): ReturnType<typeof SubmitToChallenge>;
-    runTurboMiniGame(...args: Parameters<typeof RunTurboMiniGame>): ReturnType<typeof RunTurboMiniGame>;
+    runTurboGame(...args: Parameters<typeof RunTurboGame>): ReturnType<typeof RunTurboGame>;
     /** Optional: without the pair the themed photo search skips tag resolution. */
     getCurrentMemberProfile?(
         ...args: Parameters<typeof GetCurrentMemberProfile>

@@ -9,6 +9,7 @@ import type { Challenge } from '../../src/ts/types/gurushots';
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import VotingLogic = require('../../src/ts/services/VotingLogic');
+import { __resetSnapUnavailableForTests, markSnapUnavailable } from '../../src/ts/services/turboRunLock';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
@@ -49,6 +50,7 @@ const regular = (overrides: Record<string, unknown> = {}) =>
 
 beforeEach(() => {
     jest.clearAllMocks();
+    __resetSnapUnavailableForTests();
     mockSettings();
 });
 
@@ -185,9 +187,19 @@ describe('shouldPlayAutoTurbo', () => {
         ['FREE', {}],
         ['IN_PROGRESS', {}],
         ['TIMER', { time_to_open: NOW }],
-    ])('never plays a Snap-mode %s turbo', (state, extra) => {
+    ])('plays a Snap-mode %s turbo', (state, extra) => {
         mockSettings({ autoTurbo: true });
-        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state, mode: 'snap', ...extra }), NOW)).toBe(false);
+        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state, mode: 'snap', ...extra }), NOW)).toBe(true);
+    });
+
+    test('leaves a challenge marked Snap-unavailable alone in any mode, and other challenges unaffected', () => {
+        mockSettings({ autoTurbo: true });
+        markSnapUnavailable('42');
+        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'FREE', mode: 'snap' }), NOW)).toBe(false);
+        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'FREE', mode: 'classic' }), NOW)).toBe(false);
+        expect(
+            VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'FREE', mode: 'snap' }, { id: 'other' }), NOW),
+        ).toBe(true);
     });
 
     test.each(['FREE', 'IN_PROGRESS'])('never plays a %s turbo whose mode is unknown', (state) => {
@@ -263,7 +275,7 @@ describe('deadline-action helpers with sparse challenges', () => {
     test('describeDeadlineActions returns null dueAt when close_time is unreadable', () => {
         mockSettings({ useTurbo: true, turboTime: 600 });
         const { actions, boostBlocked } = VotingLogic.describeDeadlineActions(
-            invalid({ member: { turbo: { state: 'WON' } } }),
+            invalid({ member: { turbo: { state: 'WON', mode: 'classic' } } }),
             NOW,
         );
         expect(boostBlocked).toBe(false);

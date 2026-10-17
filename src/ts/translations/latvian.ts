@@ -48,6 +48,16 @@ export const errors = {
     turboNotEarned: 'Turbo netika nopelnīts. Cīņas beidzās bez uzvaras. Mēģini vēlreiz vēlāk.',
     turboNoBattles: 'Šobrīd nav cīņu, ko spēlēt. GuruShots nav sagatavojis nevienu. Mēģini vēlreiz pēc dažām minūtēm.',
     turboRunInProgress: 'Šajā izaicinājumā Turbo spēle jau notiek. Pagaidi, kamēr tā beidzas, un mēģini vēlreiz.',
+    turboModeUnknown:
+        'Turbo veids vēl nav zināms. GuruShots nav paziņojis lietotnei, kāda ir šī Turbo spēle. Mēģini vēlreiz pēc brīža.',
+    snapNeedsModel:
+        'Snap netika spēlēts. Tam vajadzīgs vizuālais modelis, kura šajā versijā nav. Spēlē to GuruShots vai izmanto versiju ar modeli.',
+    snapNotOffered:
+        'Snap netika spēlēts. GuruShots to šim izaicinājumam vairs nepiedāvā. Atsvaidzini sarakstu, lai redzētu pašreizējo Turbo.',
+    snapUnanswerable:
+        'Snap netika pabeigts. Lietotne nevarēja atbildēt uz jautājumu par fotoattēlu. Mēģini vēlreiz vēlāk vai spēlē to GuruShots.',
+    snapInterrupted:
+        'Snap netika pabeigts. Spēle tika pārtraukta vai GuruShots neapstiprināja atbildi. Mēģini vēlreiz vēlāk; spēle turpināsies no pārtraukuma vietas.',
     challengeNoLongerActive:
         'Šis izaicinājums vairs nav atvērts, tāpēc darbība netika veikta. Atsvaidzini sarakstu, lai redzētu pašreizējos izaicinājumus.',
     boostFailed: 'Boost netika piemērots. GuruShots to noraidīja vai neatbildēja. Mēģini vēlreiz pēc brīža.',

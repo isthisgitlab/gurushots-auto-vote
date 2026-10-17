@@ -91,7 +91,7 @@ const challenge = () =>
         max_photo_submits: 4,
         member: {
             boost: { state: 'AVAILABLE' },
-            turbo: { state: 'WON' },
+            turbo: { state: 'WON', mode: 'classic' },
             ranking: {
                 entries: [
                     { id: 'a', votes: 10, rank: 20, member_id: 'm' },
@@ -1177,6 +1177,7 @@ describe('actions', () => {
             ['boost', 'gone', 'no longer active'],
             ['turbo', 'unavailable', 'no won turbo to apply (FREE)'],
             ['turbo', 'unknown', 'no won turbo to apply (unknown)'],
+            ['turbo', 'modeless', 'the turbo mode is unknown'],
             ['turbo', 'no-target', 'no entry matches the turbo target'],
             ['turbo', 'refused', 'was refused'],
             ['turbo', 'gone', 'no longer active'],
@@ -1194,6 +1195,7 @@ describe('actions', () => {
                 delete c.member.boost;
                 delete c.member.turbo;
             }
+            if (mode === 'modeless') delete c.member.turbo!.mode;
             if (mode === 'refused') {
                 pass.api.applyBoostToEntry.mockResolvedValueOnce(null);
                 pass.api.applyTurbo.mockResolvedValueOnce(invalid({ ok: false }));

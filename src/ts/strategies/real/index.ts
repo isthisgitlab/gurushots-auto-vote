@@ -10,6 +10,8 @@
 
 import { getActiveChallenges } from './activeChallenges';
 import { applyBoost } from './applyBoost';
+import { runSnapGame } from './snapGame';
+import type { TurboGameOptions } from './snapGame';
 import { getVoteImages, submitVotes } from '../../api/voting';
 import { applyBoostToEntry } from '../../api/boost';
 import { getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS } from '../../api/turbo';
@@ -51,7 +53,7 @@ import { loadMissionNeeds, registerMissionNeeds } from '../../services/missions'
 import * as runtime from '../../runtime';
 import { joinStateStore, acquireUnlockLock, refreshJoinStateAsync } from '../../joinStateStore';
 
-import type { Challenge, TurboMiniGameResult } from '../../types/gurushots';
+import type { Challenge, TurboGameResult, TurboMiniGameResult } from '../../types/gurushots';
 import { errorMessage } from '../../errorMessage';
 
 // The submit and swap every real caller goes through: a photo that went in is recorded at its exact time (the ledger
@@ -200,6 +202,23 @@ const runTurboMiniGame = async (challenge: Challenge, token: string): Promise<Tu
 };
 
 /**
+ * Plays the turbo game of one challenge, whichever it is: the classic mini-game or Snap, by the mode the web read
+ * reported. A challenge of unknown mode is never played (callers gate on it); asked anyway, nothing is sent.
+ * Only the automatic run passes `isCancelled`; a manual run is never stopped by the voting-cancel flag.
+ */
+const runTurboGame = async (
+    challenge: Challenge,
+    token: string,
+    options: TurboGameOptions = {},
+): Promise<TurboGameResult> => {
+    const mode = challenge.member?.turbo?.mode;
+    if (mode === 'classic') return { kind: 'classic', ...(await runTurboMiniGame(challenge, token)) };
+    if (mode === 'snap') return { kind: 'snap', ...(await runSnapGame(challenge, token, options)) };
+    logger.withCategory('turbo').warning(`${logger.challengeTag(challenge)} Turbo mode unknown; no game played`, null);
+    return { kind: 'classic', played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false };
+};
+
+/**
  * The user forgetting a claim whose payment could not be confirmed (real strategy): the next join asks the price again.
  */
 const forgetUnconfirmedPayment = (challengeId: string | number, token: string) =>
@@ -220,7 +239,7 @@ const votingPassApi = () => ({
     getEligiblePhotosWalk,
     getImageData,
     submitToChallenge,
-    runTurboMiniGame,
+    runTurboGame,
     // votingOrchestrator/context.ts copies these into fillDeps; without them the
     // auto-fill path loses tag resolution in real mode only.
     getCurrentMemberProfile,
@@ -348,7 +367,7 @@ export {
     applyBoostsOnSuspend,
     getActiveChallenges,
     applyBoost,
-    runTurboMiniGame,
+    runTurboGame,
     joinChallenge,
     forgetUnconfirmedPayment,
     submitToChallenge,

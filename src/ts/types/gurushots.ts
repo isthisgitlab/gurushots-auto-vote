@@ -69,7 +69,7 @@ export interface MemberRanking {
 }
 
 export type BoostState = 'LOCKED' | 'MISSED' | 'AVAILABLE' | 'AVAILABLE_KEY' | 'USED' | 'UNAVAILABLE' | (string & {});
-/** Which game a turbo session is: the classic one, or Snap (yes/no questions), which the bot does not play. Only the web read reports it. */
+/** Which game a turbo session is: the classic one, or Snap (yes/no questions). Only the web read reports it. */
 type TurboMode = 'classic' | 'snap' | (string & {});
 type TurboState = 'FREE' | 'IN_PROGRESS' | 'TIMER' | 'WON' | 'LOCKED' | 'USED' | 'UNAVAILABLE' | (string & {});
 
@@ -81,7 +81,7 @@ export interface MemberBoost {
 
 export interface MemberTurbo {
     state?: TurboState;
-    /** Which game the next turbo session is; the bot plays a turbo only when this is 'classic'. */
+    /** Which game the next turbo session is; the bot plays a turbo only when this is 'classic' or 'snap'. */
     mode?: TurboMode;
     /** Unix seconds the turbo timer opens; null when not on a timer. */
     time_to_open?: UnixSeconds | null;
@@ -400,6 +400,31 @@ export interface TurboMiniGameResult {
     doubleFailed: number;
     won: boolean;
 }
+
+/** Why a Snap game stopped: finished, or the first thing that kept it from going on. */
+export type SnapStopReason =
+    | 'completed'
+    | 'no-model'
+    | 'unparsed-caption'
+    | 'judge-failed'
+    | 'unavailable'
+    | 'withdrawn'
+    | 'request-failed'
+    | 'vote-unclear'
+    | 'cancelled';
+
+/** The outcome of playing one challenge's Snap game; `answered` counts the answers that landed in this run. */
+export interface SnapGameResult {
+    answered: number;
+    total: number;
+    /** Mean community agreement (%) over this run's answers; null with none. */
+    meanAgreement: number | null;
+    won: boolean;
+    stopReason: SnapStopReason;
+}
+
+/** The outcome of one turbo game, tagged by which game it was. */
+export type TurboGameResult = ({ kind: 'classic' } & TurboMiniGameResult) | ({ kind: 'snap' } & SnapGameResult);
 
 /** A finished challenge from get_my_completed_challenges. */
 export interface CompletedChallenge {

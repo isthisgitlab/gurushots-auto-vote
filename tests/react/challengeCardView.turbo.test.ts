@@ -1,7 +1,6 @@
 /**
  * The card offers the play-turbo button (canPlayAutoTurbo) for an open challenge whose turbo can be earned now — and
- * only when its mode is known to be classic: a Snap-mode turbo, which the bot does not play, and one with no mode
- * (GuruShots web data unavailable) are never offered.
+ * only when its mode is known (classic or Snap): one with no mode (GuruShots web data unavailable) is never offered.
  */
 
 import { deriveChallengeCardView } from '@/utils/challengeCardView';
@@ -39,8 +38,8 @@ describe('canPlayAutoTurbo', () => {
         ['FREE', {}],
         ['IN_PROGRESS', {}],
         ['TIMER', { time_to_open: NOW - 1 }],
-    ])('a Snap-mode %s turbo is not playable', (state, extra) => {
-        expect(canPlay({ state, mode: 'snap', ...extra })).toBe(false);
+    ])('a Snap-mode %s turbo is playable', (state, extra) => {
+        expect(canPlay({ state, mode: 'snap', ...extra })).toBe(true);
     });
 
     test('a TIMER turbo is not playable before its cooldown elapses, nor on a closed challenge', () => {

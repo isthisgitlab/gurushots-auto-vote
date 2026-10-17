@@ -21,3 +21,18 @@ export const releaseTurboRun = (challengeId: string | number, source: 'manual' |
     if (source === 'manual') lastManualRun.set(key, ++manualRunRevision);
     inFlight.delete(key);
 };
+
+// Challenges whose Snap game turned out not to be playable (no longer offered, an unreadable question, a dead
+// session): the bot leaves this challenge's turbo alone for the rest of the process, whatever mode the web read
+// reports for it later. A manual run ignores the marker, so the user can retry.
+const snapUnavailable = new Set<string>();
+
+export const markSnapUnavailable = (challengeId: string | number): void => {
+    snapUnavailable.add(String(challengeId));
+};
+
+export const isSnapUnavailable = (challengeId: string | number): boolean => snapUnavailable.has(String(challengeId));
+
+export const __resetSnapUnavailableForTests = (): void => {
+    snapUnavailable.clear();
+};

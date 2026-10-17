@@ -260,7 +260,7 @@ describe('StatusHeader', () => {
         expect(stats.slice(0, 3)).toEqual(['4', '0', '1']);
     });
 
-    test('a Snap-mode or mode-less turbo is not offered as playable, and a won one counts only in a known mode', () => {
+    test('a turbo counts only in a known mode (classic or Snap), earnable or won', () => {
         const nowSec = BASE_MS / 1000;
         const challenges = invalid<Challenge[]>([
             { id: 'a', member: { turbo: { state: 'FREE', mode: 'snap' } } },
@@ -274,7 +274,7 @@ describe('StatusHeader', () => {
         ]);
         const { container } = wrap(<StatusHeader challenges={challenges} nextRunAt={null} running={true} />);
         const stats = Array.from(container.querySelectorAll('.font-semibold')).map((n) => n.textContent);
-        expect(stats.slice(0, 3)).toEqual(['8', '0', '3']);
+        expect(stats.slice(0, 3)).toEqual(['8', '0', '6']);
     });
 
     test('an overdue next run reads as due', () => {

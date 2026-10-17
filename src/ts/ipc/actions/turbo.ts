@@ -6,11 +6,12 @@ import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import * as votingLogic from '../../services/VotingLogic';
 import { recordManualTurboWin } from '../../services/missions';
+import { isKnownTurboMode } from '../../voting/turboMode';
 import { claimTurboRun, releaseTurboRun } from '../../services/turboRunLock';
 import { sanitizeForLog, refuseInvalidArgs, fetchLiveChallenge } from './shared';
 
 import type { IpcReplyFn } from '../registerHandlers';
-import type { Challenge, TurboMiniGameResult } from '../../types/gurushots';
+import type { Challenge, SnapStopReason, TurboGameResult } from '../../types/gurushots';
 
 /**
  * applyTurbo's `{ ok, raw }` as this module reads it: `raw` is the untrusted
@@ -31,11 +32,7 @@ type ApplyTurboResult = {
  */
 const turboUnplayableError = (liveChallenge: Challenge, now: number): string | null => {
     const turboState = liveChallenge.member?.turbo?.state;
-    const turboMode = liveChallenge.member?.turbo?.mode;
-    if (turboMode === 'snap') {
-        return 'Turbo is a Snap game; play it on GuruShots';
-    }
-    if (turboMode !== 'classic') {
+    if (!isKnownTurboMode(liveChallenge.member?.turbo)) {
         return 'Turbo mode unknown; try again later';
     }
     const cooldownPassed =
@@ -51,26 +48,58 @@ const turboUnplayableError = (liveChallenge: Challenge, now: number): string | n
 };
 
 /**
- * Whitelist the fields returned to the renderer so any future expansion of
- * runTurboMiniGame's internal result shape never accidentally leaks new data
- * over IPC.
+ * What a Snap game that did not win tells the user, by why it stopped. Fixed text: nothing the game or the server
+ * said travels over IPC.
  */
-const toSafeTurboResult = (result: TurboMiniGameResult | null | undefined) =>
-    result
-        ? {
-              played: result.played,
-              correct: result.correct,
-              flipped: result.flipped,
-              doubleFailed: result.doubleFailed,
-              won: result.won,
-          }
-        : null;
+const SNAP_STOP_ERRORS: Record<SnapStopReason, string> = {
+    completed: 'Snap was interrupted; try again later',
+    'no-model': 'Snap needs the vision model, which this build does not include',
+    withdrawn: 'Snap is no longer offered for this challenge',
+    unavailable: 'Snap is no longer offered for this challenge',
+    'unparsed-caption': 'Snap question could not be answered',
+    'judge-failed': 'Snap question could not be answered',
+    'request-failed': 'Snap was interrupted; try again later',
+    'vote-unclear': 'Snap was interrupted; try again later',
+    cancelled: 'Snap was interrupted; try again later',
+};
 
 /**
- * Map a mini-game summary to the handler's `{success, error?, result}` reply.
+ * Whitelist the fields returned to the renderer so any future expansion of
+ * runTurboGame's internal result shape never accidentally leaks new data
+ * over IPC.
  */
-const turboRunResponse = ((result: TurboMiniGameResult | null | undefined) => {
+const toSafeTurboResult = (result: TurboGameResult | null | undefined) => {
+    if (!result) return null;
+    if (result.kind === 'snap') {
+        return {
+            kind: result.kind,
+            answered: result.answered,
+            total: result.total,
+            meanAgreement: result.meanAgreement,
+            won: result.won,
+            stopReason: result.stopReason,
+        };
+    }
+    return {
+        kind: result.kind,
+        played: result.played,
+        correct: result.correct,
+        flipped: result.flipped,
+        doubleFailed: result.doubleFailed,
+        won: result.won,
+    };
+};
+
+/**
+ * Map a turbo game's summary to the handler's `{success, error?, result}` reply.
+ */
+const turboRunResponse = ((result: TurboGameResult | null | undefined) => {
     const safeResult = toSafeTurboResult(result);
+    if (result?.kind === 'snap') {
+        return result.won
+            ? { success: true as const, result: safeResult }
+            : { success: false as const, error: SNAP_STOP_ERRORS[result.stopReason], result: safeResult };
+    }
     if (result?.played === 0) {
         return { success: false as const, error: 'No battles to play right now', result: safeResult };
     }
@@ -95,7 +124,7 @@ const runManualTurbo = (async (challengeId: string | number, safeTitle: string, 
         if (unplayable) return { success: false as const, error: unplayable };
     }
 
-    const result: TurboMiniGameResult | null = await strategy.runTurboMiniGame(
+    const result: TurboGameResult | null = await strategy.runTurboGame(
         { ...liveChallenge, title: liveChallenge.title || safeTitle },
         token,
     );

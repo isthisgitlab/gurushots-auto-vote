@@ -147,7 +147,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
-                    "mode": "classic",
+                    "mode": "snap",
                     "required_selections": 6,
                     "state": "FREE",
                     "time_to_open": null
