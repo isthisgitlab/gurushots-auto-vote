@@ -17,6 +17,17 @@ import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const challenge = (id: number, title: string) => invalid<Challenge>({ id, title });
+/** A running challenge at 5% exposure, which the jump list flags with a red dot. */
+const lowExposureChallenge = (id: number, title: string) => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    return invalid<Challenge>({
+        id,
+        title,
+        start_time: nowSec - 3600,
+        close_time: nowSec + 3600,
+        member: { ranking: { exposure: { exposure_factor: 5 } } },
+    });
+};
 
 describe('ChallengeNav', () => {
     beforeEach(() => {
@@ -140,6 +151,36 @@ describe('ChallengeNav', () => {
         expect(joinOnly.textContent).not.toMatch(/📏/);
         expect(ruled.className).toContain('btn-secondary');
         expect(joinOnly.className).not.toMatch(/btn-(info|accent|secondary)/);
+    });
+
+    test('rings the low-exposure dot on a coloured chip, not on a plain one', async () => {
+        jest.mocked(window.api.getChallengeOverrides).mockImplementation(async (id) =>
+            id === '1' ? { exposureTarget: 90 } : {},
+        );
+        jest.mocked(window.api.getTitleProfile).mockImplementation(async (_title, id) =>
+            id === '2' ? titleRuleInfo({ inlineValues: { scenario: 'Plan' } }) : null,
+        );
+
+        render(
+            <ChallengeNav
+                challenges={[
+                    lowExposureChallenge(1, 'Manual low'),
+                    lowExposureChallenge(2, 'Rule low'),
+                    lowExposureChallenge(3, 'Plain low'),
+                ]}
+            />,
+        );
+
+        const manual = screen.getByRole('button', { name: /Manual low/ });
+        const rule = screen.getByRole('button', { name: /Rule low/ });
+        const plain = screen.getByRole('button', { name: /Plain low/ });
+        await waitFor(() => expect(manual.className).toContain('btn-accent'));
+        await waitFor(() => expect(rule.className).toContain('btn-secondary'));
+        const ring = (chip: HTMLElement) =>
+            chip.querySelector('[data-testid="pulse-dot-error"]')!.parentElement!.className;
+        expect(ring(manual)).toContain('ring-base-100');
+        expect(ring(rule)).toContain('ring-base-100');
+        expect(ring(plain)).not.toContain('ring-');
     });
 
     test("draws the boost dot in the chip's own content colour on a profiled chip, and plain on others", async () => {

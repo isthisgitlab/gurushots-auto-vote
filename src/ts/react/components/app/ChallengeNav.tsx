@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact';
 import type { Challenge } from '../../../types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useCustomizedChallengeIds } from '@/hooks/useCustomizedChallengeIds';
@@ -14,6 +15,15 @@ const customizationOf = (kind: CustomizationKind | undefined) => ({
     automatic: kind === 'profile' || kind === 'both',
     byRule: kind === 'rule',
 });
+
+/**
+ * A status dot on its chip. On a coloured chip it gets a ring in the page colour, so a red or blue dot stays visible
+ * against any fill; a neutral chip's dot stands as it is.
+ */
+function ChipDot({ ringed, children }: { ringed: boolean; children: ComponentChildren }) {
+    if (!ringed) return <>{children}</>;
+    return <span className="inline-flex rounded-full ring-2 ring-base-100">{children}</span>;
+}
 
 /** One challenge's chip: its title, the status dots and the marker of what customizes it. */
 function NavChip({
@@ -39,8 +49,16 @@ function NavChip({
     const tone = chipToneOf(kind);
     return (
         <ChallengeChip challengeId={c?.id} className={tone}>
-            {boostOpen && <PulseDot variant="info" size="status-sm" onBadge={tone === 'btn-info'} />}
-            {lowExposure && <PulseDot variant="error" pulse={false} size="status-sm" />}
+            {boostOpen && (
+                <ChipDot ringed={tone !== ''}>
+                    <PulseDot variant="info" size="status-sm" onBadge={automatic} />
+                </ChipDot>
+            )}
+            {lowExposure && (
+                <ChipDot ringed={tone !== ''}>
+                    <PulseDot variant="error" pulse={false} size="status-sm" />
+                </ChipDot>
+            )}
             {manual && <span aria-hidden="true">⚙️ </span>}
             {automatic && <span aria-hidden="true">🔄 </span>}
             {byRule && <span aria-hidden="true">📏 </span>}
