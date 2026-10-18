@@ -286,6 +286,26 @@ describe('picking and submitting', () => {
         expect(tile(2).getAttribute('aria-pressed')).toBe('true');
     });
 
+    test('a pick the last loaded listing lacks stays put when its tile is tapped while a submit is in flight', async () => {
+        const { update } = setup();
+        await opened();
+        fireEvent.click(tile(1));
+        // A search comes back as a preview without photo 1 and the check of it fails: its tile is held but tappable.
+        getLibrary()
+            .mockResolvedValueOnce(listing([photo(2)]))
+            .mockResolvedValueOnce(invalid({ success: false, error: 'down' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+        const pending = await screen.findByRole('button', {
+            name: /Not among your photos as last loaded\. Press Refresh/,
+        });
+        update({ submitting: true });
+        fireEvent.click(pending);
+        expect(pending.getAttribute('aria-pressed')).toBe('true');
+        update({ submitting: false });
+        fireEvent.click(pending);
+        expect(screen.queryByRole('button', { name: /Press Refresh/ })).toBeNull();
+    });
+
     test('a failure that changed nothing does not read the listing again', async () => {
         const onSubmit = jest.fn<Promise<PickOutcome>, [string[]]>().mockResolvedValue('failed');
         setup({ onSubmit });
@@ -569,7 +589,7 @@ describe('closing', () => {
     test('while a submit is in flight nothing closes it: no Cancel, no Escape, no ✕, and Submit shows busy', async () => {
         const onClose = jest.fn();
         setup({ onClose, submitting: true });
-        await opened();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(screen.getByRole('button', { name: 'Cancel' }).hasAttribute('disabled')).toBe(true);
         expect(screen.queryByRole('button', { name: 'Close modal' })).toBeNull();
         fireEvent.keyDown(document, { key: 'Escape' });
@@ -578,6 +598,19 @@ describe('closing', () => {
         const submit = screen.getByRole('button', { name: /Submit/ });
         expect(submit.getAttribute('aria-busy')).toBe('true');
         expect(submit.hasAttribute('disabled')).toBe(true);
+    });
+
+    test('the tiles are locked and say why while a submit is in flight, instead of ignoring taps', async () => {
+        const { update } = setup({ suggest: true });
+        await loadedAll();
+        expect(tile(1).getAttribute('aria-disabled')).toBe('false');
+        update({ submitting: true });
+        expect(tile(1).getAttribute('aria-disabled')).toBe('true');
+        expect(tile(1).textContent).toContain('Locked while your pick is being submitted.');
+        fireEvent.click(tile(1));
+        expect(tile(1).getAttribute('aria-pressed')).toBe('false');
+        update({ submitting: false });
+        expect(tile(1).getAttribute('aria-disabled')).toBe('false');
     });
 });
 
@@ -775,6 +808,15 @@ describe('Auto suggestions', () => {
         setup({ max: 1, suggest: false });
         await opened();
         expect(screen.getAllByRole('status').filter((el) => el.getAttribute('aria-live') === 'polite')).toEqual([]);
+    });
+
+    test('the strip tiles are locked while a submit is in flight', async () => {
+        const { update } = setup({ suggest: true });
+        await loadedAll();
+        await press();
+        update({ submitting: true });
+        expect(stripTile(1).getAttribute('aria-disabled')).toBe('true');
+        expect(stripTile(1).textContent).toContain('Locked while your pick is being submitted.');
     });
 
     test('the strip lists the suggestions in the returned order with fixed rank badges, and keeps it after a tap', async () => {

@@ -212,7 +212,7 @@ describe('editing and saving', () => {
         fireEvent.input(input, { target: { value: '12' } });
         fireEvent.blur(input);
         await waitFor(() => expect(screen.getAllByText('app.overridden').length).toBeGreaterThan(0));
-        fireEvent.click(document.querySelector('button[title="app.resetToDefaultNotSaved"]')!);
+        fireEvent.click(document.querySelector('button[title^="app.resetToDefaultNotSaved"]')!);
         await waitFor(() => expect(screen.queryByText('app.overridden')).toBeNull());
     });
 
@@ -359,7 +359,7 @@ describe('profiles bar interplay', () => {
         );
         await waitFor(() => expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('AUTO', { boostTime: 8 }));
         // The override is cleared → the row now inherits the re-saved profile value.
-        fireEvent.click(document.querySelector('button[title="app.resetToDefaultNotSaved"]')!);
+        fireEvent.click(document.querySelector('button[title^="app.resetToDefaultNotSaved"]')!);
         await waitFor(() => expect(document.querySelector<HTMLInputElement>('input[type="number"]')!.value).toBe('8'));
         expect(body()).toContain('app.usingProfile: AUTO');
     });

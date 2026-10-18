@@ -18,6 +18,7 @@ export function SuggestedStrip({
     atCap,
     fullKey,
     locked,
+    lockedKey,
     addDisabled,
     onToggle,
     onAdd,
@@ -31,8 +32,10 @@ export function SuggestedStrip({
     atCap: boolean;
     /** The translation key of what a tile says when the selection is full. */
     fullKey: string;
-    /** The app is still checking which photos the challenge accepts: the tiles are inert. */
+    /** The tiles are inert: the app is still checking which photos the challenge accepts, or a submit is running. */
     locked: boolean;
+    /** The translation key of what a locked tile says. */
+    lockedKey: string;
     /** "Add suggestions" cannot be pressed now (a submit is running, or nothing can be added). */
     addDisabled: boolean;
     onToggle: (id: string) => void;
@@ -73,7 +76,7 @@ export function SuggestedStrip({
                         fullKey={fullKey}
                         allowedKnown={false}
                         locked={locked}
-                        lockedKey="app.pickTileLocked"
+                        lockedKey={lockedKey}
                         onToggle={onToggle}
                     />
                 ))}

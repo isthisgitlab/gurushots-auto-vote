@@ -1,10 +1,11 @@
-import { Fragment } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { ResetButton } from '@/components/ui/ResetButton';
 import { ThemeSelect } from '@/components/ui/ThemeSelect';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
-import { SettingLabel } from './SettingInput';
+import { SettingLabel, numberRangeMessage, parseNumberInput } from './SettingInput';
 
 import type { ComponentChildren } from 'preact';
 import type { useCustomTimezoneInput } from '@/hooks/useCustomTimezoneInput';
@@ -20,7 +21,12 @@ export interface UiFormProps {
     uiValues: UiValues;
     handleUiChange: UiChangeHandler;
     handleResetUi: UiResetHandler;
+    /** The settings the last Save refused: their controls are marked invalid. */
+    rejectedKeys: readonly string[];
 }
+
+// The section heading: where focus goes when a Save fails on the language, which has no key of its own to mark.
+export const APPLICATION_HEADING_ID = 'settings-application-heading';
 
 type UiNumberKey = 'checkFrequencyMin' | 'checkFrequencyMax' | 'apiMaxRetries' | 'apiRetryBaseDelayMs';
 
@@ -34,7 +40,6 @@ interface UiNumberField {
     min: string;
     max: string;
     step?: string;
-    fallback: number;
     atLeastKey?: UiNumberKey;
 }
 
@@ -74,43 +79,76 @@ function UiSettingCell({
 }
 
 /**
- * Captioned integer inputs for a multi-value UI setting. An unparseable entry
- * falls back to the field's `fallback`; a field with `atLeastKey` is clamped up
- * to that sibling's value once the user leaves it, so a range can never invert.
+ * One integer input of a multi-value UI setting. It keeps the typed text as a draft, so an emptied or
+ * half-typed field is not snapped to a fallback mid-edit: a draft inside the range is committed as it is typed,
+ * one outside it is not, and on blur the last valid value comes back with the range message. A field with
+ * `atLeastKey` is clamped up to that sibling's value on blur, so a range can never invert.
  */
-function UiNumberInputs({
-    fields,
+function UiNumberInput({
+    field: { key, labelKey, widthClass, min, max, step, atLeastKey },
     uiValues,
     handleUiChange,
+    rejected,
 }: {
-    fields: UiNumberField[];
+    field: UiNumberField;
     uiValues: UiValues;
     handleUiChange: UiChangeHandler;
+    rejected: boolean;
 }) {
     const { t } = useTranslation();
-    return fields.map(({ key, labelKey, widthClass, min, max, step, fallback, atLeastKey }) => (
-        <Fragment key={key}>
+    const committed = uiValues[key];
+    const [draft, setDraft] = useState(String(committed));
+    // Set when a blur put the last valid value back; the range message stays until the next edit.
+    const [reverted, setReverted] = useState(false);
+    const range = { min: Number(min), max: Number(max) };
+    const parsed = parseNumberInput(draft);
+    const outOfRange = parsed === '' || parsed < range.min || parsed > range.max;
+    const id = `ui-${key}`;
+    const errorId = `${id}-error`;
+
+    // The value changed from outside (a reset, Reset all, a clamp): the draft follows, unless it already reads as it.
+    useEffect(() => {
+        setDraft((typed) => (parseNumberInput(typed) === committed ? typed : String(committed)));
+        setReverted(false);
+    }, [committed]);
+
+    return (
+        <>
             <span className="text-sm">{t(labelKey)}</span>
             <input
+                id={id}
                 type="number"
-                className={`input input-sm ${widthClass}`}
+                className={`input input-sm ${widthClass} ${outOfRange || reverted ? 'input-error' : ''}`}
                 min={min}
                 max={max}
                 step={step}
                 aria-label={t(labelKey)}
-                value={uiValues[key]}
-                onChange={(e) => handleUiChange(key, parseInt(e.currentTarget.value, 10) || fallback)}
-                onBlur={
-                    atLeastKey &&
-                    ((e) => {
-                        if ((parseInt(e.currentTarget.value, 10) || fallback) < uiValues[atLeastKey]) {
-                            handleUiChange(key, uiValues[atLeastKey]);
-                        }
-                    })
-                }
+                aria-invalid={outOfRange || reverted || rejected || undefined}
+                aria-describedby={reverted ? errorId : undefined}
+                value={draft}
+                onChange={(e) => {
+                    const raw = e.currentTarget.value;
+                    const next = parseNumberInput(raw);
+                    setDraft(raw);
+                    setReverted(false);
+                    if (next !== '' && next >= range.min && next <= range.max) handleUiChange(key, next);
+                }}
+                onBlur={() => {
+                    if (outOfRange) {
+                        setDraft(String(committed));
+                        setReverted(true);
+                    } else if (atLeastKey && parsed < uiValues[atLeastKey]) {
+                        handleUiChange(key, uiValues[atLeastKey]);
+                    }
+                }}
             />
-        </Fragment>
-    ));
+            {reverted && (
+                <ToneNote tone="error" as="span" id={errorId} className="basis-full text-xs">
+                    {numberRangeMessage(range, t)}
+                </ToneNote>
+            )}
+        </>
+    );
 }
 
 /**
@@ -125,6 +163,7 @@ function UiNumberGroupCell({
     uiValues,
     handleUiChange,
     handleResetUi,
+    rejectedKeys,
 }: UiFormProps & {
     inputId: string;
     labelKey: string;
@@ -136,7 +175,15 @@ function UiNumberGroupCell({
     return (
         <UiSettingCell inputId={inputId} group labelKey={labelKey} descKey={descKey}>
             <div className="flex items-center gap-2 flex-wrap" role="group" aria-labelledby={`${inputId}-label`}>
-                <UiNumberInputs fields={fields} uiValues={uiValues} handleUiChange={handleUiChange} />
+                {fields.map((field) => (
+                    <UiNumberInput
+                        key={field.key}
+                        field={field}
+                        uiValues={uiValues}
+                        handleUiChange={handleUiChange}
+                        rejected={rejectedKeys.includes(field.key)}
+                    />
+                ))}
                 {suffix}
                 <ResetButton
                     label={resetLabel(t, labelKey)}
@@ -154,7 +201,6 @@ const CHECK_FREQUENCY_FIELDS: UiNumberField[] = [
         widthClass: 'w-20',
         min: '1',
         max: '60',
-        fallback: 1,
     },
     {
         key: 'checkFrequencyMax',
@@ -162,13 +208,12 @@ const CHECK_FREQUENCY_FIELDS: UiNumberField[] = [
         widthClass: 'w-20',
         min: '1',
         max: '60',
-        fallback: 1,
         atLeastKey: 'checkFrequencyMin',
     },
 ];
 
 const RELIABILITY_FIELDS: UiNumberField[] = [
-    { key: 'apiMaxRetries', labelKey: 'app.apiMaxRetries', widthClass: 'w-20', min: '0', max: '10', fallback: 0 },
+    { key: 'apiMaxRetries', labelKey: 'app.apiMaxRetries', widthClass: 'w-20', min: '0', max: '10' },
     {
         key: 'apiRetryBaseDelayMs',
         labelKey: 'app.apiRetryBaseDelayMs',
@@ -176,34 +221,45 @@ const RELIABILITY_FIELDS: UiNumberField[] = [
         min: '100',
         max: '10000',
         step: '100',
-        fallback: 1000,
     },
 ];
 
+const TIMEZONE_ERROR_ID = 'ui-customTimezone-error';
+
 /**
- * The revealed "+" input: Enter or blur adds the typed zone, Escape discards it.
+ * The revealed "+" input: Enter or blur adds the typed zone, Escape discards it. A zone that is not valid is
+ * flagged with a message; an empty field is not an error, there is just nothing to add.
  */
 function CustomTimezoneInput({ timezoneInput }: { timezoneInput: TimezoneInputState }) {
     const { t } = useTranslation();
     return (
-        <input
-            ref={timezoneInput.inputRef}
-            type="text"
-            aria-label={t('app.addCustomTimezone')}
-            placeholder={t('app.timezonePlaceholder')}
-            className={`input input-sm mt-2 w-60 ${timezoneInput.error ? 'input-error' : ''}`}
-            value={timezoneInput.value}
-            onChange={(e) => timezoneInput.change(e.currentTarget.value)}
-            onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    timezoneInput.add();
-                } else if (e.key === 'Escape') {
-                    timezoneInput.close();
-                }
-            }}
-            onBlur={timezoneInput.add}
-        />
+        <>
+            <input
+                ref={timezoneInput.inputRef}
+                type="text"
+                aria-label={t('app.addCustomTimezone')}
+                placeholder={t('app.timezonePlaceholder')}
+                className={`input input-sm mt-2 w-60 ${timezoneInput.error ? 'input-error' : ''}`}
+                aria-invalid={timezoneInput.error || undefined}
+                aria-describedby={timezoneInput.error ? TIMEZONE_ERROR_ID : undefined}
+                value={timezoneInput.value}
+                onChange={(e) => timezoneInput.change(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        timezoneInput.add();
+                    } else if (e.key === 'Escape') {
+                        timezoneInput.close();
+                    }
+                }}
+                onBlur={timezoneInput.add}
+            />
+            {timezoneInput.error && (
+                <ToneNote tone="error" id={TIMEZONE_ERROR_ID} className="mt-1 text-xs">
+                    {t('app.timezoneInvalid')}
+                </ToneNote>
+            )}
+        </>
     );
 }
 
@@ -234,7 +290,7 @@ function ResettableUiCell({
     );
 }
 
-function ThemeSetting({ uiValues, handleUiChange, handleResetUi }: UiFormProps) {
+function ThemeSetting({ uiValues, handleUiChange, handleResetUi, rejectedKeys }: UiFormProps) {
     return (
         <ResettableUiCell
             inputId="ui-theme"
@@ -242,7 +298,12 @@ function ThemeSetting({ uiValues, handleUiChange, handleResetUi }: UiFormProps) 
             descKey="app.themeDesc"
             onReset={() => handleResetUi('theme')}
         >
-            <ThemeSelect id="ui-theme" value={uiValues.theme} onChange={(theme) => handleUiChange('theme', theme)} />
+            <ThemeSelect
+                id="ui-theme"
+                value={uiValues.theme}
+                onChange={(theme) => handleUiChange('theme', theme)}
+                invalid={rejectedKeys.includes('theme')}
+            />
         </ResettableUiCell>
     );
 }
@@ -273,6 +334,7 @@ function TimezoneSetting({
     uiValues,
     handleUiChange,
     handleResetUi,
+    rejectedKeys,
     timezoneInput,
 }: UiFormProps & { timezoneInput: TimezoneInputState }) {
     const { t } = useTranslation();
@@ -283,6 +345,9 @@ function TimezoneSetting({
                 <select
                     id="ui-timezone"
                     className="select select-sm w-48"
+                    aria-invalid={
+                        rejectedKeys.includes('timezone') || rejectedKeys.includes('customTimezones') || undefined
+                    }
                     value={timezone}
                     onChange={(e) => handleUiChange('timezone', e.currentTarget.value)}
                 >
@@ -330,15 +395,20 @@ export function ApplicationSettingsSection({
     uiValues,
     handleUiChange,
     handleResetUi,
+    rejectedKeys,
     timezoneInput,
     children,
 }: UiFormProps & { timezoneInput: TimezoneInputState; children?: ReactNode }) {
     const { t } = useTranslation();
-    const ui = { uiValues, handleUiChange, handleResetUi };
+    const ui = { uiValues, handleUiChange, handleResetUi, rejectedKeys };
 
     return (
         <div>
-            <h4 className="font-semibold text-base mb-3 border-b border-base-300 pb-2">
+            <h4
+                id={APPLICATION_HEADING_ID}
+                tabIndex={-1}
+                className="font-semibold text-base mb-3 border-b border-base-300 pb-2"
+            >
                 {t('app.applicationSettings')}
             </h4>
             <div className={SETTINGS_GRID_CLASS}>

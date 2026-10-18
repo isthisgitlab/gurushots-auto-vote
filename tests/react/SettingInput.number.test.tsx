@@ -17,7 +17,7 @@
 
 import { render, fireEvent, screen } from './helpers/test-utils';
 import type { ComponentProps } from 'preact';
-import { SettingInput } from '@/components/app/SettingInput';
+import { SettingInput, numberRangeMessage, parseNumberInput } from '@/components/app/SettingInput';
 import type { SerializableSchemaEntry } from '../../src/ts/ipc/settings.handlers';
 import { invalid } from '../helpers/invalid';
 
@@ -57,6 +57,41 @@ describe('SettingInput — number', () => {
 
         expect(input.className).toContain('input-error');
         expect(container.querySelector('.text-error')).not.toBeNull();
+    });
+
+    test('a flagged value is marked invalid and points at its message', () => {
+        const { container, input } = renderNumber({ value: 150 });
+
+        expect(input.getAttribute('aria-invalid')).toBe('true');
+        const message = container.querySelector('.text-error')!.parentElement!;
+        expect(message.id).toBe('setting-exposure-error');
+        expect(input.getAttribute('aria-describedby')).toBe(message.id);
+    });
+
+    test('an in-range value carries neither mark', () => {
+        const { input } = renderNumber({ value: 50 });
+
+        expect(input.hasAttribute('aria-invalid')).toBe(false);
+        expect(input.hasAttribute('aria-describedby')).toBe(false);
+    });
+
+    test('a refused in-range value is marked invalid without a message', () => {
+        const { container, input } = renderNumber({ value: 50, rejected: true });
+
+        expect(input.getAttribute('aria-invalid')).toBe('true');
+        expect(input.hasAttribute('aria-describedby')).toBe(false);
+        expect(container.querySelector('.text-error')).toBeNull();
+    });
+
+    test('exports the parse and the range message the application settings reuse', () => {
+        expect(parseNumberInput('')).toBe('');
+        expect(parseNumberInput('x')).toBe('');
+        expect(parseNumberInput('12')).toBe(12);
+        expect(numberRangeMessage({ min: 1, max: 5 }, (key) => `${key} {min}-{max}`)).toBe(
+            'app.validationOutOfRange 1-5',
+        );
+        expect(numberRangeMessage({ min: 3 }, (key) => `${key} {min}`)).toBe('app.validationAtLeast 3');
+        expect(numberRangeMessage({}, (key) => key)).toBe('app.validationInvalidValue');
     });
 
     test('flags a value below the minimum', () => {

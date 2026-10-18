@@ -144,7 +144,7 @@ export function AutoVoteControls({
                         {/* Status Badge */}
                         <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">{t('app.status')}</span>
-                            <span className={`badge badge-sm ${pending ? 'badge-warning' : statusClass}`}>
+                            <span className={`badge badge-sm ${pending ? 'badge-warning' : statusClass}`} role="status">
                                 {pending ? t('app.statusWaiting') : t(STATUS_LABEL_KEYS[status] ?? 'app.statusError')}
                             </span>
                             {/* Auto-join is a property of the running autovote, so it

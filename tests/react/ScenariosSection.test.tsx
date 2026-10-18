@@ -68,6 +68,7 @@ describe('a scenario row', () => {
         click('app.scenarioExport: Plan');
         const box = await screen.findByLabelText<HTMLTextAreaElement>('app.scenarioExportLabel');
         expect(box.value).toBe('{"name":"Plan"}');
+        expect(box.getAttribute('autocapitalize')).toBe('off');
         fireEvent.focus(box);
         click('app.scenarioExportClose');
         expect(screen.queryByLabelText('app.scenarioExportLabel')).toBeNull();
@@ -261,6 +262,12 @@ describe('import', () => {
         click('app.scenarioImport');
         fireEvent.change(screen.getByLabelText('app.scenarioImportLabel'), { target: { value: '{"name":"Shared"}' } });
     };
+
+    test('the pasted JSON is not auto-capitalised', async () => {
+        await openImport();
+        const box = screen.getByLabelText('app.scenarioImportLabel');
+        expect(box.getAttribute('autocapitalize')).toBe('off');
+    });
 
     test('check shows what it does; import stores it and closes the panel', async () => {
         jest.mocked(window.api.previewScenarioImport).mockResolvedValue(invalid(preview()));

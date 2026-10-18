@@ -1,54 +1,76 @@
 /**
- * useImageLoads — probes a URL with a detached Image and reports false once it
- * fails. A fake Image constructor captures each probe so onerror can be fired.
+ * useImageLoads — listens for `error` on the rendered <img> (through the returned callback ref) and reports
+ * false once the current URL has failed. The probe keeps its <img> mounted whatever the hook says, so a test
+ * can fire errors on it across URL changes.
  */
-import { renderHook, act } from '@testing-library/preact';
+import { act, render, screen } from '@testing-library/preact';
 import { useImageLoads } from '@/hooks/useImageLoads';
-import { invalid } from '../helpers/invalid';
 
-type Probe = { src?: string; onerror: () => void };
+function Probe({ url }: { url: string | null }) {
+    const [loads, imageRef] = useImageLoads(url);
+    return <img ref={imageRef} src={url ?? undefined} alt="" data-testid="img" data-loads={String(loads)} />;
+}
+
+const img = () => screen.getByTestId('img');
+const loads = () => img().getAttribute('data-loads');
+const fail = () =>
+    act(() => {
+        img().dispatchEvent(new Event('error'));
+    });
 
 describe('useImageLoads', () => {
-    let probes: Probe[];
-    let OriginalImage: typeof Image;
+    afterEach(() => jest.restoreAllMocks());
 
-    beforeEach(() => {
-        probes = [];
-        OriginalImage = global.Image;
-        global.Image = invalid(function FakeImage(this: Probe) {
-            probes.push(this);
-        });
+    test('a falsy url is false and listens for nothing', () => {
+        const add = jest.spyOn(HTMLImageElement.prototype, 'addEventListener');
+        render(<Probe url={null} />);
+        expect(loads()).toBe('false');
+        expect(add).not.toHaveBeenCalledWith('error', expect.anything());
     });
 
-    afterEach(() => {
-        global.Image = OriginalImage;
+    test('optimistic true, flips false when the image errors', () => {
+        render(<Probe url="https://x/a.jpg" />);
+        expect(loads()).toBe('true');
+        fail();
+        expect(loads()).toBe('false');
     });
 
-    test('falsy url is false and starts no probe', () => {
-        const { result } = renderHook(() => useImageLoads(null));
-        expect(result.current).toBe(false);
-        expect(probes).toHaveLength(0);
+    test('a new url starts as not failed, and fails on its own error', () => {
+        const { rerender } = render(<Probe url="https://x/a.jpg" />);
+        fail();
+        expect(loads()).toBe('false');
+        rerender(<Probe url="https://x/b.jpg" />);
+        expect(loads()).toBe('true');
+        fail();
+        expect(loads()).toBe('false');
+        rerender(<Probe url="https://x/c.jpg" />);
+        expect(loads()).toBe('true');
     });
 
-    test('optimistic true, flips false when the probe errors', () => {
-        const { result } = renderHook(() => useImageLoads('https://x/a.jpg'));
-        expect(result.current).toBe(true);
-        expect(probes[0].src).toBe('https://x/a.jpg');
-        act(() => probes[0].onerror());
-        expect(result.current).toBe(false);
+    test('an error that arrives late for the previous url does not hide the new one', () => {
+        const add = jest.spyOn(HTMLImageElement.prototype, 'addEventListener');
+        const { rerender } = render(<Probe url="https://x/a.jpg" />);
+        const errorListeners = () =>
+            add.mock.calls.filter(([type]) => type === 'error').map(([, listener]) => listener as () => void);
+        const forA = errorListeners()[0];
+        rerender(<Probe url="https://x/b.jpg" />);
+        act(() => forA());
+        expect(loads()).toBe('true');
+        fail();
+        expect(loads()).toBe('false');
     });
 
-    test("a stale probe's failure after the url changed does not condemn the new url", () => {
-        const { result, rerender } = renderHook(({ url }) => useImageLoads(url), {
-            initialProps: { url: 'https://x/a.jpg' },
-        });
-        rerender({ url: 'https://x/b.jpg' });
-        act(() => probes[0].onerror());
-        expect(result.current).toBe(true);
-        act(() => probes[1].onerror());
-        expect(result.current).toBe(false);
-        // Changing url again resets the failure.
-        rerender({ url: 'https://x/c.jpg' });
-        expect(result.current).toBe(true);
+    test('the listener is removed when the url changes and when the image unmounts', () => {
+        const add = jest.spyOn(HTMLImageElement.prototype, 'addEventListener');
+        const remove = jest.spyOn(HTMLImageElement.prototype, 'removeEventListener');
+        const { rerender, unmount } = render(<Probe url="https://x/a.jpg" />);
+        const added = () => add.mock.calls.filter(([type]) => type === 'error').map(([, listener]) => listener);
+        const removed = () => remove.mock.calls.filter(([type]) => type === 'error').map(([, listener]) => listener);
+        expect(added()).toHaveLength(1);
+        expect(removed()).toEqual([]);
+        rerender(<Probe url="https://x/b.jpg" />);
+        expect(removed()).toEqual([added()[0]]);
+        unmount();
+        expect(removed()).toEqual([added()[0], added()[1]]);
     });
 });

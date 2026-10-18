@@ -10,17 +10,20 @@ export function ThemeSelect({
     value,
     onChange,
     className = '',
+    invalid = false,
 }: {
     id: string;
     value: string;
     onChange: (theme: string) => void;
     className?: string;
+    invalid?: boolean;
 }) {
     const { t } = useTranslation();
     return (
         <select
             id={id}
             className={`select select-sm ${className}`}
+            aria-invalid={invalid || undefined}
             value={value}
             onChange={(e) => onChange(e.currentTarget.value)}
         >

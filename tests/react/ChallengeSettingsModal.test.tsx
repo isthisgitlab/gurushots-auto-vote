@@ -63,7 +63,7 @@ function readNumberInput() {
 }
 
 // The per-field reset button in SettingInput is identified by its title.
-const resetButton = () => document.querySelector('button[title="app.resetToDefaultNotSaved"]');
+const resetButton = () => document.querySelector('button[title^="app.resetToDefaultNotSaved"]');
 
 describe('ChallengeSettingsModal load cancellation', () => {
     test('discards a stale load when challengeId changes mid-fetch', async () => {

@@ -43,6 +43,8 @@ export interface SettingFieldProps {
     onChange: SettingChangeHandler;
     onReset?: SettingResetHandler | null;
     disabled?: boolean;
+    /** The last Save refused this setting's value: the control is marked invalid. */
+    rejected?: boolean;
 }
 
 /** The application (UI, non-schema) settings the global modal edits. */

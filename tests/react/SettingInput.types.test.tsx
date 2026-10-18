@@ -31,7 +31,7 @@ const renderInput = (
     return { ...props, ...utils };
 };
 
-const resetButton = () => document.querySelector('button[title="app.resetToDefaultNotSaved"]');
+const resetButton = () => document.querySelector('button[title^="app.resetToDefaultNotSaved"]');
 
 describe('SettingInput — dispatch guards and empty defaults', () => {
     test('renders nothing without a config', () => {
@@ -72,6 +72,62 @@ describe('SettingInput — dispatch guards and empty defaults', () => {
     });
 });
 
+describe('SettingInput — reset buttons are named after their setting', () => {
+    test.each([
+        ['tags', {}],
+        ['boolean', {}],
+        ['number', {}],
+        ['text', {}],
+        ['time', {}],
+        ['schedule', {}],
+        ['timeOfDayList', {}],
+        ['timeList', {}],
+        ['photos', {}],
+    ])('a %s setting', (type) => {
+        renderInput({ type, label: 'app.thing', default: type === 'tags' ? [] : undefined }, undefined);
+        expect(resetButton()!.getAttribute('aria-label')).toBe('app.resetToDefaultNotSaved: app.thing');
+        expect(resetButton()!.getAttribute('title')).toBe('app.resetToDefaultNotSaved: app.thing');
+    });
+
+    test('a scenario setting', () => {
+        renderInput({ type: 'scenario', label: 'app.thing' }, '');
+        expect(resetButton()!.getAttribute('aria-label')).toBe('app.resetToDefaultNotSaved: app.thing');
+    });
+});
+
+describe('SettingInput — a refused value marks the control invalid', () => {
+    test.each([
+        ['tags', 'input[type="text"]', []],
+        ['boolean', 'input[type="checkbox"]', false],
+        ['number', 'input[type="number"]', 5],
+        ['text', 'input[type="text"]', 'x'],
+        ['scenario', 'select', ''],
+    ])('a %s setting', (type, selector, value) => {
+        const config = { type, label: 'app.thing', min: 1, max: 10 };
+        const { unmount } = renderInput(config, value);
+        expect(document.querySelector(selector)!.hasAttribute('aria-invalid')).toBe(false);
+        unmount();
+        renderInput(config, value, { rejected: true });
+        expect(document.querySelector(selector)!.getAttribute('aria-invalid')).toBe('true');
+    });
+
+    test.each(['schedule', 'timeOfDayList', 'timeList', 'time'])(
+        'a %s setting offers its group as the focus target, under the setting- id',
+        (type) => {
+            renderInput({ type, label: 'app.thing' }, undefined);
+            const group = document.getElementById('setting-k')!;
+            expect(group.getAttribute('role')).toBe('group');
+            expect(group.getAttribute('tabindex')).toBe('-1');
+        },
+    );
+
+    test('a photos setting keeps the id on its own button, not on its group', () => {
+        renderInput({ type: 'photos', label: 'app.thing' }, []);
+        expect(document.getElementById('setting-k')!.tagName).toBe('BUTTON');
+        expect(document.querySelector('[role="group"]')!.hasAttribute('tabindex')).toBe(false);
+    });
+});
+
 describe('SettingInput — tags', () => {
     test('shows the stored tags and emits the parsed array on edit', () => {
         const { onChange } = renderInput({ type: 'tags' }, ['a', 'b']);
@@ -88,27 +144,40 @@ describe('SettingInput — tags', () => {
     });
 
     test('TagsField treats a missing value as no tags and has no reset without onReset', () => {
-        render(<TagsField id="k" settingKey="k" value={undefined} onChange={jest.fn()} placeholder="p" />);
+        render(
+            <TagsField id="k" settingKey="k" labelKey="app.k" value={undefined} onChange={jest.fn()} placeholder="p" />,
+        );
         expect(screen.getByPlaceholderText<HTMLInputElement>('p').value).toBe('');
         expect(resetButton()).toBeNull();
     });
 
     test('TagsField re-syncs its draft when the array is replaced from outside', () => {
         const { rerender } = render(
-            <TagsField id="k" settingKey="k" value={['a']} onChange={jest.fn()} placeholder="p" />,
+            <TagsField id="k" settingKey="k" labelKey="app.k" value={['a']} onChange={jest.fn()} placeholder="p" />,
         );
-        rerender(<TagsField id="k" settingKey="k" value={['b', 'c']} onChange={jest.fn()} placeholder="p" />);
+        rerender(
+            <TagsField
+                id="k"
+                settingKey="k"
+                labelKey="app.k"
+                value={['b', 'c']}
+                onChange={jest.fn()}
+                placeholder="p"
+            />,
+        );
         expect(screen.getByPlaceholderText<HTMLInputElement>('p').value).toBe('b, c');
     });
 
     test('TagsField keeps a trailing comma while typing when the parsed tags already match', () => {
         const onChange = jest.fn();
         const { rerender } = render(
-            <TagsField id="k" settingKey="k" value={['a']} onChange={onChange} placeholder="p" />,
+            <TagsField id="k" settingKey="k" labelKey="app.k" value={['a']} onChange={onChange} placeholder="p" />,
         );
         fireEvent.change(screen.getByPlaceholderText('p'), { target: { value: 'a, b,' } });
         // Parent echoes the parsed array back: the draft must keep the comma.
-        rerender(<TagsField id="k" settingKey="k" value={['a', 'b']} onChange={onChange} placeholder="p" />);
+        rerender(
+            <TagsField id="k" settingKey="k" labelKey="app.k" value={['a', 'b']} onChange={onChange} placeholder="p" />,
+        );
         expect(screen.getByPlaceholderText<HTMLInputElement>('p').value).toBe('a, b,');
     });
 });

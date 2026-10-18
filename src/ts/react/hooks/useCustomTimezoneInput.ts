@@ -50,7 +50,9 @@ export function useCustomTimezoneInput({
 
     const add = useCallback(() => {
         const zone = value.trim();
-        if (!zone || !isValidTimezone(zone)) {
+        // An empty field has nothing to add and nothing wrong with it (leaving it is not an error).
+        if (!zone) return;
+        if (!isValidTimezone(zone)) {
             setError(true);
             return;
         }

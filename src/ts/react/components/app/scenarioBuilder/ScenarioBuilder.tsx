@@ -390,6 +390,8 @@ function JsonTab({
             <textarea
                 className="textarea w-full font-mono text-xs"
                 rows={16}
+                spellcheck={false}
+                autoCapitalize="off"
                 aria-label={t('app.sbTabJson')}
                 value={text}
                 onChange={(e) => {

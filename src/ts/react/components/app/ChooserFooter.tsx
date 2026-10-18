@@ -299,7 +299,11 @@ export function SearchForm({ onSearch }: { onSearch: (term: string) => void }) {
         >
             <input
                 type="search"
+                name="photo-search"
                 className="input input-sm min-w-40 flex-1"
+                autoComplete="off"
+                spellcheck={false}
+                enterKeyHint="search"
                 aria-label={t('app.photoChooserSearchLabel')}
                 placeholder={t('app.photoChooserSearchPlaceholder')}
                 value={text}

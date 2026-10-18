@@ -123,7 +123,7 @@ function HoursMinutesInputs({
 export function TimeField({ id, settingKey, config, value, onChange, onReset, disabled }: SettingFieldProps) {
     const { t } = useTranslation();
     return (
-        <div className="flex items-center gap-2" role="group" aria-labelledby={`${id}-label`}>
+        <div id={id} tabIndex={-1} className="flex items-center gap-2" role="group" aria-labelledby={`${id}-label`}>
             <HoursMinutesInputs
                 seconds={typeof value === 'number' ? value : 0}
                 onChange={(seconds) => onChange(settingKey, seconds)}
@@ -131,7 +131,7 @@ export function TimeField({ id, settingKey, config, value, onChange, onReset, di
                 widthClass="w-20"
                 disabled={disabled}
             />
-            <SettingResetButton settingKey={settingKey} onReset={onReset} />
+            <SettingResetButton settingKey={settingKey} labelKey={config.label} onReset={onReset} />
         </div>
     );
 }
@@ -162,7 +162,7 @@ const isDominated = (activeRows: { count: number; seconds: number }[], count: nu
  * migration removes such rows anyway, through sanitizeFillSchedule in
  * settings/schema/autoSubmit.ts).
  */
-export function ScheduleField({ settingKey, value, onChange, onReset, disabled }: SettingFieldProps) {
+export function ScheduleField({ settingKey, config, value, onChange, onReset, disabled }: SettingFieldProps) {
     const { t } = useTranslation();
     // The field holds this key's value, a schedule.
     const rows = (Array.isArray(value) ? value : []) as FillSchedule;
@@ -221,7 +221,7 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled }
             )}
             {onReset && (
                 <div className="flex items-center gap-2">
-                    <SettingResetButton settingKey={settingKey} onReset={onReset} />
+                    <SettingResetButton settingKey={settingKey} labelKey={config.label} onReset={onReset} />
                 </div>
             )}
         </div>
@@ -250,6 +250,7 @@ const copyRows = <R,>(arr: R[]): R[] => arr.slice();
 function RowListFooter({
     kind,
     settingKey,
+    labelKey,
     rowCount,
     onAdd,
     onReset,
@@ -257,6 +258,7 @@ function RowListFooter({
 }: {
     kind: Pick<RowKind<unknown>, 'addLabelKey' | 'emptyLabelKey'>;
     settingKey: string;
+    labelKey: string;
     rowCount: number;
     onAdd: () => void;
     onReset?: SettingResetHandler | null;
@@ -279,7 +281,7 @@ function RowListFooter({
                     {t('app.scheduledFillMaxEntries').replace('{0}', String(SCHEDULED_FILL_MAX_ENTRIES))}
                 </ToneNote>
             )}
-            <SettingResetButton settingKey={settingKey} onReset={onReset} />
+            <SettingResetButton settingKey={settingKey} labelKey={labelKey} onReset={onReset} />
         </div>
     );
 }
@@ -351,6 +353,7 @@ function RowListField<R>({
             <RowListFooter
                 kind={kind}
                 settingKey={settingKey}
+                labelKey={config.label}
                 rowCount={rows.length}
                 onAdd={() => update([...rows, kind.blankRow])}
                 onReset={onReset}

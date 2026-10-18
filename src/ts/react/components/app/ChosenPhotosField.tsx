@@ -24,7 +24,7 @@ const photoIdsOf = (value: unknown): string[] =>
 function ChosenPhotoChip({ id, position, memberId }: { id: string; position: number; memberId: string | null }) {
     const { t } = useTranslation();
     const url = memberId ? buildPhotoUrl(memberId, id, { size: THUMB_PX }) : null;
-    const showImage = useImageLoads(url);
+    const [showImage, imageRef] = useImageLoads(url);
     const short = id.slice(0, 8);
     return (
         <li className="inline-flex items-center gap-0.5">
@@ -34,6 +34,7 @@ function ChosenPhotoChip({ id, position, memberId }: { id: string; position: num
             </span>
             {showImage ? (
                 <img
+                    ref={imageRef}
                     src={url as string}
                     alt={interp(t('app.chosenPhotoThumbAlt'), { n: position, id: short })}
                     loading="lazy"
@@ -142,7 +143,7 @@ export function ChosenPhotosControl({
  * in a challenge's settings it is offered as "Use none", with a hint that the
  * reset button brings the inherited list back.
  */
-export function PhotosField({ id, settingKey, value, onChange, onReset, disabled }: SettingFieldProps) {
+export function PhotosField({ id, settingKey, config, value, onChange, onReset, disabled }: SettingFieldProps) {
     const { t } = useTranslation();
     const challengeId = useSettingsChallengeId();
     return (
@@ -157,7 +158,7 @@ export function PhotosField({ id, settingKey, value, onChange, onReset, disabled
                 disabled={disabled}
                 challengeId={challengeId}
             />
-            <SettingResetButton settingKey={settingKey} onReset={onReset} />
+            <SettingResetButton settingKey={settingKey} labelKey={config.label} onReset={onReset} />
         </div>
     );
 }

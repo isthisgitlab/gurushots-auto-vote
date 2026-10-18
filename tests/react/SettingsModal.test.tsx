@@ -74,7 +74,7 @@ const mockFormState: MockFormState = {
     handleResetGlobal: jest.fn(),
     handleResetUi: jest.fn<void, Parameters<UiResetHandler>>(),
     handleResetAll: jest.fn(),
-    commit: jest.fn().mockResolvedValue(undefined),
+    commit: jest.fn().mockResolvedValue([]),
     revert: jest.fn(),
 };
 
@@ -116,7 +116,7 @@ const resetHookState = () => {
         handleResetGlobal: jest.fn(),
         handleResetUi: jest.fn<void, Parameters<UiResetHandler>>(),
         handleResetAll: jest.fn(),
-        commit: jest.fn().mockResolvedValue(undefined),
+        commit: jest.fn().mockResolvedValue([]),
         revert: jest.fn(),
     });
 };
@@ -335,6 +335,91 @@ describe('SettingsModal — schema save rejection (commit reports rejected keys)
     });
 });
 
+describe('SettingsModal — focus and invalid marks after a refused Save', () => {
+    const schema = {
+        exposure: { type: 'number', default: 50, min: 1, max: 100, group: 'general', label: 'app.exposure' },
+        autoSubmitSchedule: { type: 'schedule', default: [], group: 'general', label: 'app.schedule' },
+        useVotingPause: { type: 'boolean', default: false, group: 'general', label: 'app.useVotingPause' },
+    };
+
+    beforeEach(() => {
+        mockSchemaState.schema = schema;
+        mockSchemaState.groups = [{ id: 'general', label: 'app.groupGeneral', tier: 'core' }];
+        mockSchemaState.tiers = [{ id: 'core', label: 'app.tierCore' }];
+    });
+
+    afterEach(() => {
+        mockSchemaState.schema = {};
+        mockSchemaState.defaults = {};
+        mockSchemaState.groups = undefined;
+        mockSchemaState.tiers = undefined;
+    });
+
+    // The modal reads commit when it renders, so the answer is set before it opens.
+    const openAndSave = async (rejected: string[]) => {
+        mockFormState.commit = jest.fn().mockResolvedValue(rejected);
+        const utils = render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        clickButtonByText('app.save');
+        await screen.findByText('app.settingsSaveError');
+        return utils;
+    };
+    const focused = () => document.activeElement;
+
+    test('a refused schema key is marked invalid and takes focus by its setting- id', async () => {
+        await openAndSave(['exposure']);
+        const input = document.getElementById('setting-exposure')!;
+        await waitFor(() => expect(focused()).toBe(input));
+        expect(input.getAttribute('aria-invalid')).toBe('true');
+        // Its neighbours are not marked.
+        expect(document.getElementById('setting-useVotingPause')!.hasAttribute('aria-invalid')).toBe(false);
+    });
+
+    test('a refused row-list key takes focus on its group, which has no single control', async () => {
+        await openAndSave(['autoSubmitSchedule']);
+        const group = document.getElementById('setting-autoSubmitSchedule')!;
+        expect(group.getAttribute('role')).toBe('group');
+        await waitFor(() => expect(focused()).toBe(group));
+    });
+
+    test('a refused theme is marked invalid and takes focus by its ui- id', async () => {
+        await openAndSave(['theme']);
+        const select = document.getElementById('ui-theme')!;
+        await waitFor(() => expect(focused()).toBe(select));
+        expect(select.getAttribute('aria-invalid')).toBe('true');
+    });
+
+    test('a refused UI number field is marked invalid and takes focus by its ui- id', async () => {
+        await openAndSave(['apiRetryBaseDelayMs']);
+        const input = document.getElementById('ui-apiRetryBaseDelayMs')!;
+        await waitFor(() => expect(focused()).toBe(input));
+        expect(input.getAttribute('aria-invalid')).toBe('true');
+        expect(document.getElementById('ui-apiMaxRetries')!.hasAttribute('aria-invalid')).toBe(false);
+    });
+
+    test('the custom zones are edited through the timezone select, which takes the mark and focus', async () => {
+        await openAndSave(['customTimezones']);
+        const select = document.getElementById('ui-timezone')!;
+        await waitFor(() => expect(focused()).toBe(select));
+        expect(select.getAttribute('aria-invalid')).toBe('true');
+    });
+
+    test('focus goes to the first refused key that has an input', async () => {
+        await openAndSave(['notRendered', 'exposure', 'theme']);
+        await waitFor(() => expect(focused()).toBe(document.getElementById('setting-exposure')));
+    });
+
+    test('the marks are gone after the next Save lands', async () => {
+        const { rerender } = await openAndSave(['exposure']);
+        expect(document.getElementById('setting-exposure')!.getAttribute('aria-invalid')).toBe('true');
+        mockFormState.commit = jest.fn().mockResolvedValue([]);
+        rerender(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        clickButtonByText('app.save');
+        await waitFor(() =>
+            expect(document.getElementById('setting-exposure')!.hasAttribute('aria-invalid')).toBe(false),
+        );
+    });
+});
+
 describe('SettingsModal — title-tag-rules save', () => {
     const clickSave = () => {
         const saveBtn = Array.from(document.querySelectorAll('button')).find(
@@ -358,6 +443,8 @@ describe('SettingsModal — title-tag-rules save', () => {
         await screen.findByText('app.titleTagRulesSaveError');
         expect(window.api.setTitleRules).toHaveBeenCalledWith([rule]);
         expect(onClose).not.toHaveBeenCalled();
+        // Focus moves to the section that failed.
+        await waitFor(() => expect(document.activeElement).toBe(screen.getByText('app.titleTagRules')));
     });
 
     test("removing every list from a rule's chooser, then saving, does not write the lists back", async () => {
@@ -653,17 +740,64 @@ describe('SettingsModal — application settings controls', () => {
         ]);
     });
 
-    test('check-frequency inputs parse integers and fall back to 1 when cleared', () => {
+    test('check-frequency inputs commit in-range integers as they are typed', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         const [minInput, maxInput] = document.querySelectorAll('input[type="number"][max="60"]');
         fireEvent.change(minInput, { target: { value: '7' } });
         expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('checkFrequencyMin', 7);
-        fireEvent.change(minInput, { target: { value: '' } });
-        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('checkFrequencyMin', 1);
         fireEvent.change(maxInput, { target: { value: '12' } });
         expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('checkFrequencyMax', 12);
-        fireEvent.change(maxInput, { target: { value: '' } });
-        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('checkFrequencyMax', 1);
+    });
+
+    test('an emptied or out-of-range check-frequency draft is kept as typed, not committed', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        const minInput = document.querySelector<HTMLInputElement>('input[type="number"][max="60"]')!;
+        fireEvent.change(minInput, { target: { value: '' } });
+        expect(minInput.value).toBe('');
+        fireEvent.change(minInput, { target: { value: '61' } });
+        expect(minInput.value).toBe('61');
+        expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
+        // Flagged while it is out of range, without the message yet.
+        expect(minInput.getAttribute('aria-invalid')).toBe('true');
+        expect(minInput.hasAttribute('aria-describedby')).toBe(false);
+    });
+
+    test('blurring an invalid draft puts the last valid value back and explains the range', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        const minInput = document.querySelector<HTMLInputElement>('input[type="number"][max="60"]')!;
+        fireEvent.change(minInput, { target: { value: '' } });
+        // The blur event is not wrapped in act by the test helper, which the state update it causes needs.
+        act(() => {
+            fireEvent.blur(minInput);
+        });
+        expect(minInput.value).toBe('5');
+        expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
+        const message = screen.getByText('app.validationOutOfRange');
+        expect(minInput.getAttribute('aria-invalid')).toBe('true');
+        expect(minInput.getAttribute('aria-describedby')).toBe(message.id);
+        expect(minInput.className).toMatch(/input-error/);
+        // The next edit clears it.
+        fireEvent.change(minInput, { target: { value: '8' } });
+        expect(screen.queryByText('app.validationOutOfRange')).toBeNull();
+        expect(minInput.hasAttribute('aria-invalid')).toBe(false);
+    });
+
+    test('a draft follows the value when it is changed from outside (a reset)', () => {
+        const { rerender } = render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        const minInput = document.querySelector<HTMLInputElement>('input[type="number"][max="60"]')!;
+        fireEvent.change(minInput, { target: { value: '9' } });
+        mockFormState.uiValues.checkFrequencyMin = 2;
+        rerender(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(minInput.value).toBe('2');
+    });
+
+    test('a typed draft that already reads as the committed value is left as typed', () => {
+        const { rerender } = render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        const minInput = document.querySelector<HTMLInputElement>('input[type="number"][max="60"]')!;
+        fireEvent.change(minInput, { target: { value: '07' } });
+        mockFormState.uiValues.checkFrequencyMin = 7;
+        rerender(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(minInput.value).toBe('07');
     });
 
     test('blurring a max below the min clamps it up to the min; a valid max is left alone', () => {
@@ -680,19 +814,36 @@ describe('SettingsModal — application settings controls', () => {
         expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
     });
 
-    test('blurring an emptied max treats it as 1 and clamps to the min', () => {
-        mockFormState.uiValues.checkFrequencyMax = invalid('');
+    test('a max typed below the min is committed, then clamped up on blur', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-        fireEvent.blur(document.querySelectorAll('input[type="number"][max="60"]')[1]);
-        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('checkFrequencyMax', 5);
+        const maxInput = document.querySelectorAll('input[type="number"][max="60"]')[1]!;
+        fireEvent.change(maxInput, { target: { value: '3' } });
+        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('checkFrequencyMax', 3);
+        fireEvent.blur(maxInput);
+        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('checkFrequencyMax', 5);
     });
 
-    test('clearing the reliability inputs falls back to 0 retries and a 1000 ms base delay', () => {
+    test('clearing the reliability inputs keeps the draft, and blur restores the last valid value', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-        fireEvent.change(screen.getByLabelText('app.apiMaxRetries'), { target: { value: '' } });
-        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('apiMaxRetries', 0);
-        fireEvent.change(screen.getByLabelText('app.apiRetryBaseDelayMs'), { target: { value: '' } });
-        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('apiRetryBaseDelayMs', 1000);
+        const retries = screen.getByLabelText<HTMLInputElement>('app.apiMaxRetries');
+        const delay = screen.getByLabelText<HTMLInputElement>('app.apiRetryBaseDelayMs');
+        fireEvent.change(retries, { target: { value: '' } });
+        fireEvent.change(delay, { target: { value: '' } });
+        expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
+        act(() => {
+            fireEvent.blur(retries);
+            fireEvent.blur(delay);
+        });
+        expect(retries.value).toBe('3');
+        expect(delay.value).toBe('1000');
+        expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
+    });
+
+    test('each UI number input has a ui-<key> id for the focus after a refused Save', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        for (const key of ['checkFrequencyMin', 'checkFrequencyMax', 'apiMaxRetries', 'apiRetryBaseDelayMs']) {
+            expect(document.getElementById(`ui-${key}`)!.tagName).toBe('INPUT');
+        }
     });
 });
 
@@ -749,14 +900,32 @@ describe('SettingsModal — timezone select and custom zones', () => {
         expect(mockFormState.handleUiChange).toHaveBeenCalledWith('timezone', 'Asia/Tokyo');
     });
 
-    test('typing after an invalid submit clears the error state', () => {
+    test('an invalid zone is flagged with a message the input points at; typing clears it', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         fireEvent.click(findTimezoneAddButton());
-        fireEvent.keyDown(document.querySelector('input[type="text"]')!, { key: 'Enter' }); // empty → invalid
-        expect(document.querySelector('input[type="text"]')!.className).toMatch(/input-error/);
+        const input = document.querySelector<HTMLInputElement>('input[type="text"]')!;
+        fireEvent.change(input, { target: { value: 'Not/A/Zone' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+        expect(input.className).toMatch(/input-error/);
+        expect(input.getAttribute('aria-invalid')).toBe('true');
+        const message = screen.getByText('app.timezoneInvalid');
+        expect(input.getAttribute('aria-describedby')).toBe(message.id);
 
-        fireEvent.change(document.querySelector('input[type="text"]')!, { target: { value: 'A' } });
-        expect(document.querySelector('input[type="text"]')!.className).not.toMatch(/input-error/);
+        fireEvent.change(input, { target: { value: 'A' } });
+        expect(input.className).not.toMatch(/input-error/);
+        expect(input.hasAttribute('aria-invalid')).toBe(false);
+        expect(screen.queryByText('app.timezoneInvalid')).toBeNull();
+    });
+
+    test('leaving the zone input empty is not an error', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        fireEvent.click(findTimezoneAddButton());
+        const input = document.querySelector<HTMLInputElement>('input[type="text"]')!;
+        fireEvent.keyDown(input, { key: 'Enter' });
+        fireEvent.blur(input);
+        expect(input.className).not.toMatch(/input-error/);
+        expect(screen.queryByText('app.timezoneInvalid')).toBeNull();
+        expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
     });
 
     test('other keys in the zone input are ignored', () => {
@@ -911,6 +1080,8 @@ describe('SettingsModal — save outcomes', () => {
 
         await screen.findByText('app.settingsSaveError');
         expect(onClose).not.toHaveBeenCalled();
+        // The language has no key to mark, so focus goes to its section's heading.
+        await waitFor(() => expect(document.activeElement).toBe(screen.getByText('app.applicationSettings')));
     });
 
     test.each([

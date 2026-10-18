@@ -118,6 +118,8 @@ function ImportPanel({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
                 id="scenario-import-text"
                 className="textarea w-full font-mono text-xs"
                 rows={6}
+                spellcheck={false}
+                autoCapitalize="off"
                 value={text}
                 onChange={(e) => {
                     setText(e.currentTarget.value);
@@ -180,6 +182,8 @@ function ExportedScenario({ name, exported, onHide }: { name: string; exported: 
             <textarea
                 className="textarea w-full font-mono text-xs"
                 rows={6}
+                spellcheck={false}
+                autoCapitalize="off"
                 readOnly
                 aria-label={interp(t('app.scenarioExportLabel'), { name })}
                 value={exported.json}

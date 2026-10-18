@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ToneNote } from '@/components/ui/ToneNote';
@@ -26,10 +26,12 @@ export function LoginForm({
     }, [initialUsername]);
     const [password, setPassword] = useState('');
     const [errors, setErrors] = useState<{ username?: string | null; password?: string | null }>({});
+    const usernameRef = useRef<HTMLInputElement>(null);
+    const passwordRef = useRef<HTMLInputElement>(null);
 
     /**
      * Validate form fields
-     * @returns Whether form is valid
+     * @returns The error text of each invalid field (empty when the form is valid)
      */
     const validateForm = useCallback(() => {
         const newErrors: { username?: string; password?: string } = {};
@@ -43,7 +45,7 @@ export function LoginForm({
         }
 
         setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
+        return newErrors;
     }, [username, password, t]);
 
     /**
@@ -53,9 +55,11 @@ export function LoginForm({
         (e: TargetedSubmitEvent<HTMLFormElement>) => {
             e.preventDefault();
 
-            if (validateForm()) {
-                void onSubmit(username.trim(), password);
-            }
+            const found = validateForm();
+            // Focus follows the first invalid field, so the keyboard and a screen reader land on what to fix.
+            if (found.username) usernameRef.current?.focus();
+            else if (found.password) passwordRef.current?.focus();
+            else void onSubmit(username.trim(), password);
         },
         [username, password, validateForm, onSubmit],
     );
@@ -91,6 +95,7 @@ export function LoginForm({
                     <span>{t('login.username')}</span>
                 </label>
                 <input
+                    ref={usernameRef}
                     id="username"
                     type="text"
                     className={`input w-full ${errors.username ? 'input-error' : ''}`}
@@ -101,9 +106,11 @@ export function LoginForm({
                     autoComplete="username"
                     autoCapitalize="none"
                     spellcheck={false}
+                    aria-invalid={errors.username ? true : undefined}
+                    aria-describedby={errors.username ? 'username-error' : undefined}
                 />
                 {errors.username && (
-                    <ToneNote tone="error" as="div" className="font-medium mt-1">
+                    <ToneNote tone="error" as="div" id="username-error" className="font-medium mt-1">
                         {errors.username}
                     </ToneNote>
                 )}
@@ -115,6 +122,7 @@ export function LoginForm({
                     <span>{t('login.password')}</span>
                 </label>
                 <input
+                    ref={passwordRef}
                     id="password"
                     type="password"
                     className={`input w-full ${errors.password ? 'input-error' : ''}`}
@@ -123,9 +131,11 @@ export function LoginForm({
                     onChange={handlePasswordChange}
                     disabled={loading}
                     autoComplete="current-password"
+                    aria-invalid={errors.password ? true : undefined}
+                    aria-describedby={errors.password ? 'password-error' : undefined}
                 />
                 {errors.password && (
-                    <ToneNote tone="error" as="div" className="font-medium mt-1">
+                    <ToneNote tone="error" as="div" id="password-error" className="font-medium mt-1">
                         {errors.password}
                     </ToneNote>
                 )}
@@ -137,7 +147,7 @@ export function LoginForm({
                     {loading ? (
                         <>
                             <span>{t('login.loggingIn')}</span>
-                            <LoadingSpinner size="sm" className="ml-2" />
+                            <LoadingSpinner size="sm" className="ml-2" decorative />
                         </>
                     ) : (
                         <span>{t('login.loginButton')}</span>

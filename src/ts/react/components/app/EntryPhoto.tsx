@@ -46,7 +46,7 @@ export function EntryPhoto({ entry }: { entry: RankingEntry }) {
     // A well-formed URL can still fail — a since-deleted photo, an absent `3_`
     // rendition, an offline session. Same outcome as a malformed id: show
     // nothing rather than a broken-image glyph.
-    const showPhoto = useImageLoads(thumbUrl);
+    const [showPhoto, photoRef] = useImageLoads(thumbUrl);
 
     // Past this check every URL below is a string: a null thumbUrl never
     // loads, and the larger renders are built from the same ids.
@@ -76,6 +76,7 @@ export function EntryPhoto({ entry }: { entry: RankingEntry }) {
                 {/* Decorative: the button carries the accessible name, so an alt
                     here would make a screen reader announce the photo twice. */}
                 <img
+                    ref={photoRef}
                     src={thumbUrl as string}
                     alt=""
                     loading="lazy"

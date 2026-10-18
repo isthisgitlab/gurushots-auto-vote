@@ -420,7 +420,12 @@ export function challengeSettingHints({
  */
 export function SettingHintList({ hints }: { hints: SettingHint[] }) {
     return hints.map((hint) => (
-        <ToneNote key={hint.text} tone={hint.tone} className={`text-xs mt-1 ${hint.strong ? 'font-medium' : ''}`}>
+        <ToneNote
+            key={hint.text}
+            tone={hint.tone}
+            role="status"
+            className={`text-xs mt-1 ${hint.strong ? 'font-medium' : ''}`}
+        >
             {hint.text}
         </ToneNote>
     ));

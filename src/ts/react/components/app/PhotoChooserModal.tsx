@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal } from '@/components/ui/Modal';
 import { StickyModalFooter } from '@/components/ui/StickyModalFooter';
@@ -106,7 +106,7 @@ function RankBadge({ rank }: { rank: number | null }) {
     );
 }
 
-export function PhotoTile({
+function PhotoTileBase({
     photo,
     memberId,
     selected,
@@ -139,7 +139,7 @@ export function PhotoTile({
 }) {
     const { t } = useTranslation();
     const url = memberId ? buildPhotoUrl(memberId, photo.id, { size: TILE_PX }) : null;
-    const showImage = useImageLoads(url);
+    const [showImage, imageRef] = useImageLoads(url);
     const labels = labelsOf(photo, t('app.photoChooserNoTags'));
     // A photo that cannot be added (the challenge refuses it, or the list is full)
     // stays removable once selected. It is aria-disabled rather than disabled, so
@@ -178,6 +178,7 @@ export function PhotoTile({
             <RankBadge rank={rank} />
             {showImage ? (
                 <img
+                    ref={imageRef}
                     src={url as string}
                     alt=""
                     loading="lazy"
@@ -205,6 +206,10 @@ export function PhotoTile({
         </button>
     );
 }
+
+// Memoised: a toggle re-renders the grid, and with this only the tiles whose own props changed. Every prop
+// is a primitive or stable between renders (the listing's photo records, and `toggle`, a useCallback).
+export const PhotoTile = memo(PhotoTileBase);
 
 /**
  * What a chosen photo the listing does not return most likely is. With a

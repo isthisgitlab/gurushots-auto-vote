@@ -17,7 +17,7 @@ import { SettingsTierHeading } from '@/components/ui/SettingsTierHeading';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { SettingInput, SettingLabel } from './SettingInput';
 import { SettingHintList, globalSettingHints } from './SettingHints';
-import { ApplicationSettingsSection } from './ApplicationSettingsSection';
+import { ApplicationSettingsSection, APPLICATION_HEADING_ID } from './ApplicationSettingsSection';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { ScenariosSection } from './ScenariosSection';
 import { AboutDataSection } from './AboutDataSection';
@@ -35,11 +35,16 @@ type SchemaFormProps = {
     handleFormChange: SettingChangeHandler;
     handleResetGlobal: SettingResetHandler;
     hintsFor: HintsFor;
+    /** The settings the last Save refused: their inputs are marked invalid. */
+    rejectedKeys: readonly string[];
 };
 
 // The tier of app-wide settings (rewards, missions, notifications, display).
 // They render with the Application Settings, not as challenge defaults.
 const APP_TIER = 'app';
+
+// The title-rules heading: where focus goes when saving the rules fails.
+const TITLE_RULES_HEADING_ID = 'settings-title-rules-heading';
 
 // Challenge types seen on the live API (verified 2026-09-19). Suggestions for
 // the rule type field only — it stays free text, so a type this build has never
@@ -59,6 +64,7 @@ function SchemaSettingsGroup({
     handleFormChange,
     handleResetGlobal,
     hintsFor,
+    rejectedKeys,
 }: { group: SettingsSection; level?: 'h5' | 'h6' } & SchemaFormProps) {
     const { t } = useTranslation();
     const Heading = level;
@@ -82,6 +88,7 @@ function SchemaSettingsGroup({
                             value={formValues[key] ?? config.default}
                             onChange={handleFormChange}
                             onReset={handleResetGlobal}
+                            rejected={rejectedKeys.includes(key)}
                         />
                         <SettingHintList hints={hintsFor(key)} />
                     </div>
@@ -118,7 +125,13 @@ function TitleRulesSection({ titleRules }: { titleRules: ReturnType<typeof useTi
     const { t } = useTranslation();
     return (
         <div>
-            <h4 className="font-semibold text-base mb-1 border-b border-base-300 pb-2">{t('app.titleTagRules')}</h4>
+            <h4
+                id={TITLE_RULES_HEADING_ID}
+                tabIndex={-1}
+                className="font-semibold text-base mb-1 border-b border-base-300 pb-2"
+            >
+                {t('app.titleTagRules')}
+            </h4>
             <p className="text-xs text-base-content/70 mb-3">{t('app.titleTagRulesDesc')}</p>
             {titleRules.error && (
                 <div className="alert alert-error mb-3 py-2 text-sm" role="alert">
@@ -183,6 +196,11 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     // True when commit() reported schema writes rejected by validation —
     // shown as an alert and the modal stays open (mirrors titleRules.error).
     const [saveError, setSaveError] = useState(false);
+    // The keys commit() reported, so each one's input can say it was refused.
+    const [rejectedKeys, setRejectedKeys] = useState<string[]>([]);
+    // Element ids a failed Save moves focus to (the first that exists), set as data and applied after the render
+    // that marks the inputs invalid.
+    const [focusIds, setFocusIds] = useState<string[] | null>(null);
     // The scenario builder's unsaved draft, reported by the section: the modal's Save does not save it.
     const [scenarioDirty, setScenarioDirty] = useState(false);
     // The question on screen: dismissing with unsaved edits, or saving with work Save would drop.
@@ -192,11 +210,24 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     useEffect(() => {
         if (isOpen) {
             setSaveError(false);
+            setRejectedKeys([]);
             setScenarioDirty(false);
         } else {
             setAsking(null);
         }
     }, [isOpen]);
+
+    useEffect(() => {
+        if (!focusIds) return;
+        setFocusIds(null);
+        for (const id of focusIds) {
+            const target = document.getElementById(id);
+            if (target) {
+                target.focus();
+                return;
+            }
+        }
+    }, [focusIds]);
 
     const handleCancel = useCallback(() => {
         // Put the persisted theme back on screen if the user previewed another one in this open session.
@@ -222,6 +253,16 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         scenarioDirty && 'app.settingsDropScenario',
     ].filter((key): key is string => typeof key === 'string');
 
+    // The element a refused key's input carries: a UI key's `ui-` id (the custom zones are edited through the
+    // timezone select), else the schema input's `setting-` id.
+    const focusIdOf = useCallback(
+        (key: string) => {
+            if (!(key in uiValues)) return `setting-${key}`;
+            return key === 'customTimezones' ? 'ui-timezone' : `ui-${key}`;
+        },
+        [uiValues],
+    );
+
     const runSave = useCallback(async () => {
         try {
             // commit() returns the schema keys whose write was rejected by
@@ -229,19 +270,25 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             // that and keep the modal open — same rationale as the title-rules
             // check below — so the edit isn't silently lost behind a closed
             // modal that looked like a successful save.
-            const rejectedKeys = await commit();
-            if (Array.isArray(rejectedKeys) && rejectedKeys.length > 0) {
+            const rejected = await commit();
+            setRejectedKeys(rejected);
+            if (rejected.length > 0) {
                 setSaveError(true);
+                setFocusIds(rejected.map(focusIdOf));
                 return;
             }
             setSaveError(false);
             // Title rules are rejected as a whole (e.g. a tag over the length
             // cap); the hook surfaces that and the modal stays open.
-            if (!(await persistTitleRules())) return;
+            if (!(await persistTitleRules())) {
+                setFocusIds([TITLE_RULES_HEADING_ID]);
+                return;
+            }
             // A language that fails to save keeps the modal open with the
             // save-error alert instead of closing on a change that didn't land.
             if (uiValues.language !== language && !(await setLanguage(uiValues.language))) {
                 setSaveError(true);
+                setFocusIds([APPLICATION_HEADING_ID]);
                 return;
             }
             // Close first: the re-arm reads settings and fetches the active
@@ -254,14 +301,14 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         } catch (err) {
             await ipc.logRendererError(`Error saving settings: ${errorMessage(err) || err}`);
         }
-    }, [commit, persistTitleRules, uiValues.language, language, setLanguage, rearmSchedule, onClose]);
+    }, [commit, focusIdOf, persistTitleRules, uiValues.language, language, setLanguage, rearmSchedule, onClose]);
 
     const handleSave = () => (droppedWork.length > 0 ? setAsking('drop') : runSave());
 
     if (!isOpen) return null;
 
     const hintsFor = globalSettingHints({ formValues, schema, timezone: uiValues.timezone, t });
-    const schemaForm = { formValues, handleFormChange, handleResetGlobal, hintsFor };
+    const schemaForm = { formValues, handleFormChange, handleResetGlobal, hintsFor, rejectedKeys };
     const bands = tierSchemaEntries(schema, groups, tiers);
     const appGroups = bands.filter((band) => band.id === APP_TIER).flatMap((band) => band.groups);
 
@@ -285,6 +332,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                             uiValues={uiValues}
                             handleUiChange={handleUiChange}
                             handleResetUi={handleResetUi}
+                            rejectedKeys={rejectedKeys}
                             timezoneInput={timezoneInput}
                         >
                             {appGroups.map((group) => (

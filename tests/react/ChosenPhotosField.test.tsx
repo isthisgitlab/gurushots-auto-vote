@@ -104,6 +104,18 @@ describe('the photos setting input', () => {
         expect(img.getAttribute('loading')).toBe('lazy');
     });
 
+    test('a thumbnail that fails to load falls back to the id start, and only for that chip', async () => {
+        window.api.getSetting = jest.fn().mockResolvedValue(MEMBER);
+        rememberCurrentMember(MEMBER);
+        renderInput([idOf(1), idOf(2)]);
+        await waitFor(() => expect(document.querySelectorAll('img')).toHaveLength(2));
+        act(() => {
+            document.querySelector('img')!.dispatchEvent(new Event('error'));
+        });
+        expect(document.querySelectorAll('img')).toHaveLength(1);
+        expect(screen.getByText('00000001')).toBeTruthy();
+    });
+
     test('a list owned by another account is only counted: no thumbnail, no id, no short id', async () => {
         window.api.getSetting = jest.fn().mockResolvedValue('d'.repeat(32));
         rememberCurrentMember(MEMBER);
@@ -165,7 +177,7 @@ describe('the photos setting input', () => {
 
     test('the reset button hands the key to onReset', () => {
         const { onReset } = renderInput([idOf(1)]);
-        fireEvent.click(document.querySelector('button[title="app.resetToDefaultNotSaved"]')!);
+        fireEvent.click(document.querySelector('button[title^="app.resetToDefaultNotSaved"]')!);
         expect(onReset).toHaveBeenCalledWith('chosenPhotos');
     });
 });

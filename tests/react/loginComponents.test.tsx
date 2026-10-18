@@ -22,6 +22,29 @@ describe('LoginForm', () => {
         expect(document.getElementById('password')!.className).toContain('input-error');
     });
 
+    test('an invalid field is marked and points at its error; focus lands on the first one', () => {
+        render(<LoginForm onSubmit={jest.fn()} />);
+        const username = document.getElementById('username')!;
+        const password = document.getElementById('password')!;
+        expect(username.hasAttribute('aria-invalid')).toBe(false);
+        expect(username.hasAttribute('aria-describedby')).toBe(false);
+        fireEvent.submit(document.querySelector('form')!);
+        expect(username.getAttribute('aria-invalid')).toBe('true');
+        expect(username.getAttribute('aria-describedby')).toBe('username-error');
+        expect(document.getElementById('username-error')!.textContent).toContain('login.usernameRequired');
+        expect(password.getAttribute('aria-invalid')).toBe('true');
+        expect(password.getAttribute('aria-describedby')).toBe('password-error');
+        expect(document.getElementById('password-error')!.textContent).toContain('login.passwordRequired');
+        expect(document.activeElement).toBe(username);
+    });
+
+    test('with only the password missing, focus lands on the password', () => {
+        render(<LoginForm onSubmit={jest.fn()} initialUsername="alice" />);
+        fireEvent.submit(document.querySelector('form')!);
+        expect(document.activeElement).toBe(document.getElementById('password'));
+        expect(document.getElementById('username')!.hasAttribute('aria-invalid')).toBe(false);
+    });
+
     test('typing clears the matching field error only', () => {
         render(<LoginForm onSubmit={jest.fn()} />);
         fireEvent.submit(document.querySelector('form')!);
@@ -65,6 +88,12 @@ describe('LoginForm', () => {
         expect(screen.queryByText('login.loginButton')).toBeNull();
         expect((document.getElementById('username') as HTMLInputElement).disabled).toBe(true);
         expect((document.getElementById('password') as HTMLInputElement).disabled).toBe(true);
+    });
+
+    test('the spinner is decorative: the button already says it is logging in', () => {
+        render(<LoginForm onSubmit={jest.fn()} loading />);
+        expect(screen.queryByRole('status')).toBeNull();
+        expect(document.querySelector('button .loading')!.getAttribute('aria-hidden')).toBe('true');
     });
 });
 

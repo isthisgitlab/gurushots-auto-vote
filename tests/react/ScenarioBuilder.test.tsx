@@ -159,7 +159,7 @@ describe('phases', () => {
         expect(within(picker).queryByText('app.timezone')).toBeNull();
         changeSelect(picker, 'autoSubmit');
         fireEvent.change(document.querySelector('#sb-setting-exposure')!, { target: { value: '55' } });
-        fireEvent.click(screen.getAllByTitle('app.resetToDefaultNotSaved')[0]);
+        fireEvent.click(screen.getAllByTitle(/^app\.resetToDefaultNotSaved/)[0]);
         expect(document.querySelector<HTMLInputElement>('#sb-setting-exposure')!.value).toBe('100');
         fireEvent.change(document.querySelector('#sb-setting-exposure')!, { target: { value: '12' } });
         // unknownKey (not in the schema) shows its key and only a remove button.
@@ -289,6 +289,7 @@ describe('JSON tab', () => {
         await renderBuilder();
         fireEvent.click(screen.getByRole('tab', { name: 'app.sbTabJson' }));
         const box = screen.getByRole('textbox', { name: 'app.sbTabJson' });
+        expect(box.getAttribute('autocapitalize')).toBe('off');
         fireEvent.change(box, { target: { value: '{nope' } });
         expect(screen.getByRole('status').textContent).toBe('app.sbJsonInvalid');
         fireEvent.change(box, { target: { value: '{"phases": 5}' } });

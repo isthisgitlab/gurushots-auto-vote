@@ -25,6 +25,8 @@ describe('AutoVoteControls', () => {
         const button = screen.getByText('app.startAutoVote').closest('button')!;
         expect(button.className).toContain('btn-neutral');
         expect(screen.getByText('common.stopped').className).toContain('badge-neutral');
+        // A change of status is announced.
+        expect(screen.getByText('common.stopped').getAttribute('role')).toBe('status');
         expect(screen.getByText('-')).toBeTruthy();
         expect(screen.getByText('0')).toBeTruthy();
 

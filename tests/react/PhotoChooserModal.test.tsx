@@ -8,6 +8,7 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
 import { PhotoChooserModal, PhotoGrid } from '@/components/app/PhotoChooserModal';
+import { useImageLoads } from '@/hooks/useImageLoads';
 import { Modal } from '@/components/ui/Modal';
 import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
 import { fireSettingsChanged, mockTranslator } from './helpers/setup';
@@ -15,6 +16,12 @@ import { app } from '../../src/ts/translations/english';
 import { MAX_CHOSEN_PHOTOS } from '../../src/ts/settings/limits';
 import { invalid } from '../helpers/invalid';
 import type { WindowApi } from '../../src/ts/types/ipc';
+
+// Counts renders of the tiles: each PhotoTile render calls the hook once.
+jest.mock('@/hooks/useImageLoads', () => {
+    const actual = jest.requireActual<typeof import('@/hooks/useImageLoads')>('@/hooks/useImageLoads');
+    return { __esModule: true, ...actual, useImageLoads: jest.fn(actual.useImageLoads) };
+});
 
 type Listing = Extract<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>, { success: true }>;
 type LibraryPhoto = Listing['photos'][number];
@@ -198,6 +205,16 @@ afterEach(() => {
 });
 
 describe('listing and tiles', () => {
+    test('picking one photo re-renders only that tile', async () => {
+        setup();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        const rendered = jest.mocked(useImageLoads);
+        rendered.mockClear();
+        fireEvent.click(tile(1));
+        expect(tile(1).getAttribute('aria-pressed')).toBe('true');
+        expect(rendered).toHaveBeenCalledTimes(1);
+    });
+
     test('a selected tile has a base-content border and ring, no background change; an unselected one keeps the quiet border', async () => {
         setup({ value: [idOf(1)] });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
@@ -267,23 +284,15 @@ describe('listing and tiles', () => {
     });
 
     test('a thumbnail that fails to load falls back to the text tile', async () => {
-        const RealImage = window.Image;
-        window.Image = invalid(
-            class {
-                onerror?: () => void;
-                set src(_url: string) {
-                    queueMicrotask(() => this.onerror?.());
-                }
-            },
-        );
-        try {
-            setup();
-            await screen.findByRole('button', { name: /^Photo 00000001:/ });
-            await waitFor(() => expect(tile(1).querySelector('img')).toBeNull());
-            expect(tile(1).textContent).toContain(shortOf(1));
-        } finally {
-            window.Image = RealImage;
-        }
+        setup();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        act(() => {
+            tile(1).querySelector('img')!.dispatchEvent(new Event('error'));
+        });
+        expect(tile(1).querySelector('img')).toBeNull();
+        expect(tile(1).textContent).toContain(shortOf(1));
+        // Only that tile: the others keep their pictures.
+        expect(tile(2).querySelector('img')).not.toBeNull();
     });
 
     test('server-supplied tags and reasons are rendered as text, never as markup', async () => {
@@ -793,6 +802,15 @@ describe('eligibility', () => {
 });
 
 describe('search', () => {
+    test('the search box is a named text search with no autofill and a search key on the keyboard', async () => {
+        setup();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        const box = screen.getByLabelText('Search your photos by tag');
+        expect(box.getAttribute('name')).toBe('photo-search');
+        expect(box.getAttribute('autocomplete')).toBe('off');
+        expect(box.getAttribute('enterkeyhint')).toBe('search');
+    });
+
     test('searches on submit, not while typing', async () => {
         setup();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });

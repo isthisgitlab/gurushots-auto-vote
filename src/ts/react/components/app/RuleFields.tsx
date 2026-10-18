@@ -142,6 +142,7 @@ export function RuleTagsField({ index, rule, settingKey, labelKey, onPatch }: Ru
             <TagsField
                 id={id}
                 settingKey={settingKey}
+                labelKey={labelKey}
                 value={rule[settingKey]}
                 onChange={(_key, tags) => onPatch({ [settingKey]: tags })}
                 placeholder={t('app.tagsPlaceholder')}

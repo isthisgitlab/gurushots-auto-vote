@@ -275,6 +275,9 @@ function PhotoSubmitBody({
         );
     }
 
+    // A tap while a submit is in flight does nothing (see toggle): the tiles say so instead of ignoring it.
+    const locked = checking || submitting;
+    const lockedKey = submitting ? 'app.pickTileSubmitting' : 'app.pickTileLocked';
     const over = selected.length > max;
     // Add suggestions has nothing to do when every suggestion is picked already; with one slot it swaps in #1,
     // so it has nothing to do only when #1 is the whole pick.
@@ -372,7 +375,8 @@ function PhotoSubmitBody({
                     selected={selected}
                     atCap={full}
                     fullKey={texts.full}
-                    locked={checking}
+                    locked={locked}
+                    lockedKey={lockedKey}
                     addDisabled={submitting || checking || full || nothingToAdd}
                     onToggle={toggle}
                     onAdd={() => addSuggestions(suggested.photos)}
@@ -383,8 +387,8 @@ function PhotoSubmitBody({
                 known={known}
                 selected={selected}
                 hideUnlisted={false}
-                locked={checking}
-                lockedKey="app.pickTileLocked"
+                locked={locked}
+                lockedKey={lockedKey}
                 hasChallenge
                 revalidating={revalidating}
                 recheckFailed={recheckFailed}

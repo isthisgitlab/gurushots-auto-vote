@@ -97,7 +97,7 @@ describe('SettingInput type=timeOfDayList', () => {
 
     test('the reset button calls onReset with the key', () => {
         const { onReset } = renderField(['09:00']);
-        fireEvent.click(screen.getByTitle('app.resetToDefaultNotSaved'));
+        fireEvent.click(screen.getByTitle(/^app\.resetToDefaultNotSaved/));
         expect(onReset).toHaveBeenCalledWith(KEY);
     });
 });
