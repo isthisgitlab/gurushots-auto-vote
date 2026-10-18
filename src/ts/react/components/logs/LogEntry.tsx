@@ -3,13 +3,13 @@ import { sentenceCaseLogMessage } from '../../../format/logSafe';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { localizeLogMessage } from './localizeLogMessage';
 /**
- * Severity → text color. Strict 4-value set matches logger.ts.
+ * Severity → daisyUI badge tone. Strict 4-value set matches logger.ts.
  */
-const LEVEL_COLORS = {
-    DEBUG: 'text-gray-400',
-    INFO: 'text-blue-400',
-    WARN: 'text-yellow-400',
-    ERROR: 'text-red-400',
+const LEVEL_BADGES = {
+    DEBUG: 'badge-neutral',
+    INFO: 'badge-info',
+    WARN: 'badge-warning',
+    ERROR: 'badge-error',
 };
 const CATEGORY_KEYS: Record<string, true> = {
     api: true, authentication: true, autoSubmit: true, boost: true, challenges: true, claim: true,
@@ -25,27 +25,27 @@ const CATEGORY_KEYS: Record<string, true> = {
 export type LogLine = Pick<GuiLogEntry, 'level' | 'message' | 'context' | 'timestamp' | 'category'>;
 
 /**
- * Single log entry. Three small badges then the message:
- *   [severity] [context] [category] message
+ * Single log entry. The timestamp, three small badges, then the message:
+ *   [timestamp] (severity) (context) (category) message
  */
 export function LogEntry({ entry }: { entry: LogLine }) {
     const { level, message, context, timestamp, category } = entry;
     const { language, t } = useTranslation();
-    const levelColor = LEVEL_COLORS[level] || 'text-green-400';
+    const levelBadge = LEVEL_BADGES[level] || 'badge-neutral';
     const categoryName = category || 'general';
 
     return (
         <div className="log-entry whitespace-pre-wrap break-words">
-            <span className="text-gray-400">[{timestamp}]</span>
+            <span className="text-base-content/70">[{timestamp}]</span>
             {' '}
-            <span className={levelColor}>[{language === 'lv' && level in LEVEL_COLORS ? t(`logs.levels.${level}`) : level}]</span>
+            <span className={`badge badge-sm ${levelBadge}`}>{language === 'lv' && level in LEVEL_BADGES ? t(`logs.levels.${level}`) : level}</span>
             {' '}
-            <span className="text-cyan-400">[{context || 'APP'}]</span>
+            <span className="badge badge-sm badge-ghost">{context || 'APP'}</span>
             {' '}
-            <span className="text-yellow-400">[{language === 'lv' && CATEGORY_KEYS[categoryName] ? t(`logs.categories.${categoryName}`) : categoryName}]</span>
+            <span className="badge badge-sm badge-ghost">{language === 'lv' && CATEGORY_KEYS[categoryName] ? t(`logs.categories.${categoryName}`) : categoryName}</span>
             {' '}
             {/* JSX text is escaped by the renderer; pre-escaping would show "&lt;" literally. */}
-            <span className="text-white">{sentenceCaseLogMessage(language === 'lv' ? localizeLogMessage(message) : message)}</span>
+            <span className="text-base-content">{sentenceCaseLogMessage(language === 'lv' ? localizeLogMessage(message) : message)}</span>
         </div>
     );
 }
@@ -55,7 +55,7 @@ export function LogEntry({ entry }: { entry: LogLine }) {
  */
 export function LogsEmptyState({ text }: { text: string }) {
     return (
-        <div className="text-gray-500 text-center py-8">
+        <div className="text-base-content/70 text-center py-8">
             {text}
         </div>
     );

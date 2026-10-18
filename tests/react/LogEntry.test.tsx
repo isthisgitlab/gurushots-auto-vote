@@ -1,6 +1,6 @@
 /**
- * LogEntry — one terminal-style log line: [timestamp] [level] [context]
- * [category] message, with a level→color map and fallbacks for the optional
+ * LogEntry — one terminal-style log line: [timestamp], then the level, context
+ * and category as badges, then the message, with a level→badge map and fallbacks for the optional
  * fields. LogsNavbar — the Logs window header with its connection badge.
  */
 import { render, screen, waitFor } from './helpers/test-utils';
@@ -28,21 +28,27 @@ describe('LogEntry', () => {
                 />,
             );
             await waitFor(() => expect(container.textContent).toContain('Norādīts nederīgs laika zīmogs'));
-            expect(container.textContent).toContain('[Informācija] [MAIN] [Balsošana]');
+            expect(container.textContent).toContain('[T1] Informācija MAIN Balsošana');
         } finally {
             mockApi.getSetting.mockResolvedValue(null);
             mockTranslator.t.mockImplementation((key) => key);
         }
     });
 
-    test('renders every badge and colors a known level', () => {
+    test.each([
+        ['DEBUG', 'badge-neutral'],
+        ['INFO', 'badge-info'],
+        ['WARN', 'badge-warning'],
+        ['ERROR', 'badge-error'],
+    ] as const)('renders every badge and gives a %s level its %s tone', (level, tone) => {
         const { container } = render(
-            <LogEntry
-                entry={{ timestamp: 'T1', level: 'ERROR', context: 'MAIN', category: 'voting', message: 'boom' }}
-            />,
+            <LogEntry entry={{ timestamp: 'T1', level, context: 'MAIN', category: 'voting', message: 'boom' }} />,
         );
-        expect(container.textContent).toBe('[T1] [ERROR] [MAIN] [voting] Boom');
-        expect(screen.getByText('[ERROR]', { exact: false }).className).toBe('text-red-400');
+        expect(container.textContent).toBe(`[T1] ${level} MAIN voting Boom`);
+        expect(screen.getByText(level).className).toBe(`badge badge-sm ${tone}`);
+        expect(screen.getByText('MAIN').className).toBe('badge badge-sm badge-ghost');
+        expect(screen.getByText('voting').className).toBe('badge badge-sm badge-ghost');
+        expect(screen.getByText('[T1]').className).toBe('text-base-content/70');
     });
 
     test('sentence-cases a previously saved English log line', () => {
@@ -62,8 +68,8 @@ describe('LogEntry', () => {
 
     test('falls back for an unknown level, missing context/category and an empty message', () => {
         const { container } = render(<LogEntry entry={invalid({ timestamp: 'T2', level: 'TRACE', message: '' })} />);
-        expect(container.textContent).toBe('[T2] [TRACE] [APP] [general] ');
-        expect(container.querySelectorAll('span')[1].className).toBe('text-green-400');
+        expect(container.textContent).toBe('[T2] TRACE APP general ');
+        expect(container.querySelectorAll('span')[1].className).toBe('badge badge-sm badge-neutral');
     });
 
     test('keeps unknown badges as codes in Latvian', async () => {
@@ -72,7 +78,7 @@ describe('LogEntry', () => {
             const { container } = render(
                 <LogEntry entry={invalid({ timestamp: 'T2', level: 'TRACE', category: 'plugin', message: '' })} />,
             );
-            await waitFor(() => expect(container.textContent).toContain('[TRACE] [APP] [plugin]'));
+            await waitFor(() => expect(container.textContent).toContain('TRACE APP plugin'));
         } finally {
             mockApi.getSetting.mockResolvedValue(null);
         }
@@ -82,13 +88,13 @@ describe('LogEntry', () => {
         const { container } = render(
             <LogEntry entry={invalid({ timestamp: 'T3', level: 'INFO', message: '<b>x</b>' })} />,
         );
-        expect(container.querySelector('.text-white')!.textContent).toBe('<b>x</b>');
+        expect(container.querySelector('.text-base-content')!.textContent).toBe('<b>x</b>');
         expect(container.querySelector('b')).toBeNull();
     });
 
     test('LogsEmptyState shows the given text', () => {
         render(<LogsEmptyState text="nothing here" />);
-        expect(screen.getByText('nothing here')).toBeTruthy();
+        expect(screen.getByText('nothing here').className).toBe('text-base-content/70 text-center py-8');
     });
 });
 

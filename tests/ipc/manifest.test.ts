@@ -119,7 +119,7 @@ describe('ipc channel manifest', () => {
         }
     });
 
-    test('the Logs window subset is exactly the log feed and the language read, all registered', () => {
+    test('the Logs window subset is exactly the log feed and the language and theme reads, all registered', () => {
         expect([...logsWindowInvokeChannels].sort()).toEqual(
             ['get-log-backlog', 'get-setting', 'log-error', 'start-log-stream', 'stop-log-stream'].sort(),
         );
@@ -129,6 +129,6 @@ describe('ipc channel manifest', () => {
             onLogMessage: eventMethods.onLogMessage,
             onSettingsChanged: eventMethods.onSettingsChanged,
         });
-        expect([...logsWindowSettingKeys]).toEqual(['language']);
+        expect([...logsWindowSettingKeys]).toEqual(['language', 'theme']);
     });
 });

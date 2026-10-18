@@ -176,7 +176,7 @@ describe('registerHandlers holds the Logs window to the Logs channel set', () =>
         expect(isChannelAllowedForSender(undefined, 'logout')).toBe(true);
     });
 
-    test('get-setting from the Logs window answers only the language', async () => {
+    test('get-setting from the Logs window answers only the language and theme', async () => {
         const channels = new Map<string, ChannelImpl>();
         const getSetting = jest.fn(async (_event: unknown, key: string) => `value of ${key}`);
         registerHandlers(invalid({ handle: (channel: string, fn: ChannelImpl) => channels.set(channel, fn) }), {
@@ -186,30 +186,42 @@ describe('registerHandlers holds the Logs window to the Logs channel set', () =>
         restrictToLogsChannels(invalid(sender));
 
         expect(await channels.get('get-setting')!(eventFrom(sender), 'language')).toBe('value of language');
-        for (const key of ['theme', 'token', 'autovoteRunning', undefined]) {
+        expect(await channels.get('get-setting')!(eventFrom(sender), 'theme')).toBe('value of theme');
+        for (const key of ['token', 'autovoteRunning', undefined]) {
             expect(await channels.get('get-setting')!(eventFrom(sender), key)).toEqual({
                 success: false,
                 error: 'Refused: setting not available to this window',
             });
         }
-        expect(getSetting).toHaveBeenCalledTimes(1);
+        expect(getSetting).toHaveBeenCalledTimes(2);
         // Every other window and a direct call read any key.
         expect(await channels.get('get-setting')!(eventFrom({}), 'token')).toBe('value of token');
         expect(await channels.get('get-setting')!(invalid(null), 'theme')).toBe('value of theme');
     });
 
-    test('settings-changed sent to the Logs window carries only the language', () => {
+    test('settings-changed sent to the Logs window carries only the language and theme of app', () => {
         const send = jest.fn<void, [string, ...unknown[]]>();
         const sender = invalid<IpcMainInvokeEvent['sender']>({ send });
         restrictToLogsChannels(invalid(sender));
 
-        sender.send('settings-changed', { language: 'lv', token: 'secret', mock: true, theme: 'dark' });
+        // The real payload (toRendererSettings) is nested under `app`; the token flag sits at the top level.
+        sender.send('settings-changed', {
+            hasToken: true,
+            app: { language: 'lv', theme: 'dark', mock: true, stayLoggedIn: true },
+            challenges: { token: 'secret' },
+        });
+        sender.send('settings-changed', { app: { language: 'lv' } });
+        sender.send('settings-changed', { hasToken: true, language: 'lv', theme: 'dark' });
+        sender.send('settings-changed', { app: 'not an object' });
         sender.send('settings-changed', 'not an object');
         sender.send('log-message', { seq: 1, message: 'a log line', token: 'kept: not a settings event' });
 
-        expect(send).toHaveBeenNthCalledWith(1, 'settings-changed', { language: 'lv' });
-        expect(send).toHaveBeenNthCalledWith(2, 'settings-changed', {});
-        expect(send).toHaveBeenNthCalledWith(3, 'log-message', {
+        expect(send).toHaveBeenNthCalledWith(1, 'settings-changed', { app: { language: 'lv', theme: 'dark' } });
+        expect(send).toHaveBeenNthCalledWith(2, 'settings-changed', { app: { language: 'lv' } });
+        expect(send).toHaveBeenNthCalledWith(3, 'settings-changed', {});
+        expect(send).toHaveBeenNthCalledWith(4, 'settings-changed', {});
+        expect(send).toHaveBeenNthCalledWith(5, 'settings-changed', {});
+        expect(send).toHaveBeenNthCalledWith(6, 'log-message', {
             seq: 1,
             message: 'a log line',
             token: 'kept: not a settings event',

@@ -95,13 +95,17 @@ const senderUrl = (event: IpcMainInvokeEvent): string => {
 // The webContents of windows limited to the Logs channel set. Weak, so a closed window drops out.
 const logsWindowSenders = new WeakSet<WebContents>();
 
-// A settings-changed payload cut down to the keys the Logs window may know.
-const logsWindowSettings = (payload: unknown): Record<string, unknown> =>
-    isPlainObject(payload)
-        ? Object.fromEntries(
-              Object.entries(payload).filter(([key]) => (logsWindowSettingKeys as readonly string[]).includes(key)),
-          )
-        : {};
+// A settings-changed payload cut down to the keys the Logs window may know. The payload is nested
+// (`{ app: { language, theme, … }, … }`), so the keys are picked from `app` and nothing else is passed on.
+const logsWindowSettings = (payload: unknown): Record<string, unknown> => {
+    if (!isPlainObject(payload) || !isPlainObject(payload.app)) return {};
+    const { app } = payload;
+    return {
+        app: Object.fromEntries(
+            logsWindowSettingKeys.filter((key) => Object.hasOwn(app, key)).map((key) => [key, app[key]]),
+        ),
+    };
+};
 
 /**
  * Limits every call from this window to the Logs channel set, whatever its preload exposes, and cuts what is sent to

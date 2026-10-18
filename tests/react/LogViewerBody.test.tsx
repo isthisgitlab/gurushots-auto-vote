@@ -34,7 +34,7 @@ describe('LogViewerBody', () => {
     test('applies the host height class on the shared scroll container', () => {
         const { container } = render(<LogViewerBody entries={[]} heightClass="h-[600px]" />);
         expect((container.firstChild as HTMLElement).className).toBe(
-            'h-[600px] overflow-y-auto bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-lg',
+            'h-[600px] overflow-y-auto bg-base-300 text-base-content font-mono text-sm p-4 rounded-lg',
         );
     });
 });
