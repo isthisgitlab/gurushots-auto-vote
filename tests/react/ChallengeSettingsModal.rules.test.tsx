@@ -70,6 +70,8 @@ const open = async () => {
 
 /** The cell of a setting, found by its label. */
 const cell = (label: string) => screen.getByText(label).closest<HTMLElement>('.rounded-box')!;
+/** The source badge of a setting's cell. */
+const badge = (label: string) => cell(label).querySelector<HTMLElement>('.badge')!;
 const scenarioSelect = () => document.getElementById('challenge-setting-scenario') as HTMLSelectElement;
 const withRule = () =>
     titleRuleInfo({
@@ -93,6 +95,9 @@ test('a scenario, auto-join and chosen photos a rule sets show as inherited, wit
     // A key no rule sets is still the global default.
     expect(cell('app.boostTime').textContent).toContain('app.usingGlobal');
     expect(cell('app.boostTime').textContent).not.toContain('From rule');
+    // The source badges are coloured: a rule's value secondary, the global default ghost.
+    expect(badge('app.scenario').className).toContain('badge-secondary');
+    expect(badge('app.boostTime').className).toContain('badge-ghost');
     // The lookup carries the challenge id, so rules keyed on tags or type resolve too.
     expect(mockApi.getTitleProfile).toHaveBeenCalledWith('Seaside', '1');
 });
@@ -120,7 +125,9 @@ test('a profile value is "Using profile", an inline value of the same rule is "F
     await open();
     expect(cell('app.boostTime').textContent).toContain('app.usingProfile');
     expect(cell('app.boostTime').textContent).not.toContain('From rule');
+    expect(badge('app.boostTime').className).toContain('badge-info');
     expect(cell('app.scenario').textContent).toContain('From rule: Seaside');
+    expect(badge('app.scenario').className).toContain('badge-secondary');
     expect(document.body.textContent).toContain('app.usingProfile: Quad');
 });
 
@@ -192,6 +199,7 @@ test('a manual override wins over the rule value and says so', async () => {
     expect(scenarioSelect().value).toBe('');
     expect(cell('app.scenario').textContent).toContain('app.overridden');
     expect(cell('app.scenario').textContent).not.toContain('From rule');
+    expect(badge('app.scenario').className).toContain('badge-accent');
 });
 
 /** The saved-profiles dropdown (the scenario field is a select too), found by the profile it lists. */

@@ -72,10 +72,11 @@ describe('ChallengeNav', () => {
         const plain = screen.getByRole('button', { name: /Plain/ });
 
         await waitFor(() => expect(tuned.textContent).toMatch(/⚙️/));
-        expect(tuned.className).toBe('btn btn-sm max-w-full whitespace-nowrap');
+        expect(tuned.className).toContain('btn-accent');
         expect(tuned.querySelector('.truncate')!.getAttribute('title')).toMatch(/^Tuned — ./);
 
         expect(plain.textContent).not.toMatch(/⚙️/);
+        expect(plain.className).toBe('btn btn-sm max-w-full whitespace-nowrap');
         expect(plain.querySelector('.truncate')!.getAttribute('title')).toBe('Plain');
     });
 
@@ -108,7 +109,11 @@ describe('ChallengeNav', () => {
         await waitFor(() => expect(profiled.textContent).toMatch(/🔄/));
         expect(profiled.querySelector('.truncate')!.getAttribute('title')).toContain('app.titleRuleProfile');
         expect(suppressed.textContent).not.toMatch(/🔄/);
+        expect(profiled.className).toContain('btn-info');
+        expect(suppressed.className).not.toMatch(/btn-(info|accent|secondary)/);
         expect(mixed.textContent).toMatch(/⚙️.*🔄/);
+        expect(mixed.className).toContain('btn-info');
+        expect(mixed.className).not.toContain('btn-accent');
         expect(mixed.querySelector('.truncate')!.getAttribute('title')).toContain(
             'app.customSettingsHint · app.titleRuleProfile',
         );
@@ -133,6 +138,26 @@ describe('ChallengeNav', () => {
         expect(ruled.textContent).toContain('app.ruleSettingsHint');
         expect(ruled.textContent).not.toContain('app.titleRuleProfile');
         expect(joinOnly.textContent).not.toMatch(/📏/);
+        expect(ruled.className).toContain('btn-secondary');
+        expect(joinOnly.className).not.toMatch(/btn-(info|accent|secondary)/);
+    });
+
+    test("draws the boost dot in the chip's own content colour on a profiled chip, and plain on others", async () => {
+        jest.mocked(window.api.getTitleProfile).mockImplementation(async (_title, id) =>
+            id === '1' ? titleRuleInfo({ profile: { name: '4 pics', values: { exposureTarget: 90 } } }) : null,
+        );
+        const boosted = (id: number, title: string) =>
+            invalid<Challenge>({ id, title, member: { boost: { state: 'AVAILABLE_KEY' } } });
+
+        render(<ChallengeNav challenges={[boosted(1, 'Profiled boost'), boosted(2, 'Plain boost')]} />);
+
+        const profiled = screen.getByRole('button', { name: /Profiled boost/ });
+        const plain = screen.getByRole('button', { name: /Plain boost/ });
+        await waitFor(() => expect(profiled.className).toContain('btn-info'));
+        expect(profiled.querySelector('.bg-info-content')).not.toBeNull();
+        expect(profiled.querySelector('.status-info')).toBeNull();
+        expect(plain.querySelector('.status-info')).not.toBeNull();
+        expect(plain.querySelector('.bg-info-content')).toBeNull();
     });
 
     test('marks nothing when a per-challenge override read fails', async () => {

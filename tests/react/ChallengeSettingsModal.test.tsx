@@ -228,6 +228,7 @@ describe('ChallengeSettingsModal group applicability', () => {
         expect(numberInputs().every((i) => i.disabled)).toBe(true);
         expect(document.body.textContent).toContain('app.naBoostUsed');
         expect(document.body.textContent).toContain('app.notApplicable');
+        expect(screen.getByText('app.notApplicable').className).toContain('badge-ghost');
     });
 
     test('leaves a group editable when its action can still apply (boost AVAILABLE)', async () => {

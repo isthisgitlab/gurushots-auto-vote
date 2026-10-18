@@ -3,6 +3,8 @@ import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
 import { interp } from '@/utils/interp';
+import { sourceBadgeTone } from '@/utils/customizationTone';
+import type { CustomizationSource } from '@/utils/customizationTone';
 import { getScheduleShift } from '../../../services/scheduleRemap';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { ToneNote } from '@/components/ui/ToneNote';
@@ -29,9 +31,17 @@ export interface ChallengeGroupContext {
 }
 
 /** A source badge led by the icon of its marker in ChallengeNav (decorative: the text names the source). */
-function SourceBadge({ icon, children }: { icon: string; children: ComponentChildren }) {
+function SourceBadge({
+    source,
+    icon,
+    children,
+}: {
+    source: CustomizationSource;
+    icon: string;
+    children: ComponentChildren;
+}) {
     return (
-        <span className="badge badge-ghost badge-sm">
+        <span className={`badge ${sourceBadgeTone(source)} badge-sm`}>
             <span aria-hidden="true">{icon} </span>
             {children}
         </span>
@@ -52,13 +62,27 @@ function ValueSourceBadge({
     hasProfileValue: boolean;
 }) {
     const { t } = useTranslation();
-    if (hasOverride) return <SourceBadge icon="⚙️">{t('app.overridden')}</SourceBadge>;
+    if (hasOverride)
+        return (
+            <SourceBadge source="manual" icon="⚙️">
+                {t('app.overridden')}
+            </SourceBadge>
+        );
     if (ruleSource !== undefined) {
         // A rule without a title is named by its place in the list, in the UI's language.
         const title = ruleSource.title ?? interp(t('app.ruleNumber'), { n: ruleSource.index });
-        return <SourceBadge icon="📏">{interp(t('app.fromRule'), { title })}</SourceBadge>;
+        return (
+            <SourceBadge source="rule" icon="📏">
+                {interp(t('app.fromRule'), { title })}
+            </SourceBadge>
+        );
     }
-    if (hasProfileValue) return <SourceBadge icon="🔄">{t('app.usingProfile')}</SourceBadge>;
+    if (hasProfileValue)
+        return (
+            <SourceBadge source="profile" icon="🔄">
+                {t('app.usingProfile')}
+            </SourceBadge>
+        );
     return <span className="badge badge-ghost badge-sm">{t('app.usingGlobal')}</span>;
 }
 

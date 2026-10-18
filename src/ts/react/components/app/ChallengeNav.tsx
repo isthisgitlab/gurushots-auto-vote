@@ -6,6 +6,7 @@ import { ChipListPanel, ChallengeChip, ChipTitle } from './ChallengeChips';
 import { PulseDot } from '../ui/PulseDot';
 import { isBoostWindowOpen } from '../../../voting/boostWindow';
 import { isLowExposure } from '@/utils/challengeAlerts';
+import { chipToneOf } from '@/utils/customizationTone';
 
 /** What a customization kind means for a chip: manual overrides, an automatic profile, rule values alone. */
 const customizationOf = (kind: CustomizationKind | undefined) => ({
@@ -35,9 +36,10 @@ function NavChip({
         .join(' · ');
     const boostOpen = isBoostWindowOpen(c?.member?.boost, nowSec);
     const lowExposure = isLowExposure(c, nowSec);
+    const tone = chipToneOf(kind);
     return (
-        <ChallengeChip challengeId={c?.id}>
-            {boostOpen && <PulseDot variant="info" size="status-sm" />}
+        <ChallengeChip challengeId={c?.id} className={tone}>
+            {boostOpen && <PulseDot variant="info" size="status-sm" onBadge={tone === 'btn-info'} />}
             {lowExposure && <PulseDot variant="error" pulse={false} size="status-sm" />}
             {manual && <span aria-hidden="true">⚙️ </span>}
             {automatic && <span aria-hidden="true">🔄 </span>}
@@ -57,9 +59,10 @@ function NavChip({
  * user who knows the name can click instead of scrolling. Renders nothing when
  * there are no challenges. Mirrors BoostWindowBanner, but for the full list.
  *
- * Manual overrides get ⚙️; automatic profiles get 🔄 (a challenge with both shows
- * both icons). Values a rule sets directly that matter after the join (and nothing
- * else) get 📏. Chips stay a neutral colour: the icons and tooltip identify the source.
+ * Manual overrides get an accent fill and ⚙️; automatic profiles get an info fill and 🔄
+ * (a challenge with both shows both icons on the info fill). Values a rule sets directly
+ * that matter after the join (and nothing else) get a secondary fill and 📏. The icons and
+ * tooltip identify the source without relying on colour alone (utils/customizationTone).
  *
  * Each chip also leads with a status dot — pulsing blue for an open boost
  * window, red for low exposure (utils/challengeAlerts) — so the whole
