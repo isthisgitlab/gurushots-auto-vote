@@ -53,7 +53,7 @@ export const errors = {
     turboModeUnknown:
         'Turbo mode is not known yet. GuruShots has not told the app which game this Turbo is. Try again in a moment.',
     snapNeedsModel:
-        'Snap was not played. It needs the vision model, which this build does not include. Play it on GuruShots, or use a build with the model.',
+        'Snap was not played. It needs the vision model, which this build does not include. Turn on "Answer Snap with Yes without the vision model" in the Turbo settings, play it on GuruShots, or use a build with the model.',
     snapNotOffered:
         'Snap was not played. GuruShots no longer offers it for this challenge. Refresh the list to see the current Turbo.',
     snapUnanswerable:

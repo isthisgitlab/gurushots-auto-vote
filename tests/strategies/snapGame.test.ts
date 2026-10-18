@@ -218,6 +218,30 @@ describe('runSnapGame', () => {
             expect(result.stopReason).toBe('request-failed');
             expect(isSnapUnavailable(77)).toBe(false);
         });
+
+        test('cancelled after the first answer keeps what landed', async () => {
+            let cancelled = false;
+            turbo.submitSnapVote.mockImplementationOnce(async () => {
+                cancelled = true;
+                return landed({ communityPct: 40 });
+            });
+
+            const result = await runSnapGame(CHALLENGE, 'tok', deps({ isCancelled: () => cancelled }));
+
+            expect(result).toEqual({ answered: 1, total: 3, meanAgreement: 40, won: false, stopReason: 'cancelled' });
+            expect(turbo.submitSnapVote).toHaveBeenCalledTimes(1);
+            expect(vision.judgeSnapImage).not.toHaveBeenCalled();
+        });
+
+        test('vote-unclear never resends', async () => {
+            turbo.submitSnapVote.mockResolvedValue(landed({ ok: false, unclear: true, communityPct: null }));
+
+            const result = await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(result).toMatchObject({ answered: 0, won: false, stopReason: 'vote-unclear' });
+            expect(turbo.submitSnapVote).toHaveBeenCalledTimes(1);
+            expect(isSnapUnavailable(77)).toBe(false);
+        });
     });
 
     test('with the model the model answers whatever snapYesWithoutModel says', async () => {

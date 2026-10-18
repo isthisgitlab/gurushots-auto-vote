@@ -53,7 +53,7 @@ export const errors = {
     turboModeUnknown:
         'Turbo veids vēl nav zināms. GuruShots nav paziņojis lietotnei, kāda ir šī Turbo spēle. Mēģini vēlreiz pēc brīža.',
     snapNeedsModel:
-        'Snap netika spēlēts. Tam vajadzīgs vizuālais modelis, kura šajā versijā nav. Spēlē to GuruShots vai izmanto versiju ar modeli.',
+        'Snap netika spēlēts. Tam vajadzīgs vizuālais modelis, kura šajā versijā nav. Turbo uzstādījumos ieslēdz „Atbildēt Snap ar Jā bez vizuālā modeļa”, spēlē to GuruShots vai izmanto versiju ar modeli.',
     snapNotOffered:
         'Snap netika spēlēts. GuruShots to šim izaicinājumam vairs nepiedāvā. Atsvaidzini sarakstu, lai redzētu pašreizējo Turbo.',
     snapUnanswerable:

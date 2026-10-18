@@ -134,7 +134,7 @@ Turbo is a slow-replenishing consumable you earn by playing a mini-game, then sp
 - **Auto-apply (`useTurbo`, off by default)** — when a turbo is held and the challenge has `turboTime` seconds or less remaining, it's applied to the entry at `turboImageIndex`. It does not wait for an open boost window — boost and turbo only never share an entry.
 - **A photo pinned for Boost blocks Turbo** — Turbo steps past it. With no other photo to take it, the turbo is skipped, or goes on a fresh photo with `turboNewSubmitOnConflict`. The pin gives way within `emergencySubmit` seconds of the close if Boost still isn't ready; from then on it is only a preference, so Turbo still goes on any other photo (or a fresh one with `turboNewSubmitOnConflict`) and takes the pinned photo only when nothing else can. With Emergency Submit off the pin never gives way.
 
-A Snap turbo (ten photos answered yes or no) is played by the on-device image model. A lite build has no model, so it skips Snap unless **`snapYesWithoutModel`** is on: it then answers Yes to every photo, which wins the turbo as any answer does.
+A Snap turbo (ten photos answered yes or no) is played by the on-device vision model. A lite build has no model, so it skips Snap unless **Answer Snap with Yes without the vision model** (`snapYesWithoutModel`) is on: it then answers Yes to every photo, which wins the turbo as any answer does.
 
 Each challenge's turbo can be earned only once. To keep some for a "Win Turbo" mission, turn on **Save Turbos for Missions** (see [Missions](#missions)).
 
@@ -346,7 +346,7 @@ All of these support per-challenge overrides except where noted.
 | `turboImageIndex`          | `1`           | `0`–`4`        | Entry slot to turbo (1 = first, `0` = last; a challenge holds at most 4 entries). Steps back past an entry that has Boost or is pinned for Boost.                                                                                                                                 |
 | `turboNewSubmit`           | `false`       | bool           | Submit a fresh photo and immediately turbo that new entry.                                                                                                                                                                                                                        |
 | `turboNewSubmitOnConflict` | `false`       | bool           | Submit a new photo and turbo it only when every entry has Boost or is pinned for Boost (Turbo cannot go there). With no free slot or eligible photo, Turbo is skipped, unless the Boost pin has given way: it then goes on the pinned photo. Ignored when `turboNewSubmit` is on. |
-| `snapYesWithoutModel`      | `false`       | bool           | Global only. In a build without the image model, play Snap turbos by answering Yes to every photo (any answer wins). With the model, the model answers.                                                                                                                           |
+| `snapYesWithoutModel`      | `false`       | bool           | Global only. In a build without the vision model, play Snap turbos by answering Yes to every photo (any answer wins). With the model, the model answers.                                                                                                                          |
 
 **Final window**
 
