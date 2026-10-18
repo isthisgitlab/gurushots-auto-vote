@@ -85,6 +85,7 @@ const buildChallenge = (spec: ChallengeSpec, id: number, now: number) => {
         top_photo_enable: true,
         time_left: { ...spec.timeLeft },
         member: buildMember(spec, now),
+        ...(spec.teamMatch ? { teamMatch: { us: { ...spec.teamMatch.us }, them: { ...spec.teamMatch.them } } } : {}),
     };
 };
 

@@ -9,6 +9,7 @@ import type * as challengesModule from '../../src/ts/api/challenges';
 import type * as api_clientModule from '../../src/ts/api/api-client';
 import type * as challengeTitlePinModule from '../../src/ts/services/challengeTitlePin';
 import type * as loggerModule from '../../src/ts/logger';
+import type * as teamMatchModule from '../../src/ts/strategies/real/teamMatch';
 import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
@@ -41,6 +42,10 @@ jest.mock('../../src/ts/api/api-client', () => ({
 jest.mock('../../src/ts/services/challengeTitlePin', () => ({
     pinChallengeTitles: jest.fn((challenges: unknown) => challenges),
 }));
+
+// The team-match cache is unit-tested in tests/strategies/real-team-match.test.ts; here it is a stub, so
+// the ordered makePostRequest queues below never see a team request.
+jest.mock('../../src/ts/strategies/real/teamMatch', () => ({ latestTeamMatch: jest.fn() }));
 
 // Mock the logger module
 jest.mock('../../src/ts/logger', () => {
@@ -81,9 +86,13 @@ describe('challenges', () => {
         require('../../src/ts/services/challengeTitlePin') as typeof challengeTitlePinModule,
     );
     const logger: LoggerMock = invalid(require('../../src/ts/logger'));
+    const { latestTeamMatch } = jest.mocked(
+        require('../../src/ts/strategies/real/teamMatch') as typeof teamMatchModule,
+    );
 
     beforeEach(() => {
         jest.clearAllMocks();
+        latestTeamMatch.mockReset();
     });
 
     describe('getActiveChallenges', () => {
@@ -411,6 +420,64 @@ describe('challenges', () => {
                 expect(makePostRequest).toHaveBeenNthCalledWith(2, WEB_URL, expect.anything(), '');
                 resolveMobile!({ challenges: [] });
                 await pending;
+            });
+        });
+
+        describe('team match from the cache', () => {
+            const teamMatch = { us: { name: 'Home Team', votes: 7514 }, them: { name: 'Poland Gurus', votes: 8258 } };
+            const list = () => ({
+                challenges: [
+                    { id: 1, title: 'A' },
+                    { id: '135938', title: 'B' },
+                ],
+            });
+
+            test('the cached team match lands on the matching challenge only', async () => {
+                latestTeamMatch.mockReturnValue({ challengeId: '135938', teamMatch });
+                makePostRequest.mockResolvedValueOnce(list());
+                makePostRequest.mockResolvedValueOnce({ challenges: [] });
+
+                const result = await getActiveChallenges(mockToken);
+
+                expect(result.challenges[0].teamMatch).toBeUndefined();
+                expect(result.challenges[1].teamMatch).toEqual(teamMatch);
+                expect(latestTeamMatch).toHaveBeenCalledWith(mockToken);
+            });
+
+            test('the refresh starts with the reads, before the mobile read settles', async () => {
+                let resolveMobile: (value: { challenges: [] }) => void;
+                makePostRequest.mockReturnValueOnce(new Promise((resolve) => (resolveMobile = resolve)));
+                makePostRequest.mockResolvedValueOnce({ challenges: [] });
+
+                const pending = getActiveChallenges(mockToken);
+
+                expect(latestTeamMatch).toHaveBeenCalledTimes(1);
+                resolveMobile!({ challenges: [] });
+                await pending;
+            });
+
+            test.each([
+                ['no team match is cached', undefined],
+                ['the cached match runs on a challenge the member has not joined', { challengeId: '999', teamMatch }],
+            ])('the list is untouched when %s', async (_label, cached) => {
+                latestTeamMatch.mockReturnValue(cached);
+                makePostRequest.mockResolvedValueOnce(list());
+                makePostRequest.mockResolvedValueOnce({ challenges: [] });
+
+                const result = await getActiveChallenges(mockToken);
+
+                expect(result).toEqual(list());
+                expect(result.challenges.some((challenge) => 'teamMatch' in challenge)).toBe(false);
+            });
+
+            test('a failed mobile read is returned as it is, with no team match', async () => {
+                latestTeamMatch.mockReturnValue({ challengeId: '135938', teamMatch });
+                makePostRequest.mockResolvedValueOnce(null);
+                makePostRequest.mockResolvedValueOnce({ challenges: [] });
+
+                const result = await getActiveChallenges(mockToken);
+
+                expect(result).toEqual({ challenges: [], fetchFailed: true });
             });
         });
 

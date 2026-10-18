@@ -10,12 +10,14 @@ import { invalid } from '../helpers/invalid';
 // tests/setup.ts replaces axios with a bare jest.fn(), called with one config.
 const axios: jest.Mock<Promise<unknown>, [config: AxiosRequestConfig]> = invalid(axiosModule);
 import type * as api_clientModule from '../../src/ts/api/api-client';
+import type * as constantsModule from '../../src/ts/api/constants';
 import type * as settingsModule from '../../src/ts/settings';
 import type * as loggerModule from '../../src/ts/logger';
 import type * as runtimeModule from '../../src/ts/runtime';
 import type * as coreModule from '@capacitor/core';
 const { makePostRequest, postOnce, createCommonHeaders, FORM_CONTENT_TYPE } =
     require('../../src/ts/api/api-client') as typeof api_clientModule;
+const { ENDPOINTS } = require('../../src/ts/api/constants') as typeof constantsModule;
 
 // The logger factory below also exports its shared api/apiRequest mocks.
 type LoggerMock = typeof loggerModule & {
@@ -285,6 +287,28 @@ describe('api-client', () => {
                 responseData: mockResponse.data,
             });
         });
+
+        test.each([['getTeams'], ['getMatch']] as const)(
+            "logs the status of %s but never its body (it carries other members' rosters)",
+            async (endpoint) => {
+                const logger: LoggerMock = invalid(require('../../src/ts/logger'));
+                const url = ENDPOINTS[endpoint];
+                axios.mockResolvedValueOnce({
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                    data: { data: { teams: [{ id: 1, name: 'Roster' }] } },
+                });
+
+                await makePostRequest(url, createCommonHeaders(mockToken), mockData);
+
+                expect(logger.__mockApiFn).toHaveBeenCalledWith('API Response', {
+                    method: 'POST',
+                    url,
+                    status: 200,
+                    duration: expect.any(Number),
+                });
+            },
+        );
 
         test('should log API errors', async () => {
             const logger: LoggerMock = invalid(require('../../src/ts/logger'));

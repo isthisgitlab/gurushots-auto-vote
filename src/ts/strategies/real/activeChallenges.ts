@@ -7,6 +7,7 @@ import { fetchActiveChallenges, fetchWebActiveTurbos } from '../../api/challenge
 import { pinChallengeTitles } from '../../services/challengeTitlePin';
 import { annotateEntryTimes } from '../../services/entryTimes';
 import { entryAgeLedger } from '../../entryAgeStore';
+import { latestTeamMatch } from './teamMatch';
 
 import type { ActiveChallengesResponse } from '../../types/gurushots';
 
@@ -26,13 +27,20 @@ const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => 
     // Both requests are in flight before either is awaited; fetchWebActiveTurbos never rejects.
     const mobileRead = fetchActiveChallenges(token);
     const webRead = fetchWebActiveTurbos(token);
+    // The team match refreshes in the background (never awaited, so it cannot delay this read);
+    // the marker is attached from the cache once the mobile read is in.
+    latestTeamMatch(token);
     const response = await mobileRead;
     if (!response.fetchFailed && Array.isArray(response.challenges)) {
         const webTurbos = await webRead;
+        const teamMatch = latestTeamMatch(token);
         for (const challenge of response.challenges) {
             const turbo = webTurbos?.get(String(challenge.id));
             if (turbo && challenge.member) {
                 challenge.member.turbo = turbo;
+            }
+            if (teamMatch && String(challenge.id) === teamMatch.challengeId) {
+                challenge.teamMatch = teamMatch.teamMatch;
             }
         }
         pinChallengeTitles(response.challenges);

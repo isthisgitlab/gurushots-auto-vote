@@ -349,6 +349,16 @@
                         }
                     ]
                 }
+            },
+            "teamMatch": {
+                "us": {
+                    "name": "Mock Lens Collective",
+                    "votes": 7514
+                },
+                "them": {
+                    "name": "Fictional Aperture Wanderers Of Supercalifragilisticexpialidocious Valley",
+                    "votes": 8258
+                }
             }
         },
         {

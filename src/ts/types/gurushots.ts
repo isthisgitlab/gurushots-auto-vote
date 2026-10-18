@@ -152,6 +152,25 @@ export interface Challenge {
      * the cadence decision so the next cycle lands on it.
      */
     boostHoldUntil?: UnixSeconds;
+    /** App-set, never from the API (like `appEntered`): the team match running on this challenge, when the member's team has one. */
+    teamMatch?: TeamMatch;
+}
+
+/** Both teams' vote totals in a team match, from our side (`us`) and the opponent's (`them`). */
+export interface TeamMatch {
+    us: { name: string; votes: number };
+    them: { name: string; votes: number };
+}
+
+/** The WEB get_teams (limit=1): the member's team, only read when `state.status` is STATUS_JOINED. */
+export interface TeamsResponse {
+    state?: { status?: string };
+    data?: { teams?: Array<{ id?: number }> };
+}
+
+/** The WEB get_match: the challenge a team's match runs on and each side's total votes. */
+export interface MatchResponse {
+    data?: { challenge_id?: number; teams?: Array<{ id?: number; name?: string; total_votes?: number }> };
 }
 
 /** get_my_active_challenges. `fetchFailed` marks a failed request (empty list). */

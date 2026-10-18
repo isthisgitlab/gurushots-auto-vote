@@ -62,6 +62,11 @@ const ENDPOINTS = {
     claimResources: `${API_BASE}/rest/claim_resources`,
     getMyMissions: `${API_BASE}/rest/get_my_missions`,
     claimMissionPrizes: `${API_BASE}/rest/claim_mission_prizes`,
+
+    // Team match (WEB profile): getTeams reports the member's team, getMatch
+    // that team's current match with both sides' vote totals. See api/teams.ts.
+    getTeams: `${API_BASE}/rest/get_teams`,
+    getMatch: `${API_BASE}/rest/get_match`,
 };
 
 const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';

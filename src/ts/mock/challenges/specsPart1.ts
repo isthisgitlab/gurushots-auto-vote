@@ -198,6 +198,11 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
                 boosted: false,
             },
         ],
+        // The opponent is ahead (the red state) and its name is long, with spaces and one long unbroken word.
+        teamMatch: {
+            us: { name: 'Mock Lens Collective', votes: 7514 },
+            them: { name: 'Fictional Aperture Wanderers Of Supercalifragilisticexpialidocious Valley', votes: 8258 },
+        },
     },
     {
         title: 'Wildlife Photography',

@@ -188,9 +188,14 @@ const getHeadlessHttpAdapter = (): AxiosAdapter => {
     return headlessAdapter;
 };
 
-// Endpoints whose response bodies carry account data (the login token and the member profile): the api log
-// records the status and timing of these calls, never the body.
-const BODY_UNLOGGED_URLS = new Set<string>([ENDPOINTS.signup, ENDPOINTS.currentMemberProfile]);
+// Endpoints whose response bodies carry account data (the login token and the member profile) or other
+// members' rosters (the team reads): the api log records the status and timing of these calls, never the body.
+const BODY_UNLOGGED_URLS = new Set<string>([
+    ENDPOINTS.signup,
+    ENDPOINTS.currentMemberProfile,
+    ENDPOINTS.getTeams,
+    ENDPOINTS.getMatch,
+]);
 
 // Upper bound on how long a single request will block while retrying.
 // A server-sent cooldown longer than this (e.g. a multi-minute 429
