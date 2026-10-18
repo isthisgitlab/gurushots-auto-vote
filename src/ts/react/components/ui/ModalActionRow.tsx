@@ -7,8 +7,9 @@ import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 const ROW_ICON_CLASS = 'w-4 h-4 mr-1';
 
 /**
- * Shared Save / secondary / Cancel action row used by the settings modals
+ * Shared secondary / Cancel / Save action row used by the settings modals
  * (SettingsModal and ChallengeSettingsModal), rendered in a StickyModalFooter:
+ * the destructive button sits apart on the left, Cancel then Save on the right (the order every modal uses):
  * render it as the last child of the modal content, and pass
  * STICKY_FOOTER_SCROLL_PADDING as the hosting Modal's className.
  *
@@ -44,17 +45,7 @@ export function ModalActionRow({
                 </div>
             )}
             <div className="flex flex-wrap justify-end gap-2">
-                <button
-                    className="btn btn-neutral btn-sm"
-                    onClick={() => void onSave()}
-                    disabled={saving}
-                    aria-busy={saving}
-                >
-                    {saving && <LoadingSpinner size="xs" decorative />}
-                    <StrokeIcon d={ICON_PATHS.save} className={ROW_ICON_CLASS} />
-                    {t('app.save')}
-                </button>
-                <button className="btn btn-error btn-sm" onClick={() => void onSecondary()}>
+                <button className="btn btn-error btn-sm mr-auto" onClick={() => void onSecondary()}>
                     {secondaryIcon === 'trash' ? (
                         <StrokeIcon d={ICON_PATHS.trash} className={ROW_ICON_CLASS} />
                     ) : (
@@ -64,6 +55,16 @@ export function ModalActionRow({
                 </button>
                 <button className="btn btn-outline btn-sm" onClick={onCancel}>
                     {t('app.cancel')}
+                </button>
+                <button
+                    className="btn btn-neutral btn-sm"
+                    onClick={() => void onSave()}
+                    disabled={saving}
+                    aria-busy={saving}
+                >
+                    {saving && <LoadingSpinner size="xs" decorative />}
+                    <StrokeIcon d={ICON_PATHS.save} className={ROW_ICON_CLASS} />
+                    {t('app.save')}
                 </button>
             </div>
         </StickyModalFooter>

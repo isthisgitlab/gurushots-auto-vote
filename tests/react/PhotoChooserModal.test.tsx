@@ -770,6 +770,18 @@ describe('selection', () => {
         expect(countLine().textContent).not.toContain('Limit reached');
     });
 
+    test('the footer buttons read Clear apart on the left, then Cancel, then the primary rightmost', async () => {
+        setup();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        const footer = screen.getByRole('button', { name: 'Clear' }).parentElement!;
+        expect(Array.from(footer.querySelectorAll('button')).map((button) => button.textContent)).toEqual([
+            'Clear',
+            'Cancel',
+            'Use these photos',
+        ]);
+        expect(screen.getByRole('button', { name: 'Clear' }).className).toContain('mr-auto');
+    });
+
     test('Clear empties the selection and Cancel closes without saving', async () => {
         const { onSave, onClose } = setup({ value: [idOf(1)] });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });

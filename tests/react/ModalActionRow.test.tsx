@@ -22,15 +22,15 @@ const renderRow = (over = {}) => {
 };
 
 describe('ModalActionRow', () => {
-    test('renders Save / secondary / Cancel and wires the handlers', () => {
+    test('renders secondary / Cancel / Save, with the secondary apart on the left, and wires the handlers', () => {
         const { props, container } = renderRow();
         const buttons = Array.from(container.querySelectorAll('button'));
         expect(buttons).toHaveLength(3);
 
-        const [save, secondary, cancel] = buttons;
+        const [secondary, cancel, save] = buttons;
         expect(save.className).toBe('btn btn-neutral btn-sm');
         expect(save.textContent).toContain('app.save');
-        expect(secondary.className).toBe('btn btn-error btn-sm');
+        expect(secondary.className).toBe('btn btn-error btn-sm mr-auto');
         expect(secondary.textContent).toContain('app.resetAll');
         expect(cancel.className).toBe('btn btn-outline btn-sm');
         expect(cancel.textContent).toContain('app.cancel');
@@ -45,7 +45,7 @@ describe('ModalActionRow', () => {
 
     test('saving disables Save and shows the spinner', () => {
         const { container } = renderRow({ saving: true });
-        const save = container.querySelector('button')!;
+        const save = container.querySelectorAll('button')[2];
         expect(save.disabled).toBe(true);
         expect(save.querySelector('.loading.loading-spinner')).not.toBeNull();
     });
@@ -77,7 +77,7 @@ describe('ModalActionRow', () => {
 
     test('secondaryIcon="trash" swaps the destructive-button glyph', () => {
         const { container } = renderRow({ secondaryIcon: 'trash', secondaryLabel: 'app.clearAll' });
-        const secondary = container.querySelectorAll('button')[1];
+        const secondary = container.querySelector('button')!;
         const path = secondary.querySelector('svg path')!;
         expect(path.getAttribute('d')).toMatch(/^M19 7l/); // trash outline, not the reset arrows
     });

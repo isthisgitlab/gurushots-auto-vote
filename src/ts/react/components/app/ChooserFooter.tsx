@@ -1,6 +1,6 @@
 /**
- * The chooser's controls around the photo grid: the search box, and the footer with Save, Clear and
- * Cancel — Save and Clear held back, with the reason as a live region and a Retry where a retry can
+ * The chooser's controls around the photo grid: the search box, and the footer with Clear, Cancel and
+ * Save — Save and Clear held back, with the reason as a live region and a Retry where a retry can
  * lift the hold.
  */
 
@@ -140,8 +140,8 @@ function HeldButton({
 }
 
 /**
- * Save, Clear and Cancel. Save is held (`saveWaits`) with the status line as its description; Clear is
- * held while the saved list is unread (`locked`), with its own short description of why.
+ * Clear (apart on the left), Cancel and Save (rightmost). Save is held (`saveWaits`) with the status line as its
+ * description; Clear is held while the saved list is unread (`locked`), with its own short description of why.
  */
 function FooterActions({
     saveWaits,
@@ -166,6 +166,17 @@ function FooterActions({
     const clearHintId = useId();
     return (
         <div className="flex flex-wrap justify-end gap-2">
+            <HeldButton held={locked} hintId={clearHintId} className="btn-error mr-auto" onPress={onClear}>
+                {t('app.photosClear')}
+            </HeldButton>
+            {locked && (
+                <span id={clearHintId} className="sr-only">
+                    {t('app.photoChooserClearHeld')}
+                </span>
+            )}
+            <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
+                {t('app.cancel')}
+            </button>
             <HeldButton
                 held={saveWaits}
                 hintId={hintId}
@@ -177,17 +188,6 @@ function FooterActions({
                 {saving && <LoadingSpinner size="xs" decorative />}
                 {t('app.photoChooserUse')}
             </HeldButton>
-            <HeldButton held={locked} hintId={clearHintId} className="btn-error" onPress={onClear}>
-                {t('app.photosClear')}
-            </HeldButton>
-            {locked && (
-                <span id={clearHintId} className="sr-only">
-                    {t('app.photoChooserClearHeld')}
-                </span>
-            )}
-            <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
-                {t('app.cancel')}
-            </button>
         </div>
     );
 }
