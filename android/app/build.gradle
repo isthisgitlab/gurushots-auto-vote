@@ -125,7 +125,7 @@ dependencies {
     implementation "androidx.webkit:webkit:1.17.1"
     implementation project(':capacitor-android')
     // Native background voting plugin deps
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:2.4.20"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:2.4.21"
     implementation "com.squareup.okhttp3:okhttp:$okhttpVersion"
     // NOTE: org.json is intentionally NOT declared as a Maven dependency. The
     // Android platform (android.jar / the device framework) already provides
