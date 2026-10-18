@@ -28,6 +28,12 @@ describe('releaseNotesText', () => {
         expect(releaseNotesText('<style>p{}</style>Done')).not.toContain('<');
     });
 
+    test('leaves out the source of script and style elements in the body', () => {
+        expect(
+            releaseNotesText('<p>Before</p><script>var secret = 1;</script><style>p{color:red}</style><p>After</p>'),
+        ).toBe('Before\nAfter');
+    });
+
     test('parses through an inert DOMParser document and adds nothing to the page', () => {
         const parse = jest.spyOn(DOMParser.prototype, 'parseFromString');
         const before = document.body.childNodes.length;

@@ -7,16 +7,17 @@ import { releaseNotesText } from '@/utils/releaseNotesText';
 const BYTE_UNITS = ['byte', 'kilobyte', 'megabyte', 'gigabyte'] as const;
 
 /**
- * Format bytes as a size in the UI's language (1.5 MB, 1,5 MB)
+ * Format bytes as a size in the UI's language (1.5MB, 1,5 MB). The units are SI, so the steps are powers of 1000.
  */
 function formatBytes(bytes: number, locale: string, decimals: number = 1) {
     // Zero and fractions sit below the first power, a size past the last unit stays in it.
-    const power = Math.min(Math.max(0, Math.floor(Math.log(bytes) / Math.log(1024))), BYTE_UNITS.length - 1);
+    const power = Math.min(Math.max(0, Math.floor(Math.log10(bytes) / 3)), BYTE_UNITS.length - 1);
     return new Intl.NumberFormat(locale, {
         style: 'unit',
         unit: BYTE_UNITS[power],
+        unitDisplay: 'narrow',
         maximumFractionDigits: decimals,
-    }).format(bytes / 1024 ** power);
+    }).format(bytes / 1000 ** power);
 }
 
 // The translated message of each failed step.

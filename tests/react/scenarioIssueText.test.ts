@@ -121,5 +121,14 @@ describe('scenarioPathText', () => {
         expect(scenarioPathText('mystery[3]', t)).toBe('mystery[3]');
         expect(scenarioPathText('rules.constructor[1].toString', t)).toBe('rules › constructor[1] › toString');
         expect(scenarioPathText('settings[0]', t)).toBe('settings[0]');
+        expect(scenarioPathText('rules[1][2]', t)).toBe('rules[1][2]');
+        expect(scenarioPathText('phases.main.rules[0][x]', t)).toBe('Phase main › rules[0][x]');
+    });
+
+    test('a very long segment reads in one pass, with or without an index', () => {
+        const long = '['.repeat(50_000);
+        expect(scenarioPathText(`${long}x`, t)).toBe(`${long}x`);
+        expect(scenarioPathText(`${long}[3]`, t)).toBe(`${long}[3]`);
+        expect(scenarioPathText(`phases.main.rules${long}[0]`, t)).toBe(`Phase main › rules${long}[0]`);
     });
 });

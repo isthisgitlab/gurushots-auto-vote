@@ -183,8 +183,8 @@ describe('UpdateProvider + UpdateDialog', () => {
 
         await emit('onDownloadProgress', {
             percent: 50,
-            transferred: 1024 * 1024,
-            total: 2 * 1024 * 1024,
+            transferred: 1_000_000,
+            total: 2_000_000,
             bytesPerSecond: 0,
         });
         expect(screen.getByText('50%')).toBeTruthy();
@@ -192,12 +192,12 @@ describe('UpdateProvider + UpdateDialog', () => {
 
         await emit('onDownloadProgress', {
             percent: 75,
-            transferred: 1536 * 1024,
-            total: 2 * 1024 * 1024,
-            bytesPerSecond: 2048,
+            transferred: 1_500_000,
+            total: 2_000_000,
+            bytesPerSecond: 2000,
         });
-        expect(screen.getByText(/1\.5 MB \/ 2 MB/)).toBeTruthy();
-        expect(screen.getByText(/2 kB\/s/)).toBeTruthy();
+        expect(screen.getByText(/1\.5MB \/ 2MB/)).toBeTruthy();
+        expect(screen.getByText(/2kB\/s/)).toBeTruthy();
 
         // Backdrop click and Escape are ignored while downloading.
         fireEvent.click(document.querySelector('.modal-backdrop')!);
@@ -225,13 +225,13 @@ describe('UpdateProvider + UpdateDialog', () => {
         await emit('onDownloadProgress', {
             percent: 10,
             transferred: 512,
-            total: 3.5 * 1024 ** 3,
-            bytesPerSecond: 1536 * 1024,
+            total: 3.5e9,
+            bytesPerSecond: 1.5e6,
         });
         expect(screen.getByText(/512 B \/ 3,5 GB \(1,5 MB\/s\)/)).toBeTruthy();
 
-        await emit('onDownloadProgress', { percent: 10, transferred: 1, total: 2048 * 1024 ** 3, bytesPerSecond: 1 });
-        expect(screen.getByText(/2048 GB/)).toBeTruthy();
+        await emit('onDownloadProgress', { percent: 10, transferred: 1, total: 2000e9, bytesPerSecond: 1 });
+        expect(screen.getByText(/2000 GB/)).toBeTruthy();
     });
 
     it('formats a zero byte count', async () => {
@@ -239,7 +239,7 @@ describe('UpdateProvider + UpdateDialog', () => {
         await emit('onUpdateAvailable', INFO);
         await clickAndSettle(screen.getByText('app.download'));
         await emit('onDownloadProgress', { percent: 1, transferred: 0, total: 0, bytesPerSecond: 10 });
-        expect(screen.getByText(/0 byte \/ 0 byte/)).toBeTruthy();
+        expect(screen.getByText(/0B \/ 0B/)).toBeTruthy();
     });
 
     it('shows an indeterminate, named progress bar until the download size is known', async () => {

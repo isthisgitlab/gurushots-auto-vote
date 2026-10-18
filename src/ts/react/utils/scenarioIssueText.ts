@@ -100,6 +100,17 @@ const NAMED_SEGMENTS: Record<string, string> = {
 };
 
 /**
+ * A path segment split into its name and a trailing `[n]` index (undefined when it has none). A scan from the last
+ * `[`, not a pattern with a lazy name group, so a long segment costs one pass.
+ */
+const splitIndex = (segment: string): { name: string; index: string | undefined } => {
+    const open = segment.lastIndexOf('[');
+    const tail = segment.slice(open + 1);
+    if (open < 0 || !/^\d+\]$/.test(tail)) return { name: segment, index: undefined };
+    return { name: segment.slice(0, open), index: tail.slice(0, -1) };
+};
+
+/**
  * A ScenarioIssue's path (`phases.main.rules[0].if[0].window`) in the UI's language
  * ("Phase main › Rule 1 › Condition 1 › window"). A segment with no wording stays as written.
  *
@@ -111,8 +122,7 @@ export const scenarioPathText = (path: string, t: Translate): string => {
     const words: string[] = [];
     for (let at = 0; at < segments.length; at++) {
         const segment = segments[at];
-        // The pattern accepts every string: the index group is optional and the name group takes the rest.
-        const [, name, index] = /^(.*?)(?:\[(\d+)\])?$/.exec(segment) as RegExpExecArray;
+        const { name, index } = splitIndex(segment);
         if (name === 'phases' && index === undefined && at + 1 < segments.length) {
             at++;
             words.push(interp(t('app.scenarioPathPhase'), { name: segments[at] }));
