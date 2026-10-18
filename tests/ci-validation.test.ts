@@ -379,12 +379,13 @@ describe('renderer button colours', () => {
     // included, is scanned as code of its own); (b) no `<ActionButton>` tag has a colour `variant` (a `variant="…"`
     // other than `plain`, or a `variant={…}` expression with a string literal other than `plain`) or an `error`
     // attribute (it swaps in `btn-error` whatever the variant) and a literal holding one of those styles. Comments are
-    // ignored, and a quote, `>` or brace inside a string never ends a tag or a `${…}` early. A `variant` that is an
-    // identifier or lookup is not seen.
+    // ignored, and a quote, `>` or brace inside a string never ends a tag or a `${…}` early. Not seen: a `variant`
+    // that is an identifier or lookup, and any literal after two apostrophes in JSX text on one line (they pair up).
     const STYLES = ['btn-outline', 'btn-soft', 'btn-ghost', 'btn-dash'];
     const COLOUR_VARIANT = /^btn-(?:neutral|primary|secondary|accent|info|success|warning|error|latvian)$/;
     // End (exclusive) of the string, template or comment starting at `i`, or `i + 1` when none does. A string never
-    // spans a line, so an apostrophe in JSX text is not taken for one; a template skips its `${…}` bodies by brace depth.
+    // spans a line, so a lone apostrophe in JSX text is not taken for one (two on a line still pair up); a template
+    // skips its `${…}` bodies by brace depth.
     const spanAt = (code: string, i: number): number => {
         const c = code[i];
         if (c === "'" || c === '"' || c === '`') {
@@ -465,7 +466,7 @@ describe('renderer button colours', () => {
     };
 
     const colourVariantTag = (tag: string) => {
-        if (/\serror=/.test(tag)) return true;
+        if (/\serror(?=[\s=>/])/.test(tag)) return true;
         const quoted = /\bvariant="([^"]*)"/.exec(tag);
         if (quoted) return quoted[1] !== 'plain';
         const expr = tag.indexOf('variant={');
@@ -499,6 +500,10 @@ describe('renderer button colours', () => {
             '<ActionButton title="a > b" variant="neutral" className="btn-outline">',
             // `error` swaps in btn-error whatever the variant.
             '<ActionButton variant="plain" error={e} className="btn-outline">',
+            '<ActionButton variant="plain" error className="btn-outline">',
+            // A brace inside a string in a `${…}` body, and a comment inside a tag.
+            "`a ${x ? '}' : 'btn-outline btn-error'}`",
+            '<ActionButton /* > */ variant="neutral" className="btn-outline">',
         ];
         for (const source of flagged) expect(offendersIn(source)).not.toEqual([]);
         const passing = [
