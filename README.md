@@ -56,17 +56,17 @@ The desktop app enforces this for GUI instances: launching it a second time focu
 
 ### Latest builds
 
-**Latest Version: v1.13.0-beta.8**
+**Latest Version: v1.13.0-beta.9**
 
 #### 🖥️ GUI (recommended for most users)
 
 | Platform          | Download                                                                                                                                                                             | Size    | Type                |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ------------------- |
-| **Windows**       | [📥 GuruShotsAutoVote-v1.13.0-beta.8-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.8-x64.exe)                 | ~270 MB | Portable Executable |
-| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.13.0-beta.8-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.8-arm64.dmg)             | ~310 MB | DMG Installer       |
-| **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.13.0-beta.8-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.8-arm64.app.zip)     | ~335 MB | App Bundle (ZIP)    |
-| **Linux (x64)**   | [📥 GuruShotsAutoVote-v1.13.0-beta.8-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.8-x86_64.AppImage) | ~270 MB | AppImage            |
-| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v1.13.0-beta.8-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.8-arm64.AppImage)   | ~255 MB | AppImage            |
+| **Windows**       | [📥 GuruShotsAutoVote-v1.13.0-beta.9-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.9-x64.exe)                 | ~270 MB | Portable Executable |
+| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.13.0-beta.9-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.9-arm64.dmg)             | ~310 MB | DMG Installer       |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.13.0-beta.9-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.9-arm64.app.zip)     | ~335 MB | App Bundle (ZIP)    |
+| **Linux (x64)**   | [📥 GuruShotsAutoVote-v1.13.0-beta.9-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.9-x86_64.AppImage) | ~270 MB | AppImage            |
+| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v1.13.0-beta.9-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.9-arm64.AppImage)   | ~255 MB | AppImage            |
 
 > **macOS:** Apple Silicon (arm64) only — there is no Intel (x86_64) build. The **DMG** is the simplest install; the **APP** zip is an alternative if you'd rather drop the bundle in yourself.
 
@@ -76,7 +76,7 @@ The desktop app enforces this for GUI instances: launching it a second time focu
 
 | Platform                     | Download                                                                                                                                                     | Size    | Type       |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ---------- |
-| **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v1.13.0-beta.8.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.8.apk) | ~160 MB | Signed APK |
+| **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v1.13.0-beta.9.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.9.apk) | ~160 MB | Signed APK |
 
 The Android build is a Capacitor wrapper around the same React UI, plus a Kotlin plugin that runs voting cycles natively in the background via `AlarmManager` and a foreground service. Voting continues with the phone locked and the app swiped away from recents.
 
@@ -84,9 +84,9 @@ The Android build is a Capacitor wrapper around the same React UI, plus a Kotlin
 
 | Platform              | Download                                                                                                                                             | Size    | Type                |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------- |
-| **macOS CLI**         | [📥 gurucli-v1.13.0-beta.8-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.0-beta.8-mac)             | ~375 MB | Terminal Executable |
-| **Linux CLI (x64)**   | [📥 gurucli-v1.13.0-beta.8-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.0-beta.8-linux)         | ~355 MB | Terminal Executable |
-| **Linux CLI (ARM64)** | [📥 gurucli-v1.13.0-beta.8-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.0-beta.8-linux-arm) | ~350 MB | Terminal Executable |
+| **macOS CLI**         | [📥 gurucli-v1.13.0-beta.9-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.0-beta.9-mac)             | ~375 MB | Terminal Executable |
+| **Linux CLI (x64)**   | [📥 gurucli-v1.13.0-beta.9-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.0-beta.9-linux)         | ~355 MB | Terminal Executable |
+| **Linux CLI (ARM64)** | [📥 gurucli-v1.13.0-beta.9-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.0-beta.9-linux-arm) | ~350 MB | Terminal Executable |
 
 > There is no Windows CLI build — on Windows, use the GUI app above.
 
@@ -96,15 +96,15 @@ Every download above also comes as a **lite** build without the image model and 
 
 | Platform                     | Download                                                                                                                                                                                       |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Windows**                  | [📥 GuruShotsAutoVote-v1.13.0-beta.8-x64-lite.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.8-x64-lite.exe)                 |
-| **macOS (DMG)**              | [📥 GuruShotsAutoVote-v1.13.0-beta.8-arm64-lite.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.8-arm64-lite.dmg)             |
-| **macOS (APP)**              | [📥 GuruShotsAutoVote-v1.13.0-beta.8-arm64-lite.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.8-arm64-lite.app.zip)     |
-| **Linux (x64)**              | [📥 GuruShotsAutoVote-v1.13.0-beta.8-x86_64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.8-x86_64-lite.AppImage) |
-| **Linux (ARM64)**            | [📥 GuruShotsAutoVote-v1.13.0-beta.8-arm64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.8-arm64-lite.AppImage)   |
-| **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v1.13.0-beta.8-lite.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.8-lite.apk)                         |
-| **macOS CLI**                | [📥 gurucli-v1.13.0-beta.8-mac-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.0-beta.8-mac-lite)                                             |
-| **Linux CLI (x64)**          | [📥 gurucli-v1.13.0-beta.8-linux-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.0-beta.8-linux-lite)                                         |
-| **Linux CLI (ARM64)**        | [📥 gurucli-v1.13.0-beta.8-linux-arm-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.0-beta.8-linux-arm-lite)                                 |
+| **Windows**                  | [📥 GuruShotsAutoVote-v1.13.0-beta.9-x64-lite.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.9-x64-lite.exe)                 |
+| **macOS (DMG)**              | [📥 GuruShotsAutoVote-v1.13.0-beta.9-arm64-lite.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.9-arm64-lite.dmg)             |
+| **macOS (APP)**              | [📥 GuruShotsAutoVote-v1.13.0-beta.9-arm64-lite.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.9-arm64-lite.app.zip)     |
+| **Linux (x64)**              | [📥 GuruShotsAutoVote-v1.13.0-beta.9-x86_64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.9-x86_64-lite.AppImage) |
+| **Linux (ARM64)**            | [📥 GuruShotsAutoVote-v1.13.0-beta.9-arm64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.9-arm64-lite.AppImage)   |
+| **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v1.13.0-beta.9-lite.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.0-beta.9-lite.apk)                         |
+| **macOS CLI**                | [📥 gurucli-v1.13.0-beta.9-mac-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.0-beta.9-mac-lite)                                             |
+| **Linux CLI (x64)**          | [📥 gurucli-v1.13.0-beta.9-linux-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.0-beta.9-linux-lite)                                         |
+| **Linux CLI (ARM64)**        | [📥 gurucli-v1.13.0-beta.9-linux-arm-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.0-beta.9-linux-arm-lite)                                 |
 
 Prefer a specific version? Browse **[all releases](https://github.com/isthisgitlab/gurushots-auto-vote/releases)** or the **[latest release notes](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest)**.
 
@@ -131,11 +131,11 @@ Prefer a specific version? Browse **[all releases](https://github.com/isthisgitl
 
 **CLI on macOS:**
 
-1. Download `gurucli-v1.13.0-beta.8-mac`.
+1. Download `gurucli-v1.13.0-beta.9-mac`.
 2. `cd ~/Downloads`
-3. Make it executable: `chmod +x gurucli-v1.13.0-beta.8-mac`
-4. Clear the quarantine flag (browser downloads only): `xattr -d com.apple.quarantine ./gurucli-v1.13.0-beta.8-mac`
-5. Run: `./gurucli-v1.13.0-beta.8-mac help`
+3. Make it executable: `chmod +x gurucli-v1.13.0-beta.9-mac`
+4. Clear the quarantine flag (browser downloads only): `xattr -d com.apple.quarantine ./gurucli-v1.13.0-beta.9-mac`
+5. Run: `./gurucli-v1.13.0-beta.9-mac help`
 
 The first time the CLI submits a photo, it unpacks its bundled image model and runtime (~560 MB) into `~/Library/Application Support/gurushots-auto-vote/vision/`. This happens once per version; after unpacking, a new version removes older copies that haven't been used in the last hour.
 
@@ -144,15 +144,15 @@ The first time the CLI submits a photo, it unpacks its bundled image model and r
 **GUI (AppImage):**
 
 1. Download the AppImage for your architecture.
-2. Make it executable: `chmod +x GuruShotsAutoVote-v1.13.0-beta.8-*.AppImage` (or via file-manager → Properties → Permissions).
-3. Run it: `./GuruShotsAutoVote-v1.13.0-beta.8-*.AppImage`
+2. Make it executable: `chmod +x GuruShotsAutoVote-v1.13.0-beta.9-*.AppImage` (or via file-manager → Properties → Permissions).
+3. Run it: `./GuruShotsAutoVote-v1.13.0-beta.9-*.AppImage`
 
 **CLI:**
 
-1. Download `gurucli-v1.13.0-beta.8-linux` (or `-linux-arm`).
+1. Download `gurucli-v1.13.0-beta.9-linux` (or `-linux-arm`).
 2. `cd ~/Downloads`
-3. `chmod +x gurucli-v1.13.0-beta.8-linux`
-4. `./gurucli-v1.13.0-beta.8-linux help`
+3. `chmod +x gurucli-v1.13.0-beta.9-linux`
+4. `./gurucli-v1.13.0-beta.9-linux help`
 
 The first time the CLI submits a photo, it unpacks its bundled image model and runtime (~550 MB) into `~/.config/gurushots-auto-vote/vision/`. This happens once per version; after unpacking, a new version removes older copies that haven't been used in the last hour.
 
@@ -160,7 +160,7 @@ The first time the CLI submits a photo, it unpacks its bundled image model and r
 
 The Android build is **not on Google Play** — install via direct APK download.
 
-1. On the phone, open the [latest release page](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest) and tap `GuruShotsAutoVote-v1.13.0-beta.8.apk`.
+1. On the phone, open the [latest release page](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest) and tap `GuruShotsAutoVote-v1.13.0-beta.9.apk`.
 2. Your browser warns before downloading an APK — tap **Download anyway**.
 3. Tap the downloaded file from the notification shade.
 4. Android prompts **Install unknown apps** — grant it to whichever app you downloaded with (Chrome / Files / etc.), then tap **Install**.
@@ -184,9 +184,9 @@ The Android build is **not on Google Play** — install via direct APK download.
 ### CLI
 
 ```bash
-./gurucli-v1.13.0-beta.8-[platform] login    # authenticate once (saves a token)
-./gurucli-v1.13.0-beta.8-[platform] run      # one full auto-strategy cycle (boost/turbo/auto-submit/threshold-aware vote)
-./gurucli-v1.13.0-beta.8-[platform] start    # continuous voting (Ctrl+C to stop)
+./gurucli-v1.13.0-beta.9-[platform] login    # authenticate once (saves a token)
+./gurucli-v1.13.0-beta.9-[platform] run      # one full auto-strategy cycle (boost/turbo/auto-submit/threshold-aware vote)
+./gurucli-v1.13.0-beta.9-[platform] start    # continuous voting (Ctrl+C to stop)
 ```
 
 > Replace `[platform]` with `mac`, `linux`, or `linux-arm`. Run `help` to see every command.
