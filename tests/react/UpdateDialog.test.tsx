@@ -212,11 +212,73 @@ describe('UpdateProvider + UpdateDialog', () => {
         expect(screen.getByText(/0 Bytes \/ 0 Bytes/)).toBeTruthy();
     });
 
-    it('"Cancel" while downloading hides the dialog', async () => {
+    it('shows an indeterminate, named progress bar until the download size is known', async () => {
         renderDialog();
         await emit('onUpdateAvailable', INFO);
         await clickAndSettle(screen.getByText('app.download'));
-        fireEvent.click(screen.getByText('app.cancel'));
+        const bar = document.querySelector('progress')!;
+        expect(bar.hasAttribute('value')).toBe(false);
+        expect(bar.getAttribute('aria-label')).toBe('app.downloadingUpdate');
+
+        await emit('onDownloadProgress', { percent: 40, transferred: 40, total: 100, bytesPerSecond: 0 });
+        expect(document.querySelector('progress')!.getAttribute('value')).toBe('40');
+    });
+
+    describe('a hidden dialog comes back for the events the user is waiting on', () => {
+        const hideDuringDownload = async () => {
+            renderDialog();
+            await emit('onUpdateAvailable', INFO);
+            await clickAndSettle(screen.getByText('app.download'));
+            fireEvent.click(screen.getByText('app.hide'));
+            expect(document.body.textContent).toBe('');
+        };
+
+        it('a finished download brings back "Restart now"', async () => {
+            await hideDuringDownload();
+            await emit('onUpdateDownloaded');
+            expect(screen.getByText('app.updateReady')).toBeTruthy();
+            expect(screen.getByText('app.restartNow')).toBeTruthy();
+        });
+
+        it('a failed download shows the failure', async () => {
+            await hideDuringDownload();
+            await emit('onUpdateError', { message: 'offline' });
+            expect(screen.getByText('app.updateError')).toBeTruthy();
+        });
+
+        it.each([
+            ['idle', async () => {}],
+            [
+                'available, with the dialog hidden',
+                async () => {
+                    await emit('onUpdateAvailable', INFO);
+                    fireEvent.click(screen.getByText('app.remindLater'));
+                },
+            ],
+            [
+                'ready, with the dialog hidden',
+                async () => {
+                    await emit('onUpdateAvailable', INFO);
+                    await clickAndSettle(screen.getByText('app.download'));
+                    await emit('onUpdateDownloaded');
+                    fireEvent.click(screen.getByText('app.restartLater'));
+                },
+            ],
+        ])('a background check that fails while %s stays hidden', async (_state, arrange) => {
+            renderDialog();
+            await arrange();
+            expect(document.body.textContent).toBe('');
+            await emit('onUpdateError', { message: 'offline' });
+            expect(document.body.textContent).toBe('');
+            expect(ctx.state).toBe('error');
+        });
+    });
+
+    it('"Hide" while downloading hides the dialog', async () => {
+        renderDialog();
+        await emit('onUpdateAvailable', INFO);
+        await clickAndSettle(screen.getByText('app.download'));
+        fireEvent.click(screen.getByText('app.hide'));
         expect(document.body.textContent).toBe('');
     });
 

@@ -91,7 +91,13 @@ export function UpdateDialog() {
             {/* Downloading State */}
             {state === UPDATE_STATES.DOWNLOADING && progress && (
                 <div className="space-y-4">
-                    <progress className="progress progress-latvian w-full" value={progress.percent} max="100" />
+                    {/* No value while the size is unknown (the seed zeros): the bar animates instead of sitting at 0. */}
+                    <progress
+                        className="progress progress-latvian w-full"
+                        value={progress.total === 0 ? undefined : progress.percent}
+                        max="100"
+                        aria-label={t('app.downloadingUpdate')}
+                    />
                     <div className="flex justify-between text-sm">
                         <span>{progress.percent}%</span>
                         {progress.bytesPerSecond > 0 && (
@@ -140,7 +146,7 @@ export function UpdateDialog() {
                 {/* Downloading Buttons */}
                 {state === UPDATE_STATES.DOWNLOADING && (
                     <button className="btn btn-outline btn-sm" onClick={hideDialog}>
-                        {t('app.cancel')}
+                        {t('app.hide')}
                     </button>
                 )}
 

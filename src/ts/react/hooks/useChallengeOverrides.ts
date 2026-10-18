@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSessionLoad } from './useSessionLoad';
 import { useLatestRef } from './useLatestRef';
 import * as ipc from '@/api/ipc';
 import { useOnChosenPhotosCleared, withoutChosenPhotos } from '@/api/chosenPhotosCleared';
+import { valuesEqual } from '@/utils/valuesEqual';
 
 import type { Dispatch, SetStateAction } from 'react';
 import type { ChallengeValues, RuleSource, TitleRuleInfo } from '../../types/settings';
@@ -17,6 +18,9 @@ import { ON_ONLY_KEYS } from '../../settings/ruleBehaviour';
  * inline key comes from. Null until loaded.
  */
 type TitleRulesState = TitleRuleInfo | null;
+
+/** What the stored challenge held when the modal loaded it: the overrides and whether its profile is suppressed. */
+type OverridesBaseline = { overrides: ChallengeValues; suppressed: boolean };
 
 export type SetOverrides = Dispatch<SetStateAction<ChallengeValues>>;
 export type SetTitleRules = Dispatch<SetStateAction<TitleRulesState>>;
@@ -80,6 +84,7 @@ function useOverridesLoad({
     schema,
     setOverrides,
     setTitleRules,
+    baselineRef,
 }: {
     isOpen: boolean;
     challengeId: string | number | null | undefined;
@@ -87,11 +92,15 @@ function useOverridesLoad({
     schema: RendererSchema | null | undefined;
     setOverrides: SetOverrides;
     setTitleRules: SetTitleRules;
+    baselineRef: { current: OverridesBaseline | null };
 }) {
     const [loadedKey, setLoadedKey] = useState<string | null>(null);
     useEffect(() => {
-        if (!isOpen) setLoadedKey(null);
-    }, [isOpen]);
+        if (!isOpen) {
+            setLoadedKey(null);
+            baselineRef.current = null;
+        }
+    }, [isOpen, baselineRef]);
 
     const loadKey = `${challengeId}\0${challengeTitle}`;
     const load = useCallback(async () => {
@@ -103,9 +112,10 @@ function useOverridesLoad({
         ({ values, profile, key }: { values: ChallengeValues; profile: TitleRulesState; key: string }) => {
             setOverrides(values);
             setTitleRules(profile);
+            baselineRef.current = { overrides: values, suppressed: profile?.suppressed === true };
             setLoadedKey(key);
         },
-        [setOverrides, setTitleRules],
+        [setOverrides, setTitleRules, baselineRef],
     );
 
     return useSessionLoad(load, {
@@ -353,7 +363,8 @@ function useOverrideEdits() {
  * Owns the form state behind the per-challenge settings modal: the sparse
  * override map, what the challenge's rules contribute (and whether this
  * challenge suppresses their profile), load-on-open, and save. The caller renders; it
- * drives Save / Clear all through `save()` / `clearAll()`.
+ * drives Save / Clear all through `save()` / `clearAll()`. `isDirty()` says whether the overrides or
+ * the suppression differ from what the load brought in (false until it has).
  */
 export function useChallengeOverrides({
     isOpen,
@@ -392,9 +403,13 @@ export function useChallengeOverrides({
         overrides,
         setOverrides,
     });
+    const baselineRef = useRef<OverridesBaseline | null>(null);
     // Saving writes the whole override map: lists removed meanwhile must not come back with it.
     useOnChosenPhotosCleared(() => {
         setOverrides(withoutChosenPhotos);
+        // The removal is what is on disk now, so it is not an unsaved edit.
+        const baseline = baselineRef.current;
+        if (baseline) baselineRef.current = { ...baseline, overrides: withoutChosenPhotos(baseline.overrides) };
         // From both rule layers and the matched profile, so none of them shows (or saves) a removed list.
         setTitleRules((current) => current && rulesWithoutChosenPhotos(current));
     });
@@ -405,6 +420,7 @@ export function useChallengeOverrides({
         schema,
         setOverrides,
         setTitleRules,
+        baselineRef,
     });
     const { saving, saveError, save } = useOverridesSave({
         isOpen,
@@ -422,9 +438,19 @@ export function useChallengeOverrides({
         setTitleRules((current) => (current ? { ...current, suppressed: false } : null));
     }, [setOverrides, setTitleRules]);
 
+    const isDirty = () => {
+        const baseline = baselineRef.current;
+        return (
+            baseline !== null &&
+            (!valuesEqual(overrides, baseline.overrides) ||
+                (profile.titleRules?.suppressed === true) !== baseline.suppressed)
+        );
+    };
+
     return {
         overrides,
         ...profile,
+        isDirty,
         loading,
         loadFailed,
         saving,

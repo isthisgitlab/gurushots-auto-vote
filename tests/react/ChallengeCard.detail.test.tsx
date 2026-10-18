@@ -244,6 +244,37 @@ describe('header', () => {
         await waitFor(() => expect(onVoteComplete).toHaveBeenCalledTimes(2));
     });
 
+    test.each([
+        ['Vote', 'app.vote', 'voteOnChallengeManual'],
+        ['Run', 'app.run', 'runVotingCycleForChallenge'],
+    ] as const)(
+        'a failed %s shows a translated error below the buttons until it is dismissed or retried',
+        async (_name, label, method) => {
+            jest.mocked(window.api[method])
+                .mockResolvedValueOnce({ success: false, error: 'Challenge no longer active' })
+                .mockResolvedValueOnce({ success: false, error: 'raw handler text' })
+                .mockResolvedValueOnce(invalid({ success: true }));
+            const { onVoteComplete } = renderCard(makeChallenge());
+
+            fireEvent.click(screen.getByText(label));
+            const error = await screen.findByText('errors.challengeNoLongerActive');
+            expect(error.closest('[role="alert"]')).not.toBeNull();
+            expect(onVoteComplete).not.toHaveBeenCalled();
+
+            fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
+            expect(screen.queryByText('errors.challengeNoLongerActive')).toBeNull();
+
+            fireEvent.click(screen.getByText(label));
+            expect(await screen.findByText('errors.actionFailed')).toBeTruthy();
+            expect(screen.queryByText('raw handler text')).toBeNull();
+
+            // The next press clears it, and a success leaves none.
+            fireEvent.click(screen.getByText(label));
+            await waitFor(() => expect(onVoteComplete).toHaveBeenCalledTimes(1));
+            expect(screen.queryByText('errors.actionFailed')).toBeNull();
+        },
+    );
+
     test('Vote and Run are main actions (neutral): they cost nothing', () => {
         renderCard(makeChallenge());
         expect(screen.getByText('app.vote').closest('button')!.className).toContain('btn-neutral');

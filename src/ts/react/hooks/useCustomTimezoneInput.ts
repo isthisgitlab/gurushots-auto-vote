@@ -17,7 +17,7 @@ const isValidTimezone = (tz: string) => {
  * out of the settings form hook. Reset on every open so a stale "+" panel from
  * a previous session doesn't carry over. Adding a valid zone stores it in
  * `customTimezones` and selects it; removing drops the selected custom zone
- * and falls back to the default.
+ * and falls back to the default. `dirty` is a typed zone that was not added.
  */
 export function useCustomTimezoneInput({
     isOpen,
@@ -80,5 +80,7 @@ export function useCustomTimezoneInput({
         if (error) setError(false);
     };
 
-    return { visible, value, error, inputRef, add, remove, toggle, change, close };
+    const dirty = value.trim() !== '';
+
+    return { visible, value, error, inputRef, dirty, add, remove, toggle, change, close };
 }

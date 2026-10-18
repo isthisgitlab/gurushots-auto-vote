@@ -8,6 +8,8 @@ import { useCustomTimezoneInput } from '@/hooks/useCustomTimezoneInput';
 import { useAutovote } from '@/contexts/AutovoteContext';
 import { tierSchemaEntries, SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { UnsavedChangesModal } from '@/components/ui/UnsavedChangesModal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { ModalActionRow } from '@/components/ui/ModalActionRow';
 import { STICKY_FOOTER_SCROLL_PADDING } from '@/components/ui/StickyModalFooter';
@@ -156,7 +158,6 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         formValues,
         uiValues,
         saving,
-        originalUiValues,
         handleFormChange,
         handleUiChange,
         handleResetGlobal,
@@ -164,6 +165,8 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         handleResetAll,
         commit,
         revert,
+        isDirty: formIsDirty,
+        getPersistedTheme,
     } = useSettingsForm({
         isOpen,
         schema,
@@ -180,21 +183,46 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     // True when commit() reported schema writes rejected by validation —
     // shown as an alert and the modal stays open (mirrors titleRules.error).
     const [saveError, setSaveError] = useState(false);
+    // The scenario builder's unsaved draft, reported by the section: the modal's Save does not save it.
+    const [scenarioDirty, setScenarioDirty] = useState(false);
+    // The question on screen: dismissing with unsaved edits, or saving with work Save would drop.
+    const [asking, setAsking] = useState<'discard' | 'drop' | null>(null);
 
+    // One question per opening, and no draft carried over from the last one: the modal stays mounted while closed.
     useEffect(() => {
-        if (isOpen) setSaveError(false);
+        if (isOpen) {
+            setSaveError(false);
+            setScenarioDirty(false);
+        } else {
+            setAsking(null);
+        }
     }, [isOpen]);
 
     const handleCancel = useCallback(() => {
-        // Revert theme DOM if the user changed it during this open session.
-        if (originalUiValues && originalUiValues.theme !== uiValues.theme) {
-            document.documentElement.setAttribute('data-theme', originalUiValues.theme);
+        // Put the persisted theme back on screen if the user previewed another one in this open session.
+        const persistedTheme = getPersistedTheme();
+        if (persistedTheme && persistedTheme !== uiValues.theme) {
+            document.documentElement.setAttribute('data-theme', persistedTheme);
         }
         revert();
         onClose();
-    }, [originalUiValues, uiValues.theme, revert, onClose]);
+    }, [getPersistedTheme, uiValues.theme, revert, onClose]);
 
-    const handleSave = useCallback(async () => {
+    // Read when the user acts, not at render: a Save that failed partway moved the persisted baselines after the
+    // last render. Nothing is guarded while the form is still loading or has nothing to differ from.
+    const hasUnsavedEdits = () =>
+        !(schemaLoading && !schema) && (formIsDirty() || titleRules.isDirty() || timezoneInput.dirty || scenarioDirty);
+
+    // Esc, the backdrop, the close button and Cancel: edits that are not saved are not thrown away unasked.
+    const dismiss = () => (hasUnsavedEdits() ? setAsking('discard') : handleCancel());
+
+    // What Save does not write: it is lost when the modal closes.
+    const droppedWork = [
+        timezoneInput.dirty && 'app.settingsDropTimezone',
+        scenarioDirty && 'app.settingsDropScenario',
+    ].filter((key): key is string => typeof key === 'string');
+
+    const runSave = useCallback(async () => {
         try {
             // commit() returns the schema keys whose write was rejected by
             // validation (e.g. a duplicate-count auto-fill schedule). Surface
@@ -228,6 +256,8 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         }
     }, [commit, persistTitleRules, uiValues.language, language, setLanguage, rearmSchedule, onClose]);
 
+    const handleSave = () => (droppedWork.length > 0 ? setAsking('drop') : runSave());
+
     if (!isOpen) return null;
 
     const hintsFor = globalSettingHints({ formValues, schema, timezone: uiValues.timezone, t });
@@ -236,44 +266,78 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     const appGroups = bands.filter((band) => band.id === APP_TIER).flatMap((band) => band.groups);
 
     return (
-        <Modal
-            isOpen={isOpen}
-            onClose={handleCancel}
-            title={t('app.globalSettings')}
-            size="2xl"
-            className={STICKY_FOOTER_SCROLL_PADDING}
-        >
-            {/* Spinner only for the first load: every settings write broadcasts a
+        <>
+            <Modal
+                isOpen={isOpen}
+                onClose={dismiss}
+                title={t('app.globalSettings')}
+                size="2xl"
+                className={STICKY_FOOTER_SCROLL_PADDING}
+            >
+                {/* Spinner only for the first load: every settings write broadcasts a
                 change that refetches the schema, and swapping the form out for the
                 spinner on each of those background refreshes made Save flicker. */}
-            {schemaLoading && !schema ? (
-                <InlineLoader text={t('common.loading')} />
-            ) : (
-                <div className="space-y-6">
-                    <ApplicationSettingsSection
-                        uiValues={uiValues}
-                        handleUiChange={handleUiChange}
-                        handleResetUi={handleResetUi}
-                        timezoneInput={timezoneInput}
-                    >
-                        {appGroups.map((group) => (
-                            <SchemaSettingsGroup key={group.id} group={group} level="h5" {...schemaForm} />
-                        ))}
-                    </ApplicationSettingsSection>
-                    <ChallengeDefaultsSection bands={bands.filter((band) => band.id !== APP_TIER)} {...schemaForm} />
-                    <TitleRulesSection titleRules={titleRules} />
-                    <ScenariosSection isOpen={isOpen} />
-                    <AboutDataSection />
-                    <ModalActionRow
-                        onSave={handleSave}
-                        saving={saving}
-                        onSecondary={handleResetAll}
-                        secondaryLabel={t('app.resetAll')}
-                        onCancel={handleCancel}
-                        saveError={saveError}
-                    />
-                </div>
-            )}
-        </Modal>
+                {schemaLoading && !schema ? (
+                    <InlineLoader text={t('common.loading')} />
+                ) : (
+                    <div className="space-y-6">
+                        <ApplicationSettingsSection
+                            uiValues={uiValues}
+                            handleUiChange={handleUiChange}
+                            handleResetUi={handleResetUi}
+                            timezoneInput={timezoneInput}
+                        >
+                            {appGroups.map((group) => (
+                                <SchemaSettingsGroup key={group.id} group={group} level="h5" {...schemaForm} />
+                            ))}
+                        </ApplicationSettingsSection>
+                        <ChallengeDefaultsSection
+                            bands={bands.filter((band) => band.id !== APP_TIER)}
+                            {...schemaForm}
+                        />
+                        <TitleRulesSection titleRules={titleRules} />
+                        <ScenariosSection isOpen={isOpen} onDirtyChange={setScenarioDirty} />
+                        <AboutDataSection />
+                        <ModalActionRow
+                            onSave={handleSave}
+                            saving={saving}
+                            onSecondary={handleResetAll}
+                            secondaryLabel={t('app.resetAll')}
+                            onCancel={dismiss}
+                            saveError={saveError}
+                        />
+                    </div>
+                )}
+            </Modal>
+            <UnsavedChangesModal
+                isOpen={asking === 'discard'}
+                onKeepEditing={() => setAsking(null)}
+                onDiscard={() => {
+                    setAsking(null);
+                    handleCancel();
+                }}
+            />
+            <ConfirmModal
+                isOpen={asking === 'drop'}
+                title={t('app.settingsDropTitle')}
+                working={false}
+                problem={null}
+                onClose={() => setAsking(null)}
+                onConfirm={() => {
+                    setAsking(null);
+                    void runSave();
+                }}
+                confirmLabel="app.settingsSaveWithout"
+                cancelLabel="app.settingsKeepEditing"
+                workingLabel="app.settingsSaveWithout"
+            >
+                <p>{t('app.settingsDropText')}</p>
+                <ul className="list-disc ml-5">
+                    {droppedWork.map((key) => (
+                        <li key={key}>{t(key)}</li>
+                    ))}
+                </ul>
+            </ConfirmModal>
+        </>
     );
 }

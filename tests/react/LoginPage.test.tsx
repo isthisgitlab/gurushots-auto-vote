@@ -135,6 +135,32 @@ describe('Login page', () => {
         expect(screen.getByText('login.mockModeInfo')).toBeTruthy();
     });
 
+    test('a write the handler refuses (false) leaves the toggles and the picker working, with no unhandled rejection', async () => {
+        window.api.setSetting = jest.fn().mockResolvedValue(false);
+        const unhandled = jest.fn();
+        process.on('unhandledRejection', unhandled);
+        await renderReady();
+
+        pickOption(themeSelect(), 'synthwave');
+        fireEvent.click(checkboxes()[0]);
+        fireEvent.click(checkboxes()[1]);
+        await waitFor(() => expect(window.api.setSetting).toHaveBeenCalledWith('mock', true));
+        await act(async () => {});
+
+        expect(window.api.setSetting).toHaveBeenCalledWith('theme', 'synthwave');
+        expect(window.api.setSetting).toHaveBeenCalledWith('stayLoggedIn', true);
+        expect(unhandled).not.toHaveBeenCalled();
+        process.off('unhandledRejection', unhandled);
+    });
+
+    test('a login still proceeds when the mock-mode write is refused (false)', async () => {
+        window.api.setSetting = jest.fn().mockResolvedValue(false);
+        await renderReady();
+        submit('alice', 'pw');
+        await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
+        expect(window.api.setSetting).toHaveBeenCalledWith('mock', false);
+    });
+
     test('successful login saves mock mode (never the token) and transitions (username not remembered)', async () => {
         await renderReady();
         submit('alice', 'pw');

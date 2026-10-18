@@ -11,6 +11,7 @@ import type { ComponentChildren } from 'preact';
  * @param title - the dialog's title
  * @param problem - translation key of the problem to show, or null
  * @param confirmLabel - translation key of the confirming button
+ * @param cancelLabel - translation key of the Cancel button
  * @param workingLabel - translation key of the confirming button while the call is out
  */
 export function ConfirmModal({
@@ -21,6 +22,7 @@ export function ConfirmModal({
     onClose,
     onConfirm,
     confirmLabel,
+    cancelLabel = 'app.cancel',
     workingLabel,
     children,
 }: {
@@ -31,6 +33,7 @@ export function ConfirmModal({
     onClose: () => void;
     onConfirm: () => void;
     confirmLabel: string;
+    cancelLabel?: string;
     workingLabel: string;
     children?: ComponentChildren;
 }) {
@@ -47,7 +50,7 @@ export function ConfirmModal({
             </div>
             <ModalActions>
                 <button className="btn btn-outline btn-sm" onClick={onClose} disabled={working}>
-                    {t('app.cancel')}
+                    {t(cancelLabel)}
                 </button>
                 <ConfirmButton
                     working={working}

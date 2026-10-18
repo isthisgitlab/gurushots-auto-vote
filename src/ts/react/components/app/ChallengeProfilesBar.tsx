@@ -136,17 +136,21 @@ export function ChallengeProfilesBar({
         }
         disarm();
         setBusy(true);
+        let landed = false;
         try {
             const deleted = await ipc.deleteChallengeProfile(selectedName);
             if (deleted !== true) {
                 setErrorText(t('app.profileSaveError'));
                 return;
             }
+            landed = true;
             setErrorText('');
             setSelectedName('');
             await refreshProfiles();
             onProfilesChanged({ name: selectedName, deleted: true });
         } catch (err) {
+            // A throw after the delete landed is not a failed delete: the profile is gone.
+            if (!landed) setErrorText(t('app.profileSaveError'));
             await ipc.logRendererError(`Error deleting challenge profile: ${errorMessage(err) || err}`);
         } finally {
             setBusy(false);

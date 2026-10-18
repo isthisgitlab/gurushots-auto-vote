@@ -408,6 +408,9 @@ export function useChallengeCardActions({
 
     const turboError = ipcErrorText(turboFailure, t);
     const fillError = ipcErrorText(fillFailure, t);
+    // Vote and Run share it: the translated message of whichever failed last, cleared by the next press.
+    const [pressError, setPressError] = useState<string | null>(null);
+    const clearPressError = () => setPressError(null);
 
     const handlePlayAutoTurbo = async () => {
         const result = await playAutoTurbo(challenge.id, challenge.title);
@@ -422,12 +425,21 @@ export function useChallengeCardActions({
     return {
         turboError,
         fillError,
+        pressError,
         clearTurboError,
         clearFillError,
+        clearPressError,
         voteButton: view.showVoteButton && (
-            <VoteButton challengeId={challenge.id} challengeTitle={challenge.title} onVoteComplete={onVoteComplete} />
+            <VoteButton
+                challengeId={challenge.id}
+                challengeTitle={challenge.title}
+                onVoteComplete={onVoteComplete}
+                onError={setPressError}
+            />
         ),
-        runButton: view.showRunButton && <RunButton challengeId={challenge.id} onVoteComplete={onVoteComplete} />,
+        runButton: view.showRunButton && (
+            <RunButton challengeId={challenge.id} onVoteComplete={onVoteComplete} onError={setPressError} />
+        ),
         settingsButton: challenge.type !== 'flash' && (
             <SettingsButton onClick={() => onSettingsClick(challenge.id, challenge.title)} label={t('app.settings')} />
         ),
@@ -495,6 +507,9 @@ export function buildCompactActionRow({
                     {keyUnlockButton}
                     {settingsButton}
                 </div>
+                {actions.pressError && (
+                    <InlineError onDismiss={actions.clearPressError}>{actions.pressError}</InlineError>
+                )}
                 {actions.turboError && (
                     <InlineError onDismiss={actions.clearTurboError}>{actions.turboError}</InlineError>
                 )}

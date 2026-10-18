@@ -40,6 +40,8 @@ export const errors = {
         'The action could not run: the challenge or photo id is not valid. Reload the app and try again.',
     actionFailed:
         'The action did not finish. The app or GuruShots could not complete it. Try again in a moment; if it keeps failing, the logs have the details.',
+    compactToggleFailed:
+        'The card layout was not changed. The setting could not be saved, so the cards stay as they were. Try again in a moment.',
     loginFailed:
         'Login did not work. GuruShots did not accept it or could not be reached. Check your username, password and connection, then try again.',
     invalidCredentials: 'Login failed. GuruShots did not accept the username or password. Check them and try again.',
@@ -894,6 +896,18 @@ export const app = {
     photoChooserDiscardText:
         "You've changed the chosen photos but haven't saved them. Closing now throws those changes away. Choose Cancel to keep choosing, then press Use these photos.",
     photoChooserDiscard: 'Discard changes',
+    settingsDiscardTitle: 'Discard your changes?',
+    settingsDiscardText:
+        "You have changes in these settings that you haven't saved. Closing now throws them away. Choose Keep editing to go back, then press Save.",
+    settingsDiscard: 'Discard changes',
+    settingsKeepEditing: 'Keep editing',
+    settingsDropTitle: 'Save without part of your work?',
+    settingsDropText:
+        'Save writes your settings, but not the items below. They are lost when this window closes. Choose Keep editing to deal with them first.',
+    settingsSaveWithout: 'Save without them',
+    settingsDropTimezone: 'A custom timezone you typed but did not add',
+    settingsDropScenario: 'A scenario you are editing and have not saved',
+    hide: 'Hide',
     photoChooserUse: 'Use these photos',
     fillPick: 'Pick…',
     fillPickLabel: 'Choose which photos to submit now',

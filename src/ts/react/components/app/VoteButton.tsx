@@ -11,10 +11,12 @@ export function VoteButton({
     challengeId,
     challengeTitle,
     onVoteComplete,
+    onError,
 }: {
     challengeId: Challenge['id'];
     challengeTitle: string;
     onVoteComplete: () => void;
+    onError: (message: string | null) => void;
 }) {
     const { t } = useTranslation();
 
@@ -24,6 +26,7 @@ export function VoteButton({
             title={t('app.voteTitle')}
             action={() => ipc.voteOnChallengeManual(challengeId, challengeTitle)}
             onSuccess={onVoteComplete}
+            onError={onError}
             failureLogPrefix="Voting failed"
             errorLogPrefix="Error voting on challenge"
             loadingLabel={t('app.voting')}

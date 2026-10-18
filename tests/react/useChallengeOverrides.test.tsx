@@ -428,3 +428,74 @@ describe("what the challenge's rules contribute", () => {
         expect(result.current.titleRules).toBeNull();
     });
 });
+
+describe('isDirty', () => {
+    const open = async (
+        stored: Record<string, unknown> = { exposure: 50 },
+        info: ReturnType<typeof titleRuleInfo> | null = null,
+    ) => {
+        mockApi.getChallengeOverrides.mockReset().mockResolvedValue(stored);
+        mockApi.getTitleProfile.mockReset().mockResolvedValue(info);
+        const p = {
+            ...props(),
+            schema: invalid<RendererSchema>({
+                exposure: { type: 'number', default: 100, perChallenge: true },
+                chosenPhotos: { type: 'photos', default: [], perChallenge: true },
+            }),
+        };
+        const hook = renderHook((current) => useChallengeOverrides(current), { initialProps: p });
+        await waitFor(() => expect(hook.result.current.loading).toBe(false));
+        return { ...hook, p };
+    };
+
+    test('is false until the load has landed', () => {
+        mockApi.getChallengeOverrides.mockReset().mockReturnValue(new Promise(() => {}));
+        const { result } = renderHook(() => useChallengeOverrides(props()));
+        expect(result.current.isDirty()).toBe(false);
+        // A list removed before the load lands has no baseline to move.
+        act(() => announceChosenPhotosCleared());
+        expect(result.current.isDirty()).toBe(false);
+    });
+
+    test('an edit is dirty, putting it back is not, and a refetch of the same data is not', async () => {
+        const { result } = await open();
+        expect(result.current.isDirty()).toBe(false);
+
+        act(() => result.current.changeOverride('exposure', 60));
+        expect(result.current.isDirty()).toBe(true);
+        act(() => result.current.changeOverride('exposure', 50));
+        expect(result.current.isDirty()).toBe(false);
+
+        act(() => result.current.clearOverride('exposure'));
+        expect(result.current.isDirty()).toBe(true);
+    });
+
+    test('the profile suppression counts: applying a profile and Clear all', async () => {
+        const matched = titleRuleInfo({ profile: { name: 'Quad', values: { exposure: 60 } } });
+        const { result } = await open({ exposure: 50 }, matched);
+
+        act(() => result.current.applyProfile({ exposure: 50 }));
+        // Same overrides, but the matched profile is now suppressed.
+        expect(result.current.isDirty()).toBe(true);
+        act(() => result.current.clearAll());
+        expect(result.current.isDirty()).toBe(true);
+        act(() => result.current.changeOverride('exposure', 50));
+        expect(result.current.isDirty()).toBe(false);
+    });
+
+    test('a chosen-photos clear is not an unsaved edit', async () => {
+        const { result } = await open({ exposure: 50, chosenPhotos: ['a'] });
+        act(() => announceChosenPhotosCleared());
+        expect(result.current.overrides).toEqual({ exposure: 50 });
+        expect(result.current.isDirty()).toBe(false);
+    });
+
+    test('closing drops the baseline: a reopened modal is not dirty from the last one', async () => {
+        const { result, rerender, p } = await open();
+        act(() => result.current.changeOverride('exposure', 60));
+        expect(result.current.isDirty()).toBe(true);
+
+        rerender({ ...p, isOpen: false });
+        expect(result.current.isDirty()).toBe(false);
+    });
+});

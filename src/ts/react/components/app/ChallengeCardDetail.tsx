@@ -109,6 +109,7 @@ function DetailHeader({
                     {actions.settingsButton}
                 </div>
             </div>
+            {actions.pressError && <InlineError onDismiss={actions.clearPressError}>{actions.pressError}</InlineError>}
         </div>
     );
 }

@@ -97,9 +97,15 @@ describe('TitleTagRulesEditor', () => {
             { title: 'B', mustIncludeTags: ['y'], shouldIncludeTags: [] },
         ];
         render(<TitleTagRulesEditor value={value} onChange={onChange} />);
-        const removeButtons = screen.getAllByRole('button', { name: 'app.removeTitleTagRule' });
+        const removeButtons = screen.getAllByRole('button', { name: /^app\.removeTitleTagRule \d+$/ });
         expect(removeButtons[0].className).toContain('btn-error');
         expect(removeButtons[0].className).not.toContain('btn-outline');
+        // Set apart from the reorder buttons, and named by its rule so the two are not the same control to a reader.
+        expect(removeButtons[0].className).toContain('ml-auto');
+        expect(removeButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
+            'app.removeTitleTagRule 1',
+            'app.removeTitleTagRule 2',
+        ]);
         fireEvent.click(removeButtons[0]);
         expect(onChange).toHaveBeenCalledWith([{ title: 'B', mustIncludeTags: ['y'], shouldIncludeTags: [] }]);
     });

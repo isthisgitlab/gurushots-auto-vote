@@ -17,7 +17,7 @@ const withScenarios = (scenarios: Record<string, unknown> = { Plan: plan }) =>
         .mockResolvedValue(invalid({ success: true, scenarios, templates: [template] }));
 
 const renderSection = async () => {
-    render(<ScenariosSection isOpen={true} />);
+    render(<ScenariosSection isOpen={true} onDirtyChange={jest.fn()} />);
     await waitFor(() => expect(screen.queryByText('common.loading')).toBeNull());
 };
 
@@ -173,7 +173,7 @@ describe('a scenario row', () => {
         jest.useFakeTimers();
         try {
             jest.mocked(window.api.deleteScenario).mockResolvedValue(invalid({ success: false }));
-            render(<ScenariosSection isOpen={true} />);
+            render(<ScenariosSection isOpen={true} onDirtyChange={jest.fn()} />);
             await act(async () => {
                 await Promise.resolve();
             });

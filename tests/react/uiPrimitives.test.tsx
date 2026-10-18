@@ -268,6 +268,7 @@ describe('AsyncActionButton edges', () => {
     const base = {
         className: 'btn',
         onSuccess: jest.fn(),
+        onError: jest.fn(),
         failureLogPrefix: 'Failed',
         errorLogPrefix: 'Errored',
         loadingLabel: 'busy',

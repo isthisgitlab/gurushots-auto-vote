@@ -295,6 +295,16 @@ describe('compact ChallengeCard tile with compactActions', () => {
         expect(texts).toHaveLength(7);
     });
 
+    test('a failed Vote shows its translated error under the action row', async () => {
+        window.api.voteOnChallengeManual = jest.fn().mockResolvedValue({ success: false, error: 'nope' });
+        renderWithActions();
+        fireEvent.click(screen.getByRole('button', { name: 'app.vote' }));
+        const error = await screen.findByText('errors.actionFailed');
+        expect(error.closest('[role="alert"]')).not.toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
+        expect(screen.queryByText('errors.actionFailed')).toBeNull();
+    });
+
     test('"Pick…" carries the image prefix of +1 / +N, is described by what it does in text (not only a title), and opens the picker', async () => {
         const challenge = makeChallenge();
         challenge.member!.ranking!.entries = challenge.member!.ranking!.entries!.slice(0, 1);

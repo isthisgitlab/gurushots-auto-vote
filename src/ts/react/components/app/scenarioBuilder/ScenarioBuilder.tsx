@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
+import { useLatestRef } from '@/hooks/useLatestRef';
+import { valuesEqual } from '@/utils/valuesEqual';
 import { useOnChosenPhotosCleared, scenarioWithoutChosenPhotos } from '@/api/chosenPhotosCleared';
 import { SettingInput } from '../SettingInput';
 import { ScenarioError, issuesOf } from '../ScenarioError';
@@ -352,12 +354,24 @@ function ScenarioHeader({
 }
 
 /**
- * The draft as editable JSON text.
+ * The draft as editable JSON text. Text that is not a document the forms can render never reaches the draft, so
+ * `onTextDirty` reports whether the text differs from the draft's own JSON (false once the tab closes).
  */
-function JsonTab({ draft, onDraft }: { draft: ScenarioDraft; onDraft: (next: ScenarioDraft) => void }) {
+function JsonTab({
+    draft,
+    onDraft,
+    onTextDirty,
+}: {
+    draft: ScenarioDraft;
+    onDraft: (next: ScenarioDraft) => void;
+    onTextDirty: (dirty: boolean) => void;
+}) {
     const { t } = useTranslation();
     const [text, setText] = useState(() => JSON.stringify(draft, null, 2));
     const [invalid, setInvalid] = useState(false);
+    const textDirty = text !== JSON.stringify(draft, null, 2);
+    useEffect(() => onTextDirty(textDirty), [textDirty, onTextDirty]);
+    useEffect(() => () => onTextDirty(false), [onTextDirty]);
     return (
         <div className="space-y-2">
             <p className="text-xs text-base-content/60">{t('app.sbJsonHint')}</p>
@@ -463,22 +477,38 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
 /**
  * @param props
  *   originalName: the stored name being edited, or null for a new scenario
+ *   onDirtyChange: told whether the draft (or the JSON tab's text) differs from what was opened; false when it closes
  */
 export function ScenarioBuilder({
     initial,
     originalName,
     onSaved,
     onCancel,
+    onDirtyChange,
 }: {
     initial: ScenarioDraft;
     originalName: string | null;
     onSaved: () => void;
     onCancel: () => void;
+    onDirtyChange: (dirty: boolean) => void;
 }) {
     const { t } = useTranslation();
     const [draft, setDraft] = useState(initial);
-    // Saving writes the whole scenario: lists removed meanwhile must not come back with it.
-    useOnChosenPhotosCleared(() => setDraft(scenarioWithoutChosenPhotos));
+    const [baseline, setBaseline] = useState(initial);
+    const [jsonDirty, setJsonDirty] = useState(false);
+    // Bumped when the lists are removed, so a JSON tab that is open starts again from the stripped draft.
+    const [textResync, setTextResync] = useState(0);
+    // Saving writes the whole scenario: lists removed meanwhile must not come back with it. The removal is what is
+    // stored now, so it is not an unsaved edit either.
+    useOnChosenPhotosCleared(() => {
+        setDraft(scenarioWithoutChosenPhotos);
+        setBaseline(scenarioWithoutChosenPhotos);
+        setTextResync((n) => n + 1);
+    });
+    const dirty = jsonDirty || !valuesEqual(draft, baseline);
+    const report = useLatestRef(onDirtyChange);
+    useEffect(() => report.current(dirty), [dirty, report]);
+    useEffect(() => () => report.current(false), [report]);
     // The name the scenario is stored under right now: a rename that went
     // through before a refused save must not be attempted again on retry.
     const [storedName, setStoredName] = useState(originalName);
@@ -536,7 +566,7 @@ export function ScenarioBuilder({
                 ))}
             </div>
             {tab === 'json' ? (
-                <JsonTab draft={draft} onDraft={setDraft} />
+                <JsonTab key={textResync} draft={draft} onDraft={setDraft} onTextDirty={setJsonDirty} />
             ) : (
                 <div className="space-y-3">
                     <ScenarioHeader draft={draft} onDraft={setDraft} phases={phases} />

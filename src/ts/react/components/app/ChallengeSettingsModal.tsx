@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useIpcQuery } from '@/api/useIpcQuery';
@@ -6,6 +7,7 @@ import { SettingsChallengeProvider } from '@/contexts/SettingsChallengeContext';
 import { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
 import { tierSchemaEntries } from '@/utils/groupSettings';
 import { Modal } from '@/components/ui/Modal';
+import { UnsavedChangesModal } from '@/components/ui/UnsavedChangesModal';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { ModalActionRow } from '@/components/ui/ModalActionRow';
@@ -117,7 +119,17 @@ export function ChallengeSettingsModal({
         onClose,
     });
 
+    // The question belongs to one opening: a modal the parent keeps mounted must not open on it next time.
+    const [asking, setAsking] = useState(false);
+    useEffect(() => {
+        if (!isOpen) setAsking(false);
+    }, [isOpen]);
+
     if (!isOpen) return null;
+
+    // Esc, the backdrop, the close button and Cancel: edits that are not saved are not thrown away unasked.
+    // Nothing is guarded while the form is loading or its load failed (there is nothing to differ from).
+    const dismiss = () => (!form.loading && !form.loadFailed && form.isDirty() ? setAsking(true) : onClose());
 
     const manualOnly = form.effectiveOf('manualPhotosOnly') === true;
     const hintsFor = challengeSettingHints({
@@ -129,82 +141,95 @@ export function ChallengeSettingsModal({
     });
 
     return (
-        <Modal
-            isOpen={isOpen}
-            onClose={onClose}
-            title={`${t('app.challengeSettings')}: ${challengeTitle}`}
-            size="2xl"
-            className={`${STICKY_FOOTER_SCROLL_PADDING}${manualOnly ? ` ${MANUAL_ONLY_SCROLL_PADDING}` : ''}`}
-        >
-            {/* Schema spinner only for the first load — a background refetch
+        <>
+            <Modal
+                isOpen={isOpen}
+                onClose={dismiss}
+                title={`${t('app.challengeSettings')}: ${challengeTitle}`}
+                size="2xl"
+                className={`${STICKY_FOOTER_SCROLL_PADDING}${manualOnly ? ` ${MANUAL_ONLY_SCROLL_PADDING}` : ''}`}
+            >
+                {/* Schema spinner only for the first load — a background refetch
                 (every settings write broadcasts one) must not blank the form. */}
-            {(schemaLoading && !schema) || form.loading ? (
-                <InlineLoader text={t('common.loading')} />
-            ) : form.loadFailed ? (
-                <div className="alert alert-error text-sm" role="alert">
-                    <span>{t('app.challengeOverridesLoadError')}</span>
-                </div>
-            ) : (
-                <div className="space-y-4">
-                    {manualOnly && (
-                        <div
-                            className="sticky -top-6 z-10 -mx-6 px-6 py-2 bg-base-100 border-b border-warning text-xs font-semibold text-base-content"
-                            aria-hidden="true"
-                        >
-                            ✋ {t('app.manualOnlyLabel')}
-                        </div>
-                    )}
-                    {/* Not a live region: it is on screen when the modal opens, and flipping the switch must not
-                        interrupt the user. */}
-                    {manualOnly && (
-                        <div className="alert alert-warning text-sm">
-                            <StrokeIcon d={ICON_PATHS.info} className="w-5 h-5" />
-                            <span>{t('app.manualOnlyAlert')}</span>
-                        </div>
-                    )}
-                    <OverridesSummary overrideCount={Object.keys(form.overrides).length} titleRules={form.titleRules} />
-
-                    {/* Named profiles: apply loads a saved tactic into the form
-                        state below; the Save button persists it. */}
-                    <ChallengeProfilesBar
-                        overrides={form.overrides}
-                        profileLimits={profileLimits}
-                        onProfilesChanged={form.onProfilesChanged}
-                        onApply={form.applyProfile}
-                    />
-
-                    {/* The chosen-photos chooser reads each photo's eligibility through this challenge. */}
-                    <SettingsChallengeProvider value={challengeId}>
-                        {tierSchemaEntries(schema, groups, tiers, { perChallengeOnly: true }).map((band) => (
-                            <div key={band.id ?? '_'}>
-                                <SettingsTierHeading id={band.id} label={band.label} level="h4" />
-                                {band.groups.map((group) => (
-                                    <ChallengeSettingsGroup
-                                        key={group.id}
-                                        id={group.id}
-                                        label={group.label}
-                                        entries={group.entries}
-                                        challenge={challenge}
-                                        defaults={defaults}
-                                        form={form}
-                                        hintsFor={hintsFor}
-                                    />
-                                ))}
+                {(schemaLoading && !schema) || form.loading ? (
+                    <InlineLoader text={t('common.loading')} />
+                ) : form.loadFailed ? (
+                    <div className="alert alert-error text-sm" role="alert">
+                        <span>{t('app.challengeOverridesLoadError')}</span>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {manualOnly && (
+                            <div
+                                className="sticky -top-6 z-10 -mx-6 px-6 py-2 bg-base-100 border-b border-warning text-xs font-semibold text-base-content"
+                                aria-hidden="true"
+                            >
+                                ✋ {t('app.manualOnlyLabel')}
                             </div>
-                        ))}
-                    </SettingsChallengeProvider>
+                        )}
+                        {/* Not a live region: it is on screen when the modal opens, and flipping the switch must not
+                        interrupt the user. */}
+                        {manualOnly && (
+                            <div className="alert alert-warning text-sm">
+                                <StrokeIcon d={ICON_PATHS.info} className="w-5 h-5" />
+                                <span>{t('app.manualOnlyAlert')}</span>
+                            </div>
+                        )}
+                        <OverridesSummary
+                            overrideCount={Object.keys(form.overrides).length}
+                            titleRules={form.titleRules}
+                        />
 
-                    <ModalActionRow
-                        onSave={form.save}
-                        saving={form.saving}
-                        onSecondary={form.clearAll}
-                        secondaryLabel={t('app.clearAll')}
-                        secondaryIcon="trash"
-                        onCancel={onClose}
-                        saveError={form.saveError}
-                    />
-                </div>
-            )}
-        </Modal>
+                        {/* Named profiles: apply loads a saved tactic into the form
+                        state below; the Save button persists it. */}
+                        <ChallengeProfilesBar
+                            overrides={form.overrides}
+                            profileLimits={profileLimits}
+                            onProfilesChanged={form.onProfilesChanged}
+                            onApply={form.applyProfile}
+                        />
+
+                        {/* The chosen-photos chooser reads each photo's eligibility through this challenge. */}
+                        <SettingsChallengeProvider value={challengeId}>
+                            {tierSchemaEntries(schema, groups, tiers, { perChallengeOnly: true }).map((band) => (
+                                <div key={band.id ?? '_'}>
+                                    <SettingsTierHeading id={band.id} label={band.label} level="h4" />
+                                    {band.groups.map((group) => (
+                                        <ChallengeSettingsGroup
+                                            key={group.id}
+                                            id={group.id}
+                                            label={group.label}
+                                            entries={group.entries}
+                                            challenge={challenge}
+                                            defaults={defaults}
+                                            form={form}
+                                            hintsFor={hintsFor}
+                                        />
+                                    ))}
+                                </div>
+                            ))}
+                        </SettingsChallengeProvider>
+
+                        <ModalActionRow
+                            onSave={form.save}
+                            saving={form.saving}
+                            onSecondary={form.clearAll}
+                            secondaryLabel={t('app.clearAll')}
+                            secondaryIcon="trash"
+                            onCancel={dismiss}
+                            saveError={form.saveError}
+                        />
+                    </div>
+                )}
+            </Modal>
+            <UnsavedChangesModal
+                isOpen={asking}
+                onKeepEditing={() => setAsking(false)}
+                onDiscard={() => {
+                    setAsking(false);
+                    onClose();
+                }}
+            />
+        </>
     );
 }

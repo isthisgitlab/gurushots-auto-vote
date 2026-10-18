@@ -361,3 +361,103 @@ describe('useSettingsForm — every chosen-photos list removed while the modal i
         expect(closed.result.current.originalFormValues).toBeNull();
     });
 });
+
+describe('useSettingsForm — a UI write the handler refuses', () => {
+    test('joins the rejected keys, stays unpersisted, and the later keys are still written', async () => {
+        // The set-setting handler answers false instead of throwing.
+        const updateSetting = jest.fn().mockImplementation(async (key: string) => key !== 'theme');
+        const props = baseProps({ updateSetting });
+        const { result } = renderForm(props);
+        act(() => {
+            result.current.handleUiChange('theme', 'light');
+            result.current.handleUiChange('apiMaxRetries', 7);
+            result.current.handleFormChange('exposure', 80);
+        });
+        jest.mocked(window.api.setGlobalDefault).mockResolvedValue(true);
+
+        let rejected;
+        await act(async () => {
+            rejected = await result.current.commit();
+        });
+
+        expect(rejected).toEqual(['theme']);
+        expect(updateSetting).toHaveBeenCalledWith('apiMaxRetries', 7);
+        expect(window.api.setGlobalDefault).toHaveBeenCalledWith('exposure', 80);
+        // The refused theme is still an unsaved edit and the persisted theme is the open-time one.
+        expect(result.current.isDirty()).toBe(true);
+        expect(result.current.getPersistedTheme()).toBe('dark');
+
+        // A retry writes the theme again; the keys that landed are not written twice.
+        updateSetting.mockClear().mockResolvedValue(true);
+        await act(async () => {
+            await result.current.commit();
+        });
+        expect(updateSetting.mock.calls).toEqual([['theme', 'light']]);
+        expect(result.current.getPersistedTheme()).toBe('light');
+        expect(result.current.isDirty()).toBe(false);
+    });
+
+    test('an updateSetting that resolves undefined counts as landed', async () => {
+        const props = baseProps({ updateSetting: jest.fn().mockResolvedValue(undefined) });
+        const { result } = renderForm(props);
+        act(() => result.current.handleUiChange('theme', 'light'));
+        let rejected;
+        await act(async () => {
+            rejected = await result.current.commit();
+        });
+        expect(rejected).toEqual([]);
+        expect(result.current.getPersistedTheme()).toBe('light');
+    });
+});
+
+describe('useSettingsForm — isDirty', () => {
+    test('is false right after hydrating, and before there is anything to compare with', () => {
+        expect(renderForm(baseProps()).result.current.isDirty()).toBe(false);
+        const closed = renderForm(baseProps({ isOpen: false }));
+        act(() => closed.result.current.handleFormChange('exposure', 5));
+        expect(closed.result.current.isDirty()).toBe(false);
+        expect(closed.result.current.getPersistedTheme()).toBeUndefined();
+    });
+
+    test('is true for an edited UI value (the language too) or form value, and false again after an undo', () => {
+        const { result } = renderForm(baseProps());
+
+        act(() => result.current.handleFormChange('exposure', 80));
+        expect(result.current.isDirty()).toBe(true);
+        act(() => result.current.handleFormChange('exposure', 70));
+        expect(result.current.isDirty()).toBe(false);
+
+        act(() => result.current.handleUiChange('language', 'en'));
+        expect(result.current.isDirty()).toBe(true);
+        act(() => result.current.handleUiChange('language', 'lv'));
+        expect(result.current.isDirty()).toBe(false);
+    });
+
+    test('a write that landed is no longer an unsaved edit; one that was rejected still is', async () => {
+        // exposure is accepted, autoBoost rejected.
+        jest.mocked(window.api.setGlobalDefault).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+        const { result } = renderForm(baseProps());
+        act(() => {
+            result.current.handleFormChange('exposure', 80);
+            result.current.handleFormChange('autoBoost', false);
+        });
+        await act(async () => {
+            await result.current.commit();
+        });
+        expect(result.current.isDirty()).toBe(true);
+
+        act(() => result.current.handleFormChange('autoBoost', true));
+        expect(result.current.isDirty()).toBe(false);
+    });
+
+    test('a chosen-photos clear is not an unsaved edit', () => {
+        const { result } = renderForm(
+            baseProps({
+                schema: { ...schema, chosenPhotos: { type: 'photos', default: [] } },
+                defaults: { exposure: 70, chosenPhotos: ['a'] },
+            }),
+        );
+        act(() => announceChosenPhotosCleared());
+        expect(result.current.isDirty()).toBe(false);
+    });
+});

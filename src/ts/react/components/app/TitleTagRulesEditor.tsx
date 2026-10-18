@@ -27,7 +27,7 @@ function RuleHeader({
     return (
         <div className="flex items-center gap-2">
             <span className="badge badge-ghost badge-sm">{index + 1}</span>
-            <span className="text-sm font-medium flex-1">{t('app.titleRuleConditionsLabel')}</span>
+            <span className="text-sm font-medium">{t('app.titleRuleConditionsLabel')}</span>
             <button
                 type="button"
                 className="btn btn-outline btn-sm"
@@ -49,9 +49,9 @@ function RuleHeader({
                 ↓
             </button>
             <button
-                className="btn btn-error btn-sm"
+                className="btn btn-error btn-sm ml-auto"
                 title={t('app.removeTitleTagRule')}
-                aria-label={t('app.removeTitleTagRule')}
+                aria-label={`${t('app.removeTitleTagRule')} ${index + 1}`}
                 onClick={onRemove}
             >
                 ×

@@ -40,6 +40,8 @@ export const errors = {
         'Darbību neizdevās izpildīt: izaicinājuma vai foto identifikators nav derīgs. Pārlādē lietotni un mēģini vēlreiz.',
     actionFailed:
         'Darbība netika pabeigta. Lietotne vai GuruShots to nevarēja pabeigt. Mēģini vēlreiz pēc brīža; ja tas atkārtojas, sīkāka informācija ir žurnālos.',
+    compactToggleFailed:
+        'Kartīšu izkārtojums netika mainīts. Uzstādījumu nevarēja saglabāt, tāpēc kartītes paliek, kā bija. Mēģini vēlreiz pēc brīža.',
     loginFailed:
         'Pieteikšanās neizdevās. GuruShots to nepieņēma vai nebija sasniedzams. Pārbaudi lietotājvārdu, paroli un savienojumu un mēģini vēlreiz.',
     invalidCredentials:
@@ -906,6 +908,18 @@ export const app = {
     photoChooserDiscardText:
         'Izvēlētie foto ir mainīti, bet nav saglabāti. Ja aizvērsi tagad, šīs izmaiņas pazudīs. Izvēlies „Atcelt”, lai turpinātu izvēli, un tad spied „Izmantot šos foto”.',
     photoChooserDiscard: 'Atmest izmaiņas',
+    settingsDiscardTitle: 'Atmest izmaiņas?',
+    settingsDiscardText:
+        'Šajos uzstādījumos ir izmaiņas, kas nav saglabātas. Ja aizvērsi tagad, tās pazudīs. Izvēlies „Turpināt rediģēt”, lai atgrieztos, un tad spied „Saglabāt”.',
+    settingsDiscard: 'Atmest izmaiņas',
+    settingsKeepEditing: 'Turpināt rediģēt',
+    settingsDropTitle: 'Saglabāt bez daļas darba?',
+    settingsDropText:
+        'Saglabāšana ieraksta uzstādījumus, bet ne tālāk minētos elementus. Tie pazudīs, kad logs aizvērsies. Izvēlies „Turpināt rediģēt”, lai vispirms tos sakārtotu.',
+    settingsSaveWithout: 'Saglabāt bez tiem',
+    settingsDropTimezone: 'Pielāgota laika josla, ko ievadīji, bet nepievienoji',
+    settingsDropScenario: 'Scenārijs, ko rediģē un neesi saglabājis',
+    hide: 'Paslēpt',
     photoChooserUse: 'Izmantot šos foto',
     fillPick: 'Izvēlēties…',
     fillPickLabel: 'Izvēlēties, kurus foto iesniegt tagad',

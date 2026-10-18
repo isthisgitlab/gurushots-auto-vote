@@ -35,7 +35,8 @@ type MockFormState = {
     formValues: Record<string, unknown>;
     uiValues: UiValues;
     saving: boolean;
-    originalUiValues: UiValues;
+    isDirty: jest.MockedFunction<SettingsForm['isDirty']>;
+    getPersistedTheme: jest.MockedFunction<SettingsForm['getPersistedTheme']>;
     handleFormChange: jest.MockedFunction<SettingsForm['handleFormChange']>;
     handleUiChange: jest.MockedFunction<SettingsForm['handleUiChange']>;
     handleResetGlobal: jest.MockedFunction<SettingsForm['handleResetGlobal']>;
@@ -66,16 +67,8 @@ const mockFormState: MockFormState = {
         apiRetryBaseDelayMs: 1000,
     },
     saving: false,
-    originalUiValues: {
-        theme: 'light',
-        language: 'en',
-        timezone: 'Europe/Riga',
-        customTimezones: [],
-        checkFrequencyMin: 5,
-        checkFrequencyMax: 10,
-        apiMaxRetries: 3,
-        apiRetryBaseDelayMs: 1000,
-    },
+    isDirty: jest.fn(() => false),
+    getPersistedTheme: jest.fn(() => 'light'),
     handleFormChange: jest.fn(),
     handleUiChange: jest.fn(),
     handleResetGlobal: jest.fn(),
@@ -116,16 +109,8 @@ const resetHookState = () => {
             apiRetryBaseDelayMs: 1000,
         },
         saving: false,
-        originalUiValues: {
-            theme: 'light',
-            language: 'en',
-            timezone: 'Europe/Riga',
-            customTimezones: [],
-            checkFrequencyMin: 5,
-            checkFrequencyMax: 10,
-            apiMaxRetries: 3,
-            apiRetryBaseDelayMs: 1000,
-        },
+        isDirty: jest.fn(() => false),
+        getPersistedTheme: jest.fn(() => 'light'),
         handleFormChange: jest.fn(),
         handleUiChange: jest.fn(),
         handleResetGlobal: jest.fn(),
@@ -226,9 +211,9 @@ describe('SettingsModal — timezone "+" inline-add', () => {
 describe('SettingsModal — handleCancel theme revert', () => {
     test('writes data-theme back to documentElement when theme changed mid-session', () => {
         // Simulate the user having toggled to dark during this open session
-        // (originalUiValues kept the prior value).
+        // (the persisted theme kept the prior value).
         mockFormState.uiValues.theme = 'dark';
-        mockFormState.originalUiValues.theme = 'light';
+        mockFormState.getPersistedTheme.mockReturnValue('light');
         // Pretend the user already toggled the DOM — cancel should put it back.
         document.documentElement.setAttribute('data-theme', 'dark');
 
@@ -249,7 +234,7 @@ describe('SettingsModal — handleCancel theme revert', () => {
     });
 
     test('does NOT touch documentElement when theme is unchanged', () => {
-        // No theme drift: original and current both 'light'.
+        // No theme drift: persisted and current both 'light'.
         const setSpy = jest.spyOn(document.documentElement, 'setAttribute');
 
         const onClose = jest.fn();

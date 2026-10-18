@@ -116,15 +116,21 @@ function updateReducer(state: UpdateState, action: UpdateAction): UpdateState {
                 progress: action.payload,
             };
         case ACTIONS.SET_READY:
+            // Hiding the dialog mid-download leaves "Restart now" nowhere else: a finished download brings it back.
             return {
                 ...state,
                 state: UPDATE_STATES.READY,
+                dialogVisible: true,
             };
         case ACTIONS.SET_ERROR:
             return {
                 ...state,
                 state: UPDATE_STATES.ERROR,
                 error: action.payload,
+                // Only a download the user hid comes back to say it failed. A check that fails in the background
+                // (any state, READY included) must not pop a modal up; an install failure arrives from READY with
+                // the dialog already open.
+                dialogVisible: state.state === UPDATE_STATES.DOWNLOADING ? true : state.dialogVisible,
             };
         case ACTIONS.HIDE_DIALOG:
             return {

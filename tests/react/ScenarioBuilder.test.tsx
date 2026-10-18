@@ -3,7 +3,7 @@
  * JSON tab, simulation on a live challenge, and save (with rename).
  */
 
-import { act, render, screen, waitFor, fireEvent, within } from './helpers/test-utils';
+import { act, cleanup, render, screen, waitFor, fireEvent, within } from './helpers/test-utils';
 import type { ComponentProps } from 'preact';
 import { ScenarioBuilder } from '@/components/app/scenarioBuilder/ScenarioBuilder';
 import type { ScenarioDraft, ScenarioDraftRule } from '../../src/ts/types/scenarioBuilder';
@@ -49,11 +49,22 @@ const doc = () => ({
 let saved: unknown;
 let onSaved: jest.MockedFunction<ComponentProps<typeof ScenarioBuilder>['onSaved']>;
 let onCancel: jest.MockedFunction<ComponentProps<typeof ScenarioBuilder>['onCancel']>;
+let onDirtyChange: jest.MockedFunction<ComponentProps<typeof ScenarioBuilder>['onDirtyChange']>;
 
 const renderBuilder = async (props: Partial<ComponentProps<typeof ScenarioBuilder>> = {}) => {
     onSaved = jest.fn();
     onCancel = jest.fn();
-    render(<ScenarioBuilder initial={doc()} originalName="Plan" onSaved={onSaved} onCancel={onCancel} {...props} />);
+    onDirtyChange = jest.fn();
+    render(
+        <ScenarioBuilder
+            initial={doc()}
+            originalName="Plan"
+            onSaved={onSaved}
+            onCancel={onCancel}
+            onDirtyChange={onDirtyChange}
+            {...props}
+        />,
+    );
     await waitFor(() => expect(window.api.getSettingsSchema).toHaveBeenCalled());
 };
 
@@ -429,4 +440,50 @@ test('every list removed while the builder is open is dropped from the draft, so
     // The other settings stay; a phase without settings is left as it was.
     expect(draft.phases.main.settings).toEqual({ exposure: 10 });
     expect(draft.phases.later).toEqual({ rules: [] });
+});
+
+describe('dirty reporting', () => {
+    const lastReport = () => onDirtyChange.mock.calls.at(-1)?.[0];
+
+    test('false when opened, true after an edit, false again when the edit is undone', async () => {
+        await renderBuilder();
+        expect(lastReport()).toBe(false);
+        fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'Plan B' } });
+        expect(lastReport()).toBe(true);
+        fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'Plan' } });
+        expect(lastReport()).toBe(false);
+    });
+
+    test('closing the builder reports false', async () => {
+        await renderBuilder();
+        fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'Plan B' } });
+        expect(lastReport()).toBe(true);
+        cleanup();
+        await waitFor(() => expect(lastReport()).toBe(false));
+    });
+
+    test('JSON text that never became the draft is dirty; leaving the tab clears it', async () => {
+        await renderBuilder();
+        fireEvent.click(screen.getByRole('tab', { name: 'app.sbTabJson' }));
+        expect(lastReport()).toBe(false);
+        fireEvent.change(screen.getByLabelText('app.sbTabJson'), { target: { value: '{nope' } });
+        expect(lastReport()).toBe(true);
+        fireEvent.click(screen.getByRole('tab', { name: 'app.sbTabBuilder' }));
+        expect(lastReport()).toBe(false);
+    });
+
+    test('every list removed while the builder is open is not an unsaved edit, in the builder or the JSON tab', async () => {
+        await renderBuilder({
+            initial: { ...doc(), phases: { main: { settings: { exposure: 10, chosenPhotos: ['p1'] }, rules: [] } } },
+        });
+        fireEvent.click(screen.getByRole('tab', { name: 'app.sbTabJson' }));
+        expect(screen.getByLabelText<HTMLTextAreaElement>('app.sbTabJson').value).toContain('chosenPhotos');
+
+        act(() => announceChosenPhotosCleared());
+
+        await waitFor(() =>
+            expect(screen.getByLabelText<HTMLTextAreaElement>('app.sbTabJson').value).not.toContain('chosenPhotos'),
+        );
+        expect(lastReport()).toBe(false);
+    });
 });

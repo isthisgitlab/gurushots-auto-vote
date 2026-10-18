@@ -35,6 +35,35 @@ describe('useSettings', () => {
         expect(result.current.settings).toEqual({ app: { theme: 'dark', language: 'lv' } });
     });
 
+    test('updateSetting resolves true for a write that landed, even when the bridge answers nothing', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValueOnce(invalid({ app: { theme: 'dark' } }));
+        const { result } = renderHook(() => useSettings());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        let landed;
+        await act(async () => {
+            landed = await result.current.updateSetting('theme', 'light');
+        });
+        expect(landed).toBe(true);
+    });
+
+    test('a write the handler refuses (false) resolves false: no optimistic update, no throw, no refetch', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValueOnce(invalid({ app: { theme: 'dark' } }));
+        jest.mocked(window.api.setSetting).mockResolvedValueOnce(false);
+        const { result } = renderHook(() => useSettings());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        let landed;
+        await act(async () => {
+            landed = await result.current.updateSetting('theme', 'light');
+        });
+
+        expect(landed).toBe(false);
+        expect(result.current.settings).toEqual({ app: { theme: 'dark' } });
+        expect(result.current.error).toBeNull();
+        expect(window.api.getSettings).toHaveBeenCalledTimes(1);
+    });
+
     test('with nothing loaded, getSetting is undefined and an update keeps settings null', async () => {
         jest.mocked(window.api.getSettings).mockResolvedValueOnce(invalid(null));
         const { result } = renderHook(() => useSettings());

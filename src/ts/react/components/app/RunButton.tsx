@@ -12,9 +12,11 @@ import * as ipc from '@/api/ipc';
 export function RunButton({
     challengeId,
     onVoteComplete,
+    onError,
 }: {
     challengeId: Challenge['id'];
     onVoteComplete: () => void;
+    onError: (message: string | null) => void;
 }) {
     const { t } = useTranslation();
 
@@ -23,6 +25,7 @@ export function RunButton({
             className="btn btn-neutral btn-sm"
             action={() => ipc.runVotingCycleForChallenge(challengeId)}
             onSuccess={onVoteComplete}
+            onError={onError}
             failureLogPrefix="Run failed"
             errorLogPrefix="Error running cycle"
             loadingLabel={t('app.running')}

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { getUiDefaultSettings } from '../../settings/uiDefaults';
 import * as ipc from '@/api/ipc';
 import { useOnChosenPhotosCleared, withEmptyChosenPhotos } from '@/api/chosenPhotosCleared';
+import { valuesEqual } from '@/utils/valuesEqual';
 
 import type { RendererSettings } from '../../types/settings';
 import type {
@@ -32,13 +33,6 @@ const withFallback = (value: unknown, defaultValue: unknown): unknown => {
     if (typeof defaultValue === 'string') return value || defaultValue;
     return value ?? defaultValue;
 };
-
-/**
- * Structural equality for setting values (scalars, arrays, plain objects) —
- * the same JSON comparison settings.ts uses, kept local because the renderer
- * must not import settings.ts.
- */
-const valuesEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
  * The global-default half of `defaults`: challengeOnly keys have no global
@@ -72,7 +66,7 @@ export function useSettingsForm({
     settings: RendererSettings | null | undefined;
     refetchSettings: () => Promise<void>;
     refetchSchema: () => Promise<void>;
-    updateSetting: (key: string, value: unknown) => Promise<void>;
+    updateSetting: (key: string, value: unknown) => Promise<boolean>;
 }) {
     const [formValues, setFormValues] = useState<Record<string, unknown>>({});
     const [uiValues, setUiValues] = useState(DEFAULT_UI_VALUES);
@@ -186,8 +180,9 @@ export function useSettingsForm({
     // schema keys whose write was REJECTED (setGlobalDefault returns false
     // on schema/zod validation failure — e.g. a duplicate-count schedule)
     // so the caller can keep the modal open instead of silently dropping
-    // the edit. The UI-values channel (updateSetting) has no comparable
-    // return contract today, so only schema writes are checked here.
+    // the edit. The UI-values channel (updateSetting) answers the same way:
+    // a write it reports `false` for joins the rejected keys and leaves its
+    // persisted value where it was, and the remaining keys are still written.
     const commit = useCallback(async () => {
         const rejectedKeys: string[] = [];
         setSaving(true);
@@ -199,7 +194,10 @@ export function useSettingsForm({
                 if (key === 'language') continue;
                 const persisted = persistedUiRef.current;
                 if (persisted && valuesEqual(value, persisted[key])) continue;
-                await updateSetting(key, value);
+                if ((await updateSetting(key, value)) === false) {
+                    rejectedKeys.push(key);
+                    continue;
+                }
                 if (persisted) persisted[key] = value;
             }
             for (const [key, value] of Object.entries(formValues)) {
@@ -218,6 +216,25 @@ export function useSettingsForm({
         // changes (out of scope for this hook).
         return rejectedKeys;
     }, [formValues, uiValues, updateSetting]);
+
+    // Whether Save would write anything: a value that differs from what is persisted (the language
+    // too, which commit() leaves to the caller but which is still an unsaved edit). Read at call
+    // time, so the persisted refs a landed write advanced are what it compares against.
+    const isDirty = useCallback(() => {
+        const persistedUi = persistedUiRef.current;
+        const persistedForm = persistedFormRef.current;
+        const uiDirty =
+            persistedUi && Object.entries(uiValues).some(([key, value]) => !valuesEqual(value, persistedUi[key]));
+        const formDirty =
+            persistedForm && Object.entries(formValues).some(([key, value]) => !valuesEqual(value, persistedForm[key]));
+        return Boolean(uiDirty || formDirty);
+    }, [formValues, uiValues]);
+
+    // The theme on disk as far as this session knows, for the caller's Cancel to put back on screen.
+    const getPersistedTheme = useCallback(() => {
+        const theme = persistedUiRef.current?.theme;
+        return typeof theme === 'string' ? theme : undefined;
+    }, []);
 
     // Roll in-memory state back to whatever the modal opened with. Theme
     // DOM revert is up to the caller — it owns the close sequence and may
@@ -240,5 +257,7 @@ export function useSettingsForm({
         handleResetAll,
         commit,
         revert,
+        isDirty,
+        getPersistedTheme,
     };
 }

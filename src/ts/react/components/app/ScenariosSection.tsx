@@ -325,8 +325,16 @@ const freeName = (base: string, taken: string[]) => {
  * export / rename / delete, a copy from an example template, and import of a
  * shared file. Changes here are saved immediately (not with the modal's Save),
  * like the scenario files they are.
+ *
+ * @param props.onDirtyChange - told whether the builder holds a draft that was not saved (false once it closes)
  */
-export function ScenariosSection({ isOpen }: { isOpen: boolean }) {
+export function ScenariosSection({
+    isOpen,
+    onDirtyChange,
+}: {
+    isOpen: boolean;
+    onDirtyChange: (dirty: boolean) => void;
+}) {
     const { t } = useTranslation();
     const { scenarios, templates, loading, error: loadError, refetch } = useScenarios(isOpen);
     const [importing, setImporting] = useState(false);
@@ -375,6 +383,7 @@ export function ScenariosSection({ isOpen }: { isOpen: boolean }) {
                         changed();
                     }}
                     onCancel={() => setEditing(null)}
+                    onDirtyChange={onDirtyChange}
                 />
             ) : (
                 <div className="space-y-3">

@@ -233,6 +233,40 @@ describe('ChallengeProfilesBar', () => {
         expect(onProfilesChanged).not.toHaveBeenCalled();
     });
 
+    test('a Delete that throws shows the error and logs it', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue({ tactic: { exposure: 80 } });
+        mockApi.deleteChallengeProfile.mockRejectedValue(new Error('ipc down'));
+        renderBar();
+        await waitFor(() => expect(document.body.textContent).toContain('tactic (1)'));
+        await act(async () => changeSelect(selectEl(), 'tactic'));
+
+        await act(async () => invalid<void>(fireEvent.click(deleteButton())));
+        await act(async () => invalid<void>(fireEvent.click(deleteButton())));
+
+        expect(document.body.textContent).toContain('app.profileSaveError');
+        expect(mockApi.logError).toHaveBeenCalledWith('Error deleting challenge profile: ipc down');
+    });
+
+    test('a throw after the Delete landed is logged but not shown as a failed delete', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue({ tactic: { exposure: 80 } });
+        // refreshProfiles settles its own errors, so the parent's callback is where a throw can come from.
+        const onProfilesChanged = jest.fn(() => {
+            throw new Error('parent blew up');
+        });
+        renderBar({ onProfilesChanged });
+        await waitFor(() => expect(document.body.textContent).toContain('tactic (1)'));
+        await act(async () => changeSelect(selectEl(), 'tactic'));
+
+        await act(async () => invalid<void>(fireEvent.click(deleteButton())));
+        await act(async () => invalid<void>(fireEvent.click(deleteButton())));
+
+        await waitFor(() =>
+            expect(mockApi.logError).toHaveBeenCalledWith('Error deleting challenge profile: parent blew up'),
+        );
+        expect(mockApi.deleteChallengeProfile).toHaveBeenCalledWith('tactic');
+        expect(document.body.textContent).not.toContain('app.profileSaveError');
+    });
+
     test('notifies the parent after a saved profile mutation', async () => {
         const onProfilesChanged = jest.fn();
         renderBar({ onProfilesChanged });

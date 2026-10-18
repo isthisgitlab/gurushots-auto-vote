@@ -31,7 +31,7 @@ export type NoticeGate = {
 export function useNoticeGate(
     settings: RendererSettings | null,
     settingsLoading: boolean,
-    updateSetting: (key: 'noticeAcknowledgedVersion', value: number) => Promise<void>,
+    updateSetting: (key: 'noticeAcknowledgedVersion', value: number) => Promise<unknown>,
 ): NoticeGate {
     const [state, setState] = useState<'checking' | 'open' | 'done'>('checking');
     const acknowledged = settings?.app.noticeAcknowledgedVersion;
