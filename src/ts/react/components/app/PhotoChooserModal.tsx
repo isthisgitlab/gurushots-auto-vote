@@ -312,8 +312,8 @@ const TILE_GRID = 'grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4';
 
 /**
  * The library listing with its states: idle (the not-loaded line, plus the tiles Auto named that were picked in
- * this opening), loading, an error with Retry, the missing-challenge explanation, and the tiles (selected ones
- * pinned first). The defaults are the Chosen Photos list's: numbered, capped at MAX_CHOSEN_PHOTOS.
+ * this opening), loading, an error with Retry, the missing-challenge explanation, and the tiles (the picks the
+ * listing does not return pinned first, the rest in the library's order). The defaults are the Chosen Photos list's: numbered, capped at MAX_CHOSEN_PHOTOS.
  */
 export function PhotoGrid({
     state,
@@ -443,12 +443,18 @@ export function PhotoGrid({
     const previewPhotos = listing.preview ? new Map(listing.photos.map((photo) => [photo.id, photo])) : null;
     const lookup = (id: string): LibraryPhoto | undefined => (previewPhotos ?? known).get(id) ?? extraPhotos?.get(id);
     const atCap = selected.length >= max;
-    let position = 0;
     const blockedReasonOf = (photo: LibraryPhoto): string | null => {
         if (blockedIds?.has(photo.id)) return t(blockedKey);
         return listing.allowedKnown && !photo.allowed ? photo.message || t('app.photoChooserNotEligible') : null;
     };
-    const shown = (n: number): number | null => (numbered ? n : null);
+    // A pick's number is its index in `selected` (the order it is saved in) among the picks that are shown: a photo
+    // left out (another account's) leaves no gap. The listed picks keep their place in the library's order.
+    const listed = new Set(listing.photos.map((photo) => photo.id));
+    const numberOf = new Map<string, number>();
+    for (const id of selected) {
+        if (listed.has(id) || lookup(id) || !hideUnlisted) numberOf.set(id, numberOf.size + 1);
+    }
+    const shown = (id: string): number | null => (numbered ? (numberOf.get(id) ?? null) : null);
     const tile = (photo: LibraryPhoto, position: number | null) => (
         <PhotoTile
             key={photo.id}
@@ -500,36 +506,38 @@ export function PhotoGrid({
                 </p>
             )}
             <div className={TILE_GRID}>
-                {/* Numbered 1, 2, 3… as shown: a photo left out (another account's) leaves no gap. */}
-                {selected.map((id) => {
-                    const photo = lookup(id);
-                    if (photo) return tile(photo, shown(++position));
-                    if (hideUnlisted) return null;
-                    if (listing.preview && !won.has(id)) {
+                {/* The picks the listing does not return stay pinned first, in pick order. */}
+                {selected
+                    .filter((id) => !listed.has(id))
+                    .map((id) => {
+                        const photo = lookup(id);
+                        if (photo) return tile(photo, shown(id));
+                        if (hideUnlisted) return null;
+                        if (listing.preview && !won.has(id)) {
+                            return (
+                                <PendingTile
+                                    key={id}
+                                    id={id}
+                                    position={shown(id)}
+                                    recheckFailed={recheckFailed}
+                                    onToggle={onToggle}
+                                />
+                            );
+                        }
                         return (
-                            <PendingTile
+                            <MissingTile
                                 key={id}
                                 id={id}
-                                position={shown(++position)}
-                                recheckFailed={recheckFailed}
+                                position={shown(id)}
+                                count={listing.photos.length}
+                                hasChallenge={hasChallenge}
+                                truncated={listing.truncated}
+                                won={won.has(id)}
                                 onToggle={onToggle}
                             />
                         );
-                    }
-                    return (
-                        <MissingTile
-                            key={id}
-                            id={id}
-                            position={shown(++position)}
-                            count={listing.photos.length}
-                            hasChallenge={hasChallenge}
-                            truncated={listing.truncated}
-                            won={won.has(id)}
-                            onToggle={onToggle}
-                        />
-                    );
-                })}
-                {listing.photos.filter((photo) => !chosen.has(photo.id)).map((photo) => tile(photo, null))}
+                    })}
+                {listing.photos.map((photo) => tile(photo, shown(photo.id)))}
             </div>
         </>
     );

@@ -1,6 +1,6 @@
 /**
  * PhotoChooserModal: the Chosen Photos chooser. Selection is a set capped at
- * MAX_CHOSEN_PHOTOS, selected photos stay pinned first, a chosen id the listing
+ * MAX_CHOSEN_PHOTOS, listed picks keep their place in the library's order, a chosen id the listing
  * lacks gets its own tile, eligibility shows as text, search runs on submit and
  * late responses are dropped. Translations are the real English strings so the
  * tiles are told apart by their accessible names.
@@ -368,11 +368,11 @@ describe('selection', () => {
                 'Photo 00000003: tag3. Can be entered. Number 1 in your list.',
             );
             expect(tile(2).getAttribute('aria-label')).toMatch(/Number 3 in your list\.$/);
-            // Tiles are listed in that order, the unselected after them.
+            // The tiles keep the library's order: picking does not move them.
             const order = screen
                 .getAllByRole('button', { name: /^Photo / })
                 .map((button) => button.getAttribute('aria-label')!.slice(6, 14));
-            expect(order).toEqual([shortOf(3), shortOf(1), shortOf(2)]);
+            expect(order).toEqual([shortOf(1), shortOf(2), shortOf(3)]);
         });
 
         test('an unselected tile has no number and its name is unchanged', async () => {
@@ -585,14 +585,36 @@ describe('selection', () => {
         expect(tile(1).getAttribute('aria-pressed')).toBe('true');
     });
 
-    test('selected photos are pinned above the rest', async () => {
+    test('listed picks keep their place in the library order, and toggling one does not move any tile', async () => {
         getLibrary().mockResolvedValue(listing([photo(1), photo(2), photo(3)]));
         setup({ value: [idOf(3)] });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        const order = screen
-            .getAllByRole('button', { name: /^Photo / })
-            .map((button) => button.getAttribute('aria-label'));
-        expect(order.map((label) => label!.slice(6, 14))).toEqual([shortOf(3), shortOf(1), shortOf(2)]);
+        const order = () =>
+            screen
+                .getAllByRole('button', { name: /^Photo / })
+                .map((button) => button.getAttribute('aria-label')!.slice(6, 14));
+        expect(order()).toEqual([shortOf(1), shortOf(2), shortOf(3)]);
+        fireEvent.click(tile(1));
+        fireEvent.click(tile(3));
+        expect(order()).toEqual([shortOf(1), shortOf(2), shortOf(3)]);
+        expect(within(tile(1)).getByText('1')).toBeTruthy();
+    });
+
+    test('picks the listing does not return stay pinned first, numbered in pick order with the listed ones', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1), photo(2), photo(3)]));
+        setup({ value: [idOf(3), idOf(9), idOf(1)] });
+        const missing = await missingTile();
+        expect(missing.getAttribute('aria-label')).toMatch(/Number 2 in your list\.$/);
+        const order = screen.getAllByRole('button', { name: /^(Photo|Chosen photo) / }).map((button) =>
+            button
+                .getAttribute('aria-label')!
+                .replace(/^(Photo|Chosen photo) /, '')
+                .slice(0, 8),
+        );
+        expect(order).toEqual([shortOf(9), shortOf(1), shortOf(2), shortOf(3)]);
+        expect(tile(3).getAttribute('aria-label')).toMatch(/Number 1 in your list\.$/);
+        expect(tile(1).getAttribute('aria-label')).toMatch(/Number 3 in your list\.$/);
+        expect(tile(2).getAttribute('aria-label')).not.toMatch(/Number/);
     });
 
     const missingTile = () => screen.findByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) });
