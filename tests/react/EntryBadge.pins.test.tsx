@@ -152,7 +152,7 @@ describe('EntryBadge pin toggles', () => {
     test('no actions row renders when no toggle shows', () => {
         const { container } = renderBadge(controls({ canPin: { boost: false, turbo: false } }));
         expect(pinBoost()).toBeNull();
-        expect(container.querySelector('.badge')!.children).toHaveLength(1);
+        expect(container.firstElementChild!.children).toHaveLength(1);
     });
 });
 

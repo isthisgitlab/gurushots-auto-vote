@@ -187,13 +187,18 @@ describe('a scenario whose progress can be reset from the card', () => {
 });
 
 describe('header', () => {
-    test('the jump target accepts focus and shows a blue outline', () => {
+    test('the jump target accepts focus and shows an outline for keyboard focus and for a landed jump', () => {
         const { container } = renderCard(makeChallenge());
         const card = container.querySelector('#challenge-101')!;
         expect(card.getAttribute('tabindex')).toBe('-1');
-        expect(card.className).toContain('focus:outline-base-content');
-        expect(card.className).toContain('focus:outline-4');
-        expect(card.className).toContain('focus:outline-offset-4');
+        expect(card.className).toContain('focus-visible:outline-base-content');
+        expect(card.className).toContain('focus-visible:outline-4');
+        expect(card.className).toContain('focus-visible:outline-offset-4');
+        // a pointer jump sets data-landed (see scrollToChallenge), which draws the same outline
+        expect(card.className).toContain('data-[landed]:outline-base-content');
+        expect(card.className).toContain('data-[landed]:outline-4');
+        expect(card.className).toContain('data-[landed]:outline-offset-4');
+        expect(card.className).not.toMatch(/(^|\s)focus:/);
     });
 
     test('opens the challenge URL and the settings modal', async () => {
@@ -974,7 +979,9 @@ describe('entries, tags and alerts', () => {
         const card = container.querySelector('#challenge-101')!;
         expect(card.className).toContain('border-2 border-error');
         expect(card.className).toContain('ring-2 ring-info ring-offset-2');
-        expect(card.className).toContain('focus:outline-4 focus:outline-base-content focus:outline-offset-4');
+        expect(card.className).toContain(
+            'focus-visible:outline-4 focus-visible:outline-base-content focus-visible:outline-offset-4',
+        );
         card.scrollIntoView = jest.fn();
         scrollToChallenge(101);
         expect(document.activeElement).toBe(card);

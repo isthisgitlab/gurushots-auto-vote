@@ -116,7 +116,7 @@ function ImportPanel({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
             </label>
             <textarea
                 id="scenario-import-text"
-                className="textarea textarea-bordered w-full font-mono text-xs"
+                className="textarea w-full font-mono text-xs"
                 rows={6}
                 value={text}
                 onChange={(e) => {
@@ -178,7 +178,7 @@ function ExportedScenario({ name, exported, onHide }: { name: string; exported: 
                 </ToneNote>
             )}
             <textarea
-                className="textarea textarea-bordered w-full font-mono text-xs"
+                className="textarea w-full font-mono text-xs"
                 rows={6}
                 readOnly
                 aria-label={interp(t('app.scenarioExportLabel'), { name })}

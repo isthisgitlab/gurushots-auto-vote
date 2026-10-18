@@ -28,8 +28,8 @@ type ValueChange = (next: unknown) => void;
  * validates; the real validator runs on save and on simulate.
  */
 
-const CONTROL = 'input input-sm input-bordered w-full';
-const SELECT = 'select select-sm select-bordered w-full';
+const CONTROL = 'input input-sm w-full';
+const SELECT = 'select select-sm w-full';
 
 /**
  * One labelled cell of an item's field grid — a named group, since a cell can
@@ -530,7 +530,7 @@ function ItemList({
                 />
             ))}
             <select
-                className="select select-sm select-bordered"
+                className="select select-sm"
                 aria-label={t(addLabel)}
                 value=""
                 onChange={(e) => onChange([...list, spec.make(e.currentTarget.value, { phases })])}

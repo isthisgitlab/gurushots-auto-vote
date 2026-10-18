@@ -6,7 +6,6 @@
 
 import { render, screen, fireEvent } from './helpers/test-utils';
 import { ChipListPanel, ChallengeChip, ChipTitle } from '@/components/app/ChallengeChips';
-import { invalid } from '../helpers/invalid';
 
 describe('ChipListPanel', () => {
     test('renders the heading (icon + label + count) and the chip row', () => {
@@ -36,8 +35,8 @@ describe('ChallengeChip', () => {
         expect(chip.className).toBe('btn btn-sm max-w-full whitespace-nowrap');
         expect(chip.getAttribute('type')).toBe('button');
 
-        const fakeCard = { scrollIntoView: jest.fn(), focus: jest.fn() };
-        const getById = jest.spyOn(document, 'getElementById').mockReturnValue(invalid(fakeCard));
+        const fakeCard = Object.assign(document.createElement('div'), { scrollIntoView: jest.fn(), focus: jest.fn() });
+        const getById = jest.spyOn(document, 'getElementById').mockReturnValue(fakeCard);
         fireEvent.click(chip);
 
         expect(getById).toHaveBeenCalledWith('challenge-42');

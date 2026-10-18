@@ -271,7 +271,7 @@ function DanglingPinNote({
             <span>{text}</span>
             <button
                 type="button"
-                className={`btn btn-ghost btn-sm${busy ? ' btn-disabled' : ''}`}
+                className={`btn btn-sm${busy ? ' btn-disabled' : ''}`}
                 aria-disabled={busy}
                 aria-busy={busy}
                 onClick={(event) => {

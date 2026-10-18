@@ -316,11 +316,16 @@ describe('EntryBadge — layout: an info row, then an actions row', () => {
                 {...props}
             />,
         );
-    const badge = (container: Element) => container.querySelector('.badge')!;
+    const badge = (container: Element) => container.firstElementChild!;
 
     test('the badge is a left-aligned column, its rows 8px apart', () => {
         const { container } = renderBadge();
         const { classList } = badge(container);
+        // A bordered box, not a repurposed daisyUI badge.
+        for (const cls of ['rounded-box', 'border', 'border-base-300', 'p-2']) {
+            expect(classList.contains(cls)).toBe(true);
+        }
+        expect(classList.contains('badge')).toBe(false);
         for (const cls of ['flex', 'flex-col', 'items-start', 'text-left', 'gap-2']) {
             expect(classList.contains(cls)).toBe(true);
         }

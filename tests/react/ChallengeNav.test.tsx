@@ -51,8 +51,8 @@ describe('ChallengeNav', () => {
     test('clicking an entry scrolls the matching card into view', () => {
         render(<ChallengeNav challenges={[challenge(42, 'JumpTo')]} />);
 
-        const fakeCard = { scrollIntoView: jest.fn(), focus: jest.fn() };
-        const getById = jest.spyOn(document, 'getElementById').mockReturnValue(invalid(fakeCard));
+        const fakeCard = Object.assign(document.createElement('div'), { scrollIntoView: jest.fn(), focus: jest.fn() });
+        const getById = jest.spyOn(document, 'getElementById').mockReturnValue(fakeCard);
 
         fireEvent.click(screen.getByRole('button', { name: /JumpTo/ }));
 

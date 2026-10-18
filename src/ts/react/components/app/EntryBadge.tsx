@@ -194,12 +194,11 @@ export function EntryBadge({
 
     return (
         // Two left-aligned rows in a column: what the entry is (photo, rank, when it went in), then what can be done
-        // with it. DaisyUI's badge is an inline, centred flex row, so flex-col / items-start / text-left override it
-        // (items-start does the left alignment). h-auto + py-1: a stock badge is ~20px tall, which would clip the thumbnail. Each row wraps on its own, so
-        // up to six buttons with longer translated labels do not overflow a narrow (Android) width. gap-2 (8px) keeps
-        // adjacent touch targets apart, both between the buttons of the actions row and between the rows: the photo
-        // chip (44px on touch) sits right above the first button, and Boost / Turbo spend at once.
-        <div className="badge badge-outline badge-sm flex h-auto flex-col items-start gap-2 px-2 py-1 text-left">
+        // with it. Each row wraps on its own, so up to six buttons with longer translated labels do not overflow a
+        // narrow (Android) width. gap-2 (8px) keeps adjacent touch targets apart, both between the buttons of the
+        // actions row and between the rows: the photo chip (44px on touch) sits right above the first button, and
+        // Boost / Turbo spend at once.
+        <div className="rounded-box border-base-300 flex flex-col items-start gap-2 border p-2 text-left text-xs">
             <div className="flex flex-wrap items-center gap-1">
                 <EntryPhoto entry={entry} />
                 <span>{icon}</span>

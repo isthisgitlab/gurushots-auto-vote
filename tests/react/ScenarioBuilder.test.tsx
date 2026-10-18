@@ -232,11 +232,63 @@ describe('rules', () => {
     });
 });
 
+describe('tabs', () => {
+    const tabs = () => screen.getAllByRole('tab');
+
+    test('follow the WAI-ARIA tabs pattern', async () => {
+        await renderBuilder();
+        const [builder, json] = tabs();
+        expect(screen.getByRole('tablist').className).toContain('tabs-border');
+        expect([builder.getAttribute('tabindex'), json.getAttribute('tabindex')]).toEqual(['0', '-1']);
+        const panel = screen.getByRole('tabpanel');
+        expect(panel.getAttribute('aria-labelledby')).toBe(builder.id);
+        // only the selected tab controls a mounted panel
+        expect(builder.getAttribute('aria-controls')).toBe(panel.id);
+        expect(json.hasAttribute('aria-controls')).toBe(false);
+
+        fireEvent.click(json);
+        expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(json.id);
+        expect(json.getAttribute('aria-controls')).toBe(screen.getByRole('tabpanel').id);
+        expect(builder.hasAttribute('aria-controls')).toBe(false);
+        expect([builder.getAttribute('tabindex'), json.getAttribute('tabindex')]).toEqual(['-1', '0']);
+    });
+
+    test('the arrow keys wrap and Home / End jump, selecting and focusing the target', async () => {
+        await renderBuilder();
+        const [builder, json] = tabs();
+        const press = (from: HTMLElement, key: string) => fireEvent.keyDown(from, { key });
+
+        press(builder, 'ArrowRight');
+        expect(json.getAttribute('aria-selected')).toBe('true');
+        expect(document.activeElement).toBe(json);
+        press(json, 'ArrowRight');
+        expect(builder.getAttribute('aria-selected')).toBe('true');
+        expect(document.activeElement).toBe(builder);
+        press(builder, 'ArrowLeft');
+        expect(json.getAttribute('aria-selected')).toBe('true');
+        press(json, 'ArrowLeft');
+        expect(builder.getAttribute('aria-selected')).toBe('true');
+        press(builder, 'End');
+        expect(json.getAttribute('aria-selected')).toBe('true');
+        expect(document.activeElement).toBe(json);
+        press(json, 'Home');
+        expect(builder.getAttribute('aria-selected')).toBe('true');
+        expect(document.activeElement).toBe(builder);
+    });
+
+    test('other keys leave the selection alone', async () => {
+        await renderBuilder();
+        const [builder] = tabs();
+        expect(fireEvent.keyDown(builder, { key: 'a' })).toBe(true);
+        expect(builder.getAttribute('aria-selected')).toBe('true');
+    });
+});
+
 describe('JSON tab', () => {
     test('a valid edit replaces the draft; invalid or unrenderable JSON keeps it', async () => {
         await renderBuilder();
         fireEvent.click(screen.getByRole('tab', { name: 'app.sbTabJson' }));
-        const box = screen.getByLabelText('app.sbTabJson');
+        const box = screen.getByRole('textbox', { name: 'app.sbTabJson' });
         fireEvent.change(box, { target: { value: '{nope' } });
         expect(screen.getByRole('status').textContent).toBe('app.sbJsonInvalid');
         fireEvent.change(box, { target: { value: '{"phases": 5}' } });
@@ -466,7 +518,7 @@ describe('dirty reporting', () => {
         await renderBuilder();
         fireEvent.click(screen.getByRole('tab', { name: 'app.sbTabJson' }));
         expect(lastReport()).toBe(false);
-        fireEvent.change(screen.getByLabelText('app.sbTabJson'), { target: { value: '{nope' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'app.sbTabJson' }), { target: { value: '{nope' } });
         expect(lastReport()).toBe(true);
         fireEvent.click(screen.getByRole('tab', { name: 'app.sbTabBuilder' }));
         expect(lastReport()).toBe(false);
@@ -477,12 +529,16 @@ describe('dirty reporting', () => {
             initial: { ...doc(), phases: { main: { settings: { exposure: 10, chosenPhotos: ['p1'] }, rules: [] } } },
         });
         fireEvent.click(screen.getByRole('tab', { name: 'app.sbTabJson' }));
-        expect(screen.getByLabelText<HTMLTextAreaElement>('app.sbTabJson').value).toContain('chosenPhotos');
+        expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'app.sbTabJson' }).value).toContain(
+            'chosenPhotos',
+        );
 
         act(() => announceChosenPhotosCleared());
 
         await waitFor(() =>
-            expect(screen.getByLabelText<HTMLTextAreaElement>('app.sbTabJson').value).not.toContain('chosenPhotos'),
+            expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'app.sbTabJson' }).value).not.toContain(
+                'chosenPhotos',
+            ),
         );
         expect(lastReport()).toBe(false);
     });

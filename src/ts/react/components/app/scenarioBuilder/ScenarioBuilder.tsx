@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
@@ -22,7 +22,7 @@ import {
     isEditableDraft,
 } from '../../../../scenarios/builderModel';
 
-import type { ComponentChildren } from 'preact';
+import type { ComponentChildren, TargetedKeyboardEvent } from 'preact';
 import type { WindowApi } from '../../../../types/ipc';
 import type { ScenarioDraft, ScenarioDraftPhase, ScenarioDraftRule } from '../../../../types/scenarioBuilder';
 import type { RendererSchema } from '../../../../types/settingsEditor';
@@ -42,7 +42,16 @@ type SimulationResult = Extract<Awaited<ReturnType<WindowApi['simulateScenario']
  * problems come back by path.
  */
 
-const CONTROL = 'input input-sm input-bordered w-full';
+const CONTROL = 'input input-sm w-full';
+const TABS = ['builder', 'json'] as const;
+
+/** The tab a key moves to from `index` (the arrows wrap, Home / End jump to the ends), or null for any other key. */
+function tabAfterKey(key: string, index: number): number | null {
+    if (key === 'ArrowRight') return (index + 1) % TABS.length;
+    if (key === 'ArrowLeft') return (index + TABS.length - 1) % TABS.length;
+    if (key === 'Home') return 0;
+    return key === 'End' ? TABS.length - 1 : null;
+}
 
 /**
  * A phase's settings overlay: per-challenge setting keys and their values.
@@ -102,7 +111,7 @@ function PhaseSettings({
                 );
             })}
             <select
-                className="select select-sm select-bordered"
+                className="select select-sm"
                 aria-label={t('app.sbAddSetting')}
                 value=""
                 onChange={(e) => {
@@ -155,7 +164,7 @@ function RuleEditor({
                 <label className="flex flex-col text-xs gap-1">
                     <span className="opacity-70">{t('app.sbRepeat')}</span>
                     <select
-                        className="select select-sm select-bordered"
+                        className="select select-sm"
                         value={rule.repeat ?? 'always'}
                         onChange={(e) => onChange({ ...rule, repeat: e.currentTarget.value })}
                     >
@@ -306,7 +315,7 @@ function ScenarioHeader({
             <label className="flex flex-col text-xs gap-1">
                 <span className="opacity-70">{t('app.sbStart')}</span>
                 <select
-                    className="select select-sm select-bordered"
+                    className="select select-sm"
                     value={draft.start}
                     onChange={(e) => onDraft({ ...draft, start: e.currentTarget.value })}
                 >
@@ -335,7 +344,7 @@ function ScenarioHeader({
                             <input
                                 type="number"
                                 min={0}
-                                className="input input-sm input-bordered w-24"
+                                className="input input-sm w-24"
                                 value={draft.limits?.[key] ?? ''}
                                 onChange={(e) => {
                                     const input = e.currentTarget;
@@ -379,7 +388,7 @@ function JsonTab({
         <div className="space-y-2">
             <p className="text-xs text-base-content/70">{t('app.sbJsonHint')}</p>
             <textarea
-                className="textarea textarea-bordered w-full font-mono text-xs"
+                className="textarea w-full font-mono text-xs"
                 rows={16}
                 aria-label={t('app.sbTabJson')}
                 value={text}
@@ -435,7 +444,7 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
         <div className="space-y-2">
             <div className="flex gap-2 items-center">
                 <select
-                    className="select select-sm select-bordered"
+                    className="select select-sm"
                     aria-label={t('app.sbSimulateOn')}
                     value={challengeId}
                     onChange={(e) => setChallengeId(e.currentTarget.value)}
@@ -515,7 +524,18 @@ export function ScenarioBuilder({
     // The name the scenario is stored under right now: a rename that went
     // through before a refused save must not be attempted again on retry.
     const [storedName, setStoredName] = useState(originalName);
-    const [tab, setTab] = useState('builder');
+    const [tab, setTab] = useState<(typeof TABS)[number]>('builder');
+    const idBase = useId();
+    const tabId = (name: string) => `${idBase}-tab-${name}`;
+    const panelId = `${idBase}-panel`;
+    // WAI-ARIA tabs: the tab that takes focus is the selected one.
+    const onTabKeyDown = (event: TargetedKeyboardEvent<HTMLButtonElement>, index: number) => {
+        const next = tabAfterKey(event.key, index);
+        if (next === null) return;
+        event.preventDefault();
+        setTab(TABS[next]);
+        document.getElementById(tabId(TABS[next]))?.focus();
+    };
     const [error, setError] = useState<ScenarioErrorInfo | null>(null);
     const phases = Object.keys(draft.phases);
 
@@ -554,41 +574,47 @@ export function ScenarioBuilder({
     return (
         <div className="border border-base-300 rounded-lg p-3 space-y-3">
             <h5 className="font-semibold">{t(originalName === null ? 'app.sbTitleNew' : 'app.sbTitleEdit')}</h5>
-            <div role="tablist" className="tabs tabs-bordered">
-                {['builder', 'json'].map((name) => (
+            <div role="tablist" className="tabs tabs-border">
+                {TABS.map((name, index) => (
                     <button
                         key={name}
+                        id={tabId(name)}
                         type="button"
                         role="tab"
                         aria-selected={tab === name}
+                        aria-controls={tab === name ? panelId : undefined}
+                        tabIndex={tab === name ? 0 : -1}
                         className={`tab ${tab === name ? 'tab-active' : ''}`}
                         onClick={() => setTab(name)}
+                        onKeyDown={(event) => onTabKeyDown(event, index)}
                     >
                         {t(name === 'builder' ? 'app.sbTabBuilder' : 'app.sbTabJson')}
                     </button>
                 ))}
             </div>
-            {tab === 'json' ? (
-                <JsonTab key={textResync} draft={draft} onDraft={setDraft} onTextDirty={setJsonDirty} />
-            ) : (
-                <div className="space-y-3">
-                    <ScenarioHeader draft={draft} onDraft={setDraft} phases={phases} />
-                    <div className="text-sm font-medium">{t('app.sbPhases')}</div>
-                    {phases.map((name) => (
-                        <PhaseEditor
-                            key={name}
-                            name={name}
-                            phase={draft.phases[name]}
-                            draft={draft}
-                            onDraft={setDraft}
-                            phases={phases}
-                        />
-                    ))}
-                    <button type="button" className="btn btn-sm" onClick={() => setDraft(addPhase(draft))}>
-                        {t('app.sbAddPhase')}
-                    </button>
-                </div>
-            )}
+            <div role="tabpanel" id={panelId} aria-labelledby={tabId(tab)}>
+                {tab === 'json' ? (
+                    <JsonTab key={textResync} draft={draft} onDraft={setDraft} onTextDirty={setJsonDirty} />
+                ) : (
+                    <div className="space-y-3">
+                        <ScenarioHeader draft={draft} onDraft={setDraft} phases={phases} />
+                        <div className="text-sm font-medium">{t('app.sbPhases')}</div>
+                        {phases.map((name) => (
+                            <PhaseEditor
+                                key={name}
+                                name={name}
+                                phase={draft.phases[name]}
+                                draft={draft}
+                                onDraft={setDraft}
+                                phases={phases}
+                            />
+                        ))}
+                        <button type="button" className="btn btn-sm" onClick={() => setDraft(addPhase(draft))}>
+                            {t('app.sbAddPhase')}
+                        </button>
+                    </div>
+                )}
+            </div>
             <SimulatePanel draft={draft} />
             <ScenarioError error={error} />
             <div className="flex gap-2">

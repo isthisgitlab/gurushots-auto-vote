@@ -113,13 +113,18 @@ beforeEach(() => {
 });
 
 describe('compact ChallengeCard tile', () => {
-    test('the compact jump target accepts focus and shows a blue outline', () => {
+    test('the compact jump target accepts focus and shows an outline for keyboard focus and for a landed jump', () => {
         const { container } = renderCard(makeChallenge());
         const card = container.querySelector('#challenge-202')!;
         expect(card.getAttribute('tabindex')).toBe('-1');
-        expect(card.className).toContain('focus:outline-base-content');
-        expect(card.className).toContain('focus:outline-4');
-        expect(card.className).toContain('focus:outline-offset-4');
+        expect(card.className).toContain('focus-visible:outline-base-content');
+        expect(card.className).toContain('focus-visible:outline-4');
+        expect(card.className).toContain('focus-visible:outline-offset-4');
+        // a pointer jump sets data-landed (see scrollToChallenge), which draws the same outline
+        expect(card.className).toContain('data-[landed]:outline-base-content');
+        expect(card.className).toContain('data-[landed]:outline-4');
+        expect(card.className).toContain('data-[landed]:outline-offset-4');
+        expect(card.className).not.toMatch(/(^|\s)focus:/);
     });
 
     test('offers no actions — the density toggle is the only button', () => {
