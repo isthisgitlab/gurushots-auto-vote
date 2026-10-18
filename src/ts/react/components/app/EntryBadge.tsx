@@ -33,9 +33,8 @@ export type EntryPinControls = {
     onToggle: (kind: EntryPinKind, imageId: string) => void | Promise<void>;
 };
 
-// Unpressed pin: the label stays `base-content` and only the border carries the feature's colour (an outline button
-// paints a coloured label in the raw colour, which a theme does not keep readable on `base-100`).
-const PIN_OUTLINE_CLASSES = { boost: 'btn-outline border-success', turbo: 'btn-outline border-warning' };
+// A pressed pin is solid in its feature's colour. An unpressed one is a plain `btn-outline`, which daisyUI draws in
+// `base-content` (border and label) in every theme; the label names the feature, so no colour cue is needed.
 const PIN_PRESSED_VARIANTS = { boost: 'success', turbo: 'warning' } as const;
 
 /**
@@ -59,7 +58,7 @@ function PinToggle({
     return (
         <ActionButton
             variant={pressed ? PIN_PRESSED_VARIANTS[kind] : 'plain'}
-            className={[pressed ? '' : PIN_OUTLINE_CLASSES[kind], busy ? 'btn-disabled' : ''].filter(Boolean).join(' ')}
+            className={[pressed ? '' : 'btn-outline', busy ? 'btn-disabled' : ''].filter(Boolean).join(' ')}
             aria-pressed={pressed}
             // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body> mid-write.
             onClick={() => {

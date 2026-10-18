@@ -371,30 +371,105 @@ describe('stylesheet sources', () => {
 });
 
 describe('renderer button colours', () => {
-    // A theme guarantees `X` + `X-content` (a solid button) and `base-content` on `base-*`, nothing else. An outline
-    // button paints its label in the raw colour on `base-100`, which a theme can make unreadable (business: neutral
-    // 27% on base-100 24%), so `btn-outline` never combines with a colour variant; a colour cue goes on the border.
-    test('no class literal combines btn-outline with a colour variant', () => {
+    // A theme guarantees `X` + `X-content` (a solid button) and `base-content` on `base-*`, nothing else. daisyUI paints
+    // `btn-outline`, `btn-soft`, `btn-ghost` and `btn-dash` with the colour variant's raw colour on the page
+    // background, which a theme can make unreadable (business: neutral 27% on base-100 24%). Over `src/ts/react`
+    // (.ts and .tsx) this enforces: (a) no single string or template literal (static parts, `${…}` bodies scanned
+    // separately) holds one of those styles together with a colour variant class; (b) no `<ActionButton>` tag has a
+    // colour `variant` (a `variant="…"` other than `plain`, or a `variant={…}` expression with a string literal other
+    // than `plain`) and a literal holding one of those styles. A `variant` that is an identifier or lookup is not seen.
+    const STYLES = ['btn-outline', 'btn-soft', 'btn-ghost', 'btn-dash'];
+    const COLOUR_VARIANT = /^btn-(?:neutral|primary|secondary|accent|info|success|warning|error|latvian)$/;
+    // A quoted or template literal, or a comment; the alternation consumes a string whole, so a `//` or apostrophe
+    // inside one is not taken for a comment and an apostrophe inside a comment cannot pair up with another quote.
+    const TOKEN = /'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+
+    const withoutComments = (code: string) => code.replace(TOKEN, (m) => (m.startsWith('/') ? '' : m));
+
+    const literalsIn = (code: string): string[] =>
+        [...code.matchAll(TOKEN)].flatMap(([m]) => {
+            if (m.startsWith('/')) return [];
+            const body = m.slice(1, -1);
+            if (!m.startsWith('`')) return [body];
+            const inner = [...body.matchAll(/\$\{([^}]*)\}/g)].flatMap(([, expr]) => literalsIn(expr));
+            return [body.replace(/\$\{[^}]*\}/g, ' '), ...inner];
+        });
+
+    const tokensOf = (literal: string) => literal.split(/\s+/);
+    const mixesStyleAndColour = (literal: string) => {
+        const tokens = tokensOf(literal);
+        return STYLES.some((s) => tokens.includes(s)) && tokens.some((t) => COLOUR_VARIANT.test(t));
+    };
+
+    // Index of the `}` closing the `{` at `from` (brace), or of the first `>` outside braces at or after `from`.
+    const closeOf = (code: string, from: number, brace: boolean) => {
+        let depth = 0;
+        for (let i = from; i < code.length; i++) {
+            if (code[i] === '{') depth++;
+            else if (code[i] === '}') depth--;
+            if (brace ? depth === 0 : depth === 0 && code[i] === '>') return i;
+        }
+        return code.length;
+    };
+
+    const colourVariantTag = (tag: string) => {
+        const quoted = /\bvariant="([^"]*)"/.exec(tag);
+        if (quoted) return quoted[1] !== 'plain';
+        const expr = tag.indexOf('variant={');
+        if (expr < 0) return false;
+        const start = expr + 'variant='.length;
+        return literalsIn(tag.slice(start, closeOf(tag, start, true) + 1)).some((l) => l.trim() !== 'plain');
+    };
+
+    /** The literals and `<ActionButton>` tags of `code` that pair an outline-style class with a colour variant. */
+    const offendersIn = (source: string) => {
+        const code = withoutComments(source);
+        const offenders = literalsIn(code).filter(mixesStyleAndColour);
+        for (const { index } of code.matchAll(/<ActionButton\b/g)) {
+            const tag = code.slice(index, closeOf(code, index, false) + 1);
+            const styled = literalsIn(tag).some((l) => STYLES.some((s) => tokensOf(l).includes(s)));
+            if (styled && colourVariantTag(tag)) offenders.push(tag);
+        }
+        return offenders;
+    };
+
+    test('the scan flags a colour paired with an outline style, however it is split across the source', () => {
+        const flagged = [
+            // The #59 shape: the colour comes from the variant prop, the outline from a separate literal.
+            `<ActionButton variant="neutral" className={[pressed ? '' : 'btn-outline', busy ? 'btn-disabled' : ''].filter(Boolean).join(' ')}>`,
+            '<ActionButton variant={pressed ? KINDS[kind] : \'warning\'} className="btn-soft" onClick={() => go()}>',
+            '`btn btn-outline ${x} btn-warning`',
+            '"btn-ghost btn-error"',
+            "const s = `a ${ok ? 'btn-dash btn-info' : ''}`;",
+        ];
+        for (const source of flagged) expect(offendersIn(source)).not.toEqual([]);
+        const passing = [
+            "'btn btn-sm btn-outline'",
+            '<ActionButton variant="plain" className="btn-outline">',
+            "<ActionButton variant={pressed ? PINNED[kind] : 'plain'} className={pressed ? '' : 'btn-outline'}>",
+            '<ActionButton variant="neutral" onClick={() => go()}>',
+            "// it's a btn-outline btn-error note\nconst a = 'btn btn-outline';",
+            "const url = 'https://x.test'; const b = 'btn btn-neutral';",
+        ];
+        for (const source of passing) expect(offendersIn(source)).toEqual([]);
+    });
+
+    test('no renderer source pairs an outline-style class with a colour variant', () => {
         const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
         const path = jest.requireActual<typeof import('node:path')>('node:path');
-        const colourVariant = /^btn-(?:neutral|primary|secondary|accent|info|success|warning|error|latvian)$/;
+        const root = path.join(__dirname, '..');
         const offenders: string[] = [];
         const walk = (dir: string) => {
             for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
                 const full = path.join(dir, entry.name);
                 if (entry.isDirectory()) walk(full);
-                else if (entry.name.endsWith('.tsx')) {
-                    const text = fs.readFileSync(full, 'utf8');
-                    for (const [literal] of text.matchAll(/'[^'\n]*'|"[^"\n]*"|`[^`$\n]*`/g)) {
-                        const tokens = literal.slice(1, -1).split(/\s+/);
-                        if (tokens.includes('btn-outline') && tokens.some((t) => colourVariant.test(t))) {
-                            offenders.push(`${path.relative(root, full)}: ${literal}`);
-                        }
+                else if (/\.tsx?$/.test(entry.name)) {
+                    for (const found of offendersIn(fs.readFileSync(full, 'utf8'))) {
+                        offenders.push(`${path.relative(root, full)}: ${found}`);
                     }
                 }
             }
         };
-        const root = path.join(__dirname, '..');
         walk(path.join(root, 'src/ts/react'));
         expect(offenders).toEqual([]);
     });

@@ -23,13 +23,13 @@ test.each([
 
 test('the plain variant adds no colour class, so the caller can outline it with a base-content label', () => {
     const { container } = render(
-        <ActionButton variant="plain" className="btn-outline border-success">
+        <ActionButton variant="plain" className="btn-outline">
             Go
         </ActionButton>,
     );
 
     expect(container.querySelector('button')!.className).toBe(
-        'btn btn-sm h-auto min-h-8 py-1 leading-tight btn-outline border-success',
+        'btn btn-sm h-auto min-h-8 py-1 leading-tight btn-outline',
     );
 });
 

@@ -121,13 +121,14 @@ describe('EntryBadge pin toggles', () => {
         for (const tokens of [boost, turbo]) expect(tokens).not.toContain('btn-outline');
     });
 
-    test('an unpressed pin keeps a base-content label: a plain outline with only its border coloured', () => {
+    test('an unpressed pin is a plain outline: no colour variant and no coloured border, so border and label stay base-content', () => {
         renderBadge(controls());
-        const boost = classTokens(pinBoost());
-        const turbo = classTokens(pinTurbo());
-        expect(boost).toEqual(expect.arrayContaining(['btn-outline', 'border-success']));
-        expect(turbo).toEqual(expect.arrayContaining(['btn-outline', 'border-warning']));
-        for (const tokens of [boost, turbo]) expect(tokens.filter((c) => COLOUR_VARIANTS.includes(c))).toEqual([]);
+        for (const tokens of [classTokens(pinBoost()), classTokens(pinTurbo())]) {
+            expect(tokens).toContain('btn-outline');
+            expect(tokens.filter((c) => COLOUR_VARIANTS.includes(c) || /^border-(?:success|warning)$/.test(c))).toEqual(
+                [],
+            );
+        }
     });
 
     test('no button is an outline combined with a colour variant, whatever the pin and spend state', () => {
@@ -152,11 +153,21 @@ describe('EntryBadge pin toggles', () => {
         }
     });
 
-    test('a busy unpressed pin keeps its outline and gains btn-disabled', () => {
+    test('a busy unpressed pin stays an outline with no coloured border, and gains btn-disabled', () => {
         renderBadge(controls({ busy: true }));
-        expect(classTokens(pinBoost())).toEqual(
-            expect.arrayContaining(['btn-outline', 'border-success', 'btn-disabled']),
-        );
+        const tokens = classTokens(pinBoost());
+        expect(tokens).toEqual(expect.arrayContaining(['btn-outline', 'btn-disabled']));
+        expect(tokens.some((c) => c.startsWith('border-'))).toBe(false);
+    });
+
+    test('a busy pressed pin stays solid in its colour and gains btn-disabled', () => {
+        renderBadge(controls({ busy: true, pins: { boost: 'e1', turbo: 'e1' } }));
+        const boost = classTokens(screen.getByRole('button', { name: /app\.pinnedForBoost/ }));
+        const turbo = classTokens(screen.getByRole('button', { name: /app\.pinnedForTurbo/ }));
+        expect(boost).toEqual(expect.arrayContaining(['btn-success', 'btn-disabled']));
+        expect(turbo).toEqual(expect.arrayContaining(['btn-warning', 'btn-disabled']));
+        expect(boost).not.toContain('btn-outline');
+        expect(turbo).not.toContain('btn-outline');
     });
 
     test('the pressed button says "Pinned for …" in text, and that visible text is its accessible name', () => {

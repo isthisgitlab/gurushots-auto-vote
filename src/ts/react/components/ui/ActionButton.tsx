@@ -7,7 +7,7 @@ const VARIANT_CLASSES = {
     success: 'btn-success',
     warning: 'btn-warning',
     cost: 'btn-latvian',
-    // No colour class: the caller supplies `btn-outline` and a `border-<colour>`, so the label stays `base-content`.
+    // No colour class: the caller supplies `btn-outline`, which daisyUI draws in `base-content` (border and label).
     plain: '',
 };
 
