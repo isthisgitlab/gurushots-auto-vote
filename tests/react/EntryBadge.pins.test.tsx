@@ -43,6 +43,19 @@ const renderBadge = (pin?: EntryPinControls, props = {}) =>
         />,
     );
 
+const classTokens = (el: Element | null) => (el?.className ?? '').split(/\s+/);
+const COLOUR_VARIANTS = [
+    'btn-neutral',
+    'btn-primary',
+    'btn-secondary',
+    'btn-accent',
+    'btn-info',
+    'btn-success',
+    'btn-warning',
+    'btn-error',
+    'btn-latvian',
+];
+
 const pinBoost = () => screen.queryByRole('button', { name: /app\.pinForBoost/ });
 const pinTurbo = () => screen.queryByRole('button', { name: /app\.pinForTurbo/ });
 
@@ -92,9 +105,58 @@ describe('EntryBadge pin toggles', () => {
         renderBadge(controls({ pins: { boost: 'e1', turbo: 'other' } }));
         const boost = screen.getByRole('button', { name: /app\.pinnedForBoost/ });
         expect(boost.getAttribute('aria-pressed')).toBe('true');
-        expect(boost.className).not.toContain('btn-outline');
+        expect(classTokens(boost)).not.toContain('btn-outline');
         expect(pinTurbo()!.getAttribute('aria-pressed')).toBe('false');
-        expect(pinTurbo()!.className).toContain('btn-outline');
+        expect(classTokens(pinTurbo())).toContain('btn-outline');
+    });
+
+    test('a pressed pin is a solid theme colour: success for Boost, warning for Turbo', () => {
+        renderBadge(controls({ pins: { boost: 'e1', turbo: 'e1' } }));
+        const boost = classTokens(screen.getByRole('button', { name: /app\.pinnedForBoost/ }));
+        const turbo = classTokens(screen.getByRole('button', { name: /app\.pinnedForTurbo/ }));
+        expect(boost).toContain('btn-success');
+        expect(boost).not.toContain('btn-warning');
+        expect(turbo).toContain('btn-warning');
+        expect(turbo).not.toContain('btn-success');
+        for (const tokens of [boost, turbo]) expect(tokens).not.toContain('btn-outline');
+    });
+
+    test('an unpressed pin keeps a base-content label: a plain outline with only its border coloured', () => {
+        renderBadge(controls());
+        const boost = classTokens(pinBoost());
+        const turbo = classTokens(pinTurbo());
+        expect(boost).toEqual(expect.arrayContaining(['btn-outline', 'border-success']));
+        expect(turbo).toEqual(expect.arrayContaining(['btn-outline', 'border-warning']));
+        for (const tokens of [boost, turbo]) expect(tokens.filter((c) => COLOUR_VARIANTS.includes(c))).toEqual([]);
+    });
+
+    test('no button is an outline combined with a colour variant, whatever the pin and spend state', () => {
+        for (const pins of [
+            { boost: null, turbo: null },
+            { boost: 'e1', turbo: null },
+            { boost: null, turbo: 'e1' },
+            { boost: 'e1', turbo: 'e1' },
+        ]) {
+            const { container, unmount } = renderBadge(controls({ pins }), {
+                boostAvailable: true,
+                turboAvailable: true,
+                swapAvailable: true,
+            });
+            for (const button of container.querySelectorAll('button')) {
+                const tokens = classTokens(button);
+                if (tokens.includes('btn-outline')) {
+                    expect(tokens.filter((c) => COLOUR_VARIANTS.includes(c))).toEqual([]);
+                }
+            }
+            unmount();
+        }
+    });
+
+    test('a busy unpressed pin keeps its outline and gains btn-disabled', () => {
+        renderBadge(controls({ busy: true }));
+        expect(classTokens(pinBoost())).toEqual(
+            expect.arrayContaining(['btn-outline', 'border-success', 'btn-disabled']),
+        );
     });
 
     test('the pressed button says "Pinned for …" in text, and that visible text is its accessible name', () => {

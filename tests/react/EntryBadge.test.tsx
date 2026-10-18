@@ -282,11 +282,46 @@ describe('EntryBadge — error styling on button', () => {
             />,
         );
         const button = screen.getByRole('button', { name: /🚀/ });
-        expect(button.className).toMatch(/btn-error/);
-        expect(button.className).not.toMatch(/btn-neutral/);
+        const tokens = button.className.split(/\s+/);
+        expect(tokens).toContain('btn-error');
+        expect(tokens).not.toContain('btn-success');
     });
 
-    test('boost button gets btn-neutral class when there is no error', () => {
+    test('turbo button gets btn-error class when there is a turbo error', () => {
+        mockTurboState.error = 'Turbo failed';
+        render(
+            <EntryBadge
+                timezone="local"
+                {...noCallbacks}
+                entry={baseEntry()}
+                challengeId={777}
+                boostAvailable={false}
+                turboAvailable={true}
+            />,
+        );
+        const tokens = screen.getByRole('button', { name: /⚡/ }).className.split(/\s+/);
+        expect(tokens).toContain('btn-error');
+        expect(tokens).not.toContain('btn-warning');
+    });
+
+    test('turbo button gets solid btn-warning when there is no error', () => {
+        render(
+            <EntryBadge
+                timezone="local"
+                {...noCallbacks}
+                entry={baseEntry()}
+                challengeId={777}
+                boostAvailable={false}
+                turboAvailable={true}
+            />,
+        );
+        const tokens = screen.getByRole('button').className.split(/\s+/);
+        expect(tokens).toContain('btn-warning');
+        expect(tokens).not.toContain('btn-outline');
+        expect(tokens).not.toContain('btn-error');
+    });
+
+    test('boost button gets solid btn-success when there is no error', () => {
         render(
             <EntryBadge
                 timezone="local"
@@ -298,8 +333,10 @@ describe('EntryBadge — error styling on button', () => {
             />,
         );
         const button = screen.getByRole('button');
-        expect(button.className).toMatch(/btn-neutral/);
-        expect(button.className).not.toMatch(/btn-error/);
+        const tokens = button.className.split(/\s+/);
+        expect(tokens).toContain('btn-success');
+        expect(tokens).not.toContain('btn-outline');
+        expect(tokens).not.toContain('btn-error');
     });
 });
 

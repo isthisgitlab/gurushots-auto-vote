@@ -33,6 +33,11 @@ export type EntryPinControls = {
     onToggle: (kind: EntryPinKind, imageId: string) => void | Promise<void>;
 };
 
+// Unpressed pin: the label stays `base-content` and only the border carries the feature's colour (an outline button
+// paints a coloured label in the raw colour, which a theme does not keep readable on `base-100`).
+const PIN_OUTLINE_CLASSES = { boost: 'btn-outline border-success', turbo: 'btn-outline border-warning' };
+const PIN_PRESSED_VARIANTS = { boost: 'success', turbo: 'warning' } as const;
+
 /**
  * One "Pin for Boost / Turbo" toggle: `aria-pressed` carries the state, and the visible text says it too ("Pinned
  * for Boost", as the compact tile does), which is also its accessible name.
@@ -53,8 +58,8 @@ function PinToggle({
     const pinnedName = t(kind === 'boost' ? 'app.pinnedForBoost' : 'app.pinnedForTurbo');
     return (
         <ActionButton
-            variant="neutral"
-            className={[pressed ? '' : 'btn-outline', busy ? 'btn-disabled' : ''].filter(Boolean).join(' ')}
+            variant={pressed ? PIN_PRESSED_VARIANTS[kind] : 'plain'}
+            className={[pressed ? '' : PIN_OUTLINE_CLASSES[kind], busy ? 'btn-disabled' : ''].filter(Boolean).join(' ')}
             aria-pressed={pressed}
             // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body> mid-write.
             onClick={() => {
@@ -211,7 +216,7 @@ export function EntryBadge({
                 <div className="flex flex-wrap items-center gap-2">
                     {showBoostButton && (
                         <ActionButton
-                            variant="neutral"
+                            variant="success"
                             error={boostError}
                             onClick={() => void handleBoost()}
                             disabled={boosting}
@@ -224,7 +229,7 @@ export function EntryBadge({
                     )}
                     {showTurboButton && (
                         <ActionButton
-                            variant="neutral"
+                            variant="warning"
                             error={turboError}
                             onClick={() => void handleTurbo()}
                             disabled={turboing}

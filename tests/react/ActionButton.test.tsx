@@ -4,6 +4,8 @@ import { ICON_PATHS } from '@/components/ui/StrokeIcon';
 
 test.each([
     ['neutral', 'btn-neutral'],
+    ['success', 'btn-success'],
+    ['warning', 'btn-warning'],
     ['cost', 'btn-latvian'],
 ] as const)('uses the %s variant until an action fails', (variant, expected) => {
     const { container, rerender } = render(<ActionButton variant={variant}>Go</ActionButton>);
@@ -17,6 +19,18 @@ test.each([
         </ActionButton>,
     );
     expect(button.className).toBe('btn btn-sm h-auto min-h-8 py-1 leading-tight btn-error');
+});
+
+test('the plain variant adds no colour class, so the caller can outline it with a base-content label', () => {
+    const { container } = render(
+        <ActionButton variant="plain" className="btn-outline border-success">
+            Go
+        </ActionButton>,
+    );
+
+    expect(container.querySelector('button')!.className).toBe(
+        'btn btn-sm h-auto min-h-8 py-1 leading-tight btn-outline border-success',
+    );
 });
 
 test('a failed action adds an error icon, so the button no longer reads as the idle solid-red cost button', () => {

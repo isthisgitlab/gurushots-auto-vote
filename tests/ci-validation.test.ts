@@ -369,3 +369,33 @@ describe('stylesheet sources', () => {
         expect(fs.readFileSync(path.join(__dirname, '..', 'src/styles/styles.css'), 'utf8')).toMatch(/themes:\s*all;/);
     });
 });
+
+describe('renderer button colours', () => {
+    // A theme guarantees `X` + `X-content` (a solid button) and `base-content` on `base-*`, nothing else. An outline
+    // button paints its label in the raw colour on `base-100`, which a theme can make unreadable (business: neutral
+    // 27% on base-100 24%), so `btn-outline` never combines with a colour variant; a colour cue goes on the border.
+    test('no class literal combines btn-outline with a colour variant', () => {
+        const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+        const path = jest.requireActual<typeof import('node:path')>('node:path');
+        const colourVariant = /^btn-(?:neutral|primary|secondary|accent|info|success|warning|error|latvian)$/;
+        const offenders: string[] = [];
+        const walk = (dir: string) => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) walk(full);
+                else if (entry.name.endsWith('.tsx')) {
+                    const text = fs.readFileSync(full, 'utf8');
+                    for (const [literal] of text.matchAll(/'[^'\n]*'|"[^"\n]*"|`[^`$\n]*`/g)) {
+                        const tokens = literal.slice(1, -1).split(/\s+/);
+                        if (tokens.includes('btn-outline') && tokens.some((t) => colourVariant.test(t))) {
+                            offenders.push(`${path.relative(root, full)}: ${literal}`);
+                        }
+                    }
+                }
+            }
+        };
+        const root = path.join(__dirname, '..');
+        walk(path.join(root, 'src/ts/react'));
+        expect(offenders).toEqual([]);
+    });
+});

@@ -4,7 +4,11 @@ import type { ComponentChildren, JSX } from 'preact';
 
 const VARIANT_CLASSES = {
     neutral: 'btn-neutral',
+    success: 'btn-success',
+    warning: 'btn-warning',
     cost: 'btn-latvian',
+    // No colour class: the caller supplies `btn-outline` and a `border-<colour>`, so the label stays `base-content`.
+    plain: '',
 };
 
 export type ActionButtonVariant = keyof typeof VARIANT_CLASSES;
