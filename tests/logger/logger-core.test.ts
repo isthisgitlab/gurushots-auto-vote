@@ -236,6 +236,20 @@ describe('module load: logs directory', () => {
         logger.cleanup();
         expect(fs.readdirSync).not.toHaveBeenCalled();
     });
+
+    test('treats the renderer bundle fs shim (no chmodSync) as no fs: no dir, no chmod, no error', () => {
+        const shim = { ...makeFs(), chmodSync: undefined };
+        const { logger } = loadLogger({ fs: invalid<ReturnType<typeof makeFs>>(shim) });
+
+        expect(debugSpy).toHaveBeenCalledWith(
+            '[logger] fs not available; skipping file-based logging:',
+            'fs is the bundler shim',
+        );
+        expect(shim.mkdirSync).not.toHaveBeenCalled();
+        expect(errorSpy).not.toHaveBeenCalled();
+        logger.info('hello');
+        expect(shim.appendFileSync).not.toHaveBeenCalled();
+    });
 });
 
 describe('cleanupOldLogs', () => {
