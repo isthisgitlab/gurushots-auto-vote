@@ -205,7 +205,7 @@ describe('Modal edges', () => {
                 <button type="button">ok</button>
             </ModalActions>,
         );
-        expect(container.querySelector('.modal-action')!.className).toBe('modal-action ');
+        expect(container.querySelector('.modal-action')!.className).toBe('modal-action flex-wrap ');
         expect(screen.getByText('ok')).toBeTruthy();
     });
 

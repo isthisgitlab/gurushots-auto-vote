@@ -108,13 +108,13 @@ function ChallengeSettingCell({
         <div className={SETTING_CELL_CLASS}>
             <SettingLabel inputId={inputId} type={config.type}>
                 <span className="font-medium">{t(config.label)}</span>
-                <div className="flex gap-1">
+                <span className="flex gap-1">
                     <ValueSourceBadge
                         hasOverride={hasOverride}
                         ruleSource={form.ruleSourceOf(key)}
                         hasProfileValue={hasProfileValue}
                     />
-                </div>
+                </span>
             </SettingLabel>
             <p className="text-xs text-base-content/70 mb-2">{t(config.description)}</p>
             <SettingHelp helpKey={config.helpKey} />

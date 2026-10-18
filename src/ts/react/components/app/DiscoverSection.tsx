@@ -72,7 +72,7 @@ function ChosenChip({
     return (
         <button
             type="button"
-            className="badge badge-outline badge-sm mt-0.5"
+            className="badge badge-outline badge-sm mt-0.5 min-h-6"
             title={t(foreign ? 'app.discoverChosenForeignHint' : 'app.discoverChosenChipHint')}
             aria-label={interp(t(foreign ? 'app.discoverChosenForeignLabel' : 'app.discoverChosenChipLabel'), {
                 title: name,

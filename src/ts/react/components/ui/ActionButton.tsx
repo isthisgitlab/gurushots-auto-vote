@@ -29,7 +29,16 @@ export function ActionButton({
     className?: string;
     children?: ComponentChildren;
 }) {
-    const classes = ['btn', 'btn-sm', error ? 'btn-error' : VARIANT_CLASSES[variant], className];
+    const classes = [
+        'btn',
+        'btn-sm',
+        'h-auto',
+        'min-h-8',
+        'py-1',
+        'leading-tight',
+        error ? 'btn-error' : VARIANT_CLASSES[variant],
+        className,
+    ];
 
     return (
         <button className={classes.filter(Boolean).join(' ')} {...buttonProps}>

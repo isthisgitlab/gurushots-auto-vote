@@ -35,6 +35,22 @@ test('a running plan: phase, next check and last problem (detail)', () => {
     expect(screen.getByRole('status').textContent).toBe('app.scenarioStatusProblem');
 });
 
+test('the compact line truncates only the name, so the phase and countdown stay visible', () => {
+    render(
+        <ScenarioStatusLine
+            status={{ name: 'Plan', phase: 'holding', started: true, lastError: null, nextWakeAt: NOW + 3600 }}
+            compact
+        />,
+    );
+    const line = screen.getByTitle('Plan');
+    const [name, rest] = Array.from(line.children);
+    expect(name.className).toContain('truncate');
+    expect(name.textContent).toContain('Plan');
+    expect(rest.className).toContain('shrink-0');
+    expect(rest.textContent).toContain('app.scenarioStatusPhase');
+    expect(rest.textContent).toContain('app.scenarioStatusNext');
+});
+
 test.each([
     [false, 'app.scenarioStatusPausedManual'],
     [true, 'app.scenarioStatusPausedManualShort'],

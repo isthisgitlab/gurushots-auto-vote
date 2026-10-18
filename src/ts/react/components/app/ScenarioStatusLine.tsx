@@ -167,9 +167,16 @@ export function ScenarioStatusLine({
 
     return (
         <div className={compact ? 'text-xs text-base-content/70' : 'text-xs bg-base-200 rounded p-2 space-y-1'}>
-            <div className={compact ? 'truncate' : undefined} title={status.name}>
-                <span aria-hidden="true">🧭</span> {status.name} · {phase}
-                {next && <> · {next}</>}
+            <div className={compact ? 'flex gap-1' : undefined} title={status.name}>
+                {/* Compact: only the name gives way, so the phase and countdown stay readable. */}
+                <span className={compact ? 'truncate min-w-0' : undefined}>
+                    <span aria-hidden="true">🧭</span> {status.name}
+                </span>
+                <span className={compact ? 'shrink-0' : undefined}>
+                    {' · '}
+                    {phase}
+                    {next && <> · {next}</>}
+                </span>
             </div>
             <Notice status={status} compact={compact} />
             {status.spendUnclear?.stopped && onReset && <ResetButton label="app.scenarioReset" onReset={onReset} />}

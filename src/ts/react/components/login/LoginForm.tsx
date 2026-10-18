@@ -93,12 +93,14 @@ export function LoginForm({
                 <input
                     id="username"
                     type="text"
-                    className={`input input-sm w-full ${errors.username ? 'input-error' : ''}`}
+                    className={`input w-full ${errors.username ? 'input-error' : ''}`}
                     placeholder={t('login.usernamePlaceholder')}
                     value={username}
                     onChange={handleUsernameChange}
                     disabled={loading}
                     autoComplete="username"
+                    autoCapitalize="none"
+                    spellcheck={false}
                 />
                 {errors.username && (
                     <ToneNote tone="error" as="div" className="font-medium mt-1">
@@ -115,7 +117,7 @@ export function LoginForm({
                 <input
                     id="password"
                     type="password"
-                    className={`input input-sm w-full ${errors.password ? 'input-error' : ''}`}
+                    className={`input w-full ${errors.password ? 'input-error' : ''}`}
                     placeholder={t('login.passwordPlaceholder')}
                     value={password}
                     onChange={handlePasswordChange}
@@ -131,7 +133,7 @@ export function LoginForm({
 
             {/* Submit button */}
             <div className="flex flex-col w-full mt-6">
-                <button type="submit" className="btn btn-neutral btn-sm w-full" disabled={loading}>
+                <button type="submit" className="btn btn-neutral w-full" disabled={loading}>
                     {loading ? (
                         <>
                             <span>{t('login.loggingIn')}</span>

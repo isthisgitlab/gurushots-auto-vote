@@ -200,5 +200,5 @@ export function Modal({
  * Modal action buttons container
  */
 export function ModalActions({ children, className = '' }: { children?: ComponentChildren; className?: string }) {
-    return <div className={`modal-action ${className}`}>{children}</div>;
+    return <div className={`modal-action flex-wrap ${className}`}>{children}</div>;
 }

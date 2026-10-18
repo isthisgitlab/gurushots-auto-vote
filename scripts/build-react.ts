@@ -107,7 +107,7 @@ const rendererHtml = ({ htmlAttrs, viewport, csp, bundle, themeColor }: Renderer
 // so the bridge can install before React mounts.
 const capacitorIndexHtml = rendererHtml({
     htmlAttrs: 'lang="en"',
-    viewport: 'width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no',
+    viewport: 'width=device-width, initial-scale=1.0, viewport-fit=cover',
     themeColor: '#960018',
     csp: androidCsp,
     bundle: 'capacitor-bundle.js',

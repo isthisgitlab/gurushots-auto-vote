@@ -398,9 +398,9 @@ export function ItemEditor({
     const fields = spec.table[type] ?? [];
     return (
         <div className={`rounded border border-base-300 p-2 space-y-2 ${kind === 'selector' ? 'bg-base-200' : ''}`}>
-            <div className="flex gap-2 items-center">
+            <div className="flex flex-wrap gap-2 items-center">
                 <select
-                    className={SELECT}
+                    className={`${SELECT} min-w-40 flex-1`}
                     aria-label={t('app.sbPickType')}
                     value={type}
                     onChange={(e) => onChange(spec.make(e.currentTarget.value, { phases }))}
@@ -530,7 +530,7 @@ function ItemList({
                 />
             ))}
             <select
-                className="select select-xs select-bordered"
+                className="select select-sm select-bordered"
                 aria-label={t(addLabel)}
                 value=""
                 onChange={(e) => onChange([...list, spec.make(e.currentTarget.value, { phases })])}

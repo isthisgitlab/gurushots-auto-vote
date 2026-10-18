@@ -165,7 +165,7 @@ function FooterActions({
     const { t } = useTranslation();
     const clearHintId = useId();
     return (
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
             <HeldButton
                 held={saveWaits}
                 hintId={hintId}

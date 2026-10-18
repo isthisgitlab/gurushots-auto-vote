@@ -9,14 +9,14 @@ test.each([
     const { container, rerender } = render(<ActionButton variant={variant}>Go</ActionButton>);
     const button = container.querySelector('button')!;
 
-    expect(button.className).toBe(`btn btn-sm ${expected}`);
+    expect(button.className).toBe(`btn btn-sm h-auto min-h-8 py-1 leading-tight ${expected}`);
 
     rerender(
         <ActionButton variant={variant} error="Failed">
             Go
         </ActionButton>,
     );
-    expect(button.className).toBe('btn btn-sm btn-error');
+    expect(button.className).toBe('btn btn-sm h-auto min-h-8 py-1 leading-tight btn-error');
 });
 
 test('a failed action adds an error icon, so the button no longer reads as the idle solid-red cost button', () => {
@@ -43,7 +43,7 @@ test('preserves extra classes and native button properties', () => {
     );
     const button = container.querySelector('button')!;
 
-    expect(button.className).toBe('btn btn-sm btn-neutral mt-1');
+    expect(button.className).toBe('btn btn-sm h-auto min-h-8 py-1 leading-tight btn-neutral mt-1');
     expect(button.type).toBe('button');
     expect(button.title).toBe('Run');
     fireEvent.click(button);

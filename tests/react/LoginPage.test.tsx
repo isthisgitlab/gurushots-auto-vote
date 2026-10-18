@@ -244,14 +244,13 @@ describe('Login page', () => {
         expect((await screen.findByRole('alert')).textContent).toContain('notice.recoveryUnreadableWhat');
     });
 
-    test('dismissing the outcome of a recovery on the login page moves focus to the heading of the page, not to the body or an empty element (the page has an h2 and no h1)', async () => {
+    test('dismissing the outcome of a recovery on the login page moves focus to the heading of the page, not to the body or an empty element', async () => {
         jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(
             invalid({ success: true, recovery: { code: 'settings-import-failed', path: '/data/settings.json' } }),
         );
         jest.mocked(window.api.retrySettingsImport).mockResolvedValue({ success: true });
         await renderReady();
         await screen.findByRole('alert');
-        expect(document.querySelector('h1')).toBeNull();
         // The retry worked: the notice goes, its outcome stays until dismissed.
         jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(invalid({ success: true, recovery: null }));
         fireEvent.click(screen.getByRole('button', { name: 'notice.recoveryRetry' }));

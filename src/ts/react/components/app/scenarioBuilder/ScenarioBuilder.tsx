@@ -102,7 +102,7 @@ function PhaseSettings({
                 );
             })}
             <select
-                className="select select-xs select-bordered"
+                className="select select-sm select-bordered"
                 aria-label={t('app.sbAddSetting')}
                 value=""
                 onChange={(e) => {
@@ -328,7 +328,7 @@ function ScenarioHeader({
             </label>
             <fieldset className="sm:col-span-2 text-xs">
                 <legend className="opacity-70 mb-1">{t('app.sbLimits')}</legend>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     {LIMIT_KEYS.map((key) => (
                         <label key={key} className="flex flex-col gap-1">
                             <span>{t(`app.sbCurrency_${key}`)}</span>

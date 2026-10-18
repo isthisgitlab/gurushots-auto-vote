@@ -1,6 +1,6 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useUpdate, UPDATE_STATES } from '@/contexts/UpdateContext';
-import { Modal } from '@/components/ui/Modal';
+import { Modal, ModalActions } from '@/components/ui/Modal';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 
 /**
@@ -127,7 +127,7 @@ export function UpdateDialog() {
             )}
 
             {/* Buttons */}
-            <div className="modal-action">
+            <ModalActions>
                 {/* Available Buttons */}
                 {state === UPDATE_STATES.AVAILABLE && (
                     <>
@@ -175,7 +175,7 @@ export function UpdateDialog() {
                         )}
                     </>
                 )}
-            </div>
+            </ModalActions>
         </Modal>
     );
 }

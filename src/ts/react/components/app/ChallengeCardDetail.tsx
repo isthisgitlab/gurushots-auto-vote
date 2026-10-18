@@ -84,7 +84,7 @@ function DetailHeader({
     return (
         <div className="flex flex-col gap-2">
             <div className="min-w-0">
-                <h3 className="font-bold text-base truncate">{challenge.title}</h3>
+                <h3 className="font-bold text-base wrap-anywhere">{challenge.title}</h3>
                 {/* Welcome message. wrap-anywhere wraps the full text, including long unbroken words and URLs, so it never forces the card wider. sanitizeWelcomeMessage strips medium-editor toolbar leakage and allowlists safe tags. */}
                 {sanitizedWelcome && (
                     <div
@@ -95,7 +95,10 @@ function DetailHeader({
                 <ChallengeBadgeRow {...badgeRowProps} />
                 {challenge.url && (
                     <div className="text-xs text-base-content/70 mt-1">
-                        <button onClick={handleOpenUrl} className="font-mono hover:text-info hover:underline text-left">
+                        <button
+                            onClick={handleOpenUrl}
+                            className="font-mono hover:text-info hover:underline text-left min-h-6 py-1"
+                        >
                             {challengePageUrl(challenge.url).replace('https://', '')}
                         </button>
                     </div>
@@ -232,7 +235,7 @@ function StatusCells({
                     {view.entries.length}/{challenge.max_photo_submits}
                 </div>
                 {view.canFill && (
-                    <div className="flex flex-wrap gap-1 justify-center">
+                    <div className="flex flex-wrap gap-2 justify-center">
                         <FillButtons {...actions.fillButtonProps} />
                     </div>
                 )}

@@ -498,7 +498,7 @@ export function buildCompactActionRow({
         enabled &&
         hasActions && (
             <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-1 [&>.btn]:mt-0">
+                <div className="flex flex-wrap items-center gap-2 [&>.btn]:mt-0">
                     {voteButton}
                     {runButton}
                     {earnTurboButton}

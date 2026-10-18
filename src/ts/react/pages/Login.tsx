@@ -164,7 +164,7 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
     }
 
     return (
-        <div className="min-h-screen bg-base-200 flex items-center justify-center">
+        <main className="min-h-screen bg-base-200 flex items-center justify-center p-4">
             <div className="card w-full max-w-lg bg-base-100 shadow-xl">
                 <div className="card-body">
                     {/* Language Switcher */}
@@ -173,13 +173,13 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
                     <SettingsRecoveryNotice returnFocusTo={headingRef} />
 
                     {/* Title */}
-                    <h2
+                    <h1
                         ref={headingRef}
                         tabIndex={-1}
                         className="card-title text-2xl font-bold text-center mb-6 focus-visible:ring-base-content focus-visible:ring-2 focus-visible:outline-none"
                     >
                         {t('login.heading')}
-                    </h2>
+                    </h1>
 
                     {/* Auth Error */}
                     {shownError && (
@@ -209,7 +209,7 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
 
             {/* Shown here when there is no auto-login; with one, the app page shows it instead */}
             <UnofficialNoticeModal isOpen={notice.open} onAcknowledge={() => void notice.acknowledge()} />
-        </div>
+        </main>
     );
 }
 

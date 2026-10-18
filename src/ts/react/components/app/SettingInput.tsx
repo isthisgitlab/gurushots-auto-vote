@@ -43,13 +43,16 @@ export function SettingLabel({
 }) {
     if (group) {
         return (
-            <div className="label" id={`${inputId}-label`}>
+            <div
+                className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content"
+                id={`${inputId}-label`}
+            >
                 {children}
             </div>
         );
     }
     return (
-        <label className="label" htmlFor={inputId}>
+        <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content" htmlFor={inputId}>
             {children}
         </label>
     );

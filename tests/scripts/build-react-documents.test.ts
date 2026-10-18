@@ -103,6 +103,11 @@ describe('generated HTML documents', () => {
         expect(headlessHtml).toContain(`content="${androidCsp}"`);
     });
 
+    test('the Capacitor document lets the WebView zoom', () => {
+        const viewport = capacitorIndexHtml.match(/<meta name="viewport" content="([^"]*)"/)?.[1];
+        expect(viewport).toBe('width=device-width, initial-scale=1.0, viewport-fit=cover');
+    });
+
     test('the headless flag is an external script that runs before the deferred bundle', () => {
         expect(headlessHtml.indexOf(`src="${HEADLESS_FLAG_FILE}"`)).toBeGreaterThan(-1);
         expect(headlessHtml.indexOf(HEADLESS_FLAG_FILE)).toBeLessThan(headlessHtml.indexOf('headless-bundle.js'));

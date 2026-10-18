@@ -35,6 +35,13 @@ describe('LoginForm', () => {
         expect(document.getElementById('password')!.className).not.toContain('input-error');
     });
 
+    test('the username field is not auto-capitalised, and keeps its autocomplete hint', () => {
+        render(<LoginForm onSubmit={jest.fn()} />);
+        const username = document.getElementById('username')!;
+        expect(username.getAttribute('autocapitalize')).toBe('none');
+        expect(username.getAttribute('autocomplete')).toBe('username');
+    });
+
     test('submits the trimmed username and raw password', () => {
         const onSubmit = jest.fn();
         render(<LoginForm onSubmit={onSubmit} initialUsername="  alice " />);
