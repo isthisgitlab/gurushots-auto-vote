@@ -46,24 +46,28 @@ const bootstrap = async () => {
         await initSettings();
         // Seeding reads and writes the settings, so it waits for them to be hydrated.
         seedBridgeProfiles();
-        // Metadata rides the same platform-aware transport — hydrate its
-        // cache too so per-challenge vote metadata survives relaunches.
-        await initializeMetadataAsync();
-        // Join-state markers (paid-unlock idempotency) ride the same transport;
-        // hydrate them so a paid retry after relaunch never re-unlocks (double
-        // charge) on Android.
-        await initializeJoinStateAsync();
-        // Swap-back records (which slot can restore a boosted/turbo'd photo).
-        await initializeSwapBackAsync();
-        // Automatic exposure-fill counts (the per-challenge fill cap).
-        await initializeAutoSpendAsync();
-        // When each entry entered its challenge (the boost fresh-entry wait).
-        await initializeEntryAgesAsync();
-        // Where each challenge is in its user-defined scenario (phase, memory).
-        await initializeScenarioStateAsync();
-        await initializeDiagnosticsAsync();
-        // Photo stats (the ranking signals fetched per photo): hydrated so a relaunch does not refetch them all.
-        await initializePhotoStatsAsync();
+        // The stores below ride the same platform-aware transport and are independent of each other, so they hydrate
+        // together; the mount waits for all of them. None of the initializers rejects: each catches its own read
+        // error and still marks itself initialized (createJsonStore), so one failed read never blocks the others
+        // or the mount.
+        await Promise.all([
+            // Per-challenge vote metadata survives relaunches.
+            initializeMetadataAsync(),
+            // Join-state markers (paid-unlock idempotency): a paid retry after relaunch never re-unlocks (double
+            // charge) on Android.
+            initializeJoinStateAsync(),
+            // Swap-back records (which slot can restore a boosted/turbo'd photo).
+            initializeSwapBackAsync(),
+            // Automatic exposure-fill counts (the per-challenge fill cap).
+            initializeAutoSpendAsync(),
+            // When each entry entered its challenge (the boost fresh-entry wait).
+            initializeEntryAgesAsync(),
+            // Where each challenge is in its user-defined scenario (phase, memory).
+            initializeScenarioStateAsync(),
+            initializeDiagnosticsAsync(),
+            // Photo stats (the ranking signals fetched per photo): hydrated so a relaunch does not refetch them all.
+            initializePhotoStatsAsync(),
+        ]);
 
         // Settings writes are write-behind (cache now, persist async). When
         // the OS backgrounds or tears down the WebView, push the latest

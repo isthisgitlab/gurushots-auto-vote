@@ -305,6 +305,15 @@ describe('createJsonStore', () => {
             expect(store.readRaw()).toBe('{"persisted":true}');
         });
 
+        test('initializeAsync resolves when the Preferences read fails: the cache is empty and the store is initialized', async () => {
+            mockPrefGet.mockRejectedValueOnce(new Error('bridge down'));
+            await expect(store.initializeAsync()).resolves.toBeUndefined();
+            expect(store.readRaw()).toBeNull();
+            // Initialized all the same: a second call does not read again.
+            await store.initializeAsync();
+            expect(mockPrefGet).toHaveBeenCalledTimes(1);
+        });
+
         test('writeRaw updates the cache synchronously and write-behinds to Preferences', async () => {
             store.writeRaw('{"x":1}');
             expect(store.readRaw()).toBe('{"x":1}');
