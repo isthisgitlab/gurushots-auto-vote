@@ -65,13 +65,11 @@ const escapeTerminalUnsafe = (json: string): string =>
         ),
     );
 
-/** Sentence-case a log's first word, including after a logger icon. */
+/** Sentence-case a log's first word, including after a logger icon. An indented row keeps its text as is. */
 const sentenceCaseLogMessage = (message: string): string => {
-    const challenge = /^((?:[\p{Extended_Pictographic}\uFE0F\u200D]+\s+)*)(\[Challenge [^\]]+\]\s+)(.+)$/u.exec(
-        message,
-    );
+    const challenge = /^((?:[\p{Extended_Pictographic}\uFE0F\u200D]+ )*)(\[Challenge [^\]]+\]\s+)(.+)$/u.exec(message);
     if (challenge) return `${challenge[1]}${challenge[2]}${sentenceCaseLogMessage(challenge[3])}`;
-    const match = /^((?:[\p{Extended_Pictographic}\uFE0F\u200D]+\s+)*)(\p{Ll}[\p{L}\p{N}-]*)/u.exec(message);
+    const match = /^((?:[\p{Extended_Pictographic}\uFE0F\u200D]+ )*)(\p{Ll}[\p{L}\p{N}-]*)/u.exec(message);
     if (!match) return message;
     const [, icon, word] = match;
     const rest = message.slice(match[0].length);

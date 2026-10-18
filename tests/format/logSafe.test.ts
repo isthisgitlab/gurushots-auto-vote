@@ -16,6 +16,7 @@ describe('sentenceCaseLogMessage', () => {
         ['🔄 Voting process...', '🔄 Voting process...'],
         ['⚠️ neizdevās ielādēt', '⚠️ Neizdevās ielādēt'],
         ['  indented CLI row', '  indented CLI row'],
+        ['ℹ️   indented CLI row', 'ℹ️   indented CLI row'],
         ['ℹ️ macOS detected', 'ℹ️ macOS detected'],
         ['ℹ️ https://example.com', 'ℹ️ https://example.com'],
         ['ℹ️ metadata.votes is invalid', 'ℹ️ metadata.votes is invalid'],
@@ -42,6 +43,8 @@ describe('splitIcon', () => {
         ['👍🏽 Nice', '👍🏽', 'Nice'],
         ['👨\u200D👩\u200D👧 Family', '👨\u200D👩\u200D👧', 'Family'],
         ['🎯', '🎯', ''],
+        ['ℹ️   • app.x: 1 → 2', 'ℹ️', '  • app.x: 1 → 2'],
+        ['ℹ️ ', 'ℹ️', ''],
     ])('peels the icon off %j', (message, icon, text) => {
         expect(splitIcon(message)).toEqual({ icon, text });
     });

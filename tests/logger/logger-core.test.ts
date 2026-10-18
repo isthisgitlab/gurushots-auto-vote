@@ -451,16 +451,20 @@ describe('writeLog routing and fan-out', () => {
         expect(logSpy).toHaveBeenLastCalledWith(expect.stringContaining('\x1b[37m[TRACE]\x1b[0m'));
     });
 
-    test('puts the icon right after the timestamp on the console line, and leaves an icon-less line as is', () => {
+    test('puts the icon right after the timestamp on the console line', () => {
         const { logger } = loadLogger();
         logger.warning('careful', null, 'voting');
-        const iconed = String(logSpy.mock.lastCall?.[0]);
-        expect(iconed).toContain('\x1b[0m ⚠️ \x1b[33m[WARN]\x1b[0m');
-        expect(iconed.endsWith('[voting]\x1b[0m Careful')).toBe(true);
-        logger.info('=== banner ===');
-        const plain = String(logSpy.mock.lastCall?.[0]);
-        expect(plain).toContain('\x1b[0m \x1b[34m[INFO]\x1b[0m');
-        expect(plain.endsWith(' === banner ===')).toBe(true);
+        const line = String(logSpy.mock.lastCall?.[0]);
+        expect(line).toContain('\x1b[0m ⚠️ \x1b[33m[WARN]\x1b[0m');
+        expect(line.endsWith('[voting]\x1b[0m Careful')).toBe(true);
+    });
+
+    test('keeps an indented row indented in the text column, after its own icon', () => {
+        const { logger } = loadLogger();
+        logger.info('  • app.x: 1 → 2', null, 'settings');
+        const line = String(logSpy.mock.lastCall?.[0]);
+        expect(line).toContain('\x1b[0m ℹ️ \x1b[34m[INFO]\x1b[0m');
+        expect(line.endsWith('[settings]\x1b[0m   • app.x: 1 → 2')).toBe(true);
     });
 
     test('fans entries out to the GUI sink with seq + plain message', () => {
@@ -496,11 +500,18 @@ describe('writeLog routing and fan-out', () => {
         expect(messageOf(() => logger.info('[Challenge 1: x] voted'))).toBe('ℹ️ [Challenge 1: x] Voted');
     });
 
-    test('leaves blank, indented and banner lines without an icon', () => {
+    test('gives blank, indented and banner lines the level icon, keeping their text as written', () => {
         const { logger } = loadLogger();
-        for (const message of ['', '  Status:  Default', '\nSettings:\nMore', '=== Login ===', '--- Cycle 1 ---']) {
+        for (const [message, expected] of [
+            ['', 'ℹ️ '],
+            ['  Status:  Default', 'ℹ️   Status:  Default'],
+            ['  list-photos --challenge=<id>', 'ℹ️   list-photos --challenge=<id>'],
+            ['\nSettings:\nMore', 'ℹ️  Settings: More'],
+            ['=== Login ===', 'ℹ️ === Login ==='],
+            ['--- Cycle 1 ---', 'ℹ️ --- Cycle 1 ---'],
+        ]) {
             logger.info(message);
-            expect(lastEntry(logger).message).toBe(message.replaceAll('\n', ' '));
+            expect(lastEntry(logger).message).toBe(expected);
         }
     });
 

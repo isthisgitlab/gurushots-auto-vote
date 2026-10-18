@@ -30,7 +30,7 @@ const LEVEL_COLORS: Record<LogLevel, ColorName> = {
     ERROR: 'red',
 };
 
-// Leading icon for a message that doesn't bring its own, so every log line
+// Leading icon for every message that doesn't bring its own, so every log line
 // starts with one. `success` overrides INFO's with ✅.
 const LEVEL_ICONS: Record<LogLevel, string> = {
     DEBUG: '🔍',
@@ -39,11 +39,12 @@ const LEVEL_ICONS: Record<LogLevel, string> = {
     ERROR: '❌',
 };
 
-// Messages left without an added icon: already icon-led, blank, or CLI layout lines — indented
-// detail rows and `===` / `---` banners, where an icon would break alignment.
-const NO_ICON_RE = /^(?:$|\s|[=-]|\p{Extended_Pictographic})/u;
+// A message that already leads with its own icon. Every other message — blank, an indented detail row,
+// a banner — gets the level icon; the icon has its own column, so the text keeps its indent.
+const ICON_LED_RE = /^\p{Extended_Pictographic}/u;
 
-const withIcon = (message: string, icon: string): string => (NO_ICON_RE.test(message) ? message : `${icon} ${message}`);
+const withIcon = (message: string, icon: string): string =>
+    ICON_LED_RE.test(message) ? message : `${icon} ${message}`;
 
 /**
  * Wrap text in an ANSI color. Only the console line is colored — the GUI
