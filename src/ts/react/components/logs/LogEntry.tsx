@@ -1,5 +1,5 @@
 import type { GuiLogEntry } from '../../../logger';
-import { sentenceCaseLogMessage } from '../../../format/logSafe';
+import { sentenceCaseLogMessage, splitIcon } from '../../../format/logSafe';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { localizeLogMessage } from './localizeLogMessage';
 /**
@@ -25,19 +25,21 @@ const CATEGORY_KEYS: Record<string, true> = {
 export type LogLine = Pick<GuiLogEntry, 'level' | 'message' | 'context' | 'timestamp' | 'category'>;
 
 /**
- * Single log entry. The timestamp, three small badges, then the message:
- *   [timestamp] (severity) (context) (category) message
+ * Single log entry. The timestamp, the message's icon, three small badges, then the message:
+ *   [timestamp] icon (severity) (context) (category) text
  */
 export function LogEntry({ entry }: { entry: LogLine }) {
     const { level, message, context, timestamp, category } = entry;
     const { language, t } = useTranslation();
     const levelBadge = LEVEL_BADGES[level] || 'badge-neutral';
     const categoryName = category || 'general';
+    const { icon, text } = splitIcon(sentenceCaseLogMessage(language === 'lv' ? localizeLogMessage(message) : message));
 
     return (
         <div className="log-entry whitespace-pre-wrap break-words">
             <span className="text-base-content/70">[{timestamp}]</span>
             {' '}
+            {icon && `${icon} `}
             <span className={`badge badge-sm ${levelBadge}`}>{language === 'lv' && level in LEVEL_BADGES ? t(`logs.levels.${level}`) : level}</span>
             {' '}
             <span className="badge badge-sm badge-ghost">{context || 'APP'}</span>
@@ -45,7 +47,7 @@ export function LogEntry({ entry }: { entry: LogLine }) {
             <span className="badge badge-sm badge-ghost">{language === 'lv' && CATEGORY_KEYS[categoryName] ? t(`logs.categories.${categoryName}`) : categoryName}</span>
             {' '}
             {/* JSX text is escaped by the renderer; pre-escaping would show "&lt;" literally. */}
-            <span className="text-base-content">{sentenceCaseLogMessage(language === 'lv' ? localizeLogMessage(message) : message)}</span>
+            <span className="text-base-content">{text}</span>
         </div>
     );
 }

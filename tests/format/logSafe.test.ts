@@ -6,7 +6,7 @@
 
 import type * as logSafeModule from '../../src/ts/format/logSafe';
 
-const { failureText, sentenceCaseLogMessage, stripTerminalControl, escapeTerminalUnsafe } =
+const { failureText, sentenceCaseLogMessage, splitIcon, stripTerminalControl, escapeTerminalUnsafe } =
     require('../../src/ts/format/logSafe') as typeof logSafeModule;
 
 describe('sentenceCaseLogMessage', () => {
@@ -32,6 +32,26 @@ describe('sentenceCaseLogMessage', () => {
     ])('%s → %s', (message, expected) => {
         expect(sentenceCaseLogMessage(message)).toBe(expected);
     });
+});
+
+describe('splitIcon', () => {
+    test.each([
+        ['ℹ️ Started', 'ℹ️', 'Started'],
+        ['⚠️ Careful', '⚠️', 'Careful'],
+        ['🎯 Active missions', '🎯', 'Active missions'],
+        ['👍🏽 Nice', '👍🏽', 'Nice'],
+        ['👨\u200D👩\u200D👧 Family', '👨\u200D👩\u200D👧', 'Family'],
+        ['🎯', '🎯', ''],
+    ])('peels the icon off %j', (message, icon, text) => {
+        expect(splitIcon(message)).toEqual({ icon, text });
+    });
+
+    test.each(['No icon', '=== banner ===', '--- rule ---', '    indented detail', ''])(
+        'leaves %j untouched',
+        (message) => {
+            expect(splitIcon(message)).toEqual({ icon: '', text: message });
+        },
+    );
 });
 
 describe('failureText', () => {

@@ -87,6 +87,19 @@ const sentenceCaseLogMessage = (message: string): string => {
 };
 
 /**
+ * Split a leading icon (a pictographic cluster: variation selector, skin tone, ZWJ sequence) and the
+ * single space after it off a log message. A message without one — blank, an indented detail row, a
+ * banner — gives an empty icon and the text unchanged.
+ */
+const splitIcon = (message: string): { icon: string; text: string } => {
+    const match =
+        /^(\p{Extended_Pictographic}[\uFE0F\p{Emoji_Modifier}]?(?:\u200D\p{Extended_Pictographic}[\uFE0F\p{Emoji_Modifier}]?)*) ?/u.exec(
+            message,
+        );
+    return match ? { icon: match[1], text: message.slice(match[0].length) } : { icon: '', text: message };
+};
+
+/**
  * Text for a caught value in a failure log line: its `message`, else the value
  * itself as text, else 'unknown error'. Never empty — `logger.endOperation`
  * records an operation as completed when its error text is empty, so a
@@ -96,4 +109,4 @@ const sentenceCaseLogMessage = (message: string): string => {
  */
 const failureText = (error: unknown): string => errorMessage(error) || String(error ?? '') || 'unknown error';
 
-export { oneLine, failureText, stripTerminalControl, escapeTerminalUnsafe, sentenceCaseLogMessage };
+export { oneLine, failureText, stripTerminalControl, escapeTerminalUnsafe, sentenceCaseLogMessage, splitIcon };

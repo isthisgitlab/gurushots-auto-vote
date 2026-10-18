@@ -1,4 +1,5 @@
 import { formatTimeHMS } from '../dateFormat';
+import { splitIcon } from '../format/logSafe';
 
 import type { LogLevel } from './types';
 
@@ -52,7 +53,7 @@ const colorize = (text: string, color: ColorName): string => `${colors[color]}${
 
 /**
  * Format console output. Fixed-column order:
- *   [timestamp] [LEVEL] [CONTEXT] [category] message
+ *   [timestamp] icon [LEVEL] [CONTEXT] [category] text
  */
 const formatConsoleMessage = (
     level: LogLevel,
@@ -67,7 +68,9 @@ const formatConsoleMessage = (
     const coloredContext = colorize(`[${context}]`, 'cyan');
     const coloredCategory = colorize(`[${category}]`, 'yellow');
 
-    return `${coloredTime} ${coloredLevel} ${coloredContext} ${coloredCategory} ${message}`;
+    const { icon, text } = splitIcon(message);
+
+    return `${coloredTime} ${icon ? `${icon} ` : ''}${coloredLevel} ${coloredContext} ${coloredCategory} ${text}`;
 };
 
 /**

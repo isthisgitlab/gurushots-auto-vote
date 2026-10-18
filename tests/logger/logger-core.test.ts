@@ -408,7 +408,7 @@ describe('writeLog routing and fan-out', () => {
             logger.getLogFile(),
         ]);
         expect(fs.appendFileSync.mock.calls.map(([, , options]) => options)).toEqual(Array(4).fill({ mode: 0o600 }));
-        expect(fs.appendFileSync.mock.calls[3][1]).toMatch(/\[INFO\] \[CLI\] \[general\] ℹ️ Plain\n={80}\n$/);
+        expect(fs.appendFileSync.mock.calls[3][1]).toMatch(/\] ℹ️ \[INFO\] \[CLI\] \[general\] Plain\n={80}\n$/);
     });
 
     test('serialises sanitized object data and bare-string data into the file line', () => {
@@ -417,7 +417,7 @@ describe('writeLog routing and fan-out', () => {
         logger.info('str', 'detail');
 
         expect(fs.appendFileSync.mock.calls[0][1]).toContain(JSON.stringify({ token: '[REDACTED]', n: 1 }, null, 2));
-        expect(fs.appendFileSync.mock.calls[1][1]).toContain('] ℹ️ Str\ndetail\n');
+        expect(fs.appendFileSync.mock.calls[1][1]).toContain('] ℹ️ [INFO] [CLI] [general] Str\ndetail\n');
     });
 
     test('printLine writes the console only: no file, no ring buffer, no GUI feed', () => {
@@ -449,6 +449,18 @@ describe('writeLog routing and fan-out', () => {
         expect(logSpy).toHaveBeenLastCalledWith(expect.stringContaining('\x1b[33m[WARN]\x1b[0m'));
         logger.startOperation('op-x', 'custom', invalid('TRACE'));
         expect(logSpy).toHaveBeenLastCalledWith(expect.stringContaining('\x1b[37m[TRACE]\x1b[0m'));
+    });
+
+    test('puts the icon right after the timestamp on the console line, and leaves an icon-less line as is', () => {
+        const { logger } = loadLogger();
+        logger.warning('careful', null, 'voting');
+        const iconed = String(logSpy.mock.lastCall?.[0]);
+        expect(iconed).toContain('\x1b[0m ⚠️ \x1b[33m[WARN]\x1b[0m');
+        expect(iconed.endsWith('[voting]\x1b[0m Careful')).toBe(true);
+        logger.info('=== banner ===');
+        const plain = String(logSpy.mock.lastCall?.[0]);
+        expect(plain).toContain('\x1b[0m \x1b[34m[INFO]\x1b[0m');
+        expect(plain.endsWith(' === banner ===')).toBe(true);
     });
 
     test('fans entries out to the GUI sink with seq + plain message', () => {

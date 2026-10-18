@@ -1,5 +1,5 @@
 import * as fs from 'node:fs';
-import { sentenceCaseLogMessage, stripTerminalControl } from '../format/logSafe';
+import { sentenceCaseLogMessage, splitIcon, stripTerminalControl } from '../format/logSafe';
 import { getContext } from './context';
 import { writeConsole } from './consoleSink';
 import { logsDir, currentLogFiles } from './files';
@@ -84,7 +84,8 @@ const writeLog = (
 
         if (logsDir) {
             const target = routeLogFile(level, cat);
-            let line = `[${timestamp}] [${level}] [${context}] [${cat}] ${message}`;
+            const { icon: lineIcon, text } = splitIcon(message);
+            let line = `[${timestamp}] ${lineIcon ? `${lineIcon} ` : ''}[${level}] [${context}] [${cat}] ${text}`;
             if (sanitized) {
                 line += '\n' + (typeof sanitized === 'object' ? JSON.stringify(sanitized, null, 2) : sanitized);
             }

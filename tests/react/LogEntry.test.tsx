@@ -28,7 +28,7 @@ describe('LogEntry', () => {
                 />,
             );
             await waitFor(() => expect(container.textContent).toContain('Norādīts nederīgs laika zīmogs'));
-            expect(container.textContent).toContain('[T1] Informācija MAIN Balsošana');
+            expect(container.textContent).toContain('[T1] ℹ️ Informācija MAIN Balsošana');
         } finally {
             mockApi.getSetting.mockResolvedValue(null);
             mockTranslator.t.mockImplementation((key) => key);
@@ -63,7 +63,9 @@ describe('LogEntry', () => {
                 }}
             />,
         );
-        expect(container.textContent).toContain('ℹ️ Joining up to 4 challenge(s) early for the active missions');
+        expect(container.textContent).toContain(
+            '[T1] ℹ️ INFO GUI join Joining up to 4 challenge(s) early for the active missions',
+        );
     });
 
     test('falls back for an unknown level, missing context/category and an empty message', () => {
