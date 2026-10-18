@@ -9,7 +9,7 @@ export type CustomizationSource = 'manual' | 'profile' | 'rule';
  * `BoostWindowBanner`, and the "Using profile" badge (`badge-info`) shares its settings cell with the `badge-info` "?"
  * help badge (`SettingHelp`). Known gap: daisyUI's own `secondary` pairing falls short of WCAG AA text contrast
  * (about 3:1, below 4.5:1 for small text) in the default light/dark themes; it stays because users asked for the
- * original colours and can pick another theme. Whole class literals on purpose: Tailwind only generates classes it sees in full.
+ * original colours. Whole class literals on purpose: Tailwind only generates classes it sees in full.
  */
 const TONE: Record<CustomizationSource, { btn: string; badge: string }> = {
     manual: { btn: 'btn-accent', badge: 'badge-accent' },

@@ -183,12 +183,14 @@ describe('ChallengeNav', () => {
         await waitFor(() => expect(manual.className).toContain('btn-accent'));
         await waitFor(() => expect(rule.className).toContain('btn-secondary'));
         await waitFor(() => expect(profiled.className).toContain('btn-info'));
-        const ring = (chip: HTMLElement) =>
-            chip.querySelector('[data-testid="pulse-dot-error"]')!.parentElement!.className;
-        expect(ring(manual)).toContain('ring-base-100');
-        expect(ring(rule)).toContain('ring-base-100');
-        expect(ring(profiled)).toContain('ring-base-100');
-        expect(ring(plain)).not.toContain('ring-');
+        const dotParent = (chip: HTMLElement) =>
+            chip.querySelector<HTMLElement>('[data-testid="pulse-dot-error"]')!.parentElement!;
+        for (const chip of [manual, rule, profiled]) {
+            expect(dotParent(chip).className).toContain('ring-base-100');
+            expect(dotParent(chip).className).toContain('rounded-selector');
+        }
+        // No wrapper on a plain chip: the dot sits directly in the chip button.
+        expect(dotParent(plain)).toBe(plain);
     });
 
     test("draws the boost dot in the chip's own content colour on a profiled chip, and plain on others", async () => {
@@ -207,10 +209,10 @@ describe('ChallengeNav', () => {
         expect(profiled.querySelector('.status-info')).toBeNull();
         expect(plain.querySelector('.status-info')).not.toBeNull();
         expect(plain.querySelector('.bg-info-content')).toBeNull();
-        const ring = (chip: HTMLElement) =>
-            chip.querySelector('[data-testid="pulse-dot-info"]')!.parentElement!.className;
-        expect(ring(profiled)).toContain('ring-base-100');
-        expect(ring(plain)).not.toContain('ring-');
+        const dotParent = (chip: HTMLElement) =>
+            chip.querySelector<HTMLElement>('[data-testid="pulse-dot-info"]')!.parentElement!;
+        expect(dotParent(profiled).className).toContain('ring-base-100');
+        expect(dotParent(plain)).toBe(plain);
     });
 
     test('marks nothing when a per-challenge override read fails', async () => {
