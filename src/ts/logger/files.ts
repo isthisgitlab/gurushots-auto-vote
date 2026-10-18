@@ -12,7 +12,8 @@ import { writeConsole } from './consoleSink';
 let logsDir = '';
 try {
     // The renderer bundles' fs shim (scripts/lib/browser-shims.ts) stubs existsSync/mkdirSync without
-    // throwing but has no chmodSync, so its absence is how a shim is told from the real fs.
+    // throwing but has no chmodSync, so its absence is how a shim is told from the real fs
+    // (tests/logger/logger-core.test.ts loads the real shim and fails if it ever gains one).
     if (typeof fs.chmodSync !== 'function') throw new Error('fs is the bundler shim');
     logsDir = path.join(getUserDataPath(), 'logs');
     if (!fs.existsSync(logsDir)) {

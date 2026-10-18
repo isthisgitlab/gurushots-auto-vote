@@ -6,7 +6,9 @@
  * be pinned per scenario.
  */
 
+import vm from 'node:vm';
 import type * as LoggerModule from '../../src/ts/logger';
+import { SHIM_BANNER } from '../../scripts/lib/browser-shims';
 import { invalid } from '../helpers/invalid';
 
 const LOGS_DIR = '/ud/logs';
@@ -249,6 +251,15 @@ describe('module load: logs directory', () => {
         expect(errorSpy).not.toHaveBeenCalled();
         logger.info('hello');
         expect(shim.appendFileSync).not.toHaveBeenCalled();
+    });
+
+    test('the real renderer bundle fs shim has no chmodSync, which files.ts relies on to detect it', () => {
+        // What a bundle's `require('node:fs')` returns once the banner has run.
+        const shim = vm.runInNewContext(`${SHIM_BANNER};require('node:fs')`) as Record<string, unknown>;
+
+        expect(typeof shim.existsSync).toBe('function');
+        expect(typeof shim.mkdirSync).toBe('function');
+        expect(shim.chmodSync).toBeUndefined();
     });
 });
 

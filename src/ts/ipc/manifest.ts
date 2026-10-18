@@ -172,9 +172,9 @@ const eventMethods = {
     onSettingsChanged: 'settings-changed',
 } as const;
 
-// What the Logs window may use: the log feed, its own diagnostics line, and the one
-// settings read it makes (the UI language). Its preload (preloadLogs.ts) exposes only
-// this subset and the main process refuses every other channel from that window
+// What the Logs window may use: the log feed, its own diagnostics line, and the
+// settings reads it makes (the UI language and the theme). Its preload (preloadLogs.ts)
+// exposes only this subset and the main process refuses every other channel from that window
 // (registerHandlers.ts), so a compromised Logs renderer reaches no spend, no settings
 // write and no other log channel. Every name must exist in the full manifest above
 // (tests/ipc/manifest.test.ts).
