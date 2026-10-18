@@ -166,14 +166,17 @@ function FooterActions({
     const clearHintId = useId();
     return (
         <div className="flex flex-wrap justify-end gap-2">
-            <HeldButton held={locked} hintId={clearHintId} className="btn-error mr-auto" onPress={onClear}>
-                {t('app.photosClear')}
-            </HeldButton>
-            {locked && (
-                <span id={clearHintId} className="sr-only">
-                    {t('app.photoChooserClearHeld')}
-                </span>
-            )}
+            {/* Below sm Clear takes the whole first row, so Cancel and Save wrap together onto the second. */}
+            <div className="mr-auto max-sm:basis-full">
+                <HeldButton held={locked} hintId={clearHintId} className="btn-error" onPress={onClear}>
+                    {t('app.photosClear')}
+                </HeldButton>
+                {locked && (
+                    <span id={clearHintId} className="sr-only">
+                        {t('app.photoChooserClearHeld')}
+                    </span>
+                )}
+            </div>
             <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
                 {t('app.cancel')}
             </button>

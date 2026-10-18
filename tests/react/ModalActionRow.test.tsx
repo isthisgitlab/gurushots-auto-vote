@@ -30,7 +30,7 @@ describe('ModalActionRow', () => {
         const [secondary, cancel, save] = buttons;
         expect(save.className).toBe('btn btn-neutral btn-sm');
         expect(save.textContent).toContain('app.save');
-        expect(secondary.className).toBe('btn btn-error btn-sm mr-auto');
+        expect(secondary.className).toBe('btn btn-error btn-sm');
         expect(secondary.textContent).toContain('app.resetAll');
         expect(cancel.className).toBe('btn btn-outline btn-sm');
         expect(cancel.textContent).toContain('app.cancel');
@@ -59,7 +59,17 @@ describe('ModalActionRow', () => {
 
     test('the buttons wrap instead of overflowing a narrow modal', () => {
         const { container } = renderRow();
-        expect(container.querySelector('button')!.parentElement!.className).toBe('flex flex-wrap justify-end gap-2');
+        expect(container.querySelector('button')!.parentElement!.parentElement!.className).toBe(
+            'flex flex-wrap justify-end gap-2',
+        );
+    });
+
+    test('the secondary sits apart on the left and takes the first row below sm, Cancel and Save wrapping together', () => {
+        const { container } = renderRow();
+        const [secondary, cancel, save] = Array.from(container.querySelectorAll('button'));
+        expect(secondary.parentElement!.className).toBe('mr-auto max-sm:basis-full');
+        expect(cancel.parentElement).toBe(save.parentElement);
+        expect(cancel.nextElementSibling).toBe(save);
     });
 
     test('saveError renders the alert above the buttons; omitted by default', () => {

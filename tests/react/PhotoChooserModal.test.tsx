@@ -773,13 +773,16 @@ describe('selection', () => {
     test('the footer buttons read Clear apart on the left, then Cancel, then the primary rightmost', async () => {
         setup();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        const footer = screen.getByRole('button', { name: 'Clear' }).parentElement!;
+        const footer = screen.getByRole('button', { name: 'Clear' }).parentElement!.parentElement!;
         expect(Array.from(footer.querySelectorAll('button')).map((button) => button.textContent)).toEqual([
             'Clear',
             'Cancel',
             'Use these photos',
         ]);
-        expect(screen.getByRole('button', { name: 'Clear' }).className).toContain('mr-auto');
+        // Apart on the left; below sm it takes the first row so Cancel and Save wrap together onto the second.
+        expect(screen.getByRole('button', { name: 'Clear' }).parentElement!.className).toBe(
+            'mr-auto max-sm:basis-full',
+        );
     });
 
     test('Clear empties the selection and Cancel closes without saving', async () => {
