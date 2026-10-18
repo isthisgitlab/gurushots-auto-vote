@@ -416,17 +416,23 @@ export function challengeSettingHints({
 }
 
 /**
- * Renders a `hintsFor(key)` result under a setting.
+ * Renders a `hintsFor(key)` result under a setting. The list is one persistent polite live region, rendered even
+ * when it holds no hint: a hint that appears later is added to a region the screen reader already watches, which
+ * announces it reliably, where a region mounted together with its text is often skipped. `aria-atomic` is off so
+ * only the hint that arrived is read, not the whole list again.
  */
 export function SettingHintList({ hints }: { hints: SettingHint[] }) {
-    return hints.map((hint) => (
-        <ToneNote
-            key={hint.text}
-            tone={hint.tone}
-            role="status"
-            className={`text-xs mt-1 ${hint.strong ? 'font-medium' : ''}`}
-        >
-            {hint.text}
-        </ToneNote>
-    ));
+    return (
+        <div role="status" aria-atomic="false">
+            {hints.map((hint) => (
+                <ToneNote
+                    key={hint.text}
+                    tone={hint.tone}
+                    className={`text-xs mt-1 ${hint.strong ? 'font-medium' : ''}`}
+                >
+                    {hint.text}
+                </ToneNote>
+            ))}
+        </div>
+    );
 }

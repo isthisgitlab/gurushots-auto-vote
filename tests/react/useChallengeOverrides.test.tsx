@@ -470,6 +470,17 @@ describe('isDirty', () => {
         expect(result.current.isDirty()).toBe(true);
     });
 
+    test('resetting an override and setting the same value back is not dirty, whatever the key order', async () => {
+        const { result } = await open({ exposure: 50, chosenPhotos: ['a'] });
+
+        act(() => result.current.clearOverride('exposure'));
+        expect(result.current.isDirty()).toBe(true);
+        act(() => result.current.changeOverride('exposure', 50));
+        // The key now comes last in the map.
+        expect(Object.keys(result.current.overrides)).toEqual(['chosenPhotos', 'exposure']);
+        expect(result.current.isDirty()).toBe(false);
+    });
+
     test('the profile suppression counts: applying a profile and Clear all', async () => {
         const matched = titleRuleInfo({ profile: { name: 'Quad', values: { exposure: 60 } } });
         const { result } = await open({ exposure: 50 }, matched);

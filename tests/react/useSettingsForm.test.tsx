@@ -47,9 +47,8 @@ describe('useSettingsForm — open lifecycle', () => {
         expect(props.refetchSettings).toHaveBeenCalledTimes(1);
         expect(props.refetchSchema).toHaveBeenCalledTimes(1);
         expect(result.current.formValues).toEqual({ exposure: 70, autoBoost: true });
-        expect(result.current.originalFormValues).toEqual({ exposure: 70, autoBoost: true });
         expect(result.current.uiValues.theme).toBe('dark');
-        expect(result.current.originalUiValues!.language).toBe('lv');
+        expect(result.current.uiValues.language).toBe('lv');
     });
 
     test('a closed form neither refetches nor hydrates', () => {
@@ -59,14 +58,13 @@ describe('useSettingsForm — open lifecycle', () => {
         expect(props.refetchSettings).not.toHaveBeenCalled();
         expect(result.current.formValues).toEqual({});
         expect(result.current.uiValues).toEqual(DEFAULT_UI_VALUES);
-        expect(result.current.originalUiValues).toBeNull();
     });
 
     test('waits for defaults and settings to arrive before hydrating', () => {
         const props = baseProps({ defaults: null, settings: null });
         const { result, rerender } = renderForm(props);
-        expect(result.current.originalFormValues).toBeNull();
-        expect(result.current.originalUiValues).toBeNull();
+        expect(result.current.formValues).toEqual({});
+        expect(result.current.uiValues).toEqual(DEFAULT_UI_VALUES);
 
         rerender({ ...props, defaults: { exposure: 5 }, settings: invalid({ app: { theme: 'dark' } }) });
         expect(result.current.formValues).toEqual({ exposure: 5 });
@@ -340,7 +338,6 @@ describe('useSettingsForm — every chosen-photos list removed while the modal i
 
         act(() => announceChosenPhotosCleared());
         expect(result.current.formValues).toEqual({ exposure: 70, chosenPhotos: [] });
-        expect(result.current.originalFormValues).toEqual({ exposure: 70, chosenPhotos: [] });
 
         await act(async () => {
             await result.current.commit();
@@ -358,7 +355,6 @@ describe('useSettingsForm — every chosen-photos list removed while the modal i
         const closed = renderForm(baseProps({ isOpen: false }));
         act(() => announceChosenPhotosCleared());
         expect(closed.result.current.formValues).toEqual({});
-        expect(closed.result.current.originalFormValues).toBeNull();
     });
 });
 

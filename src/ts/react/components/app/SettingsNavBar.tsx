@@ -41,6 +41,13 @@ export function SettingsNavBar() {
                 spellcheck={false}
                 value={nav.query}
                 onChange={(e) => nav.setQuery(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                    // Escape clears a filter that has text; the modal closes only when there is nothing to clear.
+                    if (e.key === 'Escape' && nav.query !== '') {
+                        e.stopPropagation();
+                        nav.setQuery('');
+                    }
+                }}
             />
         </div>
     );

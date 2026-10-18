@@ -6,6 +6,9 @@ import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 
 const ROW_ICON_CLASS = 'w-4 h-4 mr-1';
 
+// The save-failed alert's id: a setting group that the failed Save refused points its aria-describedby at it.
+export const SAVE_ERROR_ID = 'settings-save-error';
+
 /**
  * Shared secondary / Cancel / Save action row used by the settings modals
  * (SettingsModal and ChallengeSettingsModal), rendered in a StickyModalFooter:
@@ -40,7 +43,7 @@ export function ModalActionRow({
     return (
         <StickyModalFooter>
             {saveError && (
-                <div className="alert alert-error py-2 text-sm" role="alert">
+                <div id={SAVE_ERROR_ID} className="alert alert-error py-2 text-sm" role="alert">
                     <span>{t('app.settingsSaveError')}</span>
                 </div>
             )}

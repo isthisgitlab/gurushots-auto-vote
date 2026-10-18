@@ -277,7 +277,7 @@ export function ChallengeProfilesBar({
             </div>
 
             {/* A profile applies wherever it is used, not only to this challenge. */}
-            {overrides.chosenPhotosOnly === true && <SettingHintList hints={[chosenPhotosOnlyReachHint(t)]} />}
+            <SettingHintList hints={overrides.chosenPhotosOnly === true ? [chosenPhotosOnlyReachHint(t)] : []} />
 
             {/* Single polite live region: confirm-arm prompts, errors and the
                 post-apply reminder are announced without stealing focus. */}

@@ -248,8 +248,6 @@ export function useSettingsForm({
         formValues,
         uiValues,
         saving,
-        originalUiValues,
-        originalFormValues,
         handleFormChange,
         handleUiChange,
         handleResetGlobal,

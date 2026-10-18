@@ -121,6 +121,44 @@ describe('SettingInput — a refused value marks the control invalid', () => {
         },
     );
 
+    test.each([
+        ['time', 'input[type="number"]', 2],
+        ['schedule', 'input[type="number"]', 6],
+        ['timeOfDayList', 'input[type="time"]', 1],
+        ['timeList', 'input[type="number"]', 2],
+    ])(
+        'a refused %s setting marks every input and has its group name the save-failed alert',
+        (type, selector, count) => {
+            const value = type === 'timeOfDayList' ? ['09:00'] : type === 'timeList' ? [600] : [];
+            const config = { type, label: 'app.thing' };
+            const { unmount } = renderInput(config, value);
+            expect(document.querySelectorAll(selector)).toHaveLength(count);
+            document
+                .querySelectorAll(selector)
+                .forEach((input) => expect(input.hasAttribute('aria-invalid')).toBe(false));
+            expect(document.querySelector('[role="group"]')!.hasAttribute('aria-describedby')).toBe(false);
+            unmount();
+
+            renderInput(config, value, { rejected: true });
+            document
+                .querySelectorAll(selector)
+                .forEach((input) => expect(input.getAttribute('aria-invalid')).toBe('true'));
+            const group = document.querySelector('[role="group"]')!;
+            expect(group.getAttribute('aria-describedby')).toBe('settings-save-error');
+            expect(group.hasAttribute('aria-invalid')).toBe(false);
+        },
+    );
+
+    test('a refused photos setting has the button that takes focus name the alert, not its group as well', () => {
+        const { unmount } = renderInput({ type: 'photos', label: 'app.thing' }, []);
+        expect(document.getElementById('setting-k')!.hasAttribute('aria-describedby')).toBe(false);
+        unmount();
+
+        renderInput({ type: 'photos', label: 'app.thing' }, [], { rejected: true });
+        expect(document.getElementById('setting-k')!.getAttribute('aria-describedby')).toBe('settings-save-error');
+        expect(document.querySelector('[role="group"]')!.hasAttribute('aria-describedby')).toBe(false);
+    });
+
     test('a photos setting keeps the id on its own button, not on its group', () => {
         renderInput({ type: 'photos', label: 'app.thing' }, []);
         expect(document.getElementById('setting-k')!.tagName).toBe('BUTTON');

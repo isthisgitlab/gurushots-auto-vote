@@ -251,15 +251,13 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     useEffect(() => {
         if (!focusIds) return;
         setFocusIds(null);
-        for (const id of focusIds) {
-            const target = document.getElementById(id);
-            if (target) {
-                target.focus();
-                // The section opened for this focus may stop skipping its open animation now that layout is done.
-                settleNav();
-                return;
-            }
-        }
+        // The first target that exists takes focus; none may exist, and the open animation still has to come back.
+        focusIds
+            .map((id) => document.getElementById(id))
+            .find((target) => target !== null)
+            ?.focus();
+        // The section opened for this focus may stop skipping its open animation now that layout is done.
+        settleNav();
     }, [focusIds, settleNav]);
 
     const handleCancel = useCallback(() => {

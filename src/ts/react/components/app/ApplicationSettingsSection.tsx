@@ -102,10 +102,19 @@ function UiSettingCell({
 }
 
 /**
- * One integer input of a multi-value UI setting. It keeps the typed text as a draft, so an emptied or
- * half-typed field is not snapped to a fallback mid-edit: a draft inside the range is committed as it is typed,
- * one outside it is not, and on blur the last valid value comes back with the range message. A field with
- * `atLeastKey` is clamped up to that sibling's value on blur, so a range can never invert.
+ * Whether a draft reads as the form's value. An emptied field is held as NaN (see UiNumberInput), which equals nothing.
+ */
+const draftReads = (draft: string, committed: number): boolean => {
+    const parsed = parseNumberInput(draft);
+    return parsed === '' ? Number.isNaN(committed) : parsed === committed;
+};
+
+/**
+ * One integer input of a multi-value UI setting. It keeps the typed text as a draft, so an emptied or half-typed
+ * field is not snapped to a fallback mid-edit. What is typed goes to the form as it is, an emptied field as NaN:
+ * Save refuses a value outside the range (or no number), so the field is marked, says its range and takes focus,
+ * rather than the last in-range value typed on the way being saved. A field with `atLeastKey` is clamped up to that
+ * sibling's value on blur, so a range can never invert.
  */
 function UiNumberInput({
     field: { key, labelKey, widthClass, min, max, step, atLeastKey },
@@ -121,8 +130,6 @@ function UiNumberInput({
     const { t } = useTranslation();
     const committed = uiValues[key];
     const [draft, setDraft] = useState(String(committed));
-    // Set when a blur put the last valid value back; the range message stays until the next edit.
-    const [reverted, setReverted] = useState(false);
     const range = { min: Number(min), max: Number(max) };
     const parsed = parseNumberInput(draft);
     const outOfRange = parsed === '' || parsed < range.min || parsed > range.max;
@@ -131,8 +138,7 @@ function UiNumberInput({
 
     // The value changed from outside (a reset, Reset all, a clamp): the draft follows, unless it already reads as it.
     useEffect(() => {
-        setDraft((typed) => (parseNumberInput(typed) === committed ? typed : String(committed)));
-        setReverted(false);
+        setDraft((typed) => (draftReads(typed, committed) ? typed : String(committed)));
     }, [committed]);
 
     return (
@@ -141,31 +147,29 @@ function UiNumberInput({
             <input
                 id={id}
                 type="number"
-                className={`input input-sm ${widthClass} ${outOfRange || reverted ? 'input-error' : ''}`}
+                className={`input input-sm ${widthClass} ${outOfRange ? 'input-error' : ''}`}
                 min={min}
                 max={max}
                 step={step}
                 aria-label={t(labelKey)}
-                aria-invalid={outOfRange || reverted || rejected || undefined}
-                aria-describedby={reverted ? errorId : undefined}
+                aria-invalid={outOfRange || rejected || undefined}
+                aria-describedby={outOfRange ? errorId : undefined}
                 value={draft}
                 onChange={(e) => {
                     const raw = e.currentTarget.value;
                     const next = parseNumberInput(raw);
                     setDraft(raw);
-                    setReverted(false);
-                    if (next !== '' && next >= range.min && next <= range.max) handleUiChange(key, next);
+                    handleUiChange(key, next === '' ? Number.NaN : next);
                 }}
                 onBlur={() => {
-                    if (outOfRange) {
-                        setDraft(String(committed));
-                        setReverted(true);
-                    } else if (atLeastKey && parsed < uiValues[atLeastKey]) {
-                        handleUiChange(key, uiValues[atLeastKey]);
+                    // A floor that is itself out of range (typed, not yet refused) is not a value to clamp up to.
+                    const floor = atLeastKey ? uiValues[atLeastKey] : null;
+                    if (!outOfRange && floor !== null && parsed < floor && floor <= range.max) {
+                        handleUiChange(key, floor);
                     }
                 }}
             />
-            {reverted && (
+            {outOfRange && (
                 <ToneNote tone="error" as="span" id={errorId} className="basis-full text-xs">
                     {numberRangeMessage(range, t)}
                 </ToneNote>
@@ -272,6 +276,8 @@ function CustomTimezoneInput({ timezoneInput }: { timezoneInput: TimezoneInputSt
                         e.preventDefault();
                         timezoneInput.add();
                     } else if (e.key === 'Escape') {
+                        // Closing the field is this Escape's whole job: the modal stays open.
+                        e.stopPropagation();
                         timezoneInput.close();
                     }
                 }}

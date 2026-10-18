@@ -275,8 +275,8 @@ describe('TitleTagRulesEditor', () => {
                 );
                 const hint = screen.getByText('app.manualPhotosOnlyRuleHint');
                 const select = screen.getByLabelText('app.manualPhotosOnly');
-                // The hint shares the select's own cell, after it: not under Chosen Photos at the foot of the editor.
-                expect(hint.parentElement).toBe(select.parentElement);
+                // The hint (in its live region) shares the select's own cell, after it: not under Chosen Photos at the foot of the editor.
+                expect(hint.closest('[role="status"]')!.parentElement).toBe(select.parentElement);
                 expect(select.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
                 expect(screen.getByRole('group', { name: 'app.chosenPhotos' }).contains(hint)).toBe(false);
                 // A rule has no single challenge: the challenge settings modal's alert is not used.

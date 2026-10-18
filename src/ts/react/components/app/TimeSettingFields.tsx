@@ -3,6 +3,7 @@ import { ToneNote } from '@/components/ui/ToneNote';
 import { useListDraft, LIST_FINGERPRINT_SEP } from '@/hooks/useListDraft';
 import { secondsToHoursMinutes, hoursMinutesToSeconds } from '@/utils/timeFieldUnits';
 import { MAX_SCHEDULED_FILL_ENTRIES } from '../../../settings/limits';
+import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 import { SettingResetButton } from './SettingResetButton';
 
 import type { ComponentChildren } from 'preact';
@@ -20,6 +21,8 @@ interface RowRenderContext<R> {
     /** The setting's translated label; row inputs are labelled "<label> <n>". */
     label: string;
     hintId: string;
+    /** The last Save refused this setting: every input of the list is marked invalid. */
+    rejected: boolean | undefined;
     setRow: (next: R) => void;
     disabled: boolean | undefined;
     t: Translate;
@@ -72,6 +75,7 @@ function HoursMinutesInputs({
     widthClass,
     hoursMax,
     invalid,
+    rejected,
     describedBy,
     disabled,
 }: {
@@ -81,6 +85,7 @@ function HoursMinutesInputs({
     widthClass: string;
     hoursMax?: number;
     invalid?: boolean;
+    rejected?: boolean;
     describedBy?: string;
     disabled?: boolean;
 }) {
@@ -95,6 +100,7 @@ function HoursMinutesInputs({
                 min="0"
                 max={hoursMax}
                 aria-label={`${labelPrefix} ${t('app.hours')}`}
+                aria-invalid={invalid || rejected || undefined}
                 aria-describedby={describedBy}
                 value={hours}
                 onChange={(e) => onChange(hoursMinutesToSeconds(parseInt(e.currentTarget.value, 10), minutes))}
@@ -107,6 +113,7 @@ function HoursMinutesInputs({
                 min="0"
                 max="59"
                 aria-label={`${labelPrefix} ${t('app.minutes')}`}
+                aria-invalid={invalid || rejected || undefined}
                 aria-describedby={describedBy}
                 value={minutes}
                 onChange={(e) => onChange(hoursMinutesToSeconds(hours, parseInt(e.currentTarget.value, 10)))}
@@ -120,15 +127,23 @@ function HoursMinutesInputs({
 /**
  * Single duration setting (`type: 'time'`): hours + minutes, stored as seconds.
  */
-export function TimeField({ id, settingKey, config, value, onChange, onReset, disabled }: SettingFieldProps) {
+export function TimeField({ id, settingKey, config, value, onChange, onReset, disabled, rejected }: SettingFieldProps) {
     const { t } = useTranslation();
     return (
-        <div id={id} tabIndex={-1} className="flex items-center gap-2" role="group" aria-labelledby={`${id}-label`}>
+        <div
+            id={id}
+            tabIndex={-1}
+            className="flex items-center gap-2"
+            role="group"
+            aria-labelledby={`${id}-label`}
+            aria-describedby={rejected ? SAVE_ERROR_ID : undefined}
+        >
             <HoursMinutesInputs
                 seconds={typeof value === 'number' ? value : 0}
                 onChange={(seconds) => onChange(settingKey, seconds)}
                 labelPrefix={t(config.label)}
                 widthClass="w-20"
+                rejected={rejected}
                 disabled={disabled}
             />
             <SettingResetButton settingKey={settingKey} labelKey={config.label} onReset={onReset} />
@@ -162,7 +177,7 @@ const isDominated = (activeRows: { count: number; seconds: number }[], count: nu
  * migration removes such rows anyway, through sanitizeFillSchedule in
  * settings/schema/autoSubmit.ts).
  */
-export function ScheduleField({ settingKey, config, value, onChange, onReset, disabled }: SettingFieldProps) {
+export function ScheduleField({ settingKey, config, value, onChange, onReset, disabled, rejected }: SettingFieldProps) {
     const { t } = useTranslation();
     // The field holds this key's value, a schedule.
     const rows = (Array.isArray(value) ? value : []) as FillSchedule;
@@ -195,6 +210,7 @@ export function ScheduleField({ settingKey, config, value, onChange, onReset, di
                             widthClass="w-16"
                             hoursMax={SCHEDULE_MAX_HOURS}
                             invalid={outOfRange}
+                            rejected={rejected}
                             describedBy={hintId}
                             disabled={disabled}
                         />
@@ -312,6 +328,7 @@ function RowListField<R>({
     onChange,
     onReset,
     disabled,
+    rejected,
 }: SettingFieldProps & { kind: RowKind<R> }) {
     const { t } = useTranslation();
     const label = t(config.label);
@@ -332,7 +349,17 @@ function RowListField<R>({
             {rows.map((row, index) => {
                 const hintId = `${settingKey}-row-${index}-hint`;
                 const setRow = (next: R) => update(rows.map((r, j) => (j === index ? next : r)));
-                const { controls, hint } = kind.renderRow({ row, index, rows, label, hintId, setRow, disabled, t });
+                const { controls, hint } = kind.renderRow({
+                    row,
+                    index,
+                    rows,
+                    label,
+                    hintId,
+                    rejected,
+                    setRow,
+                    disabled,
+                    t,
+                });
                 return (
                     <div key={index} className="flex items-center gap-2 flex-wrap">
                         {controls}
@@ -377,7 +404,7 @@ const TIME_OF_DAY_ROWS: RowKind<string> = {
     blankRow: '',
     addLabelKey: 'app.scheduledFillAddTime',
     emptyLabelKey: 'app.scheduledFillTimeOff',
-    renderRow: ({ row, index, rows, label, hintId, setRow, disabled, t }) => {
+    renderRow: ({ row, index, rows, label, hintId, rejected, setRow, disabled, t }) => {
         const duplicate = row !== '' && rows.indexOf(row) !== index;
         return {
             controls: (
@@ -385,6 +412,7 @@ const TIME_OF_DAY_ROWS: RowKind<string> = {
                     type="time"
                     className={`input input-sm w-32 ${duplicate ? 'input-error' : ''}`}
                     aria-label={`${label} ${index + 1}`}
+                    aria-invalid={duplicate || rejected || undefined}
                     aria-describedby={hintId}
                     value={row}
                     onChange={(e) => setRow(e.currentTarget.value)}
@@ -412,7 +440,7 @@ const BEFORE_END_ROWS: RowKind<number> = {
     blankRow: 0,
     addLabelKey: 'app.scheduledFillAddBeforeEnd',
     emptyLabelKey: 'app.scheduledFillBeforeEndOff',
-    renderRow: ({ row, index, rows, label, hintId, setRow, disabled, t }) => {
+    renderRow: ({ row, index, rows, label, hintId, rejected, setRow, disabled, t }) => {
         const seconds = Number.isFinite(row) ? row : 0;
         const duplicate = seconds > 0 && rows.indexOf(row) !== index;
         const outOfRange = secondsOutOfRange(seconds);
@@ -425,6 +453,7 @@ const BEFORE_END_ROWS: RowKind<number> = {
                     widthClass="w-16"
                     hoursMax={SCHEDULE_MAX_HOURS}
                     invalid={duplicate || outOfRange}
+                    rejected={rejected}
                     describedBy={hintId}
                     disabled={disabled}
                 />

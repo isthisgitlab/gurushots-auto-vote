@@ -6,7 +6,7 @@
  */
 
 import { render, fireEvent } from './helpers/test-utils';
-import { ModalActionRow } from '@/components/ui/ModalActionRow';
+import { ModalActionRow, SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 
 const renderRow = (over = {}) => {
     const props = {
@@ -80,6 +80,7 @@ describe('ModalActionRow', () => {
         const { container } = renderRow({ saveError: true });
         const alert = container.querySelector('[role="alert"]')!;
         expect(alert.textContent).toBe('app.settingsSaveError');
+        expect(alert.id).toBe(SAVE_ERROR_ID);
         expect(alert.compareDocumentPosition(container.querySelector('button')!)).toBe(
             Node.DOCUMENT_POSITION_FOLLOWING,
         );

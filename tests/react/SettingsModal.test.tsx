@@ -196,8 +196,9 @@ describe('SettingsModal — timezone "+" inline-add', () => {
         expect(mockFormState.handleUiChange).toHaveBeenCalledWith('timezone', 'America/Los_Angeles');
     });
 
-    test('Escape key closes the input without calling handleUiChange', () => {
-        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+    test('Escape key closes the input without calling handleUiChange, and the modal stays open', () => {
+        const onClose = jest.fn();
+        render(<SettingsModal isOpen={true} onClose={onClose} />);
         fireEvent.click(findTimezoneAddButton());
         const input = document.querySelector('input[type="text"]')!;
         fireEvent.change(input, { target: { value: 'Asia/Tokyo' } });
@@ -205,6 +206,11 @@ describe('SettingsModal — timezone "+" inline-add', () => {
         // Input should be hidden after Escape.
         expect(document.querySelector('input[type="text"]')).toBeNull();
         expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
+        // The Escape was the field's: it did not reach the modal's own listener.
+        expect(onClose).not.toHaveBeenCalled();
+        // The next one, with the field gone, closes the modal.
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+        expect(onClose).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -751,37 +757,34 @@ describe('SettingsModal — application settings controls', () => {
         expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('checkFrequencyMax', 12);
     });
 
-    test('an emptied or out-of-range check-frequency draft is kept as typed, not committed', () => {
+    test('an emptied or out-of-range draft is kept as typed and handed to the form as it is, flagged with its range', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         const minInput = document.querySelector<HTMLInputElement>('input[type="number"][max="60"]')!;
         fireEvent.change(minInput, { target: { value: '' } });
         expect(minInput.value).toBe('');
+        // An emptied field is no number: Save refuses it, it does not write the value from before.
+        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('checkFrequencyMin', Number.NaN);
         fireEvent.change(minInput, { target: { value: '61' } });
         expect(minInput.value).toBe('61');
-        expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
-        // Flagged while it is out of range, without the message yet.
-        expect(minInput.getAttribute('aria-invalid')).toBe('true');
-        expect(minInput.hasAttribute('aria-describedby')).toBe(false);
-    });
-
-    test('blurring an invalid draft puts the last valid value back and explains the range', () => {
-        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-        const minInput = document.querySelector<HTMLInputElement>('input[type="number"][max="60"]')!;
-        fireEvent.change(minInput, { target: { value: '' } });
-        // The blur event is not wrapped in act by the test helper, which the state update it causes needs.
-        act(() => {
-            fireEvent.blur(minInput);
-        });
-        expect(minInput.value).toBe('5');
-        expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
+        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('checkFrequencyMin', 61);
         const message = screen.getByText('app.validationOutOfRange');
         expect(minInput.getAttribute('aria-invalid')).toBe('true');
         expect(minInput.getAttribute('aria-describedby')).toBe(message.id);
         expect(minInput.className).toMatch(/input-error/);
-        // The next edit clears it.
+    });
+
+    test('blurring an invalid draft keeps it and its range message; the next valid edit clears them', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        const minInput = document.querySelector<HTMLInputElement>('input[type="number"][max="60"]')!;
+        fireEvent.change(minInput, { target: { value: '' } });
+        fireEvent.blur(minInput);
+        expect(minInput.value).toBe('');
+        expect(screen.getByText('app.validationOutOfRange')).toBeTruthy();
+        expect(minInput.getAttribute('aria-invalid')).toBe('true');
         fireEvent.change(minInput, { target: { value: '8' } });
         expect(screen.queryByText('app.validationOutOfRange')).toBeNull();
         expect(minInput.hasAttribute('aria-invalid')).toBe(false);
+        expect(minInput.hasAttribute('aria-describedby')).toBe(false);
     });
 
     test('a draft follows the value when it is changed from outside (a reset)', () => {
@@ -791,6 +794,18 @@ describe('SettingsModal — application settings controls', () => {
         mockFormState.uiValues.checkFrequencyMin = 2;
         rerender(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         expect(minInput.value).toBe('2');
+    });
+
+    test('an emptied field holds NaN, which the draft reads as empty until the value changes from outside', () => {
+        const { rerender } = render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        const minInput = document.querySelector<HTMLInputElement>('input[type="number"][max="60"]')!;
+        fireEvent.change(minInput, { target: { value: '' } });
+        mockFormState.uiValues.checkFrequencyMin = Number.NaN;
+        rerender(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(minInput.value).toBe('');
+        mockFormState.uiValues.checkFrequencyMin = 3;
+        rerender(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(minInput.value).toBe('3');
     });
 
     test('a typed draft that already reads as the committed value is left as typed', () => {
@@ -816,6 +831,14 @@ describe('SettingsModal — application settings controls', () => {
         expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
     });
 
+    test('a min that is itself out of range is not a floor to clamp the max up to', () => {
+        mockFormState.uiValues.checkFrequencyMin = 99;
+        mockFormState.uiValues.checkFrequencyMax = 10;
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        fireEvent.blur(document.querySelectorAll('input[type="number"][max="60"]')[1]);
+        expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
+    });
+
     test('a max typed below the min is committed, then clamped up on blur', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         const maxInput = document.querySelectorAll('input[type="number"][max="60"]')[1]!;
@@ -825,20 +848,18 @@ describe('SettingsModal — application settings controls', () => {
         expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('checkFrequencyMax', 5);
     });
 
-    test('clearing the reliability inputs keeps the draft, and blur restores the last valid value', () => {
+    test('clearing the reliability inputs keeps the draft through blur and hands the form NaN for each', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         const retries = screen.getByLabelText<HTMLInputElement>('app.apiMaxRetries');
         const delay = screen.getByLabelText<HTMLInputElement>('app.apiRetryBaseDelayMs');
         fireEvent.change(retries, { target: { value: '' } });
         fireEvent.change(delay, { target: { value: '' } });
-        expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
-        act(() => {
-            fireEvent.blur(retries);
-            fireEvent.blur(delay);
-        });
-        expect(retries.value).toBe('3');
-        expect(delay.value).toBe('1000');
-        expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
+        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('apiMaxRetries', Number.NaN);
+        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('apiRetryBaseDelayMs', Number.NaN);
+        fireEvent.blur(retries);
+        fireEvent.blur(delay);
+        expect(retries.value).toBe('');
+        expect(delay.value).toBe('');
     });
 
     test('each UI number input has a ui-<key> id for the focus after a refused Save', () => {

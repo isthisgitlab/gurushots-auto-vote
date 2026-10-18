@@ -63,6 +63,14 @@ describe('isDirty', () => {
         expect(result.current.isDirty()).toBe(false);
     });
 
+    test('the same rule with its keys in another order is not an edit', async () => {
+        const { result } = await loaded();
+        act(() => result.current.change([{ mustIncludeTags: ['x'], title: 'A' }]));
+        expect(result.current.isDirty()).toBe(false);
+        act(() => result.current.change([{ mustIncludeTags: ['y', 'x'], title: 'A' }]));
+        expect(result.current.isDirty()).toBe(true);
+    });
+
     test('a persist that landed moves the baseline; a rejected one does not', async () => {
         const { result } = await loaded();
         act(() => result.current.change([{ title: 'B' }]));

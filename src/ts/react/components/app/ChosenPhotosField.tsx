@@ -5,6 +5,7 @@ import { useImageLoads } from '@/hooks/useImageLoads';
 import { useChosenListAccount } from '@/api/useChosenPhotosOwner';
 import { buildPhotoUrl } from '@/utils/formatters';
 import { interp } from '@/utils/interp';
+import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 import { SettingResetButton } from './SettingResetButton';
 import { PhotoChooserModal } from './PhotoChooserModal';
 
@@ -63,6 +64,7 @@ export function ChosenPhotosControl({
     clearLabel,
     clearHint,
     disabled = false,
+    invalid = false,
     challengeId = null,
 }: {
     id?: string;
@@ -72,6 +74,8 @@ export function ChosenPhotosControl({
     clearLabel: string;
     clearHint?: string;
     disabled?: boolean;
+    /** The last Save refused this setting: the button that takes focus names the save-failed alert (a button cannot carry aria-invalid). */
+    invalid?: boolean;
     challengeId?: string | number | null;
 }) {
     const { t } = useTranslation();
@@ -102,6 +106,7 @@ export function ChosenPhotosControl({
                 type="button"
                 className="btn btn-outline btn-sm"
                 disabled={disabled}
+                aria-describedby={invalid ? SAVE_ERROR_ID : undefined}
                 onClick={() => setOpen(true)}
             >
                 {t('app.choosePhotos')}
@@ -143,7 +148,16 @@ export function ChosenPhotosControl({
  * in a challenge's settings it is offered as "Use none", with a hint that the
  * reset button brings the inherited list back.
  */
-export function PhotosField({ id, settingKey, config, value, onChange, onReset, disabled }: SettingFieldProps) {
+export function PhotosField({
+    id,
+    settingKey,
+    config,
+    value,
+    onChange,
+    onReset,
+    disabled,
+    rejected,
+}: SettingFieldProps) {
     const { t } = useTranslation();
     const challengeId = useSettingsChallengeId();
     return (
@@ -156,6 +170,7 @@ export function PhotosField({ id, settingKey, config, value, onChange, onReset, 
                 clearLabel={t(challengeId === null ? 'app.photosClear' : 'app.photosUseNone')}
                 clearHint={challengeId === null ? undefined : t('app.photosUseNoneHint')}
                 disabled={disabled}
+                invalid={rejected}
                 challengeId={challengeId}
             />
             <SettingResetButton settingKey={settingKey} labelKey={config.label} onReset={onReset} />

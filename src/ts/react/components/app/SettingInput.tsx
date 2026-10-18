@@ -1,5 +1,6 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
+import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 import { useListDraft, LIST_FINGERPRINT_SEP } from '@/hooks/useListDraft';
 import { SettingResetButton } from './SettingResetButton';
 import { TimeField, ScheduleField, TimeOfDayListField, TimeListField } from './TimeSettingFields';
@@ -387,10 +388,16 @@ export function SettingInput({
     );
     if (!GROUP_WRAPPED_TYPES.has(config.type)) return field;
     // Photos put `id` on their own button; a row list has no single control, so its group is the focus target
-    // (a rejected Save focuses `id`).
+    // (a rejected Save focuses `id`). A group cannot carry aria-invalid, so a refused row list points at the
+    // save-failed alert and its inputs are the ones marked; photos name it on the focused button instead.
     const focusable = config.type !== 'photos' ? { id, tabIndex: -1 } : {};
     return (
-        <div {...focusable} role="group" aria-labelledby={`${id}-label`}>
+        <div
+            {...focusable}
+            role="group"
+            aria-labelledby={`${id}-label`}
+            aria-describedby={rejected && config.type !== 'photos' ? SAVE_ERROR_ID : undefined}
+        >
             {field}
         </div>
     );

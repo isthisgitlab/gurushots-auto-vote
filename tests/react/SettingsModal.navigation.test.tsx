@@ -426,6 +426,140 @@ describe('SettingsModal — focus after a refused Save', () => {
     });
 });
 
+describe('SettingsModal — Escape belongs to the field that has something to undo', () => {
+    test('Escape in the filter clears its text and leaves the modal open; with no text it closes the modal', async () => {
+        await openSettings();
+        typeFilter('zzzz');
+        expect(filterInput().value).toBe('zzzz');
+
+        fireEvent.keyDown(filterInput(), { key: 'Escape' });
+        expect(filterInput().value).toBe('');
+        expect(onClose).not.toHaveBeenCalled();
+
+        fireEvent.keyDown(filterInput(), { key: 'Escape' });
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    test('other keys in the filter are left to the modal and the field', async () => {
+        await openSettings();
+        typeFilter('zzzz');
+        fireEvent.keyDown(filterInput(), { key: 'a' });
+        expect(filterInput().value).toBe('zzzz');
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test('Escape in the open custom-timezone field closes the field only', async () => {
+        await openSettings();
+        fireEvent.click(screen.getByRole('button', { name: 'app.addCustomTimezone' }));
+        const input = screen.getByRole<HTMLInputElement>('textbox', { name: 'app.addCustomTimezone' });
+
+        fireEvent.keyDown(input, { key: 'Escape' });
+        expect(screen.queryByRole('textbox', { name: 'app.addCustomTimezone' })).toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('SettingsModal — a refused Save marks what was refused', () => {
+    const save = () => fireEvent.click(screen.getByRole('button', { name: 'app.save' }));
+
+    test('an out-of-range UI number is refused on Save, not saved as the in-range value typed on the way', async () => {
+        // The handler's own bounds (settings/loadValidation.ts): a write outside them, or no number, is refused.
+        mockApi.setSetting.mockImplementation(
+            async (_key: string, value: unknown) => typeof value === 'number' && value >= 0 && value <= 10,
+        );
+        await openSettings();
+        const retries = screen.getByLabelText<HTMLInputElement>('app.apiMaxRetries');
+        fireEvent.change(retries, { target: { value: '1' } });
+        fireEvent.change(retries, { target: { value: '15' } });
+        expect(retries.value).toBe('15');
+        expect(screen.getByText('app.validationOutOfRange')).toBeTruthy();
+
+        save();
+        await screen.findByText('app.settingsSaveError');
+        expect(onClose).not.toHaveBeenCalled();
+        expect(mockApi.setSetting).toHaveBeenCalledWith('apiMaxRetries', 15);
+        expect(mockApi.setSetting).not.toHaveBeenCalledWith('apiMaxRetries', 1);
+        expect(retries.getAttribute('aria-invalid')).toBe('true');
+        expect(retries.getAttribute('aria-describedby')).toBe(screen.getByText('app.validationOutOfRange').id);
+        await waitFor(() => expect(document.activeElement).toBe(retries));
+        // The draft stays for the user to correct, and a corrected one saves.
+        expect(retries.value).toBe('15');
+        fireEvent.change(retries, { target: { value: '4' } });
+        save();
+        await waitFor(() => expect(onClose).toHaveBeenCalled());
+        expect(mockApi.setSetting).toHaveBeenLastCalledWith('apiMaxRetries', 4);
+    });
+
+    test('an emptied UI number is refused on Save too', async () => {
+        mockApi.setSetting.mockImplementation(async (_key: string, value: unknown) => Number.isFinite(value));
+        await openSettings();
+        const retries = screen.getByLabelText<HTMLInputElement>('app.apiMaxRetries');
+        fireEvent.change(retries, { target: { value: '' } });
+
+        save();
+        await screen.findByText('app.settingsSaveError');
+        expect(onClose).not.toHaveBeenCalled();
+        expect(mockApi.setSetting).toHaveBeenCalledWith('apiMaxRetries', Number.NaN);
+        expect(retries.getAttribute('aria-invalid')).toBe('true');
+        await waitFor(() => expect(document.activeElement).toBe(retries));
+    });
+
+    test('a refused Save with no focus target still brings the section animation back', async () => {
+        mockApi.setSetting.mockResolvedValue(false);
+        await openSettings();
+        fireEvent.click(toggleOf('app.applicationSettings'));
+        expect(isOpenSection('app.applicationSettings')).toBe(false);
+        const retries = screen.getByLabelText<HTMLInputElement>('app.apiMaxRetries');
+        fireEvent.change(retries, { target: { value: '5' } });
+        // The refused key's input is gone by the time focus is looked for.
+        retries.remove();
+
+        save();
+        await screen.findByText('app.settingsSaveError');
+        await waitFor(() => expect(isOpenSection('app.applicationSettings')).toBe(true));
+        await waitFor(() =>
+            expect(sectionOf('app.applicationSettings').classList.contains('transition-none')).toBe(false),
+        );
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test('a refused schedule marks its inputs invalid and its group points at the save-failed alert', async () => {
+        mockApi.getSettingsSchema.mockResolvedValue(
+            invalid({
+                schema: {
+                    ...SCHEMA,
+                    autoSubmitSchedule: { type: 'schedule', default: [], label: 'Schedule', group: 'gCore' },
+                },
+                defaults: { exposure: 70, retries: 3, badges: true, missionTurbo: false, autoSubmitSchedule: [] },
+                groups: [{ id: 'gCore', label: 'Core group', tier: 'core' }],
+                tiers: [{ id: 'core', label: 'Core band' }],
+            }),
+        );
+        mockApi.setGlobalDefault.mockResolvedValue(false);
+        await openSettings();
+        const hours = screen.getByLabelText<HTMLInputElement>('app.autoSubmitScheduleImage 2 app.hours');
+        expect(hours.hasAttribute('aria-invalid')).toBe(false);
+        fireEvent.change(hours, { target: { value: '2' } });
+
+        save();
+        const alert = await screen.findByText('app.settingsSaveError');
+        const group = document.getElementById('setting-autoSubmitSchedule')!;
+        await waitFor(() => expect(document.activeElement).toBe(group));
+        for (const count of [2, 3, 4]) {
+            for (const unit of ['app.hours', 'app.minutes']) {
+                const input = screen.getByLabelText(`app.autoSubmitScheduleImage ${count} ${unit}`);
+                expect(input.getAttribute('aria-invalid')).toBe('true');
+            }
+        }
+        // The group itself cannot carry aria-invalid: it names the alert instead.
+        expect(group.hasAttribute('aria-invalid')).toBe(false);
+        expect(group.getAttribute('aria-describedby')).toBe(alert.closest('[role="alert"]')!.id);
+    });
+});
+
 describe('the default navigation (outside the settings modal)', () => {
     test('shows everything open and unfiltered', () => {
         function Probe() {
