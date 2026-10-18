@@ -1,3 +1,5 @@
+import { matchesSettingFilter } from './matchesSettingFilter';
+
 import type { SerializableSchemaEntry } from '../../ipc/settings.handlers';
 
 /**
@@ -122,3 +124,26 @@ export function tierSchemaEntries(
     const orphans = rendered.filter((group) => !known.has(group.tier));
     return orphans.length ? [...banded, { id: null, label: null, groups: orphans }] : banded;
 }
+
+/**
+ * The texts a settings filter searches in one schema setting: its label and its description.
+ */
+export const schemaEntryTexts = (t: (key: string) => string, config: SerializableSchemaEntry): string[] => [
+    t(config.label),
+    t(config.description),
+];
+
+/**
+ * Whether a schema setting matches the settings filter `query`.
+ */
+export const entryMatchesFilter = (
+    t: (key: string) => string,
+    config: SerializableSchemaEntry,
+    query: string,
+): boolean => matchesSettingFilter(schemaEntryTexts(t, config), query);
+
+/**
+ * Whether any setting of a group matches the settings filter `query`.
+ */
+export const groupMatchesFilter = (t: (key: string) => string, group: SettingsSection, query: string): boolean =>
+    group.entries.some(([, config]) => entryMatchesFilter(t, config, query));

@@ -444,7 +444,9 @@ describe('SettingsModal — title-tag-rules save', () => {
         expect(window.api.setTitleRules).toHaveBeenCalledWith([rule]);
         expect(onClose).not.toHaveBeenCalled();
         // Focus moves to the section that failed.
-        await waitFor(() => expect(document.activeElement).toBe(screen.getByText('app.titleTagRules')));
+        await waitFor(() =>
+            expect(document.activeElement).toBe(screen.getByRole('heading', { level: 4, name: 'app.titleTagRules' })),
+        );
     });
 
     test("removing every list from a rule's chooser, then saving, does not write the lists back", async () => {
@@ -687,7 +689,7 @@ describe('SettingsModal — loading state', () => {
         mockSchemaState.schema = null;
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         expect(screen.getByRole('status').textContent).toBe('common.loading');
-        expect(screen.queryByText('app.applicationSettings')).toBeNull();
+        expect(screen.queryByRole('heading', { level: 4, name: 'app.applicationSettings' })).toBeNull();
     });
 
     test('keeps the form on screen during a background schema refetch', async () => {
@@ -697,7 +699,7 @@ describe('SettingsModal — loading state', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         await screen.findByText('app.noTitleTagRules');
         expect(screen.queryByLabelText('Loading')).toBeNull();
-        expect(screen.getByText('app.applicationSettings')).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 4, name: 'app.applicationSettings' })).toBeTruthy();
     });
 });
 
@@ -1081,7 +1083,11 @@ describe('SettingsModal — save outcomes', () => {
         await screen.findByText('app.settingsSaveError');
         expect(onClose).not.toHaveBeenCalled();
         // The language has no key to mark, so focus goes to its section's heading.
-        await waitFor(() => expect(document.activeElement).toBe(screen.getByText('app.applicationSettings')));
+        await waitFor(() =>
+            expect(document.activeElement).toBe(
+                screen.getByRole('heading', { level: 4, name: 'app.applicationSettings' }),
+            ),
+        );
     });
 
     test.each([

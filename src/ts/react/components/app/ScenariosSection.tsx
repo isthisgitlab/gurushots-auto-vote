@@ -7,6 +7,7 @@ import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
 import { ScenarioError, issuesOf } from './ScenarioError';
 import { ScenarioBuilder } from './scenarioBuilder/ScenarioBuilder';
+import { SettingsSectionPanel } from './SettingsSectionPanel';
 import { newScenario } from '../../../scenarios/builderModel';
 
 import type { WindowApi } from '../../../types/ipc';
@@ -370,8 +371,7 @@ export function ScenariosSection({
 
     const names = Object.keys(scenarios);
     return (
-        <div>
-            <h4 className="font-semibold text-base mb-1 border-b border-base-300 pb-2">{t('app.scenarios')}</h4>
+        <SettingsSectionPanel id="scenarios">
             <p className="text-xs text-base-content/70 mb-3">{t('app.scenariosDesc')}</p>
             {loading ? (
                 <InlineLoader text={t('common.loading')} />
@@ -460,6 +460,6 @@ export function ScenariosSection({
                     )}
                 </div>
             )}
-        </div>
+        </SettingsSectionPanel>
     );
 }

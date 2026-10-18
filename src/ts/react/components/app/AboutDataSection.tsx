@@ -7,6 +7,7 @@ import { interp } from '@/utils/interp';
 import { dateLocale } from '@/utils/formatters';
 import { LicensesModal } from './LicensesModal';
 import { DeleteLocalDataModal } from './DeleteLocalDataModal';
+import { SettingsSectionPanel } from './SettingsSectionPanel';
 
 /**
  * What the import of settings.json left unresolved, read-only: when it ran and the references that
@@ -57,8 +58,7 @@ export function AboutDataSection() {
     const [licensesOpen, setLicensesOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     return (
-        <div>
-            <h4 className="font-semibold text-base mb-3 border-b border-base-300 pb-2">{t('about.title')}</h4>
+        <SettingsSectionPanel id="about">
             <div className="flex flex-wrap items-center gap-3 mb-4">
                 <button type="button" className="btn btn-outline btn-sm" onClick={() => setLicensesOpen(true)}>
                     {t('about.licensesButton')}
@@ -80,6 +80,6 @@ export function AboutDataSection() {
             </div>
             <LicensesModal isOpen={licensesOpen} onClose={() => setLicensesOpen(false)} />
             <DeleteLocalDataModal isOpen={deleteOpen} onClose={() => setDeleteOpen(false)} />
-        </div>
+        </SettingsSectionPanel>
     );
 }

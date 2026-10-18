@@ -6,7 +6,15 @@ import { useSettingsForm } from '@/hooks/useSettingsForm';
 import { useTitleRules } from '@/hooks/useTitleRules';
 import { useCustomTimezoneInput } from '@/hooks/useCustomTimezoneInput';
 import { useAutovote } from '@/contexts/AutovoteContext';
-import { tierSchemaEntries, SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
+import { SettingsNavProvider, useSettingsNav, useSettingsNavState } from '@/contexts/SettingsNavContext';
+import {
+    tierSchemaEntries,
+    entryMatchesFilter,
+    groupMatchesFilter,
+    SETTINGS_GRID_CLASS,
+    SETTING_CELL_CLASS,
+} from '@/utils/groupSettings';
+import { matchesSettingFilter } from '@/utils/matchesSettingFilter';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { UnsavedChangesModal } from '@/components/ui/UnsavedChangesModal';
@@ -17,13 +25,16 @@ import { SettingsTierHeading } from '@/components/ui/SettingsTierHeading';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { SettingInput, SettingLabel } from './SettingInput';
 import { SettingHintList, globalSettingHints } from './SettingHints';
-import { ApplicationSettingsSection, APPLICATION_HEADING_ID } from './ApplicationSettingsSection';
+import { ApplicationSettingsSection, APPLICATION_HEADING_ID, applicationCellTexts } from './ApplicationSettingsSection';
+import { SettingsNavBar, SettingsNoMatch, SETTINGS_NAV_SCROLL_PADDING } from './SettingsNavBar';
+import { SettingsSectionPanel } from './SettingsSectionPanel';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { ScenariosSection } from './ScenariosSection';
 import { AboutDataSection } from './AboutDataSection';
 import * as ipc from '@/api/ipc';
 
 import type { SettingsBand, SettingsSection } from '@/utils/groupSettings';
+import type { SettingsSectionId } from '@/contexts/SettingsNavContext';
 import type { HintsFor, SettingChangeHandler, SettingResetHandler } from '../../../types/settingsEditor';
 import { errorMessage } from '../../../errorMessage';
 
@@ -67,13 +78,17 @@ function SchemaSettingsGroup({
     rejectedKeys,
 }: { group: SettingsSection; level?: 'h5' | 'h6' } & SchemaFormProps) {
     const { t } = useTranslation();
+    const { query } = useSettingsNav();
     const Heading = level;
     return (
-        <div className="mb-4">
+        <div className={`mb-4 ${groupMatchesFilter(t, group, query) ? '' : 'hidden'}`}>
             <Heading className="font-medium text-sm opacity-70 mb-2 mt-3">{t(group.label)}</Heading>
             <div className={SETTINGS_GRID_CLASS}>
                 {group.entries.map(([key, config]) => (
-                    <div key={key} className={SETTING_CELL_CLASS}>
+                    <div
+                        key={key}
+                        className={`${SETTING_CELL_CLASS} ${entryMatchesFilter(t, config, query) ? '' : 'hidden'}`}
+                    >
                         <SettingLabel inputId={`setting-${key}`} type={config.type}>
                             <span className="font-medium">{t(config.label)}</span>
                             {config.perChallenge && (
@@ -103,18 +118,21 @@ function SchemaSettingsGroup({
  */
 function ChallengeDefaultsSection({ bands, ...form }: { bands: SettingsBand[] } & SchemaFormProps) {
     const { t } = useTranslation();
+    const { query } = useSettingsNav();
     return (
-        <div>
-            <h4 className="font-semibold text-base mb-3 border-b border-base-300 pb-2">{t('app.challengeDefaults')}</h4>
+        <SettingsSectionPanel id="challengeDefaults">
             {bands.map((band) => (
-                <div key={band.id ?? '_'} className="mb-6">
+                <div
+                    key={band.id ?? '_'}
+                    className={`mb-6 ${band.groups.some((group) => groupMatchesFilter(t, group, query)) ? '' : 'hidden'}`}
+                >
                     <SettingsTierHeading id={band.id} label={band.label} level="h5" />
                     {band.groups.map((group) => (
                         <SchemaSettingsGroup key={group.id} group={group} {...form} />
                     ))}
                 </div>
             ))}
-        </div>
+        </SettingsSectionPanel>
     );
 }
 
@@ -124,14 +142,7 @@ function ChallengeDefaultsSection({ bands, ...form }: { bands: SettingsBand[] } 
 function TitleRulesSection({ titleRules }: { titleRules: ReturnType<typeof useTitleRules> }) {
     const { t } = useTranslation();
     return (
-        <div>
-            <h4
-                id={TITLE_RULES_HEADING_ID}
-                tabIndex={-1}
-                className="font-semibold text-base mb-1 border-b border-base-300 pb-2"
-            >
-                {t('app.titleTagRules')}
-            </h4>
+        <SettingsSectionPanel id="titleRules" headingId={TITLE_RULES_HEADING_ID}>
             <p className="text-xs text-base-content/70 mb-3">{t('app.titleTagRulesDesc')}</p>
             {titleRules.error && (
                 <div className="alert alert-error mb-3 py-2 text-sm" role="alert">
@@ -154,7 +165,7 @@ function TitleRulesSection({ titleRules }: { titleRules: ReturnType<typeof useTi
                     onChange={titleRules.change}
                 />
             )}
-        </div>
+        </SettingsSectionPanel>
     );
 }
 
@@ -190,6 +201,25 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         updateSetting,
     });
 
+    const bands = tierSchemaEntries(schema, groups, tiers);
+    const appGroups = bands.filter((band) => band.id === APP_TIER).flatMap((band) => band.groups);
+    const defaultsBands = bands.filter((band) => band.id !== APP_TIER);
+
+    // Which sections have a setting (or, for the sections without any, a heading) matching the filter.
+    const nav = useSettingsNavState((query) => ({
+        application:
+            matchesSettingFilter(applicationCellTexts(t), query) ||
+            appGroups.some((group) => groupMatchesFilter(t, group, query)),
+        challengeDefaults: defaultsBands.some((band) =>
+            band.groups.some((group) => groupMatchesFilter(t, group, query)),
+        ),
+        titleRules: matchesSettingFilter([t('app.titleTagRules')], query),
+        scenarios: matchesSettingFilter([t('app.scenarios')], query),
+        about: matchesSettingFilter([t('about.title')], query),
+    }));
+    const resetNav = nav.reset;
+    const settleNav = nav.settle;
+
     const timezoneInput = useCustomTimezoneInput({ isOpen, uiValues, handleUiChange });
     const titleRules = useTitleRules(isOpen);
     const persistTitleRules = titleRules.persist;
@@ -212,10 +242,11 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             setSaveError(false);
             setRejectedKeys([]);
             setScenarioDirty(false);
+            resetNav();
         } else {
             setAsking(null);
         }
-    }, [isOpen]);
+    }, [isOpen, resetNav]);
 
     useEffect(() => {
         if (!focusIds) return;
@@ -224,10 +255,12 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             const target = document.getElementById(id);
             if (target) {
                 target.focus();
+                // The section opened for this focus may stop skipping its open animation now that layout is done.
+                settleNav();
                 return;
             }
         }
-    }, [focusIds]);
+    }, [focusIds, settleNav]);
 
     const handleCancel = useCallback(() => {
         // Put the persisted theme back on screen if the user previewed another one in this open session.
@@ -263,7 +296,18 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         [uiValues],
     );
 
-    const runSave = useCallback(async () => {
+    // The section a refused key's input sits in: a UI key in Application, a schema key in the section of its group.
+    const sectionOfKey = (key: string): SettingsSectionId | null => {
+        if (key in uiValues) return 'application';
+        const inApp = appGroups.some((group) => group.entries.some(([entryKey]) => entryKey === key));
+        if (inApp) return 'application';
+        const inDefaults = defaultsBands.some((band) =>
+            band.groups.some((group) => group.entries.some(([entryKey]) => entryKey === key)),
+        );
+        return inDefaults ? 'challengeDefaults' : null;
+    };
+
+    const runSave = async () => {
         try {
             // commit() returns the schema keys whose write was rejected by
             // validation (e.g. a duplicate-count auto-fill schedule). Surface
@@ -274,6 +318,9 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             setRejectedKeys(rejected);
             if (rejected.length > 0) {
                 setSaveError(true);
+                // The first refused key that has a section: the filter is cleared and the section opened for its focus.
+                const section = rejected.map(sectionOfKey).find((id) => id !== null);
+                if (section) nav.reveal(section);
                 setFocusIds(rejected.map(focusIdOf));
                 return;
             }
@@ -281,6 +328,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             // Title rules are rejected as a whole (e.g. a tag over the length
             // cap); the hook surfaces that and the modal stays open.
             if (!(await persistTitleRules())) {
+                nav.reveal('titleRules');
                 setFocusIds([TITLE_RULES_HEADING_ID]);
                 return;
             }
@@ -288,6 +336,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             // save-error alert instead of closing on a change that didn't land.
             if (uiValues.language !== language && !(await setLanguage(uiValues.language))) {
                 setSaveError(true);
+                nav.reveal('application');
                 setFocusIds([APPLICATION_HEADING_ID]);
                 return;
             }
@@ -301,7 +350,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         } catch (err) {
             await ipc.logRendererError(`Error saving settings: ${errorMessage(err) || err}`);
         }
-    }, [commit, focusIdOf, persistTitleRules, uiValues.language, language, setLanguage, rearmSchedule, onClose]);
+    };
 
     const handleSave = () => (droppedWork.length > 0 ? setAsking('drop') : runSave());
 
@@ -309,9 +358,6 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
 
     const hintsFor = globalSettingHints({ formValues, schema, timezone: uiValues.timezone, t });
     const schemaForm = { formValues, handleFormChange, handleResetGlobal, hintsFor, rejectedKeys };
-    const bands = tierSchemaEntries(schema, groups, tiers);
-    const appGroups = bands.filter((band) => band.id === APP_TIER).flatMap((band) => band.groups);
-
     return (
         <>
             <Modal
@@ -319,7 +365,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 onClose={dismiss}
                 title={t('app.globalSettings')}
                 size="2xl"
-                className={STICKY_FOOTER_SCROLL_PADDING}
+                className={`${STICKY_FOOTER_SCROLL_PADDING} ${SETTINGS_NAV_SCROLL_PADDING}`}
             >
                 {/* Spinner only for the first load: every settings write broadcasts a
                 change that refetches the schema, and swapping the form out for the
@@ -327,34 +373,35 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 {schemaLoading && !schema ? (
                     <InlineLoader text={t('common.loading')} />
                 ) : (
-                    <div className="space-y-6">
-                        <ApplicationSettingsSection
-                            uiValues={uiValues}
-                            handleUiChange={handleUiChange}
-                            handleResetUi={handleResetUi}
-                            rejectedKeys={rejectedKeys}
-                            timezoneInput={timezoneInput}
-                        >
-                            {appGroups.map((group) => (
-                                <SchemaSettingsGroup key={group.id} group={group} level="h5" {...schemaForm} />
-                            ))}
-                        </ApplicationSettingsSection>
-                        <ChallengeDefaultsSection
-                            bands={bands.filter((band) => band.id !== APP_TIER)}
-                            {...schemaForm}
-                        />
-                        <TitleRulesSection titleRules={titleRules} />
-                        <ScenariosSection isOpen={isOpen} onDirtyChange={setScenarioDirty} />
-                        <AboutDataSection />
-                        <ModalActionRow
-                            onSave={handleSave}
-                            saving={saving}
-                            onSecondary={handleResetAll}
-                            secondaryLabel={t('app.resetAll')}
-                            onCancel={dismiss}
-                            saveError={saveError}
-                        />
-                    </div>
+                    <SettingsNavProvider value={nav}>
+                        <SettingsNavBar />
+                        <div className="space-y-6">
+                            {!Object.values(nav.shown).some(Boolean) && <SettingsNoMatch />}
+                            <ApplicationSettingsSection
+                                uiValues={uiValues}
+                                handleUiChange={handleUiChange}
+                                handleResetUi={handleResetUi}
+                                rejectedKeys={rejectedKeys}
+                                timezoneInput={timezoneInput}
+                            >
+                                {appGroups.map((group) => (
+                                    <SchemaSettingsGroup key={group.id} group={group} level="h5" {...schemaForm} />
+                                ))}
+                            </ApplicationSettingsSection>
+                            <ChallengeDefaultsSection bands={defaultsBands} {...schemaForm} />
+                            <TitleRulesSection titleRules={titleRules} />
+                            <ScenariosSection isOpen={isOpen} onDirtyChange={setScenarioDirty} />
+                            <AboutDataSection />
+                            <ModalActionRow
+                                onSave={handleSave}
+                                saving={saving}
+                                onSecondary={handleResetAll}
+                                secondaryLabel={t('app.resetAll')}
+                                onCancel={dismiss}
+                                saveError={saveError}
+                            />
+                        </div>
+                    </SettingsNavProvider>
                 )}
             </Modal>
             <UnsavedChangesModal

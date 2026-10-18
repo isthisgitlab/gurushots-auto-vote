@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { useSettingsNav } from '@/contexts/SettingsNavContext';
+import { matchesSettingFilter } from '@/utils/matchesSettingFilter';
 import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { ResetButton } from '@/components/ui/ResetButton';
 import { ThemeSelect } from '@/components/ui/ThemeSelect';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 import { SettingLabel, numberRangeMessage, parseNumberInput } from './SettingInput';
+import { SettingsSectionPanel } from './SettingsSectionPanel';
 
 import type { ComponentChildren } from 'preact';
 import type { useCustomTimezoneInput } from '@/hooks/useCustomTimezoneInput';
@@ -27,6 +30,24 @@ export interface UiFormProps {
 
 // The section heading: where focus goes when a Save fails on the language, which has no key of its own to mark.
 export const APPLICATION_HEADING_ID = 'settings-application-heading';
+
+/**
+ * The label and description keys of the section's hand-written cells: the cells render them, and the settings
+ * filter searches the same texts.
+ */
+export const APPLICATION_CELLS = {
+    theme: { labelKey: 'app.theme', descKey: 'app.themeDesc' },
+    language: { labelKey: 'app.language', descKey: 'app.languageDesc' },
+    timezone: { labelKey: 'app.timezone', descKey: 'app.timezoneDesc' },
+    checkFrequency: { labelKey: 'app.checkFrequency', descKey: 'app.checkFrequencyDesc' },
+    reliability: { labelKey: 'app.reliability', descKey: 'app.apiMaxRetriesDesc' },
+};
+
+/**
+ * Every text of the section's hand-written cells, for the settings filter.
+ */
+export const applicationCellTexts = (t: (key: string) => string): string[] =>
+    Object.values(APPLICATION_CELLS).flatMap(({ labelKey, descKey }) => [t(labelKey), t(descKey)]);
 
 type UiNumberKey = 'checkFrequencyMin' | 'checkFrequencyMax' | 'apiMaxRetries' | 'apiRetryBaseDelayMs';
 
@@ -66,8 +87,10 @@ function UiSettingCell({
     children?: ComponentChildren;
 }) {
     const { t } = useTranslation();
+    const { query } = useSettingsNav();
+    const shown = matchesSettingFilter([t(labelKey), t(descKey)], query);
     return (
-        <div className={SETTING_CELL_CLASS}>
+        <div className={`${SETTING_CELL_CLASS} ${shown ? '' : 'hidden'}`}>
             <SettingLabel inputId={inputId} group={group}>
                 <span className="font-medium">{t(labelKey)}</span>
                 <span className="badge badge-ghost badge-sm ml-2">{t('app.uiSetting')}</span>
@@ -292,12 +315,7 @@ function ResettableUiCell({
 
 function ThemeSetting({ uiValues, handleUiChange, handleResetUi, rejectedKeys }: UiFormProps) {
     return (
-        <ResettableUiCell
-            inputId="ui-theme"
-            labelKey="app.theme"
-            descKey="app.themeDesc"
-            onReset={() => handleResetUi('theme')}
-        >
+        <ResettableUiCell inputId="ui-theme" {...APPLICATION_CELLS.theme} onReset={() => handleResetUi('theme')}>
             <ThemeSelect
                 id="ui-theme"
                 value={uiValues.theme}
@@ -313,8 +331,7 @@ function LanguageSetting({ uiValues, handleUiChange, handleResetUi }: UiFormProp
     return (
         <ResettableUiCell
             inputId="ui-language"
-            labelKey="app.language"
-            descKey="app.languageDesc"
+            {...APPLICATION_CELLS.language}
             onReset={() => handleResetUi('language')}
         >
             <select
@@ -340,7 +357,7 @@ function TimezoneSetting({
     const { t } = useTranslation();
     const { timezone, customTimezones } = uiValues;
     return (
-        <UiSettingCell inputId="ui-timezone" labelKey="app.timezone" descKey="app.timezoneDesc">
+        <UiSettingCell inputId="ui-timezone" {...APPLICATION_CELLS.timezone}>
             <div className="flex items-center gap-2 flex-wrap">
                 <select
                     id="ui-timezone"
@@ -377,7 +394,10 @@ function TimezoneSetting({
                 >
                     ×
                 </button>
-                <ResetButton label={resetLabel(t, 'app.timezone')} onClick={() => handleResetUi('timezone')} />
+                <ResetButton
+                    label={resetLabel(t, APPLICATION_CELLS.timezone.labelKey)}
+                    onClick={() => handleResetUi('timezone')}
+                />
             </div>
             {timezoneInput.visible && <CustomTimezoneInput timezoneInput={timezoneInput} />}
         </UiSettingCell>
@@ -403,14 +423,7 @@ export function ApplicationSettingsSection({
     const ui = { uiValues, handleUiChange, handleResetUi, rejectedKeys };
 
     return (
-        <div>
-            <h4
-                id={APPLICATION_HEADING_ID}
-                tabIndex={-1}
-                className="font-semibold text-base mb-3 border-b border-base-300 pb-2"
-            >
-                {t('app.applicationSettings')}
-            </h4>
+        <SettingsSectionPanel id="application" headingId={APPLICATION_HEADING_ID}>
             <div className={SETTINGS_GRID_CLASS}>
                 <ThemeSetting {...ui} />
                 <LanguageSetting {...ui} />
@@ -419,8 +432,7 @@ export function ApplicationSettingsSection({
                 <UiNumberGroupCell
                     {...ui}
                     inputId="ui-checkFrequency"
-                    labelKey="app.checkFrequency"
-                    descKey="app.checkFrequencyDesc"
+                    {...APPLICATION_CELLS.checkFrequency}
                     fields={CHECK_FREQUENCY_FIELDS}
                     suffix={<span className="text-sm">{t('app.minutes')}</span>}
                 />
@@ -428,12 +440,11 @@ export function ApplicationSettingsSection({
                 <UiNumberGroupCell
                     {...ui}
                     inputId="ui-reliability"
-                    labelKey="app.reliability"
-                    descKey="app.apiMaxRetriesDesc"
+                    {...APPLICATION_CELLS.reliability}
                     fields={RELIABILITY_FIELDS}
                 />
             </div>
             {children}
-        </div>
+        </SettingsSectionPanel>
     );
 }
