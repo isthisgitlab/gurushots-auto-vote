@@ -1,10 +1,11 @@
 /**
  * Real-strategy team-match cache. The active-challenge list is read by many
  * callers (some of them spend-critical) and each team request can retry for
- * minutes, so the team read never sits on a list read's path: `latestTeamMatch`
+ * minutes, so the team read stays off a list read's path: `latestTeamMatch`
  * answers from a one-slot cache synchronously and refreshes it in the
  * background at most once per REFRESH_MS, whatever the caller count and
- * whatever the outcome.
+ * whatever the outcome. `settledTeamMatch` lets a list read wait a bounded time
+ * for the refresh it started, so the list shows that refresh and not the last one.
  */
 
 import { fetchActiveTeamMatch } from '../../api/teams';
@@ -52,6 +53,9 @@ const settle = (token: string, read: TeamMatchRead): void => {
     slot = { token, result, fetchedAt, failures: 0 };
 };
 
+const cachedResult = (token: string): TeamMatchResult | undefined =>
+    slot?.token === token && slot.result !== 'none' ? slot.result : undefined;
+
 const startRefresh = (token: string): void => {
     // fetchActiveTeamMatch never rejects; the catch keeps this promise total all the same.
     // A settle deletes only its own token's key (at most one refresh per token is ever in flight).
@@ -78,7 +82,29 @@ const latestTeamMatch = (token: string): TeamMatchResult | undefined => {
     if (!inFlightByToken.has(token) && (!slot || Date.now() - slot.fetchedAt > REFRESH_MS)) {
         startRefresh(token);
     }
-    return slot && slot.result !== 'none' ? slot.result : undefined;
+    return cachedResult(token);
 };
 
-export { latestTeamMatch };
+/**
+ * The team match as of the refresh `latestTeamMatch` started: waits for this
+ * token's in-flight refresh, but for `maxWaitMs` at most (then the previous slot
+ * is returned, and the late refresh still lands in the slot for the next call).
+ * Never rejects and never starts a refresh itself.
+ *
+ * @returns what `latestTeamMatch` would return once the wait is over
+ */
+const settledTeamMatch = async (token: string, maxWaitMs: number): Promise<TeamMatchResult | undefined> => {
+    if (!token) return undefined;
+    const refresh = inFlightByToken.get(token);
+    if (refresh) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const cap = new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, maxWaitMs);
+        });
+        await Promise.race([refresh, cap]);
+        clearTimeout(timer);
+    }
+    return cachedResult(token);
+};
+
+export { latestTeamMatch, settledTeamMatch };

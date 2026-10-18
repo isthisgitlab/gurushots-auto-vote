@@ -45,7 +45,10 @@ jest.mock('../../src/ts/services/challengeTitlePin', () => ({
 
 // The team-match cache is unit-tested in tests/strategies/real-team-match.test.ts; here it is a stub, so
 // the ordered makePostRequest queues below never see a team request.
-jest.mock('../../src/ts/strategies/real/teamMatch', () => ({ latestTeamMatch: jest.fn() }));
+jest.mock('../../src/ts/strategies/real/teamMatch', () => ({
+    latestTeamMatch: jest.fn(),
+    settledTeamMatch: jest.fn(),
+}));
 
 // Mock the logger module
 jest.mock('../../src/ts/logger', () => {
@@ -86,13 +89,14 @@ describe('challenges', () => {
         require('../../src/ts/services/challengeTitlePin') as typeof challengeTitlePinModule,
     );
     const logger: LoggerMock = invalid(require('../../src/ts/logger'));
-    const { latestTeamMatch } = jest.mocked(
+    const { latestTeamMatch, settledTeamMatch } = jest.mocked(
         require('../../src/ts/strategies/real/teamMatch') as typeof teamMatchModule,
     );
 
     beforeEach(() => {
         jest.clearAllMocks();
         latestTeamMatch.mockReset();
+        settledTeamMatch.mockReset();
     });
 
     describe('getActiveChallenges', () => {
@@ -433,7 +437,7 @@ describe('challenges', () => {
             });
 
             test('the cached team match lands on the matching challenge only', async () => {
-                latestTeamMatch.mockReturnValue({ challengeId: '135938', teamMatch });
+                settledTeamMatch.mockResolvedValue({ challengeId: '135938', teamMatch });
                 makePostRequest.mockResolvedValueOnce(list());
                 makePostRequest.mockResolvedValueOnce({ challenges: [] });
 
@@ -442,6 +446,27 @@ describe('challenges', () => {
                 expect(result.challenges[0].teamMatch).toBeUndefined();
                 expect(result.challenges[1].teamMatch).toEqual(teamMatch);
                 expect(latestTeamMatch).toHaveBeenCalledWith(mockToken);
+                // The wait is bounded at 2 s.
+                expect(settledTeamMatch).toHaveBeenCalledWith(mockToken, 2000);
+            });
+
+            test('a team read that only settles at the cap still yields the list', async () => {
+                jest.useFakeTimers();
+                try {
+                    settledTeamMatch.mockReturnValue(
+                        new Promise((resolve) => setTimeout(() => resolve(undefined), 2000)),
+                    );
+                    makePostRequest.mockResolvedValueOnce(list());
+                    makePostRequest.mockResolvedValueOnce({ challenges: [] });
+
+                    const pending = getActiveChallenges(mockToken);
+                    await jest.advanceTimersByTimeAsync(2000);
+                    const result = await pending;
+
+                    expect(result).toEqual(list());
+                } finally {
+                    jest.useRealTimers();
+                }
             });
 
             test('the refresh starts with the reads, before the mobile read settles', async () => {
@@ -460,7 +485,7 @@ describe('challenges', () => {
                 ['no team match is cached', undefined],
                 ['the cached match runs on a challenge the member has not joined', { challengeId: '999', teamMatch }],
             ])('the list is untouched when %s', async (_label, cached) => {
-                latestTeamMatch.mockReturnValue(cached);
+                settledTeamMatch.mockResolvedValue(cached);
                 makePostRequest.mockResolvedValueOnce(list());
                 makePostRequest.mockResolvedValueOnce({ challenges: [] });
 
@@ -471,7 +496,7 @@ describe('challenges', () => {
             });
 
             test('a failed mobile read is returned as it is, with no team match', async () => {
-                latestTeamMatch.mockReturnValue({ challengeId: '135938', teamMatch });
+                settledTeamMatch.mockResolvedValue({ challengeId: '135938', teamMatch });
                 makePostRequest.mockResolvedValueOnce(null);
                 makePostRequest.mockResolvedValueOnce({ challenges: [] });
 
