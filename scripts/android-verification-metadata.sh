@@ -16,8 +16,7 @@
 # local Android build.
 #
 # Two passes write the one file, because some artifacts depend on the operating system (the aapt2 jar is `-osx` on a
-# Mac and `-linux` on CI's ubuntu-latest): the host's, then a linux container's, which runs on the host's own
-# architecture (no emulation).
+# Mac and `-linux` on CI's ubuntu-latest): the host's, then a linux/amd64 container's (the platform CI runs on).
 # Gradle merges what the second pass resolves into what the first wrote. Both start from an empty Gradle home, so every
 # checksum is computed from a fresh download, never from a cache that something else may have written.
 #
@@ -34,9 +33,9 @@ LICENSE_HASH="24333f8a63b6825ea9c5514f83c2829b004d1fee"
 
 # The pass inside the container. Gradle insists on writable project directories, so the repo is mounted read-write; the
 # build directories are moved out of it (an init script) so the host's own build outputs are left alone. The tests run
-# there only so that their dependencies are resolved: the ones that shut a MockWebServer down fail inside this container
-# (they pass on the host and on CI), which must not stop the metadata from being written; the host pass is the one that
-# has to be green.
+# there only so that their dependencies are resolved: under amd64 emulation on an arm64 host they are slow enough for
+# timing-sensitive ones (MockWebServer shutdown) to fail, which must not stop the metadata from being written; the host
+# pass is the one that has to be green.
 in_container() {
     export ANDROID_HOME=/tmp/android-sdk
     mkdir -p "$HOME" "$ANDROID_HOME/licenses"
@@ -79,11 +78,12 @@ echo "==> host pass ($(uname -s))"
     ./gradlew --no-daemon --console=plain --write-verification-metadata sha256 --rerun-tasks "${TASKS[@]}"
 )
 
-echo "==> linux pass ($CONTAINER_IMAGE, $(uname -m))"
+# amd64 even on an arm64 host: Google's Linux aapt2 is x86-64 only, so an arm64 container cannot run assembleRelease.
+echo "==> linux/amd64 pass ($CONTAINER_IMAGE)"
 mounts=(-v "$repo:/work")
 # local.properties names the host's SDK; the container has its own.
 if [ -f "$repo/android/local.properties" ]; then mounts+=(-v /dev/null:/work/android/local.properties:ro); fi
-docker run --rm --user "$(id -u):$(id -g)" \
+docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" \
     -e HOME=/tmp/home -e GRADLE_USER_HOME=/tmp/gradle-home \
     "${mounts[@]}" "$CONTAINER_IMAGE" \
     bash /work/scripts/android-verification-metadata.sh --in-container
