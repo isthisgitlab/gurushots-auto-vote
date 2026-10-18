@@ -1,12 +1,15 @@
 /**
  * The Snap turbo game: ten photos, each answered yes or no by the local vision model. Any answer counts and the
- * tenth wins the turbo. This never opens the classic game (get_challenge_turbo makes the server swap a classic game
- * in on a Snap challenge), and an answer is never sent twice: the next run resumes from the server's position.
+ * tenth wins the turbo; a build without the model answers yes to every photo when `snapYesWithoutModel` is on. This
+ * never opens the classic game (get_challenge_turbo makes the server swap a classic game in on a Snap challenge), and
+ * an answer is never sent twice: the next run resumes from the server's position.
  */
 
+import * as settings from '../../settings';
 import { startTurboSession, submitSnapVote } from '../../api/turbo';
 import { markSnapUnavailable } from '../../services/turboRunLock';
 import { hasBundledModel, judgeSnapImage, SNAP_CAPTION_MAX_CHARS, snapPrompts } from '../../services/visionVerifier';
+import type { SnapJudgment } from '../../services/visionVerifier';
 import { getRandomDelay, sleep } from '../../timing';
 import * as logger from '../../logger';
 
@@ -38,11 +41,12 @@ export interface SnapGameDeps extends TurboGameOptions {
 }
 
 /**
- * Plays (or resumes) the Snap game of one challenge. A missing model, a withdrawn game, an unreadable question, a
- * dead session and an answer the server refused mark the challenge unavailable. A failed judgment, a failed or
- * unusable session open, an answer request that got no response from the server and a session that runs out of
- * photos are transient and leave it open for the next pass; the third such run in a row marks it unavailable, and
- * a run that wins, or that lands answers before failing, starts that count again.
+ * Plays (or resumes) the Snap game of one challenge. A withdrawn game, an unreadable question, a dead session and an
+ * answer the server refused mark the challenge unavailable. A missing model with `snapYesWithoutModel` off stops the
+ * run without a request and marks nothing, so turning the setting on takes effect on the next pass. A failed
+ * judgment, a failed or unusable session open, an answer request that got no response from the server and a session
+ * that runs out of photos are transient and leave it open for the next pass; the third such run in a row marks it
+ * unavailable, and a run that wins, or that lands answers before failing, starts that count again.
  */
 const runSnapGame = async (
     challenge: Challenge,
@@ -89,10 +93,11 @@ const runSnapGame = async (
         return stop(stopReason);
     };
 
-    // The model answers every photo; without it nothing is asked of the server, so the session stays untouched.
-    if (!(await hasBundledModel())) {
-        markSnapUnavailable(challenge.id);
-        log.info(`${tag} Snap needs the vision model, which this build does not include`, null);
+    // The model answers every photo. Without it, the setting answers yes to all of them; with it off nothing is asked
+    // of the server, so the session stays untouched.
+    const modelAnswers = await hasBundledModel();
+    if (!modelAnswers && settings.getEffectiveSetting('snapYesWithoutModel', null) !== true) {
+        log.debug(`${tag} Snap needs the vision model, which this build does not include`, null);
         return stop('no-model');
     }
 
@@ -108,7 +113,7 @@ const runSnapGame = async (
     }
 
     total = session.images.length;
-    if (!snapPrompts(session.caption)) {
+    if (modelAnswers && !snapPrompts(session.caption)) {
         markSnapUnavailable(challenge.id);
         log.warning(
             `${tag} Snap question not understood: ${JSON.stringify(session.caption.slice(0, SNAP_CAPTION_MAX_CHARS))}`,
@@ -121,15 +126,21 @@ const runSnapGame = async (
         if (isCancelled()) return stop('cancelled');
         const image = session.images[index];
         const startedAt = now();
-        const judgment = await judgeSnapImage(session.caption, image);
-        if (!judgment) {
-            log.warning(`${tag} Snap photo ${index + 1}/${total} could not be judged`, null);
-            return stopTransient('judge-failed');
+        let answer: SnapJudgment['answer'] = 'yes';
+        let basis = 'no vision model';
+        if (modelAnswers) {
+            const judgment = await judgeSnapImage(session.caption, image);
+            if (!judgment) {
+                log.warning(`${tag} Snap photo ${index + 1}/${total} could not be judged`, null);
+                return stopTransient('judge-failed');
+            }
+            answer = judgment.answer;
+            basis = `yes=${judgment.yesLogit.toFixed(2)} no=${judgment.noLogit.toFixed(2)}`;
         }
         const remaining = pace() - (now() - startedAt);
         if (remaining > 0) await wait(remaining);
 
-        const vote = await submitSnapVote(session.sessionId, image.imageId, judgment.answer, token);
+        const vote = await submitSnapVote(session.sessionId, image.imageId, answer, token);
         if (vote.unclear) {
             log.warning(
                 `${tag} Snap answer ${index + 1}/${total} may have landed; the next run resumes from the server`,
@@ -157,7 +168,7 @@ const runSnapGame = async (
         answered++;
         if (vote.communityPct !== null) agreements.push(vote.communityPct);
         log.info(
-            `${tag} Snap ${index + 1}/${total}: ${judgment.answer} (yes=${judgment.yesLogit.toFixed(2)} no=${judgment.noLogit.toFixed(2)}) community=${vote.communityPct ?? 'n/a'}%`,
+            `${tag} Snap ${index + 1}/${total}: ${answer} (${basis}) community=${vote.communityPct ?? 'n/a'}%`,
             null,
         );
         if (vote.completed) {

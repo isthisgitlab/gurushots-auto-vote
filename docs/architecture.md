@@ -241,8 +241,10 @@ Domain terms used throughout, in reader's terms:
   once, an unclear one never resent. The automatic pass plays one Snap game per pass (a game that landed an
   answer, or may have, takes the slot), and none in the Android headless service (its cycle is capped at
   120 s). A Snap that turns out not playable — withdrawn, an unreadable question, a dead session, an answer the
-  server refused, no vision model, or three transient failures in a row — is remembered in-process (`markSnapUnavailable`, `services/turboRunLock.ts`), and
-  `shouldPlayAutoTurbo` leaves that challenge's turbo alone in any mode; a manual run ignores the marker.
+  server refused, or three transient failures in a row — is remembered in-process (`markSnapUnavailable`, `services/turboRunLock.ts`), and
+  `shouldPlayAutoTurbo` leaves that challenge's turbo alone in any mode; a manual run ignores the marker. Without
+  the vision model Snap stops `no-model` before any request and marks nothing, unless `snapYesWithoutModel` is on: then
+  every photo is answered yes (no judging, and the question need not parse), at the same pace.
 - Every POST goes through `api/api-client.ts`. `makePostRequest<T>()`, used by every request but a spend, has this
   **contract: it returns the response body as `T` on success and `null` on ultimate failure or when the body is
   not a JSON object — it never throws.** Every caller branches on `null`, not on a catch. Only the object check

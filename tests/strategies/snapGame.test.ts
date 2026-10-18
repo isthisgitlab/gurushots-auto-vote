@@ -14,6 +14,7 @@ jest.mock('../../src/ts/services/visionVerifier', () => ({
     snapPrompts: jest.fn(),
     SNAP_CAPTION_MAX_CHARS: 200,
 }));
+jest.mock('../../src/ts/settings', () => ({ __esModule: true, getEffectiveSetting: jest.fn() }));
 jest.mock('../../src/ts/timing', () => ({
     sleep: jest.fn(() => Promise.resolve()),
     getRandomDelay: jest.fn(() => 4000),
@@ -21,6 +22,7 @@ jest.mock('../../src/ts/timing', () => ({
 
 import turboModule = require('../../src/ts/api/turbo');
 import visionModule = require('../../src/ts/services/visionVerifier');
+import settingsModule = require('../../src/ts/settings');
 import timingModule = require('../../src/ts/timing');
 import cancellation = require('../../src/ts/voting/cancellation');
 import logger = require('../../src/ts/logger');
@@ -32,6 +34,7 @@ import { invalid } from '../helpers/invalid';
 
 const turbo = jest.mocked(turboModule);
 const vision = jest.mocked(visionModule);
+const settings = jest.mocked(settingsModule);
 const timing = jest.mocked(timingModule);
 
 const CHALLENGE = invalid<Challenge>({ id: 77, title: 'Snap Test' });
@@ -56,6 +59,11 @@ const landed = (overrides: Partial<SnapVoteResult> = {}): SnapVoteResult => ({
 });
 
 const judgment = { answer: 'yes', yesLogit: 1.234, noLogit: -0.5 } as const;
+
+const debugs = () =>
+    jest
+        .mocked(logger.withCategory)
+        .mock.results.flatMap((r) => jest.mocked(r.value as CategoryLogger).debug.mock.calls.map((call) => call[0]));
 
 const warnings = () =>
     jest
@@ -93,6 +101,7 @@ beforeEach(() => {
     cancellation.reset();
     __resetSnapUnavailableForTests();
     __resetSnapTransientRunsForTests();
+    settings.getEffectiveSetting.mockReturnValue(false);
     vision.hasBundledModel.mockResolvedValue(true);
     vision.snapPrompts.mockReturnValue({ yes: 'y', no: 'n' });
     vision.judgeSnapImage.mockResolvedValue(judgment);
@@ -150,6 +159,80 @@ describe('runSnapGame', () => {
         expect(infos().some((line) => line.endsWith('community=n/a%'))).toBe(true);
     });
 
+    describe('without the vision model and snapYesWithoutModel on', () => {
+        beforeEach(() => {
+            vision.hasBundledModel.mockResolvedValue(false);
+            settings.getEffectiveSetting.mockImplementation((key) => key === 'snapYesWithoutModel');
+        });
+
+        test('answers yes to every photo, never judges, and wins on the last answer', async () => {
+            turbo.submitSnapVote
+                .mockResolvedValueOnce(landed({ communityPct: 50 }))
+                .mockResolvedValueOnce(landed({ communityPct: 70 }))
+                .mockResolvedValueOnce(landed({ communityPct: 90, completed: true }));
+
+            const result = await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(result).toEqual({ answered: 3, total: 3, meanAgreement: 70, won: true, stopReason: 'completed' });
+            expect(turbo.submitSnapVote.mock.calls).toEqual([
+                ['sess', 'img0', 'yes', 'tok'],
+                ['sess', 'img1', 'yes', 'tok'],
+                ['sess', 'img2', 'yes', 'tok'],
+            ]);
+            expect(vision.judgeSnapImage).not.toHaveBeenCalled();
+            expect(isSnapUnavailable(77)).toBe(false);
+            expect(infos()).toEqual([
+                expect.stringContaining('Snap 1/3: yes (no vision model) community=50%'),
+                expect.stringContaining('Snap 2/3: yes (no vision model) community=70%'),
+                expect.stringContaining('Snap 3/3: yes (no vision model) community=90%'),
+            ]);
+        });
+
+        test('plays a question the model could not parse', async () => {
+            vision.snapPrompts.mockReturnValue(null);
+            turbo.startTurboSession.mockResolvedValue({ ...snapSession(0, 1), caption: 'Unreadable question' });
+            turbo.submitSnapVote.mockResolvedValue(landed({ completed: true }));
+
+            const result = await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(result).toEqual({ answered: 1, total: 1, meanAgreement: 60, won: true, stopReason: 'completed' });
+            expect(vision.snapPrompts).not.toHaveBeenCalled();
+            expect(isSnapUnavailable(77)).toBe(false);
+        });
+
+        test('resumes from the server position at the usual pace', async () => {
+            turbo.startTurboSession.mockResolvedValue(snapSession(2, 3));
+            turbo.submitSnapVote.mockResolvedValue(landed({ completed: true }));
+
+            await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(turbo.submitSnapVote.mock.calls).toEqual([['sess', 'img2', 'yes', 'tok']]);
+            expect(sleeps).toEqual([4000]);
+        });
+
+        test('keeps the stop handling of the model path', async () => {
+            turbo.submitSnapVote.mockResolvedValue(landed({ ok: false, serverAnswered: false }));
+
+            const result = await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(result.stopReason).toBe('request-failed');
+            expect(isSnapUnavailable(77)).toBe(false);
+        });
+    });
+
+    test('with the model the model answers whatever snapYesWithoutModel says', async () => {
+        settings.getEffectiveSetting.mockReturnValue(true);
+        vision.judgeSnapImage.mockResolvedValue({ answer: 'no', yesLogit: -1, noLogit: 2 });
+        turbo.startTurboSession.mockResolvedValue(snapSession(0, 1));
+        turbo.submitSnapVote.mockResolvedValue(landed({ completed: true }));
+
+        await runSnapGame(CHALLENGE, 'tok', deps());
+
+        expect(vision.judgeSnapImage).toHaveBeenCalledTimes(1);
+        expect(turbo.submitSnapVote.mock.calls).toEqual([['sess', 'img0', 'no', 'tok']]);
+        expect(infos()).toEqual([expect.stringContaining('no (yes=-1.00 no=2.00)')]);
+    });
+
     describe('pacing', () => {
         test('waits so that judging plus the wait reaches the target', async () => {
             turbo.submitSnapVote.mockResolvedValueOnce(landed()).mockResolvedValueOnce(landed({ completed: true }));
@@ -188,16 +271,19 @@ describe('runSnapGame', () => {
     });
 
     describe('stop reasons', () => {
-        test('no-model: no request is made', async () => {
+        test('no-model with snapYesWithoutModel off: no request is made, nothing is marked, the line is debug', async () => {
             vision.hasBundledModel.mockResolvedValue(false);
 
             const result = await runSnapGame(CHALLENGE, 'tok', deps());
 
             expect(result).toEqual({ answered: 0, total: 0, meanAgreement: null, won: false, stopReason: 'no-model' });
-            expect(isSnapUnavailable(77)).toBe(true);
+            expect(settings.getEffectiveSetting).toHaveBeenCalledWith('snapYesWithoutModel', null);
+            expect(isSnapUnavailable(77)).toBe(false);
             expect(turbo.startTurboSession).not.toHaveBeenCalled();
             expect(turbo.submitSnapVote).not.toHaveBeenCalled();
             expect(turbo.getChallengeTurbo).not.toHaveBeenCalled();
+            expect(debugs()).toEqual([expect.stringContaining('needs the vision model')]);
+            expect(infos()).toEqual([]);
         });
 
         test('request-failed when the session cannot be opened', async () => {

@@ -55,6 +55,7 @@ describe('settings schema shape', () => {
             'turboImageIndex',
             'turboNewSubmit',
             'turboNewSubmitOnConflict',
+            'snapYesWithoutModel',
             'autoKeyUnlock',
             'autoKeyAfterStart',
             'autoKeyBeforeEnd',

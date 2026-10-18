@@ -291,6 +291,9 @@ export const app = {
     turbo: 'Turbo',
     autoTurbo: 'Auto-Earn Turbo',
     autoTurboDesc: 'Play the Turbo mini-game automatically to earn the bonus',
+    snapYesWithoutModel: 'Answer Snap with Yes without the vision model',
+    snapYesWithoutModelDesc:
+        'In a build without the vision model, play Snap Turbos by answering Yes to every photo; any answer wins the Turbo. With the model, the model answers. Off by default.',
     useTurbo: 'Auto-Apply Turbo',
     useTurboDesc: 'Automatically apply an earned Turbo to one of your entries',
     turboTime: 'Turbo Apply Time',
