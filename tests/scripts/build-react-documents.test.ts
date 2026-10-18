@@ -5,6 +5,7 @@
  */
 
 import path from 'node:path';
+import type * as capacitor_config_jsonModule from '../../capacitor.config.json';
 import {
     HEADLESS_FLAG_FILE,
     HEADLESS_FLAG_SOURCE,
@@ -103,9 +104,12 @@ describe('generated HTML documents', () => {
         expect(headlessHtml).toContain(`content="${androidCsp}"`);
     });
 
-    test('the Capacitor document lets the WebView zoom', () => {
+    test('pinch-zoom works on Android: the viewport allows it and the WebView is made zoomable', () => {
         const viewport = capacitorIndexHtml.match(/<meta name="viewport" content="([^"]*)"/)?.[1];
         expect(viewport).toBe('width=device-width, initial-scale=1.0, viewport-fit=cover');
+        expect(viewport).not.toContain('user-scalable');
+        const { android } = require('../../capacitor.config.json') as typeof capacitor_config_jsonModule;
+        expect(android.zoomEnabled).toBe(true);
     });
 
     test('the headless flag is an external script that runs before the deferred bundle', () => {
