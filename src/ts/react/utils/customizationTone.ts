@@ -7,9 +7,9 @@ export type CustomizationSource = 'manual' | 'profile' | 'rule';
  * The single documented exception to the one-meaning palette: users scan for customized challenges by colour, and the
  * icons and sr-only text stay, so colour is never the only cue. Info also means "boost window open" in the neighbouring
  * `BoostWindowBanner`, and the "Using profile" badge (`badge-info`) shares its settings cell with the `badge-info` "?"
- * help badge (`SettingHelp`). daisyUI's own `secondary` pairing measures about 3:1 text contrast in the default
- * light/dark themes; it stays because users asked for the original colours: the theme owns contrast, and the icon plus
- * text carry the meaning. Whole class literals on purpose: Tailwind only generates classes it sees in full.
+ * help badge (`SettingHelp`). Known gap: daisyUI's own `secondary` pairing falls short of WCAG AA text contrast
+ * (about 3:1, below 4.5:1 for small text) in the default light/dark themes; it stays because users asked for the
+ * original colours and can pick another theme. Whole class literals on purpose: Tailwind only generates classes it sees in full.
  */
 const TONE: Record<CustomizationSource, { btn: string; badge: string }> = {
     manual: { btn: 'btn-accent', badge: 'badge-accent' },

@@ -18,11 +18,12 @@ const customizationOf = (kind: CustomizationKind | undefined) => ({
 
 /**
  * A status dot on its chip. On a coloured chip it gets a ring in the page colour, so a red or blue dot stays visible
- * against any fill; a neutral chip's dot stands as it is.
+ * against any fill; a neutral chip's dot stands as it is. The ring takes the theme's selector radius, like the
+ * dot's own `.status`, so a square-selector theme gets no corners poking out of a round ring.
  */
 function ChipDot({ ringed, children }: { ringed: boolean; children: ComponentChildren }) {
     if (!ringed) return <>{children}</>;
-    return <span className="inline-flex rounded-full ring-2 ring-base-100">{children}</span>;
+    return <span className="inline-flex rounded-selector ring-2 ring-base-100">{children}</span>;
 }
 
 /** One challenge's chip: its title, the status dots and the marker of what customizes it. */

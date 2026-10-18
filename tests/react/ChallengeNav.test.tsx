@@ -158,7 +158,11 @@ describe('ChallengeNav', () => {
             id === '1' ? { exposureTarget: 90 } : {},
         );
         jest.mocked(window.api.getTitleProfile).mockImplementation(async (_title, id) =>
-            id === '2' ? titleRuleInfo({ inlineValues: { scenario: 'Plan' } }) : null,
+            id === '2'
+                ? titleRuleInfo({ inlineValues: { scenario: 'Plan' } })
+                : id === '4'
+                  ? titleRuleInfo({ profile: { name: '4 pics', values: { exposureTarget: 90 } } })
+                  : null,
         );
 
         render(
@@ -167,6 +171,7 @@ describe('ChallengeNav', () => {
                     lowExposureChallenge(1, 'Manual low'),
                     lowExposureChallenge(2, 'Rule low'),
                     lowExposureChallenge(3, 'Plain low'),
+                    lowExposureChallenge(4, 'Profiled low'),
                 ]}
             />,
         );
@@ -174,12 +179,15 @@ describe('ChallengeNav', () => {
         const manual = screen.getByRole('button', { name: /Manual low/ });
         const rule = screen.getByRole('button', { name: /Rule low/ });
         const plain = screen.getByRole('button', { name: /Plain low/ });
+        const profiled = screen.getByRole('button', { name: /Profiled low/ });
         await waitFor(() => expect(manual.className).toContain('btn-accent'));
         await waitFor(() => expect(rule.className).toContain('btn-secondary'));
+        await waitFor(() => expect(profiled.className).toContain('btn-info'));
         const ring = (chip: HTMLElement) =>
             chip.querySelector('[data-testid="pulse-dot-error"]')!.parentElement!.className;
         expect(ring(manual)).toContain('ring-base-100');
         expect(ring(rule)).toContain('ring-base-100');
+        expect(ring(profiled)).toContain('ring-base-100');
         expect(ring(plain)).not.toContain('ring-');
     });
 
@@ -199,6 +207,10 @@ describe('ChallengeNav', () => {
         expect(profiled.querySelector('.status-info')).toBeNull();
         expect(plain.querySelector('.status-info')).not.toBeNull();
         expect(plain.querySelector('.bg-info-content')).toBeNull();
+        const ring = (chip: HTMLElement) =>
+            chip.querySelector('[data-testid="pulse-dot-info"]')!.parentElement!.className;
+        expect(ring(profiled)).toContain('ring-base-100');
+        expect(ring(plain)).not.toContain('ring-');
     });
 
     test('marks nothing when a per-challenge override read fails', async () => {
