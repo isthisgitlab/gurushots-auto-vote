@@ -192,15 +192,15 @@ class AutoUpdater {
     }
 
     /**
-     * Parse release notes (can be string or array of objects)
+     * Parse release notes (can be string or array of objects); '' when there are none
      */
     parseReleaseNotes(releaseNotes: UpdateInfo['releaseNotes']): string {
-        if (!releaseNotes) return 'No release notes available';
+        if (!releaseNotes) return '';
         if (typeof releaseNotes === 'string') return releaseNotes;
         if (Array.isArray(releaseNotes)) {
             return releaseNotes.map((note) => note.note || note).join('\n');
         }
-        return 'No release notes available';
+        return '';
     }
 
     /**

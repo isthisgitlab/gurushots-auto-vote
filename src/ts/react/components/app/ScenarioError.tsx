@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import * as ipc from '@/api/ipc';
-import { scenarioIssueText } from '@/utils/scenarioIssueText';
+import { scenarioIssueText, scenarioPathText } from '@/utils/scenarioIssueText';
 
 import type { ScenarioIssue } from '../../../settings/scenarioSchema';
 
@@ -48,7 +48,10 @@ export function ScenarioError({ error }: { error: ScenarioErrorInfo | null }) {
                 <ul className="text-xs list-disc ml-4">
                     {issues.map((issue) => (
                         <li key={`${issue.path}:${issue.message}`}>
-                            {issue.path ? <code>{issue.path}</code> : null} {issue.text}
+                            {issue.path ? (
+                                <span className="font-medium">{scenarioPathText(issue.path, t)}:</span>
+                            ) : null}{' '}
+                            {issue.text}
                         </li>
                     ))}
                 </ul>

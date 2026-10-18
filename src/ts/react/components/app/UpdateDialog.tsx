@@ -2,16 +2,21 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { useUpdate, UPDATE_STATES } from '@/contexts/UpdateContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
+import { releaseNotesText } from '@/utils/releaseNotesText';
+
+const BYTE_UNITS = ['byte', 'kilobyte', 'megabyte', 'gigabyte'] as const;
 
 /**
- * Format bytes to human-readable string
+ * Format bytes as a size in the UI's language (1.5 MB, 1,5 MB)
  */
-function formatBytes(bytes: number, decimals: number = 1) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i];
+function formatBytes(bytes: number, locale: string, decimals: number = 1) {
+    // Zero and fractions sit below the first power, a size past the last unit stays in it.
+    const power = Math.min(Math.max(0, Math.floor(Math.log(bytes) / Math.log(1024))), BYTE_UNITS.length - 1);
+    return new Intl.NumberFormat(locale, {
+        style: 'unit',
+        unit: BYTE_UNITS[power],
+        maximumFractionDigits: decimals,
+    }).format(bytes / 1024 ** power);
 }
 
 // The translated message of each failed step.
@@ -29,7 +34,7 @@ const ERROR_KEYS = {
  * only through its own buttons.
  */
 export function UpdateDialog() {
-    const { t } = useTranslation();
+    const { t, language } = useTranslation();
     const {
         state,
         updateInfo,
@@ -73,18 +78,16 @@ export function UpdateDialog() {
                             <span className="text-base-content/70">{t('app.latestVersion')}:</span>
                             <span className="ml-2 font-mono">{updateInfo.latestVersion}</span>
                             {updateInfo.isPrerelease && (
-                                <span className="badge badge-warning badge-sm ml-1">Pre-release</span>
+                                <span className="badge badge-warning badge-sm ml-1">{t('app.prerelease')}</span>
                             )}
                         </div>
                     </div>
-                    {updateInfo.releaseNotes && (
-                        <div>
-                            <h4 className="font-medium text-sm mb-1">{t('app.releaseNotes')}:</h4>
-                            <div className="bg-base-200 rounded p-2 text-sm max-h-40 overflow-y-auto">
-                                {updateInfo.releaseNotes}
-                            </div>
+                    <div>
+                        <h4 className="font-medium text-sm mb-1">{t('app.releaseNotes')}:</h4>
+                        <div className="bg-base-200 rounded p-2 text-sm max-h-40 overflow-y-auto whitespace-pre-line break-words">
+                            {releaseNotesText(updateInfo.releaseNotes) || t('app.noReleaseNotes')}
                         </div>
-                    )}
+                    </div>
                 </div>
             )}
 
@@ -102,8 +105,8 @@ export function UpdateDialog() {
                         <span>{progress.percent}%</span>
                         {progress.bytesPerSecond > 0 && (
                             <span>
-                                {formatBytes(progress.transferred)} / {formatBytes(progress.total)} (
-                                {formatBytes(progress.bytesPerSecond)}/s)
+                                {formatBytes(progress.transferred, language)} / {formatBytes(progress.total, language)}{' '}
+                                ({formatBytes(progress.bytesPerSecond, language)}/s)
                             </span>
                         )}
                     </div>

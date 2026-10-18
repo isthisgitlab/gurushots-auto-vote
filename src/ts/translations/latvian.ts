@@ -5,7 +5,7 @@ export const common = {
     global: 'Globāli:',
     languageEnglish: 'English',
     languageLatvian: 'Latviešu',
-    loading: 'Ielādē...',
+    loading: 'Ielādē…',
     closeModal: 'Aizvērt',
     logout: 'Iziet',
     mock: 'Testa režīms:',
@@ -77,7 +77,7 @@ export const errors = {
     pickUnclear:
         'Foto, iespējams, tika iesniegti. GuruShots neatbildēja skaidri, un kartīte tiek atsvaidzināta. Pārbaudi kartīti, pirms mēģini vēlreiz.',
     suggestNoChosenEntered:
-        'Nav ko ieteikt. Ir ieslēgts uzstādījums „Iesniegt tikai izvēlētos foto”, un visi izvēlētie foto jau ir iesniegti. Poga „Izvēlēties…” šo uzstādījumu nepiemēro, tāpēc izvēlies jebkuru foto šeit vai atjauno izvēlētos foto.',
+        'Nav ko ieteikt. Ir ieslēgts uzstādījums „Iesniegt tikai izvēlētos foto”, un visi izvēlētie foto jau ir iesniegti. Poga „Izvēlēties foto…” šo uzstādījumu nepiemēro, tāpēc izvēlies jebkuru foto šeit vai atjauno izvēlētos foto.',
     suggestNoChosenUnusable:
         'Nav ko ieteikt. Ir ieslēgts uzstādījums „Iesniegt tikai izvēlētos foto”, un neviens izvēlētais foto šim izaicinājumam neder. Izvēlies jebkuru foto šeit vai atjauno izvēlētos foto.',
     suggestNoMatch:
@@ -85,7 +85,8 @@ export const errors = {
     suggestNoEligible:
         'Nav ko ieteikt. Tavā bibliotēkā šobrīd nav foto, ko šis izaicinājums pieņem. Augšupielādē foto vai pamēģini meklēšanu.',
     suggestBusy: 'Foto netika sarindoti. Cita rindošana vēl turpinās. Pagaidi, kamēr tā beidzas, un mēģini vēlreiz.',
-    suggestAccountChanged: 'Foto netika sarindoti. Rindošanas laikā tu nomainīji kontu. Atver „Izvēlēties…” vēlreiz.',
+    suggestAccountChanged:
+        'Foto netika sarindoti. Rindošanas laikā tu nomainīji kontu. Atver „Izvēlēties foto…” vēlreiz.',
     suggestChallengeEnded:
         'Foto netika sarindoti. Izaicinājums ir beidzies vai to nevarēja nolasīt. Aizver šo dialoglodziņu un atver kartīti vēlreiz.',
     suggestFailed: 'Foto netika sarindoti. GuruShots neatbildēja vai rindošana nepabeidzās. Mēģini vēlreiz pēc brīža.',
@@ -143,7 +144,7 @@ export const menu = {
     aboutNode: 'Node.js',
     aboutDescription:
         'GuruShots Auto Vote — Electron lietotne automātiskai balsošanai GuruShots izaicinājumos ar kopīgu grafisko un komandrindas saskarni (atbalsta gan īsto, gan testa režīmu)',
-    checkForUpdates: 'Pārbaudīt atjauninājumus...',
+    checkForUpdates: 'Pārbaudīt atjauninājumus…',
     noUpdates: 'Nav atjauninājumu',
     noUpdatesMessage: 'Tev jau ir jaunākā versija.',
     updateError: 'Atjaunināšanas kļūda',
@@ -160,8 +161,8 @@ export const quitGuard = {
 // Login screen specific
 export const login = {
     heading: 'Pieteikšanās',
-    loadingModeInfo: 'Ielādē informāciju par režīmu...',
-    loggingIn: 'Piesakās...',
+    loadingModeInfo: 'Ielādē informāciju par režīmu…',
+    loggingIn: 'Piesakās…',
     loginButton: 'Pieteikties',
     mockMode: 'Testa režīms',
     mockModeInfo: 'Testa režīms: lietotne izmanto simulētus datus. Der jebkāds lietotājvārds un parole.',
@@ -757,7 +758,7 @@ export const app = {
     discoverConfirmBalance: 'Monētu atlikums: {current}; maksa: {cost}; paliks: {resulting}.',
     discoverConfirmBalanceUnknown: 'Neizdevās nolasīt tavu pašreizējo monētu atlikumu.',
     discoverConfirmInsufficient:
-        'Monētu atlikums: {current}, bet šis izaicinājums maksā {cost} — ar to nepietiek, lai pievienotos.',
+        'Monētu atlikums: {current}, bet šis izaicinājums maksā {cost} — ar to nepietiek, lai pievienotos. Nopelni vairāk monētu un mēģini vēlreiz.',
     discoverConfirmSpend: 'Tērēt monētas: {coins}',
     // Atklāšanas pievienošanās rezultāti
     discoverJoined: 'Pievienojies.',
@@ -793,7 +794,7 @@ export const app = {
         'Kad ir uzstādīti izvēlētie foto, iesniedz tos tādā secībā, kādā tos izvēlējies (numuri izvēles logā), nevis kārto tā, kā lietotne kārto savas automātiskās izvēles. Foto, kas neiztur tavus obligātos tagus, jau ir iesniegts vai šim izaicinājumam nav pieejams, izlaiž un izmanto nākamo sarakstā; atlikušās vietas aizpilda pēc kārtojuma kā parasti. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” un neviens no izvēlētajiem foto neatbilst taviem obligātajiem tagiem, tos tomēr var iesniegt. Pēc noklusējuma izslēgts.',
     chosenPhotosOnly: 'Iesniegt tikai izvēlētos foto',
     chosenPhotosOnlyDesc:
-        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski (ar pogu „Izvēlēties…” izaicinājuma kartītē vienreiz iesniedz tevis izvēlētos foto), ārkārtas iesniegšana šo uzstādījumu neņem vērā (uzstādi izaicinājumam ārkārtas iesniegšanu uz 0, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā (ja vien nav ieslēgts „Tikai manuāli”: tad sadaļā „Atrast izaicinājumus” izvēlies šī izaicinājuma foto un nospied „Pievienoties” vai „Mēģināt iesniegt vēlreiz”, ja monētas jau iztērētas). Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem obligātajiem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
+        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski (ar pogu „Izvēlēties foto…” izaicinājuma kartītē vienreiz iesniedz tevis izvēlētos foto), ārkārtas iesniegšana šo uzstādījumu neņem vērā (uzstādi izaicinājumam ārkārtas iesniegšanu uz 0, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā (ja vien nav ieslēgts „Tikai manuāli”: tad sadaļā „Atrast izaicinājumus” izvēlies šī izaicinājuma foto un nospied „Pievienoties” vai „Mēģināt iesniegt vēlreiz”, ja monētas jau iztērētas). Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem obligātajiem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
     chosenPhotosMemberId: 'Izvēlēto foto konts',
     chosenPhotosClearedAt: 'Izvēlēto foto notīrīšanas laiks',
     chosenPhotosClearedAtDesc:
@@ -815,7 +816,7 @@ export const app = {
     photoChooserHelp:
         'Lietotne šos foto izmanto pirmos, un tiem joprojām jāiztur tavi tagu filtri. Tos kārto tāpat, kā kārto savas automātiskās izvēles, vai arī izmanto tos šeit redzamo numuru secībā, ja ir ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos” (uzstādījumi „Automātiskā iesniegšana”: globālie noklusējumi, izaicinājuma noteikums vai paša izaicinājuma uzstādījumi pēc pievienošanās).',
     photoChooserSearchLabel: 'Meklēt savus foto pēc taga',
-    photoChooserSearchPlaceholder: 'piem., saulriets',
+    photoChooserSearchPlaceholder: 'piem., saulriets…',
     photoChooserSearch: 'Meklēt',
     photoChooserCount: 'Izvēlēto foto: {count} no {max}',
     photoChooserLoading: 'Ielādē tavus foto…',
@@ -921,7 +922,7 @@ export const app = {
     settingsDropScenario: 'Scenārijs, ko rediģē un neesi saglabājis',
     hide: 'Paslēpt',
     photoChooserUse: 'Izmantot šos foto',
-    fillPick: 'Izvēlēties…',
+    fillPick: 'Izvēlēties foto…',
     fillPickLabel: 'Izvēlēties, kurus foto iesniegt tagad',
     pickTitle: 'Izvēlēties iesniedzamos foto',
     pickHelp:
@@ -948,7 +949,7 @@ export const app = {
     pickSuggestionRank: 'Ieteikums Nr. {n}',
     pickAddSuggestions: 'Pievienot ieteikumus',
     pickAddSuggestionsFull: 'Nav brīvu vietu',
-    swapPick: 'Izvēlēties…',
+    swapPick: 'Nomainīt ar…',
     swapPickLabel: 'Izvēlēties foto no bibliotēkas, ar ko apmainīt',
     swapPickTitle: 'Izvēlies foto, ar ko apmainīt',
     swapPickHelp:
@@ -1297,7 +1298,7 @@ export const app = {
     uiSetting: 'Saskarnes uzstādījums',
     updateAvailable: 'Pieejams atjauninājums!',
     run: 'Palaist',
-    running: 'Darbojas...',
+    running: 'Darbojas…',
     vote: 'Balsot',
     voteTitle:
         'Tagad nobalsot šajā izaicinājumā līdz 100 % (apiet automātiku; automātiskā balsošana turpina darboties)',
@@ -1307,8 +1308,8 @@ export const app = {
     votedAll: 'Visur nobalsots!',
     votes: 'Balsis',
     votesNeeded: 'balsis nepieciešamas',
-    voting: 'Balso...',
-    votingAll: 'Balso...',
+    voting: 'Balso…',
+    votingAll: 'Balso…',
     checkFrequency: 'Pārbaudes biežums',
     checkFrequencyDesc:
         'Katrs cikls izmanto nejauša garuma pauzi šajā diapazonā. Vienāds min un max nozīmē fiksētu biežumu.',
@@ -1418,7 +1419,7 @@ export const app = {
     status: 'Statuss',
     title: 'GuruShots Auto Vote',
     mainContent: 'Automātiskā balsošana un izaicinājumi',
-    downloadingUpdate: 'Lejupielādē atjauninājumu...',
+    downloadingUpdate: 'Lejupielādē atjauninājumu…',
     updateReady: 'Atjauninājums gatavs',
     updateError: 'Atjaunināšanas kļūda',
     releaseNotes: 'Laidiena piezīmes',
@@ -1495,6 +1496,14 @@ export const app = {
     autovoteNotificationLastCycle: 'Pēdējais cikls: {time}',
     actionOnItem: '{action}: {item}',
     sbRuleN: '{n}. likums',
+    scenarioPathPhase: 'Fāze {name}',
+    scenarioPathCondition: '{n}. nosacījums',
+    scenarioPathAction: '{n}. darbība',
+    scenarioPathSettings: 'Uzstādījumi',
+    scenarioPathLimits: 'Limiti',
+    sbDurationHint: 'Sekundes vai laika posms, piemēram, „90m”, „6h” vai „1d 6h” (līdz 60 dienām).',
+    timeLeft: 'atlicis {time}',
+    noReleaseNotes: 'Laidiena piezīmju nav',
     scenarioIssueNoJson: 'Scenārijs nav ievadīts. Ielīmē scenārija failu.',
     scenarioIssueTooLarge: 'Fails ir lielāks par {kb} KB.',
     scenarioIssueNotJson: 'Šis nav derīgs JSON.',

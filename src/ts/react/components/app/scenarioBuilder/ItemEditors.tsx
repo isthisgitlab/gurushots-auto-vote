@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { interp } from '@/utils/interp';
 import {
@@ -54,16 +55,22 @@ function OptionalText({
     onChange,
     label,
     type = 'text',
+    placeholder,
+    describedBy,
 }: {
     value: string | number | undefined;
     onChange: ValueChange;
     label: string;
     type?: 'text' | 'number';
+    placeholder?: string;
+    describedBy?: string;
 }) {
     return (
         <input
             {...(type === 'number' ? { type: 'number' as const } : { type: 'text' as const })}
             aria-label={label}
+            aria-describedby={describedBy}
+            placeholder={placeholder}
             className={CONTROL}
             value={value ?? ''}
             onChange={(e) => {
@@ -72,6 +79,30 @@ function OptionalText({
                 else onChange(type === 'number' ? Number(raw) : raw);
             }}
         />
+    );
+}
+
+/**
+ * An optional duration, with an example of the notation and a caption naming the forms it takes.
+ */
+function DurationInput({
+    value,
+    onChange,
+    label,
+}: {
+    value: string | number | undefined;
+    onChange: ValueChange;
+    label: string;
+}) {
+    const { t } = useTranslation();
+    const hintId = useId();
+    return (
+        <>
+            <OptionalText label={label} value={value} onChange={onChange} placeholder="1d 6h" describedBy={hintId} />
+            <span id={hintId} className="text-base-content/70">
+                {t('app.sbDurationHint')}
+            </span>
+        </>
     );
 }
 
@@ -240,6 +271,7 @@ function FieldInput({
                 <ValueInput type="number" label={label} value={scalar} onChange={onChange} />
             );
         case 'duration':
+            return <DurationInput label={label} value={scalar} onChange={onChange} />;
         case 'slot':
             return field.optional ? (
                 <OptionalText label={label} value={scalar} onChange={onChange} />

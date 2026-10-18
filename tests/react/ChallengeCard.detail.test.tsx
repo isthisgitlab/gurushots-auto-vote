@@ -639,10 +639,10 @@ describe('pick', () => {
         mockTranslator.t.mockImplementation((key) => key);
     });
 
-    test('Pick… sits beside +1 / +N, named for what it does, and the row wraps', () => {
+    test('Pick photos… sits beside +1 / +N, named for what it does, and the row wraps', () => {
         const { container } = renderCard(makeChallenge());
         const pick = pickButton();
-        expect(pick.textContent).toBe('Pick…');
+        expect(pick.textContent).toBe('Pick photos…');
         expect(pick.getAttribute('title')).toBe('Choose which photos to submit now');
         expect(pick.parentElement).toBe(screen.getByText('+1').parentElement);
         expect(pick.parentElement!.className).toContain('flex-wrap');

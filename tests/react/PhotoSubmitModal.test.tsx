@@ -1029,7 +1029,10 @@ describe('Auto suggestions', () => {
         ],
         ['no-eligible', /^Nothing to suggest\. Your library has no photo this challenge accepts right now/],
         ['suggest-busy', /^The photos were not ranked\. Another ranking is still running/],
-        ['account-changed', /^The photos were not ranked\. You switched accounts while it ran\. Reopen Pick…\.$/],
+        [
+            'account-changed',
+            /^The photos were not ranked\. You switched accounts while it ran\. Reopen Pick photos…\.$/,
+        ],
         ['challenge-ended', /^The photos were not ranked\. This challenge has ended or could not be read/],
         ['fetch-failed', /^The photos were not ranked\. GuruShots did not answer/],
         ['suggest-failed', /^The photos were not ranked\. GuruShots did not answer/],

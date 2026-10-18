@@ -1,4 +1,4 @@
-import { scenarioIssueText } from '@/utils/scenarioIssueText';
+import { scenarioIssueText, scenarioPathText } from '@/utils/scenarioIssueText';
 
 const keys = (key: string) => key;
 
@@ -88,5 +88,38 @@ describe('scenarioIssueText', () => {
             known: false,
         });
         expect(scenarioIssueText('', keys).known).toBe(false);
+    });
+});
+
+describe('scenarioPathText', () => {
+    const words: Record<string, string> = {
+        'app.scenarioPathPhase': 'Phase {name}',
+        'app.sbRuleN': 'Rule {n}',
+        'app.scenarioPathCondition': 'Condition {n}',
+        'app.scenarioPathAction': 'Action {n}',
+        'app.scenarioPathSettings': 'Settings',
+        'app.scenarioPathLimits': 'Limits',
+    };
+    const t = (key: string) => words[key] ?? key;
+
+    test.each([
+        ['phases.main.rules[0].if[0].window', 'Phase main › Rule 1 › Condition 1 › window'],
+        ['phases.buildup.rules[1].do[2].with', 'Phase buildup › Rule 2 › Action 3 › with'],
+        ['phases.main.rules[0].if[1].of[0].min', 'Phase main › Rule 1 › Condition 2 › Condition 1 › min'],
+        ['phases.main.settings.boostTime', 'Phase main › Settings › boostTime'],
+        ['limits.swaps', 'Limits › swaps'],
+        ['start', 'start'],
+        ['phases.late', 'Phase late'],
+        ['', ''],
+    ])('%s reads %s', (path, text) => {
+        expect(scenarioPathText(path, t)).toBe(text);
+    });
+
+    test('a segment with no wording stays as written, and an inherited name is not one', () => {
+        expect(scenarioPathText('phases', t)).toBe('phases');
+        expect(scenarioPathText('phases[0].x', t)).toBe('phases[0] › x');
+        expect(scenarioPathText('mystery[3]', t)).toBe('mystery[3]');
+        expect(scenarioPathText('rules.constructor[1].toString', t)).toBe('rules › constructor[1] › toString');
+        expect(scenarioPathText('settings[0]', t)).toBe('settings[0]');
     });
 });

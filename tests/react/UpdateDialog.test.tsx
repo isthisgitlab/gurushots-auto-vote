@@ -106,15 +106,28 @@ describe('UpdateProvider + UpdateDialog', () => {
         expect(screen.getByText('app.updateAvailable')).toBeTruthy();
         expect(screen.getByText('1.0.0')).toBeTruthy();
         expect(screen.getByText('1.1.0')).toBeTruthy();
-        expect(screen.getByText('Pre-release')).toBeTruthy();
+        expect(screen.getByText('app.prerelease')).toBeTruthy();
         expect(screen.getByText('Fixes')).toBeTruthy();
     });
 
-    it('omits the pre-release badge and notes when absent', async () => {
+    it('omits the pre-release badge, and says so when there are no notes', async () => {
         renderDialog();
         await emit('onUpdateAvailable', { ...INFO, releaseNotes: '' });
-        expect(screen.queryByText('Pre-release')).toBeNull();
-        expect(screen.queryByText('app.releaseNotes:')).toBeNull();
+        expect(screen.queryByText('app.prerelease')).toBeNull();
+        expect(screen.getByText('app.releaseNotes:')).toBeTruthy();
+        expect(screen.getByText('app.noReleaseNotes')).toBeTruthy();
+    });
+
+    it('shows HTML release notes as plain text, lines kept', async () => {
+        renderDialog();
+        await emit('onUpdateAvailable', {
+            ...INFO,
+            releaseNotes: '<p>Fixes</p>\n<ul>\n<li class="x">One</li>\n<li>Two<br/>more</li>\n</ul>',
+        });
+        const notes = screen.getByText(/Fixes/);
+        expect(notes.textContent).toBe('Fixes\n\n• One\n\n• Two\nmore');
+        expect(notes.className).toContain('whitespace-pre-line');
+        expect(notes.querySelector('p, ul, li')).toBeNull();
     });
 
     it('renders the available frame without details when no info is attached', async () => {
@@ -184,7 +197,7 @@ describe('UpdateProvider + UpdateDialog', () => {
             bytesPerSecond: 2048,
         });
         expect(screen.getByText(/1\.5 MB \/ 2 MB/)).toBeTruthy();
-        expect(screen.getByText(/2 KB/)).toBeTruthy();
+        expect(screen.getByText(/2 kB\/s/)).toBeTruthy();
 
         // Backdrop click and Escape are ignored while downloading.
         fireEvent.click(document.querySelector('.modal-backdrop')!);
@@ -204,12 +217,29 @@ describe('UpdateProvider + UpdateDialog', () => {
         expect(screen.queryByText('app.updateReady')).toBeNull();
     });
 
+    it('writes sizes in the UI language, from bytes up to gigabytes and no further', async () => {
+        mockApi.getSetting.mockResolvedValueOnce('lv');
+        renderDialog();
+        await emit('onUpdateAvailable', INFO);
+        await clickAndSettle(screen.getByText('app.download'));
+        await emit('onDownloadProgress', {
+            percent: 10,
+            transferred: 512,
+            total: 3.5 * 1024 ** 3,
+            bytesPerSecond: 1536 * 1024,
+        });
+        expect(screen.getByText(/512 B \/ 3,5 GB \(1,5 MB\/s\)/)).toBeTruthy();
+
+        await emit('onDownloadProgress', { percent: 10, transferred: 1, total: 2048 * 1024 ** 3, bytesPerSecond: 1 });
+        expect(screen.getByText(/2048 GB/)).toBeTruthy();
+    });
+
     it('formats a zero byte count', async () => {
         renderDialog();
         await emit('onUpdateAvailable', INFO);
         await clickAndSettle(screen.getByText('app.download'));
         await emit('onDownloadProgress', { percent: 1, transferred: 0, total: 0, bytesPerSecond: 10 });
-        expect(screen.getByText(/0 Bytes \/ 0 Bytes/)).toBeTruthy();
+        expect(screen.getByText(/0 byte \/ 0 byte/)).toBeTruthy();
     });
 
     it('shows an indeterminate, named progress bar until the download size is known', async () => {

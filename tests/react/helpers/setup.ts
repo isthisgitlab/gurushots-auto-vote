@@ -190,7 +190,11 @@ function fireSettingsChanged(payload?: object) {
 // assert on keys ('app.save'); override it per test with mockImplementation.
 // Keys whose text is a pattern the component fills in (no t() interpolation: callers use interp), so the filled
 // text — an accessible name made of an action and what it acts on — stays testable.
-const PATTERN_TEXT: Record<string, string> = { 'app.actionOnItem': '{action}: {item}', 'app.sbRuleN': 'Rule {n}' };
+const PATTERN_TEXT: Record<string, string> = {
+    'app.actionOnItem': '{action}: {item}',
+    'app.sbRuleN': 'Rule {n}',
+    'app.timeLeft': '{time} left',
+};
 const defaultTranslate = (key: string) => PATTERN_TEXT[key] ?? key;
 const mockTranslator = {
     t: jest.fn(defaultTranslate),

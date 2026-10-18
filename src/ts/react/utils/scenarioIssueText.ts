@@ -85,3 +85,44 @@ export const scenarioIssueText = (message: string, t: Translate): { text: string
     }
     return { text: t('app.scenarioIssueGeneric'), known: false };
 };
+
+// The path keys that name a numbered item, with the wording of the item.
+const NUMBERED_SEGMENTS: Record<string, string> = {
+    rules: 'app.sbRuleN',
+    if: 'app.scenarioPathCondition',
+    of: 'app.scenarioPathCondition',
+    do: 'app.scenarioPathAction',
+};
+// The path keys that name a part of the document by themselves.
+const NAMED_SEGMENTS: Record<string, string> = {
+    settings: 'app.scenarioPathSettings',
+    limits: 'app.scenarioPathLimits',
+};
+
+/**
+ * A ScenarioIssue's path (`phases.main.rules[0].if[0].window`) in the UI's language
+ * ("Phase main › Rule 1 › Condition 1 › window"). A segment with no wording stays as written.
+ *
+ * @param path - the issue's path; empty for a problem with the file as a whole
+ * @param t - the translation function
+ */
+export const scenarioPathText = (path: string, t: Translate): string => {
+    const segments = path.split('.');
+    const words: string[] = [];
+    for (let at = 0; at < segments.length; at++) {
+        const segment = segments[at];
+        // The pattern accepts every string: the index group is optional and the name group takes the rest.
+        const [, name, index] = /^(.*?)(?:\[(\d+)\])?$/.exec(segment) as RegExpExecArray;
+        if (name === 'phases' && index === undefined && at + 1 < segments.length) {
+            at++;
+            words.push(interp(t('app.scenarioPathPhase'), { name: segments[at] }));
+        } else if (index !== undefined && Object.hasOwn(NUMBERED_SEGMENTS, name)) {
+            words.push(interp(t(NUMBERED_SEGMENTS[name]), { n: Number(index) + 1 }));
+        } else if (index === undefined && Object.hasOwn(NAMED_SEGMENTS, name)) {
+            words.push(t(NAMED_SEGMENTS[name]));
+        } else {
+            words.push(segment);
+        }
+    }
+    return words.join(' › ');
+};

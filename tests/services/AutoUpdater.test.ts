@@ -397,7 +397,7 @@ describe('AutoUpdater', () => {
         it('should return default message for undefined notes', () => {
             const result = autoUpdater.parseReleaseNotes(undefined);
 
-            expect(result).toBe('No release notes available');
+            expect(result).toBe('');
         });
     });
 
@@ -594,7 +594,7 @@ describe('AutoUpdater', () => {
 
         it('parseReleaseNotes handles note objects without a note field and unknown shapes', () => {
             expect(autoUpdater.parseReleaseNotes(invalid([{ note: 'a' }, 'plain']))).toBe('a\nplain');
-            expect(autoUpdater.parseReleaseNotes(invalid({ unexpected: true }))).toBe('No release notes available');
+            expect(autoUpdater.parseReleaseNotes(invalid({ unexpected: true }))).toBe('');
         });
 
         it('a throwing legacy store never breaks construction', () => {

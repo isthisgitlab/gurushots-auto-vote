@@ -136,6 +136,24 @@ describe('a scenario row', () => {
         expect(alert.textContent).toContain('app.scenarioIssueGeneric');
     });
 
+    test('an issue names its place in words, not as a JSON path', async () => {
+        jest.mocked(window.api.renameScenario).mockResolvedValue(
+            invalid({
+                success: false,
+                issues: [{ path: 'phases.main.rules[0].if[0].window', message: 'Name is required' }],
+            }),
+        );
+        await renderSection();
+        click('app.scenarioRename: Plan');
+        click('app.scenarioRenameSave');
+        const alert = await screen.findByRole('alert');
+        // The test translator returns keys, so the segment words are keys and the raw segments stay as written.
+        expect(alert.querySelector('li')?.textContent).toBe(
+            'app.scenarioPathPhase › Rule 1 › app.scenarioPathCondition › window: app.scenarioIssueNameRequired',
+        );
+        expect(alert.textContent).not.toContain('phases.main');
+    });
+
     test('only an issue with no wording is logged as missing; one with wording is shown translated', async () => {
         jest.mocked(window.api.renameScenario).mockResolvedValue(
             invalid({
