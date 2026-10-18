@@ -53,7 +53,8 @@ const turboUnplayableError = (liveChallenge: Challenge, now: number): string | n
  */
 const SNAP_STOP_ERRORS: Record<SnapStopReason, string> = {
     completed: 'Snap was interrupted; try again later',
-    'no-model': 'Snap needs the vision model, which this build does not include',
+    'no-model':
+        'Snap needs the vision model, which this build does not include; turn on snapYesWithoutModel to play it',
     withdrawn: 'Snap is no longer offered for this challenge',
     unavailable: 'Snap is no longer offered for this challenge',
     'unparsed-caption': 'Snap question could not be answered',

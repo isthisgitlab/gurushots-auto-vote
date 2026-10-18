@@ -14,7 +14,8 @@ const KNOWN_ERRORS: Record<string, string> = {
     'No battles to play right now': 'errors.turboNoBattles',
     'A turbo run is already in progress for this challenge': 'errors.turboRunInProgress',
     'Turbo mode unknown; try again later': 'errors.turboModeUnknown',
-    'Snap needs the vision model, which this build does not include': 'errors.snapNeedsModel',
+    'Snap needs the vision model, which this build does not include; turn on snapYesWithoutModel to play it':
+        'errors.snapNeedsModel',
     'Snap is no longer offered for this challenge': 'errors.snapNotOffered',
     'Snap question could not be answered': 'errors.snapUnanswerable',
     'Snap was interrupted; try again later': 'errors.snapInterrupted',

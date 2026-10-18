@@ -40,6 +40,8 @@ jest.mock('../../src/ts/services/autoFill', () => ({
     reflectEntryFlag: jest.fn(),
 }));
 
+jest.mock('../../src/ts/services/visionVerifier', () => ({ hasBundledModel: jest.fn(async () => true) }));
+
 jest.mock('../../src/ts/voting/cancellation', () => ({
     isCancelled: jest.fn(() => false),
     setCancelled: jest.fn(),
@@ -48,6 +50,10 @@ jest.mock('../../src/ts/voting/cancellation', () => ({
 
 import votingLogicModule = require('../../src/ts/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
+import visionModule = require('../../src/ts/services/visionVerifier');
+const vision = jest.mocked(visionModule);
+import settingsMockModule = require('../../src/ts/settings');
+const settingsMock = jest.mocked(settingsMockModule);
 import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
 import cancellationModule = require('../../src/ts/voting/cancellation');
@@ -60,6 +66,7 @@ import type { TurboGameOptions } from '../../src/ts/strategies/real/snapGame';
 import type { CategoryLogger } from '../../src/ts/logger';
 import logger = require('../../src/ts/logger');
 import type { VotingPassDeps } from '../../src/ts/types/votingPass';
+import { __resetSnapModelHintForTests } from '../../src/ts/services/votingOrchestrator/turbo';
 import { claimTurboRun, releaseTurboRun } from '../../src/ts/services/turboRunLock';
 import { recordManualTurboWin } from '../../src/ts/services/missions';
 import { invalid } from '../helpers/invalid';
@@ -424,6 +431,59 @@ describe('mock-parity behaviors on the shared path', () => {
             }
 
             expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([2]);
+        });
+
+        describe('in a build without the vision model', () => {
+            const infoLines = () =>
+                jest
+                    .mocked(logger.withCategory)
+                    .mock.results.flatMap((r) =>
+                        jest.mocked(r.value as CategoryLogger).info.mock.calls.map((call) => String(call[0])),
+                    );
+            const startedEarns = () =>
+                jest
+                    .mocked(logger.withCategory)
+                    .mock.results.flatMap((r) =>
+                        jest
+                            .mocked(r.value as CategoryLogger)
+                            .startOperation.mock.calls.filter(([id]) => String(id).startsWith('turbo-earn-')),
+                    );
+
+            beforeEach(() => {
+                __resetSnapModelHintForTests();
+                vision.hasBundledModel.mockResolvedValue(false);
+                votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+            });
+            afterEach(() => {
+                vision.hasBundledModel.mockResolvedValue(true);
+                settingsMock.getEffectiveSetting.mockReturnValue(false);
+            });
+
+            test('with snapYesWithoutModel off a Snap turbo is left alone, with one info hint per process', async () => {
+                const api = makeApi([snapChallenge(1), makeChallenge({ id: 2 })]);
+                api.runTurboGame.mockResolvedValue(snapWon);
+
+                await runVotingPass('tok', null, deps(api));
+                await runVotingPass('tok', null, deps(api));
+
+                // Only the classic turbo is played, once per pass.
+                expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([2, 2]);
+                expect(startedEarns().map(([id]) => id)).toEqual(['turbo-earn-2', 'turbo-earn-2']);
+                expect(infoLines().filter((line) => line.includes('Snap turbos need the vision model'))).toEqual([
+                    expect.stringContaining('(snapYesWithoutModel)'),
+                ]);
+            });
+
+            test('with snapYesWithoutModel on the Snap turbo is played', async () => {
+                settingsMock.getEffectiveSetting.mockImplementation((key) => key === 'snapYesWithoutModel');
+                const api = makeApi([snapChallenge(1)]);
+                api.runTurboGame.mockResolvedValue(snapWon);
+
+                await runVotingPass('tok', null, deps(api));
+
+                expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+                expect(infoLines().filter((line) => line.includes('Snap turbos need the vision model'))).toEqual([]);
+            });
         });
 
         test('a classic result keeps the classic summary', async () => {

@@ -92,7 +92,7 @@ The Android build is a Capacitor wrapper around the same React UI, plus a Kotlin
 
 #### 🪶 Lite builds (no image model)
 
-Every download above also comes as a **lite** build without the image model and its runtime: the macOS DMG shrinks from ~310 MB to ~130 MB and the macOS CLI from ~375 MB to ~140 MB. Everything else works the same — auto-submit skips the [visual check](docs/usage.md#auto-submit-missing-entries) and ranks photos without it. A lite GUI or Android install is only offered lite updates (the lite desktop app skips pre-releases).
+Every download above also comes as a **lite** build without the image model and its runtime: the macOS DMG shrinks from ~310 MB to ~130 MB and the macOS CLI from ~375 MB to ~140 MB. Everything else works the same — auto-submit skips the [visual check](docs/usage.md#auto-submit-missing-entries) and ranks photos without it, and Snap turbos, which need the model, are played with Yes answers only when `snapYesWithoutModel` is on. A lite GUI or Android install is only offered lite updates (the lite desktop app skips pre-releases).
 
 | Platform                     | Download                                                                                                                                                                                       |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

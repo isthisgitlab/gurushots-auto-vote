@@ -7,6 +7,7 @@ import { consumeMission } from '../missions';
 import { isCancelled } from '../../voting/cancellation';
 import { claimTurboRun, releaseTurboRun, wasManualTurboRunSince } from '../turboRunLock';
 import { failureText, oneLine } from '../../format/logSafe';
+import { hasBundledModel } from '../visionVerifier';
 
 import type { Challenge, TurboGameResult } from '../../types/gurushots';
 import type { ActionContext, PassContext } from './context';
@@ -152,6 +153,13 @@ export const runTurboApply = async (ctx: ActionContext) => {
 // Snap answers are paced at seconds each, so a pass plays one game and the rest wait for the next pass.
 const MAX_SNAP_GAMES_PER_PASS = 1;
 
+// The hint that a model-less build needs `snapYesWithoutModel` for Snap is logged once per process, at info level.
+let snapModelHintLogged = false;
+
+export const __resetSnapModelHintForTests = (): void => {
+    snapModelHintLogged = false;
+};
+
 const turboGameSummary = (result: TurboGameResult): string =>
     result.kind === 'snap'
         ? `answered=${result.answered}/${result.total} meanAgreement=${result.meanAgreement === null ? 'n/a' : `${result.meanAgreement.toFixed(0)}%`} stopReason=${result.stopReason} won=${result.won}`
@@ -161,6 +169,8 @@ const turboGameSummary = (result: TurboGameResult): string =>
  * Auto-earn turbo by playing the mini-game when eligible. No game has a
  * close-time threshold (it plays whenever a turbo is winnable); a Snap game is
  * skipped in the Android headless service and after the pass's first Snap game.
+ * A Snap game also waits, with one info hint per process, in a build without the vision model unless
+ * `snapYesWithoutModel` is on.
  * It runs ahead of the timer-ordered deadline actions so a win can be applied in this pass.
  * With Save Turbos for Missions on, starting a game waits (isTurboEarnSaved)
  * unless a "Win Turbo" mission still needs wins; a game already in progress is
@@ -188,6 +198,23 @@ export const playAutoTurbo = async (
                 `${logger.challengeTag(challenge)} Snap turbo skipped: the background service cycle is too short`,
                 null,
             );
+        return;
+    }
+    // Without the vision model a Snap turbo is played only with `snapYesWithoutModel` on; otherwise it is left alone
+    // here, with no claim and no operation line on every pass.
+    if (isSnap && !(await hasBundledModel()) && settings.getEffectiveSetting('snapYesWithoutModel', null) !== true) {
+        const log = logger.withCategory('turbo');
+        log.debug(
+            `${logger.challengeTag(challenge)} Snap turbo skipped: no vision model and snapYesWithoutModel is off`,
+            null,
+        );
+        if (!snapModelHintLogged) {
+            snapModelHintLogged = true;
+            log.info(
+                'Snap turbos need the vision model, which this build does not include; turn on "Answer Snap with Yes without the vision model" (snapYesWithoutModel) to play them',
+                null,
+            );
+        }
         return;
     }
     const savedForMission = votingLogic.isTurboEarnSaved(challenge, now);
