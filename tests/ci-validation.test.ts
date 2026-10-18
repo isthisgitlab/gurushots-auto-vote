@@ -374,25 +374,88 @@ describe('renderer button colours', () => {
     // A theme guarantees `X` + `X-content` (a solid button) and `base-content` on `base-*`, nothing else. daisyUI paints
     // `btn-outline`, `btn-soft`, `btn-ghost` and `btn-dash` with the colour variant's raw colour on the page
     // background, which a theme can make unreadable (business: neutral 27% on base-100 24%). Over `src/ts/react`
-    // (.ts and .tsx) this enforces: (a) no single string or template literal (static parts, `${…}` bodies scanned
-    // separately) holds one of those styles together with a colour variant class; (b) no `<ActionButton>` tag has a
-    // colour `variant` (a `variant="…"` other than `plain`, or a `variant={…}` expression with a string literal other
-    // than `plain`) and a literal holding one of those styles. A `variant` that is an identifier or lookup is not seen.
+    // (.ts and .tsx) this enforces: (a) no single string or template literal holds one of those styles together with
+    // a colour variant class (a template is checked by its static parts, and each `${…}` body, nested templates
+    // included, is scanned as code of its own); (b) no `<ActionButton>` tag has a colour `variant` (a `variant="…"`
+    // other than `plain`, or a `variant={…}` expression with a string literal other than `plain`) or an `error`
+    // attribute (it swaps in `btn-error` whatever the variant) and a literal holding one of those styles. Comments are
+    // ignored, and a quote, `>` or brace inside a string never ends a tag or a `${…}` early. A `variant` that is an
+    // identifier or lookup is not seen.
     const STYLES = ['btn-outline', 'btn-soft', 'btn-ghost', 'btn-dash'];
     const COLOUR_VARIANT = /^btn-(?:neutral|primary|secondary|accent|info|success|warning|error|latvian)$/;
-    // A quoted or template literal, or a comment; the alternation consumes a string whole, so a `//` or apostrophe
-    // inside one is not taken for a comment and an apostrophe inside a comment cannot pair up with another quote.
-    const TOKEN = /'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+    // End (exclusive) of the string, template or comment starting at `i`, or `i + 1` when none does. A string never
+    // spans a line, so an apostrophe in JSX text is not taken for one; a template skips its `${…}` bodies by brace depth.
+    const spanAt = (code: string, i: number): number => {
+        const c = code[i];
+        if (c === "'" || c === '"' || c === '`') {
+            for (let j = i + 1; j < code.length; j++) {
+                if (code[j] === '\\') j++;
+                else if (code[j] === c) return j + 1;
+                else if (c === '`' && code[j] === '$' && code[j + 1] === '{') j = closeOf(code, j + 1, true);
+                else if (code[j] === '\n' && c !== '`') return i + 1;
+            }
+            return code.length;
+        }
+        if (code.startsWith('/*', i))
+            return code.indexOf('*/', i + 2) < 0 ? code.length : code.indexOf('*/', i + 2) + 2;
+        if (code.startsWith('//', i)) return code.indexOf('\n', i) < 0 ? code.length : code.indexOf('\n', i);
+        return i + 1;
+    };
 
-    const withoutComments = (code: string) => code.replace(TOKEN, (m) => (m.startsWith('/') ? '' : m));
+    // Index of the `}` closing the `{` at `from` (brace), or of the first `>` outside braces and strings at or after
+    // `from`.
+    const closeOf = (code: string, from: number, brace: boolean) => {
+        let depth = 0;
+        for (let i = from; i < code.length; i++) {
+            const end = spanAt(code, i);
+            if (end - i > 1) {
+                i = end - 1;
+                continue;
+            }
+            if (code[i] === '{') depth++;
+            else if (code[i] === '}') depth--;
+            if (brace ? depth === 0 : depth === 0 && code[i] === '>') return i;
+        }
+        return code.length;
+    };
+
+    // `code` cut into its top-level strings, templates and comments (`literal`) and the single characters between.
+    const chunksOf = (code: string) => {
+        const chunks: Array<{ text: string; literal: boolean }> = [];
+        for (let i = 0; i < code.length; ) {
+            const end = spanAt(code, i);
+            chunks.push({ text: code.slice(i, end), literal: end - i > 1 });
+            i = end;
+        }
+        return chunks;
+    };
+    const isComment = ({ text, literal }: { text: string; literal: boolean }) => literal && text.startsWith('/');
+
+    const withoutComments = (code: string) =>
+        chunksOf(code)
+            .filter((chunk) => !isComment(chunk))
+            .map((chunk) => chunk.text)
+            .join('');
 
     const literalsIn = (code: string): string[] =>
-        [...code.matchAll(TOKEN)].flatMap(([m]) => {
-            if (m.startsWith('/')) return [];
-            const body = m.slice(1, -1);
-            if (!m.startsWith('`')) return [body];
-            const inner = [...body.matchAll(/\$\{([^}]*)\}/g)].flatMap(([, expr]) => literalsIn(expr));
-            return [body.replace(/\$\{[^}]*\}/g, ' '), ...inner];
+        chunksOf(code).flatMap((chunk) => {
+            if (!chunk.literal || isComment(chunk)) return [];
+            const span = chunk.text;
+            if (span[0] !== '`') return [span.slice(1, -1)];
+            let statics = '';
+            const bodies: string[] = [];
+            for (let i = 1; i < span.length - 1; ) {
+                if (span[i] === '\\') {
+                    statics += span.slice(i, i + 2);
+                    i += 2;
+                } else if (span.startsWith('${', i)) {
+                    const end = closeOf(span, i + 1, true);
+                    bodies.push(span.slice(i + 2, end));
+                    statics += ' ';
+                    i = end + 1;
+                } else statics += span[i++];
+            }
+            return [statics, ...bodies.flatMap(literalsIn)];
         });
 
     const tokensOf = (literal: string) => literal.split(/\s+/);
@@ -401,18 +464,8 @@ describe('renderer button colours', () => {
         return STYLES.some((s) => tokens.includes(s)) && tokens.some((t) => COLOUR_VARIANT.test(t));
     };
 
-    // Index of the `}` closing the `{` at `from` (brace), or of the first `>` outside braces at or after `from`.
-    const closeOf = (code: string, from: number, brace: boolean) => {
-        let depth = 0;
-        for (let i = from; i < code.length; i++) {
-            if (code[i] === '{') depth++;
-            else if (code[i] === '}') depth--;
-            if (brace ? depth === 0 : depth === 0 && code[i] === '>') return i;
-        }
-        return code.length;
-    };
-
     const colourVariantTag = (tag: string) => {
+        if (/\serror=/.test(tag)) return true;
         const quoted = /\bvariant="([^"]*)"/.exec(tag);
         if (quoted) return quoted[1] !== 'plain';
         const expr = tag.indexOf('variant={');
@@ -441,6 +494,11 @@ describe('renderer button colours', () => {
             '`btn btn-outline ${x} btn-warning`',
             '"btn-ghost btn-error"',
             "const s = `a ${ok ? 'btn-dash btn-info' : ''}`;",
+            // A template nested in a `${…}` body, and a `>` inside a quoted attribute.
+            "`a ${x ? `btn-outline btn-error` : ''}`",
+            '<ActionButton title="a > b" variant="neutral" className="btn-outline">',
+            // `error` swaps in btn-error whatever the variant.
+            '<ActionButton variant="plain" error={e} className="btn-outline">',
         ];
         for (const source of flagged) expect(offendersIn(source)).not.toEqual([]);
         const passing = [
@@ -450,6 +508,9 @@ describe('renderer button colours', () => {
             '<ActionButton variant="neutral" onClick={() => go()}>',
             "// it's a btn-outline btn-error note\nconst a = 'btn btn-outline';",
             "const url = 'https://x.test'; const b = 'btn btn-neutral';",
+            '<ActionButton variant="neutral" error={e} onClick={() => go()}>',
+            "const c = `btn btn-sm${className ? ` ${className}` : ''}`;",
+            '<ActionButton title="a > b" variant="plain" className="btn-outline">',
         ];
         for (const source of passing) expect(offendersIn(source)).toEqual([]);
     });
