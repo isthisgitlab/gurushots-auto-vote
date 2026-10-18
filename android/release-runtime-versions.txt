@@ -49,7 +49,7 @@ com.squareup.okhttp3:okhttp:5.5.0
 com.squareup.okio:okio-jvm:3.18.1
 com.squareup.okio:okio:3.18.1
 org.apache.cordova:framework:14.0.1
-org.jetbrains.kotlin:kotlin-stdlib:2.4.20
+org.jetbrains.kotlin:kotlin-stdlib:2.4.21
 org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0
 org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.9.0
 org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.9.0
