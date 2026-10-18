@@ -135,12 +135,12 @@ describe('formatEndTime', () => {
 
 describe('getBoostStatus', () => {
     test.each([
-        [null, { code: 'unknown', colorClass: 'text-base-content/60' }],
-        [{}, { code: 'unknown', colorClass: 'text-base-content/60' }],
+        [null, { code: 'unknown', colorClass: 'text-base-content/70' }],
+        [{}, { code: 'unknown', colorClass: 'text-base-content/70' }],
         [{ state: 'USED' }, { code: 'used', colorClass: 'text-success' }],
-        [{ state: 'UNAVAILABLE' }, { code: 'unavailable', colorClass: 'text-base-content/60' }],
-        [{ state: 'LOCKED' }, { code: 'locked', colorClass: 'text-base-content/60' }],
-        [{ state: 'WEIRD' }, { code: 'other', colorClass: 'text-base-content/60', raw: 'WEIRD' }],
+        [{ state: 'UNAVAILABLE' }, { code: 'unavailable', colorClass: 'text-base-content/70' }],
+        [{ state: 'LOCKED' }, { code: 'locked', colorClass: 'text-base-content/70' }],
+        [{ state: 'WEIRD' }, { code: 'other', colorClass: 'text-base-content/70', raw: 'WEIRD' }],
     ])('%j → %j', (boost, status) => {
         expect(getBoostStatus(boost)).toEqual(status);
     });
@@ -193,16 +193,16 @@ describe('statusText', () => {
 
 describe('getTurboStatus', () => {
     test.each([
-        [undefined, { code: 'unavailable', colorClass: 'text-base-content/60' }],
-        [{ state: '' }, { code: 'unavailable', colorClass: 'text-base-content/60' }],
+        [undefined, { code: 'unavailable', colorClass: 'text-base-content/70' }],
+        [{ state: '' }, { code: 'unavailable', colorClass: 'text-base-content/70' }],
         [{ state: 'FREE' }, { code: 'free', colorClass: 'text-info' }],
-        [{ state: 'TIMER' }, { code: 'timer', colorClass: 'text-base-content/60' }],
+        [{ state: 'TIMER' }, { code: 'timer', colorClass: 'text-base-content/70' }],
         [{ state: 'IN_PROGRESS' }, { code: 'inProgress', colorClass: 'text-warning' }],
         [{ state: 'WON' }, { code: 'won', colorClass: 'text-success' }],
         [{ state: 'USED' }, { code: 'used', colorClass: 'text-success' }],
-        [{ state: 'UNAVAILABLE' }, { code: 'unavailable', colorClass: 'text-base-content/60' }],
-        [{ state: 'LOCKED' }, { code: 'locked', colorClass: 'text-base-content/60' }],
-        [{ state: 'NEW_STATE' }, { code: 'other', colorClass: 'text-base-content/60', raw: 'NEW_STATE' }],
+        [{ state: 'UNAVAILABLE' }, { code: 'unavailable', colorClass: 'text-base-content/70' }],
+        [{ state: 'LOCKED' }, { code: 'locked', colorClass: 'text-base-content/70' }],
+        [{ state: 'NEW_STATE' }, { code: 'other', colorClass: 'text-base-content/70', raw: 'NEW_STATE' }],
     ])('%j → %j', (turbo, status) => {
         expect(getTurboStatus(turbo)).toEqual(status);
     });

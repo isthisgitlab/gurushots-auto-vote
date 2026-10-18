@@ -3,6 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal } from '@/components/ui/Modal';
 import { StickyModalFooter } from '@/components/ui/StickyModalFooter';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { useImageLoads } from '@/hooks/useImageLoads';
 import { buildPhotoUrl } from '@/utils/formatters';
@@ -191,13 +192,16 @@ export function PhotoTile({
                 </span>
             )}
             <span className={`truncate text-xs ${dim}`}>{showImage ? labels : shortId(photo.id)}</span>
-            {reason && (
-                <span
-                    className={`text-xs ${locked || full ? 'text-base-content/70' : blockedReason !== null ? 'text-error' : 'text-success'}`}
-                >
-                    {reason}
-                </span>
-            )}
+            {reason &&
+                (!locked && !full && blockedReason !== null ? (
+                    <ToneNote tone="error" as="span" className="text-xs">
+                        {reason}
+                    </ToneNote>
+                ) : (
+                    <span className={`text-xs ${locked || full ? 'text-base-content/70' : 'text-success'}`}>
+                        {reason}
+                    </span>
+                ))}
         </button>
     );
 }
@@ -477,12 +481,12 @@ export function PhotoGrid({
                 </p>
             )}
             {listing.truncated && (
-                <p className="text-warning text-xs">
+                <ToneNote tone="warning" className="text-xs">
                     {interp(t('app.photoChooserTruncated'), { count: listing.photos.length })}
-                </p>
+                </ToneNote>
             )}
             {listing.photos.length === 0 && (
-                <p className="text-base-content/60 text-sm">
+                <p className="text-base-content/70 text-sm">
                     {t(
                         listing.wonCount > 0 && !listing.truncated
                             ? 'app.photoChooserEmptyAllWon'

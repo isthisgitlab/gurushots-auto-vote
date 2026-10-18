@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 import { interp } from '@/utils/interp';
@@ -64,7 +65,7 @@ function PhaseSettings({
     return (
         <div className="space-y-2">
             <div className="text-xs font-medium">{t('app.sbPhaseSettings')}</div>
-            {keys.length === 0 && <p className="text-xs text-base-content/60">{t('app.sbNoSettings')}</p>}
+            {keys.length === 0 && <p className="text-xs text-base-content/70">{t('app.sbNoSettings')}</p>}
             {keys.map((key) => {
                 const config = schema?.[key];
                 return (
@@ -93,7 +94,9 @@ function PhaseSettings({
                         </button>
                         {/* A scenario has no state until its challenge is joined, so a join never sees this list. */}
                         {key === 'chosenPhotos' && (
-                            <p className="text-info w-full text-xs">{t('app.chosenPhotosScenarioHint')}</p>
+                            <ToneNote tone="info" className="w-full text-xs">
+                                {t('app.chosenPhotosScenarioHint')}
+                            </ToneNote>
                         )}
                     </div>
                 );
@@ -167,7 +170,7 @@ function RuleEditor({
             </div>
             <div className="text-xs font-medium">{t('app.sbConditions')}</div>
             {(rule.if ?? []).length === 0 && (
-                <p className="text-xs text-base-content/60">{t('app.sbConditionsEmpty')}</p>
+                <p className="text-xs text-base-content/70">{t('app.sbConditionsEmpty')}</p>
             )}
             <ConditionList value={rule.if} onChange={(next) => onChange({ ...rule, if: next })} phases={phases} />
             <div className="text-xs font-medium">{t('app.sbActions')}</div>
@@ -374,7 +377,7 @@ function JsonTab({
     useEffect(() => () => onTextDirty(false), [onTextDirty]);
     return (
         <div className="space-y-2">
-            <p className="text-xs text-base-content/60">{t('app.sbJsonHint')}</p>
+            <p className="text-xs text-base-content/70">{t('app.sbJsonHint')}</p>
             <textarea
                 className="textarea textarea-bordered w-full font-mono text-xs"
                 rows={16}
@@ -396,9 +399,9 @@ function JsonTab({
                 }}
             />
             {invalid && (
-                <p className="text-xs text-warning" role="status">
+                <ToneNote tone="warning" role="status" className="text-xs">
                     {t('app.sbJsonInvalid')}
-                </p>
+                </ToneNote>
             )}
         </div>
     );
@@ -451,8 +454,8 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
             <ScenarioError error={error} />
             {result && (
                 <div className="text-xs bg-base-200 rounded p-2 space-y-1">
-                    <p className="text-base-content/60">{t('app.sbSimulateAssume')}</p>
-                    {result.manualOnly && <p className="text-warning">{t('app.sbSimulatePausedManual')}</p>}
+                    <p className="text-base-content/70">{t('app.sbSimulateAssume')}</p>
+                    {result.manualOnly && <ToneNote tone="warning">{t('app.sbSimulatePausedManual')}</ToneNote>}
                     {result.events.length === 0 ? (
                         <p>{t('app.sbSimulateNothing')}</p>
                     ) : (
@@ -467,7 +470,7 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
                         </ol>
                     )}
                     <p>{t(`app.sbStop_${result.stoppedBecause}`)}</p>
-                    {result.halted && <p className="text-warning">{result.halted}</p>}
+                    {result.halted && <ToneNote tone="warning">{result.halted}</ToneNote>}
                 </div>
             )}
         </div>

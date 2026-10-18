@@ -914,10 +914,11 @@ describe('entries, tags and alerts', () => {
             window.api.getEffectiveSetting = jest.fn(async (key) => key === 'compactCards');
             answer({ boost: { by: 'pin', releaseAt }, turbo: { by: 'flag' } });
             renderCard(makeChallenge());
-            await waitFor(() => expect(screen.getAllByRole('alert')[0].textContent).toMatch(/^⚠ /));
+            // The compact tile's note leads with the warning icon; the detailed card's alert box has none.
+            await waitFor(() => expect(screen.getAllByRole('alert')[0].querySelector('svg')).not.toBeNull());
             const [boost, turbo] = screen.getAllByRole('alert');
             expect(boost.textContent).toBe(
-                `⚠ ${app.conflictPinReleases
+                `${app.conflictPinReleases
                     .replace(/\{kind\}/g, 'Boost')
                     .replace(/\{other\}/g, 'Turbo')
                     .replace('{time}', when)}`,
@@ -925,8 +926,10 @@ describe('entries, tags and alerts', () => {
             expect(boost.className).not.toContain('line-clamp');
             expect(boost.hasAttribute('title')).toBe(false);
             expect(turbo.textContent).toBe(
-                "⚠ Turbo can't apply: your only entry already has Boost (they can't share an entry). Add another entry to use both.",
+                "Turbo can't apply: your only entry already has Boost (they can't share an entry). Add another entry to use both.",
             );
+            // The warning icon is a separate, decorative cue ahead of the words.
+            expect(boost.querySelector('svg')!.getAttribute('class')).toContain('text-warning');
         });
 
         test('a reworded warning for the same feature updates the same element', async () => {
@@ -1013,8 +1016,8 @@ describe('entries, tags and alerts', () => {
                 'app.stateLocked',
                 'UNAVAILABLE',
                 'app.unavailable',
-                'text-base-content/60',
-                'text-base-content/60',
+                'text-base-content/70',
+                'text-base-content/70',
             ],
         ];
         for (const [boost, boostText, turbo, turboText, boostClass, turboClass] of cases) {

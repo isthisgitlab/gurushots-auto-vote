@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { useSwapPhoto, useSwapBack } from '@/api/useCurrencyActions';
 import { interp } from '@/utils/interp';
 import { entryPhotoUrl } from '@/utils/formatters';
@@ -128,11 +129,11 @@ export function SwapWarningLines({ actioned, pinned }: SwapWarnings) {
     const { t } = useTranslation();
     return (
         <>
-            {actioned && <p className="text-warning">{t('app.currencySwapBoostedWarning')}</p>}
+            {actioned && <ToneNote tone="warning">{t('app.currencySwapBoostedWarning')}</ToneNote>}
             {pinned && (
-                <p className="text-warning">
+                <ToneNote tone="warning">
                     {interp(t('app.pinSwapWarning'), { kind: t(pinned === 'boost' ? 'app.boost' : 'app.turbo') })}
-                </p>
+                </ToneNote>
             )}
         </>
     );

@@ -111,7 +111,7 @@ export function ChallengeAlertPanel<Item extends { id: Challenge['id']; title: s
         <ChipListPanel icon={icon} label={label} count={items.length}>
             {items.map((c) => (
                 <ChallengeChip key={c.id} challengeId={c.id} className={chipClassName}>
-                    <PulseDot variant={dotVariant} pulse={pulse(c)} size="status-sm" />
+                    <PulseDot variant={dotVariant} pulse={pulse(c)} size="status-sm" onBadge />
                     <ChipTitle>{c.title}</ChipTitle>
                     {detail(c)}
                 </ChallengeChip>

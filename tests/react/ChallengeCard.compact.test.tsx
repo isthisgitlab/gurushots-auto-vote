@@ -174,8 +174,8 @@ describe('compact ChallengeCard tile', () => {
                 'app.stateLocked',
                 'UNAVAILABLE',
                 'app.unavailable',
-                'text-base-content/60',
-                'text-base-content/60',
+                'text-base-content/70',
+                'text-base-content/70',
             ],
         ];
         for (const [boost, boostText, turbo, turboText, boostClass, turboClass] of cases) {

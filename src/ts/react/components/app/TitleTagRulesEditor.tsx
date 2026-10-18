@@ -94,7 +94,7 @@ function RuleCard({
             </div>
             <RuleTitleList rule={rule} onPatch={onPatch} />
             <RuleClassConditions rule={rule} onPatch={onPatch} />
-            <p className="text-xs opacity-60">{t('app.titleRuleConditionsHint')}</p>
+            <p className="text-xs text-base-content/70">{t('app.titleRuleConditionsHint')}</p>
             <RuleProfileSelect rule={rule} profiles={profiles} onPatch={onPatch} />
             <RuleScenarioSelect rule={rule} onPatch={onPatch} />
             <RuleBehaviour rule={rule} onPatch={onPatch} />
@@ -178,11 +178,11 @@ export function TitleTagRulesEditor({
 
     return (
         <div className="space-y-3">
-            {rules.length === 0 && <p className="text-sm text-base-content/60">{t('app.noTitleTagRules')}</p>}
+            {rules.length === 0 && <p className="text-sm text-base-content/70">{t('app.noTitleTagRules')}</p>}
 
             {rules.length > 1 && (
                 <div className="flex items-center gap-2">
-                    <p className="text-xs opacity-60 flex-1">{t('app.titleRuleOrderHint')}</p>
+                    <p className="text-xs text-base-content/70 flex-1">{t('app.titleRuleOrderHint')}</p>
                     <button
                         type="button"
                         className="btn btn-outline btn-sm"

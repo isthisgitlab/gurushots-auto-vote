@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneIcon } from '@/components/ui/ToneNote';
 import { useImportRefText, useImportReport } from '@/api/useImportReport';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { interp } from '@/utils/interp';
@@ -23,7 +24,7 @@ function ImportReportBlock() {
     return (
         <div className="mb-4 text-sm">
             <h5 className="font-medium mb-1">{t('about.importTitle')}</h5>
-            <p className="text-xs text-base-content/60 mb-1">
+            <p className="text-xs text-base-content/70 mb-1">
                 {interp(t(settingsFile ? 'about.importAt' : 'about.importAtAndroid'), {
                     date: Number.isNaN(date.getTime()) ? report.at : date.toLocaleDateString(dateLocale()),
                 })}
@@ -62,16 +63,19 @@ export function AboutDataSection() {
                 <button type="button" className="btn btn-outline btn-sm" onClick={() => setLicensesOpen(true)}>
                     {t('about.licensesButton')}
                 </button>
-                <span className="text-xs text-base-content/60">{t('about.licensesDesc')}</span>
+                <span className="text-xs text-base-content/70">{t('about.licensesDesc')}</span>
             </div>
             <ImportReportBlock />
             <div className="rounded-lg border border-error/50 p-3">
-                <h5 className="font-medium text-sm text-error mb-1">{t('about.dangerTitle')}</h5>
+                <h5 className="font-medium text-sm mb-1">
+                    <ToneIcon tone="error" />
+                    {t('about.dangerTitle')}
+                </h5>
                 <div className="flex flex-wrap items-center gap-3">
                     <button type="button" className="btn btn-error btn-sm" onClick={() => setDeleteOpen(true)}>
                         {t('about.deleteButton')}
                     </button>
-                    <span className="text-xs text-base-content/60">{t('about.deleteDesc')}</span>
+                    <span className="text-xs text-base-content/70">{t('about.deleteDesc')}</span>
                 </div>
             </div>
             <LicensesModal isOpen={licensesOpen} onClose={() => setLicensesOpen(false)} />

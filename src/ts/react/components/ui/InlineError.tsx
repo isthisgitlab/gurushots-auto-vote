@@ -1,11 +1,13 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneIcon } from './ToneNote';
 
 import type { ComponentChildren } from 'preact';
 
 /**
- * A failed action's message next to the control that failed. It is announced when it appears (role="alert") and
- * stays until the user dismisses it or starts the next action — a message that vanishes on a timer is gone before a
- * screen-reader user or a slow reader gets to it.
+ * A failed action's message next to the control that failed, in body-text colour behind an error icon (coloured text
+ * is too faint on the light themes, and the icon's shape carries the tone without its colour). It is announced when
+ * it appears (role="alert") and stays until the user dismisses it or starts the next action — a message that vanishes
+ * on a timer is gone before a screen-reader user or a slow reader gets to it.
  *
  * @param props.onDismiss - clears the message; the dismiss button shows only when this is given
  * @param props.className - layout classes of the wrapper (spacing, display)
@@ -21,7 +23,8 @@ export function InlineError({
 }) {
     const { t } = useTranslation();
     return (
-        <div role="alert" className={`text-error text-xs ${className}`.trim()}>
+        <div role="alert" className={`text-base-content text-xs ${className}`.trim()}>
+            <ToneIcon tone="error" />
             <span>{children}</span>
             {onDismiss && (
                 <button

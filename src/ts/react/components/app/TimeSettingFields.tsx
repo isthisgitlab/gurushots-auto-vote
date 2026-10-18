@@ -1,4 +1,5 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { useListDraft, LIST_FINGERPRINT_SEP } from '@/hooks/useListDraft';
 import { secondsToHoursMinutes, hoursMinutesToSeconds } from '@/utils/timeFieldUnits';
 import { MAX_SCHEDULED_FILL_ENTRIES } from '../../../settings/limits';
@@ -198,8 +199,12 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled }
                             disabled={disabled}
                         />
                         <span aria-live="polite" id={hintId} className="text-xs">
-                            {off && <span className="opacity-60">{t('app.autoSubmitScheduleOff')}</span>}
-                            {outOfRange && <span className="text-error">{t('app.autoSubmitScheduleOutOfRange')}</span>}
+                            {off && <span className="text-base-content/70">{t('app.autoSubmitScheduleOff')}</span>}
+                            {outOfRange && (
+                                <ToneNote tone="error" as="span">
+                                    {t('app.autoSubmitScheduleOutOfRange')}
+                                </ToneNote>
+                            )}
                             {dominated && (
                                 <span className="badge badge-warning badge-sm">
                                     {t('app.autoSubmitScheduleDominated')}
@@ -210,9 +215,9 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled }
                 );
             })}
             {activeRows.length === 0 && (
-                <div role="status" className="text-xs text-warning">
+                <ToneNote tone="warning" as="div" role="status" className="text-xs">
                     {t('app.autoSubmitScheduleEmpty')}
-                </div>
+                </ToneNote>
             )}
             {onReset && (
                 <div className="flex items-center gap-2">
@@ -270,9 +275,9 @@ function RowListFooter({
                 </span>
             )}
             {atCap && (
-                <span role="status" className="text-xs text-warning">
+                <ToneNote tone="warning" as="span" role="status" className="text-xs">
                     {t('app.scheduledFillMaxEntries').replace('{0}', String(SCHEDULED_FILL_MAX_ENTRIES))}
-                </span>
+                </ToneNote>
             )}
             <SettingResetButton settingKey={settingKey} onReset={onReset} />
         </div>
@@ -383,7 +388,11 @@ const TIME_OF_DAY_ROWS: RowKind<string> = {
                     disabled={disabled}
                 />
             ),
-            hint: duplicate && <span className="text-error">{t('app.scheduledFillDuplicateEntry')}</span>,
+            hint: duplicate && (
+                <ToneNote tone="error" as="span">
+                    {t('app.scheduledFillDuplicateEntry')}
+                </ToneNote>
+            ),
         };
     },
 };
@@ -419,9 +428,17 @@ const BEFORE_END_ROWS: RowKind<number> = {
             ),
             hint: (
                 <>
-                    {seconds === 0 && <span className="opacity-60">{t('app.scheduledFillEntryDraft')}</span>}
-                    {outOfRange && <span className="text-error">{t('app.autoSubmitScheduleOutOfRange')}</span>}
-                    {duplicate && <span className="text-error">{t('app.scheduledFillDuplicateEntry')}</span>}
+                    {seconds === 0 && <span className="text-base-content/70">{t('app.scheduledFillEntryDraft')}</span>}
+                    {outOfRange && (
+                        <ToneNote tone="error" as="span">
+                            {t('app.autoSubmitScheduleOutOfRange')}
+                        </ToneNote>
+                    )}
+                    {duplicate && (
+                        <ToneNote tone="error" as="span">
+                            {t('app.scheduledFillDuplicateEntry')}
+                        </ToneNote>
+                    )}
                 </>
             ),
         };

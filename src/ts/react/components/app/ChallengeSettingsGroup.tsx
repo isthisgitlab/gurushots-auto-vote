@@ -5,6 +5,7 @@ import { formatSettingDefault } from '@/utils/formatters';
 import { interp } from '@/utils/interp';
 import { getScheduleShift } from '../../../services/scheduleRemap';
 import { SettingHelp } from '@/components/ui/SettingHelp';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { SettingInput, SettingLabel } from './SettingInput';
 import { SettingHintList } from './SettingHints';
 
@@ -115,7 +116,7 @@ function ChallengeSettingCell({
                     />
                 </div>
             </SettingLabel>
-            <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
+            <p className="text-xs text-base-content/70 mb-2">{t(config.description)}</p>
             <SettingHelp helpKey={config.helpKey} />
             <SettingInput
                 id={inputId}
@@ -127,14 +128,14 @@ function ChallengeSettingCell({
                 disabled={!applicable}
             />
             {scheduleShift > 0 && (
-                <p className="text-xs text-info mt-1">
+                <ToneNote tone="info" className="text-xs mt-1">
                     {t('app.autoSubmitScheduleShiftHint')
                         .replace('{0}', String(shiftedChallenge.max_photo_submits))
                         .replace('{1}', String(shiftedChallenge.max_photo_submits + scheduleShift))}
-                </p>
+                </ToneNote>
             )}
             <SettingHintList hints={hintsFor(key)} />
-            <p className={`text-xs mt-1 ${hasOverride ? 'text-base-content/70' : 'text-base-content/40'}`}>
+            <p className="text-xs mt-1 text-base-content/70">
                 {t('app.globalDefault')}: {formatSettingDefault(defaults?.[key] ?? config.default, config, t)}
             </p>
         </div>

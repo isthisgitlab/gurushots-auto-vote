@@ -18,10 +18,12 @@ export type SettingChangeHandler = (key: string, value: unknown) => void;
 /** A settings field's per-key reset. */
 export type SettingResetHandler = (key: string) => void;
 
-/** One inline hint under a setting: DaisyUI text-colour classes plus the translated sentence. */
+/** One inline hint under a setting: its tone (the icon it reads with) plus the translated sentence. */
 export interface SettingHint {
-    tone: string;
+    tone: 'info' | 'warning';
     text: string;
+    /** Set on the hints the user most needs to act on (a setting that cancels another). */
+    strong?: boolean;
 }
 
 /** A modal's per-setting hint resolver. */

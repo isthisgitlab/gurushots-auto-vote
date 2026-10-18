@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { ToneNote } from '@/components/ui/ToneNote';
 import type { TargetedEvent, TargetedSubmitEvent } from 'preact';
 
 /**
@@ -99,7 +100,11 @@ export function LoginForm({
                     disabled={loading}
                     autoComplete="username"
                 />
-                {errors.username && <div className="text-error font-medium mt-1">{errors.username}</div>}
+                {errors.username && (
+                    <ToneNote tone="error" as="div" className="font-medium mt-1">
+                        {errors.username}
+                    </ToneNote>
+                )}
             </div>
 
             {/* Password field */}
@@ -117,7 +122,11 @@ export function LoginForm({
                     disabled={loading}
                     autoComplete="current-password"
                 />
-                {errors.password && <div className="text-error font-medium mt-1">{errors.password}</div>}
+                {errors.password && (
+                    <ToneNote tone="error" as="div" className="font-medium mt-1">
+                        {errors.password}
+                    </ToneNote>
+                )}
             </div>
 
             {/* Submit button */}

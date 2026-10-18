@@ -1,4 +1,5 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { formatDuration } from '@/utils/formatters';
 import { useTick } from '@/hooks/useTick';
 import { interp } from '@/utils/interp';
@@ -66,11 +67,10 @@ function Unavailable({
     // The button's own label, which the compact tile's notice names (the tile has no button of its own).
     const resetLabel = status.corrupt === 'file' ? 'app.scenarioResetAll' : 'app.scenarioReset';
     return (
-        <div className="text-xs text-warning space-y-1">
-            <div role="status">
-                <span aria-hidden="true">⚠</span>{' '}
+        <div className="text-xs space-y-1">
+            <ToneNote tone="warning" as="div" role="status">
                 {interp(t(key), { name: status.name, details: t('app.details'), reset: t(resetLabel) })}
-            </div>
+            </ToneNote>
             {status.corrupt && status.corrupt !== 'unloaded' && onReset && (
                 <ResetButton label={resetLabel} onReset={onReset} />
             )}
@@ -111,9 +111,15 @@ function Notice({ status, compact }: { status: Summary; compact: boolean }) {
             {[spend, problem].map(
                 (text) =>
                     text && (
-                        <div key={text} className={`text-warning ${compact ? 'line-clamp-2' : ''}`} role="status">
+                        <ToneNote
+                            key={text}
+                            tone="warning"
+                            as="div"
+                            role="status"
+                            className={compact ? 'line-clamp-2' : ''}
+                        >
                             {text}
-                        </div>
+                        </ToneNote>
                     ),
             )}
         </>

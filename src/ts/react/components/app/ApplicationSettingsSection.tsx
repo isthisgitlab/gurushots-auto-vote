@@ -67,7 +67,7 @@ function UiSettingCell({
                 <span className="font-medium">{t(labelKey)}</span>
                 <span className="badge badge-ghost badge-sm ml-2">{t('app.uiSetting')}</span>
             </SettingLabel>
-            <p className="text-xs text-base-content/60 mb-2">{t(descKey)}</p>
+            <p className="text-xs text-base-content/70 mb-2">{t(descKey)}</p>
             {children}
         </div>
     );

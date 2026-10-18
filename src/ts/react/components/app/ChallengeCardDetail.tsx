@@ -88,13 +88,13 @@ function DetailHeader({
                 {/* Welcome message. wrap-anywhere wraps the full text, including long unbroken words and URLs, so it never forces the card wider. sanitizeWelcomeMessage strips medium-editor toolbar leakage and allowlists safe tags. */}
                 {sanitizedWelcome && (
                     <div
-                        className="text-xs text-base-content/60 wrap-anywhere"
+                        className="text-xs text-base-content/70 wrap-anywhere"
                         dangerouslySetInnerHTML={{ __html: sanitizedWelcome }} /* aislop-ignore-line -- sanitized */
                     />
                 )}
                 <ChallengeBadgeRow {...badgeRowProps} />
                 {challenge.url && (
-                    <div className="text-xs text-base-content/40 mt-1">
+                    <div className="text-xs text-base-content/70 mt-1">
                         <button onClick={handleOpenUrl} className="font-mono hover:text-info hover:underline text-left">
                             {challengePageUrl(challenge.url).replace('https://', '')}
                         </button>
@@ -160,10 +160,10 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
                 )}
             </div>
             {challenge.type !== 'flash' && (
-                <div className="text-xs text-base-content/60 mt-1">{userProgress.next_message}</div>
+                <div className="text-xs text-base-content/70 mt-1">{userProgress.next_message}</div>
             )}
             {nextLevelInfo && (
-                <div className="text-xs text-base-content/60 mt-1">
+                <div className="text-xs text-base-content/70 mt-1">
                     {t('app.next')}: {nextLevelInfo.levelName} ({nextLevelInfo.votesNeeded} {t('app.votesNeeded')})
                 </div>
             )}
@@ -375,7 +375,7 @@ function EntryDetails({
 
     return (
         <div ref={detailsRef} tabIndex={-1} role="group" aria-labelledby={labelId}>
-            <div className="text-xs text-base-content/60 mb-1">
+            <div className="text-xs text-base-content/70 mb-1">
                 <span id={labelId}>{t('app.entryDetails')}</span>:
             </div>
             <div className="flex flex-col items-start gap-1">

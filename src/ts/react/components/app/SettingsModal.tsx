@@ -74,7 +74,7 @@ function SchemaSettingsGroup({
                                 <span className="badge badge-ghost badge-sm ml-2">{t('app.globalDefault')}</span>
                             )}
                         </SettingLabel>
-                        <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
+                        <p className="text-xs text-base-content/70 mb-2">{t(config.description)}</p>
                         <SettingHelp helpKey={config.helpKey} />
                         <SettingInput
                             settingKey={key}
@@ -119,7 +119,7 @@ function TitleRulesSection({ titleRules }: { titleRules: ReturnType<typeof useTi
     return (
         <div>
             <h4 className="font-semibold text-base mb-1 border-b border-base-300 pb-2">{t('app.titleTagRules')}</h4>
-            <p className="text-xs text-base-content/60 mb-3">{t('app.titleTagRulesDesc')}</p>
+            <p className="text-xs text-base-content/70 mb-3">{t('app.titleTagRulesDesc')}</p>
             {titleRules.error && (
                 <div className="alert alert-error mb-3 py-2 text-sm" role="alert">
                     <span>{t('app.titleTagRulesSaveError')}</span>

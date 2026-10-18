@@ -15,7 +15,7 @@
  * "check the highlighted values" banner pointing at nothing.
  */
 
-import { render, fireEvent } from './helpers/test-utils';
+import { render, fireEvent, screen } from './helpers/test-utils';
 import type { ComponentProps } from 'preact';
 import { SettingInput } from '@/components/app/SettingInput';
 import type { SerializableSchemaEntry } from '../../src/ts/ipc/settings.handlers';
@@ -108,14 +108,14 @@ describe('SettingInput — number', () => {
     });
 
     test('a min-only setting explains the lower bound', () => {
-        const { container } = renderNumber({ config: invalid({ type: 'number', min: 1 }), value: 0 });
+        renderNumber({ config: invalid({ type: 'number', min: 1 }), value: 0 });
 
-        expect(container.querySelector('.text-error')!.textContent).toBe('app.validationAtLeast');
+        expect(screen.getByText('app.validationAtLeast')).toBeTruthy();
     });
 
     test('an unbounded setting left blank gets the generic invalid-value message', () => {
-        const { container } = renderNumber({ config: invalid({ type: 'number' }), value: '' });
+        renderNumber({ config: invalid({ type: 'number' }), value: '' });
 
-        expect(container.querySelector('.text-error')!.textContent).toBe('app.validationInvalidValue');
+        expect(screen.getByText('app.validationInvalidValue')).toBeTruthy();
     });
 });

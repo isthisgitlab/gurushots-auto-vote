@@ -66,11 +66,11 @@ export function UpdateDialog() {
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
-                            <span className="text-base-content/60">{t('app.currentVersion')}:</span>
+                            <span className="text-base-content/70">{t('app.currentVersion')}:</span>
                             <span className="ml-2 font-mono">{updateInfo.currentVersion}</span>
                         </div>
                         <div>
-                            <span className="text-base-content/60">{t('app.latestVersion')}:</span>
+                            <span className="text-base-content/70">{t('app.latestVersion')}:</span>
                             <span className="ml-2 font-mono">{updateInfo.latestVersion}</span>
                             {updateInfo.isPrerelease && (
                                 <span className="badge badge-warning badge-sm ml-1">Pre-release</span>

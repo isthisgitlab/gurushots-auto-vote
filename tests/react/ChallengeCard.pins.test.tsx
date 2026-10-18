@@ -651,7 +651,7 @@ describe('the compact tile', () => {
         expect(hidden.className).toContain('sr-only');
         const mark = hidden.parentElement!;
         expect(mark.getAttribute('title')).toBe(text);
-        expect(mark.className).toContain('text-base-content/60');
+        expect(mark.className).toContain('text-base-content/70');
         // The short reason is visible text (a title is invisible on touch), hidden from screen readers.
         const visible = screen.getByText('📌 app.pinNotApplyingShort');
         expect(visible.getAttribute('aria-hidden')).toBe('true');

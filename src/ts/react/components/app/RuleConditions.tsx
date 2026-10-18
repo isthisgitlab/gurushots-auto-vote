@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { RuleNumberField } from './RuleFields';
 import { normalizeRuleClosesAt } from '../../../settings/challengeRules';
 
@@ -108,9 +109,9 @@ function CloseTimeRow({
                 )}
             </div>
             {invalid && (
-                <span id={messageId} className="text-error text-xs">
+                <ToneNote tone="error" as="span" id={messageId} className="text-xs">
                     {t('app.titleRuleClosesAtInvalid')}
-                </span>
+                </ToneNote>
             )}
         </div>
     );

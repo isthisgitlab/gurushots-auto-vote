@@ -60,14 +60,14 @@ export function ChallengeBadgeRow({
         <div className="flex flex-wrap items-center gap-1 mt-1">
             {boostOpen && (
                 <StatusBadge variant="info" className="gap-1 font-semibold">
-                    <PulseDot variant="info" size="status-sm" />
+                    <PulseDot variant="info" size="status-sm" onBadge />
                     🚀 {t('app.boostOpenBadge')}
                     {boostTimeLeft && <span>· ⏳ {boostTimeLeft}</span>}
                 </StatusBadge>
             )}
             {lowExposure && (
                 <StatusBadge variant="error" className="gap-1 font-semibold">
-                    <PulseDot variant="error" pulse={exposureFactor === 0} size="status-sm" />
+                    <PulseDot variant="error" pulse={exposureFactor === 0} size="status-sm" onBadge />
                     👁 {t('app.exposure')} {exposureFactor}%
                 </StatusBadge>
             )}

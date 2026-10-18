@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { getIntentByName, intentValuesMatch } from '../../../settings/intentProfiles';
 import * as ipc from '@/api/ipc';
 import { useOnChosenPhotosCleared, withoutChosenPhotos } from '@/api/chosenPhotosCleared';
@@ -205,6 +206,13 @@ export function ChallengeProfilesBar({
         }
     };
 
+    const liveMessage =
+        errorText ||
+        (confirming === 'delete' && t('app.confirmDelete')) ||
+        (confirming === 'overwrite' && t('app.confirmOverwrite')) ||
+        (applied && t('app.profileAppliedHint')) ||
+        '';
+
     return (
         <div className="rounded-box border border-base-300 p-3 space-y-2">
             <h4 className="font-semibold text-sm">{t('app.challengeProfiles')}</h4>
@@ -273,14 +281,14 @@ export function ChallengeProfilesBar({
 
             {/* Single polite live region: confirm-arm prompts, errors and the
                 post-apply reminder are announced without stealing focus. */}
-            <p aria-live="polite" className={errorText ? 'text-xs text-error' : 'text-xs text-info'}>
-                {errorText ||
-                    (confirming === 'delete' && t('app.confirmDelete')) ||
-                    (confirming === 'overwrite' && t('app.confirmOverwrite')) ||
-                    (applied && t('app.profileAppliedHint')) ||
-                    ''}
+            <p aria-live="polite" className="text-xs">
+                {liveMessage && (
+                    <ToneNote tone={errorText ? 'error' : 'info'} as="span">
+                        {liveMessage}
+                    </ToneNote>
+                )}
             </p>
-            <p className="text-xs opacity-60">
+            <p className="text-xs text-base-content/70">
                 {t('app.profileApplyHint')} {t('app.profileOverwriteHint')}
             </p>
         </div>

@@ -1,4 +1,5 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { costOf } from '@/utils/discoverCost';
 import { interp } from '@/utils/interp';
@@ -46,20 +47,21 @@ export function JoinConfirmModal({
                             {confirm.chosenEffectiveCount > 0 && (
                                 <p className="text-base-content/70">{t('app.discoverConfirmChosen')}</p>
                             )}
-                            <p className={insufficient ? 'text-error' : 'text-base-content/70'}>
-                                {!known
-                                    ? t('app.discoverConfirmBalanceUnknown')
-                                    : insufficient
-                                      ? interp(t('app.discoverConfirmInsufficient'), {
-                                            current: coins,
-                                            cost: cCost,
-                                        })
-                                      : interp(t('app.discoverConfirmBalance'), {
-                                            current: coins,
-                                            cost: cCost,
-                                            resulting: coins - cCost,
-                                        })}
-                            </p>
+                            {insufficient ? (
+                                <ToneNote tone="error">
+                                    {interp(t('app.discoverConfirmInsufficient'), { current: coins, cost: cCost })}
+                                </ToneNote>
+                            ) : (
+                                <p className="text-base-content/70">
+                                    {known
+                                        ? interp(t('app.discoverConfirmBalance'), {
+                                              current: coins,
+                                              cost: cCost,
+                                              resulting: coins - cCost,
+                                          })
+                                        : t('app.discoverConfirmBalanceUnknown')}
+                                </p>
+                            )}
                         </div>
                         <ModalActions>
                             <button className="btn btn-outline btn-sm" onClick={dismiss}>

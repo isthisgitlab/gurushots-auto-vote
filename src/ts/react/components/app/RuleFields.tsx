@@ -57,7 +57,7 @@ export function RuleNumberField({
                         onPatch({ [settingKey]: next === '' ? '' : Number(next) });
                     }}
                 />
-                <span className="text-xs opacity-60">{t(unitKey)}</span>
+                <span className="text-xs text-base-content/70">{t(unitKey)}</span>
             </div>
         </div>
     );

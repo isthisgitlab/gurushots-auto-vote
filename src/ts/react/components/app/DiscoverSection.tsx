@@ -10,6 +10,7 @@ import { costOf } from '@/utils/discoverCost';
 import { outcomeMeta } from '@/utils/discoverOutcome';
 import type { OutcomeVariant } from '@/utils/discoverOutcome';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { interp } from '@/utils/interp';
 import { formatDuration, formatEndTime } from '@/utils/formatters';
 import * as ipc from '@/api/ipc';
@@ -39,12 +40,11 @@ export type JoinOutcome = {
 };
 
 // Static (purge-safe) text color per outcome variant — never build Tailwind
-// class names dynamically, the JIT can't see them.
-const TEXT_CLASS: Record<OutcomeVariant, string> = {
+// class names dynamically, the JIT can't see them. A warning or an error is
+// body-text colour behind a tone icon (ToneNote), so it has no entry here.
+const TEXT_CLASS: Record<Exclude<OutcomeVariant, 'warning' | 'error'>, string> = {
     success: 'text-success',
-    warning: 'text-warning',
-    error: 'text-error',
-    neutral: 'text-base-content/60',
+    neutral: 'text-base-content/70',
 };
 
 /** What names a row for assistive technology: its title, else its address. */
@@ -103,7 +103,7 @@ function ChosenMarks({ c, name, onChoose }: { c: OpenChallenge; name: string; on
     }
     if (c.chosenEffectiveCount === 0) return null;
     return (
-        <div className="text-xs text-base-content/60 mt-0.5">
+        <div className="text-xs text-base-content/70 mt-0.5">
             {interp(t('app.discoverChosenInherited'), { count: c.chosenEffectiveCount })}
         </div>
     );
@@ -264,12 +264,9 @@ function RowOutcome({
 }) {
     const { t } = useTranslation();
     const meta = outcomeMeta(outcome);
-    return (
-        // Announced when it appears: a problem interrupts (alert), a result or a note waits its turn (status).
-        <div
-            role={meta.variant === 'error' || meta.variant === 'warning' ? 'alert' : 'status'}
-            className={`text-xs mt-0.5 ${TEXT_CLASS[meta.variant]}`}
-        >
+    const { variant } = meta;
+    const content = (
+        <>
             {meta.key
                 ? interp(t(meta.key), { coins: outcome.cost ?? cost, have: outcome.coins })
                 : ipcErrorText(outcome.error, t) || t('app.discoverGenericError')}
@@ -283,6 +280,19 @@ function RowOutcome({
                     {t('app.discoverForgetPayment')}
                 </button>
             )}
+        </>
+    );
+    // Announced when it appears: a problem interrupts (alert), a result or a note waits its turn (status).
+    if (variant === 'error' || variant === 'warning') {
+        return (
+            <ToneNote tone={variant} as="div" role="alert" className="text-xs mt-0.5">
+                {content}
+            </ToneNote>
+        );
+    }
+    return (
+        <div role="status" className={`text-xs mt-0.5 ${TEXT_CLASS[variant]}`}>
+            {content}
         </div>
     );
 }
@@ -319,7 +329,7 @@ function DiscoverRow({
         <li className="flex flex-wrap items-center justify-between gap-2 rounded border border-base-200 px-2 py-1.5">
             <div className="min-w-0">
                 <div className="truncate font-medium">{name}</div>
-                <div className="flex flex-wrap items-center gap-1 text-xs text-base-content/60">
+                <div className="flex flex-wrap items-center gap-1 text-xs text-base-content/70">
                     <ChallengeKindBadges challenge={c} />
                     <ChallengeTagBadges tags={listedTags(c)} />
                     <span>
@@ -335,7 +345,7 @@ function DiscoverRow({
                 <StartLine c={c} nowSec={nowSec} />
                 <ChosenMarks c={c} name={name} onChoose={onChoose} />
                 {waiting !== null && c.chosenEffectiveCount > 0 && (
-                    <div className="text-xs text-base-content/60 mt-0.5">{t('app.discoverUpcomingChosenHint')}</div>
+                    <div className="text-xs text-base-content/70 mt-0.5">{t('app.discoverUpcomingChosenHint')}</div>
                 )}
                 {outcome && (
                     <RowOutcome outcome={outcome} cost={cost} name={name} busy={busy !== null} onForget={onForget} />
@@ -460,12 +470,16 @@ export function DiscoverSection({
                     </div>
 
                     {/* A failed read leaves the rows of the last good one (see useMemberChallenges): the error stands beside them. */}
-                    {error && <p className="text-sm text-error mb-2">{t('app.discoverUnavailableList')}</p>}
+                    {error && (
+                        <ToneNote tone="error" className="text-sm mb-2">
+                            {t('app.discoverUnavailableList')}
+                        </ToneNote>
+                    )}
                     {loading && list.length === 0 ? (
                         <InlineLoader />
                     ) : list.length === 0 ? (
                         error ? null : (
-                            <p className="text-sm text-base-content/60">{t('app.discoverEmpty')}</p>
+                            <p className="text-sm text-base-content/70">{t('app.discoverEmpty')}</p>
                         )
                     ) : (
                         <ul className="flex flex-col gap-2">

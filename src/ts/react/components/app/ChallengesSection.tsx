@@ -155,7 +155,7 @@ export function ChallengesSection({
         return (
             <div>
                 {fetchErrorBanner}
-                <div className="text-center py-4 text-base-content/60">
+                <div className="text-center py-4 text-base-content/70">
                     {isLoggedIn ? t('app.noActiveChallenges') : t('app.pleaseLogin')}
                 </div>
                 {error && isLoggedIn && (

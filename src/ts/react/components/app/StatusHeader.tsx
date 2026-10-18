@@ -46,7 +46,7 @@ function HeaderStat({
             {children ?? (
                 <>
                     <span className="font-semibold">{value}</span>
-                    <span className="text-base-content/60">{label}</span>
+                    <span className="text-base-content/70">{label}</span>
                 </>
             )}
         </div>
@@ -107,7 +107,7 @@ function MissedBoostsJump({
               : interp(t('app.missedBoostsKeysUnknown'), labels);
     return (
         <FocusDropdown
-            triggerClassName="btn btn-sm btn-soft btn-warning"
+            triggerClassName="btn btn-sm btn-warning"
             describedBy={hintId}
             menuClassName="menu z-[1] mt-1 p-2 shadow bg-base-100 rounded-box w-64 max-w-[calc(100vw-2rem)]"
             trigger={
@@ -167,7 +167,7 @@ function HeaderCountdown({ icon, labelKey, ...countdown }: { icon: string; label
     const { t } = useTranslation();
     return (
         <HeaderStat icon={icon}>
-            <span className="text-base-content/60">{t(labelKey)}:</span>
+            <span className="text-base-content/70">{t(labelKey)}:</span>
             <span className="inline-block min-w-[11ch] tabular-nums">
                 <NextActionCountdown {...countdown} />
             </span>

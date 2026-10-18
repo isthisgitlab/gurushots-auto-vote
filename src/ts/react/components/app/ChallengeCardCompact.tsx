@@ -6,6 +6,7 @@ import type { ChallengeCardView } from './ChallengeCard';
 import type { ChallengeBadgeRowProps } from './ChallengeBadgeRow';
 import type { DeadlineAction } from './DeadlineTimeline';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { statusBadgeClass, toneBadgeClass } from '@/utils/statTone';
 import { getEntryStatus, statusText } from '@/utils/formatters';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
@@ -193,7 +194,7 @@ export function ChallengeCardCompact({
             {notApplyingNote && (
                 // Visible short text, not just a glyph: a title is invisible on touch, and a dimmed pin alone reads
                 // like the live-pin mark. The full sentence is for screen readers and the title.
-                <div className="text-xs text-base-content/60" title={notApplyingNote.long}>
+                <div className="text-xs text-base-content/70" title={notApplyingNote.long}>
                     <span aria-hidden="true">📌 {notApplyingNote.short}</span>
                     <span className="sr-only">{notApplyingNote.long}</span>
                 </div>
@@ -211,9 +212,9 @@ export function ChallengeCardCompact({
             ).map(
                 ([kind, warning]) =>
                     warning && (
-                        <div key={kind} className="text-xs text-warning" role="alert">
-                            ⚠ {warning}
-                        </div>
+                        <ToneNote key={kind} tone="warning" as="div" role="alert" className="text-xs">
+                            {warning}
+                        </ToneNote>
                     ),
             )}
 

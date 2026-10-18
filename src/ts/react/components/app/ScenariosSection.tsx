@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { useScenarios } from '@/api/useScenarios';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { interp } from '@/utils/interp';
@@ -52,7 +53,7 @@ function ImportPreview({ preview }: { preview: ImportPreviewResult['preview'] })
                     : t('app.scenarioSpendsNothing')}
             </div>
             {preview.flagged.length > 0 && (
-                <div className="text-warning">
+                <ToneNote tone="warning" as="div">
                     {interp(t('app.scenarioFlagged'), {
                         settings: preview.flagged
                             .map(
@@ -61,7 +62,7 @@ function ImportPreview({ preview }: { preview: ImportPreviewResult['preview'] })
                             )
                             .join(', '),
                     })}
-                </div>
+                </ToneNote>
             )}
             <div>
                 {limits.length > 0
@@ -168,13 +169,13 @@ function ExportedScenario({ name, exported, onHide }: { name: string; exported: 
     const { t } = useTranslation();
     return (
         <div className="space-y-1">
-            <p className="text-xs text-base-content/60">{t('app.scenarioExportHint')}</p>
+            <p className="text-xs text-base-content/70">{t('app.scenarioExportHint')}</p>
             {exported.omitted.length > 0 && (
-                <p className="text-xs text-warning">
+                <ToneNote tone="warning" className="text-xs">
                     {interp(t('app.scenarioExportOmitted'), {
                         settings: exported.omitted.map((key) => t(`app.${key}`)).join(', '),
                     })}
-                </p>
+                </ToneNote>
             )}
             <textarea
                 className="textarea textarea-bordered w-full font-mono text-xs"
@@ -256,7 +257,7 @@ function ScenarioRow({
                 <span className="font-medium flex-1 min-w-0 truncate" title={name}>
                     {name}
                 </span>
-                <span className="text-xs text-base-content/60">
+                <span className="text-xs text-base-content/70">
                     {interp(t('app.scenarioPhaseCount'), { count: Object.keys(scenario.phases).length })}
                 </span>
                 <button type="button" className="btn btn-sm" aria-label={rowLabel('app.sbEdit')} onClick={onEdit}>
@@ -287,7 +288,7 @@ function ScenarioRow({
                     {armed ? t('app.scenarioDeleteConfirm') : t('app.scenarioDelete')}
                 </button>
             </div>
-            {scenario.description && <p className="text-xs text-base-content/60">{scenario.description}</p>}
+            {scenario.description && <p className="text-xs text-base-content/70">{scenario.description}</p>}
             {renaming !== null && (
                 <div className="flex gap-2">
                     <input
@@ -367,7 +368,7 @@ export function ScenariosSection({
     return (
         <div>
             <h4 className="font-semibold text-base mb-1 border-b border-base-300 pb-2">{t('app.scenarios')}</h4>
-            <p className="text-xs text-base-content/60 mb-3">{t('app.scenariosDesc')}</p>
+            <p className="text-xs text-base-content/70 mb-3">{t('app.scenariosDesc')}</p>
             {loading ? (
                 <InlineLoader text={t('common.loading')} />
             ) : loadError ? (
@@ -389,7 +390,7 @@ export function ScenariosSection({
                 <div className="space-y-3">
                     <ScenarioError error={error} />
                     {names.length === 0 ? (
-                        <p className="text-sm text-base-content/60">{t('app.scenariosEmpty')}</p>
+                        <p className="text-sm text-base-content/70">{t('app.scenariosEmpty')}</p>
                     ) : (
                         <ul className="space-y-2">
                             {names.map((name) => (

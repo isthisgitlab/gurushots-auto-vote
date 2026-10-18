@@ -155,7 +155,7 @@ export type TurboStatusCode = 'unavailable' | 'free' | 'timer' | 'inProgress' | 
  */
 export const getBoostStatus = (boost: MemberBoost | null | undefined): ResourceStatus<BoostStatusCode> => {
     if (!boost || !boost.state) {
-        return { code: 'unknown', colorClass: 'text-base-content/60' };
+        return { code: 'unknown', colorClass: 'text-base-content/70' };
     }
 
     if (boost.state === 'AVAILABLE' || boost.state === 'AVAILABLE_KEY') {
@@ -169,12 +169,12 @@ export const getBoostStatus = (boost: MemberBoost | null | undefined): ResourceS
     } else if (boost.state === 'USED') {
         return { code: 'used', colorClass: 'text-success' };
     } else if (boost.state === 'UNAVAILABLE') {
-        return { code: 'unavailable', colorClass: 'text-base-content/60' };
+        return { code: 'unavailable', colorClass: 'text-base-content/70' };
     } else if (boost.state === 'LOCKED') {
-        return { code: 'locked', colorClass: 'text-base-content/60' };
+        return { code: 'locked', colorClass: 'text-base-content/70' };
     } else {
         // state is non-empty here (guarded above), so it is shown verbatim.
-        return { code: 'other', colorClass: 'text-base-content/60', raw: boost.state };
+        return { code: 'other', colorClass: 'text-base-content/70', raw: boost.state };
     }
 };
 
@@ -248,14 +248,14 @@ export { isBoostWindowOpen } from '../../voting/boostWindow';
  */
 export const getTurboStatus = (turbo: MemberTurbo | null | undefined): ResourceStatus<TurboStatusCode> => {
     if (!turbo || !turbo.state) {
-        return { code: 'unavailable', colorClass: 'text-base-content/60' };
+        return { code: 'unavailable', colorClass: 'text-base-content/70' };
     }
 
     switch (turbo.state) {
         case 'FREE':
             return { code: 'free', colorClass: 'text-info' };
         case 'TIMER':
-            return { code: 'timer', colorClass: 'text-base-content/60' };
+            return { code: 'timer', colorClass: 'text-base-content/70' };
         case 'IN_PROGRESS':
             return { code: 'inProgress', colorClass: 'text-warning' };
         case 'WON':
@@ -263,12 +263,12 @@ export const getTurboStatus = (turbo: MemberTurbo | null | undefined): ResourceS
         case 'USED':
             return { code: 'used', colorClass: 'text-success' };
         case 'UNAVAILABLE':
-            return { code: 'unavailable', colorClass: 'text-base-content/60' };
+            return { code: 'unavailable', colorClass: 'text-base-content/70' };
         case 'LOCKED':
-            return { code: 'locked', colorClass: 'text-base-content/60' };
+            return { code: 'locked', colorClass: 'text-base-content/70' };
         default:
             // state is non-empty here (guarded above), so it is shown verbatim.
-            return { code: 'other', colorClass: 'text-base-content/60', raw: turbo.state };
+            return { code: 'other', colorClass: 'text-base-content/70', raw: turbo.state };
     }
 };
 

@@ -1,5 +1,6 @@
 import { render, fireEvent } from './helpers/test-utils';
 import { ActionButton } from '@/components/ui/ActionButton';
+import { ICON_PATHS } from '@/components/ui/StrokeIcon';
 
 test.each([
     ['neutral', 'btn-neutral'],
@@ -16,6 +17,21 @@ test.each([
         </ActionButton>,
     );
     expect(button.className).toBe('btn btn-sm btn-error');
+});
+
+test('a failed action adds an error icon, so the button no longer reads as the idle solid-red cost button', () => {
+    const { container, rerender } = render(<ActionButton variant="cost">Go</ActionButton>);
+    expect(container.querySelector('svg')).toBeNull();
+
+    rerender(
+        <ActionButton variant="cost" error="Failed">
+            Go
+        </ActionButton>,
+    );
+    const icon = container.querySelector('button > svg')!;
+    expect(icon.getAttribute('aria-hidden')).toBe('true');
+    expect(icon.querySelector('path')!.getAttribute('d')).toBe(ICON_PATHS.xCircle);
+    expect(container.querySelector('button')!.textContent).toBe('Go');
 });
 
 test('preserves extra classes and native button properties', () => {

@@ -12,6 +12,8 @@ import { Modal, ModalActions } from '@/components/ui/Modal';
 import { AsyncActionButton } from '@/components/ui/AsyncActionButton';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
+import { ToneNote } from '@/components/ui/ToneNote';
+import { InlineError } from '@/components/ui/InlineError';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 
@@ -100,6 +102,15 @@ describe('PulseDot', () => {
         const dots = container.querySelectorAll('.status');
         expect(dots).toHaveLength(1);
         expect(dots[0].className).toBe('status status-xs status-info');
+    });
+
+    test("on a solid badge the dot takes the tone's -content colour, so it does not vanish into the badge", () => {
+        const { container } = render(<PulseDot variant="error" size="status-sm" onBadge />);
+        const dots = container.querySelectorAll('.status');
+        expect(dots).toHaveLength(2);
+        expect(dots[1].className).toBe('status status-sm bg-error-content');
+        expect(container.querySelector('.status-error')).toBeNull();
+        expect(render(<PulseDot pulse={false} onBadge />).container.querySelector('.bg-info-content')).not.toBeNull();
     });
 
     describe('when the page comes back into view', () => {
@@ -285,6 +296,46 @@ describe('AsyncActionButton edges', () => {
         render(<AsyncActionButton {...base} action={jest.fn().mockRejectedValue('plain string')} />);
         fireEvent.click(screen.getByText('go'));
         await waitFor(() => expect(mockApi.logError).toHaveBeenCalledWith('Errored: plain string'));
+    });
+});
+
+describe('ToneNote', () => {
+    test.each([
+        ['info', ICON_PATHS.info, 'text-info'],
+        ['warning', ICON_PATHS.warning, 'text-warning'],
+        ['error', ICON_PATHS.xCircle, 'text-error'],
+    ] as const)('%s: the words stay in body-text colour and the tone sits on a distinct icon', (tone, d, colour) => {
+        render(<ToneNote tone={tone}>Careful</ToneNote>);
+        const note = screen.getByText('Careful');
+        expect(note.tagName).toBe('P');
+        expect(note.className).toBe('text-base-content');
+        const icon = note.querySelector('svg')!;
+        expect(icon.getAttribute('aria-hidden')).toBe('true');
+        expect(icon.getAttribute('class')).toContain(colour);
+        expect(icon.querySelector('path')!.getAttribute('d')).toBe(d);
+    });
+
+    test("the element, role, id and classes are the caller's, on the element that holds the text", () => {
+        render(
+            <ToneNote tone="warning" as="span" role="status" id="why" className="text-xs">
+                Heads up
+            </ToneNote>,
+        );
+        const note = screen.getByRole('status');
+        expect(note.tagName).toBe('SPAN');
+        expect(note.id).toBe('why');
+        expect(note.className).toBe('text-base-content text-xs');
+        expect(note.textContent).toBe('Heads up');
+    });
+});
+
+describe('InlineError', () => {
+    test('is announced, keeps the words in body-text colour and marks the tone with an error icon', () => {
+        render(<InlineError>It failed</InlineError>);
+        const alert = screen.getByRole('alert');
+        expect(alert.className).toBe('text-base-content text-xs');
+        expect(alert.textContent).toBe('It failed');
+        expect(alert.querySelector('svg')!.getAttribute('class')).toContain('text-error');
     });
 });
 

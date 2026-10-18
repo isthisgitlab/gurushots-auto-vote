@@ -81,12 +81,12 @@ export function ChosenPhotosControl({
     return (
         <div className="flex flex-wrap items-center gap-2">
             {value === null ? (
-                <span className="text-base-content/60 text-sm">{t('app.titleRuleInherit')}</span>
+                <span className="text-base-content/70 text-sm">{t('app.titleRuleInherit')}</span>
             ) : ids.length === 0 ? (
-                <span className="text-base-content/60 text-sm">{t('app.none')}</span>
+                <span className="text-base-content/70 text-sm">{t('app.none')}</span>
             ) : otherAccount ? (
                 // Another account's photos are neither shown nor named, only counted.
-                <span className="text-base-content/60 text-sm">
+                <span className="text-base-content/70 text-sm">
                     {interp(t('app.chosenPhotosOtherAccountCount'), { count: ids.length })}
                 </span>
             ) : (
@@ -117,7 +117,7 @@ export function ChosenPhotosControl({
                 </button>
             )}
             {value !== null && clearHint && (
-                <p id={hintId} className="basis-full text-xs text-base-content/60">
+                <p id={hintId} className="basis-full text-xs text-base-content/70">
                     {clearHint}
                 </p>
             )}

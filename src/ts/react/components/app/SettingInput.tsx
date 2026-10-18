@@ -1,4 +1,5 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { useListDraft, LIST_FINGERPRINT_SEP } from '@/hooks/useListDraft';
 import { SettingResetButton } from './SettingResetButton';
 import { TimeField, ScheduleField, TimeOfDayListField, TimeListField } from './TimeSettingFields';
@@ -220,7 +221,11 @@ function NumberField({ id, settingKey, config, value, onChange, onReset, disable
                 />
                 {config.unit && <span className="text-sm">{t(config.unit)}</span>}
             </ControlRow>
-            {invalid && <span className="text-error text-xs">{numberRangeMessage(config, t)}</span>}
+            {invalid && (
+                <ToneNote tone="error" as="span" className="text-xs">
+                    {numberRangeMessage(config, t)}
+                </ToneNote>
+            )}
         </div>
     );
 }

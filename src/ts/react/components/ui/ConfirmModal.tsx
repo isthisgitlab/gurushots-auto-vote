@@ -1,6 +1,7 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from './Modal';
 import { ConfirmButton } from './ConfirmButton';
+import { ToneNote } from './ToneNote';
 import type { ComponentChildren } from 'preact';
 
 /**
@@ -43,9 +44,9 @@ export function ConfirmModal({
             <div className="space-y-2 text-sm">
                 {children}
                 {problem && (
-                    <p role="alert" className="text-error">
+                    <ToneNote tone="error" role="alert">
                         {t(problem)}
-                    </p>
+                    </ToneNote>
                 )}
             </div>
             <ModalActions>

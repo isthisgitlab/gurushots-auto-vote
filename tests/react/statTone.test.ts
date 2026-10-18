@@ -70,8 +70,8 @@ describe('statusBadgeClass', () => {
     });
 
     test('a muted colour stays as it is', () => {
-        expect(statusBadgeClass('text-base-content/60', 'md')).toBe('text-base-content/60');
-        expect(statusBadgeClass('text-base-content/60', 'sm')).toBe('text-base-content/60');
+        expect(statusBadgeClass('text-base-content/70', 'md')).toBe('text-base-content/70');
+        expect(statusBadgeClass('text-base-content/70', 'sm')).toBe('text-base-content/70');
     });
 });
 
@@ -99,7 +99,7 @@ describe('formatter colour classes', () => {
         ...turbos.map((turbo) => [`turbo ${JSON.stringify(turbo)}`, getTurboStatus(invalid(turbo)).colorClass]),
     ])('%s', (_name, colorClass) => {
         const rendered = statusBadgeClass(colorClass, 'md');
-        expect(rendered.startsWith('badge ') || rendered === 'text-base-content/60').toBe(true);
+        expect(rendered.startsWith('badge ') || rendered === 'text-base-content/70').toBe(true);
     });
 });
 

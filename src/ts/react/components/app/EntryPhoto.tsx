@@ -110,7 +110,7 @@ export function EntryPhoto({ entry }: { entry: RankingEntry }) {
                     referrerPolicy="no-referrer"
                     className="max-h-[70vh] w-full rounded object-contain"
                 />
-                <div className="text-base-content/60 mt-2 text-xs">
+                <div className="text-base-content/70 mt-2 text-xs">
                     {t('app.rank')} {entry.rank} · {entry.votes} {t('app.votes')}
                 </div>
             </Modal>

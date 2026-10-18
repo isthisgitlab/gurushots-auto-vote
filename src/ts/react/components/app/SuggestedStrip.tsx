@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { interp } from '@/utils/interp';
 import { PhotoTile } from './PhotoChooserModal';
 
@@ -53,7 +54,11 @@ export function SuggestedStrip({
             <p className="text-xs" aria-hidden="true">
                 {interp(t('app.pickSuggestedCount'), { count: photos.length })}
             </p>
-            {statsLimited && <p className="text-warning text-xs">{t('app.pickSuggestedStatsLimited')}</p>}
+            {statsLimited && (
+                <ToneNote tone="warning" className="text-xs">
+                    {t('app.pickSuggestedStatsLimited')}
+                </ToneNote>
+            )}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
                 {photos.map((photo, index) => (
                     <PhotoTile
