@@ -7,7 +7,7 @@ import { fetchActiveChallenges, fetchWebActiveTurbos } from '../../api/challenge
 import { pinChallengeTitles } from '../../services/challengeTitlePin';
 import { annotateEntryTimes } from '../../services/entryTimes';
 import { entryAgeLedger } from '../../entryAgeStore';
-import { latestTeamMatch, settledTeamMatch } from './teamMatch';
+import { refreshTeamMatch, settledTeamMatch } from './teamMatch';
 
 import type { ActiveChallengesResponse } from '../../types/gurushots';
 
@@ -30,12 +30,13 @@ const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => 
     const mobileRead = fetchActiveChallenges(token);
     const webRead = fetchWebActiveTurbos(token);
     // The team match refreshes alongside the reads; the marker is attached from the cache once both are in.
-    latestTeamMatch(token);
+    const startedRefresh = refreshTeamMatch(token);
     const response = await mobileRead;
     if (!response.fetchFailed && Array.isArray(response.challenges)) {
         const webTurbos = await webRead;
-        // Bounded so a slow team read delays a list read by at most 2 s, at most once per refresh window.
-        const teamMatch = await settledTeamMatch(token, TEAM_MATCH_WAIT_MS);
+        // Only the read that started a refresh waits for it, and for 2 s at most; every other read takes the
+        // cache as it is, so a slow team read delays one list read per refresh window, never the spend-critical re-reads.
+        const teamMatch = await settledTeamMatch(token, startedRefresh ? TEAM_MATCH_WAIT_MS : 0);
         for (const challenge of response.challenges) {
             const turbo = webTurbos?.get(String(challenge.id));
             if (turbo && challenge.member) {

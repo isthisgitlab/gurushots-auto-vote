@@ -1,7 +1,7 @@
 /**
  * Tests for strategies/real/teamMatch.ts — the one-slot team-match cache.
- * latestTeamMatch answers synchronously from the cache and refreshes it in the
- * background at most once per minute, whatever the outcome; a different or empty
+ * refreshTeamMatch refreshes the cache in the background at most once per
+ * minute, whatever the outcome, and settledTeamMatch reads it; a different or empty
  * token never sees (or keeps) another token's result.
  */
 
@@ -13,7 +13,7 @@ jest.mock('../../src/ts/api/teams', () => ({ fetchActiveTeamMatch: jest.fn() }))
 
 type Read = Awaited<ReturnType<typeof teamsModule.fetchActiveTeamMatch>>;
 
-let latestTeamMatch: typeof teamMatchModule.latestTeamMatch;
+let refreshTeamMatch: typeof teamMatchModule.refreshTeamMatch;
 let settledTeamMatch: typeof teamMatchModule.settledTeamMatch;
 let fetchActiveTeamMatch: jest.MockedFunction<typeof teamsModule.fetchActiveTeamMatch>;
 
@@ -45,33 +45,51 @@ const settle = () => jest.advanceTimersByTimeAsync(0);
 // One settled refresh per answer, with a minute between them so each call starts the next.
 const refreshWith = async (token: string, read: Read) => {
     fetchActiveTeamMatch.mockResolvedValueOnce(read);
-    latestTeamMatch(token);
+    refreshTeamMatch(token);
     await settle();
 };
+// Reads the cache without waiting and without starting a refresh.
+const cached = (token: string) => settledTeamMatch(token, 0);
 const nextMinute = () => jest.advanceTimersByTime(MINUTE + 1);
 
 beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-10-19T12:00:00Z'));
     jest.resetModules();
-    ({ latestTeamMatch, settledTeamMatch } =
+    ({ refreshTeamMatch, settledTeamMatch } =
         require('../../src/ts/strategies/real/teamMatch') as typeof teamMatchModule);
     fetchActiveTeamMatch = jest.mocked((require('../../src/ts/api/teams') as typeof teamsModule).fetchActiveTeamMatch);
 });
 
 afterEach(() => jest.useRealTimers());
 
-describe('latestTeamMatch', () => {
+describe('refreshTeamMatch', () => {
     test('the first call starts one refresh and answers nothing yet; the next call has the result', async () => {
         fetchActiveTeamMatch.mockResolvedValueOnce(matched());
 
-        expect(latestTeamMatch('tok')).toBeUndefined();
+        refreshTeamMatch('tok');
+        expect(await cached('tok')).toBeUndefined();
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(1);
         expect(fetchActiveTeamMatch).toHaveBeenCalledWith('tok');
         await settle();
 
-        expect(latestTeamMatch('tok')).toEqual({ challengeId: '135938', teamMatch: teamMatch(10, 20) });
+        refreshTeamMatch('tok');
+        expect(await cached('tok')).toEqual({ challengeId: '135938', teamMatch: teamMatch(10, 20) });
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(1);
+    });
+
+    test('returns true only for the call that started a refresh', async () => {
+        fetchActiveTeamMatch.mockResolvedValueOnce(matched());
+
+        expect(refreshTeamMatch('tok')).toBe(true);
+        expect(refreshTeamMatch('tok')).toBe(false);
+        await settle();
+        expect(refreshTeamMatch('tok')).toBe(false);
+        nextMinute();
+        fetchActiveTeamMatch.mockResolvedValueOnce(matched());
+        expect(refreshTeamMatch('tok')).toBe(true);
+        expect(refreshTeamMatch('')).toBe(false);
+        await settle();
     });
 
     test.each([
@@ -82,14 +100,14 @@ describe('latestTeamMatch', () => {
         await refreshWith('tok', read);
 
         jest.advanceTimersByTime(MINUTE - 1);
-        latestTeamMatch('tok');
-        latestTeamMatch('tok');
+        refreshTeamMatch('tok');
+        refreshTeamMatch('tok');
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(1);
 
         jest.advanceTimersByTime(2);
         fetchActiveTeamMatch.mockResolvedValueOnce(read);
-        latestTeamMatch('tok');
-        latestTeamMatch('tok');
+        refreshTeamMatch('tok');
+        refreshTeamMatch('tok');
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(2);
     });
 
@@ -97,10 +115,10 @@ describe('latestTeamMatch', () => {
         const refresh = deferred();
         fetchActiveTeamMatch.mockReturnValueOnce(refresh.promise);
 
-        latestTeamMatch('tok');
-        latestTeamMatch('tok');
+        refreshTeamMatch('tok');
+        refreshTeamMatch('tok');
         nextMinute();
-        latestTeamMatch('tok');
+        refreshTeamMatch('tok');
 
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(1);
         refresh.resolve(matched());
@@ -112,7 +130,8 @@ describe('latestTeamMatch', () => {
         nextMinute();
         await refreshWith('tok', none);
 
-        expect(latestTeamMatch('tok')).toBeUndefined();
+        refreshTeamMatch('tok');
+        expect(await cached('tok')).toBeUndefined();
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(2);
     });
 
@@ -122,7 +141,8 @@ describe('latestTeamMatch', () => {
         for (const kept of [true, true, false]) {
             nextMinute();
             await refreshWith('tok', failed);
-            expect(latestTeamMatch('tok') !== undefined).toBe(kept);
+            refreshTeamMatch('tok');
+            expect((await cached('tok')) !== undefined).toBe(kept);
         }
     });
 
@@ -137,13 +157,15 @@ describe('latestTeamMatch', () => {
         nextMinute();
         await refreshWith('tok', failed);
 
-        expect(latestTeamMatch('tok')).toEqual({ challengeId: '135938', teamMatch: teamMatch(10, 20) });
+        refreshTeamMatch('tok');
+        expect(await cached('tok')).toEqual({ challengeId: '135938', teamMatch: teamMatch(10, 20) });
     });
 
     test('a first refresh that fails leaves nothing and waits out the minute', async () => {
         await refreshWith('tok', failed);
 
-        expect(latestTeamMatch('tok')).toBeUndefined();
+        refreshTeamMatch('tok');
+        expect(await cached('tok')).toBeUndefined();
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(1);
     });
 
@@ -151,14 +173,17 @@ describe('latestTeamMatch', () => {
         await refreshWith('A', matched());
         fetchActiveTeamMatch.mockResolvedValueOnce(none);
 
-        expect(latestTeamMatch('B')).toBeUndefined();
+        refreshTeamMatch('B');
+        expect(await cached('B')).toBeUndefined();
         expect(fetchActiveTeamMatch).toHaveBeenLastCalledWith('B');
         await settle();
 
-        expect(latestTeamMatch('B')).toBeUndefined();
+        refreshTeamMatch('B');
+        expect(await cached('B')).toBeUndefined();
         // A's result is gone, not parked: A refreshes from scratch.
         fetchActiveTeamMatch.mockResolvedValueOnce(none);
-        expect(latestTeamMatch('A')).toBeUndefined();
+        refreshTeamMatch('A');
+        expect(await cached('A')).toBeUndefined();
         expect(fetchActiveTeamMatch).toHaveBeenLastCalledWith('A');
         await settle();
     });
@@ -168,35 +193,42 @@ describe('latestTeamMatch', () => {
         const b = deferred();
         fetchActiveTeamMatch.mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
 
-        latestTeamMatch('A');
-        expect(latestTeamMatch('B')).toBeUndefined();
+        refreshTeamMatch('A');
+        refreshTeamMatch('B');
+        expect(await cached('B')).toBeUndefined();
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(2);
         expect(fetchActiveTeamMatch).toHaveBeenLastCalledWith('B');
 
         a.resolve(matched(1, 2));
         await settle();
-        expect(latestTeamMatch('B')).toBeUndefined();
+        refreshTeamMatch('B');
+        expect(await cached('B')).toBeUndefined();
         // A settling neither cleared B's in-flight refresh nor started another.
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(2);
 
         b.resolve(matched(3, 4));
         await settle();
-        expect(latestTeamMatch('B')).toEqual({ challengeId: '135938', teamMatch: teamMatch(3, 4) });
+        refreshTeamMatch('B');
+        expect(await cached('B')).toEqual({ challengeId: '135938', teamMatch: teamMatch(3, 4) });
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(2);
     });
 
     test('an empty token drops the slot and sends no request, however often it is asked', async () => {
         await refreshWith('tok', matched());
 
-        expect(latestTeamMatch('')).toBeUndefined();
+        refreshTeamMatch('');
+        expect(await cached('')).toBeUndefined();
         nextMinute();
-        expect(latestTeamMatch('')).toBeUndefined();
-        expect(latestTeamMatch('')).toBeUndefined();
+        refreshTeamMatch('');
+        expect(await cached('')).toBeUndefined();
+        refreshTeamMatch('');
+        expect(await cached('')).toBeUndefined();
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(1);
 
         // Signing back in starts from nothing.
         fetchActiveTeamMatch.mockResolvedValueOnce(none);
-        expect(latestTeamMatch('tok')).toBeUndefined();
+        refreshTeamMatch('tok');
+        expect(await cached('tok')).toBeUndefined();
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(2);
         await settle();
     });
@@ -204,34 +236,38 @@ describe('latestTeamMatch', () => {
     test('a rejecting fetch never rejects out and counts as a failed refresh', async () => {
         fetchActiveTeamMatch.mockRejectedValueOnce(new Error('boom'));
 
-        expect(latestTeamMatch('tok')).toBeUndefined();
+        refreshTeamMatch('tok');
+        expect(await cached('tok')).toBeUndefined();
         await settle();
 
-        expect(latestTeamMatch('tok')).toBeUndefined();
+        refreshTeamMatch('tok');
+        expect(await cached('tok')).toBeUndefined();
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(1);
     });
 
-    test('a team read that never settles does not hold the caller: the answer is synchronous', () => {
+    test('a team read that never settles does not hold the caller: the answer is synchronous', async () => {
         fetchActiveTeamMatch.mockReturnValueOnce(new Promise<Read>(() => {}));
 
-        expect(latestTeamMatch('tok')).toBeUndefined();
-        expect(latestTeamMatch('tok')).toBeUndefined();
+        refreshTeamMatch('tok');
+        expect(await cached('tok')).toBeUndefined();
+        refreshTeamMatch('tok');
+        expect(await cached('tok')).toBeUndefined();
     });
 
     test('a stuck refresh blocks new ones only until it settles', async () => {
         const stuck = deferred();
         fetchActiveTeamMatch.mockReturnValueOnce(stuck.promise);
-        latestTeamMatch('tok');
+        refreshTeamMatch('tok');
 
         jest.advanceTimersByTime(10 * MINUTE);
-        latestTeamMatch('tok');
+        refreshTeamMatch('tok');
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(1);
 
         stuck.resolve(none);
         await settle();
         nextMinute();
         fetchActiveTeamMatch.mockResolvedValueOnce(none);
-        latestTeamMatch('tok');
+        refreshTeamMatch('tok');
         expect(fetchActiveTeamMatch).toHaveBeenCalledTimes(2);
         await settle();
     });
@@ -247,7 +283,7 @@ describe('settledTeamMatch', () => {
         nextMinute();
         const refresh = deferred();
         fetchActiveTeamMatch.mockReturnValueOnce(refresh.promise);
-        latestTeamMatch('tok');
+        refreshTeamMatch('tok');
 
         const waiting = settledTeamMatch('tok', MAX_WAIT);
         jest.advanceTimersByTime(MAX_WAIT - 1);
@@ -262,7 +298,7 @@ describe('settledTeamMatch', () => {
         nextMinute();
         const refresh = deferred();
         fetchActiveTeamMatch.mockReturnValueOnce(refresh.promise);
-        latestTeamMatch('tok');
+        refreshTeamMatch('tok');
 
         const waiting = settledTeamMatch('tok', MAX_WAIT);
         await jest.advanceTimersByTimeAsync(MAX_WAIT);
@@ -270,8 +306,19 @@ describe('settledTeamMatch', () => {
 
         refresh.resolve(matched(30, 40));
         await settle();
-        expect(latestTeamMatch('tok')).toEqual(fresh);
+        refreshTeamMatch('tok');
+        expect(await cached('tok')).toEqual(fresh);
         await expect(settledTeamMatch('tok', MAX_WAIT)).resolves.toEqual(fresh);
+    });
+
+    test('a zero wait takes the slot as it is while a refresh is in flight, with no timer', async () => {
+        await refreshWith('tok', matched(10, 20));
+        nextMinute();
+        fetchActiveTeamMatch.mockReturnValueOnce(deferred().promise);
+        refreshTeamMatch('tok');
+
+        await expect(settledTeamMatch('tok', 0)).resolves.toEqual(previous);
+        expect(jest.getTimerCount()).toBe(0);
     });
 
     test('nothing in flight resolves at once with the slot, and starts no refresh', async () => {
@@ -291,7 +338,7 @@ describe('settledTeamMatch', () => {
 
     test('a none result reads as undefined', async () => {
         fetchActiveTeamMatch.mockResolvedValueOnce(none);
-        latestTeamMatch('tok');
+        refreshTeamMatch('tok');
 
         await expect(settledTeamMatch('tok', MAX_WAIT)).resolves.toBeUndefined();
     });
@@ -304,7 +351,7 @@ describe('settledTeamMatch', () => {
 
     test('never rejects, even when the fetch does', async () => {
         fetchActiveTeamMatch.mockRejectedValueOnce(new Error('boom'));
-        latestTeamMatch('tok');
+        refreshTeamMatch('tok');
 
         await expect(settledTeamMatch('tok', MAX_WAIT)).resolves.toBeUndefined();
         expect(jest.getTimerCount()).toBe(0);
@@ -313,11 +360,11 @@ describe('settledTeamMatch', () => {
     test("a token that changed during the wait does not see the other token's result", async () => {
         const refresh = deferred();
         fetchActiveTeamMatch.mockReturnValueOnce(refresh.promise);
-        latestTeamMatch('A');
+        refreshTeamMatch('A');
         const waiting = settledTeamMatch('A', MAX_WAIT);
 
         fetchActiveTeamMatch.mockReturnValueOnce(new Promise<Read>(() => {}));
-        latestTeamMatch('B');
+        refreshTeamMatch('B');
         refresh.resolve(matched());
 
         await expect(waiting).resolves.toBeUndefined();

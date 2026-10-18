@@ -46,7 +46,7 @@ jest.mock('../../src/ts/services/challengeTitlePin', () => ({
 // The team-match cache is unit-tested in tests/strategies/real-team-match.test.ts; here it is a stub, so
 // the ordered makePostRequest queues below never see a team request.
 jest.mock('../../src/ts/strategies/real/teamMatch', () => ({
-    latestTeamMatch: jest.fn(),
+    refreshTeamMatch: jest.fn(),
     settledTeamMatch: jest.fn(),
 }));
 
@@ -89,13 +89,13 @@ describe('challenges', () => {
         require('../../src/ts/services/challengeTitlePin') as typeof challengeTitlePinModule,
     );
     const logger: LoggerMock = invalid(require('../../src/ts/logger'));
-    const { latestTeamMatch, settledTeamMatch } = jest.mocked(
+    const { refreshTeamMatch, settledTeamMatch } = jest.mocked(
         require('../../src/ts/strategies/real/teamMatch') as typeof teamMatchModule,
     );
 
     beforeEach(() => {
         jest.clearAllMocks();
-        latestTeamMatch.mockReset();
+        refreshTeamMatch.mockReset();
         settledTeamMatch.mockReset();
     });
 
@@ -437,6 +437,7 @@ describe('challenges', () => {
             });
 
             test('the cached team match lands on the matching challenge only', async () => {
+                refreshTeamMatch.mockReturnValue(true);
                 settledTeamMatch.mockResolvedValue({ challengeId: '135938', teamMatch });
                 makePostRequest.mockResolvedValueOnce(list());
                 makePostRequest.mockResolvedValueOnce({ challenges: [] });
@@ -445,12 +446,57 @@ describe('challenges', () => {
 
                 expect(result.challenges[0].teamMatch).toBeUndefined();
                 expect(result.challenges[1].teamMatch).toEqual(teamMatch);
-                expect(latestTeamMatch).toHaveBeenCalledWith(mockToken);
-                // The wait is bounded at 2 s.
+                expect(refreshTeamMatch).toHaveBeenCalledWith(mockToken);
+                // The read that started the refresh waits for it, bounded at 2 s.
                 expect(settledTeamMatch).toHaveBeenCalledWith(mockToken, 2000);
             });
 
-            test('a team read that only settles at the cap still yields the list', async () => {
+            test('a read that did not start the refresh takes the cache as it is: no wait', async () => {
+                refreshTeamMatch.mockReturnValue(false);
+                settledTeamMatch.mockResolvedValue({ challengeId: '135938', teamMatch });
+                makePostRequest.mockResolvedValueOnce(list());
+                makePostRequest.mockResolvedValueOnce({ challenges: [] });
+
+                const result = await getActiveChallenges(mockToken);
+
+                expect(settledTeamMatch).toHaveBeenCalledWith(mockToken, 0);
+                expect(result.challenges[1].teamMatch).toEqual(teamMatch);
+            });
+
+            test('during one refresh that never settles, only the first of two sequential reads waits', async () => {
+                jest.useFakeTimers();
+                try {
+                    refreshTeamMatch.mockReturnValueOnce(true).mockReturnValue(false);
+                    // Stands in for the real cache: a wait above 0 runs out the cap, a wait of 0 returns at once.
+                    settledTeamMatch.mockImplementation(
+                        (_token, waitMs) =>
+                            new Promise((resolve) =>
+                                waitMs > 0 ? setTimeout(() => resolve(undefined), waitMs) : resolve(undefined),
+                            ),
+                    );
+                    // Two reads, each a mobile list and a web list.
+                    makePostRequest
+                        .mockResolvedValueOnce(list())
+                        .mockResolvedValueOnce({ challenges: [] })
+                        .mockResolvedValueOnce(list())
+                        .mockResolvedValueOnce({ challenges: [] });
+
+                    const first = getActiveChallenges(mockToken);
+                    await jest.advanceTimersByTimeAsync(2000);
+                    await expect(first).resolves.toEqual(list());
+
+                    // No timer advance: the second read must not wait at all.
+                    await expect(getActiveChallenges(mockToken)).resolves.toEqual(list());
+                    expect(settledTeamMatch.mock.calls).toEqual([
+                        [mockToken, 2000],
+                        [mockToken, 0],
+                    ]);
+                } finally {
+                    jest.useRealTimers();
+                }
+            });
+
+            test('fetchAndPin awaits settledTeamMatch and still returns the list', async () => {
                 jest.useFakeTimers();
                 try {
                     settledTeamMatch.mockReturnValue(
@@ -476,7 +522,7 @@ describe('challenges', () => {
 
                 const pending = getActiveChallenges(mockToken);
 
-                expect(latestTeamMatch).toHaveBeenCalledTimes(1);
+                expect(refreshTeamMatch).toHaveBeenCalledTimes(1);
                 resolveMobile!({ challenges: [] });
                 await pending;
             });

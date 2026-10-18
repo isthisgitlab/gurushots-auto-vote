@@ -1,11 +1,11 @@
 /**
  * Real-strategy team-match cache. The active-challenge list is read by many
  * callers (some of them spend-critical) and each team request can retry for
- * minutes, so the team read stays off a list read's path: `latestTeamMatch`
- * answers from a one-slot cache synchronously and refreshes it in the
- * background at most once per REFRESH_MS, whatever the caller count and
- * whatever the outcome. `settledTeamMatch` lets a list read wait a bounded time
- * for the refresh it started, so the list shows that refresh and not the last one.
+ * minutes, so the team read stays off a list read's path: `refreshTeamMatch`
+ * refreshes a one-slot cache in the background at most once per REFRESH_MS,
+ * whatever the caller count and whatever the outcome. `settledTeamMatch` reads
+ * the cache; the one list read that started a refresh waits a bounded time for
+ * it, so the list shows that refresh and not the last one.
  */
 
 import { fetchActiveTeamMatch } from '../../api/teams';
@@ -67,36 +67,34 @@ const startRefresh = (token: string): void => {
 };
 
 /**
- * The cached team match for this token, synchronously; starts a background
- * refresh (not awaited) when the cache is older than REFRESH_MS or empty and
- * none is in flight. A different token drops the slot at once; an empty token
- * (signed out) drops it and sends no request.
+ * Starts a background refresh (not awaited) when this token's cache is older
+ * than REFRESH_MS or empty and none is in flight. A different token drops the
+ * slot at once; an empty token (signed out) drops it and sends no request.
+ *
+ * @returns true only when this call started a refresh
+ */
+const refreshTeamMatch = (token: string): boolean => {
+    latestToken = token;
+    if (slot?.token !== token) slot = null;
+    if (!token) return false;
+    if (inFlightByToken.has(token) || (slot && Date.now() - slot.fetchedAt <= REFRESH_MS)) return false;
+    startRefresh(token);
+    return true;
+};
+
+/**
+ * The cached team match for this token. With `maxWaitMs` above 0 it first waits
+ * for this token's in-flight refresh, for that long at most (then the previous
+ * slot is returned, and the late refresh still lands in the slot for the next
+ * call). Never rejects and never starts a refresh itself.
  *
  * @returns the challenge the member's team match runs on, or undefined when
  *   there is none (or nothing is known yet)
  */
-const latestTeamMatch = (token: string): TeamMatchResult | undefined => {
-    latestToken = token;
-    if (slot?.token !== token) slot = null;
-    if (!token) return undefined;
-    if (!inFlightByToken.has(token) && (!slot || Date.now() - slot.fetchedAt > REFRESH_MS)) {
-        startRefresh(token);
-    }
-    return cachedResult(token);
-};
-
-/**
- * The team match as of the refresh `latestTeamMatch` started: waits for this
- * token's in-flight refresh, but for `maxWaitMs` at most (then the previous slot
- * is returned, and the late refresh still lands in the slot for the next call).
- * Never rejects and never starts a refresh itself.
- *
- * @returns what `latestTeamMatch` would return once the wait is over
- */
 const settledTeamMatch = async (token: string, maxWaitMs: number): Promise<TeamMatchResult | undefined> => {
     if (!token) return undefined;
     const refresh = inFlightByToken.get(token);
-    if (refresh) {
+    if (refresh && maxWaitMs > 0) {
         let timer: ReturnType<typeof setTimeout> | undefined;
         const cap = new Promise<void>((resolve) => {
             timer = setTimeout(resolve, maxWaitMs);
@@ -107,4 +105,4 @@ const settledTeamMatch = async (token: string, maxWaitMs: number): Promise<TeamM
     return cachedResult(token);
 };
 
-export { latestTeamMatch, settledTeamMatch };
+export { refreshTeamMatch, settledTeamMatch };
