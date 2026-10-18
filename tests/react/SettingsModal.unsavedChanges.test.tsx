@@ -264,8 +264,9 @@ describe('SettingsModal — work Save would drop', () => {
 
         click('app.sbSave');
         await waitFor(() => expect(screen.queryByLabelText('app.sbName')).toBeNull());
-        // The builder's closing report runs as an effect cleanup, a tick after it unmounts.
-        await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+        // The builder's closing report runs as an effect cleanup, which Preact defers by up to its 35 ms
+        // frame fallback after it unmounts; wait out more than that.
+        await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
 
         click('app.save');
         expect(screen.queryByText('app.settingsDropTitle')).toBeNull();
