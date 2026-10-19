@@ -578,7 +578,7 @@ describe('cli session lock', () => {
             const release = holdWebServerLock();
             const file = path.join(root, `web-server-${process.pid}.lock`);
 
-            expect(fs.existsSync(file)).toBe(true);
+            expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual(expect.objectContaining({ pid: process.pid }));
             fs.writeFileSync(file, JSON.stringify({ pid: process.ppid }));
             await expect(isWebServerActive()).resolves.toBe(true);
             fs.writeFileSync(file, JSON.stringify({ pid: process.pid }));

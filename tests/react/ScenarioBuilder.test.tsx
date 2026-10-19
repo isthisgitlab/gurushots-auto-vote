@@ -200,7 +200,7 @@ describe('rules', () => {
         const ruleButton = (index: number, name: string) =>
             // Named by the action and the rule's place: "Move up: Rule 2".
             within(ruleCards()[index]).getAllByRole<HTMLButtonElement>('button', {
-                name: new RegExp(`^${name.replace('.', '\\.')}: Rule ${index + 1}\$`),
+                name: new RegExp(`^${name.replace('.', '\\.')}: Rule ${index + 1}$`),
             })[0];
         const labels = screen.getAllByLabelText('app.sbRuleLabel');
         fireEvent.change(labels[0], { target: { value: '' } });

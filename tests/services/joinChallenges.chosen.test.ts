@@ -58,6 +58,7 @@ jest.mock('../../src/ts/settings', () => ({
     rememberOpenChallengeIds: jest.fn(),
 }));
 
+import { invalid } from '../helpers/invalid';
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import loggerModule = require('../../src/ts/logger');
@@ -72,7 +73,6 @@ import type * as chosenPhotosModule from '../../src/ts/services/autoFill/chosenP
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { PickerPhoto } from '../../src/ts/types/photoPicker';
 import type { RawJsonStore } from '../../src/ts/types/stores';
-import { invalid } from '../helpers/invalid';
 import type { JoinDeps } from '../../src/ts/services/joinChallenges';
 const { performJoin, runJoinPass, joinChallengeSingle, resolveJoinSetting, inFlight } =
     require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule;

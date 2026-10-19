@@ -50,7 +50,7 @@ const cspOf = (html: string): Map<string, string[]> => {
 };
 
 const inlineScripts = (html: string) =>
-    [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)].filter(([, attrs]) => !/\bsrc=/.test(attrs));
+    [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi)].filter(([, attrs]) => !/\bsrc=/i.test(attrs));
 
 describe('generated HTML documents', () => {
     test('the Electron pages are the ones this test expects', () => {
@@ -120,7 +120,7 @@ describe('generated HTML documents', () => {
 
     test('the photo CDN allowed by img-src is the one buildPhotoUrl emits', () => {
         const id = 'a'.repeat(32);
-        expect(buildPhotoUrl(id, id)).toMatch(new RegExp(`^${PHOTO_HOST}/`));
+        expect(buildPhotoUrl(id, id)?.startsWith(`${PHOTO_HOST}/`)).toBe(true);
     });
 
     test('the notices file copied into dist/ is the one the Android loader fetches', () => {
