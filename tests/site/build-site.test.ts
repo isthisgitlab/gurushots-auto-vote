@@ -191,7 +191,8 @@ describe('badgeSvg', () => {
 
     it('references no other host', () => {
         for (const badge of Object.values(BADGES)) {
-            expect(badgeSvg(badge)).not.toMatch(/https?:\/\/(?!www\.w3\.org\/2000\/svg)/);
+            const urls = new Set(badgeSvg(badge).match(/https?:\/\/[^\s"'<>)]+/g));
+            expect([...urls]).toEqual(['http://www.w3.org/2000/svg']);
         }
     });
 });

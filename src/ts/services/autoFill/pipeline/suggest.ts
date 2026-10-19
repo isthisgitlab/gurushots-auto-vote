@@ -26,7 +26,9 @@ type SuggestResult =
     | { status: 'no-chosen-unusable' }
     /** The Must Include Tags filter was active, there were photos to consider, and none matched. */
     | { status: 'no-match' }
-    | { status: 'no-eligible' };
+    | { status: 'no-eligible' }
+    /** `exclude` was given and every photo that fits has been named already. */
+    | { status: 'no-more-suggestions' };
 
 /**
  * Ranks a challenge's photos the way the scheduled auto-fill picks (tag rules, Chosen Photos and Submit Only,
@@ -45,17 +47,20 @@ type SuggestResult =
  * @param deps - settings is optional only so failure-path unit tests can omit it, in which case tag rules
  *   degrade to "no filter".
  * @param opts - `usage`: what the eligibility is read for (`'submit'` by default; the swap picker asks `'swap'`).
- *   It reaches the candidate fetch and the chosen-photo lookup alike.
+ *   It reaches the candidate fetch and the chosen-photo lookup alike. `exclude`: ids an earlier run named
+ *   (paging on to the next-best); they leave the pool like the entered photos, and a run they leave with
+ *   nothing to answer is `no-more-suggestions`, since a run with the same rules found photos before.
  */
 const suggestFillPhotos = async (
     challenge: Challenge,
     token: string,
     deps: RankDeps,
     count: number = SUGGEST_COUNT,
-    { usage }: { usage?: LibraryUsage } = {},
+    { usage, exclude = new Set() }: { usage?: LibraryUsage; exclude?: ReadonlySet<string> } = {},
 ): Promise<SuggestResult> => {
     const { settings, logger } = deps;
     const label = 'suggest';
+    const paging = exclude.size > 0;
     const log = logger.withCategory('autoSubmit');
     const tag = logger.challengeTag(challenge);
     const statsBudget = createStatsBudget();
@@ -82,6 +87,11 @@ const suggestFillPhotos = async (
         log.info(`${label}: every chosen photo is already entered in ${tag}, and Submit Only is on`, null);
         return { status: 'no-chosen-entered' };
     }
+    // A run the exclusions emptied is the end of the paging, not a failure of the rules.
+    const exhausted = (): SuggestResult => {
+        log.info(`${label}: no photos left in ${tag} after excluding ${exclude.size} already shown`, null);
+        return { status: 'no-more-suggestions' };
+    };
 
     const loaded = await loadFillCandidates({
         label,
@@ -107,10 +117,10 @@ const suggestFillPhotos = async (
         usage,
     });
 
-    // Photos already entered are removed BEFORE scoring and enrichment: finalizePick truncates after
-    // sorting, so filtering afterwards could leave fewer than `count` when the top photos are entered.
+    // Photos already entered, and those already shown, are removed BEFORE scoring and enrichment: finalizePick
+    // truncates after sorting, so filtering afterwards could leave fewer than `count` when the top photos are out.
     const entered = enteredIds(challenge);
-    const pool = eligible.filter((photo) => !entered.has(String(photo.id)));
+    const pool = eligible.filter((photo) => !entered.has(String(photo.id)) && !exclude.has(String(photo.id)));
     const { scored, chosenIds, orderedIds } = await scoreFillCandidates({
         label,
         challenge,
@@ -126,12 +136,14 @@ const suggestFillPhotos = async (
         chosen,
     });
     if (enforceOnly && scored.length === 0) {
+        if (paging) return exhausted();
         log.info(`${label}: none of the chosen photos can be submitted to ${tag}, and Submit Only is on`, null);
         return { status: 'no-chosen-unusable' };
     }
 
     const pickedIds = finalizePick(scored, count, chosenIds, inOrder ? orderedIds : null);
     if (pickedIds.length === 0) {
+        if (paging) return exhausted();
         const mustActive = Array.isArray(mustIncludeTags) && mustIncludeTags.length > 0;
         const noMatch = mustActive && pool.length > 0;
         log.info(

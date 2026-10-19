@@ -105,6 +105,28 @@ describe('htmlToText', () => {
         expect(htmlToText('<!-- never closed')).toBe('<!-- never closed');
     });
 
+    test('what one removal joins into a comment or a tag is removed too', () => {
+        expect(htmlToText('a<!<!---->-- x -->b')).toBe('ab');
+        expect(htmlToText('a<scr<b>ipt>alert(1)</scr</i>ipt>b')).toBe('aalert(1)b');
+        expect(htmlToText('x<b<i>r>y')).toBe('x — y');
+        expect(htmlToText('a</<b>p>b')).toBe('a b');
+        expect(htmlToText('a<<b>!-- x -->b')).toBe('ab');
+        expect(htmlToText('a<br </p>>b')).toBe('a — b');
+    });
+
+    test('a break formed in a later round joins the break beside it', () => {
+        expect(htmlToText('a<br><b<i>r>b')).toBe('a — b');
+        // A dash the server wrote itself is text, not a break: it is not merged.
+        expect(htmlToText('a<br>&mdash;<br>b')).toBe('a — — — b');
+        // Breaks with only an empty tag between them are one.
+        expect(htmlToText('a<br><span></span><br>b')).toBe('a — b');
+    });
+
+    test('only a real block end becomes a space: a longer tag name or an attribute is a plain tag', () => {
+        expect(htmlToText('a</pre>b')).toBe('ab');
+        expect(htmlToText('a</p class=x>b')).toBe('ab');
+    });
+
     test('an unknown entity is left as written', () => {
         expect(htmlToText('&bogus; &amp;')).toBe('&bogus; &');
     });

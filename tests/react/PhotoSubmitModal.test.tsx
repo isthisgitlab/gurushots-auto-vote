@@ -11,6 +11,7 @@ import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
 import { mockTranslator } from './helpers/setup';
 import { app, errors } from '../../src/ts/translations/english';
 import { invalid } from '../helpers/invalid';
+import { MAX_SUGGEST_EXCLUDE } from '../../src/ts/settings/limits';
 import type { WindowApi } from '../../src/ts/types/ipc';
 
 type Listing = Extract<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>, { success: true }>;
@@ -742,7 +743,7 @@ describe('Auto suggestions', () => {
         return { promise, resolve };
     };
     const suggestPhotos = () => jest.mocked(window.api.suggestPhotos);
-    const autoButton = () => screen.getByRole('button', { name: 'Auto' });
+    const autoButton = () => screen.getByRole('button', { name: /^(Auto|Next suggestions)$/ });
     const strip = () => screen.getByRole('region', { name: 'Suggestions' });
     const stripTile = (n: number) => within(strip()).getByRole('button', { name: new RegExp(`^Photo ${shortOf(n)}:`) });
     // The tile in the listing's grid (the strip's tile of the same photo has the same name).
@@ -770,7 +771,7 @@ describe('Auto suggestions', () => {
         await loadedAll();
         expect(
             screen.getByText(
-                'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is submitted.',
+                'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is submitted. Press it again for the next ones.',
             ),
         ).toBeTruthy();
         expect(autoButton().getAttribute('aria-disabled')).toBe('false');
@@ -778,7 +779,7 @@ describe('Auto suggestions', () => {
         setup({ max: 1, texts: { ...PICK_TEXTS, autoHelp: 'app.swapPickAutoHelp' } });
         expect(
             screen.getByText(
-                'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is swapped.',
+                'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is swapped. Press it again for the next ones.',
             ),
         ).toBeTruthy();
     });
@@ -796,7 +797,7 @@ describe('Auto suggestions', () => {
         expect(autoButton().hasAttribute('disabled')).toBe(false);
         expect(document.activeElement).toBe(autoButton());
         expect(screen.getByText('Ranking your photos… this can take a minute. Nothing is submitted.')).toBeTruthy();
-        expect(suggestPhotos()).toHaveBeenCalledWith(7, 'submit');
+        expect(suggestPhotos()).toHaveBeenCalledWith(7, 'submit', []);
         fireEvent.click(autoButton());
         expect(suggestPhotos()).toHaveBeenCalledTimes(1);
         await act(async () => answer.resolve(suggestion([photo(2)])));
@@ -1022,6 +1023,107 @@ describe('Auto suggestions', () => {
         expect(kept[0].getAttribute('aria-pressed')).toBe('true');
     });
 
+    describe('paging on to the next suggestions', () => {
+        const set = (from: number, count = 5) => Array.from({ length: count }, (_, i) => photo(from + i));
+        const nextButton = () => screen.getByRole('button', { name: 'Next suggestions' });
+
+        test('the next press sends the ids already shown, the ranks continue and the button reads "Next suggestions"', async () => {
+            setup();
+            await loadedAll();
+            expect(autoButton().textContent).toBe('Auto');
+            await press(set(1));
+            expect(suggestPhotos()).toHaveBeenLastCalledWith(7, 'submit', []);
+            expect(autoButton().textContent).toBe('Next suggestions');
+            suggestPhotos().mockResolvedValueOnce(suggestion(set(6)));
+            fireEvent.click(nextButton());
+            await screen.findByRole('img', { name: 'Suggestion #6' });
+            expect(suggestPhotos()).toHaveBeenLastCalledWith(7, 'submit', [1, 2, 3, 4, 5].map(idOf));
+            expect(within(strip()).getByRole('img', { name: 'Suggestion #10' })).toBeTruthy();
+            expect(within(strip()).queryByRole('img', { name: 'Suggestion #5' })).toBeNull();
+            // A third press sends both sets.
+            suggestPhotos().mockResolvedValueOnce(suggestion(set(11, 2)));
+            fireEvent.click(nextButton());
+            await screen.findByRole('img', { name: 'Suggestion #12' });
+            expect(suggestPhotos()).toHaveBeenLastCalledWith(7, 'submit', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(idOf));
+        });
+
+        test('a pick from an earlier set stays picked, with its tile, when the next set replaces the strip', async () => {
+            setup();
+            await loadedAll();
+            await press([photo(9), photo(1)]);
+            fireEvent.click(stripTile(9));
+            suggestPhotos().mockResolvedValueOnce(suggestion([photo(2)]));
+            fireEvent.click(nextButton());
+            await screen.findByRole('img', { name: 'Suggestion #3' });
+            expect(within(strip()).queryByRole('button', { name: /^Photo 00000009:/ })).toBeNull();
+            const kept = screen.getByRole('button', { name: /^Photo 00000009:/ });
+            expect(kept.getAttribute('aria-pressed')).toBe('true');
+            expect(countLine().textContent).toBe('Picked: 1/3 open slots');
+        });
+
+        test('no-more-suggestions shows its text and drops the strip; the button is "Auto" again and the next press starts over', async () => {
+            setup();
+            await loadedAll();
+            await press(set(1));
+            suggestPhotos().mockResolvedValueOnce(failure('no-more-suggestions'));
+            fireEvent.click(nextButton());
+            const alert = await screen.findByRole('alert');
+            expect(alert.textContent).toBe(
+                'No more suggestions. Every photo that fits has been shown. Press Auto to start again from the best.',
+            );
+            expect(screen.queryByRole('region', { name: 'Suggestions' })).toBeNull();
+            expect(autoButton().textContent).toBe('Auto');
+            suggestPhotos().mockResolvedValueOnce(suggestion(set(1)));
+            fireEvent.click(autoButton());
+            await screen.findByRole('img', { name: 'Suggestion #1' });
+            expect(suggestPhotos()).toHaveBeenLastCalledWith(7, 'submit', []);
+        });
+
+        test('another failure keeps the list, so the next press carries on paging', async () => {
+            setup();
+            await loadedAll();
+            await press(set(1));
+            suggestPhotos().mockResolvedValueOnce(failure('suggest-busy'));
+            fireEvent.click(nextButton());
+            await screen.findByRole('alert');
+            expect(nextButton()).toBeTruthy();
+            suggestPhotos().mockResolvedValueOnce(suggestion(set(6)));
+            fireEvent.click(nextButton());
+            await screen.findByRole('img', { name: 'Suggestion #6' });
+            expect(suggestPhotos()).toHaveBeenLastCalledWith(7, 'submit', [1, 2, 3, 4, 5].map(idOf));
+        });
+
+        test('Refresh resets the list, and an answer still in flight is dropped instead of adding its ids', async () => {
+            setup();
+            await loadedAll();
+            await press(set(1));
+            const answer = deferred<Suggestion>();
+            suggestPhotos().mockReturnValueOnce(answer.promise);
+            fireEvent.click(nextButton());
+            fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
+            await act(async () => answer.resolve(suggestion(set(6))));
+            expect(screen.queryByRole('region', { name: 'Suggestions' })).toBeNull();
+            await waitFor(() => expect(autoButton().textContent).toBe('Auto'));
+            suggestPhotos().mockResolvedValueOnce(suggestion(set(1)));
+            fireEvent.click(autoButton());
+            await screen.findByRole('img', { name: 'Suggestion #1' });
+            expect(suggestPhotos()).toHaveBeenLastCalledWith(7, 'submit', []);
+        });
+
+        test('a list that reaches the cap is dropped, so the next press starts over instead of sending too many', async () => {
+            setup();
+            await loadedAll();
+            await press(set(1, MAX_SUGGEST_EXCLUDE));
+            expect(within(strip()).getByRole('img', { name: `Suggestion #${MAX_SUGGEST_EXCLUDE}` })).toBeTruthy();
+            expect(autoButton().textContent).toBe('Auto');
+            suggestPhotos().mockResolvedValueOnce(suggestion(set(1)));
+            fireEvent.click(autoButton());
+            await waitFor(() => expect(suggestPhotos()).toHaveBeenLastCalledWith(7, 'submit', []));
+            await waitFor(() => expect(within(strip()).queryByRole('img', { name: 'Suggestion #6' })).toBeNull());
+            expect(within(strip()).getByRole('img', { name: 'Suggestion #1' })).toBeTruthy();
+        });
+    });
+
     test('after a refreshed submit a picked suggestion the re-read listing does not return stays picked', async () => {
         const onSubmit = jest.fn<Promise<PickOutcome>, [string[]]>().mockResolvedValue('refreshed');
         setup({ onSubmit });
@@ -1152,7 +1254,7 @@ describe('Pick… loads photos on demand', () => {
     const failed = invalid<Answer>({ success: false, error: 'Failed to read your photo library' });
     const suggestPhotos = () => jest.mocked(window.api.suggestPhotos);
     const loadAllButton = () => screen.getByRole('button', { name: 'Load all photos' });
-    const autoButton = () => screen.getByRole('button', { name: 'Auto' });
+    const autoButton = () => screen.getByRole('button', { name: /^(Auto|Next suggestions)$/ });
     const searchBox = () => screen.getByLabelText<HTMLInputElement>('Search your photos by tag');
     const idleLine = () => screen.queryByText(/^Photos are not loaded yet/);
     const auto = async (photos: LibraryPhoto[], over: Partial<SuggestionOk> = {}) => {
@@ -1437,7 +1539,7 @@ describe('Pick… loads photos on demand', () => {
         suggestPhotos().mockResolvedValueOnce(suggestion([photo(1)]));
         fireEvent.click(autoButton());
         await screen.findByRole('region', { name: 'Suggestions' });
-        expect(suggestPhotos()).toHaveBeenCalledWith(7, 'swap');
+        expect(suggestPhotos()).toHaveBeenCalledWith(7, 'swap', []);
         fireEvent.click(loadAllButton());
         await waitFor(() => expect(getLibrary()).toHaveBeenCalledTimes(2));
         expect(getLibrary().mock.calls).toEqual([

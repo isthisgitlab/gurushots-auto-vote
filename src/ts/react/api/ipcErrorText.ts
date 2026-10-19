@@ -59,6 +59,7 @@ const SUGGEST_ERRORS: Record<string, string> = {
     'no-chosen-unusable': 'errors.suggestNoChosenUnusable',
     'no-match': 'errors.suggestNoMatch',
     'no-eligible': 'errors.suggestNoEligible',
+    'no-more-suggestions': 'errors.suggestNoMore',
     'suggest-busy': 'errors.suggestBusy',
     'account-changed': 'errors.suggestAccountChanged',
     'challenge-ended': 'errors.suggestChallengeEnded',

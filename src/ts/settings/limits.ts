@@ -48,6 +48,10 @@ const MAX_CHOSEN_PHOTOS = 20;
 // shows (at most 100). The renderer asks in requests of at most this many.
 const MAX_ANNOTATED_IDS = 300;
 
+// Most ids one suggest-photos request may exclude: the photos the Pick… modal's Auto has already shown (five per
+// press). The modal starts over from the best when its list reaches this, so it never sends a longer one.
+const MAX_SUGGEST_EXCLUDE = 1000;
+
 // The shape a photo id must have to be stored in a Chosen Photos list and to be
 // listed by the library read: ids are opaque server tokens, so only the safe
 // token characters (the mock ids fit) are accepted.
@@ -87,6 +91,7 @@ export {
     MAX_TAG_LENGTH,
     MAX_CHOSEN_PHOTOS,
     MAX_ANNOTATED_IDS,
+    MAX_SUGGEST_EXCLUDE,
     CHOSEN_PHOTO_ID_RE,
     MAX_UPCOMING_HOURS,
 };

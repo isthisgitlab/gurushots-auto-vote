@@ -10,6 +10,7 @@ import { useLibraryListing } from '@/hooks/useLibraryListing';
 import { SearchForm } from './ChooserFooter';
 import { PhotoGrid } from './PhotoGrid';
 import { SuggestedStrip } from './SuggestedStrip';
+import { MAX_SUGGEST_EXCLUDE } from '../../../settings/limits';
 
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
 import type { LibraryUsage } from '../../../types/photoPicker';
@@ -56,7 +57,7 @@ export const PICK_TEXTS: PickTexts = {
 };
 
 /** What Auto ranked: the photos best first, the member that owns them, and whether stats were partly skipped. */
-type Suggested = { photos: LibraryPhoto[]; memberId: string | null; statsLimited: boolean };
+type Suggested = { photos: LibraryPhoto[]; rankOffset: number; memberId: string | null; statsLimited: boolean };
 
 /**
  * Cancel and Submit: Submit names how many are picked and is held with none, while the pick cannot be sent
@@ -161,6 +162,8 @@ function PhotoSubmitBody({
     // The member of the last answer that named one: it survives the strip clearing, so picks keep their thumbnails.
     const [suggestedMemberId, setSuggestedMemberId] = useState<string | null>(null);
     const [suggestFailure, setSuggestFailure] = useState<string | null>(null);
+    // The ids Auto has named since the last listing read, in order: the next press asks for the ones after them.
+    const [shownIds, setShownIds] = useState<string[]>([]);
     // Every id picked in this opening, in first-pick order: while idle the grid keeps each one's tile in place
     // when it is unpicked, so the tile (and the focus on it) stays and the pick can be made again. The state
     // remembers the ids once they are unpicked; a pick is shown in the render that makes it.
@@ -242,6 +245,7 @@ function PhotoSubmitBody({
         suggestEpoch.current += 1;
         setSuggested(null);
         setSuggestFailure(null);
+        setShownIds([]);
     };
 
     // After a Refresh answers, the pick is checked against the listing it brought, as after a refused submit.
@@ -264,14 +268,19 @@ function PhotoSubmitBody({
     const autoSuggest = async () => {
         const epoch = suggestEpoch.current;
         setSuggestFailure(null);
-        const result = await runSuggest(challengeId, usage);
+        const result = await runSuggest(challengeId, usage, shownIds);
         if (epoch !== suggestEpoch.current) return;
         if (!result.success) {
             setSuggested(null);
             setSuggestFailure(result.error);
+            // Every photo that fits has been shown: the next press starts again from the best.
+            if (result.error === 'no-more-suggestions') setShownIds([]);
             return;
         }
-        setSuggested(result);
+        // At the cap the list is dropped, as at the end of the photos: a longer one would be refused.
+        const shown = [...shownIds, ...result.photos.map((photo) => photo.id)];
+        setShownIds(shown.length >= MAX_SUGGEST_EXCLUDE ? [] : shown);
+        setSuggested({ ...result, rankOffset: shownIds.length });
         if (result.memberId !== null) setSuggestedMemberId(result.memberId);
         setSuggestedKnown(
             (prev) => new Map([...prev, ...result.photos.map((photo): [string, LibraryPhoto] => [photo.id, photo])]),
@@ -324,6 +333,8 @@ function PhotoSubmitBody({
             : suggested.photos.every((photo) => selected.includes(photo.id)));
     // With one slot the modal swaps the pick, so nothing is ever "full".
     const full = max !== 1 && selected.length >= max;
+    // Once a set has been shown, the button pages on to the next-best ones.
+    const autoKey = shownIds.length > 0 ? 'app.pickAutoNext' : 'app.pickAuto';
     let autoStatus = '';
     if (suggesting) autoStatus = t(texts.autoRunning);
     else if (suggested) autoStatus = interp(t('app.pickSuggestedCount'), { count: suggested.photos.length });
@@ -377,8 +388,8 @@ function PhotoSubmitBody({
                             if (!suggesting) void autoSuggest();
                         }}
                     >
-                        <BusyContent busy={suggesting} label={t('app.pickAuto')}>
-                            {t('app.pickAuto')}
+                        <BusyContent busy={suggesting} label={t(autoKey)}>
+                            {t(autoKey)}
                         </BusyContent>
                     </button>
                 </div>
@@ -400,6 +411,7 @@ function PhotoSubmitBody({
             {suggested && (
                 <SuggestedStrip
                     photos={suggested.photos}
+                    rankOffset={suggested.rankOffset}
                     memberId={suggested.memberId}
                     statsLimited={suggested.statsLimited}
                     selected={selected}
