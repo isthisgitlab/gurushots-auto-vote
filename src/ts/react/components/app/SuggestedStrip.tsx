@@ -12,6 +12,7 @@ import type { LibraryPhoto } from '@/hooks/useLibraryListing';
  */
 export function SuggestedStrip({
     photos,
+    rankOffset,
     memberId,
     statsLimited,
     selected,
@@ -24,6 +25,8 @@ export function SuggestedStrip({
     onAdd,
 }: {
     photos: LibraryPhoto[];
+    /** How many photos earlier sets named: the first tile here ranks one past it. */
+    rankOffset: number;
     memberId: string | null;
     /** The popularity stats could not all be read, so the ranking leans on tags and the image check. */
     statsLimited: boolean;
@@ -70,7 +73,7 @@ export function SuggestedStrip({
                         memberId={memberId}
                         selected={chosen.has(photo.id)}
                         position={null}
-                        rank={index + 1}
+                        rank={rankOffset + index + 1}
                         blockedReason={null}
                         atCap={atCap}
                         fullKey={fullKey}

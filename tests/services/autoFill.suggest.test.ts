@@ -382,6 +382,85 @@ describe('suggestFillPhotos', () => {
         });
     });
 
+    describe('paging on with exclude', () => {
+        const ids = (result: Awaited<ReturnType<typeof suggestFillPhotos>>) => suggestedIds(result) as string[];
+
+        test('leaves the excluded photos out of the ranking, so each page holds the next-best ones', async () => {
+            const first = ids(await suggestFillPhotos(makeChallenge(), 'tok', makeDeps()));
+            const second = ids(
+                await suggestFillPhotos(makeChallenge(), 'tok', makeDeps(), undefined, { exclude: new Set(first) }),
+            );
+            // Eight photos: five on the first page, the other three on the second.
+            expect(second).toHaveLength(3);
+            expect(second.filter((id) => first.includes(id))).toEqual([]);
+        });
+
+        test('answers no-more-suggestions once the exclusions leave nothing to rank', async () => {
+            const { logger, lines } = makeLog();
+            const exclude = new Set(library().map((p) => String(p.id)));
+            const result = await suggestFillPhotos(makeChallenge(), 'tok', makeDeps({ logger }), undefined, {
+                exclude,
+            });
+            expect(result).toEqual({ status: 'no-more-suggestions' });
+            const line = lines.info.find((l) => l.includes('after excluding'));
+            expect(line).toBe('suggest: no photos left in [Challenge c1] after excluding 8 already shown');
+        });
+
+        test('answers no-more-suggestions instead of no-match when Must Include matched nothing', async () => {
+            const deps = makeDeps({
+                settings: { must: ['Dogs'], submitWithoutTagMatch: false },
+                photos: [photo('p0', ['Cats']), photo('p1', ['Cats'])],
+            });
+            const exclude = new Set(['p9']);
+            expect(await suggestFillPhotos(makeChallenge(), 'tok', deps, undefined, { exclude })).toEqual({
+                status: 'no-more-suggestions',
+            });
+        });
+
+        test('answers no-more-suggestions instead of no-chosen-unusable under Submit Only', async () => {
+            const deps = makeDeps({ settings: { chosen: ['gone'], only: true }, photos: [photo('p0'), photo('p1')] });
+            const exclude = new Set(['p0']);
+            expect(await suggestFillPhotos(makeChallenge(), 'tok', deps, undefined, { exclude })).toEqual({
+                status: 'no-more-suggestions',
+            });
+        });
+
+        test('leaves no-chosen-entered alone: it does not depend on the exclusions', async () => {
+            const deps = makeDeps({ settings: { chosen: ['p1'], only: true } });
+            const exclude = new Set(['p0']);
+            expect(await suggestFillPhotos(makeChallenge([{ id: 'p1' }]), 'tok', deps, undefined, { exclude })).toEqual(
+                { status: 'no-chosen-entered' },
+            );
+        });
+
+        test('an empty or missing exclude ranks as it does without one', async () => {
+            const plain = ids(await suggestFillPhotos(makeChallenge(), 'tok', makeDeps()));
+            const empty = ids(
+                await suggestFillPhotos(makeChallenge(), 'tok', makeDeps(), undefined, { exclude: new Set() }),
+            );
+            const missing = ids(await suggestFillPhotos(makeChallenge(), 'tok', makeDeps(), undefined, {}));
+            expect(empty).toEqual(plain);
+            expect(missing).toEqual(plain);
+            const none = await suggestFillPhotos(makeChallenge(), 'tok', makeDeps({ photos: [] }), undefined, {
+                exclude: new Set(),
+            });
+            expect(none).toEqual({ status: 'no-eligible' });
+        });
+
+        test('keeps the order of the in-order chosen photos that are left', async () => {
+            const deps = makeDeps({ settings: { chosen: ['p6', 'p2', 'p4'], inOrder: true, only: true } });
+            const exclude = new Set(['p2']);
+            expect(ids(await suggestFillPhotos(makeChallenge(), 'tok', deps, undefined, { exclude }))).toEqual([
+                'p6',
+                'p4',
+            ]);
+            const all = new Set(['p6', 'p2', 'p4']);
+            expect(await suggestFillPhotos(makeChallenge(), 'tok', deps, undefined, { exclude: all })).toEqual({
+                status: 'no-more-suggestions',
+            });
+        });
+    });
+
     describe('what it must never do', () => {
         test('leaves the entry ledger, the skip and refusal memory and the uncertain-subject record alone', async () => {
             const clearChosenSkip = jest.spyOn(chosenPhotos, 'clearChosenSkip');

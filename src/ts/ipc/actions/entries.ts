@@ -7,7 +7,7 @@ import * as auth from '../../services/auth';
 import * as autoFill from '../../services/autoFill';
 import { accountGeneration } from '../../services/accountScope';
 import { dropContext } from '../../services/libraryCache';
-import { CHOSEN_PHOTO_ID_RE, MAX_CHOSEN_PHOTOS } from '../../settings/limits';
+import { CHOSEN_PHOTO_ID_RE, MAX_CHOSEN_PHOTOS, MAX_SUGGEST_EXCLUDE } from '../../settings/limits';
 import { sanitizeForLog, refuseInvalidArgs, isUsageArg, fetchLiveChallenge } from './shared';
 import { mapPhoto } from './library';
 
@@ -85,6 +85,16 @@ const isPickedIds = (imageIds: unknown): imageIds is string[] => {
     return new Set(imageIds).size === imageIds.length;
 };
 
+/** Whether `ids` is a plausible exclude list: at most MAX_SUGGEST_EXCLUDE ids of the shape a library photo has (may be empty). */
+const isExcludeIds = (ids: unknown): ids is string[] => {
+    if (!Array.isArray(ids) || ids.length > MAX_SUGGEST_EXCLUDE) return false;
+    for (let i = 0; i < ids.length; i++) {
+        const id: unknown = ids[i];
+        if (typeof id !== 'string' || !CHOSEN_PHOTO_ID_RE.test(id)) return false;
+    }
+    return true;
+};
+
 // Challenges with a picked-photos submit running, by id: a second submit for one of them is turned away
 // instead of racing the first (the live re-read cannot see a submit that has not landed yet).
 const submitsInFlight = new Set<string>();
@@ -143,11 +153,22 @@ let suggestRunning = false;
  *
  * @param usage - what the eligibility is read for: `'submit'` (the default) is entering the challenge, `'swap'`
  *   is replacing an entry's photo (the swap picker's Auto).
+ * @param exclude - ids an earlier answer named: the ranking runs on the rest, so a second press pages on to the
+ *   next-best. When nothing is left to rank the answer is `no-more-suggestions`.
  *
  * Failures are `{ success: false, error: <fixed code> }` and never carry raw text.
  */
-const handleSuggestPhotos = (async (event: unknown, challengeId: string | number, usage?: LibraryUsage) => {
-    if (!isIdArg(challengeId) || (usage !== undefined && !isUsageArg(usage))) {
+const handleSuggestPhotos = (async (
+    event: unknown,
+    challengeId: string | number,
+    usage?: LibraryUsage,
+    exclude?: string[],
+) => {
+    if (
+        !isIdArg(challengeId) ||
+        (usage !== undefined && !isUsageArg(usage)) ||
+        (exclude !== undefined && !isExcludeIds(exclude))
+    ) {
         return refuseInvalidArgs('autoSubmit', 'suggest-photos');
     }
     const log = logger.withCategory('autoSubmit');
@@ -157,7 +178,10 @@ const handleSuggestPhotos = (async (event: unknown, challengeId: string | number
     }
     suggestRunning = true;
     try {
-        log.info(`📝 Photo suggestions request: Challenge=${sanitizeForLog(challengeId)}`, null);
+        log.info(
+            `📝 Photo suggestions request: Challenge=${sanitizeForLog(challengeId)}, Excluded=${exclude?.length ?? 0}`,
+            null,
+        );
         const guard = auth.requireAuthToken('photo suggestions');
         if (!guard.ok) return guard.response;
 
@@ -180,13 +204,16 @@ const handleSuggestPhotos = (async (event: unknown, challengeId: string | number
                 getCurrentMemberProfile: strategy.getCurrentMemberProfile,
             },
             undefined,
-            { usage },
+            { usage, exclude: new Set(exclude) },
         );
         if (result.status === 'fetch-error') return { success: false as const, error: 'fetch-failed' as const };
         if (result.status !== 'suggested') return { success: false as const, error: result.status };
         // An id that is not a safe token could never be stored in a list, so it is not offered.
         const photos = result.photos.filter((photo) => CHOSEN_PHOTO_ID_RE.test(String(photo.id))).map(mapPhoto);
-        if (photos.length === 0) return { success: false as const, error: 'no-eligible' as const };
+        if (photos.length === 0) {
+            const error = exclude?.length ? ('no-more-suggestions' as const) : ('no-eligible' as const);
+            return { success: false as const, error };
+        }
         const memberId = await autoFill.resolveMemberId(
             guard.token,
             strategy.getCurrentMemberProfile,

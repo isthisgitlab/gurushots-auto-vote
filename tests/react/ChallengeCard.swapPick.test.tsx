@@ -489,7 +489,7 @@ describe('Auto in the swap picker', () => {
         expect(screen.getByText(app.swapPickAutoHelp)).toBeTruthy();
         fireEvent.click(autoButton());
         expect(await screen.findByText(app.swapPickAutoRunning)).toBeTruthy();
-        expect(window.api.suggestPhotos).toHaveBeenCalledWith(101, 'swap');
+        expect(window.api.suggestPhotos).toHaveBeenCalledWith(101, 'swap', []);
         answer.resolve?.({
             success: true,
             memberId: MEMBER,

@@ -29,6 +29,7 @@ import {
 import { registerMissionNeeds } from '../../src/ts/services/missions';
 import { clearOpenChallenges } from '../../src/ts/services/openChallengeCache';
 import { isPlainObject } from '../../src/ts/plainObject';
+import { MAX_SUGGEST_EXCLUDE } from '../../src/ts/settings/limits';
 import type { TurboGameResult } from '../../src/ts/types/gurushots';
 import type { JoinSingleResult } from '../../src/ts/services/joinChallenges/shared';
 import type { ForgetOutcome } from '../../src/ts/services/joinChallenges/forgetPayment';
@@ -968,7 +969,7 @@ describe('suggest-photos', () => {
             await buildHandlers()['suggest-photos']({}, '123', usage);
             const [, , , count, opts] = autoFill.suggestFillPhotos.mock.calls[0];
             expect(count).toBeUndefined();
-            expect(opts).toEqual({ usage });
+            expect(opts).toEqual({ usage, exclude: new Set() });
         },
     );
 
@@ -979,6 +980,50 @@ describe('suggest-photos', () => {
             error: 'invalid-args',
         });
         expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+    });
+
+    test('passes the exclude ids on to the ranking as a set, and logs their count, not the ids', async () => {
+        await buildHandlers()['suggest-photos']({}, '123', 'submit', ['a1', 'b2', 'a1']);
+        const [, , , , opts] = autoFill.suggestFillPhotos.mock.calls[0];
+        expect(opts).toEqual({ usage: 'submit', exclude: new Set(['a1', 'b2']) });
+        expect(logCategories('info', '📝 Photo suggestions request: Challenge=123, Excluded=3', null)).toEqual([
+            'autoSubmit',
+        ]);
+    });
+
+    test('accepts an exclude list of exactly the cap and an empty one', async () => {
+        const full = Array.from({ length: MAX_SUGGEST_EXCLUDE }, (_, i) => `p${i}`);
+        await expect(buildHandlers()['suggest-photos']({}, '123', 'submit', full)).resolves.toMatchObject({
+            success: true,
+        });
+        await expect(buildHandlers()['suggest-photos']({}, '123', 'submit', [])).resolves.toMatchObject({
+            success: true,
+        });
+    });
+
+    test.each([
+        ['not an array', 'a1'],
+        ['a non-string', ['a1', 7]],
+        ['a bad id', ['a1', 'not ok!']],
+        ['more than the cap', Array.from({ length: MAX_SUGGEST_EXCLUDE + 1 }, (_, i) => `p${i}`)],
+    ])('refuses an exclude list that is %s, without ranking', async (_name, exclude) => {
+        await expect(
+            buildHandlers()['suggest-photos']({}, '123', 'submit', invalid<string[]>(exclude)),
+        ).resolves.toEqual({ success: false, error: 'invalid-args' });
+        expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+    });
+
+    test('answers no-more-suggestions, not no-eligible, when an exclude list was sent and no suggested photo has a safe id', async () => {
+        autoFill.suggestFillPhotos.mockResolvedValue(suggested(['not ok!']));
+        await expect(buildHandlers()['suggest-photos']({}, '123', 'submit', ['a1'])).resolves.toEqual({
+            success: false,
+            error: 'no-more-suggestions',
+        });
+        // An empty list is a first press: the plain code.
+        await expect(buildHandlers()['suggest-photos']({}, '123', 'submit', [])).resolves.toEqual({
+            success: false,
+            error: 'no-eligible',
+        });
     });
 
     test('reports statsLimited', async () => {
@@ -1004,6 +1049,7 @@ describe('suggest-photos', () => {
         [{ status: 'no-chosen-unusable' as const }, 'no-chosen-unusable'],
         [{ status: 'no-match' as const }, 'no-match'],
         [{ status: 'no-eligible' as const }, 'no-eligible'],
+        [{ status: 'no-more-suggestions' as const }, 'no-more-suggestions'],
     ])('maps the service answer %j to the code %s', async (answer, code) => {
         autoFill.suggestFillPhotos.mockResolvedValue(answer);
         await expect(suggest()).resolves.toEqual({ success: false, error: code });
@@ -1049,7 +1095,9 @@ describe('suggest-photos', () => {
             ),
         );
         expect(JSON.stringify(logged)).not.toContain('a1');
-        expect(logCategories('info', '📝 Photo suggestions request: Challenge=123', null)).toEqual(['autoSubmit']);
+        expect(logCategories('info', '📝 Photo suggestions request: Challenge=123, Excluded=0', null)).toEqual([
+            'autoSubmit',
+        ]);
     });
 
     describe('when the account changes meanwhile', () => {
