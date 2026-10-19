@@ -225,7 +225,7 @@ describe('TitleTagRulesEditor', () => {
                     expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotos: [ID] })]),
                 );
                 // A rule has no challenge to read eligibility through.
-                expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined, 'cached');
+                expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined, 'cached', 'submit');
             });
 
             test('an explicit empty list means none, and Inherit writes the empty sentinel', () => {

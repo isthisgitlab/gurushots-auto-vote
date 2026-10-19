@@ -833,6 +833,10 @@ export const app = {
         "Hidden: {count} photo(s) that have won a challenge. A winning photo can't be entered again.",
     photoChooserWonHiddenTruncated:
         "Hidden: at least {count} photo(s) that have won a challenge. A winning photo can't be entered again.",
+    photoChooserRefusedHidden: "Hidden: {count} photo(s) GuruShots won't take in this challenge.",
+    photoChooserRefusedHiddenTruncated: "Hidden: at least {count} photo(s) GuruShots won't take in this challenge.",
+    photoChooserNoneAccepted:
+        "GuruShots won't take any of the listed photos in this challenge. Search by tag to find others, or upload new photos and press Refresh.",
     photoChooserWonInList: "Has won a challenge, so it can't be entered again. Click it to remove it from your list.",
     photoChooserEmpty:
         'No photos found. Try another tag, or upload photos to your GuruShots library and press Refresh.',
@@ -954,7 +958,11 @@ export const app = {
     swapPickLabel: 'Choose the photo to swap in from your library',
     swapPickTitle: 'Choose the photo to swap in',
     swapPickHelp:
-        "The photo you pick replaces the current one as is: your tag filters and Chosen Photos setting don't apply. GuruShots checks whether the challenge accepts it only when the swap is spent.",
+        "The photo you pick replaces the current one. Photos this challenge doesn't accept for a swap are hidden. Auto ranks your photos by your tag rules and Chosen Photos; a photo you pick yourself skips them. Nothing is spent until you confirm.",
+    swapPickAutoHelp:
+        'Auto ranks your photos by your auto-submit rules, including the local image check. Nothing is swapped.',
+    swapPickAutoRunning: 'Ranking your photos… this can take a minute. Nothing is spent.',
+    swapPickIdleWithPicks: 'Your pick can be used as it is. Load all photos or search to see the rest of your library.',
     swapPickCount: 'Picked: {count}/1',
     swapPickSubmit: 'Use this photo',
     swapPickBlocked: 'Already in this challenge',

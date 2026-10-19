@@ -962,6 +962,25 @@ describe('suggest-photos', () => {
         );
     });
 
+    test.each([['submit' as const], ['swap' as const], [undefined]])(
+        'forwards the usage %s to the ranking, which reads submit eligibility when it is not given',
+        async (usage) => {
+            await buildHandlers()['suggest-photos']({}, '123', usage);
+            const [, , , count, opts] = autoFill.suggestFillPhotos.mock.calls[0];
+            expect(count).toBeUndefined();
+            expect(opts).toEqual({ usage });
+        },
+    );
+
+    test.each([['everyone'], [null], [7], [{}]])('refuses the usage %j before looking up the token', async (usage) => {
+        const handlers = buildHandlers();
+        await expect(handlers['suggest-photos']({}, '123', invalid<'swap'>(usage))).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+        expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+    });
+
     test('reports statsLimited', async () => {
         autoFill.suggestFillPhotos.mockResolvedValue(suggested(['a1'], true));
         await expect(suggest()).resolves.toMatchObject({ success: true, statsLimited: true });

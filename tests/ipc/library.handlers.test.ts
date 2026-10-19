@@ -46,7 +46,7 @@ const rawPhoto = {
 };
 
 type WalkResult = { items: unknown[]; truncated: boolean; skipped?: string[] };
-type WalkOptions = { search?: string; logLabel?: string; skip?: (photo: LibraryPhoto) => boolean };
+type WalkOptions = { search?: string; logLabel?: string; usage?: string; skip?: (photo: LibraryPhoto) => boolean };
 type Walk = jest.Mock<Promise<WalkResult>, [string | number, string, WalkOptions]>;
 const newWalk = (result: WalkResult = { items: [rawPhoto], truncated: false }): Walk =>
     jest.fn<Promise<WalkResult>, [string | number, string, WalkOptions]>(async () => result);
@@ -133,6 +133,7 @@ describe('the listing', () => {
         expect(strategy.getEligiblePhotosWalk).toHaveBeenCalledWith(5, 'tok', {
             search: 'pink',
             logLabel: 'library',
+            usage: 'submit',
             skip: hasWonChallenge,
         });
         expect(result).toEqual({
@@ -594,6 +595,36 @@ describe('the library cache', () => {
         await expect(call('5', undefined, mode)).resolves.toEqual({ success: false, error: 'invalid-args' });
         expect(auth.requireAuthToken).not.toHaveBeenCalled();
         expect(walk).not.toHaveBeenCalled();
+    });
+
+    test.each([['everyone'], [null], [7], [{}]])('refuses the usage %j before looking up the token', async (usage) => {
+        const walk = newWalk();
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await expect(call('5', undefined, 'fresh', usage)).resolves.toEqual({ success: false, error: 'invalid-args' });
+        expect(auth.requireAuthToken).not.toHaveBeenCalled();
+        expect(walk).not.toHaveBeenCalled();
+    });
+
+    test('the usage reaches the walk, submit by default, and each usage keeps and answers its own listing', async () => {
+        const walk = newWalk(listed('a'));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5');
+        await next('5', undefined, 'fresh', 'swap');
+        expect(walk.mock.calls.map((walkCall) => walkCall[2].usage)).toEqual(['submit', 'swap']);
+        // Each usage is answered from its own listing, with its marks, and walks nothing.
+        await expect(next('5', undefined, 'cached', 'swap')).resolves.toMatchObject({ preview: false });
+        await expect(next('5', undefined, 'cached', 'submit')).resolves.toMatchObject({ preview: false });
+        await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(2);
+    });
+
+    test('a listing read for one usage never answers the other with marks: only as a preview', async () => {
+        const walk = newWalk(listed('a'));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5', undefined, 'fresh', 'swap');
+        const answer = await next('5', undefined, 'cached', 'submit');
+        expect(answer).toMatchObject({ success: true, preview: true, allowedKnown: false });
+        expect(walk).toHaveBeenCalledTimes(1);
     });
 
     test('a cached answer reads the token once and signed out is the guard’s answer', async () => {

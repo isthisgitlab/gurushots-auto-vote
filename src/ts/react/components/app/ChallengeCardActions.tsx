@@ -198,14 +198,13 @@ function usePickModal({
                 max={slotsRemaining}
                 submitting={picking}
                 error={ipcErrorText(failure, t)}
-                suggest
                 onSubmit={submit}
             />
         ),
     };
 }
 
-// What the swap picker says: the Pick… submit's lines, with the ones about slots and submitting made to fit
+// What the swap picker says: the Pick… submit's lines, with the ones about slots, submitting and Auto made to fit
 // choosing the one photo that takes an entry's place (overCap, full and noSlots can't be reached with one).
 const SWAP_PICK_TEXTS = {
     ...PICK_TEXTS,
@@ -214,6 +213,9 @@ const SWAP_PICK_TEXTS = {
     count: 'app.swapPickCount',
     submit: 'app.swapPickSubmit',
     submitCount: 'app.swapPickSubmit',
+    autoHelp: 'app.swapPickAutoHelp',
+    autoRunning: 'app.swapPickAutoRunning',
+    idleWithPicks: 'app.swapPickIdleWithPicks',
 };
 
 /**
@@ -234,8 +236,9 @@ type SwapPickFlow = {
  * The chosen swap's state: the library picker for the photo that takes an entry's place, then the confirm
  * modal for that photo. Owned by the card (not by the entry's Swap button, which a refresh can unmount), so
  * a long library browse or a preview in flight survives it. It has its own swap actions, so its errors never
- * mix with the button's inline one. Like Pick…, nothing is ranked: the photo is sent as chosen and the server
- * has the final say on whether the challenge accepts it.
+ * mix with the button's inline one. Like Pick…, the picker reads nothing on opening (Load all, Search and Auto
+ * ask for it) and the photo is sent as chosen, but its listing and Auto read swap eligibility, and the photos the
+ * challenge refuses for a swap are not offered. The server has the final say on whether it accepts the pick.
  */
 function useSwapPickModal({
     challenge,
@@ -327,7 +330,9 @@ function useSwapPickModal({
     };
 
     // A refused pick and a refused spend are told in the picker, which a refused spend reopens; a refused spend
-    // that is held (`unclear`, `no-balance`) is told in the confirm instead.
+    // that is held (`unclear`, `no-balance`) is told in the confirm instead. The reopened picker is a new mount, so
+    // it comes back idle, without the earlier listing or Auto ranking: the alert gives the reason, `flow.notice`
+    // still shows, and the next read is wanted fresh after a refused spend anyway.
     const pickError = preview.error || commit.error;
     const candidate = flow?.candidate ?? null;
 
@@ -345,6 +350,7 @@ function useSwapPickModal({
                     texts={SWAP_PICK_TEXTS}
                     notice={flow.notice}
                     blocked={{ ids: entered, reasonKey: 'app.swapPickBlocked' }}
+                    usage="swap"
                     onSubmit={pick(flow)}
                 />
                 {candidate && (

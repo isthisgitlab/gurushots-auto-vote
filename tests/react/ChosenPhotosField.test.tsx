@@ -190,7 +190,9 @@ describe('challenge context', () => {
             </SettingsChallengeProvider>,
         );
         fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
-        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(77, undefined, 'cached'));
+        await waitFor(() =>
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(77, undefined, 'cached', 'submit'),
+        );
     });
 
     test('inside a per-challenge editor Clear is "Use none", described by a hint that the reset button brings the inherited list back', () => {
@@ -217,7 +219,9 @@ describe('challenge context', () => {
     test('outside one it asks with no challenge', async () => {
         renderInput([]);
         fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
-        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined, 'cached'));
+        await waitFor(() =>
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined, 'cached', 'submit'),
+        );
     });
 });
 

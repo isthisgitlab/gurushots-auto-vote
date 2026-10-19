@@ -11,6 +11,7 @@ import { buildChallenge } from '../helpers/challengeFixtures';
 import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
 import { mockTranslator } from './helpers/setup';
 import { app, errors } from '../../src/ts/translations/english';
+import { invalid } from '../helpers/invalid';
 import type { Bankroll } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
 
@@ -128,11 +129,19 @@ const tile = (id: string) => screen.getByRole('button', { name: new RegExp(`^Pho
 const pickerTitle = () => screen.queryByText('Choose the photo to swap in');
 const suggestionTitle = () => screen.queryByText('Swap this photo?');
 
-// Swap → the suggestion's confirm → Choose another photo… → the picker, read and unlocked.
-const openPicker = async () => {
+// Swap → the suggestion's confirm → Choose another photo… → the picker, which opens idle.
+const openPickerIdle = async () => {
     fireEvent.click(swapButton());
     fireEvent.click(await screen.findByRole('button', { name: 'Choose another photo…' }));
     await screen.findByText('Choose the photo to swap in');
+};
+
+const loadAll = () => fireEvent.click(screen.getByRole('button', { name: 'Load all photos' }));
+
+// The picker, asked for the whole library, read and unlocked.
+const openPicker = async () => {
+    await openPickerIdle();
+    loadAll();
     await waitFor(() => expect(tile(PICK_ID).textContent).toContain('Can be entered'));
 };
 
@@ -151,6 +160,12 @@ beforeEach(() => {
         }),
     );
     window.api.swapEntryPhoto = jest.fn().mockResolvedValue({ success: true, outcome: 'ok' });
+    window.api.suggestPhotos = jest.fn().mockResolvedValue({
+        success: true,
+        memberId: MEMBER,
+        photos: [{ id: OTHER_ID, labels: ['other'], allowed: true, message: null, uploadDate: 1 }],
+        statsLimited: false,
+    });
 });
 
 afterEach(() => {
@@ -158,12 +173,17 @@ afterEach(() => {
 });
 
 describe('choosing the replacement', () => {
-    test('Choose another photo… closes the suggestion and opens the picker; entered photos are blocked', async () => {
+    test('Choose another photo… closes the suggestion and opens the picker idle: nothing is read until Load all, which asks for swap eligibility', async () => {
         renderCard();
-        await openPicker();
+        await openPickerIdle();
         expect(suggestionTitle()).toBeNull();
         expect(window.api.previewSwapPhoto).toHaveBeenCalledTimes(1);
-        expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(101, undefined, 'cached');
+        expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'Auto' })).toBeTruthy();
+        loadAll();
+        await waitFor(() => expect(tile(PICK_ID).textContent).toContain('Can be entered'));
+        expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(101, undefined, 'cached', 'swap');
+        expect(window.api.getLibraryPhotos).toHaveBeenLastCalledWith(101, undefined, 'fresh', 'swap');
         expect(screen.getByText('Picked: 0/1')).toBeTruthy();
         expect(tile(ENTRY_ID).textContent).toContain('Already in this challenge');
         expect(tile(ENTRY_ID).getAttribute('aria-disabled')).toBe('true');
@@ -305,6 +325,12 @@ describe('a refused pick or spend', () => {
         expect(screen.queryByText(app.currencySwapChosenBody)).toBeNull();
         expect(onCurrencySpent).not.toHaveBeenCalled();
 
+        // The reopened picker is a new mount: idle, without the earlier listing, until the library is asked for again.
+        const readsBefore = jest.mocked(window.api.getLibraryPhotos).mock.calls.length;
+        expect(screen.getByText(/^Photos are not loaded yet/)).toBeTruthy();
+        expect(screen.queryByRole('button', { name: new RegExp(`^Photo ${PICK_ID.slice(0, 8)}:`) })).toBeNull();
+        expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(readsBefore);
+        loadAll();
         await waitFor(() => expect(tile(OTHER_ID).textContent).toContain('Can be entered'));
         fireEvent.click(tile(OTHER_ID));
         fireEvent.click(useThisPhoto());
@@ -440,5 +466,93 @@ describe('ownership and focus', () => {
         fireEvent.click(swapButton());
         expect(await screen.findByText(app.currencyOutcomeFailed)).toBeTruthy();
         expect(pickerTitle()).toBeNull();
+    });
+});
+
+describe('Auto in the swap picker', () => {
+    const autoButton = () => screen.getByRole('button', { name: 'Auto' });
+    const stripTile = () =>
+        within(screen.getByRole('region', { name: 'Suggestions' })).getByRole('button', {
+            name: new RegExp(`^Photo ${OTHER_ID.slice(0, 8)}:`),
+        });
+
+    test('ranks with swap eligibility and, alone, previews and spends nothing; the swap help and running text are the swap ones', async () => {
+        const answer: { resolve?: (value: unknown) => void } = {};
+        window.api.suggestPhotos = jest.fn(
+            () =>
+                new Promise((resolve) => {
+                    answer.resolve = resolve;
+                }),
+        ) as unknown as typeof window.api.suggestPhotos;
+        renderCard();
+        await openPickerIdle();
+        expect(screen.getByText(app.swapPickAutoHelp)).toBeTruthy();
+        fireEvent.click(autoButton());
+        expect(await screen.findByText(app.swapPickAutoRunning)).toBeTruthy();
+        expect(window.api.suggestPhotos).toHaveBeenCalledWith(101, 'swap');
+        answer.resolve?.({
+            success: true,
+            memberId: MEMBER,
+            photos: [{ id: OTHER_ID, labels: ['other'], allowed: true, message: null, uploadDate: 1 }],
+            statsLimited: false,
+        });
+        await screen.findByRole('region', { name: 'Suggestions' });
+        // Nothing was read, previewed or spent by Auto.
+        expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
+        expect(window.api.previewSwapPhoto).toHaveBeenCalledTimes(1);
+        expect(window.api.swapEntryPhoto).not.toHaveBeenCalled();
+    });
+
+    test('a pick from the strip can be used while the listing is idle, and goes to the preview', async () => {
+        renderCard();
+        await openPickerIdle();
+        fireEvent.click(autoButton());
+        await screen.findByRole('region', { name: 'Suggestions' });
+        fireEvent.click(stripTile());
+        expect(screen.getByText(app.swapPickIdleWithPicks)).toBeTruthy();
+        expect(useThisPhoto().hasAttribute('disabled')).toBe(false);
+        fireEvent.click(useThisPhoto());
+        expect(await screen.findByText(app.currencySwapChosenBody)).toBeTruthy();
+        expect(window.api.previewSwapPhoto).toHaveBeenLastCalledWith(101, ENTRY_ID, OTHER_ID);
+        expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['suggest-busy', errors.suggestBusy],
+        ['no-eligible', errors.suggestNoEligible],
+    ])('a ranking that answers %s shows its own alert and nothing else', async (error, text) => {
+        window.api.suggestPhotos = jest.fn().mockResolvedValue(invalid({ success: false, error }));
+        renderCard();
+        await openPickerIdle();
+        fireEvent.click(autoButton());
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toBe(text);
+        expect(screen.getAllByRole('alert')).toHaveLength(1);
+    });
+
+    test('a refused spend reopens the picker idle with the notice it opened with', async () => {
+        window.api.previewSwapPhoto = jest
+            .fn()
+            .mockResolvedValueOnce({ success: false, outcome: 'no-alternative', error: 'no-alternative' })
+            .mockImplementation(async (_challengeId, _imageId, chosenId) => ({
+                success: true as const,
+                outcome: 'ok' as const,
+                candidate: { id: String(chosenId), member_id: MEMBER },
+            }));
+        window.api.swapEntryPhoto = jest
+            .fn()
+            .mockResolvedValue({ success: false, outcome: 'stale-candidate', error: 'stale-candidate' });
+        renderCard();
+        fireEvent.click(swapButton());
+        await screen.findByText(app.swapPickNoSuggestion);
+        loadAll();
+        await waitFor(() => expect(tile(PICK_ID).textContent).toContain('Can be entered'));
+        fireEvent.click(tile(PICK_ID));
+        fireEvent.click(useThisPhoto());
+        fireEvent.click(await screen.findByRole('button', { name: /^Spend 1 swap/ }));
+        expect((await screen.findByRole('alert')).textContent).toBe(app.currencyOutcomeStaleCandidate);
+        expect(screen.getByText(app.swapPickNoSuggestion)).toBeTruthy();
+        expect(screen.getByText(/^Photos are not loaded yet/)).toBeTruthy();
+        expect(screen.queryByRole('button', { name: new RegExp(`^Photo ${PICK_ID.slice(0, 8)}:`) })).toBeNull();
     });
 });

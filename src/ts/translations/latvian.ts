@@ -840,6 +840,10 @@ export const app = {
         'Paslēpti foto, kas uzvarējuši izaicinājumā: {count}. Uzvarējušo foto nevar iesniegt vēlreiz.',
     photoChooserWonHiddenTruncated:
         'Paslēpti foto, kas uzvarējuši izaicinājumā: vismaz {count}. Uzvarējušo foto nevar iesniegt vēlreiz.',
+    photoChooserRefusedHidden: 'Paslēpti foto, ko GuruShots šajā izaicinājumā nepieņem: {count}.',
+    photoChooserRefusedHiddenTruncated: 'Paslēpti foto, ko GuruShots šajā izaicinājumā nepieņem: vismaz {count}.',
+    photoChooserNoneAccepted:
+        'GuruShots šajā izaicinājumā nepieņem nevienu no uzskaitītajiem foto. Meklē pēc taga, lai atrastu citus, vai augšupielādē jaunus foto un spied „Atsvaidzināt”.',
     photoChooserWonInList:
         'Uzvarējis izaicinājumā, tāpēc to nevar iesniegt vēlreiz. Noklikšķini uz tā, lai to noņemtu no saraksta.',
     photoChooserEmpty:
@@ -966,7 +970,12 @@ export const app = {
     swapPickLabel: 'Izvēlēties foto no bibliotēkas, ar ko apmainīt',
     swapPickTitle: 'Izvēlies foto, ar ko apmainīt',
     swapPickHelp:
-        'Izvēlētais foto aizstās pašreizējo bez tagu filtriem un uzstādījuma „Izvēlētie foto”. Vai izaicinājums to pieņem, GuruShots pārbauda tikai tad, kad apmaiņa tiek veikta.',
+        'Izvēlētais foto aizstās pašreizējo. Foto, ko šis izaicinājums apmaiņā nepieņem, ir paslēpti. Pogas „Automātiski” rindojums balstās uz taviem tagu noteikumiem un uzstādījumu „Izvēlētie foto”; pašam izvēlētam foto tie netiek piemēroti. Nekas netiek tērēts, kamēr neapstiprini.',
+    swapPickAutoHelp:
+        'Šī poga sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem, arī ar vietējo attēlu pārbaudi. Nekas netiek apmainīts.',
+    swapPickAutoRunning: 'Foto tiek sarindoti… tas var aizņemt minūti. Nekas netiek tērēts.',
+    swapPickIdleWithPicks:
+        'Izvēlēto foto var izmantot jau tagad. Ielādē visus foto vai meklē, lai redzētu pārējo bibliotēku.',
     swapPickCount: 'Izvēlēts: {count}/1',
     swapPickSubmit: 'Izmantot šo foto',
     swapPickBlocked: 'Jau iesniegts šajā izaicinājumā',

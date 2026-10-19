@@ -1,6 +1,8 @@
 import { useNamedIpcAction } from './useAsyncIpcAction';
 
-const suggestIpc = (challengeId: string | number) => window.api.suggestPhotos(challengeId);
+import type { LibraryUsage } from '../../types/photoPicker';
+
+const suggestIpc = (challengeId: string | number, usage: LibraryUsage) => window.api.suggestPhotos(challengeId, usage);
 
 /**
  * Hook for ranking the library under the auto-submit rules via IPC; nothing is submitted.

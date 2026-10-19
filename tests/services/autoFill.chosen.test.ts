@@ -41,7 +41,7 @@ const {
     rankCandidatesForChallenge,
     __resetMemberIdCache,
 } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
-const { forgetChosenPhotosMemory, resolveMissingChosen, logChosenSkipOnce } =
+const { forgetChosenPhotosMemory, resolveMissingChosen, refuseRememberedChosen, logChosenSkipOnce } =
     require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 const { verifyFillPick, recordUncertainSubmission } =
@@ -1560,5 +1560,78 @@ describe('swap ranking ignores the chosen photos settings', () => {
         const asked = chosen.deps.settings.getEffectiveSetting.mock.calls.map((call) => call[0]);
         expect(asked).not.toContain('chosenPhotos');
         expect(asked).not.toContain('chosenPhotosOnly');
+    });
+});
+
+describe('the lookup memo is kept per usage', () => {
+    type WalkImpl = NonNullable<RankDeps['getEligiblePhotosWalk']>;
+    type WalkFn = jest.MockedFunction<WalkImpl>;
+    const car = photo('car', ['Car']);
+    const refusedCar = photo('car', ['Car'], { permission: { allowed: false, message: 'full' } });
+    const challenge = () => buildChallenge({ id: 'u1', member: { ranking: { entries: [] } } });
+    const look = async (
+        target: ReturnType<typeof challenge>,
+        usage: 'submit' | 'swap' | undefined,
+        walk: WalkFn,
+        allowWalk = true,
+    ) =>
+        (
+            await resolveMissingChosen({
+                challenge: target,
+                token: 'tok',
+                ids: ['car'],
+                eligible: [],
+                wantCount: 1,
+                allowWalk,
+                deps: { getEligiblePhotosWalk: walk, logger: makeLog().logger },
+                label: 'autoSubmit',
+                usage,
+            })
+        ).map((found) => found.id);
+    const walkOf = (...items: PickerPhoto[]): WalkFn =>
+        jest.fn<ReturnType<WalkImpl>, Parameters<WalkImpl>>(async () => ({ items, truncated: false }));
+
+    test('the walk asks for the usage, submit by default', async () => {
+        const walk = walkOf(car);
+        await look(challenge(), 'swap', walk);
+        await look(buildChallenge({ id: 'u2', member: { ranking: { entries: [] } } }), undefined, walk);
+        expect(walk.mock.calls.map((call) => call[2])).toEqual([
+            { logLabel: 'autoSubmit', usage: 'swap' },
+            { logLabel: 'autoSubmit', usage: 'submit' },
+        ]);
+    });
+
+    test('a swap verdict does not answer a later submit lookup', async () => {
+        const target = challenge();
+        expect(await look(target, 'swap', walkOf(car))).toEqual(['car']);
+        // Nothing is remembered for submit: with no walk allowed it finds nothing, and with one it walks again.
+        expect(await look(target, 'submit', walkOf(car), false)).toEqual([]);
+        const submitWalk = walkOf(car);
+        expect(await look(target, 'submit', submitWalk)).toEqual(['car']);
+        expect(submitWalk).toHaveBeenCalledTimes(1);
+        // The swap verdict is still its own.
+        expect(await look(target, 'swap', walkOf(), false)).toEqual(['car']);
+    });
+
+    test('a submit walk that recorded the photo as refused does not answer a swap lookup, which walks again for swap', async () => {
+        const target = challenge();
+        expect(await look(target, 'submit', walkOf(refusedCar))).toEqual([]);
+        const swapWalk = walkOf(car);
+        expect(await look(target, 'swap', swapWalk)).toEqual(['car']);
+        expect(swapWalk).toHaveBeenCalledTimes(1);
+        expect(swapWalk.mock.calls[0]).toEqual(['u1', 'tok', { logLabel: 'autoSubmit', usage: 'swap' }]);
+        // The submit memo still says refused: it is not walked again for that.
+        const again = walkOf(car);
+        expect(await look(target, 'submit', again)).toEqual([]);
+        expect(again).not.toHaveBeenCalled();
+    });
+
+    test('a refused submit holds the photo back for the next submit fill and leaves the swap verdict alone', async () => {
+        const target = challenge();
+        await look(target, 'submit', walkOf(car));
+        await look(target, 'swap', walkOf(car));
+        refuseRememberedChosen(target, ['car'], Date.now());
+        expect(await look(target, 'submit', walkOf(), false)).toEqual([]);
+        expect(await look(target, 'swap', walkOf(), false)).toEqual(['car']);
     });
 });

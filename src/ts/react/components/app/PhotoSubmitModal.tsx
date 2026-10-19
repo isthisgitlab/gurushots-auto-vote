@@ -12,6 +12,7 @@ import { PhotoGrid } from './PhotoChooserModal';
 import { SuggestedStrip } from './SuggestedStrip';
 
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
+import type { LibraryUsage } from '../../../types/photoPicker';
 
 /**
  * What a submit came to: `done` (submitted, the modal closes), `refreshed` (it failed and the card was
@@ -32,6 +33,9 @@ export type PickTexts = {
     submitCount: string;
     full: string;
     noSlots: string;
+    autoHelp: string;
+    autoRunning: string;
+    idleWithPicks: string;
 };
 
 /** Photos the modal shows as blocked (ids) and the translation key of what their tiles say. */
@@ -46,6 +50,9 @@ export const PICK_TEXTS: PickTexts = {
     submitCount: 'app.pickSubmitCount',
     full: 'app.pickFull',
     noSlots: 'app.pickNoSlots',
+    autoHelp: 'app.pickAutoHelp',
+    autoRunning: 'app.pickAutoRunning',
+    idleWithPicks: 'app.pickIdleWithPicks',
 };
 
 /** What Auto ranked: the photos best first, the member that owns them, and whether stats were partly skipped. */
@@ -94,9 +101,9 @@ function SubmitFooter({
 
 /**
  * The modal's body. Mounted only while the modal is open, so every opening starts with nothing picked.
- * With `suggest` (Pick…) no listing is read until Load all, Search or a Retry asks for one, and Auto's picks can
- * be sent without it; without `suggest` (the swap picker) the listing is read afresh on opening, picking only once
- * that read is in. `max` is the card's live count of open slots: it can shrink while the modal is open.
+ * No listing is read until Load all, Search or a Retry asks for one, and Auto's picks can be sent without it.
+ * `usage` is what the listing and Auto read eligibility for. `max` is the card's live count of open slots: it
+ * can shrink while the modal is open.
  */
 function PhotoSubmitBody({
     challengeId,
@@ -106,7 +113,7 @@ function PhotoSubmitBody({
     texts,
     notice,
     blocked,
-    suggest,
+    usage,
     onSubmit,
     onClose,
 }: {
@@ -117,7 +124,7 @@ function PhotoSubmitBody({
     texts: PickTexts;
     notice: string | null;
     blocked?: BlockedPhotos;
-    suggest: boolean;
+    usage: LibraryUsage;
     onSubmit: (imageIds: string[]) => Promise<PickOutcome>;
     onClose: () => void;
 }) {
@@ -127,7 +134,7 @@ function PhotoSubmitBody({
     // always comes back as a preview, and picking waits for the fresh read.
     const { state, known, generation, revalidating, recheckFailed, load, refresh, retry } = useLibraryListing(
         challengeId,
-        { alwaysFresh: true, onDemand: suggest },
+        { alwaysFresh: true, onDemand: true, usage },
     );
     const preview = state.status === 'ready' && state.listing.preview;
     // Once a listing is shown, until the app has checked which photos the challenge accepts, none can be picked or
@@ -139,8 +146,10 @@ function PhotoSubmitBody({
     // Bumped by Load all to remount the search box empty, so it never shows a term the grid is not filtered by.
     const [searchKey, setSearchKey] = useState(0);
 
-    // The generation of the read a failed submit asked for: once a listing of that generation (or later) is
-    // in, photos it says can no longer be entered leave the pick. Null when nothing is waiting.
+    // The generation of the read a failed submit asked for (or a Refresh): once a listing of that generation (or
+    // later) is in, photos it says can no longer be entered leave the pick. Load all and Search do not set it, so a
+    // pick that one of those reads marks refused stays on screen with its reason (the grid shows a pick whatever its
+    // mark). Null when nothing is waiting.
     const pruneFromRef = useRef<number | null>(null);
 
     // Auto: the ranking on screen, the records of every photo it has named (a picked suggestion keeps its tile
@@ -229,7 +238,7 @@ function PhotoSubmitBody({
     const autoSuggest = async () => {
         const epoch = suggestEpoch.current;
         setSuggestFailure(null);
-        const result = await runSuggest(challengeId);
+        const result = await runSuggest(challengeId, usage);
         if (epoch !== suggestEpoch.current) return;
         if (!result.success) {
             setSuggested(null);
@@ -289,7 +298,7 @@ function PhotoSubmitBody({
     // With one slot the modal swaps the pick, so nothing is ever "full".
     const full = max !== 1 && selected.length >= max;
     let autoStatus = '';
-    if (suggesting) autoStatus = t('app.pickAutoRunning');
+    if (suggesting) autoStatus = t(texts.autoRunning);
     else if (suggested) autoStatus = interp(t('app.pickSuggestedCount'), { count: suggested.photos.length });
     // Load all waits for any read, and for a submit, as Refresh does.
     const loadAllHeld = reading || submitting;
@@ -311,57 +320,51 @@ function PhotoSubmitBody({
                 </div>
             )}
             <p className="text-base-content/70 text-xs">{t(texts.help)}</p>
-            {suggest ? (
-                <div className="space-y-1">
-                    <div className="flex flex-wrap items-start gap-2">
-                        <div className="min-w-48 flex-1">{search}</div>
-                        <button
-                            type="button"
-                            className={`btn btn-outline btn-sm ${loadAllHeld ? 'btn-disabled' : ''}`}
-                            // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body>.
-                            aria-disabled={loadAllHeld}
-                            aria-busy={loadAllBusy}
-                            onClick={() => {
-                                if (loadAllHeld) return;
-                                setLoadAllReading(true);
-                                setSearchKey((key) => key + 1);
-                                void load('');
-                            }}
-                        >
-                            <BusyContent busy={loadAllBusy} label={t('app.pickLoadAll')}>
-                                {t('app.pickLoadAll')}
-                            </BusyContent>
-                        </button>
-                        <button
-                            type="button"
-                            className={`btn btn-sm ${suggesting ? 'btn-disabled' : ''}`}
-                            // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body>.
-                            aria-disabled={suggesting}
-                            aria-busy={suggesting}
-                            onClick={() => {
-                                if (!suggesting) void autoSuggest();
-                            }}
-                        >
-                            <BusyContent busy={suggesting} label={t('app.pickAuto')}>
-                                {t('app.pickAuto')}
-                            </BusyContent>
-                        </button>
-                    </div>
-                    <p className="text-base-content/70 text-xs">{t('app.pickAutoHelp')}</p>
+            <div className="space-y-1">
+                <div className="flex flex-wrap items-start gap-2">
+                    <div className="min-w-48 flex-1">{search}</div>
+                    <button
+                        type="button"
+                        className={`btn btn-outline btn-sm ${loadAllHeld ? 'btn-disabled' : ''}`}
+                        // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body>.
+                        aria-disabled={loadAllHeld}
+                        aria-busy={loadAllBusy}
+                        onClick={() => {
+                            if (loadAllHeld) return;
+                            setLoadAllReading(true);
+                            setSearchKey((key) => key + 1);
+                            void load('');
+                        }}
+                    >
+                        <BusyContent busy={loadAllBusy} label={t('app.pickLoadAll')}>
+                            {t('app.pickLoadAll')}
+                        </BusyContent>
+                    </button>
+                    <button
+                        type="button"
+                        className={`btn btn-sm ${suggesting ? 'btn-disabled' : ''}`}
+                        // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body>.
+                        aria-disabled={suggesting}
+                        aria-busy={suggesting}
+                        onClick={() => {
+                            if (!suggesting) void autoSuggest();
+                        }}
+                    >
+                        <BusyContent busy={suggesting} label={t('app.pickAuto')}>
+                            {t('app.pickAuto')}
+                        </BusyContent>
+                    </button>
                 </div>
-            ) : (
-                search
-            )}
+                <p className="text-base-content/70 text-xs">{t(texts.autoHelp)}</p>
+            </div>
             <p className="text-xs" role="status">
                 {interp(t(over ? texts.overCap : texts.count), { count: selected.length, max })}
             </p>
-            {suggest && (
-                // Always mounted, so a screen reader announces the text that arrives in it. The count of a
-                // finished ranking is read out only: the strip shows it.
-                <p role="status" aria-live="polite" className={suggesting || !suggested ? 'text-xs' : 'sr-only'}>
-                    {autoStatus}
-                </p>
-            )}
+            {/* Always mounted, so a screen reader announces the text that arrives in it. The count of a finished
+                ranking is read out only: the strip shows it. */}
+            <p role="status" aria-live="polite" className={suggesting || !suggested ? 'text-xs' : 'sr-only'}>
+                {autoStatus}
+            </p>
             {suggestFailure && (
                 <div role="alert" className="alert alert-error py-2 text-sm">
                     <span>{suggestErrorText(suggestFailure, t)}</span>
@@ -406,6 +409,7 @@ function PhotoSubmitBody({
                 extraPhotos={suggestedKnown}
                 idleMemberId={suggestedMemberId}
                 idleIds={idleShown}
+                idleWithPicksKey={texts.idleWithPicks}
             />
             <StickyModalFooter>
                 {alert}
@@ -424,9 +428,10 @@ function PhotoSubmitBody({
 
 /**
  * Pick photos from the member's library and submit them to one challenge right away: the picker of the
- * Chosen Photos chooser, without saving anything. Owned by the card's actions (not by the buttons that open
- * it), so a refresh that closes the buttons' gate cannot drop it or the answer to a submit in flight.
- * While a submit is in flight nothing can close it.
+ * Chosen Photos chooser, without saving anything. Nothing is read on opening: Load all, Search and Auto (which
+ * ranks the photos under the auto-submit rules and shows the best) ask for what they need. Owned by the card's
+ * actions (not by the buttons that open it), so a refresh that closes the buttons' gate cannot drop it or the
+ * answer to a submit in flight. While a submit is in flight nothing can close it.
  *
  * @param max - the card's live count of open slots
  * @param error - the translated text of the last failed submit
@@ -434,8 +439,8 @@ function PhotoSubmitBody({
  * @param notice - a line shown at the top of the body, e.g. why the modal opened
  * @param blocked - photos shown as blocked, with the translation key of the reason, that cannot be picked: the
  *   listing marks only what the server refuses for the challenge, not what is already entered
- * @param suggest - offers Auto, which ranks the photos under the auto-submit rules and shows the best (the Pick…
- *   submit's; the swap picker has none)
+ * @param usage - what the listing's eligibility and Auto's ranking are read for: entering the challenge (the
+ *   default, the Pick… submit) or replacing an entry's photo (the swap picker)
  * @param onSubmit - sends the ids and says what came of it (the card refreshes itself)
  */
 export function PhotoSubmitModal({
@@ -448,7 +453,7 @@ export function PhotoSubmitModal({
     texts = PICK_TEXTS,
     notice = null,
     blocked,
-    suggest = false,
+    usage = 'submit',
     onSubmit,
 }: {
     isOpen: boolean;
@@ -460,7 +465,7 @@ export function PhotoSubmitModal({
     texts?: PickTexts;
     notice?: string | null;
     blocked?: BlockedPhotos;
-    suggest?: boolean;
+    usage?: LibraryUsage;
     onSubmit: (imageIds: string[]) => Promise<PickOutcome>;
 }) {
     const { t } = useTranslation();
@@ -482,7 +487,7 @@ export function PhotoSubmitModal({
                 texts={texts}
                 notice={notice}
                 blocked={blocked}
-                suggest={suggest}
+                usage={usage}
                 onSubmit={onSubmit}
                 onClose={onClose}
             />

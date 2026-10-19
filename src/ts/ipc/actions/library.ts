@@ -23,10 +23,11 @@ import { accountGeneration } from '../../services/accountScope';
 import { dropEpoch, readFresh, readLatest, writeListing } from '../../services/libraryCache';
 import { errorResult } from '../errorResult';
 import { isIdArg } from '../isIdArg';
-import { refuseInvalidArgs } from './shared';
+import { isUsageArg, refuseInvalidArgs } from './shared';
 
 import type { IpcReplyFn } from '../registerHandlers';
 import type { LibraryPhoto } from '../../types/gurushots';
+import type { LibraryUsage } from '../../types/photoPicker';
 
 // Shortest gap between the end of one walk and the start of the next. The chooser
 // runs a search on every submit; this stops a held Enter key (or a script) from
@@ -143,11 +144,12 @@ const borrowChallengeId = async (strategy: apiFactory.ApiStrategy, token: string
 };
 
 /**
- * The cached answer to a no-search `'cached'` request: the challenge's own listing while it is fresh, else
- * the newest one read for any challenge as a preview (its marks withheld). Null when nothing is cached.
+ * The cached answer to a no-search `'cached'` request: the challenge's own listing for the usage while it is
+ * fresh, else the newest one read for any challenge or usage as a preview (its marks withheld). Null when
+ * nothing is cached.
  */
-const answerFromCache = (token: string, contextId: string | number | null) => {
-    const fresh = readFresh(token, contextId);
+const answerFromCache = (token: string, contextId: string | number | null, usage: LibraryUsage) => {
+    const fresh = readFresh(token, contextId, usage);
     if (fresh) return { success: true as const, ...fresh, preview: false };
     const latest = readLatest(token);
     return latest ? { success: true as const, ...asPreview(latest), preview: true } : null;
@@ -161,19 +163,23 @@ const answerFromCache = (token: string, contextId: string | number | null) => {
  *   challenge in the last LIBRARY_FRESH_MS as it is, else the newest listing read for any challenge as a
  *   preview (`preview: true`, no marks), and walks only when nothing is cached. `'fresh'` (the default)
  *   always walks, and a no-search walk is kept for the next `'cached'` request.
+ * @param usage - what the `allowed` flags are read for, as the server filters them per usage: `'submit'` (the
+ *   default) is entering the challenge, `'swap'` is replacing an entry's photo. Listings are cached per usage.
  */
 const handleGetLibraryPhotos = (async (
     event: unknown,
     challengeId?: string | number | null,
     search?: string | null,
     mode?: 'cached' | 'fresh',
+    usage?: LibraryUsage,
 ) => {
     const hasChallenge = challengeId !== undefined && challengeId !== null;
     const hasSearch = search !== undefined && search !== null;
     if (
         (hasChallenge && !isIdArg(challengeId)) ||
         (hasSearch && typeof search !== 'string') ||
-        (mode !== undefined && mode !== 'cached' && mode !== 'fresh')
+        (mode !== undefined && mode !== 'cached' && mode !== 'fresh') ||
+        (usage !== undefined && !isUsageArg(usage))
     ) {
         return refuseInvalidArgs('autoSubmit', 'get-library-photos');
     }
@@ -184,8 +190,9 @@ const handleGetLibraryPhotos = (async (
         const { token } = guard;
         // The cache keys the challenge asked for: the settings and rules choosers ask for none, whatever one is borrowed.
         const contextId = challengeId ?? null;
+        const readUsage = usage ?? 'submit';
         if (mode === 'cached' && term === undefined) {
-            const cached = answerFromCache(token, contextId);
+            const cached = answerFromCache(token, contextId, readUsage);
             if (cached) return cached;
         }
         // Compared after the walk: an account that left, or an entry dropped by an action of this window, meanwhile.
@@ -203,6 +210,7 @@ const handleGetLibraryPhotos = (async (
             const walk = await strategy.getEligiblePhotosWalk(readThrough, token, {
                 search: term,
                 logLabel: 'library',
+                usage: readUsage,
                 skip: hasWonChallenge,
             });
             const memberId = await resolveMemberId(token, strategy.getCurrentMemberProfile, logger, 'library');
@@ -228,7 +236,7 @@ const handleGetLibraryPhotos = (async (
         // Only the no-search listing is kept, and not a read that kept nothing and was cut short (it may be a
         // failed read), nor one an action of this window outdated while it ran.
         const keep = term === undefined && (listing.photos.length > 0 || listing.wonCount > 0 || !listing.truncated);
-        if (keep && epoch === dropEpoch()) writeListing(token, contextId, listing);
+        if (keep && epoch === dropEpoch()) writeListing(token, contextId, listing, readUsage);
         return { success: true as const, ...listing, preview: false };
     } catch (error) {
         logger.withCategory('autoSubmit').error('Error handling get-library-photos request:', error);

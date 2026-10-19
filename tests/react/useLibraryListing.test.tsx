@@ -74,8 +74,8 @@ describe('a preview answer', () => {
         expect(result.current.state).toMatchObject({ status: 'ready', listing: { preview: true } });
         const generation = result.current.generation;
         expect(getLibrary().mock.calls).toEqual([
-            [7, undefined, 'cached'],
-            [7, undefined, 'fresh'],
+            [7, undefined, 'cached', 'submit'],
+            [7, undefined, 'fresh', 'submit'],
         ]);
         expect(result.current.known.size).toBe(0);
 
@@ -222,7 +222,7 @@ describe('alwaysFresh', () => {
         const { result } = renderHook(() => useLibraryListing(7, { alwaysFresh: true }));
         await waitFor(() => expect(result.current.revalidating).toBe(false));
         await act(async () => result.current.load('pink'));
-        expect(getLibrary().mock.calls.at(-1)).toEqual([7, 'pink', 'fresh']);
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, 'pink', 'fresh', 'submit']);
         expect(result.current.state).toMatchObject({ listing: { preview: false } });
         expect(result.current.revalidating).toBe(false);
     });
@@ -243,7 +243,7 @@ describe('load and retry', () => {
         await act(async () => {
             result.current.retry();
         });
-        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh']);
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit']);
     });
 
     test('Retry is a new generation with the loading state, as before', async () => {
@@ -308,7 +308,7 @@ describe('refresh', () => {
         expect(result.current.revalidating).toBe(true);
         expect(ids(result.current.state as never)).toEqual(['p']);
         expect(result.current.generation).toBe(generation);
-        expect(getLibrary().mock.calls.at(-1)).toEqual([7, 'pink', 'fresh']);
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, 'pink', 'fresh', 'submit']);
         read.resolve(answer({ photos: [photo('p'), photo('q')], readAtMs: 1_700_000_100_000 }));
         await waitFor(() => expect(result.current.revalidating).toBe(false));
         expect(ids(result.current.state as never)).toEqual(['p', 'q']);
@@ -450,7 +450,7 @@ describe('onDemand', () => {
         const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
         await act(async () => result.current.load(''));
         expect(result.current.state).toMatchObject({ status: 'ready', listing: { preview: false } });
-        expect(getLibrary()).toHaveBeenCalledWith(7, undefined, 'cached');
+        expect(getLibrary()).toHaveBeenCalledWith(7, undefined, 'cached', 'submit');
     });
 
     test('retry() from idle is a fresh full read', async () => {
@@ -460,7 +460,25 @@ describe('onDemand', () => {
             result.current.retry();
         });
         await waitFor(() => expect(result.current.state.status).toBe('ready'));
-        expect(getLibrary().mock.calls).toEqual([[7, undefined, 'fresh']]);
+        expect(getLibrary().mock.calls).toEqual([[7, undefined, 'fresh', 'submit']]);
+    });
+
+    test('a usage change reads nothing, and the next load and retry send the new usage', async () => {
+        getLibrary().mockResolvedValue(answer());
+        const { result, rerender } = renderHook(
+            ({ usage }: { usage: 'submit' | 'swap' }) => useLibraryListing(7, { onDemand: true, usage }),
+            { initialProps: { usage: 'submit' } },
+        );
+        rerender({ usage: 'swap' });
+        await act(async () => undefined);
+        expect(result.current.state).toEqual({ status: 'idle' });
+        expect(getLibrary()).not.toHaveBeenCalled();
+        await act(async () => result.current.load(''));
+        expect(getLibrary().mock.calls).toEqual([[7, undefined, 'cached', 'swap']]);
+        await act(async () => {
+            result.current.retry();
+        });
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'swap']);
     });
 
     test('a preview that lands after unmounting starts no re-check', async () => {

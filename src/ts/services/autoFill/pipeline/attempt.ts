@@ -16,7 +16,7 @@ import {
 import { describeSubmitFailure, logPopularityPicks, logSelectionDetails } from '../fillLogging';
 import type { FillAttemptParams, FillAttemptResult, FillLabel, RankDeps } from '../../../types/autoFill';
 import type { Challenge } from '../../../types/gurushots';
-import type { ChosenPick, IgnoreWords, PickerPhoto, ScoredCandidate } from '../../../types/photoPicker';
+import type { ChosenPick, IgnoreWords, LibraryUsage, PickerPhoto, ScoredCandidate } from '../../../types/photoPicker';
 import { errorMessage } from '../../../errorMessage';
 import { loadFillCandidates, scoreFillCandidates } from './scoring';
 import { recordUncertainSubmission, verifyFillPick } from './verify';
@@ -75,10 +75,13 @@ const addMissedChosen = async ({
     unentered,
     inOrder,
     loaded,
+    usage,
 }: ChosenParams & {
     wantCount: number;
     unentered: string[];
     inOrder: boolean;
+    /** What the chosen-photo lookup reads eligibility for (submit when omitted). */
+    usage?: LibraryUsage;
     loaded: Extract<Awaited<ReturnType<typeof loadFillCandidates>>, { status: 'loaded' }>;
 }) => {
     const { eligible, semanticScores, ignoreWords } = loaded;
@@ -92,6 +95,7 @@ const addMissedChosen = async ({
         inOrder,
         deps,
         label,
+        usage,
     });
     if (missed.length === 0) return { eligible, semanticScores };
     const missedScores = await resolveSemanticScores(challenge, missed, { ...deps, ignoreWords });

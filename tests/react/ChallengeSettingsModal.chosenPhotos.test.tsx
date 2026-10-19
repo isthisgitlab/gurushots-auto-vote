@@ -56,7 +56,7 @@ beforeEach(() => {
 test('the chooser reads the library through the challenge being edited, and the pick becomes an override', async () => {
     render(<ChallengeSettingsModal isOpen onClose={jest.fn()} challengeId="123" challengeTitle="Sea" />);
     fireEvent.click(await screen.findByRole('button', { name: 'app.choosePhotos' }));
-    await waitFor(() => expect(mockApi.getLibraryPhotos).toHaveBeenCalledWith('123', undefined, 'cached'));
+    await waitFor(() => expect(mockApi.getLibraryPhotos).toHaveBeenCalledWith('123', undefined, 'cached', 'submit'));
     fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserTileLabel' }));
     fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
     // The edit is held in the form until the modal's own Save.

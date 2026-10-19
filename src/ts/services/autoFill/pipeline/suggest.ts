@@ -6,7 +6,7 @@ import { finalizePick } from '../../photoPicker';
 import { createStatsBudget, statsBudgetTripped } from '../../photoStats';
 import { enteredIds } from '../chosenPhotos';
 import type { Challenge } from '../../../types/gurushots';
-import type { PickerPhoto } from '../../../types/photoPicker';
+import type { LibraryUsage, PickerPhoto } from '../../../types/photoPicker';
 import type { FetchErrorResult, RankDeps } from '../../../types/autoFill';
 import { addMissedChosen, planChosen } from './attempt';
 import { loadFillCandidates, scoreFillCandidates } from './scoring';
@@ -44,12 +44,15 @@ type SuggestResult =
  *
  * @param deps - settings is optional only so failure-path unit tests can omit it, in which case tag rules
  *   degrade to "no filter".
+ * @param opts - `usage`: what the eligibility is read for (`'submit'` by default; the swap picker asks `'swap'`).
+ *   It reaches the candidate fetch and the chosen-photo lookup alike.
  */
 const suggestFillPhotos = async (
     challenge: Challenge,
     token: string,
     deps: RankDeps,
     count: number = SUGGEST_COUNT,
+    { usage }: { usage?: LibraryUsage } = {},
 ): Promise<SuggestResult> => {
     const { settings, logger } = deps;
     const label = 'suggest';
@@ -80,6 +83,7 @@ const suggestFillPhotos = async (
         deps: runDeps,
         mustIncludeTags,
         shouldIncludeTags,
+        usage,
     });
     if (loaded.status === 'fetch-error') return loaded;
     const { ignoreWords } = loaded;
@@ -93,6 +97,7 @@ const suggestFillPhotos = async (
         unentered,
         inOrder,
         loaded,
+        usage,
     });
 
     // Photos already entered are removed BEFORE scoring and enrichment: finalizePick truncates after

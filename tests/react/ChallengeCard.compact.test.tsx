@@ -326,7 +326,9 @@ describe('compact ChallengeCard tile with compactActions', () => {
         // Opening reads nothing; Load all does.
         expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
-        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(202, undefined, 'cached'));
+        await waitFor(() =>
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(202, undefined, 'cached', 'submit'),
+        );
     });
 
     test('the picker stays open, with its listing, when the card switches layout', async () => {

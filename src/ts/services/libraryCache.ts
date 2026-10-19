@@ -2,22 +2,24 @@
  * The photo-library listing the photo choosers open with, kept in memory only (never written to disk) so a
  * chooser opened again does not wait for a walk of the whole library.
  *
- * Each listing is kept per account (by a hash of the token, never the token) and per challenge: its
- * eligibility marks are that challenge's own, and so is what the challenge's rules accept. A challenge's
- * entry answers a chooser for that challenge only while it is under LIBRARY_FRESH_MS old; anything else
- * is answered from `latest`, the newest listing read for any challenge, which is only ever shown as a
- * preview with its marks withheld. Entries are frozen and every answer is a copy, so nothing a caller
- * does to an answer reaches the cache.
+ * Each listing is kept per account (by a hash of the token, never the token), per challenge and per usage
+ * (submit or swap): its eligibility marks are that challenge's own for that usage, and so is what the
+ * challenge's rules accept. A challenge's entry answers a chooser for that challenge and usage only while it is
+ * under LIBRARY_FRESH_MS old; anything else is answered from `latest`, the newest listing read for any
+ * challenge or usage, which is only ever shown as a preview with its marks withheld. Entries are frozen and
+ * every answer is a copy, so nothing a caller does to an answer reaches the cache.
  *
- * The account's own actions in this window (a submit, a fill, a join, a swap) drop a challenge's entry
- * (`dropContext`), and so do the automatic ones (a new entry reflected on the pass's challenge, a swap, a join:
- * `dropChallenge`, which has no token at hand and drops the challenge for every account). A read that was running
+ * The account's own actions in this window (a submit, a fill, a join, a swap) drop a challenge's entries, of
+ * every usage (`dropContext`), and so do the automatic ones (a new entry reflected on the pass's challenge, a
+ * swap, a join: `dropChallenge`, which has no token at hand and drops the challenge for every account). A read that was running
  * meanwhile writes nothing, whichever challenge was dropped (`dropEpoch`). A logout or account switch empties
  * everything (`clearLibraryCache`).
  */
 
 import * as logger from '../logger';
 import { tokenKey } from './accountScope';
+
+import type { LibraryUsage } from '../types/photoPicker';
 
 /** One library photo as the listing hands it out. */
 type ListedPhoto = {
@@ -46,8 +48,8 @@ type Entry = { readAtMs: number; listing: Readonly<TimedListing> };
 /** How long a challenge's listing answers a chooser for that challenge. */
 const LIBRARY_FRESH_MS = 5 * 60_000;
 
-/** Most challenges kept at once. */
-const MAX_LIBRARY_ENTRIES = 6;
+/** Most (challenge, usage) pairs kept at once. */
+const MAX_LIBRARY_ENTRIES = 12;
 
 const entries = new Map<string, Entry>();
 let latest: { account: string; listing: Readonly<TimedListing> } | null = null;
@@ -56,9 +58,14 @@ let dropCount = 0;
 
 const log = (kind: string): void => logger.withCategory('autoSubmit').debug(`Library cache: ${kind}`, null);
 
-/** The key of one challenge's entry (null: the settings and rules choosers, which name none) for an account. */
-const keyOf = (token: string, contextId: string | number | null): string =>
-    `${tokenKey(token)}:${contextId === null ? 'none' : `id:${contextId}`}`;
+const USAGES: readonly LibraryUsage[] = ['submit', 'swap'];
+
+/**
+ * The key of one challenge's entry for a usage (null: the settings and rules choosers, which name none) for an
+ * account. The challenge comes last, which `dropChallenge` matches.
+ */
+const keyOf = (token: string, contextId: string | number | null, usage: LibraryUsage): string =>
+    `${tokenKey(token)}:${usage}:${contextId === null ? 'none' : `id:${contextId}`}`;
 
 const copyPhoto = (photo: ListedPhoto): ListedPhoto => ({ ...photo, labels: [...photo.labels] });
 
@@ -87,14 +94,19 @@ const evictExpired = (now: number): void => {
     }
 };
 
-/** The challenge's listing when it was read less than LIBRARY_FRESH_MS ago, as a copy; else null. */
-const readFresh = (token: string, contextId: string | number | null, now: number = Date.now()): TimedListing | null => {
+/** The challenge's listing for the usage when it was read less than LIBRARY_FRESH_MS ago, as a copy; else null. */
+const readFresh = (
+    token: string,
+    contextId: string | number | null,
+    usage: LibraryUsage = 'submit',
+    now: number = Date.now(),
+): TimedListing | null => {
     evictExpired(now);
-    const entry = entries.get(keyOf(token, contextId));
+    const entry = entries.get(keyOf(token, contextId, usage));
     return entry ? copyOf(entry.listing) : null;
 };
 
-/** The newest listing the account has read for any challenge, as a copy, however old; else null. */
+/** The newest listing the account has read for any challenge or usage, as a copy, however old; else null. */
 const readLatest = (token: string): TimedListing | null =>
     latest && latest.account === tokenKey(token) ? copyOf(latest.listing) : null;
 
@@ -110,15 +122,16 @@ const oldestKey = (): string => {
     return oldest;
 };
 
-/** Keeps a challenge's listing (and as the newest, when it is), evicting what has expired and what is over the cap. */
+/** Keeps a challenge's listing for a usage (and as the newest, when it is), evicting what has expired and what is over the cap. */
 const writeListing = (
     token: string,
     contextId: string | number | null,
     listing: TimedListing,
+    usage: LibraryUsage = 'submit',
     now: number = Date.now(),
 ): void => {
     evictExpired(now);
-    const key = keyOf(token, contextId);
+    const key = keyOf(token, contextId, usage);
     const kept = frozen(listing);
     entries.delete(key);
     entries.set(key, { readAtMs: kept.readAtMs, listing: kept });
@@ -131,18 +144,17 @@ const writeListing = (
 };
 
 /**
- * The challenge's listing is out of date (the app has just changed what it can enter): forget it, so the
- * next opening reads again, and make a read that is in flight write nothing. `latest` stays: it is only
- * ever shown as a preview, with its marks withheld.
+ * The challenge's listings are out of date (the app has just changed what it can enter): forget them, of every
+ * usage, so the next opening reads again, and make a read that is in flight write nothing. `latest` stays: it
+ * is only ever shown as a preview, with its marks withheld.
  */
 const dropContext = (token: string, contextId: string | number | null): void => {
-    const key = keyOf(token, contextId);
-    entries.delete(key);
+    for (const usage of USAGES) entries.delete(keyOf(token, contextId, usage));
     dropCount += 1;
     log('dropped');
 };
 
-/** Same as `dropContext`, for the code that has the challenge but not the token: every account's entry of it goes. */
+/** Same as `dropContext`, for the code that has the challenge but not the token: every account's entries of it go. */
 const dropChallenge = (contextId: string | number): void => {
     const suffix = `:id:${contextId}`;
     for (const key of entries.keys()) {

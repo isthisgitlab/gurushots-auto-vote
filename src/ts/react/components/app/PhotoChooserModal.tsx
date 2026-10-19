@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal } from '@/components/ui/Modal';
 import { StickyModalFooter } from '@/components/ui/StickyModalFooter';
@@ -314,6 +314,11 @@ const TILE_GRID = 'grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4';
  * The library listing with its states: idle (the not-loaded line, plus the tiles Auto named that were picked in
  * this opening), loading, an error with Retry, the missing-challenge explanation, and the tiles (the picks the
  * listing does not return pinned first, the rest in the library's order). The defaults are the Chosen Photos list's: numbered, capped at MAX_CHOSEN_PHOTOS.
+ *
+ * The submit modal's grid (`submit`) leaves out the photos the challenge refuses once the listing says which it
+ * accepts, and counts them in a line of their own. A photo is shown anyway when it is picked (a pick that a later
+ * read marks refused keeps its tile and its reason: the pick is pruned only after a Refresh or a refused submit,
+ * not after Load all or Search) or when the caller lists it as blocked (it is shown blocked, not counted).
  */
 export function PhotoGrid({
     state,
@@ -338,6 +343,7 @@ export function PhotoGrid({
     extraPhotos,
     idleMemberId = null,
     idleIds,
+    idleWithPicksKey = 'app.pickIdleWithPicks',
 }: {
     state: ListState;
     known: Map<string, LibraryPhoto>;
@@ -377,10 +383,23 @@ export function PhotoGrid({
     idleMemberId?: string | null;
     /** The ids the idle grid shows, in place whether picked or not (default: the selected ones). */
     idleIds?: string[];
+    /** The translation key of the idle line shown while something is picked. */
+    idleWithPicksKey?: string;
 }) {
     const { t } = useTranslation();
     // Every won id this chooser has been told of: a search that no longer lists a chosen photo still knows it has won.
     const everWon = useRef(new Set<string>());
+    // The tile that last had the keyboard focus, and the hidden-count line a tile the fresh read hides hands it to.
+    const lastFocusedTile = useRef<Element | null>(null);
+    const hiddenLineRef = useRef<HTMLDivElement>(null);
+    // A tile that leaves the page takes the focus to <body>: when that was a tile of this grid, the focus goes to
+    // the hidden-count line (if there is one to go to) instead of being lost.
+    useLayoutEffect(() => {
+        const last = lastFocusedTile.current;
+        if (last === null || last.isConnected) return;
+        lastFocusedTile.current = null;
+        if (document.activeElement === document.body) hiddenLineRef.current?.focus();
+    });
     if (state.status === 'idle') {
         // Nothing is read yet: only the photos Auto named that were picked are shown, from the records it brought,
         // so a pick never goes invisible. An unpicked one keeps its place, so it can be picked again.
@@ -389,7 +408,7 @@ export function PhotoGrid({
         return (
             <>
                 <p className="text-base-content/70 text-sm" role="status">
-                    {t(selected.length > 0 ? 'app.pickIdleWithPicks' : 'app.pickIdle')}
+                    {t(selected.length > 0 ? idleWithPicksKey : 'app.pickIdle')}
                 </p>
                 {shownIdle.length > 0 && (
                     <div className={TILE_GRID}>
@@ -443,10 +462,24 @@ export function PhotoGrid({
     const previewPhotos = listing.preview ? new Map(listing.photos.map((photo) => [photo.id, photo])) : null;
     const lookup = (id: string): LibraryPhoto | undefined => (previewPhotos ?? known).get(id) ?? extraPhotos?.get(id);
     const atCap = selected.length >= max;
+    const refusedHere = (photo: LibraryPhoto): boolean => listing.allowedKnown && !photo.allowed;
     const blockedReasonOf = (photo: LibraryPhoto): string | null => {
         if (blockedIds?.has(photo.id)) return t(blockedKey);
-        return listing.allowedKnown && !photo.allowed ? photo.message || t('app.photoChooserNotEligible') : null;
+        return refusedHere(photo) ? photo.message || t('app.photoChooserNotEligible') : null;
     };
+    // Left out of the submit modal's grid, in this order: a pick is shown, a blocked photo is shown blocked, and a
+    // photo the challenge refuses is hidden. Nothing is hidden before the fresh read says what is accepted.
+    const hiddenFromGrid = (photo: LibraryPhoto): boolean =>
+        submit && !chosen.has(photo.id) && !blockedIds?.has(photo.id) && refusedHere(photo);
+    const refusedHidden = listing.photos.filter(hiddenFromGrid).length;
+    const shownPhotos = listing.photos.filter((photo) => !hiddenFromGrid(photo));
+    // A non-empty listing with nothing in it to pick: every photo is hidden or blocked, and nothing is picked.
+    const noneAccepted =
+        submit &&
+        listing.allowedKnown &&
+        listing.photos.length > 0 &&
+        selected.length === 0 &&
+        shownPhotos.every((photo) => blockedIds?.has(photo.id));
     // A pick's number is its index in `selected` (the order it is saved in) among the picks that are shown: a photo
     // left out (another account's) leaves no gap. The listed picks keep their place in the library's order.
     const listed = new Set(listing.photos.map((photo) => photo.id));
@@ -491,6 +524,21 @@ export function PhotoGrid({
                     })}
                 </p>
             )}
+            {/* Always mounted, so a screen reader announces the line that arrives in it. */}
+            <div role="status" tabIndex={-1} ref={hiddenLineRef} className="empty:hidden">
+                {refusedHidden > 0 && (
+                    <p className="text-base-content/70 text-xs">
+                        {interp(
+                            t(
+                                listing.truncated
+                                    ? 'app.photoChooserRefusedHiddenTruncated'
+                                    : 'app.photoChooserRefusedHidden',
+                            ),
+                            { count: refusedHidden },
+                        )}
+                    </p>
+                )}
+            </div>
             {listing.truncated && (
                 <ToneNote tone="warning" className="text-xs">
                     {interp(t('app.photoChooserTruncated'), { count: listing.photos.length })}
@@ -505,7 +553,14 @@ export function PhotoGrid({
                     )}
                 </p>
             )}
-            <div className={TILE_GRID}>
+            {noneAccepted && <p className="text-base-content/70 text-sm">{t('app.photoChooserNoneAccepted')}</p>}
+            <div
+                className={TILE_GRID}
+                onFocusCapture={() => {
+                    // The focus event's target is typed as a bare EventTarget; the focused element is the same node.
+                    lastFocusedTile.current = document.activeElement;
+                }}
+            >
                 {/* The picks the listing does not return stay pinned first, in pick order. */}
                 {selected
                     .filter((id) => !listed.has(id))
@@ -537,7 +592,7 @@ export function PhotoGrid({
                             />
                         );
                     })}
-                {listing.photos.map((photo) => tile(photo, shown(photo.id)))}
+                {shownPhotos.map((photo) => tile(photo, shown(photo.id)))}
             </div>
         </>
     );

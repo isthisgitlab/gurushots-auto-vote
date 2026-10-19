@@ -8,10 +8,11 @@ import * as autoFill from '../../services/autoFill';
 import { accountGeneration } from '../../services/accountScope';
 import { dropContext } from '../../services/libraryCache';
 import { CHOSEN_PHOTO_ID_RE, MAX_CHOSEN_PHOTOS } from '../../settings/limits';
-import { sanitizeForLog, refuseInvalidArgs, fetchLiveChallenge } from './shared';
+import { sanitizeForLog, refuseInvalidArgs, isUsageArg, fetchLiveChallenge } from './shared';
 import { mapPhoto } from './library';
 
 import type { IpcReplyFn } from '../registerHandlers';
+import type { LibraryUsage } from '../../types/photoPicker';
 
 /**
  * Map a fillChallengeNow result to the handler's reply.
@@ -140,10 +141,15 @@ let suggestRunning = false;
  * Pick… "Auto" button and `list-photos --suggest`). It is a ranking under those rules, not a replay of the
  * next fill. One ranking at a time answers `suggest-busy` to the rest.
  *
+ * @param usage - what the eligibility is read for: `'submit'` (the default) is entering the challenge, `'swap'`
+ *   is replacing an entry's photo (the swap picker's Auto).
+ *
  * Failures are `{ success: false, error: <fixed code> }` and never carry raw text.
  */
-const handleSuggestPhotos = (async (event: unknown, challengeId: string | number) => {
-    if (!isIdArg(challengeId)) return refuseInvalidArgs('autoSubmit', 'suggest-photos');
+const handleSuggestPhotos = (async (event: unknown, challengeId: string | number, usage?: LibraryUsage) => {
+    if (!isIdArg(challengeId) || (usage !== undefined && !isUsageArg(usage))) {
+        return refuseInvalidArgs('autoSubmit', 'suggest-photos');
+    }
     const log = logger.withCategory('autoSubmit');
     if (suggestRunning) {
         log.info('📝 Photo suggestions refused: a ranking is already running', null);
@@ -161,15 +167,21 @@ const handleSuggestPhotos = (async (event: unknown, challengeId: string | number
         const liveChallenge = await fetchLiveChallenge(strategy, guard.token, challengeId);
         if (!liveChallenge) return { success: false as const, error: 'challenge-ended' as const };
 
-        const result = await autoFill.suggestFillPhotos(liveChallenge, guard.token, {
-            settings,
-            logger,
-            getEligiblePhotos: strategy.getEligiblePhotos,
-            getEligiblePhotosWalk: strategy.getEligiblePhotosWalk,
-            getImageData: strategy.getImageData,
-            searchTagAutocomplete: strategy.searchTagAutocomplete,
-            getCurrentMemberProfile: strategy.getCurrentMemberProfile,
-        });
+        const result = await autoFill.suggestFillPhotos(
+            liveChallenge,
+            guard.token,
+            {
+                settings,
+                logger,
+                getEligiblePhotos: strategy.getEligiblePhotos,
+                getEligiblePhotosWalk: strategy.getEligiblePhotosWalk,
+                getImageData: strategy.getImageData,
+                searchTagAutocomplete: strategy.searchTagAutocomplete,
+                getCurrentMemberProfile: strategy.getCurrentMemberProfile,
+            },
+            undefined,
+            { usage },
+        );
         if (result.status === 'fetch-error') return { success: false as const, error: 'fetch-failed' as const };
         if (result.status !== 'suggested') return { success: false as const, error: result.status };
         // An id that is not a safe token could never be stored in a list, so it is not offered.

@@ -10,6 +10,7 @@ import * as ipc from '@/api/ipc';
 import { asPreview } from '../../libraryPreview';
 
 import type { WindowApi } from '../../types/ipc';
+import type { LibraryUsage } from '../../types/photoPicker';
 
 type LibraryAnswer = Awaited<ReturnType<WindowApi['getLibraryPhotos']>>;
 type Listing = Extract<LibraryAnswer, { success: true }>;
@@ -39,10 +40,16 @@ const replacesListing = (error: string | undefined): boolean =>
  * The listing for a challenge. A no-search read may come from memory as a preview, which is read again in
  * the background; a search, Retry and Refresh read afresh. Answers to any but the newest request are dropped.
  * With `onDemand` nothing is read on mount: the listing is `idle` until `load` (or `retry`) is called.
+ * `usage` is what the listing's eligibility marks are read for (submit, or a swap's); a change of it sends the next
+ * read with the new one and reads nothing by itself.
  */
 export function useLibraryListing(
     challengeId: string | number | null,
-    { alwaysFresh = false, onDemand = false }: { alwaysFresh?: boolean; onDemand?: boolean } = {},
+    {
+        alwaysFresh = false,
+        onDemand = false,
+        usage = 'submit',
+    }: { alwaysFresh?: boolean; onDemand?: boolean; usage?: LibraryUsage } = {},
 ) {
     const [state, setState] = useState<ListState>({ status: onDemand ? 'idle' : 'loading' });
     // Every photo any fresh response has listed, by id: a selected photo that a narrower
@@ -62,8 +69,8 @@ export function useLibraryListing(
 
     const read = useCallback(
         (search: string, mode: ReadMode) =>
-            ipc.callOrNull(() => ipc.getLibraryPhotos(challengeId, search || undefined, mode)),
-        [challengeId],
+            ipc.callOrNull(() => ipc.getLibraryPhotos(challengeId, search || undefined, mode, usage)),
+        [challengeId, usage],
     );
 
     /**

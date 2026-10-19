@@ -1400,7 +1400,9 @@ describe('chosen photos', () => {
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
-        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(900001, undefined, 'cached'));
+        await waitFor(() =>
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(900001, undefined, 'cached', 'submit'),
+        );
         fireEvent.click(await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ }));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
         await waitFor(() =>

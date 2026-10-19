@@ -272,6 +272,43 @@ describe('suggestFillPhotos', () => {
             expect(suggestedIds(await suggestFillPhotos(makeChallenge(), 'tok', deps))).toEqual(['car']);
             expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
         });
+
+        const withCar = () =>
+            makeDeps({
+                settings: { chosen: ['car'], only: true },
+                photos: library(),
+                walkItems: [...library(), photo('car', ['Car'])],
+            });
+
+        test('reads swap eligibility, in the candidate fetch and in the chosen-photo walk, when asked to', async () => {
+            const deps = withCar();
+            await suggestFillPhotos(makeChallenge(), 'tok', deps, undefined, { usage: 'swap' });
+            expect(deps.getEligiblePhotos).toHaveBeenCalledWith(
+                expect.anything(),
+                'tok',
+                expect.objectContaining({ usage: 'swap' }),
+            );
+            expect(deps.getEligiblePhotosWalk).toHaveBeenCalledWith(
+                expect.anything(),
+                'tok',
+                expect.objectContaining({ usage: 'swap' }),
+            );
+        });
+
+        test('reads submit eligibility by default', async () => {
+            const deps = withCar();
+            await suggestFillPhotos(makeChallenge(), 'tok', deps);
+            expect(deps.getEligiblePhotos).not.toHaveBeenCalledWith(
+                expect.anything(),
+                'tok',
+                expect.objectContaining({ usage: 'swap' }),
+            );
+            expect(deps.getEligiblePhotosWalk).toHaveBeenCalledWith(
+                expect.anything(),
+                'tok',
+                expect.objectContaining({ usage: 'submit' }),
+            );
+        });
     });
 
     describe('tag settings', () => {

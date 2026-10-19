@@ -268,7 +268,7 @@ describe('listing and tiles', () => {
     test('reads the library through the challenge it was opened for', async () => {
         setup({ challengeId: 42 });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(getLibrary()).toHaveBeenCalledWith(42, undefined, 'cached');
+        expect(getLibrary()).toHaveBeenCalledWith(42, undefined, 'cached', 'submit');
     });
 
     test('a photo with no usable URL becomes a text tile with its tags and short id', async () => {
@@ -818,6 +818,15 @@ describe('eligibility', () => {
         expect(screen.getByText('Can be entered')).toBeTruthy();
     });
 
+    test('the Chosen Photos chooser keeps every refused photo on screen: none is hidden or counted', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1, { allowed: false }), photo(2, { allowed: false })]));
+        setup();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(screen.getByRole('button', { name: /^Photo 00000002:/ })).toBeTruthy();
+        expect(screen.queryByText(/^Hidden: /)).toBeNull();
+        expect(screen.queryByText(/won't take any of the listed photos/)).toBeNull();
+    });
+
     test('a refused photo without a message gets a generic reason, and stays removable once chosen', async () => {
         getLibrary().mockResolvedValue(listing([photo(1, { allowed: false })]));
         setup({ value: [idOf(1)] });
@@ -834,7 +843,7 @@ describe('eligibility', () => {
         expect(only.getAttribute('aria-disabled')).toBe('false');
         expect(screen.queryByText('Not eligible for this challenge')).toBeNull();
         expect(screen.queryByText('Can be entered')).toBeNull();
-        expect(getLibrary()).toHaveBeenCalledWith(null, undefined, 'cached');
+        expect(getLibrary()).toHaveBeenCalledWith(null, undefined, 'cached', 'submit');
     });
 });
 
@@ -856,7 +865,7 @@ describe('search', () => {
         expect(getLibrary()).toHaveBeenCalledTimes(1);
         fireEvent.submit(box.closest('form')!);
         await waitFor(() => expect(getLibrary()).toHaveBeenCalledTimes(2));
-        expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh');
+        expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh', 'submit');
     });
 
     test('a selected photo a narrower search no longer lists keeps its tile', async () => {
@@ -938,7 +947,7 @@ describe('failures', () => {
         expect(alert.textContent).not.toContain('details below');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh');
+        expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh', 'submit');
     });
 
     test('an error is shown as a translated detail, never as raw handler text; invalid-args has its own', async () => {
@@ -971,7 +980,7 @@ describe('failures', () => {
         fireEvent.submit(box.closest('form')!);
         await screen.findByRole('alert');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'dog', 'fresh'));
+        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'dog', 'fresh', 'submit'));
     });
 
     test('with no challenge to read the library through it explains what is needed', async () => {
@@ -1873,7 +1882,7 @@ describe('the cached listing, its preview and Refresh', () => {
         const reread = deferred<Listing>();
         getLibrary().mockReturnValueOnce(reread.promise);
         fireEvent.click(button);
-        expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh');
+        expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh', 'submit');
         await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
         expect(button.hasAttribute('disabled')).toBe(true);
         // The photos stay while it reads.
@@ -1889,10 +1898,10 @@ describe('the cached listing, its preview and Refresh', () => {
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         fireEvent.change(screen.getByLabelText('Search your photos by tag'), { target: { value: 'cat' } });
         fireEvent.submit(screen.getByLabelText('Search your photos by tag').closest('form')!);
-        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh'));
+        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh', 'submit'));
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         fireEvent.click(refreshButton());
-        expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh');
+        expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh', 'submit');
     });
 
     test('a listing read for this challenge in the last minutes opens as it is: no status line, no second read', async () => {

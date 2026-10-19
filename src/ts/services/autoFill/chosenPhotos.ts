@@ -14,7 +14,7 @@ import { getEntries } from './challengeState';
 
 import type { Challenge } from '../../types/gurushots';
 import type { FillLogger, RankDeps } from '../../types/autoFill';
-import type { PickerPhoto } from '../../types/photoPicker';
+import type { LibraryUsage, PickerPhoto } from '../../types/photoPicker';
 import { errorMessage } from '../../errorMessage';
 import { oneLine } from '../../format/logSafe';
 
@@ -133,9 +133,14 @@ const MAX_TRUNCATED_WALK_RETRY_MS = 60 * 60_000;
 const SUBMIT_REFUSAL_TTL_MS = 10 * 60_000;
 const MAX_WALK_MEMOS = 64;
 
-// Per challenge: the photo ids are the chosen list's own concern, so editing the
-// list keeps what is already known about the ids it still holds.
+// Per challenge and usage: the photo ids are the chosen list's own concern, so editing the
+// list keeps what is already known about the ids it still holds. A walk's verdicts are those of its usage (the
+// server filters `allowed` per usage), so a swap's memo is kept apart from the submit one, which keeps the bare
+// challenge id as its key.
 const walkMemos: Map<string, WalkMemo> = new Map();
+
+const memoKey = (challenge: Challenge, usage: LibraryUsage): string =>
+    usage === 'swap' ? `${challenge.id}:swap` : String(challenge.id);
 
 /** Makes room in a capped map by dropping its oldest entry (a Map iterates in insertion order), not every entry. */
 const evictOldest = (map: Map<string, unknown>): void => {
@@ -154,8 +159,8 @@ const truncatedWalkDelay = (truncatedWalks: number): number =>
  * the negative ones (a found photo is still checked for eligibility on every
  * pass). Null when the challenge has none.
  */
-const readMemo = (challenge: Challenge, now: number): WalkMemo | null => {
-    const memo = walkMemos.get(String(challenge.id));
+const readMemo = (challenge: Challenge, now: number, usage: LibraryUsage): WalkMemo | null => {
+    const memo = walkMemos.get(memoKey(challenge, usage));
     if (!memo) return null;
     if (now - memo.at >= WALK_MEMO_TTL_MS) {
         memo.outcomes.clear();
@@ -237,6 +242,7 @@ const recordWalk = (
  */
 const rememberWalk = ({
     challenge,
+    usage,
     memo,
     outcomes,
     now,
@@ -244,6 +250,7 @@ const rememberWalk = ({
     cutShort,
 }: {
     challenge: Challenge;
+    usage: LibraryUsage;
     memo: WalkMemo | null;
     outcomes: Map<string, WalkOutcome>;
     now: number;
@@ -262,7 +269,7 @@ const rememberWalk = ({
         return;
     }
     if (walkMemos.size >= MAX_WALK_MEMOS) evictOldest(walkMemos);
-    walkMemos.set(String(challenge.id), {
+    walkMemos.set(memoKey(challenge, usage), {
         at: now,
         entryCount: getEntries(challenge).length,
         outcomes,
@@ -284,7 +291,7 @@ const rememberWalk = ({
  * pick goes by the user's order (`inOrder`) the lookup is needed whenever a
  * missing photo stands before the `wantCount`-th usable one in the list, however
  * many usable ones stand behind it: the order says which photo goes first. Its outcome
- * is remembered per challenge and photo (WALK_MEMO_TTL_MS; a changed entry count
+ * is remembered per challenge, usage and photo (WALK_MEMO_TTL_MS; a changed entry count
  * drops only the negative outcomes): "not found" is only ever recorded from a
  * complete walk, so a photo beyond a truncated walk stays unresolved and the
  * walk is retried with a growing wait (TRUNCATED_WALK_RETRY_MS, doubling).
@@ -301,6 +308,7 @@ const resolveMissingChosen = async ({
     inOrder = false,
     deps,
     label,
+    usage = 'submit',
 }: {
     challenge: Challenge;
     token: string;
@@ -311,6 +319,8 @@ const resolveMissingChosen = async ({
     inOrder?: boolean;
     deps: Pick<RankDeps, 'getEligiblePhotosWalk'> & { logger: FillLogger };
     label: string;
+    /** What the walk reads eligibility for; its memo is kept per usage. */
+    usage?: LibraryUsage;
 }): Promise<PickerPhoto[]> => {
     const present = new Map(eligible.map((photo) => [String(photo.id), photo]));
     const missing = ids.filter((id) => !present.has(id));
@@ -322,7 +332,7 @@ const resolveMissingChosen = async ({
     if (usable.length >= (inOrder ? wantCount : Math.min(ids.length, wantCount))) return [];
 
     const now = Date.now();
-    const memo = readMemo(challenge, now);
+    const memo = readMemo(challenge, now, usage);
     const unresolved = missing.filter((id) => !memo?.outcomes.has(id));
     // The wait holds for every id already looked for: only a newly chosen id is looked up at once.
     const waiting = memo !== null && now < memo.nextWalkAt && unresolved.every((id) => memo.knownIds.has(id));
@@ -332,14 +342,14 @@ const resolveMissingChosen = async ({
 
     let walk;
     try {
-        walk = await deps.getEligiblePhotosWalk(challenge.id, token, { logLabel: label });
+        walk = await deps.getEligiblePhotosWalk(challenge.id, token, { logLabel: label, usage });
     } catch (error) {
         deps.logger
             .withCategory(label === 'join' ? 'join' : 'autoSubmit')
             .debug(`${label}: could not look for your chosen photos: ${oneLine(errorMessage(error) || error)}`, null);
         // A failing walk waits like a cut-short one, so a library that is down is not hit every cycle.
         const kept = memo?.outcomes ?? new Map<string, WalkOutcome>();
-        rememberWalk({ challenge, memo, outcomes: kept, now, unresolved, cutShort: true });
+        rememberWalk({ challenge, usage, memo, outcomes: kept, now, unresolved, cutShort: true });
         return foundPhotos(kept, missing);
     }
     const outcomes = memo?.outcomes ?? new Map<string, WalkOutcome>();
@@ -351,7 +361,7 @@ const resolveMissingChosen = async ({
             `${label}: looked for your chosen photos outside the themed search for ${deps.logger.challengeTag(challenge)} — ${tally.found} found, ${tally.refused} not allowed here, ${tally.notFound} not in your library, ${notReached} not reached`,
             null,
         );
-    rememberWalk({ challenge, memo, outcomes, now, unresolved, cutShort: notReached > 0 });
+    rememberWalk({ challenge, usage, memo, outcomes, now, unresolved, cutShort: notReached > 0 });
     return foundPhotos(outcomes, missing);
 };
 
