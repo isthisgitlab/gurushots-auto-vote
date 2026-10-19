@@ -210,10 +210,10 @@ describe('statusText', () => {
         expect(words({ code: 'timer', colorClass: '' })).toBe('app.stateTimer');
         expect(words({ code: 'inProgress', colorClass: '' })).toBe('app.stateInProgress');
         expect(words({ code: 'won', colorClass: '' })).toBe('app.stateWon');
-        expect(statusText({ code: 'availableMinutes', colorClass: '', minutes: 7 }, () => 'Left: {minutes} min')).toBe(
-            'Left: 7 min',
+        expect(statusText({ code: 'availableMinutes', colorClass: '', minutes: 446 }, () => 'Left: {time}')).toBe(
+            'Left: 7h 26m',
         );
-        expect(statusText({ code: 'availableMinutes', colorClass: '' }, () => '{minutes} min')).toBe('0 min');
+        expect(statusText({ code: 'availableMinutes', colorClass: '' }, () => '{time} left')).toBe('<1m left');
     });
 
     test("an 'other' state is the API's own text, untranslated", () => {

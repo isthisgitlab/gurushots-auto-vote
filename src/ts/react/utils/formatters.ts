@@ -205,7 +205,9 @@ const STATUS_TEXT_KEYS: Record<string, string> = {
 export const statusText = (status: ResourceStatus<string>, t: (key: string) => string): string => {
     if (status.code === 'other') return status.raw ?? '';
     const text = t(STATUS_TEXT_KEYS[status.code]);
-    return status.code === 'availableMinutes' ? interp(text, { minutes: status.minutes ?? 0 }) : text;
+    return status.code === 'availableMinutes'
+        ? interp(text, { time: formatDuration((status.minutes ?? 0) * 60) })
+        : text;
 };
 
 /**
