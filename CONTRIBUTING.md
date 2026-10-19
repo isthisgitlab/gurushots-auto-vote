@@ -220,10 +220,7 @@ Later builds reuse the cache offline.
 
 ## 🤝 Code of Conduct
 
-- Be respectful and inclusive
-- Help others learn and grow
-- Focus on constructive feedback
-- Respect project maintainers' decisions
+This project follows the [Contributor Covenant 3.0](CODE_OF_CONDUCT.md). By taking part, you agree to uphold it.
 
 ## 📞 Getting Help
 
