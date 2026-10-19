@@ -1511,7 +1511,7 @@ export const app = {
         'Visu laiku ar pilnu jaudu: balso līdz pilnai redzamībai, iesniedz foto visās foto vietās un izmanto Boost un Turbo.',
     ended: 'Beidzies',
     stateUnknown: 'Nezināms',
-    stateAvailableMinutes: 'Pieejams (atlikušas {minutes} min)',
+    stateAvailableMinutes: 'Pieejams (vēl {time})',
     stateLocked: 'Slēgts',
     stateFree: 'Bezmaksas',
     stateTimer: 'Gaidīšana',

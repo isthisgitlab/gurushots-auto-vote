@@ -1486,7 +1486,7 @@ export const app = {
     naBoostSinglePhoto: "Single-photo challenges never unlock Boost — these settings won't take effect.",
     ended: 'Ended',
     stateUnknown: 'Unknown',
-    stateAvailableMinutes: 'Available ({minutes} min left)',
+    stateAvailableMinutes: 'Available ({time} left)',
     stateLocked: 'Locked',
     stateFree: 'Free',
     stateTimer: 'Timer',
