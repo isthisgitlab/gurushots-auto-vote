@@ -7,7 +7,8 @@
  */
 
 import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
-import { PhotoChooserModal, PhotoGrid } from '@/components/app/PhotoChooserModal';
+import { PhotoChooserModal } from '@/components/app/PhotoChooserModal';
+import { PhotoGrid } from '@/components/app/PhotoGrid';
 import { useImageLoads } from '@/hooks/useImageLoads';
 import { Modal } from '@/components/ui/Modal';
 import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';

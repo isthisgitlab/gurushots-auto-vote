@@ -8,7 +8,7 @@ import { suggestErrorText } from '@/api/ipcErrorText';
 import { useSuggestPhotos } from '@/api/useSuggestPhotos';
 import { useLibraryListing } from '@/hooks/useLibraryListing';
 import { SearchForm } from './ChooserFooter';
-import { PhotoGrid } from './PhotoChooserModal';
+import { PhotoGrid } from './PhotoGrid';
 import { SuggestedStrip } from './SuggestedStrip';
 
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';

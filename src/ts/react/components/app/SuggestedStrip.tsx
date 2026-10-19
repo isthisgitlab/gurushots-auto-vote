@@ -2,7 +2,7 @@ import { useId } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { interp } from '@/utils/interp';
-import { PhotoTile } from './PhotoChooserModal';
+import { PhotoTile } from './PhotoTile';
 
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
 
