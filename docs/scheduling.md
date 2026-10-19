@@ -116,9 +116,13 @@ Deliberate semantics and caveats:
   time-of-day fill can shift by up to an hour on the changeover day
   (spring-forward nonexistent times resolve nearby; fall-back ambiguity
   resolves deterministically). Documented in `wallClock.ts`.
-- **Timezone changes mid-run** take effect on the next cycle: the decision
-  path re-reads `settings.getSetting('timezone')` every evaluation, and
-  `timezone` is already in the renderer's reload-required list.
+- **Timezone changes mid-run**: an in-app Save re-plans the armed timer
+  (`rearmSchedule`). A change made outside the app (CLI or hand edit), like
+  every other setting edited there, takes effect at the next cycle — the
+  decision path re-reads `settings.getSetting('timezone')` every evaluation —
+  so it can be up to one full wait late, and a time-of-day fill window
+  shorter than the remaining wait is skipped, the same as a CLI
+  `scheduledFillTime` edit.
 - **Fail-soft**: corrupt persisted values (hand-edited settings.json)
   degrade that one challenge's scheduled fill to "off" — the string key is
   type-guarded, numeric corruption coerces to `NaN`-false, an unknown
@@ -341,18 +345,13 @@ Deliberate semantics and caveats:
       `QUIT_WARN_HORIZON_SEC` (60 min), and is bypassed for an OS shutdown,
       signals, update install and logout.
 
-    Two sharp edges in that `onSettingsChanged` wiring, both already handled
-    in `index.ts` — keep them handled:
-    - The watcher's debounce handle is **module-level and outlives
-      `close()`**, so a callback armed before a window teardown still fires
-      after it. The observer must re-check the window is alive before acting,
-      exactly as the reload and broadcast paths do, or a routine settings
-      write (a window move is enough) can re-arm the blocker for a session
-      with no window — and nothing would release it.
-    - The watcher's 2-second "window recently created" guard suppresses the
-      **reload**, not the observer. `notifyObserver()` is called on that
-      early return too, so a Start clicked immediately after login still
-      syncs.
+    One sharp edge in that `onSettingsChanged` wiring, already handled in
+    `index.ts` — keep it handled: the watcher's debounce handle is
+    **module-level and outlives `close()`**, so a callback armed before a
+    window teardown still fires after it. The observer must re-check the
+    window is alive before acting, exactly as the broadcast path does, or a
+    routine settings write (a window move is enough) can re-arm the blocker
+    for a session with no window — and nothing would release it.
 
     When a timer _does_ fire far past its due time anyway, `cadenceChain`'s
     `log.overslept` hook (`scheduling/cadenceChain/chain.ts`) reports it as a warning on both hosts, using the

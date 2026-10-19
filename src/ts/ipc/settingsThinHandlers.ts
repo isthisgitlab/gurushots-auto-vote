@@ -91,7 +91,7 @@ type ThinHandlers = {
 };
 
 // Capacitor has no filesystem watcher to rebroadcast settings mutations, and
-// Electron's watcher reloads only the main window for reload-required keys.
+// Electron's watcher debounces by 500 ms, so this broadcast is the immediate one.
 // Notify every renderer subscriber after a successful user-facing write so
 // cards immediately re-read effective global/profile/per-challenge values and
 // every open window follows a saved language (set-setting broadcasts too).

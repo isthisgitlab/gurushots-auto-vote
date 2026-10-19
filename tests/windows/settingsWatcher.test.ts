@@ -6,8 +6,8 @@
  * `autovoteRunning` flag the renderer persists — there is no dedicated IPC
  * channel for it. That makes this hook load-bearing for the power-save blocker
  * in windows/backgroundActivity.ts, so it must fire on every successful load
- * (whichever branch follows) and must never be able to cost the window its
- * reload or the renderers their broadcast.
+ * (whichever branch follows) and must never be able to cost the renderers
+ * their broadcast. No window is ever reloaded: the watcher only broadcasts.
  */
 
 import { invalid } from '../helpers/invalid';
@@ -36,7 +36,6 @@ jest.mock('electron', () => ({
 jest.mock('../../src/ts/settings', () => ({
     getSettingsPath: jest.fn(() => '/tmp/config.json'),
     loadSettings: jest.fn(),
-    isReloadRequired: jest.fn(() => false),
 }));
 
 type LogArgs = [message: string, data?: unknown];
@@ -63,13 +62,7 @@ type Deps = Parameters<typeof watchSettingsFile>[0];
 const loaded = (app: object, auth: object = {}, rest: object = {}) =>
     invalid<ConfigV2>({ app, auth: { token: '', ...auth }, ...rest });
 
-// Window state accessors: an old creation time so the "recently created" guard
-// (which deliberately skips the whole change handler) never fires here.
-const makeDeps = (onSettingsChanged: Deps['onSettingsChanged']): Deps => ({
-    getMainWindow: () => invalid({ isDestroyed: () => false, reload: jest.fn() }),
-    getMainWindowCreatedTime: () => Date.now() - 60_000,
-    onSettingsChanged,
-});
+const makeDeps = (onSettingsChanged: Deps['onSettingsChanged']): Deps => ({ onSettingsChanged });
 
 // Drive one debounced change event through the watcher.
 const emitChange = async () => {
@@ -148,10 +141,7 @@ describe('watchSettingsFile onSettingsChanged', () => {
     });
 
     test('omitting the observer changes nothing (pre-existing host shape)', async () => {
-        watchSettingsFile({
-            getMainWindow: () => invalid({ isDestroyed: () => false, reload: jest.fn() }),
-            getMainWindowCreatedTime: () => Date.now() - 60_000,
-        });
+        watchSettingsFile({});
 
         settings.loadSettings.mockReturnValue(loaded({ autovoteRunning: true }));
         await expect(emitChange()).resolves.toBeUndefined();
@@ -165,72 +155,34 @@ describe('watchSettingsFile onSettingsChanged', () => {
         expect(watchSettingsFile(makeDeps(jest.fn()))).toBeNull();
     });
 
-    // The "recently created" guard exists to suppress a RELOAD during login.
-    // It must not also suppress the observer: someone who hits Start within
-    // two seconds of the window appearing still has to sync the main-process
-    // state that tracks the flag, or it stays wrong until an unrelated write
-    // happens to fix it — the same class of silent failure this whole branch
-    // is about.
-    describe('"window recently created" guard', () => {
-        const makeYoungWindowDeps = (onSettingsChanged: Deps['onSettingsChanged']): Deps => ({
-            getMainWindow: () => invalid({ isDestroyed: () => false, reload: jest.fn() }),
-            getMainWindowCreatedTime: () => Date.now() - 100,
-            onSettingsChanged,
-        });
+    test('a change right after window creation fires the observer once and broadcasts', async () => {
+        const onSettingsChanged = jest.fn();
+        watchSettingsFile(makeDeps(onSettingsChanged));
 
-        test('still fires the observer even though it skips the reload', async () => {
-            const onSettingsChanged = jest.fn();
-            watchSettingsFile(makeYoungWindowDeps(onSettingsChanged));
+        settings.loadSettings.mockReturnValue(loaded({ autovoteRunning: true }));
+        mockWatchHandlers.at(-1)!('change', 'config.json');
+        jest.advanceTimersByTime(500);
 
-            settings.loadSettings.mockReturnValue(loaded({ autovoteRunning: true }));
-            await emitChange();
-
-            expect(onSettingsChanged).toHaveBeenCalledWith(loaded({ autovoteRunning: true }));
-            // The guard's actual job is still done: nothing was broadcast and
-            // no reload happened.
-            expect(mockSend).not.toHaveBeenCalled();
-        });
-
-        test('a failed read on that path is swallowed, not thrown', async () => {
-            const onSettingsChanged = jest.fn();
-            watchSettingsFile(makeYoungWindowDeps(onSettingsChanged));
-
-            settings.loadSettings.mockImplementation(() => {
-                throw new Error('config.json unreadable');
-            });
-
-            await expect(emitChange()).resolves.toBeUndefined();
-            expect(onSettingsChanged).not.toHaveBeenCalled();
-        });
+        expect(onSettingsChanged).toHaveBeenCalledTimes(1);
+        expect(mockSend).toHaveBeenCalledTimes(1);
     });
 });
 
 describe('watchSettingsFile change detection', () => {
     const { BrowserWindow } = jest.mocked(require('electron') as typeof electronModule);
     const fs = require('node:fs') as typeof node_fsModule;
-    let reload: jest.MockedFunction<NonNullable<ReturnType<Deps['getMainWindow']>>['reload']>;
-    let windowDestroyed: boolean;
+    const reload = jest.fn();
 
-    const deps = (overrides: Partial<Deps> = {}): Deps => ({
-        getMainWindow: () => invalid({ isDestroyed: () => windowDestroyed, reload }),
-        getMainWindowCreatedTime: () => Date.now() - 60_000,
-        ...overrides,
-    });
+    const deps = (overrides: Partial<Deps> = {}): Deps => ({ ...overrides });
     const infoLines = () => mockLog.info.mock.calls.map(([line]) => line);
 
     beforeEach(() => {
         jest.useFakeTimers();
         jest.clearAllMocks();
         mockWatchHandlers.length = 0;
-        reload = jest.fn();
-        windowDestroyed = false;
-        settings.isReloadRequired.mockImplementation(() => false);
     });
 
     afterEach(() => {
-        // clearAllMocks keeps implementations; restore the file-level default
-        // so the observer suite's broadcast assertions stay order-independent.
-        settings.isReloadRequired.mockImplementation(() => false);
         jest.clearAllTimers();
         jest.useRealTimers();
     });
@@ -241,7 +193,7 @@ describe('watchSettingsFile change detection', () => {
         expect(fs.watch).toHaveBeenCalledWith('/tmp', expect.any(Function));
     });
 
-    test('a nested reload-required change reloads the main window and broadcasts to the others only', async () => {
+    test('a theme change broadcasts to the main window too and reloads nothing', async () => {
         const mainSend = jest.fn();
         const mainWindow = invalid<electronModule.BrowserWindow>({
             isDestroyed: () => false,
@@ -252,40 +204,44 @@ describe('watchSettingsFile change detection', () => {
             mainWindow,
             invalid({ isDestroyed: () => false, webContents: { send: mockSend } }),
         ]);
-        settings.loadSettings.mockReturnValue(loaded({ ui: { theme: 'light' } }));
-        settings.isReloadRequired.mockImplementation((key) => key === 'ui');
-        watchSettingsFile(deps({ getMainWindow: () => mainWindow }));
+        settings.loadSettings.mockReturnValue(loaded({ theme: 'light' }));
+        watchSettingsFile(deps());
 
-        settings.loadSettings.mockReturnValue(loaded({ ui: { theme: 'dark' } }));
+        settings.loadSettings.mockReturnValue(loaded({ theme: 'dark' }));
         await emitChange();
 
-        expect(settings.isReloadRequired).toHaveBeenCalledWith('ui');
-        expect(reload).toHaveBeenCalledTimes(1);
-        expect(mainSend).not.toHaveBeenCalled();
-        expect(mockSend).toHaveBeenCalledWith('settings-changed', { app: { ui: { theme: 'dark' } }, hasToken: false });
-        expect(infoLines()).toEqual([
-            '🔄 Reload-required settings changed, reloading main window...',
-            '  • app.ui.theme: light → dark (reload required)',
-        ]);
+        expect(reload).not.toHaveBeenCalled();
+        expect(mainSend).toHaveBeenCalledWith('settings-changed', { app: { theme: 'dark' }, hasToken: false });
+        expect(mockSend).toHaveBeenCalledWith('settings-changed', { app: { theme: 'dark' }, hasToken: false });
+        expect(infoLines()).toEqual(['🔄 Settings changed:', '  • app.theme: light → dark']);
     });
 
-    test('a reload-required change with a destroyed main window falls back to broadcasting to live windows', async () => {
+    test('a destroyed window is not sent to', async () => {
         const deadSend = jest.fn();
         BrowserWindow.getAllWindows.mockReturnValueOnce([
             invalid({ isDestroyed: () => true, webContents: { send: deadSend } }),
             invalid({ isDestroyed: () => false, webContents: { send: mockSend } }),
         ]);
         settings.loadSettings.mockReturnValue(loaded({ language: 'en' }));
-        settings.isReloadRequired.mockReturnValue(true);
-        windowDestroyed = true;
         watchSettingsFile(deps());
 
         settings.loadSettings.mockReturnValue(loaded({ language: 'lv' }));
         await emitChange();
 
-        expect(reload).not.toHaveBeenCalled();
         expect(deadSend).not.toHaveBeenCalled();
         expect(mockSend).toHaveBeenCalledWith('settings-changed', { app: { language: 'lv' }, hasToken: false });
+    });
+
+    test('the broadcast payload carries no auth block', async () => {
+        settings.loadSettings.mockReturnValue(loaded({ theme: 'light' }, { token: 'oldABC' }));
+        watchSettingsFile(deps());
+
+        settings.loadSettings.mockReturnValue(loaded({ theme: 'dark' }, { token: 'newXYZ' }));
+        await emitChange();
+
+        const [, payload] = mockSend.mock.calls[0] as [string, Record<string, unknown>];
+        expect(payload).not.toHaveProperty('auth');
+        expect(JSON.stringify(payload)).not.toMatch(/oldABC|newXYZ/);
     });
 
     test('logs null, object and array differences using a stable string form', async () => {
@@ -298,7 +254,7 @@ describe('watchSettingsFile change detection', () => {
         await emitChange();
 
         expect(infoLines()).toEqual([
-            '🔄 Settings changed (no reload required):',
+            '🔄 Settings changed:',
             '  • app.a: null → set',
             '  • app.c: {"x":1} → null',
             '  • app.list: [1] → [1,2]',
@@ -345,7 +301,7 @@ describe('watchSettingsFile change detection', () => {
             await emitChange();
 
             expect(infoLines()).toEqual([
-                '🔄 Settings changed (no reload required):',
+                '🔄 Settings changed:',
                 '  • app.network.password: [REDACTED] → [REDACTED]',
                 '  • auth.apiHeaders.x-token: [REDACTED] → [REDACTED]',
                 '  • auth.apiHeaders.ua: [REDACTED] → [REDACTED]',
@@ -402,7 +358,7 @@ describe('watchSettingsFile change detection', () => {
             await emitChange();
 
             expect(infoLines()).toEqual([
-                '🔄 Settings changed (no reload required):',
+                '🔄 Settings changed:',
                 '  • auth.lastUsername: [REDACTED] → [REDACTED]',
                 '  • auth.chosenPhotosMemberId: [REDACTED] → [REDACTED]',
             ]);
@@ -410,7 +366,7 @@ describe('watchSettingsFile change detection', () => {
         });
     });
 
-    test('a write with no property differences neither reloads nor broadcasts', async () => {
+    test('a write with no property differences does not broadcast', async () => {
         settings.loadSettings.mockReturnValue(loaded({ theme: 'light' }));
         watchSettingsFile(deps());
 
@@ -421,18 +377,69 @@ describe('watchSettingsFile change detection', () => {
         expect(mockSend).not.toHaveBeenCalled();
     });
 
-    test('when the initial snapshot could not be loaded, the first change reloads', async () => {
-        settings.loadSettings.mockImplementationOnce(() => {
-            throw new Error('EACCES');
-        });
-        watchSettingsFile(deps());
-        expect(mockLog.error).toHaveBeenCalledWith('Failed to load initial settings for comparison:', 'EACCES');
+    describe('without a baseline (the initial snapshot could not be loaded)', () => {
+        const startWithoutBaseline = () => {
+            settings.loadSettings.mockImplementationOnce(() => {
+                throw new Error('EACCES');
+            });
+            const onSettingsChanged = jest.fn();
+            watchSettingsFile(deps({ onSettingsChanged }));
+            expect(mockLog.error).toHaveBeenCalledWith('Failed to load initial settings for comparison:', 'EACCES');
+            return onSettingsChanged;
+        };
 
+        test('the first good load broadcasts and notifies once, logging no setting value', async () => {
+            const onSettingsChanged = startWithoutBaseline();
+
+            settings.loadSettings.mockReturnValue(
+                loaded({ theme: 'dark' }, { token: 'secretABC', lastUsername: 'me@example.com' }),
+            );
+            await emitChange();
+
+            expect(infoLines()).toEqual(['🔄 Settings file changed (no earlier snapshot to compare)']);
+            expect(reload).not.toHaveBeenCalled();
+            expect(mockSend).toHaveBeenCalledTimes(1);
+            expect(onSettingsChanged).toHaveBeenCalledTimes(1);
+            expect(JSON.stringify([...mockLog.info.mock.calls, ...mockLog.debug.mock.calls])).not.toMatch(
+                /secretABC|me@example\.com|dark/,
+            );
+        });
+
+        test('the next change diffs against the adopted snapshot and logs one masked bullet', async () => {
+            startWithoutBaseline();
+            settings.loadSettings.mockReturnValue(loaded({ theme: 'dark' }, { token: 'oldABC' }));
+            await emitChange();
+            mockLog.info.mockClear();
+
+            settings.loadSettings.mockReturnValue(loaded({ theme: 'dark' }, { token: 'newXYZ' }));
+            await emitChange();
+
+            expect(infoLines()).toEqual(['🔄 Settings changed:', '  • auth.token: [REDACTED] → [REDACTED]']);
+        });
+    });
+
+    test('a failed load sends nothing, skips the observer and keeps the old baseline', async () => {
+        settings.loadSettings.mockReturnValue(loaded({ theme: 'light' }));
+        const onSettingsChanged = jest.fn();
+        watchSettingsFile(deps({ onSettingsChanged }));
+
+        settings.loadSettings.mockImplementation(() => {
+            throw new Error('EBUSY');
+        });
+        await emitChange();
+
+        expect(mockLog.error).toHaveBeenCalledWith('Failed to load new settings for comparison:', 'EBUSY');
+        expect(mockSend).not.toHaveBeenCalled();
+        expect(onSettingsChanged).not.toHaveBeenCalled();
+        expect(reload).not.toHaveBeenCalled();
+
+        mockLog.info.mockClear();
         settings.loadSettings.mockReturnValue(loaded({ theme: 'dark' }));
         await emitChange();
 
-        expect(infoLines()).toEqual(['🔄 Settings file changed, reloading main window...']);
-        expect(reload).toHaveBeenCalledTimes(1);
+        expect(infoLines()).toEqual(['🔄 Settings changed:', '  • app.theme: light → dark']);
+        expect(mockSend).toHaveBeenCalledTimes(1);
+        expect(onSettingsChanged).toHaveBeenCalledTimes(1);
     });
 
     test('debounces bursts into one handler run and ignores the other files of the directory', async () => {
@@ -485,16 +492,5 @@ describe('watchSettingsFile change detection', () => {
         await emitChange();
 
         expect(mockLog.warning).toHaveBeenCalledWith('Settings observer failed: observer said no');
-    });
-
-    test('without an observer the young-window guard does not re-read the file', async () => {
-        settings.loadSettings.mockReturnValue(loaded({ n: 1 }));
-        watchSettingsFile(deps({ getMainWindowCreatedTime: () => Date.now() - 100 }));
-        settings.loadSettings.mockClear();
-
-        await emitChange();
-
-        expect(settings.loadSettings).not.toHaveBeenCalled();
-        expect(infoLines()).toEqual(['🔄 Settings file changed, but skipping reload (window recently created)']);
     });
 });

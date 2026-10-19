@@ -754,11 +754,9 @@ describe('main window', () => {
             expect(m.settings.saveWindowBounds).toHaveBeenCalledWith('main', win.bounds);
         });
 
-        it('passes live window state to the settings watcher and follows autovote changes', () => {
+        it('hands the settings watcher an observer that follows autovote changes', () => {
             const deps = m.watcher.watchSettingsFile.mock.calls[0][0];
             const win = mainWin()!;
-            expect(deps.getMainWindow()).toBe(win);
-            expect(typeof deps.getMainWindowCreatedTime()).toBe('number');
 
             m.bg.syncBackgroundActivity.mockClear();
             deps.onSettingsChanged!(invalid({ app: { autovoteRunning: true } }));
@@ -779,7 +777,6 @@ describe('main window', () => {
 
             expect(watcher.close).toHaveBeenCalled();
             expect(m.bg.syncBackgroundActivity).toHaveBeenCalledWith(false);
-            expect(deps.getMainWindow()).toBeNull();
 
             deps.onSettingsChanged!(invalid({ app: { autovoteRunning: true } }));
             expect(m.bg.syncBackgroundActivity).toHaveBeenCalledTimes(1);

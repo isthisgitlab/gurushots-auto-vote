@@ -10,7 +10,6 @@
 
 import * as logger from '../logger';
 import * as runtime from '../runtime';
-import { schemaEntry } from './schema';
 import {
     getSaveDroppedCause,
     getSaveDroppedSerial,
@@ -1021,20 +1020,6 @@ const _asideOwedLost = (): void => {
 };
 
 /**
- * Check if a setting requires app reload when changed
- */
-const isReloadRequired = (key: string): boolean | undefined => {
-    // Only these settings require a reload
-    const reloadSettings = ['theme', 'language', 'timezone'];
-
-    // Check if it's a challenge-specific setting
-    const entry = schemaEntry(key);
-    const isChallengeSetting = entry && entry.perChallenge;
-
-    return reloadSettings.includes(key) || isChallengeSetting;
-};
-
-/**
  * Save window bounds for a specific window type
  */
 const saveWindowBounds = (windowType: WindowType, bounds: WindowBounds): boolean =>
@@ -1301,7 +1286,6 @@ export {
     saveAppSettings,
     getSetting,
     setSetting,
-    isReloadRequired,
     saveWindowBounds,
     getWindowBounds,
     retryImport,

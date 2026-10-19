@@ -113,9 +113,6 @@ function createLoginWindow() {
 }
 
 function createMainWindow() {
-    // Track when main window is created to prevent reload during login
-    appState.mainWindowCreatedTime = Date.now();
-
     appState.mainWindow = createAppWindow('main', 'app.html', {
         // The auto-vote cadence chain is a recursive setTimeout living in
         // THIS renderer, and Chromium throttles then freezes timers on a
@@ -155,18 +152,15 @@ function createMainWindow() {
         syncBackgroundActivity(false);
     });
 
-    // Watch settings file for changes and auto-reload with debouncing.
-    // The watcher lives in windows/settingsWatcher.ts; accessors keep it
-    // reading the current window state held in index/state.ts.
+    // Watch settings file for changes and broadcast them to the renderers with debouncing.
+    // The watcher lives in windows/settingsWatcher.ts.
     appState.settingsWatcher = watchSettingsFile({
-        getMainWindow: () => appState.mainWindow,
-        getMainWindowCreatedTime: () => appState.mainWindowCreatedTime,
         // The renderer persists `autovoteRunning` on every start/stop, so the
         // settings file IS the signal — no extra IPC channel is needed to keep
         // the power-save blocker in step with the running session.
         onSettingsChanged: (newSettings) => {
-            // Liveness check, matching what the watcher's own reload and
-            // broadcast paths do. Its debounce handle is module-level and
+            // Liveness check, matching what the watcher's own broadcast
+            // path does. Its debounce handle is module-level and
             // survives `close()`, so a callback armed by a routine write (a
             // window move alone triggers one) can land AFTER 'closed' already
             // released the blocker — re-arming an assertion for a session with

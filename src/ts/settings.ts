@@ -73,7 +73,6 @@ export const saveSettings = persistence.saveSettings;
 export const saveAppSettings = persistence.saveAppSettings;
 export const getSetting = persistence.getSetting;
 export const setSetting = persistence.setSetting;
-export const isReloadRequired = persistence.isReloadRequired;
 export const getSettingsRecovery = persistence.getSettingsRecovery;
 export const isSignOutOwed = persistence.isSignOutOwed;
 // Recovery of a configuration that could not be imported or read (see persistence.ts)

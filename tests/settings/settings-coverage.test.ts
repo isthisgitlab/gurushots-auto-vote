@@ -127,13 +127,6 @@ describe('settings facade — edge cases', () => {
             expect(settings.saveAppSettings({ theme: 'light' })).toBe(true);
             expect(saved().app).toEqual(expect.objectContaining({ theme: 'light', language: 'lv' }));
         });
-
-        test('isReloadRequired: UI keys and per-challenge keys reload, others do not', () => {
-            expect(settings.isReloadRequired('theme')).toBe(true);
-            expect(settings.isReloadRequired('exposure')).toBe(true);
-            expect(settings.isReloadRequired('lastMinuteCheckFrequency')).toBeFalsy();
-            expect(settings.isReloadRequired('token')).toBeFalsy();
-        });
     });
 
     describe('window bounds', () => {

@@ -47,7 +47,7 @@ const command = cliArgs[0];
 const key = cliArgs[1];
 const value = cliArgs[2];
 
-// Settings whose change only takes effect after a GUI reload.
+// Settings the running GUI picks up live.
 const UI_SETTINGS = ['theme', 'language', 'timezone'];
 
 // Helper function to get nested property value
@@ -115,7 +115,7 @@ function isElectronRunning() {
     });
 }
 
-// Function to inform about GUI auto-reload
+// Function to inform that the running GUI picks the change up live
 async function informAboutGuiReload() {
     try {
         const isRunning = await isElectronRunning();
@@ -174,7 +174,7 @@ async function runSet() {
     }
 
     // Delegate to the shared CLI command module — this script owns
-    // only argv semantics, GUI-reload notice, and exit codes.
+    // only argv semantics, the running-GUI notice, and exit codes.
     if (key.startsWith('challengeSettings.globalDefaults.')) {
         const settingKey = key.replace('challengeSettings.globalDefaults.', '');
         if (!setGlobalDefault(settingKey, value)) {

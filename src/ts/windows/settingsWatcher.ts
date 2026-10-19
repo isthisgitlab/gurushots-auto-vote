@@ -2,10 +2,11 @@
  * Settings-file watcher for the Electron main process. Watches the
  * directory of the config.json the facade owns, for that file's name (the
  * file is replaced by a rename on every save, which ends a watch on the file
- * itself), and, on change, logs the diff, reloads the
- * main window when a reload-required key changed, and broadcasts a
- * `settings-changed` event to every other renderer window (so React hooks can
- * refetch without a full reload — catches CLI-originated changes).
+ * itself), and, on change, logs the diff and broadcasts a `settings-changed`
+ * event to every renderer window (so React hooks can refetch without a
+ * reload — catches CLI-originated changes). No window is ever reloaded: each
+ * renderer follows a setting live, and a reload would end the auto-vote
+ * cadence chain the main renderer owns.
  *
  * Separate from index/windows.ts's createMainWindow — window creation has
  * nothing to do with file watching. The caller owns the returned fs.FSWatcher's
@@ -27,9 +28,9 @@ type SettingChange = { key: string; oldValue: string; newValue: string };
 
 // Debounce timeout shared across successive watchSettingsFile calls (the
 // main window can be torn down and re-created on logout/login): a new
-// watcher's first change event clears a still-pending reload scheduled by
+// watcher's first change event clears a still-pending handler scheduled by
 // the previous watcher.
-let settingsReloadTimeout: NodeJS.Timeout | null = null;
+let settingsDebounceTimeout: NodeJS.Timeout | null = null;
 
 // Function to safely stringify values for comparison and logging
 const stringify = (value: unknown) => {
@@ -115,36 +116,33 @@ function compareSettings(oldSettings: unknown, newSettings: unknown): SettingCha
 }
 
 /**
- * Watch the settings file for changes and auto-reload with debouncing.
+ * Watch the settings file for changes and broadcast them with debouncing.
  * The facade owns the path — never re-derive it here.
  *
- * @param deps - accessors for the window state index.ts owns; read at
- *   event time so the watcher always sees the current window/creation time.
- *   `onSettingsChanged` is an OPTIONAL side-channel fired with a freshly
- *   loaded snapshot on EVERY exit of the debounced handler — the normal
- *   reload/broadcast path and the "window recently created" early return
- *   alike — so main-process state that must track a setting (e.g. the
- *   auto-vote power-save blocker in windows/backgroundActivity.ts) can follow
- *   a change the renderer made without inventing a second IPC channel.
- *   Exceptions it throws are swallowed: an observer must never stop the
- *   watcher from reloading or broadcasting.
+ * The main window receives an in-app save twice: once from the IPC broadcast
+ * (immediate) and once from this watcher 500 ms later. That is harmless (a
+ * broadcast only triggers an idempotent refetch), and this watcher is the only
+ * path for CLI and hand edits, so it must not be "deduplicated" away.
+ *
+ * @param deps - `onSettingsChanged` is an OPTIONAL side-channel fired with a
+ *   freshly loaded snapshot on every successful load of the debounced handler,
+ *   so main-process state that must track a setting (e.g. the auto-vote
+ *   power-save blocker in windows/backgroundActivity.ts) can follow a change
+ *   the renderer made without inventing a second IPC channel. Exceptions it
+ *   throws are swallowed: an observer must never stop the watcher from
+ *   broadcasting.
  *
  *   NOTE for implementers: the debounce handle is module-level and is NOT
  *   cleared by the returned watcher's `close()`, so a callback armed before a
- *   window teardown still fires afterwards. The reload and broadcast paths
- *   below both re-check the window before acting; an observer must make the
- *   equivalent liveness check itself (see index.ts) rather than assume a
- *   window still exists.
+ *   window teardown still fires afterwards. The broadcast path below skips
+ *   destroyed windows; an observer must make the equivalent liveness check
+ *   itself (see index.ts) rather than assume a window still exists.
  * @returns the watcher (caller owns closing it), or
  *   null when no settings file exists yet.
  */
 function watchSettingsFile({
-    getMainWindow,
-    getMainWindowCreatedTime,
     onSettingsChanged = null,
 }: {
-    getMainWindow: () => BrowserWindow | null;
-    getMainWindowCreatedTime: () => number | null;
     onSettingsChanged?: ((settings: ConfigV2) => void) | null;
 }): fs.FSWatcher | null {
     const settingsPath = settings.getSettingsPath();
@@ -162,33 +160,14 @@ function watchSettingsFile({
     }
 
     // Hand the observer a snapshot the caller already loaded. Never throws: a
-    // buggy observer must not cost the window its reload or the renderers
-    // their broadcast. A falsy snapshot is a no-op — the load-failure path
-    // below already logs the read error, and re-reporting it here as an
-    // "observer failed" would name the wrong culprit.
-    const notifyObserver = (snapshot: ConfigV2 | undefined) => {
-        if (!onSettingsChanged || !snapshot) return;
+    // buggy observer must not cost the renderers their broadcast.
+    const notifyObserver = (snapshot: ConfigV2) => {
+        if (!onSettingsChanged) return;
         try {
             onSettingsChanged(snapshot);
         } catch (error) {
             logger.withCategory('settings').warning(`Settings observer failed: ${errorMessage(error) || error}`);
         }
-    };
-
-    // Same, for the one exit that returns before anything is loaded (the
-    // "window recently created" guard): a consumer tracking a setting must not
-    // miss a flip just because the window happens to be young. An unreadable
-    // file there is silently skipped — there is simply nothing to observe, and
-    // the next event will log it on the normal path.
-    const notifyObserverFromDisk = () => {
-        if (!onSettingsChanged) return;
-        let snapshot;
-        try {
-            snapshot = settings.loadSettings();
-        } catch {
-            return;
-        }
-        notifyObserver(snapshot);
     };
 
     const settingsFileName = basename(settingsPath);
@@ -198,111 +177,61 @@ function watchSettingsFile({
     return fs.watch(dirname(settingsPath), (_eventType, fileName) => {
         if (fileName === null || fileName === settingsFileName) {
             // Clear existing timeout to debounce rapid file changes
-            if (settingsReloadTimeout) {
-                clearTimeout(settingsReloadTimeout);
+            if (settingsDebounceTimeout) {
+                clearTimeout(settingsDebounceTimeout);
             }
 
-            // Reload after a short delay to avoid rapid reloads
-            settingsReloadTimeout = setTimeout(() => {
-                // Prevent reload if main window was just created (during login)
-                // An unknown (null) creation time coerces to 0 — it never suppresses a reload.
-                const timeSinceCreation = Date.now() - (getMainWindowCreatedTime() as number);
-                if (timeSinceCreation < 2000) {
-                    // 2 second window
-                    logger
-                        .withCategory('settings')
-                        .info('🔄 Settings file changed, but skipping reload (window recently created)');
-                    // The RELOAD is what this guard exists to suppress — not the
-                    // observer. Someone who hits Start within 2s of the window
-                    // appearing (a fast post-login click) still has to sync the
-                    // main-process state that tracks the flag, or it stays wrong
-                    // until an unrelated settings write happens to fix it.
-                    // `previousSettings` is deliberately NOT advanced here, so
-                    // the skipped change is still diffed (and can still force a
-                    // reload) on the next event.
-                    notifyObserverFromDisk();
-                    return;
-                }
-
+            // Handle the change after a short delay to coalesce rapid writes
+            settingsDebounceTimeout = setTimeout(() => {
                 // Load new settings and compare with previous
-                let newSettings: ConfigV2 | undefined;
-                let shouldReload = false;
-                let hasChanges = false;
+                let newSettings: ConfigV2;
                 try {
                     newSettings = settings.loadSettings();
-
-                    if (previousSettings) {
-                        const changes = compareSettings(previousSettings, newSettings);
-                        if (changes.length > 0) {
-                            hasChanges = true;
-                            // Check if any of the changed settings require reload
-                            const reloadRequiredChanges = changes.filter((change) => {
-                                // The setting a change is under: an `app` key, else the container it is in.
-                                const [container, appKey] = change.key.split('.');
-                                return settings.isReloadRequired(container === 'app' ? appKey : container);
-                            });
-
-                            if (reloadRequiredChanges.length > 0) {
-                                logger
-                                    .withCategory('settings')
-                                    .info('🔄 Reload-required settings changed, reloading main window...');
-                                reloadRequiredChanges.forEach((change) => {
-                                    logger
-                                        .withCategory('settings')
-                                        .info(
-                                            `  • ${change.key}: ${change.oldValue} → ${change.newValue} (reload required)`,
-                                        );
-                                });
-                                shouldReload = true;
-                            } else {
-                                logger.withCategory('settings').info('🔄 Settings changed (no reload required):');
-                                changes.forEach((change) => {
-                                    logger
-                                        .withCategory('settings')
-                                        .info(`  • ${change.key}: ${change.oldValue} → ${change.newValue}`);
-                                });
-                            }
-                        } else {
-                            logger
-                                .withCategory('settings')
-                                .info('🔄 Settings file changed (no property differences detected)');
-                        }
-                    } else {
-                        logger.withCategory('settings').info('🔄 Settings file changed, reloading main window...');
-                        shouldReload = true;
-                    }
-
-                    // Update previous settings for next comparison
-                    previousSettings = newSettings;
                 } catch (error) {
+                    // Nothing is sent and the observer is not called; the old baseline stays,
+                    // so the next good load still diffs against it.
                     logger
                         .withCategory('settings')
                         .error('Failed to load new settings for comparison:', errorMessage(error));
-                    logger.withCategory('settings').info('🔄 Settings file changed, reloading main window...');
-                    shouldReload = true;
+                    return;
                 }
 
-                // Fire the observer on every successful load, whichever branch
-                // runs below (and even when nothing differed — a snapshot is a
-                // snapshot).
+                let hasChanges = false;
+                if (previousSettings) {
+                    const changes = compareSettings(previousSettings, newSettings);
+                    if (changes.length > 0) {
+                        hasChanges = true;
+                        logger.withCategory('settings').info('🔄 Settings changed:');
+                        changes.forEach((change) => {
+                            logger
+                                .withCategory('settings')
+                                .info(`  • ${change.key}: ${change.oldValue} → ${change.newValue}`);
+                        });
+                    } else {
+                        logger
+                            .withCategory('settings')
+                            .info('🔄 Settings file changed (no property differences detected)');
+                    }
+                } else {
+                    // No baseline to diff against: the snapshot is adopted below and broadcast once.
+                    // No value is logged, as there is no diff to mask.
+                    logger.withCategory('settings').info('🔄 Settings file changed (no earlier snapshot to compare)');
+                    hasChanges = true;
+                }
+
+                // Update previous settings for next comparison
+                previousSettings = newSettings;
+
+                // Fire the observer on every successful load (even when nothing
+                // differed — a snapshot is a snapshot).
                 notifyObserver(newSettings);
 
-                const mainWindow = getMainWindow();
-                const reloadingMain = shouldReload && mainWindow && !mainWindow.isDestroyed();
-                if (reloadingMain) {
-                    mainWindow.reload();
-                }
                 if (hasChanges) {
-                    // hasChanges is only set after a successful load, so
-                    // newSettings is always populated here.
-                    // Notify the renderer windows so React hooks can refetch
-                    // without a full reload (catches CLI-originated changes).
-                    // A main window that is reloading re-reads everything
-                    // anyway; the others (e.g. Logs) still have to follow a
-                    // reload-required key such as the language.
-                    const rendererSettings = toRendererSettings(newSettings as ConfigV2);
+                    // Notify every renderer window (the main one included) so React
+                    // hooks can refetch without a reload (catches CLI-originated changes).
+                    const rendererSettings = toRendererSettings(newSettings);
                     BrowserWindow.getAllWindows().forEach((win) => {
-                        if (!win.isDestroyed() && !(reloadingMain && win === mainWindow)) {
+                        if (!win.isDestroyed()) {
                             win.webContents.send('settings-changed', rendererSettings);
                         }
                     });

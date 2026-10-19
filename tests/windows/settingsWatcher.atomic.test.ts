@@ -23,7 +23,6 @@ const mockLoad = jest.fn();
 jest.mock('../../src/ts/settings', () => ({
     getSettingsPath: jest.fn(() => mockPaths.settingsFile),
     loadSettings: mockLoad,
-    isReloadRequired: jest.fn(() => false),
 }));
 
 import * as fs from 'node:fs';
@@ -61,10 +60,7 @@ describe('watchSettingsFile over atomic saves (real directory)', () => {
     /** Starts the watcher; a failure to watch, whenever it is reported, fails the test. */
     const start = async (): Promise<void> => {
         failure = null;
-        watcher = watchSettingsFile({
-            getMainWindow: () => null,
-            getMainWindowCreatedTime: () => Date.now() - 60_000,
-        });
+        watcher = watchSettingsFile({});
         watcher?.on('error', (error) => {
             failure = error;
         });
