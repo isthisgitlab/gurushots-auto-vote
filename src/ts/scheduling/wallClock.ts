@@ -9,12 +9,15 @@
  *
  * Failure posture (deliberate, mirrors the rest of the settings read path):
  *   - `parseTimeOfDay` type-guards its input and returns null for anything
- *     that is not a strict 'HH:MM' string — a hand-edited settings.json can
+ *     that is not a strict 'HH:MM' string — a hand-edited config.json can
  *     hold null/numbers/objects, and the voting loop must never throw on it.
  *   - `occurrencesOf` catches the RangeError Intl throws for unknown zone
  *     names and retries with 'UTC'. The guard lives HERE (not in callers)
  *     because the `timezone` setting has no main-process schema validation —
  *     a CLI `settings:set timezone <bad>` writes unvalidated.
+ *   - `timeOfDayIn` reads a challenge's close time as the card shows it. 'local'
+ *     reads the DEVICE clock and an unknown zone reads as UTC: the rule
+ *     condition must agree with `formatEndTime`, which does the same.
  *   - The numeric scheduled-fill keys (window minutes, before-end seconds)
  *     intentionally have no guards in this module: corrupt values coerce to
  *     NaN in the callers' arithmetic, every comparison goes false, and the
@@ -85,6 +88,31 @@ const parseTimeOfDay = (str: unknown): { hours: number; minutes: number } | null
         return null;
     }
     return { hours: Number(match[1]), minutes: Number(match[2]) };
+};
+
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+/**
+ * Floored 'HH:MM' wall-clock reading of an instant in `timeZone`, the way a
+ * challenge card shows its end time. 'local' reads the device clock and an
+ * unknown zone name reads as UTC (card parity — see module notes), so this
+ * never throws.
+ *
+ * @param epochSec - Unix timestamp (seconds)
+ * @param timeZone - IANA zone name, or 'local' for the device clock
+ */
+const timeOfDayIn = (epochSec: number, timeZone: string): string => {
+    if (timeZone !== 'local') {
+        try {
+            const { hour, minute } = partsOf(epochSec, timeZone);
+            return `${hour}:${minute}`;
+        } catch {
+            // Callers pass effectiveTimezone output; this keeps an unresolved caller from throwing into the voting pass.
+            return timeOfDayIn(epochSec, 'UTC');
+        }
+    }
+    const date = new Date(epochSec * 1000);
+    return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 };
 
 /**
@@ -193,4 +221,4 @@ const occurrencesOf = (timeHHMM: unknown, timeZone: string, nowSec: number): { p
     }
 };
 
-export { parseTimeOfDay, tzOffsetSeconds, epochForWallTime, occurrencesOf };
+export { parseTimeOfDay, timeOfDayIn, tzOffsetSeconds, epochForWallTime, occurrencesOf };

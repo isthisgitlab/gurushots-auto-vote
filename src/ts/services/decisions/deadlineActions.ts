@@ -11,13 +11,31 @@ import * as settings from '../../settings';
 // cycle: autoFill.ts does not require VotingLogic).
 import { getNextScheduleThresholdSec, evaluateEmergencyFill, getSlotsRemaining } from '../autoFill';
 import { boostApplyThreshold } from '../../voting/boostWindow';
+import { isKnownTurboMode } from '../../voting/turboMode';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
 import { isBoostWindowOpen } from './boostTurbo';
-import { pickBoostEntry, resolveBoostFillNewMode } from './entryPick';
+import {
+    livePinnedId,
+    pickBoostEntry,
+    pickTurboEntry,
+    pinReleaseAt,
+    resolveBoostFillNewMode,
+    resolveTurboFillNewMode,
+} from './entryPick';
+import { isManualPhotosOnly } from '../manualPhotosOnly';
+
+const tieOrder: Record<string, number> = { autoSubmit: 0, emergencySubmit: 1, boost: 2, turbo: 3 };
+
+/** Run order of two deadline actions: the larger threshold first, ties by `tieOrder`. */
+const compareDeadlineActions = (
+    a: { action: string; thresholdSec: number },
+    b: { action: string; thresholdSec: number },
+): number =>
+    b.thresholdSec !== a.thresholdSec ? b.thresholdSec - a.thresholdSec : tieOrder[a.action] - tieOrder[b.action];
 
 /**
  * Effective seconds-before-close at which the next auto-fill becomes due:
- * the largest autoFillSchedule threshold whose target count hasn't been met
+ * the largest autoSubmitSchedule threshold whose target count hasn't been met
  * yet, straight from autoFill.getNextScheduleThresholdSec (single source of
  * truth — it does the end-alignment shift for challenges allowing fewer
  * images than the schedule covers, plus the clamping and defensive parsing).
@@ -30,7 +48,7 @@ import { pickBoostEntry, resolveBoostFillNewMode } from './entryPick';
 const getAutoFillThresholdSec = (challenge: Challenge, challengeId: string): number => {
     const entries = challenge?.member?.ranking?.entries;
     const entryCount = Array.isArray(entries) ? entries.length : 0;
-    const schedule = settings.getEffectiveSetting('autoFillSchedule', challengeId);
+    const schedule = settings.getEffectiveSetting('autoSubmitSchedule', challengeId);
     return getNextScheduleThresholdSec(schedule, entryCount, challenge?.max_photo_submits);
 };
 
@@ -38,7 +56,7 @@ const getAutoFillThresholdSec = (challenge: Challenge, challengeId: string): num
  * Effective seconds-before-close at which emergency fill activates (0 = off).
  */
 const getEmergencyFillThresholdSec = (challengeId: string): number => {
-    const seconds = settings.getEffectiveSetting('emergencyFill', challengeId);
+    const seconds = settings.getEffectiveSetting('emergencySubmit', challengeId);
     return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
 };
 
@@ -70,40 +88,132 @@ const getBoostThresholdSec = (challenge: Challenge, challengeId: string): number
  *
  * The ordering is therefore user-controlled: it falls out of the time settings, so
  * widening turboTime or boostTime moves that action earlier in the pass. With the
- * defaults (turboTime 7200, autoFill's top row 1800, emergencyFill 300) the real
- * order is turbo → autoFill → emergencyFill → boost — the numbers, not the code
+ * defaults (turboTime 7200, autoSubmit's top row 1800, emergencySubmit 300) the real
+ * order is turbo → autoSubmit → emergencySubmit → boost — the numbers, not the code
  * order, decide.
  *
  * Note this sorts turbo on its configured window even when no turbo is held or
  * Auto-Apply Turbo is off — the runner then no-ops. That keeps the ordering a pure
  * function of the settings rather than of live challenge state.
  *
- * Tie-break (stable): autoFill → emergencyFill → boost → turbo, so fills and
+ * Tie-break (stable): autoSubmit → emergencySubmit → boost → turbo, so fills and
  * boost precede turbo and a freshly filled (and locally reflected) entry is
  * available when turbo runs on a tie.
  */
 const orderDeadlineActions = (
     challenge: Challenge,
-): Array<{ action: 'autoFill' | 'turbo' | 'emergencyFill' | 'boost'; thresholdSec: number }> => {
+): Array<{ action: 'autoSubmit' | 'turbo' | 'emergencySubmit' | 'boost'; thresholdSec: number }> => {
     const challengeId = challenge?.id?.toString?.() || '';
-    const tieOrder: Record<string, number> = { autoFill: 0, emergencyFill: 1, boost: 2, turbo: 3 };
-    const actions: Array<{ action: 'autoFill' | 'turbo' | 'emergencyFill' | 'boost'; thresholdSec: number }> = [
-        { action: 'autoFill', thresholdSec: getAutoFillThresholdSec(challenge, challengeId) },
+    const actions: Array<{ action: 'autoSubmit' | 'turbo' | 'emergencySubmit' | 'boost'; thresholdSec: number }> = [
+        { action: 'autoSubmit', thresholdSec: getAutoFillThresholdSec(challenge, challengeId) },
         { action: 'turbo', thresholdSec: getEffectiveTurboTime(challengeId) },
-        { action: 'emergencyFill', thresholdSec: getEmergencyFillThresholdSec(challengeId) },
+        { action: 'emergencySubmit', thresholdSec: getEmergencyFillThresholdSec(challengeId) },
         { action: 'boost', thresholdSec: getBoostThresholdSec(challenge, challengeId) },
     ];
-    return actions.sort((a, b) => {
-        if (b.thresholdSec !== a.thresholdSec) return b.thresholdSec - a.thresholdSec;
-        return tieOrder[a.action] - tieOrder[b.action];
-    });
+    return actions.sort(compareDeadlineActions);
+};
+
+/**
+ * The boost/turbo conflict flags, what blocks each, and when a blocking pin gives way.
+ */
+type Conflicts = {
+    boostBlocked: boolean;
+    turboBlocked: boolean;
+    /** `flag`: every entry carries the other feature; `pin`: the photo pinned for it is in the way. */
+    boostBlockedBy: 'flag' | 'pin' | null;
+    turboBlockedBy: 'flag' | 'pin' | null;
+    /** Unix seconds the blocking pin gives way; null when not blocked or the block never gives way. */
+    boostReleaseAt: number | null;
+    turboReleaseAt: number | null;
+};
+
+/**
+ * Whether a Boost is blocked at `now`: it is available to place, there is an entry to place it on,
+ * every candidate carries Turbo or is the photo pinned for Turbo, and no fill-new mode with a free
+ * slot resolves it. The deadline view and the sleep boost share this one rule.
+ *
+ * @param now - Unix timestamp in seconds
+ */
+const isBoostBlocked = (challenge: Challenge, challengeId: string, now: number): boolean => {
+    const entries = challenge?.member?.ranking?.entries;
+    const hasEntries = Array.isArray(entries) && entries.length >= 1;
+    const hasFreeSlot = getSlotsRemaining(challenge) > 0;
+    return (
+        isBoostWindowOpen(challenge, now) &&
+        hasEntries &&
+        pickBoostEntry(challenge, challengeId, now) === null &&
+        !(hasFreeSlot && resolveBoostFillNewMode(challenge, challengeId) !== 'no')
+    );
+};
+
+/**
+ * The boost/turbo conflict flags and the instant a blocking pin gives way.
+ *
+ * Boost/turbo conflict: a boost is available to place, there IS an entry to
+ * place it on, but every candidate entry already carries turbo or is the photo
+ * pinned for Turbo. The entries.length >= 1 guard is required — pickBoostEntry
+ * also returns null when there are simply no entries yet (a freshly joined
+ * challenge before auto-fill), which is NOT a conflict. The caller computes it
+ * before the row gating so the boost row can be suppressed when it can't actually
+ * be placed — otherwise the timeline would show a "Boost" row that directly
+ * contradicts the conflict warning rendered right beside it. turboBlocked is
+ * the mirror: a won Turbo with every entry boosted or pinned for Boost.
+ *
+ * A fill-new mode (always or the narrower on-conflict) resolves the conflict
+ * by using a freshly submitted photo instead — but only when there is a
+ * free slot to submit into, so the warning still shows for a truly full,
+ * conflicted challenge. The free-slot count comes from autoFill's own
+ * getSlotsRemaining (this module already imports that module — there is no
+ * cycle) so the fill paths and this view can never disagree on "full".
+ *
+ * A pin blocks only until the blocked spend nears its deadline, and nothing else
+ * the renderer fingerprints moves then — so the view carries the instant for each
+ * block (`boostReleaseAt` / `turboReleaseAt`, null when the block never gives way).
+ * A block with no pin in it is a flag: the warning differs, because unpinning cannot help.
+ *
+ * With Manual Only on a pin-caused block is not a block: the card's Boost and Turbo buttons send
+ * the photo the user clicked straight to the apply path and never consult a pin, so a pin only
+ * steers the automatic spends, which do not run. A flag block is real for manual play too.
+ *
+ * @param now - Unix timestamp in seconds
+ */
+const describeConflicts = (challenge: Challenge, challengeId: string, now: number, manualOnly: boolean): Conflicts => {
+    const entries = challenge?.member?.ranking?.entries;
+    const hasEntries = Array.isArray(entries) && entries.length >= 1;
+    const hasFreeSlot = getSlotsRemaining(challenge) > 0;
+    const rawBoostBlocked = isBoostBlocked(challenge, challengeId, now);
+    const rawTurboBlocked =
+        challenge?.member?.turbo?.state === 'WON' &&
+        isKnownTurboMode(challenge.member.turbo) &&
+        hasEntries &&
+        pickTurboEntry(challenge, challengeId, now) === null &&
+        !(hasFreeSlot && resolveTurboFillNewMode(challenge, challengeId) !== 'no');
+    // A Boost is blocked by the photo pinned for Turbo, and a Turbo by the one pinned for Boost.
+    const causeOf = (blocked: boolean, blocker: 'boost' | 'turbo') =>
+        blocked
+            ? livePinnedId(challenge, challengeId, blocker) !== null
+                ? ('pin' as const)
+                : ('flag' as const)
+            : null;
+    const rawBoostBy = causeOf(rawBoostBlocked, 'turbo');
+    const rawTurboBy = causeOf(rawTurboBlocked, 'boost');
+    const boostBlocked = rawBoostBlocked && !(manualOnly && rawBoostBy === 'pin');
+    const turboBlocked = rawTurboBlocked && !(manualOnly && rawTurboBy === 'pin');
+    return {
+        boostBlocked,
+        turboBlocked,
+        boostBlockedBy: boostBlocked ? rawBoostBy : null,
+        turboBlockedBy: turboBlocked ? rawTurboBy : null,
+        boostReleaseAt: boostBlocked ? pinReleaseAt(challenge, challengeId, 'turbo', now) : null,
+        turboReleaseAt: turboBlocked ? pinReleaseAt(challenge, challengeId, 'boost', now) : null,
+    };
 };
 
 /**
  * Read-only, renderer-facing description of a challenge's upcoming deadline
  * actions: the ordered actions that will ACTUALLY fire (gated on the same
  * conditions the runner uses, not merely on a positive threshold) plus each
- * one's absolute due instant, and the boost/turbo conflict flag.
+ * one's absolute due instant, the boost/turbo conflict flags (and their cause), and when a blocking pin gives way.
  *
  * Gating matters because several threshold getters stay positive even when the
  * feature is off or the resource isn't held:
@@ -111,14 +221,18 @@ const orderDeadlineActions = (
  *     only when a turbo is WON and Auto-Apply Turbo is on.
  *   - boost: getBoostThresholdSec's timer branch stays positive when
  *     boostTime=0 ("off") — re-check that, and honour the autoBoost toggle.
- *   - autoFill: gate on the autoFill toggle (a schedule can imply a threshold
+ *   - autoSubmit: gate on the autoSubmit toggle (a schedule can imply a threshold
  *     while auto-fill is disabled).
- *   - emergencyFill: its threshold is a fixed setting that never reflects live
+ *   - emergencySubmit: its threshold is a fixed setting that never reflects live
  *     state, so defer to the runner's own evaluateEmergencyFill (no id, no free
  *     slot, or normal auto-fill already owning the fill). Shared code, not a
  *     copy, so the row cannot drift from what actually runs.
  *   - a threshold of 0 / -Infinity means off/n-a (auto-fill satisfied,
  *     emergency-fill off, key-unlocked boost off) — always omitted.
+ *
+ * Manual Only: the app does nothing by itself on the challenge, so `actions` is empty (the conflict
+ * flags stay, see describeConflicts). This one function also feeds the sleep boost, the quit guard,
+ * deadline notifications and the card timeline.
  *
  * Purely reads the passed challenge object (never mutates it, never calls an
  * apply path), so it cannot perturb a concurrent sequential voting pass. The
@@ -131,7 +245,7 @@ const orderDeadlineActions = (
 const describeDeadlineActions = (
     challenge: Challenge,
     now: number,
-): { actions: Array<{ action: string; thresholdSec: number; dueAt: number | null }>; boostBlocked: boolean } => {
+): { actions: Array<{ action: string; thresholdSec: number; dueAt: number | null }> } & Conflicts => {
     const challengeId = challenge?.id?.toString?.() || '';
     const closeTime = Number(challenge?.close_time);
     const boost = challenge?.member?.boost || {};
@@ -139,48 +253,37 @@ const describeDeadlineActions = (
     const boostTimerBranch = boost.state === 'AVAILABLE' && boostHasTimeout;
     const turboState = challenge?.member?.turbo?.state;
 
-    // Boost/turbo conflict: a boost is available to place, there IS an entry to
-    // place it on, but every candidate entry is already turboed. The
-    // entries.length >= 1 guard is required — pickBoostEntry also returns null
-    // when there are simply no entries yet (a freshly joined challenge before
-    // auto-fill), which is NOT a conflict. Computed before the row gating below
-    // so the boost row can be suppressed when it can't actually be placed —
-    // otherwise the timeline would show a "Boost" row that directly contradicts
-    // the conflict warning rendered right beside it.
-    //
-    // A fill-new mode (always or the narrower on-conflict) resolves the conflict
-    // by boosting a freshly submitted photo instead — but only when there is a
-    // free slot to submit into, so the warning still shows for a truly full,
-    // conflicted challenge. The free-slot count comes from autoFill's own
-    // getSlotsRemaining (this module already imports that module — there is no
-    // cycle) so the fill paths and this view can never disagree on "full".
-    const entries = challenge?.member?.ranking?.entries;
-    const hasFreeSlot = getSlotsRemaining(challenge) > 0;
-    const fillNewWillResolve = hasFreeSlot && resolveBoostFillNewMode(challenge, challengeId) !== 'no';
-    const boostBlocked =
-        isBoostWindowOpen(challenge, now) &&
-        Array.isArray(entries) &&
-        entries.length >= 1 &&
-        pickBoostEntry(challenge, challengeId) === null &&
-        !fillNewWillResolve;
+    const manualOnly = isManualPhotosOnly(settings, challengeId);
+    const conflicts = describeConflicts(challenge, challengeId, now, manualOnly);
+    const { boostBlocked, turboBlocked, boostReleaseAt, turboReleaseAt } = conflicts;
+    // A blocked spend whose pin will give way is still coming, just later: its row stays.
+    const boostRowHidden = boostBlocked && boostReleaseAt === null;
+    const turboRowHidden = turboBlocked && turboReleaseAt === null;
 
     const isVisible = (action: string, thresholdSec: number): boolean => {
         if (!Number.isFinite(thresholdSec) || thresholdSec <= 0) return false;
         switch (action) {
             case 'turbo':
-                return turboState === 'WON' && settings.getEffectiveSetting('useTurbo', challengeId) === true;
+                // A turbo that can't be placed must not appear as an upcoming action either.
+                return (
+                    turboState === 'WON' &&
+                    isKnownTurboMode(challenge?.member?.turbo) &&
+                    settings.getEffectiveSetting('useTurbo', challengeId) === true &&
+                    !turboRowHidden
+                );
             case 'boost':
                 if (settings.getEffectiveSetting('autoBoost', challengeId) !== true) return false;
-                // A boost that can't be placed (only entry already turboed) must
-                // not appear as an upcoming action — the conflict warning owns it.
-                if (boostBlocked) return false;
+                // A boost that can't be placed (every entry turboed or pinned for
+                // Turbo, the pin never giving way) must not appear as an upcoming
+                // action — the conflict warning owns it.
+                if (boostRowHidden) return false;
                 // Timer branch stays positive at boostTime=0 (off); key-unlocked
                 // branch already resolves to 0 when off and is dropped above.
                 if (boostTimerBranch && !(getEffectiveBoostTime(challengeId) > 0)) return false;
                 return true;
-            case 'autoFill':
-                return settings.getEffectiveSetting('autoFill', challengeId) === true;
-            case 'emergencyFill':
+            case 'autoSubmit':
+                return settings.getEffectiveSetting('autoSubmit', challengeId) === true;
+            case 'emergencySubmit':
                 // thresholdSec > 0 already means enabled (0 = off); the runner
                 // owns the state-only stand-downs, so ask it rather than keeping
                 // a second copy here that could drift from what actually runs.
@@ -197,15 +300,26 @@ const describeDeadlineActions = (
         }
     };
 
+    if (manualOnly) return { actions: [], ...conflicts };
+
     const actions = orderDeadlineActions(challenge)
         .filter(({ action, thresholdSec }) => isVisible(action, thresholdSec))
-        .map(({ action, thresholdSec }) => ({
-            action,
-            thresholdSec,
-            dueAt: Number.isFinite(closeTime) ? closeTime - thresholdSec : null,
-        }));
+        .map(({ action, thresholdSec }) => {
+            const dueAt = Number.isFinite(closeTime) ? closeTime - thresholdSec : null;
+            const releaseAt = action === 'boost' ? boostReleaseAt : action === 'turbo' ? turboReleaseAt : null;
+            // A held-back spend is due once its pin has given way, if that is later than its own time.
+            return releaseAt === null || dueAt === null
+                ? { action, thresholdSec, dueAt }
+                : {
+                      action,
+                      thresholdSec: Math.min(thresholdSec, closeTime - releaseAt),
+                      dueAt: Math.max(dueAt, releaseAt),
+                  };
+        })
+        // A moved row can now sit out of order; order it by its adjusted threshold.
+        .sort(compareDeadlineActions);
 
-    return { actions, boostBlocked };
+    return { actions, ...conflicts };
 };
 
-export { getAutoFillThresholdSec, getBoostThresholdSec, orderDeadlineActions, describeDeadlineActions };
+export { getAutoFillThresholdSec, getBoostThresholdSec, isBoostBlocked, orderDeadlineActions, describeDeadlineActions };

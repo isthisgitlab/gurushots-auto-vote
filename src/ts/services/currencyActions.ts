@@ -16,9 +16,11 @@
  * handlers and the automatic runners (services/currencyAuto.ts) share it.
  */
 
+import { errorMessage } from '../errorMessage';
 import { findActiveChallenge } from './findActiveChallenge';
 import { rankCandidatesForChallenge, resolveMemberId } from './autoFill';
 import { resetPassState as resetPhotoStatsPassState } from './photoStats';
+import { dropChallenge } from './libraryCache';
 import { CURRENCY_OUTCOME, blockedOutcome, swapExcludedIds } from '../voting/currencyActions';
 
 import type { Challenge, RankingEntry } from '../types/gurushots';
@@ -80,16 +82,20 @@ const withSpendLock = async <T>(spend: () => Promise<T>): Promise<{ busy: true }
 const cat = (logger: Logger) => logger.withCategory('currency');
 
 /**
- * Reads the live challenge and bankroll. A missing challenge is reported as
- * notAvailable; an unreadable bankroll is left null for blockedOutcome to map
- * onto balanceUnknown.
+ * Reads the live challenge and bankroll. `readFailed` tells a failed challenge
+ * read (no usable response, or one flagged `fetchFailed`) from a read that worked
+ * but does not list the challenge (closed or gone): checkLive maps the first onto
+ * apiFailed and the second onto notAvailable. An unreadable bankroll is left null
+ * for blockedOutcome to map onto balanceUnknown.
  */
 const loadLive = async (challengeId: string | number, token: string, strategy: CurrencyStrategy) => {
     const [challengesResponse, bankroll] = await Promise.all([
         strategy.getActiveChallenges(token),
         strategy.getBankroll(token),
     ]);
-    return { challenge: findActiveChallenge(challengesResponse?.challenges, challengeId), bankroll };
+    const readFailed =
+        !challengesResponse || !!challengesResponse.fetchFailed || !Array.isArray(challengesResponse.challenges);
+    return { challenge: findActiveChallenge(challengesResponse?.challenges, challengeId), bankroll, readFailed };
 };
 
 const entriesOf = (challenge: Challenge): RankingEntry[] =>
@@ -114,6 +120,10 @@ const swappedOutIds = (challenge: Challenge) =>
         ),
     );
 
+// How many swaps the challenge's swap history holds.
+const swapsMade = (challenge: Challenge): number =>
+    Array.isArray(challenge?.member?.ranking?.swaps) ? challenge.member.ranking.swaps.length : 0;
+
 /**
  * Live re-check shared by every action. Returns the blocking outcome, or null
  * with the live challenge when the spend may go ahead.
@@ -126,8 +136,10 @@ const checkLive = async (
 ): Promise<
     { blocked: CurrencyOutcome; challenge: null } | { blocked: CurrencyOutcome | null; challenge: Challenge }
 > => {
-    const { challenge, bankroll } = await loadLive(challengeId, token, strategy);
-    if (!challenge) return { blocked: CURRENCY_OUTCOME.notAvailable, challenge: null };
+    const { challenge, bankroll, readFailed } = await loadLive(challengeId, token, strategy);
+    if (!challenge) {
+        return { blocked: readFailed ? CURRENCY_OUTCOME.apiFailed : CURRENCY_OUTCOME.notAvailable, challenge: null };
+    }
     // blockedOutcome only ever answers a CURRENCY_OUTCOME value or null.
     const blocked = blockedOutcome(action, challenge, bankroll, nowSec()) as CurrencyOutcome | null;
     return { blocked, challenge };
@@ -137,14 +149,49 @@ const spendResult = (
     logger: Logger,
     label: string,
     challenge: Challenge,
-    result: { ok?: boolean } | null | undefined,
+    result: { ok?: boolean; unclear?: boolean } | null | undefined,
 ): SpendOutcome => {
     if (result?.ok) {
         cat(logger).info(`${label}: done for ${logger.challengeTag(challenge)}`, null);
         return { ok: true, outcome: CURRENCY_OUTCOME.ok };
     }
+    if (result?.unclear) {
+        cat(logger).warning(
+            `${label}: no usable answer for ${logger.challengeTag(challenge)} — it may have gone through`,
+            null,
+        );
+        return { ok: false, outcome: CURRENCY_OUTCOME.unclear };
+    }
     cat(logger).warning(`${label}: rejected by the server for ${logger.challengeTag(challenge)}`, null);
     return { ok: false, outcome: CURRENCY_OUTCOME.apiFailed };
+};
+
+/**
+ * A swap that got no answer, settled against the live entries: it went through when the photo it put in is
+ * entered and the one it took out is not. Anything else (not entered, or the challenge cannot be read) stays unclear.
+ */
+const settleUnclearSwap = async (
+    result: SpendOutcome,
+    challengeId: string | number,
+    entered: { out: string; in: string },
+    token: string,
+    { strategy, logger }: { strategy: CurrencyStrategy; logger: Logger },
+): Promise<SpendOutcome> => {
+    if (result.outcome !== CURRENCY_OUTCOME.unclear) return result;
+    let landed = false;
+    try {
+        const { challenge } = await loadLive(challengeId, token, strategy);
+        const ids = challenge ? entryIds(challenge) : new Set<string>();
+        landed = ids.has(entered.in) && !ids.has(entered.out);
+    } catch (error) {
+        cat(logger).warning(
+            `swap: could not read the challenge to settle an unanswered request: ${errorMessage(error) || error}`,
+            null,
+        );
+    }
+    if (!landed) return result;
+    cat(logger).info(`swap: the unanswered request had gone through for challenge ${challengeId}`, null);
+    return { ok: true, outcome: CURRENCY_OUTCOME.ok };
 };
 
 /**
@@ -162,26 +209,45 @@ const unlockBoostWithKey = async (
 };
 
 /**
- * Picks the photo a swap would put in place of `imageId` — the best-ranked
- * candidate under the same pipeline a fill uses, excluding every photo already
- * entered and `imageId` itself. A photo swapped out earlier stays a candidate
- * unless `excludeSwapped` is set — the automatic swap sets it, since it means
- * "bring in a fresh photo" and would otherwise flip a slot between the photo it
- * just swapped out and its replacement. Spends nothing.
+ * Previews the photo a swap would put in place of `imageId`. Spends nothing.
+ *
+ * Without `chosenId` it is the app's suggestion: the best-ranked candidate under
+ * the same pipeline a fill uses, excluding every photo already entered and
+ * `imageId` itself. A photo swapped out earlier stays a candidate unless
+ * `excludeSwapped` is set — the automatic swap sets it, since it means "bring in
+ * a fresh photo" and would otherwise flip a slot between the photo it just
+ * swapped out and its replacement.
+ *
+ * With `chosenId` the user picked the photo: nothing is ranked and no tag rule
+ * applies, like the Pick… submit. Beyond the live checks, `imageId` still being
+ * entered and `chosenId` not being entered, the server has the final say on
+ * whether the photo is eligible when the swap is spent.
  *
  * @param imageId - the entered photo to replace
+ * @param options.chosenId - the library photo to swap in instead of a suggestion
  */
 const previewSwap = async (
     challengeId: string | number,
     imageId: string,
     token: string,
     { strategy, logger, settings }: { strategy: CurrencyStrategy; logger: Logger; settings: SettingsFacade },
-    { excludeSwapped = false }: { excludeSwapped?: boolean } = {},
+    { excludeSwapped = false, chosenId }: { excludeSwapped?: boolean; chosenId?: string } = {},
 ): Promise<{ ok: false; outcome: string } | { ok: true; outcome: string; candidate: SwapCandidate }> => {
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
     if (!entryIds(challenge).has(imageId)) {
         return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
+    }
+    if (chosenId !== undefined) {
+        // swapExcludedIds holds every entered photo, `imageId` included.
+        if (swapExcludedIds(challenge).has(chosenId)) {
+            return { ok: false, outcome: CURRENCY_OUTCOME.alreadyEntered };
+        }
+        return {
+            ok: true,
+            outcome: CURRENCY_OUTCOME.ok,
+            candidate: { id: chosenId, member_id: String(findEntry(challenge, imageId)?.member_id ?? '') },
+        };
     }
 
     // A manual swap is its own operation, like a manual fill: fresh photo-stats
@@ -211,7 +277,7 @@ const previewSwap = async (
             wantCount: 1,
             mustIncludeTags: settings.getEffectiveTagSetting('mustIncludeTags', challenge) ?? null,
             shouldIncludeTags: settings.getEffectiveTagSetting('shouldIncludeTags', challenge) ?? null,
-            fillWithoutTagMatch: settings.getEffectiveSetting('fillWithoutTagMatch', id),
+            submitWithoutTagMatch: settings.getEffectiveSetting('submitWithoutTagMatch', id),
         },
     );
     if (ranked.status !== 'ranked') {
@@ -237,36 +303,49 @@ const previewSwap = async (
 
 /**
  * Spends a SWAP to replace entered photo `imageId` with `newImageId`. Refuses
- * (spending nothing) when `imageId` is no longer entered, or when `newImageId`
- * is already entered / equals `imageId`.
+ * (spending nothing) with `not-available` when `imageId` is no longer entered,
+ * or with `already-entered` when `newImageId` is already entered / equals `imageId`.
  *
  * @param deps - ledger: the swap-back
  *   ledger (swapBackStore.ts), told about every successful swap so a swapped-out
- *   boosted/turbo'd photo can be swapped back later
+ *   boosted/turbo'd photo can be swapped back later; maxSwaps: spend nothing when the live
+ *   challenge's swap history already holds that many
  */
 const swapEntry = async (
     challengeId: string | number,
     imageId: string,
     newImageId: string,
     token: string,
-    { strategy, logger, ledger = null }: { strategy: CurrencyStrategy; logger: Logger; ledger?: SwapBackLedger | null },
+    {
+        strategy,
+        logger,
+        ledger = null,
+        maxSwaps,
+    }: { strategy: CurrencyStrategy; logger: Logger; ledger?: SwapBackLedger | null; maxSwaps?: number },
 ): Promise<SpendOutcome> => {
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
+    if (maxSwaps !== undefined && swapsMade(challenge) >= maxSwaps) {
+        cat(logger).info(`swap: ${logger.challengeTag(challenge)} is already at its limit of ${maxSwaps} swaps`, null);
+        return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
+    }
     if (!entryIds(challenge).has(imageId)) {
         return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
     }
     if (newImageId === imageId || swapExcludedIds(challenge).has(newImageId)) {
-        return { ok: false, outcome: CURRENCY_OUTCOME.staleCandidate };
+        return { ok: false, outcome: CURRENCY_OUTCOME.alreadyEntered };
     }
     const oldEntry = findEntry(challenge, imageId);
-    const result = spendResult(
-        logger,
-        'swap',
-        challenge,
-        await strategy.swapPhoto(challenge.id, imageId, newImageId, token),
+    const result = await settleUnclearSwap(
+        spendResult(logger, 'swap', challenge, await strategy.swapPhoto(challenge.id, imageId, newImageId, token)),
+        challenge.id,
+        { out: imageId, in: newImageId },
+        token,
+        { strategy, logger },
     );
     if (result.ok && ledger) ledger.onSwapped(challenge.id, oldEntry, newImageId);
+    // The entry's photo changed (or may have, with no answer): the photo chooser's listing for it is out of date.
+    dropChallenge(challenge.id);
     return result;
 };
 
@@ -295,13 +374,20 @@ const swapBack = async (
         ledger.remove(challengeId, record.currentId);
         return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
     }
-    const result = spendResult(
-        logger,
-        'swapBack',
-        challenge,
-        await strategy.swapPhoto(challenge.id, record.currentId, record.previousId, token),
+    const result = await settleUnclearSwap(
+        spendResult(
+            logger,
+            'swapBack',
+            challenge,
+            await strategy.swapPhoto(challenge.id, record.currentId, record.previousId, token),
+        ),
+        challenge.id,
+        { out: record.currentId, in: record.previousId },
+        token,
+        { strategy, logger },
     );
     if (result.ok) ledger.remove(challengeId, record.currentId);
+    dropChallenge(challenge.id);
     return result;
 };
 

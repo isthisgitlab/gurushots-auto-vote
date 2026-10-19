@@ -2,7 +2,7 @@
 
 import { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } from '../randomDelay';
 import { computeNextCycleDelayMs } from '../thresholdWindow';
-import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
+import { effectiveTimezone } from '../../settings/uiDefaults';
 
 import type { ActiveChallengesResponse, Challenge } from '../../types/gurushots';
 import type { CadenceDecision } from '../thresholdWindow';
@@ -123,7 +123,7 @@ const decideNextWait = async (
         lastMinuteCheckMinutes,
         minGapMs: MIN_CYCLE_GAP_MS,
         resolveScheduledFill: deps.resolveScheduledFill,
-        timezone: settings.timezone || DEFAULT_TIMEZONE,
+        timezone: effectiveTimezone(settings.timezone),
         resolveFinalWindowTopUp: deps.resolveFinalWindowTopUp,
         resolveBoostPrefill: deps.resolveBoostPrefill,
         resolveCurrencyAuto: deps.resolveCurrencyAuto,

@@ -5,15 +5,18 @@
  * transitions via window.api.login(). Also covers the module-load auto-mount,
  * which the Capacitor entry suppresses with __capacitorBootstrap.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { invalid } from '../helpers/invalid';
 import { pickOption } from './helpers/test-utils';
+import { act } from '@testing-library/preact';
+import { fireSettingsChanged } from './helpers/setup';
+import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
 
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
 import type { WindowApi } from '../../src/ts/types/ipc';
 import type * as LoginModule from '@/pages/Login';
 
-const API_METHODS = ['getSettings', 'getEnvironmentInfo', 'authenticate', 'setSetting', 'login'] as const;
+const API_METHODS = ['getSettings', 'getSetting', 'getEnvironmentInfo', 'authenticate', 'setSetting', 'login'] as const;
 
 let LoginPage: typeof LoginModule.default;
 let mountLogin: typeof LoginModule.mountLogin;
@@ -29,7 +32,8 @@ describe('Login page', () => {
 
     beforeEach(() => {
         originals = Object.fromEntries(API_METHODS.map((m) => [m, window.api[m]]));
-        window.api.getSettings = jest.fn().mockResolvedValue({});
+        window.api.getSettings = jest.fn().mockResolvedValue({ app: {} });
+        window.api.getSetting = jest.fn().mockResolvedValue('');
         window.api.getEnvironmentInfo = jest.fn().mockResolvedValue({ defaultMock: false });
         window.api.authenticate = jest.fn().mockResolvedValue({ success: true });
         window.api.setSetting = jest.fn().mockResolvedValue(undefined);
@@ -41,6 +45,7 @@ describe('Login page', () => {
         document.documentElement.removeAttribute('data-theme');
         document.body.innerHTML = '';
         delete (globalThis as RendererGlobals).__capacitorBootstrap;
+        delete (globalThis as RendererGlobals).Capacitor;
     });
 
     const renderReady = async () => {
@@ -72,7 +77,11 @@ describe('Login page', () => {
 
     test('hydrates from settings and the environment default', async () => {
         jest.mocked(window.api.getSettings).mockResolvedValue(
-            invalid({ theme: 'dracula', stayLoggedIn: true, lastUsername: 'bob' }),
+            invalid({ app: { theme: 'dracula', stayLoggedIn: true } }),
+        );
+        // The saved user name is part of the sign-in state, which the settings the page is handed leave out.
+        jest.mocked(window.api.getSetting).mockImplementation((key) =>
+            Promise.resolve(key === 'lastUsername' ? 'bob' : null),
         );
         jest.mocked(window.api.getEnvironmentInfo).mockResolvedValue(invalid({ defaultMock: true }));
         await renderReady();
@@ -86,7 +95,7 @@ describe('Login page', () => {
     });
 
     test('remembered without a saved username leaves the field empty', async () => {
-        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ stayLoggedIn: true }));
+        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { stayLoggedIn: true } }));
         await renderReady();
         expect(checkboxes()[0].checked).toBe(true);
         expect((document.getElementById('username') as HTMLInputElement).value).toBe('');
@@ -104,7 +113,7 @@ describe('Login page', () => {
         expect(checkboxes()[1].checked).toBe(false);
     });
 
-    test('the theme picker and toggles persist theme, stay-logged-in (clearing the username when off) and mock', async () => {
+    test('the theme picker and toggles persist theme, stay-logged-in (the main process clears the username when off) and mock', async () => {
         await renderReady();
         const [stay, mock] = checkboxes();
 
@@ -114,16 +123,42 @@ describe('Login page', () => {
 
         fireEvent.click(stay);
         await waitFor(() => expect(window.api.setSetting).toHaveBeenCalledWith('stayLoggedIn', true));
-        expect(window.api.setSetting).not.toHaveBeenCalledWith('lastUsername', '');
         await waitFor(() => expect(checkboxes()[0].checked).toBe(true));
 
         fireEvent.click(checkboxes()[0]);
-        await waitFor(() => expect(window.api.setSetting).toHaveBeenCalledWith('lastUsername', ''));
-        expect(window.api.setSetting).toHaveBeenCalledWith('stayLoggedIn', false);
+        await waitFor(() => expect(window.api.setSetting).toHaveBeenCalledWith('stayLoggedIn', false));
+        // A renderer cannot write the sign-in state: the main process drops the saved name with this write.
+        expect(window.api.setSetting).not.toHaveBeenCalledWith('lastUsername', '');
 
         fireEvent.click(mock);
         await waitFor(() => expect(window.api.setSetting).toHaveBeenCalledWith('mock', true));
         expect(screen.getByText('login.mockModeInfo')).toBeTruthy();
+    });
+
+    test('a write the handler refuses (false) leaves the toggles and the picker working, with no unhandled rejection', async () => {
+        window.api.setSetting = jest.fn().mockResolvedValue(false);
+        const unhandled = jest.fn();
+        process.on('unhandledRejection', unhandled);
+        await renderReady();
+
+        pickOption(themeSelect(), 'synthwave');
+        fireEvent.click(checkboxes()[0]);
+        fireEvent.click(checkboxes()[1]);
+        await waitFor(() => expect(window.api.setSetting).toHaveBeenCalledWith('mock', true));
+        await act(async () => {});
+
+        expect(window.api.setSetting).toHaveBeenCalledWith('theme', 'synthwave');
+        expect(window.api.setSetting).toHaveBeenCalledWith('stayLoggedIn', true);
+        expect(unhandled).not.toHaveBeenCalled();
+        process.off('unhandledRejection', unhandled);
+    });
+
+    test('a login still proceeds when the mock-mode write is refused (false)', async () => {
+        window.api.setSetting = jest.fn().mockResolvedValue(false);
+        await renderReady();
+        submit('alice', 'pw');
+        await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
+        expect(window.api.setSetting).toHaveBeenCalledWith('mock', false);
     });
 
     test('successful login saves mock mode (never the token) and transitions (username not remembered)', async () => {
@@ -136,21 +171,254 @@ describe('Login page', () => {
         expect(window.api.setSetting).not.toHaveBeenCalledWith('lastUsername', 'alice');
     });
 
-    test('successful login remembers the username when stay-logged-in is on', async () => {
-        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ stayLoggedIn: true }));
+    test('successful login leaves remembering the username to the main process, even when stay-logged-in is on', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { stayLoggedIn: true } }));
         await renderReady();
         submit('alice', 'pw');
         await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
-        expect(window.api.setSetting).toHaveBeenCalledWith('lastUsername', 'alice');
+        expect(window.api.setSetting).not.toHaveBeenCalledWith('lastUsername', expect.anything());
     });
 
-    test('failed auth shows the error and does not transition', async () => {
+    test('without a saved username the field stays empty, and a failed read of it too', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { stayLoggedIn: true } }));
+        jest.mocked(window.api.getSetting).mockResolvedValue(5);
+        await renderReady();
+        expect((document.getElementById('username') as HTMLInputElement).value).toBe('');
+    });
+
+    test('a rejected read of the saved username leaves the field empty and unhandled-rejection free', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { stayLoggedIn: true } }));
+        jest.mocked(window.api.getSetting).mockRejectedValue(new Error('ipc'));
+        const unhandled = jest.fn();
+        process.once('unhandledRejection', unhandled);
+        await renderReady();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        process.off('unhandledRejection', unhandled);
+        expect((document.getElementById('username') as HTMLInputElement).value).toBe('');
+        expect(unhandled).not.toHaveBeenCalled();
+    });
+
+    test('the saved username is read once, and not again after a settings change once it is there', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { stayLoggedIn: true } }));
+        jest.mocked(window.api.getSetting).mockResolvedValue('alice');
+        await renderReady();
+        await waitFor(() => expect((document.getElementById('username') as HTMLInputElement).value).toBe('alice'));
+        act(() => fireSettingsChanged({ app: { stayLoggedIn: true }, hasToken: false }));
+        await act(async () => undefined);
+        expect(jest.mocked(window.api.getSetting).mock.calls.filter(([key]) => key === 'lastUsername')).toHaveLength(1);
+    });
+
+    test('failed auth shows a translated, announced error and does not transition', async () => {
         jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'Bad credentials' });
         await renderReady();
         submit('alice', 'wrong');
-        await waitFor(() => expect(screen.getByText('Bad credentials')).toBeTruthy());
+        // An unlisted message is never shown raw: the generic login-failed text stands in for it.
+        await waitFor(() => expect(screen.getByText('errors.loginFailed')).toBeTruthy());
+        expect(screen.getByText('errors.loginFailed').closest('[role="alert"]')).not.toBeNull();
+        expect(screen.queryByText('Bad credentials')).toBeNull();
         expect(window.api.setSetting).not.toHaveBeenCalledWith('token', expect.anything());
         expect(window.api.login).not.toHaveBeenCalled();
+    });
+
+    test('the unofficial-app notice shows on the login page and acknowledging it persists the version', async () => {
+        await renderReady();
+        expect(screen.getByRole('dialog', { name: 'notice.title' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'notice.acknowledge' }));
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'notice.title' })).toBeNull());
+        expect(window.api.setSetting).toHaveBeenCalledWith('noticeAcknowledgedVersion', CURRENT_NOTICE_VERSION);
+    });
+
+    test('an acknowledged notice is not shown again', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValue(
+            invalid({ app: { noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION } }),
+        );
+        await renderReady();
+        expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    test('a damaged settings file is explained on the login page too', async () => {
+        jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(
+            invalid({ success: true, recovery: { code: 'settings-unreadable', path: '/data/config.json' } }),
+        );
+        await renderReady();
+        expect((await screen.findByRole('alert')).textContent).toContain('notice.recoveryUnreadableWhat');
+    });
+
+    test('dismissing the outcome of a recovery on the login page moves focus to the heading of the page, not to the body or an empty element', async () => {
+        jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(
+            invalid({ success: true, recovery: { code: 'settings-import-failed', path: '/data/settings.json' } }),
+        );
+        jest.mocked(window.api.retrySettingsImport).mockResolvedValue({ success: true });
+        await renderReady();
+        await screen.findByRole('alert');
+        // The retry worked: the notice goes, its outcome stays until dismissed.
+        jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(invalid({ success: true, recovery: null }));
+        fireEvent.click(screen.getByRole('button', { name: 'notice.recoveryRetry' }));
+        const done = await screen.findByText('notice.recoveryRetryDone');
+        await waitFor(() => expect(screen.queryByText('notice.recoveryImportWhat')).toBeNull());
+
+        fireEvent.click(within(done.closest('.alert') as HTMLElement).getByRole('button', { name: 'errors.dismiss' }));
+
+        // The page's own heading takes it (the page made it focusable; the notice touched no markup of the page's).
+        const heading = screen.getByRole('heading', { name: 'login.heading' });
+        expect(document.activeElement).toBe(heading);
+        expect(heading.getAttribute('tabindex')).toBe('-1');
+        expect(document.activeElement).not.toBe(document.body);
+    });
+
+    describe('a session that arrives while the page shows (a settings restore that was waiting came through)', () => {
+        const arrives = (payload: object) => act(() => fireSettingsChanged(payload));
+
+        test('moves on to the app as a login does, once, when it is one to keep', async () => {
+            await renderReady();
+
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+
+            await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
+        });
+
+        test.each([
+            ['a session that is not kept (Stay logged in is off)', { app: { stayLoggedIn: false }, hasToken: true }],
+            ['settings with no session', { app: { stayLoggedIn: true }, hasToken: false }],
+            ['a payload that is not settings', 'nope'],
+            ['settings with no app part', { hasToken: true }],
+        ])('does not move on for %s', async (_name, payload) => {
+            await renderReady();
+
+            arrives(invalid(payload));
+
+            expect(window.api.login).not.toHaveBeenCalled();
+        });
+
+        test('a session that was stored when the page opened is not an arrival: ticking Stay logged in does not sign in with it', async () => {
+            jest.mocked(window.api.getSettings).mockResolvedValue(
+                invalid({ app: { stayLoggedIn: false }, hasToken: true }),
+            );
+            await renderReady();
+
+            fireEvent.click(checkboxes()[0]);
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+
+            await act(async () => undefined);
+            expect(window.api.login).not.toHaveBeenCalled();
+        });
+
+        test('a session that was stored when the page opened, then cleared and stored again, is an arrival', async () => {
+            jest.mocked(window.api.getSettings).mockResolvedValue(
+                invalid({ app: { stayLoggedIn: true }, hasToken: true }),
+            );
+            await renderReady();
+
+            arrives({ app: { stayLoggedIn: true }, hasToken: false });
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+
+            await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
+        });
+
+        test('does not move on twice when its own login stores the token meanwhile', async () => {
+            jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { stayLoggedIn: true } }));
+            await renderReady();
+            let finish: (result: { success: true }) => void = () => {};
+            jest.mocked(window.api.authenticate).mockReturnValue(
+                new Promise((resolve) => {
+                    finish = resolve;
+                }),
+            );
+
+            submit('me', 'pw');
+            // The login stores its token and the settings change, before the answer.
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+            await act(async () => finish({ success: true }));
+
+            await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
+        });
+
+        test('a login that threw does not stop a session that arrives later either', async () => {
+            jest.mocked(window.api.authenticate).mockRejectedValue(new Error('offline'));
+            await renderReady();
+            const unhandled = jest.fn();
+            process.once('unhandledRejection', unhandled);
+            submit('me', 'pw');
+            await waitFor(() => expect(window.api.authenticate).toHaveBeenCalled());
+            await act(async () => undefined);
+
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+
+            await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
+            // A macrotask: Node reports an unhandled rejection after the microtasks of the turn have drained, so a flush made of
+            // promises alone would end before the listener could have been called.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            process.off('unhandledRejection', unhandled);
+            expect(unhandled).not.toHaveBeenCalled();
+        });
+
+        test('a move the shell ignored (no session stored after all) leaves the page free to move on at the next one', async () => {
+            await renderReady();
+
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+            await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
+            await act(async () => undefined);
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+
+            await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(2));
+        });
+
+        test('a login that failed does not stop a session that arrives later', async () => {
+            jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'bad' });
+            await renderReady();
+            submit('me', 'wrong');
+            await waitFor(() => expect(window.api.authenticate).toHaveBeenCalled());
+            await act(async () => undefined);
+
+            arrives({ app: { stayLoggedIn: true }, hasToken: true });
+
+            await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
+        });
+    });
+
+    test('rejected credentials get their own translated text', async () => {
+        jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'Invalid credentials' });
+        await renderReady();
+        submit('alice', 'wrong');
+        await waitFor(() => expect(screen.getByText('errors.invalidCredentials')).toBeTruthy());
+    });
+
+    test('a login that could not be saved says so, with what to do, and does not transition', async () => {
+        jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'token-not-saved' });
+        await renderReady();
+        submit('alice', 'pw');
+        const text = await screen.findByText('errors.tokenNotSaved');
+        expect(text.closest('[role="alert"]')).not.toBeNull();
+        expect(window.api.login).not.toHaveBeenCalled();
+    });
+
+    test('on Android a login that could not be saved says to restart the app, not to fix a file', async () => {
+        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'token-not-saved' });
+        await renderReady();
+        submit('alice', 'pw');
+        const text = await screen.findByText('errors.tokenNotSavedAndroid');
+        expect(text.closest('[role="alert"]')).not.toBeNull();
+        expect(screen.queryByText('errors.tokenNotSaved')).toBeNull();
+    });
+
+    test('a failure the shell met before the page loaded shows at once, and an attempt that answers replaces it', async () => {
+        jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'Invalid credentials' });
+        render(<LoginPage startupError="web-shell-token" />);
+        const text = await screen.findByText('errors.webShellToken');
+        expect(text.closest('[role="alert"]')).not.toBeNull();
+
+        submit('alice', 'wrong');
+        await waitFor(() => expect(screen.getByText('errors.invalidCredentials')).toBeTruthy());
+        expect(screen.queryByText('errors.webShellToken')).toBeNull();
+    });
+
+    test('a web shell page without a valid access token says to open the printed URL', async () => {
+        jest.mocked(window.api.authenticate).mockRejectedValue(new Error('web-shell-token'));
+        await renderReady();
+        submit('alice', 'pw');
+        expect((await screen.findByText('errors.webShellToken')).closest('[role="alert"]')).not.toBeNull();
     });
 
     test('mountLogin renders into #root and is a no-op without it', async () => {

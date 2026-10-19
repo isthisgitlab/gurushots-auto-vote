@@ -7,6 +7,7 @@ import { ChallengesProvider, useChallenges } from '@/contexts/ChallengesContext'
 import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
 import { UpdateProvider } from '@/contexts/UpdateContext';
 import { useSettings } from '@/api/useSettings';
+import { LOGOUT_NOT_SAVED } from '../../ipc/logoutCode';
 import { useBankroll } from '@/api/useBankroll';
 import { useAutoJoinActive } from '@/api/useAutoJoinActive';
 import { useAutoClaimStatus } from '@/api/useAutoClaimStatus';
@@ -20,12 +21,16 @@ import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal'
 import { LogsModal } from '@/components/app/LogsModal';
 import { UpdateDialog } from '@/components/app/UpdateDialog';
 import { WelcomeModal } from '@/components/app/WelcomeModal';
+import { UnofficialNoticeModal } from '@/components/app/UnofficialNoticeModal';
+import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice';
+import { ImportReportModal } from '@/components/app/ImportReportModal';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { ScrollToTopButton } from '@/components/ui/ScrollToTopButton';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { useDocumentTheme } from '@/hooks/useDocumentTheme';
-import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
+import { useNoticeGate } from '@/hooks/useNoticeGate';
+import { effectiveTimezone } from '../../settings/uiDefaults';
 import * as ipc from '@/api/ipc';
 import { errorMessage } from '../../errorMessage';
 
@@ -46,7 +51,7 @@ function useWelcomeGate(
     const [welcomeOpen, setWelcomeOpen] = useState(false);
     const welcomeHandledRef = useRef(false);
     const settingsReady = !settingsLoading && Boolean(settings);
-    const onboardingCompleted = settings?.onboardingCompleted;
+    const onboardingCompleted = settings?.app.onboardingCompleted;
     useEffect(() => {
         if (welcomeHandledRef.current) return;
         if (settingsReady && !onboardingCompleted) {
@@ -118,12 +123,16 @@ function AppModals({
     logsModal,
     welcomeOpen,
     onWelcomeClose,
+    noticeOpen,
+    onNoticeAcknowledge,
 }: {
     settingsModal: ReturnType<typeof useDisclosure>;
     challengeSettings: ReturnType<typeof useChallengeSettingsTarget>;
     logsModal: ReturnType<typeof useDisclosure>;
     welcomeOpen: boolean;
     onWelcomeClose: () => Promise<void>;
+    noticeOpen: boolean;
+    onNoticeAcknowledge: () => Promise<void>;
 }) {
     return (
         <>
@@ -154,11 +163,51 @@ function AppModals({
             {/* Update Dialog */}
             <UpdateDialog />
 
-            {/* First-run onboarding */}
+            {/* The unofficial-app notice, shown at the next open after an install or a change to its text */}
             <ErrorBoundary>
-                <WelcomeModal isOpen={welcomeOpen} onClose={onWelcomeClose} />
+                <UnofficialNoticeModal isOpen={noticeOpen} onAcknowledge={() => void onNoticeAcknowledge()} />
+            </ErrorBoundary>
+
+            {/* What the import of settings.json left unresolved, once */}
+            <ErrorBoundary>
+                <ImportReportModal hold={noticeOpen || welcomeOpen} />
+            </ErrorBoundary>
+
+            {/* First-run onboarding — after the notice, never on top of it */}
+            <ErrorBoundary>
+                <WelcomeModal isOpen={welcomeOpen && !noticeOpen} onClose={onWelcomeClose} />
             </ErrorBoundary>
         </>
+    );
+}
+
+/**
+ * The notice for a logout that did not end (the sign-in is still stored): what failed, and whether auto-vote was
+ * stopped on the way. `refused`: the settings did not take the sign-out; otherwise something else failed.
+ */
+function LogoutProblemAlert({
+    problem,
+    onDismiss,
+}: {
+    problem: { refused: boolean; stopped: boolean };
+    onDismiss: () => void;
+}) {
+    const { t } = useTranslation();
+    return (
+        <div role="alert" className="alert alert-error mb-4 text-sm items-start">
+            <div className="flex-1 space-y-1">
+                <p className="font-semibold">
+                    {t(problem.refused ? 'errors.logoutNotSavedTitle' : 'errors.logoutFailedTitle')}
+                </p>
+                <p>
+                    {t(problem.refused ? 'errors.logoutNotSavedDetail' : 'errors.logoutFailedDetail')}
+                    {problem.stopped && ` ${t('errors.logoutNotSavedStopped')}`}
+                </p>
+            </div>
+            <button type="button" className="btn btn-sm" onClick={onDismiss}>
+                {t('errors.dismiss')}
+            </button>
+        </div>
     );
 }
 
@@ -166,6 +215,11 @@ function AppModals({
  * Main app content (inside all providers)
  */
 function AppContent() {
+    // Where focus goes when the settings notice has nothing of its own left to return it to.
+    const mainRef = useRef<HTMLElement>(null);
+    // A logout that did not end (the sign-in is still stored): the screen stays, and says why. `refused`: the settings did
+    // not take the sign-out; otherwise something else failed. `stopped`: auto-vote was stopped on the way.
+    const [logoutProblem, setLogoutProblem] = useState<{ refused: boolean; stopped: boolean } | null>(null);
     const { ready, t } = useTranslation();
     const { settings, loading: settingsLoading, updateSetting } = useSettings();
     const { challenges, refetch: refetchChallenges } = useChallenges();
@@ -177,9 +231,10 @@ function AppContent() {
     // In-app log viewer; the Navbar button is Capacitor-gated.
     const logsModal = useDisclosure();
     const challengeSettings = useChallengeSettingsTarget(challenges);
+    const notice = useNoticeGate(settings, settingsLoading, updateSetting);
     const { welcomeOpen, handleWelcomeClose } = useWelcomeGate(settings, settingsLoading, updateSetting);
 
-    useDocumentTheme(settings?.theme);
+    useDocumentTheme(settings?.app.theme);
 
     // After a join changes state, refresh balances + the active-challenge list.
     const handleJoined = useCallback(() => {
@@ -196,57 +251,91 @@ function AppContent() {
     }, [autovote.cycles, refetchBankroll]);
 
     const handleLogout = useCallback(async () => {
+        setLogoutProblem(null);
+        let stopped = false;
         try {
-            // Stop autovote if running
-            if (autovote.running) {
+            // Stop autovote if running, or held at launch for a resume
+            if (autovote.running || autovote.pendingStartAt !== null) {
                 await autovote.stop();
+                stopped = true;
             }
             await ipc.logout();
         } catch (err) {
             await ipc.logRendererError(`Error during logout: ${errorMessage(err) || err}`);
+            // The user is still logged in, and is told why: the settings refused the sign-out, or something else failed.
+            setLogoutProblem({ refused: errorMessage(err) === LOGOUT_NOT_SAVED, stopped });
         }
     }, [autovote]);
 
-    const handleAutovoteToggle = useCallback(async () => {
+    // start/stop await bridge calls; a failure there must reach the log
+    // rather than surface as an unhandled rejection from a click.
+    const logAutovoteFailure = useCallback(async (action: string, run: () => Promise<void>) => {
         try {
-            await autovote.toggle();
+            await run();
         } catch (err) {
-            // start/stop await bridge calls; a failure there must reach the log
-            // rather than surface as an unhandled rejection from a click.
-            await ipc.logRendererError(`Autovote toggle failed: ${errorMessage(err) || err}`);
+            await ipc.logRendererError(`Autovote ${action} failed: ${errorMessage(err) || err}`);
         }
-    }, [autovote]);
+    }, []);
+    const handleAutovoteToggle = useCallback(
+        () => logAutovoteFailure('toggle', autovote.toggle),
+        [autovote.toggle, logAutovoteFailure],
+    );
+    const handleStartNow = useCallback(
+        () => logAutovoteFailure('start', autovote.start),
+        [autovote.start, logAutovoteFailure],
+    );
+    const handleCancelResume = useCallback(
+        () => logAutovoteFailure('resume cancel', autovote.stop),
+        [autovote.stop, logAutovoteFailure],
+    );
 
     // Show loading while initializing
     if (!ready || settingsLoading) {
         return <PageLoader text={t('common.loading')} />;
     }
 
-    const timezone = settings?.timezone || DEFAULT_TIMEZONE;
-    const isMock = settings?.mock || false;
+    const timezone = effectiveTimezone(settings?.app.timezone);
+    const isMock = settings?.app.mock || false;
     const isLoggedIn = !!settings?.hasToken;
 
     return (
         <div className="min-h-screen bg-base-200">
-            <div className="container mx-auto px-4 py-4 max-w-4xl">
+            {/* The banner: the notices and the navbar. The main landmark below holds the page's content. */}
+            <header className="container mx-auto px-4 pt-4 max-w-4xl">
                 <ErrorBoundary>
-                    {/* Navbar */}
+                    <SettingsRecoveryNotice returnFocusTo={mainRef} />
+                    {logoutProblem && (
+                        <LogoutProblemAlert problem={logoutProblem} onDismiss={() => setLogoutProblem(null)} />
+                    )}
+
                     <Navbar
                         isMock={isMock}
                         onLogsClick={logsModal.open}
                         onSettingsClick={settingsModal.open}
                         onLogout={handleLogout}
                     />
-
+                </ErrorBoundary>
+            </header>
+            <main
+                ref={mainRef}
+                aria-label={t('app.mainContent')}
+                tabIndex={-1}
+                className="container mx-auto px-4 pb-4 max-w-4xl focus-visible:ring-base-content focus-visible:ring-2 focus-visible:outline-none"
+            >
+                <ErrorBoundary>
                     {/* Autovote Controls */}
                     <AutoVoteControls
                         running={autovote.running}
                         status={autovote.status}
                         statusClass={autovote.statusClass}
+                        error={autovote.error}
                         lastRun={autovote.lastRun}
                         cycles={autovote.cycles}
                         onToggle={handleAutovoteToggle}
                         autoJoinActive={autoJoinActive}
+                        pendingStartAt={autovote.pendingStartAt}
+                        onStartNow={handleStartNow}
+                        onCancelResume={handleCancelResume}
                     />
 
                     {/* At-a-glance status summary — counts + next-action countdown + bankroll */}
@@ -256,6 +345,7 @@ function AppContent() {
                         running={autovote.running}
                         bankroll={bankroll}
                         autoClaimStatus={autoClaimStatus}
+                        pendingStartAt={autovote.pendingStartAt}
                     />
 
                     {/* Challenges Section — the primary view (joined/active) */}
@@ -271,18 +361,25 @@ function AppContent() {
 
                     {/* Discover — un-joined challenges, collapsed below the main list */}
                     <ErrorBoundary>
-                        <DiscoverSection isLoggedIn={isLoggedIn} bankroll={bankroll} onJoined={handleJoined} />
+                        <DiscoverSection
+                            isLoggedIn={isLoggedIn}
+                            bankroll={bankroll}
+                            onJoined={handleJoined}
+                            timezone={timezone}
+                        />
                     </ErrorBoundary>
 
                     <AppModals
                         settingsModal={settingsModal}
                         challengeSettings={challengeSettings}
                         logsModal={logsModal}
-                        welcomeOpen={welcomeOpen}
+                        welcomeOpen={welcomeOpen && !notice.pending}
                         onWelcomeClose={handleWelcomeClose}
+                        noticeOpen={notice.open}
+                        onNoticeAcknowledge={notice.acknowledge}
                     />
                 </ErrorBoundary>
-            </div>
+            </main>
 
             {/* Back-to-top for the long challenges list */}
             <ScrollToTopButton />

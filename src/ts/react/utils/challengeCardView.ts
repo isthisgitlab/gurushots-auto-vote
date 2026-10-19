@@ -1,9 +1,12 @@
 import type { Bankroll, Challenge } from '../../types/gurushots';
 import type { RankedChallenge } from '../../types/rendererUtils';
 import { formatDuration, getBoostStatus, getTurboStatus, isBoostWindowOpen } from '@/utils/formatters';
-import { isLowExposure } from '@/utils/challengeAlerts';
+import { isChallengeLive, isLowExposure } from '@/utils/challengeAlerts';
+import { exposureBand } from '@/utils/statTone';
+import type { StatTone } from '@/utils/statTone';
 import { canKeyUnlock, canSwapEntry, canFillExposure } from '../../voting/currencyActions';
 import { finiteOr } from '../../numbers';
+import { isKnownTurboMode } from '../../voting/turboMode';
 
 const LEVEL_NAMES = ['', 'POPULAR', 'SKILLED', 'PREMIER', 'ELITE', 'ALL STAR'];
 
@@ -32,6 +35,39 @@ export function getNextLevelInfo(
 }
 
 /**
+ * Whether anything on the card counts down to a second-by-second change at `now`: a turbo cooldown that has yet to
+ * elapse, or a timed boost window with time left (its remaining time is on the card's badge). When neither is
+ * true the card needs no per-second re-render.
+ *
+ * @param challenge - An active challenge.
+ * @param now - Unix seconds
+ */
+export function needsSecondTick(challenge: Challenge, now: number): boolean {
+    const member = (challenge as RankedChallenge).member;
+    const turbo = member?.turbo;
+    const boost = member?.boost;
+    const turboCooldown =
+        turbo?.state === 'TIMER' && typeof turbo.time_to_open === 'number' && turbo.time_to_open > now;
+    const timedBoost = boost?.state === 'AVAILABLE' && finiteOr(boost.timeout, 0) > now;
+    return turboCooldown || timedBoost;
+}
+
+/**
+ * The next second at which a start- or close-gated control on the card flips, or null when none is ahead: the first
+ * second after `start_time` (the vote and run buttons need the challenge started) and `close_time` itself (filling needs
+ * it still open). The card re-renders at that second, so those buttons flip on time with no per-second tick.
+ *
+ * @param challenge - An active challenge.
+ * @param now - Unix seconds
+ */
+export function nextBoundaryFlip(challenge: Challenge, now: number): number | null {
+    const ahead = [challenge.start_time + 1, challenge.close_time].filter(
+        (flip) => Number.isFinite(flip) && flip > now,
+    );
+    return ahead.length > 0 ? Math.min(...ahead) : null;
+}
+
+/**
  * Everything the challenge card (detailed and compact) derives from the raw
  * challenge at one `now` tick: stats, alert flags/classes and the action gates.
  * Pure, so the two layouts can never disagree about what a state means.
@@ -44,21 +80,30 @@ export function deriveChallengeCardView(
         now,
         bankroll,
         autovoteRunning,
-        autoFillEnabled,
-    }: { now: number; bankroll: Bankroll | null; autovoteRunning: boolean; autoFillEnabled: boolean },
+        autoSubmitEnabled,
+        manualPhotosOnly,
+    }: {
+        now: number;
+        bankroll: Bankroll | null;
+        autovoteRunning: boolean;
+        autoSubmitEnabled: boolean;
+        manualPhotosOnly: boolean;
+    },
 ) {
     const member = (challenge as RankedChallenge).member;
     const entries = member.ranking.entries || [];
     const exposureFactor = member.ranking.exposure.exposure_factor;
 
     // canPlayAutoTurbo flips to true the moment a TIMER cooldown elapses (the
-    // card ticks `now` every second) without waiting for an external poll.
+    // card ticks `now` every second while one runs) without waiting for an external poll.
     const turboState = member.turbo?.state;
     const turboCooldownPassed =
         turboState === 'TIMER' && typeof member.turbo?.time_to_open === 'number' && member.turbo.time_to_open <= now;
     const challengeStillOpen = challenge.close_time > now;
     const canPlayAutoTurbo =
-        challengeStillOpen && (turboState === 'FREE' || turboState === 'IN_PROGRESS' || turboCooldownPassed);
+        challengeStillOpen &&
+        isKnownTurboMode(member.turbo) &&
+        (turboState === 'FREE' || turboState === 'IN_PROGRESS' || turboCooldownPassed);
 
     const slotsRemaining = Math.max(0, (challenge.max_photo_submits || 0) - entries.length);
 
@@ -67,6 +112,11 @@ export function deriveChallengeCardView(
     // exposure figure, so the card stands out in a long list without reading it.
     const boostOpen = isBoostWindowOpen(member.boost, now);
     const lowExposure = isLowExposure(challenge, now);
+    let exposureTone: StatTone | null = null;
+    if (lowExposure) exposureTone = 'error';
+    else if (isChallengeLive(challenge, now) && typeof exposureFactor === 'number') {
+        exposureTone = exposureBand(exposureFactor);
+    }
 
     return {
         member,
@@ -77,10 +127,12 @@ export function deriveChallengeCardView(
         userProgress: member.ranking.total,
         canPlayAutoTurbo,
         slotsRemaining,
-        // Manual photo submit (+1 / +N). Hidden while the scheduled autovote
-        // loop is active, like the Run button, so it can't race the loop's own
-        // auto-submit for the same slot.
-        canFill: !autovoteRunning && challengeStillOpen && slotsRemaining > 0,
+        // Manual photo submit (+1 / +N), shown whenever the challenge is open
+        // with a free slot, autovote running or not: the fill handler fetches
+        // the live challenge before submitting, the loop's own scheduled fill
+        // re-checks live state before its submit, and a submit past the slot
+        // cap is rejected by the API ("Submit rejected").
+        canFill: challengeStillOpen && slotsRemaining > 0,
         boostOpen,
         // Time left in a timed boost window, preformatted for the badge; null
         // for a key-unlocked boost, which has no timer. Ticks with `now`.
@@ -89,9 +141,14 @@ export function deriveChallengeCardView(
                 ? formatDuration(finiteOr(member.boost.timeout, 0) - now)
                 : null,
         lowExposure,
-        exposureClass: lowExposure ? 'text-error font-bold' : '',
+        exposureTone,
         cardAlertClass: `${lowExposure ? 'border-2 border-error' : 'border'}${boostOpen ? ' ring-2 ring-info ring-offset-2 ring-offset-base-100' : ''}`,
-        showAutoFillBadge: autoFillEnabled && slotsRemaining > 0,
+        // Manual Only stops the auto-submit, so its badge gives way to the manual-only one.
+        showAutoSubmitBadge: autoSubmitEnabled && !manualPhotosOnly && slotsRemaining > 0,
+        showManualPhotosBadge: manualPhotosOnly,
+        // Manual Only: the card's notes about pins that are not applying are hidden, since a pin only steers
+        // the automatic spends, which do not run there.
+        manualOnly: manualPhotosOnly,
         // Bankroll-currency actions — shown only when the balance and the
         // challenge both allow them (shared predicates; the main process
         // re-checks the live state before spending).
@@ -104,12 +161,14 @@ export function deriveChallengeCardView(
         // manual path (evaluateManualVotingToHundred) bypasses thresholds and
         // the vote is naturally bounded (the API caps exposure at 100%), unlike
         // the full-strategy Run button which stays hidden to avoid racing
-        // turbo/boost/fill actions. Both gates read the per-second `now` tick
-        // (not a raw Date.now()) so they flip the moment a challenge starts.
+        // turbo/boost/fill actions. Both gates read the card's `now` (not a raw
+        // Date.now()), and the card re-renders at the start boundary
+        // (nextBoundaryFlip), so they flip the moment a challenge starts.
         showVoteButton: challenge.start_time < now && exposureFactor < 100,
         // Run button: fires one full auto-strategy cycle for this card. Hidden
         // while the scheduled autovote loop is active to avoid racing
-        // concurrent strategy passes for the same challenge.
-        showRunButton: !autovoteRunning && challenge.start_time < now,
+        // concurrent strategy passes for the same challenge. Also hidden under
+        // Manual Only: Run applies the automatic rules, which do nothing there.
+        showRunButton: !autovoteRunning && challenge.start_time < now && !manualPhotosOnly,
     };
 }

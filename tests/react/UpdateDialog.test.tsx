@@ -72,8 +72,8 @@ describe('UpdateProvider + UpdateDialog', () => {
     });
 
     it('renders nothing until an update is announced', () => {
-        const { container } = renderDialog();
-        expect(container.textContent).toBe('');
+        renderDialog();
+        expect(document.body.textContent).toBe('');
         expect(ctx.state).toBe('idle');
     });
 
@@ -106,15 +106,28 @@ describe('UpdateProvider + UpdateDialog', () => {
         expect(screen.getByText('app.updateAvailable')).toBeTruthy();
         expect(screen.getByText('1.0.0')).toBeTruthy();
         expect(screen.getByText('1.1.0')).toBeTruthy();
-        expect(screen.getByText('Pre-release')).toBeTruthy();
+        expect(screen.getByText('app.prerelease')).toBeTruthy();
         expect(screen.getByText('Fixes')).toBeTruthy();
     });
 
-    it('omits the pre-release badge and notes when absent', async () => {
+    it('omits the pre-release badge, and says so when there are no notes', async () => {
         renderDialog();
         await emit('onUpdateAvailable', { ...INFO, releaseNotes: '' });
-        expect(screen.queryByText('Pre-release')).toBeNull();
-        expect(screen.queryByText('app.releaseNotes:')).toBeNull();
+        expect(screen.queryByText('app.prerelease')).toBeNull();
+        expect(screen.getByText('app.releaseNotes:')).toBeTruthy();
+        expect(screen.getByText('app.noReleaseNotes')).toBeTruthy();
+    });
+
+    it('shows HTML release notes as plain text, lines kept', async () => {
+        renderDialog();
+        await emit('onUpdateAvailable', {
+            ...INFO,
+            releaseNotes: '<p>Fixes</p>\n<ul>\n<li class="x">One</li>\n<li>Two<br/>more</li>\n</ul>',
+        });
+        const notes = screen.getByText(/Fixes/);
+        expect(notes.textContent).toBe('Fixes\n\n• One\n\n• Two\nmore');
+        expect(notes.className).toContain('whitespace-pre-line');
+        expect(notes.querySelector('p, ul, li')).toBeNull();
     });
 
     it('renders the available frame without details when no info is attached', async () => {
@@ -125,29 +138,29 @@ describe('UpdateProvider + UpdateDialog', () => {
     });
 
     it('"Remind later" hides the dialog; backdrop click and Escape hide it too, inner clicks do not', async () => {
-        const { container } = renderDialog();
+        renderDialog();
         await emit('onUpdateAvailable', INFO);
         fireEvent.click(screen.getByText('app.remindLater'));
-        expect(container.textContent).toBe('');
+        expect(document.body.textContent).toBe('');
 
         await emit('onUpdateAvailable', INFO);
         expect(screen.getByRole('dialog', { name: 'app.updateAvailable' })).toBeTruthy();
-        fireEvent.click(container.querySelector('.modal-box')!);
+        fireEvent.click(document.querySelector('.modal-box')!);
         expect(screen.getByText('app.updateAvailable')).toBeTruthy();
-        fireEvent.click(container.querySelector('.modal-backdrop')!);
-        expect(container.textContent).toBe('');
+        fireEvent.click(document.querySelector('.modal-backdrop')!);
+        expect(document.body.textContent).toBe('');
 
         await emit('onUpdateAvailable', INFO);
         fireEvent.keyDown(document, { key: 'Escape' });
-        expect(container.textContent).toBe('');
+        expect(document.body.textContent).toBe('');
     });
 
     it('"Skip version" skips and hides; a failing skip is logged and the dialog stays', async () => {
-        const { container } = renderDialog();
+        renderDialog();
         await emit('onUpdateAvailable', INFO);
         await clickAndSettle(screen.getByText('app.skipVersion'));
         expect(mockApi.skipUpdateVersion).toHaveBeenCalled();
-        expect(container.textContent).toBe('');
+        expect(document.body.textContent).toBe('');
 
         await emit('onUpdateAvailable', INFO);
         mockApi.skipUpdateVersion.mockRejectedValueOnce(new Error('io'));
@@ -170,8 +183,8 @@ describe('UpdateProvider + UpdateDialog', () => {
 
         await emit('onDownloadProgress', {
             percent: 50,
-            transferred: 1024 * 1024,
-            total: 2 * 1024 * 1024,
+            transferred: 1_000_000,
+            total: 2_000_000,
             bytesPerSecond: 0,
         });
         expect(screen.getByText('50%')).toBeTruthy();
@@ -179,12 +192,12 @@ describe('UpdateProvider + UpdateDialog', () => {
 
         await emit('onDownloadProgress', {
             percent: 75,
-            transferred: 1536 * 1024,
-            total: 2 * 1024 * 1024,
-            bytesPerSecond: 2048,
+            transferred: 1_500_000,
+            total: 2_000_000,
+            bytesPerSecond: 2000,
         });
-        expect(screen.getByText(/1\.5 MB \/ 2 MB/)).toBeTruthy();
-        expect(screen.getByText(/2 KB/)).toBeTruthy();
+        expect(screen.getByText(/1\.5MB \/ 2MB/)).toBeTruthy();
+        expect(screen.getByText(/2kB\/s/)).toBeTruthy();
 
         // Backdrop click and Escape are ignored while downloading.
         fireEvent.click(document.querySelector('.modal-backdrop')!);
@@ -204,20 +217,99 @@ describe('UpdateProvider + UpdateDialog', () => {
         expect(screen.queryByText('app.updateReady')).toBeNull();
     });
 
+    it('writes sizes in the UI language, from bytes up to gigabytes and no further', async () => {
+        mockApi.getSetting.mockResolvedValueOnce('lv');
+        renderDialog();
+        await emit('onUpdateAvailable', INFO);
+        await clickAndSettle(screen.getByText('app.download'));
+        await emit('onDownloadProgress', {
+            percent: 10,
+            transferred: 512,
+            total: 3.5e9,
+            bytesPerSecond: 1.5e6,
+        });
+        expect(screen.getByText(/512 B \/ 3,5 GB \(1,5 MB\/s\)/)).toBeTruthy();
+
+        await emit('onDownloadProgress', { percent: 10, transferred: 1, total: 2000e9, bytesPerSecond: 1 });
+        expect(screen.getByText(/2000 GB/)).toBeTruthy();
+    });
+
     it('formats a zero byte count', async () => {
         renderDialog();
         await emit('onUpdateAvailable', INFO);
         await clickAndSettle(screen.getByText('app.download'));
         await emit('onDownloadProgress', { percent: 1, transferred: 0, total: 0, bytesPerSecond: 10 });
-        expect(screen.getByText(/0 Bytes \/ 0 Bytes/)).toBeTruthy();
+        expect(screen.getByText(/0B \/ 0B/)).toBeTruthy();
     });
 
-    it('"Cancel" while downloading hides the dialog', async () => {
-        const { container } = renderDialog();
+    it('shows an indeterminate, named progress bar until the download size is known', async () => {
+        renderDialog();
         await emit('onUpdateAvailable', INFO);
         await clickAndSettle(screen.getByText('app.download'));
-        fireEvent.click(screen.getByText('app.cancel'));
-        expect(container.textContent).toBe('');
+        const bar = document.querySelector('progress')!;
+        expect(bar.hasAttribute('value')).toBe(false);
+        expect(bar.getAttribute('aria-label')).toBe('app.downloadingUpdate');
+
+        await emit('onDownloadProgress', { percent: 40, transferred: 40, total: 100, bytesPerSecond: 0 });
+        expect(document.querySelector('progress')!.getAttribute('value')).toBe('40');
+    });
+
+    describe('a hidden dialog comes back for the events the user is waiting on', () => {
+        const hideDuringDownload = async () => {
+            renderDialog();
+            await emit('onUpdateAvailable', INFO);
+            await clickAndSettle(screen.getByText('app.download'));
+            fireEvent.click(screen.getByText('app.hide'));
+            expect(document.body.textContent).toBe('');
+        };
+
+        it('a finished download brings back "Restart now"', async () => {
+            await hideDuringDownload();
+            await emit('onUpdateDownloaded');
+            expect(screen.getByText('app.updateReady')).toBeTruthy();
+            expect(screen.getByText('app.restartNow')).toBeTruthy();
+        });
+
+        it('a failed download shows the failure', async () => {
+            await hideDuringDownload();
+            await emit('onUpdateError', { message: 'offline' });
+            expect(screen.getByText('app.updateError')).toBeTruthy();
+        });
+
+        it.each([
+            ['idle', async () => {}],
+            [
+                'available, with the dialog hidden',
+                async () => {
+                    await emit('onUpdateAvailable', INFO);
+                    fireEvent.click(screen.getByText('app.remindLater'));
+                },
+            ],
+            [
+                'ready, with the dialog hidden',
+                async () => {
+                    await emit('onUpdateAvailable', INFO);
+                    await clickAndSettle(screen.getByText('app.download'));
+                    await emit('onUpdateDownloaded');
+                    fireEvent.click(screen.getByText('app.restartLater'));
+                },
+            ],
+        ])('a background check that fails while %s stays hidden', async (_state, arrange) => {
+            renderDialog();
+            await arrange();
+            expect(document.body.textContent).toBe('');
+            await emit('onUpdateError', { message: 'offline' });
+            expect(document.body.textContent).toBe('');
+            expect(ctx.state).toBe('error');
+        });
+    });
+
+    it('"Hide" while downloading hides the dialog', async () => {
+        renderDialog();
+        await emit('onUpdateAvailable', INFO);
+        await clickAndSettle(screen.getByText('app.download'));
+        fireEvent.click(screen.getByText('app.hide'));
+        expect(document.body.textContent).toBe('');
     });
 
     it('hides the progress block when the dialog is downloading without a progress payload', async () => {
@@ -231,17 +323,17 @@ describe('UpdateProvider + UpdateDialog', () => {
 
     it('falls back to the browser when auto-update is unavailable', async () => {
         mockApi.canAutoUpdate.mockResolvedValue(invalid({ canAutoUpdate: false }));
-        const { container } = renderDialog();
+        renderDialog();
         await emit('onUpdateAvailable', INFO);
         await clickAndSettle(screen.getByText('app.download'));
         expect(mockApi.openExternalUrl).toHaveBeenCalledWith('https://example.test/releases');
         expect(mockApi.downloadUpdate).not.toHaveBeenCalled();
-        expect(container.textContent).toBe('');
+        expect(document.body.textContent).toBe('');
     });
 
     it('shows a download failure with a browser fallback', async () => {
         mockApi.downloadUpdate.mockResolvedValue({ success: false, error: 'checksum mismatch' });
-        const { container } = renderDialog();
+        renderDialog();
         await emit('onUpdateAvailable', INFO);
         await clickAndSettle(screen.getByText('app.download'));
         expect(screen.getByText('app.updateError')).toBeTruthy();
@@ -252,7 +344,7 @@ describe('UpdateProvider + UpdateDialog', () => {
 
         await clickAndSettle(screen.getByText('app.downloadInBrowser'));
         expect(mockApi.openExternalUrl).toHaveBeenCalledWith('https://example.test/releases');
-        expect(container.textContent).toBe('');
+        expect(document.body.textContent).toBe('');
     });
 
     it.each([
@@ -299,12 +391,73 @@ describe('UpdateProvider + UpdateDialog', () => {
         expect(screen.queryByText('app.updateError')).toBeNull();
     });
 
+    it.each(['host', 'content-type', 'size', 'digest', 'digest-missing'])(
+        'a download the Android updater refused (%s) says it was not verified and offers no browser download',
+        async (code) => {
+            mockApi.downloadUpdate.mockResolvedValue(
+                invalid({ success: false, error: 'The download does not match; the release page was opened', code }),
+            );
+            renderDialog();
+            await emit('onUpdateAvailable', INFO);
+            await clickAndSettle(screen.getByText('app.download'));
+            expect(screen.getByText('app.updateUnverified')).toBeTruthy();
+            expect(screen.queryByText('app.downloadInBrowser')).toBeNull();
+            expect(screen.getByText('app.close')).toBeTruthy();
+            expect(mockApi.logError).toHaveBeenCalledWith(expect.stringContaining(`(${code})`));
+        },
+    );
+
+    it('an Android install that failed after opening the release page says so, and does not offer the browser download again', async () => {
+        mockApi.downloadUpdate.mockResolvedValue({
+            success: false,
+            error: 'network down; the release page was opened instead',
+            code: 'release-page-opened',
+        });
+        renderDialog();
+        await emit('onUpdateAvailable', INFO);
+        await clickAndSettle(screen.getByText('app.download'));
+        expect(screen.getByText('app.updateReleasePageOpened')).toBeTruthy();
+        expect(screen.queryByText('app.updateFailed')).toBeNull();
+        expect(screen.queryByText('app.downloadInBrowser')).toBeNull();
+        expect(screen.getByText('app.close')).toBeTruthy();
+        expect(mockApi.logError).toHaveBeenCalledWith(
+            'Update failed: network down; the release page was opened instead (release-page-opened)',
+        );
+    });
+
+    it('takes the release-page-opened code from an update-error event as well', async () => {
+        renderDialog();
+        await emit('onUpdateAvailable', INFO);
+        await emit('onUpdateError', { message: 'x', code: 'release-page-opened' });
+        expect(screen.getByText('app.updateReleasePageOpened')).toBeTruthy();
+        expect(screen.queryByText('app.downloadInBrowser')).toBeNull();
+    });
+
+    it('takes the refusal code from an update-error event as well', async () => {
+        renderDialog();
+        await emit('onUpdateAvailable', INFO);
+        await emit('onUpdateError', { message: 'x', code: 'digest' });
+        expect(screen.getByText('app.updateUnverified')).toBeTruthy();
+        expect(screen.queryByText('app.downloadInBrowser')).toBeNull();
+    });
+
+    it.each([
+        ['an unknown code', { message: 'x', code: 'timeout' }],
+        ['a code that is not text', { message: 'x', code: 7 }],
+    ])('%s is an ordinary update failure with the browser download', async (_name, payload) => {
+        renderDialog();
+        await emit('onUpdateAvailable', INFO);
+        await emit('onUpdateError', payload);
+        expect(screen.getByText('app.updateFailed')).toBeTruthy();
+        expect(screen.getByText('app.downloadInBrowser')).toBeTruthy();
+    });
+
     it('closes the error dialog from the backdrop', async () => {
-        const { container } = renderDialog();
+        renderDialog();
         await emit('onUpdateAvailable', INFO);
         await emit('onUpdateError', { message: 'x' });
-        fireEvent.click(container.querySelector('.modal-backdrop')!);
-        expect(container.textContent).toBe('');
+        fireEvent.click(document.querySelector('.modal-backdrop')!);
+        expect(document.body.textContent).toBe('');
     });
 
     it('opening the browser download logs a failure and keeps the dialog', async () => {

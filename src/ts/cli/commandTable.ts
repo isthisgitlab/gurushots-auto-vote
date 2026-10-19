@@ -18,13 +18,18 @@ import {
     SWAP_BACK_USAGE,
     fillExposureCmd,
 } from './commands/actions';
+import { pinCmd, PIN_USAGE } from './commands/pin';
 import { showBankroll } from './commands/bankroll';
-import { showDiscover, joinChallengeCmd } from './commands/join';
+import { showDiscover, joinChallengeCmd, forgetPaymentCmd } from './commands/join';
+import { listPhotosCmd, suggestPhotosCmd, parseSearchFlag } from './commands/photos';
 import { checkUpdates } from './commands/update';
+import { isPinnableImageId } from '../settings';
 import {
     getSetting,
     setSetting,
     setGlobalDefault,
+    beforeChosenPhotosWrite,
+    clearChosenPhotos,
     listSettings,
     resetSetting,
     resetAllSettings,
@@ -36,6 +41,8 @@ import {
     deleteProfile,
 } from './commands/settings';
 import { showLogs } from './commands/logs';
+import { resetDataCmd, licensesCmd } from './commands/localData';
+import { settingsRecoveryCmd } from './commands/settingsRecovery';
 import * as scenarioCommands from './commands/scenarios';
 import { showHelp } from './help';
 import {
@@ -71,6 +78,18 @@ const runVote: CommandHandler = async (argv) => {
     return 0;
 };
 
+const SCENARIO_RESET_USAGE = 'Usage: scenario-reset --challenge=<id>  |  scenario-reset --all';
+
+// One challenge's progress, or (--all, alone) every challenge's: the only way past an unreadable progress file.
+const runScenarioReset: CommandHandler = async (argv) => {
+    if (!argv.includes('--all')) {
+        return challengeCommand(SCENARIO_RESET_USAGE, (id) => scenarioCommands.scenarioResetCmd(id))(argv);
+    }
+    return argv.length === 1
+        ? scenarioCommands.scenarioResetAllCmd()
+        : usageError('--all takes no other arguments', SCENARIO_RESET_USAGE);
+};
+
 const LOG_CATEGORY_FLAGS: Record<string, string> = {
     '--error': 'error',
     '--api': 'api',
@@ -91,11 +110,62 @@ const runRun: CommandHandler = async (argv) => {
     return 0;
 };
 
+const JOIN_USAGE = 'Usage: join <id> [--yes [--max-coins=<coins>]]';
+
+// `join` spends coins, so its arguments are strict: a cap that is misspelled, written with a space
+// or repeated would otherwise be dropped, and the join would go ahead uncapped (or on the wrong id).
 const runJoin: CommandHandler = async (argv) => {
-    const yes = argv.includes('--yes');
-    const id = argv.find((a) => !a.startsWith('--'));
-    await joinChallengeCmd(id, { yes });
-    return 0;
+    const flags = argv.filter((a) => a.startsWith('--'));
+    const positional = argv.filter((a) => !a.startsWith('--'));
+    const caps = flags.filter((a) => a.startsWith('--max-coins='));
+    const maxText = caps[0]?.slice('--max-coins='.length);
+    const maxCoins = maxText !== undefined && /^\d+$/.test(maxText) ? Number(maxText) : undefined;
+    const wrong =
+        flags.some((a) => a !== '--yes' && !a.startsWith('--max-coins=')) ||
+        flags.filter((a) => a === '--yes').length > 1 ||
+        caps.length > 1 ||
+        (maxText !== undefined && !Number.isSafeInteger(maxCoins)) ||
+        positional.length > 1;
+    if (wrong) return usageError('Wrong arguments', JOIN_USAGE);
+    return joinChallengeCmd(positional[0], {
+        yes: flags.includes('--yes'),
+        ...(maxCoins === undefined ? {} : { maxCoins }),
+    });
+};
+
+const FORGET_PAYMENT_USAGE = 'Usage: forget-payment <id>';
+
+// Strict like `join`: it changes what a later join pays for, so a typo must not reach another challenge.
+const runForgetPayment: CommandHandler = async (argv) => {
+    // Only a plain challenge id: the claims are keyed `<member id>:<challenge id>`, and a colon in the id must not
+    // reach another record.
+    if (argv.length !== 1 || !/^\d+$/.test(argv[0])) return usageError('Wrong arguments', FORGET_PAYMENT_USAGE);
+    return forgetPaymentCmd(argv[0]);
+};
+
+const LIST_PHOTOS_USAGE =
+    'Usage: list-photos [--challenge=<id>] [--search=<tag>]  or  list-photos --challenge=<id> --suggest';
+
+const runListPhotos: CommandHandler = async (argv) => {
+    const { challengeId, rest } = extractChallenge(argv);
+    const suggestFlags = rest.filter((arg) => arg === '--suggest');
+    const listRest = rest.filter((arg) => arg !== '--suggest');
+    const search = parseSearchFlag(listRest);
+    // Anything that is neither a --search flag nor its value is a typo.
+    const unexpected = listRest.filter(
+        (arg, i) => arg !== '--search' && !arg.startsWith('--search=') && listRest[i - 1] !== '--search',
+    );
+    if (unexpected.length > 0 || (listRest.some((arg) => arg === '--search') && search === null)) {
+        return usageError('Wrong arguments', LIST_PHOTOS_USAGE);
+    }
+    if (suggestFlags.length > 0) {
+        // The suggestions rank for one challenge and are not a search.
+        if (suggestFlags.length > 1 || challengeId === null || listRest.length > 0) {
+            return usageError('Wrong arguments', LIST_PHOTOS_USAGE);
+        }
+        return suggestPhotosCmd(challengeId);
+    }
+    return listPhotosCmd(challengeId, search);
 };
 
 const runBoost = async (challengeId: string, rest: string[]) => {
@@ -103,6 +173,38 @@ const runBoost = async (challengeId: string, rest: string[]) => {
     const imageId = imageArg ? imageArg.slice('--image='.length) || null : null;
     await boostChallenge(challengeId, { imageId });
     return 0;
+};
+
+// --boost= / --turbo= take an image id, or `none` to clear, each at most once. It changes what a later Boost or Turbo
+// lands on, so like `join` anything it does not recognise (`--boost abc`, a typo) is a usage error, never a listing.
+const runPin = async (challengeId: string, rest: string[]) => {
+    const flagsOf = (kind: string) => rest.filter((a) => a.startsWith(`--${kind}=`));
+    if (
+        rest.some((a) => !a.startsWith('--boost=') && !a.startsWith('--turbo=')) ||
+        flagsOf('boost').length > 1 ||
+        flagsOf('turbo').length > 1
+    ) {
+        return usageError('Wrong arguments', PIN_USAGE);
+    }
+    const pins: Parameters<typeof pinCmd>[1] = {};
+    for (const kind of ['boost', 'turbo'] as const) {
+        const [arg] = flagsOf(kind);
+        if (arg === undefined) continue;
+        const value = arg.slice(`--${kind}=`.length);
+        if (value === '') return usageError(`--${kind} needs an image id, or none to clear the pin`, PIN_USAGE);
+        // The raw text never reaches a log line unless it is a plain image id.
+        if (value.toLowerCase() !== 'none' && !isPinnableImageId(value)) {
+            return usageError(
+                `--${kind} takes an image id: letters, digits, _ and -, at most 64 characters (or none to clear the pin)`,
+                PIN_USAGE,
+            );
+        }
+        pins[kind] = value.toLowerCase() === 'none' ? null : value;
+    }
+    if (pins.boost && pins.boost === pins.turbo) {
+        return usageError('--boost and --turbo name the same image: a photo is pinned for one feature only', PIN_USAGE);
+    }
+    return exitCodeOf(await pinCmd(challengeId, pins));
 };
 
 const runSwapBack = async (challengeId: string, rest: string[]) => {
@@ -122,8 +224,12 @@ const runSetSetting: CommandHandler = async (argv) => {
     if (!rest[0] || rest[1] === undefined) {
         return usageError('Please specify both key and value', 'Usage: set-setting <key> <value> [--challenge=<id>]');
     }
-    setSetting(rest[0], rest[1], challengeId);
-    return 0;
+    // The warning about another account's lists comes before the write, the owner stamp after it.
+    const stampOwner = await beforeChosenPhotosWrite(rest[0], rest[1]);
+    // A name that is no setting, or a value it refuses, is a failure: the exit code says so to a script.
+    const saved = setSetting(rest[0], rest[1], challengeId);
+    if (saved) stampOwner();
+    return saved ? 0 : 1;
 };
 
 const runResetSetting: CommandHandler = async (argv) => {
@@ -140,8 +246,17 @@ const runSetGlobalDefault: CommandHandler = async ([key, value]) => {
             'Example: set-global-default exposure 80',
         );
     }
-    setGlobalDefault(key, value);
-    return 0;
+    const stampOwner = await beforeChosenPhotosWrite(key, value);
+    const saved = setGlobalDefault(key, value);
+    if (saved) stampOwner();
+    return saved ? 0 : 1;
+};
+
+// It takes no arguments on purpose: a --challenge would suggest it clears one challenge, but it
+// removes every saved list.
+const runClearChosenPhotos: CommandHandler = async (argv) => {
+    if (argv.length > 0) return usageError(`Unexpected arguments: ${argv.join(' ')}`, 'Usage: clear-chosen-photos');
+    return exitCodeOf(clearChosenPhotos());
 };
 
 const runListProfiles: CommandHandler = async (argv) => {
@@ -157,11 +272,12 @@ const runListProfiles: CommandHandler = async (argv) => {
  * running (continuous mode).
  */
 const COMMANDS: Record<string, CommandHandler> = {
-    login: exitsZero(handleLogin),
-    logout: exitsZero(handleLogout),
+    login: async () => exitCodeOf(await handleLogin()),
+    logout: async () => exitCodeOf(await handleLogout()),
     vote: runVote,
     run: runRun,
     boost: challengeCommand('Usage: boost --challenge=<id> [--image=<id>]', runBoost),
+    pin: challengeCommand(PIN_USAGE, runPin),
     turbo: challengeCommand('Usage: turbo --challenge=<id>', async (challengeId) => {
         await turboChallenge(challengeId);
         return 0;
@@ -190,6 +306,8 @@ const COMMANDS: Record<string, CommandHandler> = {
     coins: exitsZero(showBankroll),
     discover: exitsZero(showDiscover),
     join: runJoin,
+    'forget-payment': runForgetPayment,
+    'list-photos': runListPhotos,
     'get-setting': runGetSetting,
     'set-setting': runSetSetting,
     'list-settings': async (argv) => {
@@ -197,6 +315,7 @@ const COMMANDS: Record<string, CommandHandler> = {
         return 0;
     },
     'reset-setting': runResetSetting,
+    'clear-chosen-photos': runClearChosenPhotos,
     'set-global-default': runSetGlobalDefault,
     'reset-all-settings': exitsZero(resetAllSettings),
     'list-profiles': runListProfiles,
@@ -240,18 +359,30 @@ const COMMANDS: Record<string, CommandHandler> = {
     'scenario-simulate': challengeCommand('Usage: scenario-simulate --challenge=<id>', (id) =>
         scenarioCommands.scenarioSimulateCmd(id),
     ),
-    'scenario-reset': challengeCommand('Usage: scenario-reset --challenge=<id>', (id) =>
-        scenarioCommands.scenarioResetCmd(id),
-    ),
+    'scenario-reset': runScenarioReset,
     'scenario-vocabulary': scenarioCommand('Usage: scenario-vocabulary', 0, () =>
         scenarioCommands.scenarioVocabulary(),
     ),
     logs: runLogs,
+    'reset-data': resetDataCmd,
+    licenses: async () => licensesCmd(),
     'help-settings': exitsZero(helpSettings),
     'reset-windows': exitsZero(resetWindows),
+    'settings-recovery': settingsRecoveryCmd,
     help: exitsZero(showHelp),
     '--help': exitsZero(showHelp),
     '-h': exitsZero(showHelp),
 };
 
-export { COMMANDS };
+// The commands that hold no session marker, so they never make a local-data wipe wait: help and licenses, which only
+// print, and `reset-data`, which checks for running sessions itself.
+const MARKERLESS_COMMANDS = new Set(['help', '--help', '-h', 'licenses', 'reset-data']);
+
+/**
+ * Whether a command holds the CLI session marker while it runs: every command that loads the settings does, since a
+ * load can write them back (a migration, a scrub) and a command can spend, so a wipe (or `reset-data` in another
+ * terminal) refuses while it runs.
+ */
+const holdsSessionMarker = (name: string): boolean => !MARKERLESS_COMMANDS.has(name);
+
+export { COMMANDS, holdsSessionMarker };

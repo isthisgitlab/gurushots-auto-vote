@@ -9,6 +9,7 @@ import type { Challenge } from '../../src/ts/types/gurushots';
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import VotingLogic = require('../../src/ts/services/VotingLogic');
+import { __resetSnapUnavailableForTests, markSnapUnavailable } from '../../src/ts/services/turboRunLock';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
@@ -18,7 +19,7 @@ jest.mock('../../src/ts/settings');
 const NOW = 1_700_000_000;
 
 const DEFAULTS = {
-    autoFillSchedule: [],
+    autoSubmitSchedule: [],
     onlyBoost: false,
     voteOnlyInLastMinute: false,
     exposure: 50,
@@ -36,7 +37,7 @@ const DEFAULTS = {
     boostTime: 600,
     keyUnlockedBoostTime: 900,
     turboTime: 7200,
-    emergencyFill: 0,
+    emergencySubmit: 0,
 };
 
 const mockSettings = (overrides: Record<string, unknown> = {}) => {
@@ -49,6 +50,7 @@ const regular = (overrides: Record<string, unknown> = {}) =>
 
 beforeEach(() => {
     jest.clearAllMocks();
+    __resetSnapUnavailableForTests();
     mockSettings();
 });
 
@@ -106,10 +108,10 @@ describe('evaluateManualVotingDecision', () => {
 
 describe('isWithinEmergencyWindow', () => {
     test('reads the setting under an empty id when the challenge has none', () => {
-        mockSettings({ emergencyFill: 300 });
+        mockSettings({ emergencySubmit: 300 });
         const challenge = invalid<Challenge>({ close_time: NOW + 100 });
         expect(VotingLogic.isWithinEmergencyWindow(challenge, NOW)).toBe(true);
-        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('emergencyFill', '');
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('emergencySubmit', '');
     });
 });
 
@@ -138,8 +140,8 @@ describe('shouldApplyBoost', () => {
 
 describe('pickBoostEntry', () => {
     test('returns null when the challenge has no entries', () => {
-        expect(VotingLogic.pickBoostEntry(regular(), '42')).toBeNull();
-        expect(VotingLogic.pickBoostEntry(invalid({ member: {} }), '42')).toBeNull();
+        expect(VotingLogic.pickBoostEntry(regular(), '42', NOW)).toBeNull();
+        expect(VotingLogic.pickBoostEntry(invalid({ member: {} }), '42', NOW)).toBeNull();
     });
 });
 
@@ -161,16 +163,48 @@ describe('shouldPlayAutoTurbo', () => {
 
     test.each(['FREE', 'IN_PROGRESS'])('plays a %s turbo', (state) => {
         mockSettings({ autoTurbo: true });
-        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state }), NOW)).toBe(true);
+        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state, mode: 'classic' }), NOW)).toBe(true);
     });
 
     test('plays a TIMER turbo only once its open time has arrived', () => {
         mockSettings({ autoTurbo: true });
-        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'TIMER', time_to_open: NOW }), NOW)).toBe(true);
-        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'TIMER', time_to_open: NOW + 1 }), NOW)).toBe(
-            false,
-        );
-        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'TIMER' }), NOW)).toBe(false);
+        expect(
+            VotingLogic.shouldPlayAutoTurbo(
+                turboChallenge({ state: 'TIMER', mode: 'classic', time_to_open: NOW }),
+                NOW,
+            ),
+        ).toBe(true);
+        expect(
+            VotingLogic.shouldPlayAutoTurbo(
+                turboChallenge({ state: 'TIMER', mode: 'classic', time_to_open: NOW + 1 }),
+                NOW,
+            ),
+        ).toBe(false);
+        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'TIMER', mode: 'classic' }), NOW)).toBe(false);
+    });
+
+    test.each([
+        ['FREE', {}],
+        ['IN_PROGRESS', {}],
+        ['TIMER', { time_to_open: NOW }],
+    ])('plays a Snap-mode %s turbo', (state, extra) => {
+        mockSettings({ autoTurbo: true });
+        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state, mode: 'snap', ...extra }), NOW)).toBe(true);
+    });
+
+    test('leaves a challenge marked Snap-unavailable alone in any mode, and other challenges unaffected', () => {
+        mockSettings({ autoTurbo: true });
+        markSnapUnavailable('42');
+        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'FREE', mode: 'snap' }), NOW)).toBe(false);
+        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'FREE', mode: 'classic' }), NOW)).toBe(false);
+        expect(
+            VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'FREE', mode: 'snap' }, { id: 'other' }), NOW),
+        ).toBe(true);
+    });
+
+    test.each(['FREE', 'IN_PROGRESS'])('never plays a %s turbo whose mode is unknown', (state) => {
+        mockSettings({ autoTurbo: true });
+        expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state }), NOW)).toBe(false);
     });
 
     test('an id-less challenge with no member reads autoTurbo under the empty id and does not play', () => {
@@ -195,6 +229,17 @@ describe('isTurboEarnSaved', () => {
         expect(VotingLogic.isTurboEarnSaved(closingIn(10_801), NOW)).toBe(true);
         expect(VotingLogic.isTurboEarnSaved(closingIn(10_800), NOW)).toBe(false);
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('missionSaveTurbos', null);
+    });
+
+    test.each(['classic', 'snap'])('never holds a %s game already in progress, far from close', (mode) => {
+        mockSettings({ missionSaveTurbos: true });
+        const inProgress = closingIn(100_000, { member: { turbo: { state: 'IN_PROGRESS', mode } } });
+        expect(VotingLogic.isTurboEarnSaved(inProgress, NOW)).toBe(false);
+    });
+
+    test.each(['FREE', 'TIMER'])('still saves a %s turbo far from close', (state) => {
+        mockSettings({ missionSaveTurbos: true });
+        expect(VotingLogic.isTurboEarnSaved(closingIn(100_000, { member: { turbo: { state } } }), NOW)).toBe(true);
     });
 
     test('an id-less challenge reads turboTime under the empty id', () => {
@@ -225,23 +270,23 @@ describe('shouldApplyTurbo defensive paths', () => {
 
 describe('deadline-action helpers with sparse challenges', () => {
     test('getAutoFillThresholdSec treats non-array entries as zero entries', () => {
-        mockSettings({ autoFillSchedule: [] });
+        mockSettings({ autoSubmitSchedule: [] });
         const sparse = VotingLogic.getAutoFillThresholdSec(invalid({ member: {} }), '42');
         const empty = VotingLogic.getAutoFillThresholdSec(regular(), '42');
         expect(sparse).toBe(empty);
     });
 
     test('orderDeadlineActions tolerates an id-less challenge', () => {
-        mockSettings({ emergencyFill: 300, turboTime: 600 });
+        mockSettings({ emergencySubmit: 300, turboTime: 600 });
         const order = VotingLogic.orderDeadlineActions(invalid({ close_time: NOW + 100 }));
-        expect(order.map((a) => a.action)).toEqual(['turbo', 'emergencyFill', 'autoFill', 'boost']);
+        expect(order.map((a) => a.action)).toEqual(['turbo', 'emergencySubmit', 'autoSubmit', 'boost']);
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('turboTime', '');
     });
 
     test('describeDeadlineActions returns null dueAt when close_time is unreadable', () => {
         mockSettings({ useTurbo: true, turboTime: 600 });
         const { actions, boostBlocked } = VotingLogic.describeDeadlineActions(
-            invalid({ member: { turbo: { state: 'WON' } } }),
+            invalid({ member: { turbo: { state: 'WON', mode: 'classic' } } }),
             NOW,
         );
         expect(boostBlocked).toBe(false);

@@ -29,6 +29,8 @@ const requireValue = makeRequireValue('submissions');
 // photos may have no eligible image in the first 1000 sorted by votes.
 // Hitting the cap is logged, never silent: truncating the candidate list
 // without saying so would misreport "considered the whole library".
+// A walk given a `skip` (the library listing, which leaves won photos out) may
+// read up to twice as many pages, within the same wall-clock budget below.
 const MAX_LIBRARY_PAGES = 10;
 
 // Wall-clock ceiling on one paginated walk. A page count alone does NOT bound
@@ -84,6 +86,169 @@ const fetchPhotoPage = async (
     return response.items;
 };
 
+type LibraryOptions = {
+    limit?: number;
+    start?: number;
+    search?: string;
+    paginate?: boolean;
+    logLabel?: string;
+    usage?: string;
+    budgetMs?: number;
+    order?: 'default';
+    /**
+     * Out-parameter: `firstPageFailed` is set when the first page could not be read (a failed request or an
+     * unreadable payload), which the empty list returned for it cannot tell from a library with nothing in it.
+     */
+    readState?: { firstPageFailed: boolean };
+    /**
+     * A walk only (getEligiblePhotosWalk): photos this answers true for are left out of `items` and do not count
+     * toward the walk's cap (their ids are reported as `skipped`, up to 2 * MAX_LIBRARY_PAGES * limit of them). The
+     * walk then ends at MAX_LIBRARY_PAGES * limit kept photos, or at twice MAX_LIBRARY_PAGES pages, whichever comes
+     * first, besides the budget.
+     */
+    skip?: (photo: LibraryPhoto) => boolean;
+};
+
+/**
+ * A walk's photos, and whether it stopped before the library was exhausted. `skipped` (only when the walk was given a
+ * `skip`) are the ids of the photos it left out.
+ */
+type LibraryWalk = { items: LibraryPhoto[]; truncated: boolean; skipped?: string[] };
+
+/**
+ * The request shape every library read shares, normalized from caller options.
+ */
+const normalizeLibraryOptions = (options: LibraryOptions) => ({
+    // A non-positive limit would break both the offset advance (start never
+    // moves) and the short-page test (`0 < 0` is false), turning the walk into
+    // MAX_LIBRARY_PAGES redundant requests for the same offset.
+    // (The typeof tests only narrow for the checker: Number.isFinite is already
+    // false for a non-number.)
+    limit:
+        typeof options.limit === 'number' && Number.isFinite(options.limit) && options.limit > 0 ? options.limit : 100,
+    start:
+        typeof options.start === 'number' && Number.isFinite(options.start) && options.start >= 0 ? options.start : 0,
+    search: options.search,
+    usage: options.usage === 'swap' ? 'swap' : 'submit',
+    order: options.order,
+});
+
+/** Notes in a caller's readState that the first page (page index 0) of a read failed. */
+const markFirstPageFailed = (readState: LibraryOptions['readState'], page: number): void => {
+    if (page === 0 && readState) readState.firstPageFailed = true;
+};
+
+/**
+ * The paginated library walk (see getEligiblePhotos for its stop conditions).
+ * Given a `skip`, the cap is on the photos kept rather than the pages read: the walk ends once at least
+ * MAX_LIBRARY_PAGES * limit photos are kept (checked after each page, so the page that crosses it is kept whole), or at
+ * twice MAX_LIBRARY_PAGES pages. Rows the server repeats are kept once, so a walk can need more than MAX_LIBRARY_PAGES
+ * pages to see that many distinct photos, but never reads past its page ceiling.
+ * `truncated` is true whenever it stopped for any reason other than reaching a
+ * short page: the budget, a failed or unreadable page (the first included), or
+ * the page cap. A caller that wants to conclude "this photo is not in the
+ * library" may only do so from a walk that was not truncated.
+ */
+const walkLibrary = async (
+    challengeId: string | number,
+    token: string,
+    options: LibraryOptions,
+): Promise<LibraryWalk> => {
+    const { limit, start, search, usage, order } = normalizeLibraryOptions(options);
+    const budgetMs =
+        typeof options.budgetMs === 'number' && Number.isFinite(options.budgetMs) && options.budgetMs > 0
+            ? options.budgetMs
+            : PAGINATE_BUDGET_MS;
+    const startedAt = Date.now();
+    // Dedupe across pages: offset pagination over a live, vote-ordered list can
+    // repeat a row when the underlying order shifts between requests. The same
+    // shift can also skip one (a photo gaining votes mid-walk moves up into a
+    // page already read); the walk takes seconds, so that is accepted.
+    const byId: Map<string, LibraryPhoto> = new Map();
+    // Prefix the library-walk warnings with the calling flow (auto-fill vs join)
+    // so a "10-page limit" message from a join isn't mislabeled as auto-fill.
+    const logLabel =
+        typeof options.logLabel === 'string' && options.logLabel.trim() ? options.logLabel.trim() : 'autoSubmit';
+    const warn = (message: string) => logger.withCategory('api').warning(`${logLabel}: ${message}`, null);
+    // With a `skip`, the photos left out do not use up the cap, so the walk may need more pages to keep as many.
+    const { skip } = options;
+    const maxPages = skip ? 2 * MAX_LIBRARY_PAGES : MAX_LIBRARY_PAGES;
+    const keepCap = MAX_LIBRARY_PAGES * limit;
+    // A bound on what a skipping walk records, however many photos the library holds.
+    const skippedCap = 2 * MAX_LIBRARY_PAGES * limit;
+    const skipped = new Set<string>();
+    const result = (truncated: boolean): LibraryWalk => ({
+        items: Array.from(byId.values()),
+        truncated,
+        ...(skip ? { skipped: Array.from(skipped) } : {}),
+    });
+    let page = 0;
+    let stoppedEarly = false;
+    for (; page < maxPages; page++) {
+        if (page > 0 && Date.now() - startedAt >= budgetMs) {
+            warn(
+                `reading your photo library took longer than ${Math.round(budgetMs / 1000)}s, so it stopped after ${page} page(s) with ${byId.size} photo(s); less-voted photos were not considered this time`,
+            );
+            stoppedEarly = true;
+            break;
+        }
+        let items;
+        try {
+            items = await fetchPhotoPage(challengeId, token, {
+                limit,
+                start: start + page * limit,
+                search,
+                usage,
+                order,
+            });
+        } catch (error) {
+            markFirstPageFailed(options.readState, page);
+            warn(
+                `reading page ${page + 1} of your photo library failed (${oneLine(errorMessage(error) || error)}); continuing with the ${byId.size} photo(s) already read`,
+            );
+            stoppedEarly = true;
+            break;
+        }
+        if (items === null) {
+            // Malformed/missing payload. Page 1 means "no photos" (the
+            // long-standing empty-array contract); a later page means a partial
+            // walk the caller should know about.
+            markFirstPageFailed(options.readState, page);
+            if (page > 0) {
+                warn(
+                    `page ${page + 1} of your photo library came back empty or unreadable; continuing with the ${byId.size} photo(s) already read`,
+                );
+            }
+            stoppedEarly = true;
+            break;
+        }
+        for (const item of items) {
+            if (!item || item.id === undefined || item.id === null) continue;
+            if (skip?.(item)) {
+                if (!byId.has(item.id) && skipped.size < skippedCap) skipped.add(String(item.id));
+            } else if (!byId.has(item.id)) {
+                byId.set(item.id, item);
+                skipped.delete(String(item.id));
+            }
+        }
+        if (items.length < limit) {
+            // Short page — the library is exhausted.
+            return result(false);
+        }
+        if (skip && byId.size >= keepCap) {
+            warn(`stopped reading your photo library at ${byId.size} photo(s); less-voted photos were not considered`);
+            return result(true);
+        }
+    }
+
+    if (!stoppedEarly && page === maxPages) {
+        warn(
+            `stopped reading your photo library at the ${maxPages}-page limit with ${byId.size} photo(s); less-voted photos were not considered`,
+        );
+    }
+    return result(true);
+};
+
 /**
  * Fetches the user's photo library filtered to photos eligible for
  * submission to a given challenge. The server applies the eligibility
@@ -92,7 +257,7 @@ const fetchPhotoPage = async (
  *
  * @param options
  *   usage: 'submit' (default) or 'swap' — forwarded to every page request.
- *   logLabel: prefix for the paginated-walk warnings (default 'autoFill'); the
+ *   logLabel: prefix for the paginated-walk warnings (default 'autoSubmit'); the
  *   join flow passes 'join' so its messages aren't attributed to auto-fill.
  *   search: optional free-text term; when a non-empty string, the server
  *   filters the library against its own tag index (mirrors the web UI's
@@ -116,111 +281,40 @@ const fetchPhotoPage = async (
  *
  *   budgetMs: override the wall-clock budget for this walk. Callers running
  *   against a deadline should pass something smaller.
- * @returns list of photo items, or empty array on failure
+ * @returns list of photo items, or empty array on failure (`readState.firstPageFailed` tells the two apart)
  */
 const getEligiblePhotos = async (
     challengeId: string | number,
     token: string,
-    options: {
-        limit?: number;
-        start?: number;
-        search?: string;
-        paginate?: boolean;
-        logLabel?: string;
-        usage?: string;
-        budgetMs?: number;
-        order?: 'default';
-    } = {},
+    options: Omit<LibraryOptions, 'skip'> = {},
 ): Promise<LibraryPhoto[]> => {
     requireValue(challengeId, 'challengeId');
     requireValue(token, 'token');
-    // A non-positive limit would break both the offset advance (start never
-    // moves) and the short-page test (`0 < 0` is false), turning the walk into
-    // MAX_LIBRARY_PAGES redundant requests for the same offset.
-    // (The typeof tests only narrow for the checker: Number.isFinite is already
-    // false for a non-number.)
-    const limit =
-        typeof options.limit === 'number' && Number.isFinite(options.limit) && options.limit > 0 ? options.limit : 100;
-    const start =
-        typeof options.start === 'number' && Number.isFinite(options.start) && options.start >= 0 ? options.start : 0;
-    const search = options.search;
-    const usage = options.usage === 'swap' ? 'swap' : 'submit';
-    const order = options.order;
 
     if (options.paginate !== true) {
-        return (await fetchPhotoPage(challengeId, token, { limit, start, search, usage, order })) || [];
+        const { limit, start, search, usage, order } = normalizeLibraryOptions(options);
+        const items = await fetchPhotoPage(challengeId, token, { limit, start, search, usage, order });
+        if (items === null) markFirstPageFailed(options.readState, 0);
+        return items ?? [];
     }
+    return (await walkLibrary(challengeId, token, options)).items;
+};
 
-    const budgetMs =
-        typeof options.budgetMs === 'number' && Number.isFinite(options.budgetMs) && options.budgetMs > 0
-            ? options.budgetMs
-            : PAGINATE_BUDGET_MS;
-    const startedAt = Date.now();
-    // Dedupe across pages: offset pagination over a live, vote-ordered list can
-    // repeat a row when the underlying order shifts between requests. The same
-    // shift can also skip one (a photo gaining votes mid-walk moves up into a
-    // page already read); the walk takes seconds, so that is accepted.
-    const byId: Map<string, LibraryPhoto> = new Map();
-    // Prefix the library-walk warnings with the calling flow (auto-fill vs join)
-    // so a "10-page limit" message from a join isn't mislabeled as auto-fill.
-    const logLabel =
-        typeof options.logLabel === 'string' && options.logLabel.trim() ? options.logLabel.trim() : 'autoFill';
-    const warn = (message: string) => logger.withCategory('api').warning(`${logLabel}: ${message}`, null);
-    let page = 0;
-    let stoppedEarly = false;
-    for (; page < MAX_LIBRARY_PAGES; page++) {
-        if (page > 0 && Date.now() - startedAt >= budgetMs) {
-            warn(
-                `reading your photo library took longer than ${Math.round(budgetMs / 1000)}s, so it stopped after ${page} page(s) with ${byId.size} photo(s); less-voted photos were not considered this time`,
-            );
-            stoppedEarly = true;
-            break;
-        }
-        let items;
-        try {
-            items = await fetchPhotoPage(challengeId, token, {
-                limit,
-                start: start + page * limit,
-                search,
-                usage,
-                order,
-            });
-        } catch (error) {
-            warn(
-                `reading page ${page + 1} of your photo library failed (${oneLine(errorMessage(error) || error)}); continuing with the ${byId.size} photo(s) already read`,
-            );
-            stoppedEarly = true;
-            break;
-        }
-        if (items === null) {
-            // Malformed/missing payload. Page 1 means "no photos" (the
-            // long-standing empty-array contract); a later page means a partial
-            // walk the caller should know about.
-            if (page > 0) {
-                warn(
-                    `page ${page + 1} of your photo library came back empty or unreadable; continuing with the ${byId.size} photo(s) already read`,
-                );
-                stoppedEarly = true;
-            }
-            break;
-        }
-        for (const item of items) {
-            if (item && item.id !== undefined && item.id !== null && !byId.has(item.id)) {
-                byId.set(item.id, item);
-            }
-        }
-        if (items.length < limit) {
-            // Short page — the library is exhausted.
-            return Array.from(byId.values());
-        }
-    }
-
-    if (!stoppedEarly && page === MAX_LIBRARY_PAGES) {
-        warn(
-            `stopped reading your photo library at the ${MAX_LIBRARY_PAGES}-page limit with ${byId.size} photo(s); less-voted photos were not considered`,
-        );
-    }
-    return Array.from(byId.values());
+/**
+ * The paginated library walk (same options and stop conditions as
+ * getEligiblePhotos with paginate:true; `paginate` itself is implied), plus
+ * whether it was cut short. The chosen-photos lookup needs that bit: a photo
+ * absent from a truncated walk was simply not reached, so it may only be
+ * recorded as "not found" after a complete walk.
+ */
+const getEligiblePhotosWalk = async (
+    challengeId: string | number,
+    token: string,
+    options: Omit<LibraryOptions, 'paginate'> = {},
+): Promise<LibraryWalk> => {
+    requireValue(challengeId, 'challengeId');
+    requireValue(token, 'token');
+    return walkLibrary(challengeId, token, options);
 };
 
 /**
@@ -284,4 +378,4 @@ const submitToChallenge = async (
     };
 };
 
-export { getEligiblePhotos, getImageData, submitToChallenge, MAX_LIBRARY_PAGES };
+export { getEligiblePhotos, getEligiblePhotosWalk, getImageData, submitToChallenge, MAX_LIBRARY_PAGES };

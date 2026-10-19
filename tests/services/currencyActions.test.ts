@@ -8,7 +8,7 @@ import logger = require('../../src/ts/logger');
 import type * as autoFillModule from '../../src/ts/services/autoFill';
 import type * as currencyActionsModule from '../../src/ts/services/currencyActions';
 import type * as swapBackStoreModule from '../../src/ts/swapBackStore';
-import type { Challenge, MemberBoost, MemberRanking } from '../../src/ts/types/gurushots';
+import type { ActionResult, Challenge, MemberBoost, MemberRanking } from '../../src/ts/types/gurushots';
 import type * as settingsModule from '../../src/ts/settings';
 import { invalid } from '../helpers/invalid';
 const { __resetMemberIdCache } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
@@ -97,13 +97,25 @@ describe('live re-check (shared by every spend)', () => {
         expect(strategy.keyUnlock).toHaveBeenCalledWith(555, 'tok');
     });
 
-    test('challenge gone → not-available, nothing spent', async () => {
+    test('a good read that does not list the challenge → not-available, nothing spent', async () => {
         const strategy = stubStrategy({ challenge: null });
         expect(await unlockBoostWithKey(555, 'tok', { strategy, logger })).toEqual({
             ok: false,
             outcome: 'not-available',
         });
         expect(strategy.keyUnlock).not.toHaveBeenCalled();
+    });
+
+    test('a failed challenge read → api-failed (not not-available), nothing spent', async () => {
+        for (const response of [null, { challenges: [], fetchFailed: true }, {}]) {
+            const strategy = stubStrategy();
+            strategy.getActiveChallenges = jest.fn().mockResolvedValue(response);
+            expect(await unlockBoostWithKey(555, 'tok', { strategy, logger })).toEqual({
+                ok: false,
+                outcome: 'api-failed',
+            });
+            expect(strategy.keyUnlock).not.toHaveBeenCalled();
+        }
     });
 
     test('already unlocked (repeat request) → not-available, nothing spent', async () => {
@@ -214,6 +226,55 @@ describe('previewSwap', () => {
     });
 });
 
+describe('previewSwap with a chosen photo', () => {
+    const chosen = (strategy: ReturnType<typeof stubStrategy>, chosenId: string, imageId = 'old') =>
+        previewSwap(555, imageId, 'tok', { strategy, logger, settings: noSettings }, { chosenId });
+
+    test('names the chosen photo as the candidate without ranking anything', async () => {
+        const strategy = stubStrategy({ library: [photo('fresh', 1)] });
+        expect(await chosen(strategy, 'picked')).toEqual({
+            ok: true,
+            outcome: 'ok',
+            candidate: { id: 'picked', member_id: 'mem1' },
+        });
+        expect(strategy.getEligiblePhotos).not.toHaveBeenCalled();
+        expect(strategy.getImageData).not.toHaveBeenCalled();
+    });
+
+    test('a photo swapped out earlier can be chosen', async () => {
+        const strategy = stubStrategy();
+        expect((await chosen(strategy, 'swapped-before')).ok).toBe(true);
+    });
+
+    test('the photo being replaced is refused as already entered', async () => {
+        const strategy = stubStrategy();
+        expect(await chosen(strategy, 'old')).toEqual({ ok: false, outcome: 'already-entered' });
+    });
+
+    test('another entered photo is refused as already entered', async () => {
+        const strategy = stubStrategy();
+        expect(await chosen(strategy, 'entered')).toEqual({ ok: false, outcome: 'already-entered' });
+    });
+
+    test('a live block still applies: nothing is named', async () => {
+        const strategy = stubStrategy({ challenge: makeChallenge({ swap_locked: true }) });
+        expect(await chosen(strategy, 'picked')).toEqual({ ok: false, outcome: 'not-available' });
+    });
+
+    test('the replaced entry must still be entered', async () => {
+        const strategy = stubStrategy();
+        expect(await chosen(strategy, 'picked', 'gone')).toEqual({ ok: false, outcome: 'not-available' });
+    });
+
+    test('an entry without a member id gives an empty one, not "undefined"', async () => {
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries = [{ id: 'old' }];
+        const strategy = stubStrategy({ challenge });
+        expect((await chosen(strategy, 'picked')).ok).toBe(true);
+        expect(await chosen(strategy, 'picked')).toMatchObject({ candidate: { id: 'picked', member_id: '' } });
+    });
+});
+
 describe('swapEntry', () => {
     test('swaps the entry for the new photo', async () => {
         const strategy = stubStrategy();
@@ -221,13 +282,50 @@ describe('swapEntry', () => {
         expect(strategy.swapPhoto).toHaveBeenCalledWith(555, 'old', 'fresh', 'tok');
     });
 
+    test('drops the photo chooser’s cached listing of the challenge, for every account', async () => {
+        const cache =
+            require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
+        cache.writeListing('tok', 555, {
+            photos: [],
+            memberId: null,
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        });
+        cache.writeListing('other', 555, {
+            photos: [],
+            memberId: null,
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        });
+        cache.writeListing('tok', 556, {
+            photos: [],
+            memberId: null,
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        });
+        await swapEntry(555, 'old', 'fresh', 'tok', { strategy: stubStrategy(), logger });
+        expect(cache.readFresh('tok', 555)).toBeNull();
+        expect(cache.readFresh('other', 555)).toBeNull();
+        expect(cache.readFresh('tok', 556)).not.toBeNull();
+        cache.clearLibraryCache();
+    });
+
     test.each(['old', 'entered'])('refuses %s as the replacement', async (newId) => {
         const strategy = stubStrategy();
-        expect((await swapEntry(555, 'old', newId, 'tok', { strategy, logger })).outcome).toBe('stale-candidate');
+        expect((await swapEntry(555, 'old', newId, 'tok', { strategy, logger })).outcome).toBe('already-entered');
         expect(strategy.swapPhoto).not.toHaveBeenCalled();
     });
 
-    test('a replacement with the same id as the replaced entry is stale, nothing spent', async () => {
+    test('a replacement with the same id as the replaced entry is already entered, nothing spent', async () => {
         const strategy = stubStrategy({
             challenge: makeChallenge({
                 member: {
@@ -238,7 +336,7 @@ describe('swapEntry', () => {
         });
         expect(await swapEntry(555, '7', '7', 'tok', { strategy, logger })).toEqual({
             ok: false,
-            outcome: 'stale-candidate',
+            outcome: 'already-entered',
         });
         expect(strategy.swapPhoto).not.toHaveBeenCalled();
     });
@@ -255,6 +353,34 @@ describe('swapEntry', () => {
     test('photo no longer entered → not-available', async () => {
         const strategy = stubStrategy();
         expect((await swapEntry(555, 'gone', 'fresh', 'tok', { strategy, logger })).outcome).toBe('not-available');
+    });
+
+    describe('with a limit on the swaps (autoSwapMax), held on the live challenge', () => {
+        test('a live swap history that already holds that many spends nothing', async () => {
+            // The pass counted none; the challenge read now holds one.
+            const strategy = stubStrategy();
+            expect(await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, maxSwaps: 1 })).toEqual({
+                ok: false,
+                outcome: 'not-available',
+            });
+            expect(strategy.swapPhoto).not.toHaveBeenCalled();
+        });
+
+        test('one below the limit swaps', async () => {
+            const strategy = stubStrategy();
+            expect(await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, maxSwaps: 2 })).toEqual({
+                ok: true,
+                outcome: 'ok',
+            });
+            expect(strategy.swapPhoto).toHaveBeenCalledTimes(1);
+        });
+
+        test('a challenge without a swap history has made none', async () => {
+            const challenge = makeChallenge();
+            delete challenge.member.ranking.swaps;
+            const strategy = stubStrategy({ challenge });
+            expect((await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, maxSwaps: 1 })).ok).toBe(true);
+        });
     });
 });
 
@@ -305,6 +431,26 @@ describe('swap back', () => {
         expect(await swapBack(555, 'repl', 'tok', { strategy, logger, ledger })).toEqual({ ok: true, outcome: 'ok' });
         expect(strategy.swapPhoto).toHaveBeenCalledWith(555, 'repl', 'orig', 'tok');
         expect(ledger.list(555)).toEqual([]);
+    });
+
+    test('a swap back drops the photo chooser’s cached listing of the challenge too', async () => {
+        const cache =
+            require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
+        const strategy = stubStrategy({ challenge: swappedChallenge() });
+        const ledger = createMemoryLedger();
+        ledger.onSwapped(555, { id: 'orig', member_id: 'mem1', boosted: true }, 'repl');
+        cache.writeListing('tok', 555, {
+            photos: [],
+            memberId: null,
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        });
+        await swapBack(555, 'repl', 'tok', { strategy, logger, ledger });
+        expect(cache.readFresh('tok', 555)).toBeNull();
+        cache.clearLibraryCache();
     });
 
     test('no record for that slot → not-available, nothing spent', async () => {
@@ -378,7 +524,7 @@ describe('edge paths', () => {
             'shouldIncludeTags',
             expect.objectContaining({ id: 555 }),
         );
-        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('fillWithoutTagMatch', '555');
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('submitWithoutTagMatch', '555');
     });
 
     test('previewSwap: no member id anywhere → empty member_id, not "undefined"', async () => {
@@ -442,5 +588,108 @@ describe('edge paths', () => {
         });
         expect(await fillExposure(555, 'tok', { strategy, logger })).toEqual({ ok: false, outcome: 'api-failed' });
         expect(strategy.exposureAutofill).not.toHaveBeenCalled();
+    });
+});
+
+describe('a spend that got no answer is not "rejected"', () => {
+    const { createMemoryLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
+    const { swapBack } = require('../../src/ts/services/currencyActions') as typeof currencyActionsModule;
+    const noAnswer = { ok: false, raw: null, unclear: true };
+    // A spend that answers with the given result, and the live challenge list as the strategy reads it.
+    const answering = (result: ActionResult) => jest.fn<Promise<ActionResult>, unknown[]>().mockResolvedValue(result);
+    const listOf = () => jest.fn<Promise<{ challenges: FixtureChallenge[] }>, unknown[]>();
+
+    test('a key and a fill say "unclear": they may have gone through, which a rejection would deny', async () => {
+        const key = stubStrategy({ overrides: { keyUnlock: answering(noAnswer) } });
+        expect(await unlockBoostWithKey(555, 'tok', { strategy: key, logger })).toEqual({
+            ok: false,
+            outcome: 'unclear',
+        });
+        const fill = stubStrategy({ overrides: { exposureAutofill: answering(noAnswer) } });
+        expect(await fillExposure(555, 'tok', { strategy: fill, logger })).toEqual({ ok: false, outcome: 'unclear' });
+    });
+
+    // The live challenge before the swap, then after it: 'old' replaced by 'fresh'.
+    const afterSwap = () => {
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries = [
+            { id: 'entered', member_id: 'mem1' },
+            { id: 'fresh', member_id: 'mem1' },
+        ];
+        challenge.member.ranking.swaps = [{ id: 'swapped-before' }, { id: 'old' }];
+        return challenge;
+    };
+    const boostedOld = () => {
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries![1].boosted = true;
+        return challenge;
+    };
+    const unclearSwap = (live: Array<FixtureChallenge | Error>) => {
+        const strategy = stubStrategy({
+            challenge: boostedOld(),
+            overrides: { swapPhoto: answering(noAnswer) },
+        });
+        // The first read is the live re-check before the spend; the next ones settle the unanswered request.
+        const reads = listOf().mockResolvedValueOnce({ challenges: [boostedOld()] });
+        for (const next of live) {
+            if (next instanceof Error) reads.mockRejectedValueOnce(next);
+            else reads.mockResolvedValueOnce({ challenges: [next] });
+        }
+        strategy.getActiveChallenges = reads;
+        return strategy;
+    };
+
+    test('a swap that did land is recorded as one, so its boosted photo can be swapped back', async () => {
+        const strategy = unclearSwap([afterSwap()]);
+        const ledger = createMemoryLedger();
+        expect(await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, ledger })).toEqual({
+            ok: true,
+            outcome: 'ok',
+        });
+        expect(ledger.list(555)).toEqual([
+            expect.objectContaining({ currentId: 'fresh', previousId: 'old', kind: 'boost' }),
+        ]);
+    });
+
+    test('a swap that did not land stays unclear, and nothing is recorded', async () => {
+        const strategy = unclearSwap([boostedOld()]);
+        const ledger = createMemoryLedger();
+        expect((await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, ledger })).outcome).toBe('unclear');
+        expect(ledger.list(555)).toEqual([]);
+    });
+
+    test('a challenge that cannot be read to settle it, or that has left the list, stays unclear', async () => {
+        for (const live of [[new Error('down')], [new Error('')], []]) {
+            const strategy = unclearSwap(live);
+            const ledger = createMemoryLedger();
+            expect((await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, ledger })).outcome).toBe('unclear');
+            expect(ledger.list(555)).toEqual([]);
+        }
+    });
+
+    test('a swap-back that did land drops its record; one that did not keeps it', async () => {
+        const entered = (id: string) => {
+            const challenge = makeChallenge();
+            challenge.member.ranking.entries = [{ id, member_id: 'mem1' }];
+            challenge.member.ranking.swaps = [{ id: id === 'repl' ? 'orig' : 'repl' }];
+            return challenge;
+        };
+        for (const [after, landed] of [
+            [entered('orig'), true],
+            [entered('repl'), false],
+        ] as const) {
+            const strategy = stubStrategy({
+                challenge: entered('repl'),
+                overrides: { swapPhoto: answering(noAnswer) },
+            });
+            strategy.getActiveChallenges = listOf()
+                .mockResolvedValueOnce({ challenges: [entered('repl')] })
+                .mockResolvedValueOnce({ challenges: [after] });
+            const ledger = createMemoryLedger();
+            ledger.onSwapped(555, { id: 'orig', member_id: 'mem1', boosted: true }, 'repl');
+            const result = await swapBack(555, 'repl', 'tok', { strategy, logger, ledger });
+            expect(result.outcome).toBe(landed ? 'ok' : 'unclear');
+            expect(ledger.list(555)).toHaveLength(landed ? 0 : 1);
+        }
     });
 });

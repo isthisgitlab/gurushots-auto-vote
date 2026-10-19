@@ -5,7 +5,8 @@
  * browser session. Uses the same WEB header profile as submissions/turbo
  * (x-env: WEB, x-api-version: 13).
  *
- *   getMemberChallenges - list un-joined ("open") challenges the member can join
+ *   getMemberChallenges - list un-joined challenges: "open" ones the member can join,
+ *                         "upcoming" ones that have not started yet
  *   coinsUnlock         - spend COINS to unlock a paid challenge for joining
  *   getBankroll         - read the account currency balances
  *
@@ -18,7 +19,8 @@
  * the header names it lists.
  */
 
-import { makePostRequest } from './api-client';
+import { makePostRequest, postOnce } from './api-client';
+import { toActionResult } from './postOutcome';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
 import type {
@@ -32,19 +34,25 @@ import type {
 
 const requireValue = makeRequireValue('join');
 
+/** The server-side filters of get_member_challenges. */
+type MemberChallengesFilter = 'open' | 'upcoming';
+
 /**
  * Lists challenges the member has NOT joined yet.
  *
- * @param filter server-side filter (the web app uses 'open')
- * @returns the challenge items, or [] on failure
+ * @param filter 'open' (joinable now, what the web app uses) or 'upcoming' (not started yet)
+ * @returns the challenge items, or null on failure — an empty list is a real answer
  */
-const getMemberChallenges = async (token: string, filter: string = 'open'): Promise<Challenge[]> => {
+const getMemberChallenges = async (
+    token: string,
+    filter: MemberChallengesFilter = 'open',
+): Promise<Challenge[] | null> => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `filter=${encodeURIComponent(filter)}`;
     const response = await makePostRequest<MemberChallengesResponse>(ENDPOINTS.getMemberChallenges, headers, data);
     if (!response || !Array.isArray(response.items)) {
-        return [];
+        return null;
     }
     return response.items;
 };
@@ -66,11 +74,8 @@ const coinsUnlock = async (
     const data = [`challenge_id=${encodeURIComponent(String(challengeId))}`, `usage=${encodeURIComponent(usage)}`].join(
         '&',
     );
-    const response = await makePostRequest<SuccessResponse>(ENDPOINTS.coinsUnlock, headers, data);
-    if (!response) {
-        return { ok: false, raw: null };
-    }
-    return { ok: response.success === true, raw: response };
+    // One attempt: a charge is not known to be idempotent, so a retry after a timeout could charge twice.
+    return toActionResult(await postOnce<SuccessResponse>(ENDPOINTS.coinsUnlock, headers, data));
 };
 
 // Map the API's currency `type` tokens to our normalized field names.
@@ -115,3 +120,4 @@ const getBankroll = async (token: string): Promise<Bankroll | null> => {
 };
 
 export { getMemberChallenges, coinsUnlock, getBankroll };
+export type { MemberChallengesFilter };

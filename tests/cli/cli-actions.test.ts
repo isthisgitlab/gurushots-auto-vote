@@ -29,9 +29,11 @@ jest.mock('../../src/ts/logger', () => {
 jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(() => 'tok'),
     setSetting: jest.fn(() => true),
-    loadSettings: jest.fn(() => ({ mock: true, token: 'tok' })),
+    isSignOutOwed: jest.fn(() => false),
+    loadSettings: jest.fn(() => ({ app: { mock: true }, auth: { token: 'tok' } })),
     getEffectiveSetting: jest.fn(),
     flushPendingWrites: jest.fn(async () => {}),
+    forgetOpenChallengeIds: jest.fn(),
 }));
 
 jest.mock('../../src/ts/apiFactory', () => {
@@ -175,6 +177,8 @@ describe('CLI boost command', () => {
         await boostChallenge('111', {});
 
         expect(contains(msgsAt('error'), 'Failed to apply boost')).toBe(true);
+        // The CLI is where the flag exists.
+        expect(contains(msgsAt('error'), 'pass --image=<id>')).toBe(true);
     });
 
     test('not authenticated: does not boost, prompts to login', async () => {

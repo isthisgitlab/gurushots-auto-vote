@@ -22,14 +22,27 @@ import type * as authModule from '../../src/ts/services/auth';
 import type * as settingsModule from '../../src/ts/settings';
 import type * as randomizerModule from '../../src/ts/api/randomizer';
 import type * as updateCheckerModule from '../../src/ts/services/UpdateChecker';
+import type * as cliSessionLockModule from '../../src/ts/settings/cliSessionLock';
 import type { CategoryLogger, GuiLogSink } from '../../src/ts/logger';
 
+let mockWipeSucceeds = true;
+// While set, 'slow-setting' waits for it: a request that is still in flight when a wipe finishes.
+let mockSlowGate: Promise<void> | null = null;
 let mockSettingsDeps: Parameters<typeof settingsHandlersModule.buildHandlers>[0] | null = null;
 jest.mock('../../src/ts/ipc/settings.handlers', () => ({
     buildHandlers: (deps: Parameters<typeof settingsHandlersModule.buildHandlers>[0]) => {
         mockSettingsDeps = deps;
         return {
             'get-setting': async (_event: unknown, key: string, scope = 'global') => ({ key, scope }),
+            'slow-setting': async () => {
+                await mockSlowGate;
+                return 'slow';
+            },
+            'wipe-local-data': async () => {
+                if (!mockWipeSucceeds) return { success: false, error: 'busy' };
+                mockSettingsDeps?.afterWipe?.();
+                return { success: true };
+            },
         };
     },
 }));
@@ -56,7 +69,10 @@ jest.mock('../../src/ts/services/UpdateChecker', () => ({
     checkForUpdates: jest.fn(),
     getReleasesUrl: jest.fn(() => 'https://example.com/releases'),
 }));
-jest.mock('../../src/ts/services/auth', () => ({ clearAuthToken: jest.fn(async () => true) }));
+jest.mock('../../src/ts/services/auth', () => {
+    class LogoutNotSavedError extends Error {}
+    return { clearAuthToken: jest.fn(async () => true), LogoutNotSavedError };
+});
 jest.mock('../../src/ts/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
 jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(() => ''),
@@ -65,9 +81,13 @@ jest.mock('../../src/ts/settings', () => ({
     getEnvironmentInfo: jest.fn(() => ({ defaultMock: false })),
     getUserDataPath: jest.fn(() => '/tmp/user-data'),
 }));
+// The marker the server holds while it runs: recorded, never written to a user-data directory.
+const mockReleaseMarker = jest.fn<void, []>();
+jest.mock('../../src/ts/settings/cliSessionLock', () => ({ holdWebServerLock: jest.fn(() => mockReleaseMarker) }));
 const mockLog = { error: jest.fn(), warning: jest.fn(), info: jest.fn() };
 jest.mock('../../src/ts/logger', () => ({
     withCategory: jest.fn((): Pick<CategoryLogger, 'error' | 'warning' | 'info'> => mockLog),
+    printLine: jest.fn(),
 }));
 
 const { createWebServer, startWebServer } = require('../../src/ts/web/server') as typeof serverModule;
@@ -75,10 +95,16 @@ const auth = jest.mocked(require('../../src/ts/services/auth') as typeof authMod
 const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
 const randomizer = jest.mocked(require('../../src/ts/api/randomizer') as typeof randomizerModule);
 const updateChecker = jest.mocked(require('../../src/ts/services/UpdateChecker') as typeof updateCheckerModule);
+const { holdWebServerLock } = jest.mocked(
+    require('../../src/ts/settings/cliSessionLock') as typeof cliSessionLockModule,
+);
 
 type Reply = { status: number; headers: http.IncomingHttpHeaders; body: string };
 
-const JSON_HEADERS = { 'Content-Type': 'application/json' };
+const TOKEN = 'run-token-0123456789abcdef';
+const TOKEN_HEADER = { 'x-web-shell-token': TOKEN };
+const JSON_HEADERS = { 'Content-Type': 'application/json', ...TOKEN_HEADER };
+const onWiped = jest.fn();
 
 let distDir: string;
 let server: http.Server;
@@ -146,7 +172,9 @@ afterAll(() => {
 
 beforeEach(async () => {
     jest.clearAllMocks();
-    ({ server, emit } = createWebServer({ distDir }));
+    mockWipeSucceeds = true;
+    mockSlowGate = null;
+    ({ server, emit } = createWebServer({ distDir, token: TOKEN, onLocalDataWiped: onWiped }));
     port = await listen(server);
 });
 
@@ -232,14 +260,18 @@ describe('request guards', () => {
         expect(same.status).toBe(200);
 
         expect(
-            (await request('POST', '/api/invoke/get-setting', { headers: { 'Content-Type': 'text/plain' }, body }))
-                .status,
+            (
+                await request('POST', '/api/invoke/get-setting', {
+                    headers: { 'Content-Type': 'text/plain', ...TOKEN_HEADER },
+                    body,
+                })
+            ).status,
         ).toBe(403);
-        expect((await request('POST', '/api/invoke/get-setting', { body })).status).toBe(403);
+        expect((await request('POST', '/api/invoke/get-setting', { headers: TOKEN_HEADER, body })).status).toBe(403);
     });
 
     test('API paths only take POST', async () => {
-        expect((await request('GET', '/api/invoke/get-setting')).status).toBe(405);
+        expect((await request('GET', '/api/invoke/get-setting', { headers: TOKEN_HEADER })).status).toBe(405);
     });
 
     test('an oversized or malformed body is rejected', async () => {
@@ -250,6 +282,190 @@ describe('request guards', () => {
         expect(big.status).toBe(413);
         const bad = await request('POST', '/api/invoke/get-setting', { headers: JSON_HEADERS, body: '{nope' });
         expect(bad.status).toBe(400);
+    });
+});
+
+describe('access token', () => {
+    const body = JSON.stringify({ args: ['theme'] });
+    const apiRequests: [string, string, Record<string, string>][] = [
+        ['an invoke', '/api/invoke/get-setting', { 'Content-Type': 'application/json' }],
+        ['a logout', '/api/logout', { 'Content-Type': 'application/json' }],
+        ['an unknown API path', '/api/other', { 'Content-Type': 'application/json' }],
+    ];
+
+    test.each(apiRequests)(
+        '%s without the token is refused before any handler runs',
+        async (_name, urlPath, headers) => {
+            const reply = await request('POST', urlPath, { headers, body });
+            expect(reply.status).toBe(403);
+            expect(parsed(reply)).toEqual({
+                success: false,
+                error: 'web-shell-token',
+            });
+            expect(auth.clearAuthToken).not.toHaveBeenCalled();
+        },
+    );
+
+    test.each(['wrong-token', TOKEN.slice(1), `${TOKEN}x`, ''])(
+        'an invoke with the token %j is refused',
+        async (given) => {
+            const reply = await request('POST', '/api/invoke/get-setting', {
+                headers: { 'Content-Type': 'application/json', 'x-web-shell-token': given },
+                body,
+            });
+            expect(reply.status).toBe(403);
+        },
+    );
+
+    test('a repeated token header is refused', async () => {
+        const reply = await new Promise<number>((resolve, reject) => {
+            const req = http.request(
+                {
+                    host: '127.0.0.1',
+                    port,
+                    method: 'POST',
+                    path: '/api/invoke/get-setting',
+                    headers: { Host: `localhost:${port}`, 'Content-Type': 'application/json' },
+                },
+                (res) => resolve(res.statusCode ?? 0),
+            );
+            req.on('error', reject);
+            req.setHeader('x-web-shell-token', [TOKEN, TOKEN]);
+            req.end(body);
+        });
+        expect(reply).toBe(403);
+    });
+
+    test('the right token is served, on every API route', async () => {
+        expect((await invoke('get-setting', { args: ['theme'] })).status).toBe(200);
+        const logout = await request('POST', '/api/logout', { headers: JSON_HEADERS, body: '{}' });
+        expect(logout.status).toBe(200);
+    });
+
+    test('the event stream takes the token in the query, never from a header, and is refused without it', async () => {
+        const missing = await request('GET', '/api/events');
+        expect(missing.status).toBe(403);
+        const wrong = await request('GET', '/api/events?t=nope');
+        expect(wrong.status).toBe(403);
+        const headerOnly = await request('GET', '/api/events', { headers: TOKEN_HEADER });
+        expect(headerOnly.status).toBe(403);
+    });
+
+    test('the event stream refuses a cross-site request even with the right token', async () => {
+        const stream = (headers: Record<string, string>) =>
+            request('GET', `/api/events?t=${TOKEN}`, { headers }).then((reply) => reply.status);
+        expect(await stream({ Origin: 'http://evil.example' })).toBe(403);
+        expect(await stream({ Origin: `http://localhost:${port + 1}` })).toBe(403);
+        expect(await stream({ 'Sec-Fetch-Site': 'cross-site' })).toBe(403);
+        expect(await stream({ 'Sec-Fetch-Site': 'same-site' })).toBe(403);
+    });
+
+    test.each([['same-origin'], ['none']])('the event stream opens for Sec-Fetch-Site: %s', async (site) => {
+        const status = await new Promise<number>((resolve, reject) => {
+            const req = http.get(
+                {
+                    host: '127.0.0.1',
+                    port,
+                    path: `/api/events?t=${TOKEN}`,
+                    headers: { Host: `localhost:${port}`, 'Sec-Fetch-Site': site },
+                },
+                (res) => {
+                    resolve(res.statusCode ?? 0);
+                    req.destroy();
+                },
+            );
+            req.on('error', reject);
+        });
+        expect(status).toBe(200);
+    });
+
+    test('a token in the query does not authorize a POST', async () => {
+        const reply = await request('POST', `/api/invoke/get-setting?t=${TOKEN}`, {
+            headers: { 'Content-Type': 'application/json' },
+            body,
+        });
+        expect(reply.status).toBe(403);
+    });
+
+    test('static files need no token: it never travels to the server', async () => {
+        expect((await request('GET', '/')).status).toBe(200);
+    });
+
+    test('a server made without a token gets its own random one', async () => {
+        const first = createWebServer({ distDir });
+        const second = createWebServer({ distDir });
+        expect(first.token).toMatch(/^[0-9a-f]{64}$/);
+        expect(first.token).not.toBe(second.token);
+        const open = await listen(first.server);
+        try {
+            const noToken = await new Promise<number>((resolve, reject) => {
+                http.get(
+                    { host: '127.0.0.1', port: open, path: '/api/events', headers: { Host: `localhost:${open}` } },
+                    (res) => resolve(res.statusCode ?? 0),
+                ).on('error', reject);
+            });
+            expect(noToken).toBe(403);
+        } finally {
+            await close(first.server);
+        }
+    });
+});
+
+describe('local-data wipe', () => {
+    test('stops the server after the reply, ends the event streams and says to restart', async () => {
+        const stream = await new Promise<http.IncomingMessage>((resolve) => {
+            http.get(
+                { host: '127.0.0.1', port, path: `/api/events?t=${TOKEN}`, headers: { Host: `localhost:${port}` } },
+                resolve,
+            );
+        });
+        const streamEnded = new Promise<void>((resolve) => stream.on('end', resolve).resume());
+
+        const reply = await invoke('wipe-local-data', { args: [] });
+
+        expect(parsed(reply)).toEqual({ result: { success: true } });
+        await streamEnded;
+        await new Promise<void>((resolve) => (server.listening ? server.once('close', () => resolve()) : resolve()));
+        expect(server.listening).toBe(false);
+        expect(onWiped).toHaveBeenCalledTimes(1);
+    });
+
+    test('two replies finishing after a wipe stop the server once', async () => {
+        let release: () => void = () => undefined;
+        mockSlowGate = new Promise<void>((resolve) => (release = resolve));
+        const slow = invoke('slow-setting', { args: [] });
+        // The slow request has reached its handler before the wipe is asked for.
+        await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
+        await invoke('wipe-local-data', { args: [] });
+        release();
+        await slow;
+        mockSlowGate = null;
+        await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
+        expect(onWiped).toHaveBeenCalledTimes(1);
+    });
+
+    test('a refused wipe leaves the server running', async () => {
+        mockWipeSucceeds = false;
+
+        const reply = await invoke('wipe-local-data', { args: [] });
+
+        expect(parsed(reply)).toEqual({ result: { success: false, error: 'busy' } });
+        expect(server.listening).toBe(true);
+        expect(onWiped).not.toHaveBeenCalled();
+        expect((await invoke('get-setting', { args: ['theme'] })).status).toBe(200);
+    });
+
+    test('a server without a callback still stops', async () => {
+        await close(server);
+        ({ server } = createWebServer({ distDir, token: TOKEN }));
+        port = await listen(server);
+
+        await invoke('wipe-local-data', { args: [] });
+        await new Promise<void>((resolve) => (server.listening ? server.once('close', () => resolve()) : resolve()));
+
+        expect(server.listening).toBe(false);
     });
 });
 
@@ -330,6 +546,16 @@ describe('logout', () => {
         expect(settings.setSetting).toHaveBeenCalledWith('mock', false);
     });
 
+    test('a logout the settings refused is answered as refused, and the mock flag is left alone', async () => {
+        auth.clearAuthToken.mockRejectedValueOnce(new auth.LogoutNotSavedError());
+        settings.setSetting.mockClear();
+
+        const reply = await request('POST', '/api/logout', { headers: JSON_HEADERS, body: '' });
+
+        expect(parsed(reply)).toEqual({ result: { success: false, error: 'logout-not-saved' } });
+        expect(settings.setSetting).not.toHaveBeenCalled();
+    });
+
     test('a failed token flush is logged and the logout still completes', async () => {
         auth.clearAuthToken.mockRejectedValueOnce(new Error('disk full'));
         const reply = await request('POST', '/api/logout', { headers: JSON_HEADERS, body: '' });
@@ -342,13 +568,13 @@ describe('events', () => {
     /**
      * Open the event stream and collect what arrives until `count` frames are in.
      */
-    const openStream = () =>
+    const openStream = (token: string = TOKEN) =>
         new Promise<{ frames: string[]; req: http.ClientRequest; ready: Promise<void> }>((resolve) => {
             const frames: string[] = [];
             let markReady: () => void = () => {};
             const ready = new Promise<void>((r) => (markReady = r));
             const req = http.request(
-                { host: '127.0.0.1', port, path: '/api/events', headers: { Host: `localhost:${port}` } },
+                { host: '127.0.0.1', port, path: `/api/events?t=${token}`, headers: { Host: `localhost:${port}` } },
                 (res) => {
                     res.setEncoding('utf8');
                     res.on('data', (chunk: string) => {
@@ -401,6 +627,31 @@ describe('startWebServer', () => {
 
     afterEach(() => {
         delete globals.sendLogToGUI;
+        holdWebServerLock.mockClear();
+        mockReleaseMarker.mockClear();
+    });
+
+    test('holds the web-server marker while it listens, so a wipe from the app or the CLI waits for it', async () => {
+        const started = await startWebServer({ port: 0, distDir });
+
+        expect(holdWebServerLock).toHaveBeenCalledTimes(1);
+        expect(started.server.listening).toBe(true);
+        expect(mockReleaseMarker).not.toHaveBeenCalled();
+
+        await close(started.server);
+        expect(mockReleaseMarker).toHaveBeenCalledTimes(1);
+    });
+
+    test('holds no marker when it could not start listening', async () => {
+        const started = await startWebServer({ port: 0, distDir });
+        const taken = (started.server.address() as net.AddressInfo).port;
+        holdWebServerLock.mockClear();
+        try {
+            await expect(startWebServer({ port: taken, distDir })).rejects.toThrow(/EADDRINUSE/);
+            expect(holdWebServerLock).not.toHaveBeenCalled();
+        } finally {
+            await close(started.server);
+        }
     });
 
     test('boots headers and intent presets, routes the logger fan-out, and listens on loopback', async () => {
@@ -408,7 +659,10 @@ describe('startWebServer', () => {
         try {
             expect(randomizer.initializeHeaders).toHaveBeenCalled();
             expect(settings.seedIntentProfiles).toHaveBeenCalled();
-            expect(started.url).toMatch(/^http:\/\/localhost:\d+\/$/);
+            expect(started.url).toBe(
+                `http://localhost:${(started.server.address() as net.AddressInfo).port}/#t=${started.token}`,
+            );
+            expect(started.token).toMatch(/^[0-9a-f]{64}$/);
             expect(started.server.address()).toEqual(expect.objectContaining({ address: '127.0.0.1' }));
             expect(typeof globals.sendLogToGUI).toBe('function');
             globals.sendLogToGUI!({
@@ -422,6 +676,58 @@ describe('startWebServer', () => {
         } finally {
             await close(started.server);
         }
+    });
+
+    test('the token is in the returned URL only: never in a logger call, never in the logged URL', async () => {
+        const started = await startWebServer({ port: 0, distDir });
+        try {
+            const { url, token } = started;
+            const logged = JSON.stringify([
+                mockLog.info.mock.calls,
+                mockLog.warning.mock.calls,
+                mockLog.error.mock.calls,
+            ]);
+            expect(logged).not.toContain(token);
+            expect(mockLog.info).toHaveBeenCalledWith(
+                `Web UI listening on ${url.split('#')[0]}`,
+                expect.objectContaining({ userData: '/tmp/user-data' }),
+            );
+            const api = await fetch(`${url.split('#')[0]}api/invoke/get-setting`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-web-shell-token': token },
+                body: JSON.stringify({ args: ['theme'] }),
+            });
+            expect(api.status).toBe(200);
+            const refused = await fetch(`${url.split('#')[0]}api/invoke/get-setting`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ args: ['theme'] }),
+            });
+            expect(refused.status).toBe(403);
+            expect(JSON.stringify(mockLog.error.mock.calls)).not.toContain(token);
+        } finally {
+            await close(started.server);
+        }
+    });
+
+    test('after a wipe it says on the console that the web shell must be started again', async () => {
+        const started = await startWebServer({ port: 0, distDir });
+        const loggerModule = jest.mocked(require('../../src/ts/logger') as { printLine: jest.Mock<void, [string]> });
+        const origin = started.url.split('#')[0];
+
+        await fetch(`${origin}api/invoke/wipe-local-data`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-web-shell-token': started.token },
+            body: JSON.stringify({ args: [] }),
+        });
+        await new Promise<void>((resolve) =>
+            started.server.listening ? started.server.once('close', () => resolve()) : resolve(),
+        );
+
+        expect(loggerModule.printLine).toHaveBeenCalledWith(
+            'Local data was deleted. The web shell has stopped: start it again to continue.',
+        );
+        expect(started.server.listening).toBe(false);
     });
 
     test('a failed preset seed is non-fatal; a taken port rejects', async () => {

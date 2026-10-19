@@ -3,6 +3,7 @@ import type { Bankroll } from '../../../types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { interp } from '@/utils/interp';
+import { BusyContent } from '@/components/ui/LoadingSpinner';
 
 // Outcome code (voting/currencyActions CURRENCY_OUTCOME) → translated message.
 // Anything unmapped (auth failure, unexpected string) reads as a generic
@@ -13,7 +14,9 @@ const OUTCOME_KEY: Partial<Record<string, string>> = {
     'balance-unknown': 'app.currencyOutcomeBalanceUnknown',
     'no-alternative': 'app.currencyOutcomeNoAlternative',
     'stale-candidate': 'app.currencyOutcomeStaleCandidate',
+    'already-entered': 'app.currencyOutcomeAlreadyEntered',
     busy: 'app.currencyOutcomeBusy',
+    unclear: 'app.currencyOutcomeUnclear',
 };
 
 /**
@@ -42,6 +45,8 @@ export interface CurrencyConfirmModalProps {
     field: keyof typeof CURRENCY_LABELS;
     bankroll: Bankroll | null;
     spending: boolean;
+    /** the spend must not be sent again — its answer was unclear (it may have landed) or it cannot be made (no balance, refused before any request): Spend stays off, Cancel still closes */
+    spendHeld?: boolean;
     /** action-specific body */
     children: ComponentChildren;
 }
@@ -49,7 +54,8 @@ export interface CurrencyConfirmModalProps {
 /**
  * Confirmation before spending one unit of a bankroll currency. Shows the cost
  * and the current → resulting balance; Spend stays disabled with a spinner from
- * the first click until the spend settles, so a double click can't spend twice.
+ * the first click until the spend settles, so a double click can't spend twice;
+ * `spendHeld` keeps it disabled after that, for a spend that must not be sent again.
  */
 export function CurrencyConfirmModal({
     isOpen,
@@ -59,6 +65,7 @@ export function CurrencyConfirmModal({
     field,
     bankroll,
     spending,
+    spendHeld = false,
     children,
 }: CurrencyConfirmModalProps) {
     const { t } = useTranslation();
@@ -83,12 +90,13 @@ export function CurrencyConfirmModal({
                 <button className="btn btn-outline btn-sm" onClick={onClose} disabled={spending}>
                     {t('app.cancel')}
                 </button>
-                <button className="btn btn-warning btn-sm" onClick={() => void onConfirm()} disabled={spending}>
-                    {spending ? (
-                        <span className="loading loading-spinner loading-xs" />
-                    ) : (
-                        interp(t('app.currencySpend'), { unit })
-                    )}
+                <button
+                    className="btn btn-latvian btn-sm"
+                    onClick={() => void onConfirm()}
+                    disabled={spending || spendHeld}
+                    aria-busy={spending}
+                >
+                    <BusyContent busy={spending} label={interp(t('app.currencySpend'), { unit })} />
                 </button>
             </ModalActions>
         </Modal>

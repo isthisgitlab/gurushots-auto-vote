@@ -13,6 +13,7 @@ import {
 } from '../src/ts/cli/commands/settings';
 import { spawn } from 'node:child_process';
 import { errorMessage } from '../src/ts/errorMessage';
+import { runIfMain } from './lib/run-if-main';
 
 /**
  * CLI Settings Management Script
@@ -46,7 +47,7 @@ const command = cliArgs[0];
 const key = cliArgs[1];
 const value = cliArgs[2];
 
-// Settings whose change only takes effect after a GUI reload.
+// Settings the running GUI picks up live.
 const UI_SETTINGS = ['theme', 'language', 'timezone'];
 
 // Helper function to get nested property value
@@ -114,7 +115,7 @@ function isElectronRunning() {
     });
 }
 
-// Function to inform about GUI auto-reload
+// Function to inform that the running GUI picks the change up live
 async function informAboutGuiReload() {
     try {
         const isRunning = await isElectronRunning();
@@ -146,7 +147,15 @@ function runGet() {
         console.log(formatValue(forDisplay(allSettings)));
     } else {
         // Show specific setting
-        const value = getNestedProperty(allSettings, key);
+        // A bare name that is not a container of the configuration is an app or sign-in setting, as `set` takes it; one
+        // the schema defines that is neither is a global default (what `set` writes it as).
+        let value = getNestedProperty(allSettings, key);
+        if (value === undefined && !key.includes('.')) {
+            value = settings.getSetting(key);
+            if (value === undefined && Object.hasOwn(settings.SETTINGS_SCHEMA, key)) {
+                value = settings.getGlobalDefault(key);
+            }
+        }
         if (value === undefined) {
             console.error(`Setting '${key}' not found`);
             process.exit(1);
@@ -165,7 +174,7 @@ async function runSet() {
     }
 
     // Delegate to the shared CLI command module — this script owns
-    // only argv semantics, GUI-reload notice, and exit codes.
+    // only argv semantics, the running-GUI notice, and exit codes.
     if (key.startsWith('challengeSettings.globalDefaults.')) {
         const settingKey = key.replace('challengeSettings.globalDefaults.', '');
         if (!setGlobalDefault(settingKey, value)) {
@@ -236,7 +245,7 @@ async function runSetGlobal() {
 
 async function runResetAll() {
     const confirmMessage =
-        'Are you sure you want to reset ALL settings to their default values?\nThis will reset all UI settings, global challenge defaults, window positions, and preferences.\nOnly your login token, last update check time, mock mode setting, and API headers will be preserved.\nType "yes" to confirm:';
+        'Are you sure you want to reset ALL settings to their default values?\nThis will reset all UI settings, global challenge defaults, window positions, and preferences.\nOnly your sign-in (login token, API headers, last username and chosen-photos owner), mock mode setting, the record of the settings.json import and last update check time will be preserved.\nType "yes" to confirm:';
 
     console.log(confirmMessage);
 
@@ -345,11 +354,16 @@ async function main() {
     }
 }
 
-main()
-    .then(() => {
-        process.exit(0);
-    })
-    .catch((error: unknown) => {
-        console.error('❌ Unhandled error:', errorMessage(error));
-        process.exit(1);
-    });
+const run = () =>
+    main()
+        .then(() => {
+            process.exit(0);
+        })
+        .catch((error: unknown) => {
+            console.error('❌ Unhandled error:', errorMessage(error));
+            process.exit(1);
+        });
+
+runIfMain(require.main, module, run);
+
+export { run };

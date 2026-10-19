@@ -16,6 +16,10 @@
  *
  * The per-phase runners live in services/votingOrchestrator/.
  *
+ * Manual Only (`manualPhotosOnly`, votingOrchestrator/manualOnly.ts): a challenge with it on is skipped whole, read
+ * live per challenge, so nothing below runs on it; a scoped Run on it is a successful no-op. The skip keeps the
+ * read-only ledgers (entry ages, the new-entry snapshot) current.
+ *
  * Runners execute SEQUENTIALLY by design: auto-fill mutates the shared
  * challenge object (reflectNewEntry) so a later turbo/boost in the same
  * cycle sees the consumed slot and new entry. Do not parallelize them.
@@ -38,9 +42,10 @@
  *   automatic-fill counter. Mock passes in-memory ledgers for the same reason it passes
  *   cleanupStaleMetadata: null. Omitting it makes the automation inert.
  *   `missions` is what the active missions still need (services/missions.ts): a
- *   turbo win or a fill this pass counts down its mission, and a vote mission
- *   splits its remaining votes over the challenges (missionVoteQuota). Omitted =
- *   no mission is followed.
+ *   turbo win or a fill this pass counts down its mission (a mission fill is
+ *   spent before the challenge's vote), and a vote mission splits its remaining
+ *   votes over the challenges (missionVoteQuota). Omitted = no mission is
+ *   followed.
  *   `challenges` is the full active list this cycle fetched (not the
  *   filtered subset) so callers can reuse it for threshold scheduling.
  */
@@ -53,6 +58,7 @@ import { consumeMission, registerMissionNeeds } from './missions';
 import { turboRunSnapshot } from './turboRunLock';
 import { runScenarioStep } from './scenarioRunner';
 import * as cancellation from '../voting/cancellation';
+import { beginVotingPass, isVotingPassRunning } from '../voting/passActivity';
 import { failureText } from '../format/logSafe';
 import { buildFillDeps, cancelPass } from './votingOrchestrator/context';
 import { runDeadlineActions } from './votingOrchestrator/actionRunners';
@@ -60,6 +66,15 @@ import { playAutoTurbo } from './votingOrchestrator/turbo';
 import { describeNewEntryOutcome, detectNewEntry, recordEntrySnapshot } from './votingOrchestrator/newEntries';
 import { voteOnChallenge } from './votingOrchestrator/vote';
 import { missionVoteDecision, planMissionVotes, resetMissionVoteLog } from './votingOrchestrator/missionVotes';
+import {
+    isManualOnlyFailClosed,
+    manualOnlyOnLine,
+    manualOnlyState,
+    manualOnlyUnreadableLine,
+    pruneManualOnlyLog,
+    resetManualOnlyLog,
+    skipIfManualOnly,
+} from './votingOrchestrator/manualOnly';
 
 import type { Challenge } from '../types/gurushots';
 import type { VotingPassDeps, VotingPassResult } from '../types/votingPass';
@@ -123,8 +138,8 @@ const selectPassChallenges = (
 
 /**
  * One challenge's full pass: its user-defined scenario, turbo-earn, currency
- * automation, deadline actions, new-entry detection, the vote, and the
- * post-vote exposure fill — in that order.
+ * automation, deadline actions, the mission fill, new-entry detection, the
+ * vote, and the post-vote exposure fill — in that order.
  *
  * @param position - 1-based index for progress reporting
  * @returns the cancelled-pass result, or null to continue
@@ -145,6 +160,10 @@ const processChallenge = async (
         .withCategory('voting')
         .progress(`Processing challenge ${position}/${total}: ${challenge.title}`, position, total);
 
+    // Manual Only: nothing below runs on this challenge. Checked live, after the cancellation
+    // check, so a switch turned on mid-pass takes effect from the next challenge.
+    if (skipIfManualOnly(challenge, now, pass)) return null;
+
     // The challenge's scenario runs first: its actions (and a phase change)
     // land before the built-in steps, which then read the new phase's
     // settings overlay through getEffectiveSetting.
@@ -162,6 +181,11 @@ const processChallenge = async (
 
     const actionsCancelled = await runDeadlineActions(challenge, now, pass);
     if (actionsCancelled) return actionsCancelled;
+
+    // A "Use Fill" mission's fill goes BEFORE the vote: the vote lifts exposure to
+    // ~100%, and a fill on a full challenge is refused. It reflects 100% exposure
+    // onto the challenge, so the vote decision below sees it and spends no votes.
+    if (await currencyAuto.runMissionFill(currencyCtx, pass.missions)) consumeMission(pass.missions, 'fill');
 
     // New-entry detection runs AFTER the deadline actions on purpose: auto-fill /
     // emergency fill / boost-turbo fill-new all reflect their new entry into
@@ -199,12 +223,9 @@ const processChallenge = async (
 
     // Automatic exposure fill, AFTER the vote: a fill is only worth spending
     // when this pass's voting could not lift exposure to the fill threshold.
-    // Failing that, a "Use Fill" mission may want one; either counts toward it.
-    if (!vote.voteThrew) {
-        const filled =
-            (await currencyAuto.runAutoExposureFill(currencyCtx, vote.votePool)) ||
-            (await currencyAuto.runMissionFill(currencyCtx, pass.missions?.fill ?? 0));
-        if (filled) consumeMission(pass.missions, 'fill');
+    // It counts toward a "Use Fill" mission too.
+    if (!vote.voteThrew && (await currencyAuto.runAutoExposureFill(currencyCtx, vote.votePool))) {
+        consumeMission(pass.missions, 'fill');
     }
     return null;
 };
@@ -234,6 +255,7 @@ const runVotingPass = async (
     photoStats.resetPassState();
     logger.withCategory('voting').startOperation('voting-process', 'Voting process');
     const unregisterMissionNeeds = registerMissionNeeds(token, missions);
+    const endPass = beginVotingPass();
 
     try {
         // Get all active challenges
@@ -263,6 +285,20 @@ const runVotingPass = async (
         if (scope.result) return scope.result;
         const { challenges } = scope;
 
+        const scopedState = challengeIdFilter != null ? manualOnlyState(challenges[0]) : 'off';
+        // Fail closed, but say what happened: an unreadable switch is a failed Run, not a Manual Only one.
+        if (scopedState === 'unreadable') {
+            return abortPass(manualOnlyUnreadableLine(challenges[0]), allChallenges, 'warning');
+        }
+        if (scopedState === 'on') {
+            // A scoped Run on a Manual Only challenge is a deliberate no-op, not a failure.
+            const message = manualOnlyOnLine(challenges[0]);
+            logger.withCategory('voting').info(message, null);
+            logger.withCategory('voting').endOperation('voting-process', message);
+            return { success: true, message, challenges: allChallenges };
+        }
+        pruneManualOnlyLog(allChallenges);
+
         const pass: PassContext = {
             token,
             api,
@@ -274,9 +310,14 @@ const runVotingPass = async (
             scenarios,
             missions,
             refreshMissionNeeds,
-            missionVoteQuota: planMissionVotes(missions, challengeIdFilter, allChallenges),
+            missionVoteQuota: planMissionVotes(
+                missions,
+                challengeIdFilter,
+                allChallenges.filter((challenge) => !isManualOnlyFailClosed(challenge)),
+            ),
             allChallenges,
             turboSnapshot,
+            snapGames: { played: 0 },
         };
 
         // Process each challenge
@@ -325,9 +366,10 @@ const runVotingPass = async (
             error: errorMessage(error) || 'Voting process failed',
         };
     } finally {
+        endPass();
         unregisterMissionNeeds?.();
     }
 };
 
-export { runVotingPass, resetMissionVoteLog };
+export { runVotingPass, resetMissionVoteLog, resetManualOnlyLog, isVotingPassRunning };
 export type { PassContext };

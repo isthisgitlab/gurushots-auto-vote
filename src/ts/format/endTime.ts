@@ -1,0 +1,45 @@
+/**
+ * A challenge's end time as the challenge card shows it: day, month, year and 24-hour time, in the named
+ * timezone ('local' for the device's; a zone that is not valid reads as UTC). The renderer words it for the UI's
+ * language and the CLI in English, so both write the same instant the same way.
+ */
+
+const FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+};
+
+/**
+ * A close time worth showing: the number of seconds when `raw` is a number or a numeric string above zero that
+ * makes a date the platform can write (which rules out infinity and NaN). Anything else, such as a boolean, an
+ * unreadable value or one past the latest date the platform can write, gives null, so the server's value shows no
+ * end instead of "Invalid Date".
+ */
+const endTimeOf = (raw: unknown): number | null => {
+    if (typeof raw !== 'number' && typeof raw !== 'string') return null;
+    const seconds = Number(raw);
+    return seconds > 0 && !Number.isNaN(new Date(seconds * 1000).getTime()) ? seconds : null;
+};
+
+/**
+ * @param endTime - Unix timestamp, in seconds
+ * @param timezone - 'local' or an IANA zone name (e.g. 'Europe/Riga')
+ * @param locale - BCP 47 locale the date is written in
+ */
+const formatEndTimeIn = (endTime: number, timezone: string, locale: string): string => {
+    const date = new Date(endTime * 1000);
+    if (timezone === 'local') return date.toLocaleString(locale, FORMAT_OPTIONS);
+    try {
+        return date.toLocaleString(locale, { ...FORMAT_OPTIONS, timeZone: timezone });
+    } catch {
+        // Callers pass effectiveTimezone output; this keeps an unresolved zone from breaking a challenge card
+        // render or the CLI discover line.
+        return date.toLocaleString(locale, { ...FORMAT_OPTIONS, timeZone: 'UTC' });
+    }
+};
+
+export { endTimeOf, formatEndTimeIn };

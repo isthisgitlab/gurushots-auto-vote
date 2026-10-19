@@ -10,13 +10,15 @@ const fetchSettings = () => window.api.getSettings();
 
 /**
  * Hook for managing settings via IPC
- * Follows React Query-like pattern for consistent data fetching
+ * Follows React Query-like pattern for consistent data fetching. `updateSetting`
+ * resolves `false` when the handler refused the write (it answers `false` rather
+ * than throwing), `true` once it landed; a throw is still a throw.
  */
 export function useSettings(): {
     settings: RendererSettings | null;
     loading: boolean;
     error: Error | null;
-    updateSetting: <K extends string>(key: K, value: SettingValueOf<K>) => Promise<void>;
+    updateSetting: <K extends string>(key: K, value: SettingValueOf<K>) => Promise<boolean>;
     getSetting: (key: string) => unknown;
     refetch: () => Promise<void>;
 } {
@@ -32,9 +34,11 @@ export function useSettings(): {
     const updateSetting = useCallback(
         async <K extends string>(key: K, value: SettingValueOf<K>) => {
             try {
-                await window.api.setSetting(key, value);
+                // `=== false`, not `!result`: only an explicit refusal fails the write.
+                if ((await window.api.setSetting(key, value)) === false) return false;
                 // Optimistic update
-                setSettings((prev) => (prev ? { ...prev, [key]: value } : null));
+                setSettings((prev) => (prev ? { ...prev, app: { ...prev.app, [key]: value } } : null));
+                return true;
             } catch (err) {
                 setError(err as Error);
                 // Refetch to get actual state on error
@@ -47,7 +51,7 @@ export function useSettings(): {
 
     const getSetting = useCallback(
         (key: string) => {
-            return settings ? settings[key] : undefined;
+            return settings ? settings.app[key] : undefined;
         },
         [settings],
     );

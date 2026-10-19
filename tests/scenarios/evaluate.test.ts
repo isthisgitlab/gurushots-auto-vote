@@ -116,6 +116,36 @@ describe('evaluateScenario', () => {
             );
         });
 
+        describe('a rule stopped after a spend that got no answer', () => {
+            const base = initialState('Plan', 'main', NOW - 60);
+            const halted = { ...firedRecord(base, NOW - 30, TZ), unclearHalt: 'swap' as const };
+
+            test('an every-pass rule waits for its phase to be entered again', () => {
+                const doc = scenario([rule('r1', [yes])]);
+                const blocked = run(doc, fired(base, 'r1', halted));
+                expect(blocked.fire).toBeNull();
+                expect(blocked.explain[0].reason).toBe(
+                    'stopped after a spend that got no answer, until the phase is entered again',
+                );
+                const reentered = fired(base, 'r1', { ...halted, phaseEnteredAt: NOW - 2 * DAY });
+                expect(run(doc, reentered).fire?.ruleId).toBe('r1');
+            });
+
+            test('a rule with a repeat limit keeps that limit’s own window (once: never; per phase; per day)', () => {
+                expect(
+                    run(scenario([rule('r1', [yes], { repeat: 'once' })]), fired(base, 'r1', halted)).fire,
+                ).toBeNull();
+                expect(
+                    run(scenario([rule('r1', [yes], { repeat: 'oncePerPhase' })]), fired(base, 'r1', halted)).fire,
+                ).toBeNull();
+                const yesterday = { ...halted, day: localDayOf(NOW, TZ) - DAY };
+                expect(
+                    run(scenario([rule('r1', [yes], { repeat: 'oncePerDay' })]), fired(base, 'r1', yesterday)).fire
+                        ?.ruleId,
+                ).toBe('r1');
+            });
+        });
+
         test('oncePerDay follows the local calendar day', () => {
             const base = initialState('Plan', 'main', NOW - 60);
             const doc = scenario([rule('r1', [yes], { repeat: 'oncePerDay' })]);

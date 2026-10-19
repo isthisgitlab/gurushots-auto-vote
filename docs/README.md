@@ -8,11 +8,13 @@ This directory contains application documentation in different languages.
 
 - **[Lejupielāde un instalācija](../README.lv.md)** - Latvian overview, downloads, and quick start
 - **[Lietošanas ceļvedis](usage.lv.md)** - Latvian usage, settings, and troubleshooting
+- **[Vietnes privātums](privacy.lv.md)** - Latvian privacy notice for the project website
 
 ### **🇺🇸 English**
 
 - **[Main README](../README.md)** - English overview, downloads, and quick start
 - **[Usage guide](usage.md)** - English usage, settings, and troubleshooting
+- **[Website privacy](privacy.md)** - English privacy notice for the project website
 
 ### **🛠️ Internals**
 

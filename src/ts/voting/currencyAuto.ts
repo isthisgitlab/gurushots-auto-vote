@@ -80,7 +80,8 @@ const isProtectedEntry = (entry: RankingEntry): boolean =>
  *   - lowestVotes: the candidate with the fewest votes (ties → the later slot,
  *     the more recent photo); otherwise the configured slot (imageIndex: 1-4, 0 =
  *     last), stepping backward (wrapping) past protected entries.
- *   - allowProtected: when false, boosted/turbo'd entries are never picked.
+ *   - allowProtected: when false, boosted/turbo'd entries and the `protectedIds`
+ *     (the photos pinned for a still-spendable Boost or Turbo) are never picked.
  *   - maxVotes > 0: the picked entry must have fewer votes than this.
  */
 const pickSwapTarget = (
@@ -90,10 +91,18 @@ const pickSwapTarget = (
         lowestVotes = false,
         allowProtected = false,
         maxVotes = 0,
-    }: { imageIndex?: number; lowestVotes?: boolean; allowProtected?: boolean; maxVotes?: number },
+        protectedIds = [],
+    }: {
+        imageIndex?: number;
+        lowestVotes?: boolean;
+        allowProtected?: boolean;
+        maxVotes?: number;
+        protectedIds?: readonly string[];
+    },
 ): RankingEntry | null => {
     if (!Array.isArray(entries) || entries.length === 0) return null;
-    const eligible = (entry: RankingEntry) => entry && (allowProtected || !isProtectedEntry(entry));
+    const eligible = (entry: RankingEntry) =>
+        entry && (allowProtected || (!isProtectedEntry(entry) && !protectedIds.includes(String(entry.id))));
     const votesOf = (entry: RankingEntry) => {
         const votes = Number(entry?.votes);
         return Number.isFinite(votes) ? votes : 0;

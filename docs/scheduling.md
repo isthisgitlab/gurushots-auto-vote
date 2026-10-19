@@ -116,13 +116,19 @@ Deliberate semantics and caveats:
   time-of-day fill can shift by up to an hour on the changeover day
   (spring-forward nonexistent times resolve nearby; fall-back ambiguity
   resolves deterministically). Documented in `wallClock.ts`.
-- **Timezone changes mid-run** take effect on the next cycle: the decision
-  path re-reads `settings.getSetting('timezone')` every evaluation, and
-  `timezone` is already in the renderer's reload-required list.
+- **Timezone changes mid-run**: an in-app Save re-plans the armed timer
+  (`rearmSchedule`). A change made outside the app (CLI or hand edit), like
+  every other setting edited there, takes effect at the next cycle — the
+  decision path re-reads `settings.getSetting('timezone')` every evaluation —
+  so it can be up to one full wait late, and a time-of-day fill window
+  shorter than the remaining wait is skipped, the same as a CLI
+  `scheduledFillTime` edit. An empty or unknown `timezone` means UTC everywhere —
+  scheduling, close-time rules and end-time display (a missing one,
+  Europe/Riga).
 - **Fail-soft**: corrupt persisted values (hand-edited settings.json)
   degrade that one challenge's scheduled fill to "off" — the string key is
   type-guarded, numeric corruption coerces to `NaN`-false, an unknown
-  timezone falls back to UTC inside `wallClock.ts`, and
+  timezone reads as UTC (`effectiveTimezone`, with a guard inside `wallClock.ts`), and
   `getScheduledFillState` is wrapped in try/catch so the per-challenge
   voting loop can never be aborted by one bad override.
 
@@ -285,6 +291,27 @@ Deliberate semantics and caveats:
 - **Lifecycle**: tied to the renderer window. Closing the window stops
   the loop. The persisted `autovoteRunning` flag means a relaunch
   resumes voting without the user re-clicking Start.
+- **Startup hold**: that resume waits until `autovoteStartupDelay`
+  seconds (default 60, `0` = off) after the app _launched_, so settings
+  can be checked before the first cycle spends anything. The anchor is
+  `launchedAt` from `getEnvironmentInfo()` (captured when the process
+  hosting the IPC handlers loads), not the mount. On Electron that
+  process is the main process, so a window reload during the hold
+  continues the same countdown, and one after it resumes at once. On
+  Android the process is the WebView, so a WebView reload restarts the
+  hold (it holds longer, never shorter). While held, `pendingStartAt`
+  drives a countdown with Start now / Don't resume (`stop()` cancels the
+  pending timer and persists `autovoteRunning=false`). The hold timer
+  re-arms in 5 s chunks and starts once the wall clock reaches the resume
+  time, so a system sleep does not stretch it. A native Android service
+  that is already running is adopted at once, never held. The Electron
+  main process honours the hold too: `start()` persists the launch time
+  it read from `getEnvironmentInfo()` as `autovoteStartedLaunch` just
+  before the running flag (0 when unreadable), and the sleep boost and
+  the quit guard count a session as running only when that equals the
+  main process's own `launchedAt`. A resume still held carries the
+  previous launch's marker, so it is not live; a manual Start or Start
+  now is live at once. `cli:start` is an explicit start and ignores it.
 - **Staying schedulable** — the "never sleep past a boundary" guarantee
   is only as good as the timer that carries it, and this chain runs in a
   _renderer_. Two mechanisms will hold that timer for tens of minutes
@@ -301,19 +328,32 @@ Deliberate semantics and caveats:
       machine from idling to sleep while auto-vote runs (the display may
       still sleep) — a deliberate power cost, logged at INFO on both engage
       and release so it is never a silent behaviour.
+    - A user-initiated sleep cannot be cancelled on macOS, and a sleeping
+      machine cannot reach the API. On Electron's `powerMonitor` `'suspend'`,
+      `src/ts/windows/suspendBoost.ts` therefore applies, right away, every
+      boost auto-vote would apply within the next 30 minutes
+      (`SUSPEND_BOOST_HORIZON_SEC`), using the voting pass's own boost
+      decision (`runSuspendBoost`). It is best effort: the event only
+      notifies the app, so the request races the network going down, and an
+      unconfirmed result is logged as such. A new photo is never submitted
+      for it, and a fresh-entry hold (`boostFreshEntryWait`) is overridden —
+      the device cannot come back to finish the wait, and a hold never
+      outlasts the Boost's deadline. The per-challenge `boostOnSleep`
+      setting (default on) turns this off for a challenge: its boost then
+      stays at its set time, and the quit guard still counts it.
+      The same remembered list drives the quit/close warning
+      (`windows/quitGuard.ts`): with auto-vote running, quitting the app or
+      closing its main window asks first when a boost is due within
+      `QUIT_WARN_HORIZON_SEC` (60 min), and is bypassed for an OS shutdown,
+      signals, update install and logout.
 
-    Two sharp edges in that `onSettingsChanged` wiring, both already handled
-    in `index.ts` — keep them handled:
-    - The watcher's debounce handle is **module-level and outlives
-      `close()`**, so a callback armed before a window teardown still fires
-      after it. The observer must re-check the window is alive before acting,
-      exactly as the reload and broadcast paths do, or a routine settings
-      write (a window move is enough) can re-arm the blocker for a session
-      with no window — and nothing would release it.
-    - The watcher's 2-second "window recently created" guard suppresses the
-      **reload**, not the observer. `notifyObserver()` is called on that
-      early return too, so a Start clicked immediately after login still
-      syncs.
+    One sharp edge in that `onSettingsChanged` wiring, already handled in
+    `index.ts` — keep it handled: the watcher's debounce handle is
+    **module-level and outlives `close()`**, so a callback armed before a
+    window teardown still fires after it. The observer must re-check the
+    window is alive before acting, exactly as the broadcast path does, or a
+    routine settings write (a window move is enough) can re-arm the blocker
+    for a session with no window — and nothing would release it.
 
     When a timer _does_ fire far past its due time anyway, `cadenceChain`'s
     `log.overslept` hook (`scheduling/cadenceChain/chain.ts`) reports it as a warning on both hosts, using the
@@ -342,9 +382,13 @@ Deliberate semantics and caveats:
   The _next-delay decision_ is the shared one: the headless JS entry
   (`src/ts/headless/index.ts`) runs one cycle per alarm and reports
   `nextDelayMs` from `computeNextCycleDelayMs` back to the plugin, which
-  schedules the next alarm accordingly. The JS-side `AutovoteContext` cycle
-  still runs while the app is open so the user gets immediate visual
-  feedback (cycle counter, last-run timestamp).
+  schedules the next alarm accordingly. While the app is open, `AutovoteContext`
+  also runs its own cadence chain in the WebView (`createCadenceChain`, the
+  same shared decision, its own timer), so the user gets immediate visual
+  feedback (cycle counter, last-run timestamp) and the in-app boost / turbo /
+  submit surfaces keep working. The two loops do not both spend: with the
+  native service installed, the app's pass leaves automatic joins and fills to
+  the service, and only the service advances scenarios.
 - **Lifecycle**: independent of the WebView. Survives swipe-to-close.
   Only stopped explicitly via `nativeAutovote.stop()` or by
   vendor-specific battery killers (Samsung / Xiaomi / OnePlus may kill

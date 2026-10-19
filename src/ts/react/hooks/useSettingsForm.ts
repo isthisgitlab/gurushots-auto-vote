@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getUiDefaultSettings } from '../../settings/uiDefaults';
+import { effectiveTimezone, getUiDefaultSettings } from '../../settings/uiDefaults';
 import * as ipc from '@/api/ipc';
+import { useOnChosenPhotosCleared, withEmptyChosenPhotos } from '@/api/chosenPhotosCleared';
+import { valuesEqual } from '@/utils/valuesEqual';
 
 import type { RendererSettings } from '../../types/settings';
 import type {
@@ -24,20 +26,14 @@ export const DEFAULT_UI_VALUES = getUiDefaultSettings();
 /**
  * Per-key fallback: arrays keep the Array.isArray guard, strings treat '' as unset (||),
  * and numeric/boolean keys use ?? so an explicit 0 / false from settings
- * is preserved rather than silently replaced by the default.
+ * is preserved rather than silently replaced by the default. The exception is
+ * `timezone`, where '' means UTC (effectiveTimezone), not unset.
  */
 const withFallback = (value: unknown, defaultValue: unknown): unknown => {
     if (Array.isArray(defaultValue)) return Array.isArray(value) ? value : defaultValue;
     if (typeof defaultValue === 'string') return value || defaultValue;
     return value ?? defaultValue;
 };
-
-/**
- * Structural equality for setting values (scalars, arrays, plain objects) —
- * the same JSON comparison settings.ts uses, kept local because the renderer
- * must not import settings.ts.
- */
-const valuesEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
  * The global-default half of `defaults`: challengeOnly keys have no global
@@ -71,7 +67,7 @@ export function useSettingsForm({
     settings: RendererSettings | null | undefined;
     refetchSettings: () => Promise<void>;
     refetchSchema: () => Promise<void>;
-    updateSetting: (key: string, value: unknown) => Promise<void>;
+    updateSetting: (key: string, value: unknown) => Promise<boolean>;
 }) {
     const [formValues, setFormValues] = useState<Record<string, unknown>>({});
     const [uiValues, setUiValues] = useState(DEFAULT_UI_VALUES);
@@ -118,7 +114,10 @@ export function useSettingsForm({
             // withFallback keeps each key's default shape (see above).
             const initialUiValues = {} as UiValues;
             for (const [key, defaultValue] of Object.entries(DEFAULT_UI_VALUES)) {
-                (initialUiValues as Record<string, unknown>)[key] = withFallback(settings[key], defaultValue);
+                (initialUiValues as Record<string, unknown>)[key] =
+                    key === 'timezone'
+                        ? effectiveTimezone(settings.app.timezone)
+                        : withFallback(settings.app[key], defaultValue);
             }
             setUiValues(initialUiValues);
             setOriginalUiValues(initialUiValues);
@@ -130,6 +129,14 @@ export function useSettingsForm({
     const handleFormChange = useCallback<SettingChangeHandler>((key, value) => {
         setFormValues((prev) => ({ ...prev, [key]: value }));
     }, []);
+
+    // Lists removed while the modal is open: the removal is what is on disk now, so the field
+    // reads empty and neither Save nor Cancel writes the old list back.
+    useOnChosenPhotosCleared(() => {
+        setFormValues(withEmptyChosenPhotos);
+        setOriginalFormValues((original) => original && withEmptyChosenPhotos(original));
+        persistedFormRef.current = persistedFormRef.current && withEmptyChosenPhotos(persistedFormRef.current);
+    });
 
     const handleUiChange = useCallback<UiChangeHandler>((key, value) => {
         setUiValues((prev) => ({ ...prev, [key]: value }));
@@ -177,8 +184,9 @@ export function useSettingsForm({
     // schema keys whose write was REJECTED (setGlobalDefault returns false
     // on schema/zod validation failure — e.g. a duplicate-count schedule)
     // so the caller can keep the modal open instead of silently dropping
-    // the edit. The UI-values channel (updateSetting) has no comparable
-    // return contract today, so only schema writes are checked here.
+    // the edit. The UI-values channel (updateSetting) answers the same way:
+    // a write it reports `false` for joins the rejected keys and leaves its
+    // persisted value where it was, and the remaining keys are still written.
     const commit = useCallback(async () => {
         const rejectedKeys: string[] = [];
         setSaving(true);
@@ -190,7 +198,10 @@ export function useSettingsForm({
                 if (key === 'language') continue;
                 const persisted = persistedUiRef.current;
                 if (persisted && valuesEqual(value, persisted[key])) continue;
-                await updateSetting(key, value);
+                if ((await updateSetting(key, value)) === false) {
+                    rejectedKeys.push(key);
+                    continue;
+                }
                 if (persisted) persisted[key] = value;
             }
             for (const [key, value] of Object.entries(formValues)) {
@@ -210,6 +221,25 @@ export function useSettingsForm({
         return rejectedKeys;
     }, [formValues, uiValues, updateSetting]);
 
+    // Whether Save would write anything: a value that differs from what is persisted (the language
+    // too, which commit() leaves to the caller but which is still an unsaved edit). Read at call
+    // time, so the persisted refs a landed write advanced are what it compares against.
+    const isDirty = useCallback(() => {
+        const persistedUi = persistedUiRef.current;
+        const persistedForm = persistedFormRef.current;
+        const uiDirty =
+            persistedUi && Object.entries(uiValues).some(([key, value]) => !valuesEqual(value, persistedUi[key]));
+        const formDirty =
+            persistedForm && Object.entries(formValues).some(([key, value]) => !valuesEqual(value, persistedForm[key]));
+        return Boolean(uiDirty || formDirty);
+    }, [formValues, uiValues]);
+
+    // The theme on disk as far as this session knows, for the caller's Cancel to put back on screen.
+    const getPersistedTheme = useCallback(() => {
+        const theme = persistedUiRef.current?.theme;
+        return typeof theme === 'string' ? theme : undefined;
+    }, []);
+
     // Roll in-memory state back to whatever the modal opened with. Theme
     // DOM revert is up to the caller — it owns the close sequence and may
     // want to skip the DOM write if the user never touched the theme.
@@ -222,8 +252,6 @@ export function useSettingsForm({
         formValues,
         uiValues,
         saving,
-        originalUiValues,
-        originalFormValues,
         handleFormChange,
         handleUiChange,
         handleResetGlobal,
@@ -231,5 +259,7 @@ export function useSettingsForm({
         handleResetAll,
         commit,
         revert,
+        isDirty,
+        getPersistedTheme,
     };
 }

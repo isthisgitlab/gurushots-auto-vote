@@ -3,12 +3,13 @@
  * `pnpm verify:readme`).
  *
  * fs is an in-memory file map, so the real READMEs and usage guides
- * are never read or rewritten. The script does its work at require time, so
- * each case requires it in an isolated registry with argv set and
- * process.exit stubbed to throw (stopping control where the process would).
+ * are never read or rewritten. Each case requires the script in an isolated
+ * registry, sets argv, and calls its `main` with process.exit stubbed to throw
+ * (stopping control where the process would).
  */
 
 import type * as pathModule from 'node:path';
+import type * as readmeVersion from '../../scripts/readme-version';
 
 const realPath: typeof pathModule = jest.requireActual<typeof import('path')>('path');
 
@@ -113,7 +114,7 @@ describe('scripts/readme-version.ts', () => {
         process.argv = ['node', 'scripts/readme-version.ts', ...args];
         try {
             jest.isolateModules(() => {
-                require('../../scripts/readme-version');
+                (require('../../scripts/readme-version') as typeof readmeVersion).main();
             });
         } catch (err) {
             if (err instanceof ExitCalled) return err.code;

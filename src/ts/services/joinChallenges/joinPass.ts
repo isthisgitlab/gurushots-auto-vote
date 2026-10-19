@@ -7,6 +7,7 @@ import * as logger from '../../logger';
 import * as settings from '../../settings';
 import * as cancellation from '../../voting/cancellation';
 import { shouldJoinChallenge } from '../VotingLogic';
+import { isKnownTurboMode } from '../../voting/turboMode';
 import { consumeMission } from '../missions';
 import type { Bankroll, Challenge } from '../../types/gurushots';
 import type { MissionNeeds } from '../missions';
@@ -20,6 +21,7 @@ import {
     warnMissingCloseTime,
 } from './settingsResolution';
 import { performJoin } from './performJoin';
+import { markerKey, markerOwner, paidByThisAccount, pruneClosedClaims } from './unlockMarker';
 
 /**
  * Mutable per-pass join state: the balance and budget kept locally accurate as
@@ -73,7 +75,8 @@ const turboJoinsNeeded = async (
     for (const { remaining, expiresAtSec: deadline } of requirements) {
         const pending = challenges.filter((c) => {
             const state = c?.member?.turbo?.state ?? '';
-            if (!PENDING_TURBO_STATES.has(state)) return false;
+            // A turbo without a known mode is never played, so it earns nothing toward the mission.
+            if (!PENDING_TURBO_STATES.has(state) || !isKnownTurboMode(c?.member?.turbo)) return false;
             if (deadline === null) return true;
             const closes = Number(c?.close_time);
             if (!Number.isFinite(closes) || closes <= nowSec) return false;
@@ -107,7 +110,7 @@ const earlyJoinsFor = async (
  */
 const toPassNowSec = (now: number): number => Math.floor((Number.isFinite(now) && now > 0 ? now : Date.now()) / 1000);
 
-const decideCandidateJoin = (challenge: Challenge, pass: JoinPassState) => {
+const decideCandidateJoin = (challenge: Challenge, pass: JoinPassState, alreadyPaid: boolean) => {
     const cfg = resolveCandidateConfig(challenge);
     // Join Early for Missions lifts the timing window while a mission wants
     // joins: these would join later anyway, the mission wants them now.
@@ -132,6 +135,7 @@ const decideCandidateJoin = (challenge: Challenge, pass: JoinPassState) => {
         joinWithinSec: joinEarly ? 0 : cfg.joinWithinSec,
         joinAfterPercentElapsed: joinEarly ? 0 : cfg.joinAfterPercentElapsed,
         nowSec: pass.nowSec,
+        alreadyPaid,
     });
 };
 
@@ -145,6 +149,25 @@ const noteTimingRefusal = (challenge: Challenge, reason: string, pass: JoinPassS
     if (pass.missingCloseTimeLogged) return;
     pass.missingCloseTimeLogged = true;
     warnMissingCloseTime(challenge, reason);
+};
+
+// Account + challenge pairs already warned about a paid-but-not-entered join: once per pair per process.
+const warnedPaidNotEntered = new Set<string>();
+
+/**
+ * With Manual Only on, a join the user already paid for is still not entered by itself. Say so once, so
+ * the coins are not left stranded unnoticed. The challenge is not joined, so it has no card and no Pick… button:
+ * the user enters it from Discover: choose the photo for that challenge (Chosen Photos), then press Join, which
+ * tries those photos first.
+ */
+const noteUnenteredPaidJoin = async (challenge: Challenge, token: string, deps: JoinDeps): Promise<void> => {
+    const key = markerKey(String(challenge?.id), await markerOwner(token, deps));
+    if (warnedPaidNotEntered.has(key) || !(await paidByThisAccount(challenge, token, deps))) return;
+    warnedPaidNotEntered.add(key);
+    cat().warning(
+        `Manual Only is on for ${logger.challengeTag(challenge)}: the join was already paid for, but no photo is entered automatically — enter one from Discover: choose the photo for this challenge (Chosen Photos), then press Join`,
+        null,
+    );
 };
 
 /**
@@ -164,7 +187,13 @@ const joinCandidate = async (
     if (resolveJoinSetting('autoJoin', challenge) !== true) {
         return 'skipped:autojoin-off';
     }
-    const decision = decideCandidateJoin(challenge, pass);
+    // Manual Only: the join would enter a photo by itself, so it is left to the user.
+    if (resolveJoinSetting('manualPhotosOnly', challenge) === true) {
+        await noteUnenteredPaidJoin(challenge, token, deps);
+        return 'skipped:manual-photos-only';
+    }
+    const alreadyPaid = await paidByThisAccount(challenge, token, deps);
+    const decision = decideCandidateJoin(challenge, pass, alreadyPaid);
     if (!decision.join) {
         noteTimingRefusal(challenge, decision.reason, pass);
         return `skipped:${decision.reason}`;
@@ -173,20 +202,38 @@ const joinCandidate = async (
     // abort the rest of the pass — mirrors the per-challenge voting loop.
     let outcome;
     try {
-        outcome = await performJoin(challenge, token, deps, decision.needsCoins);
+        // The balance the pass already holds goes into the claim, for the user to compare with GuruShots.
+        const coins = Number(pass.bankroll?.coins);
+        outcome = await performJoin(challenge, token, deps, decision.needsCoins, {
+            submitOnly: alreadyPaid,
+            coinsBefore: Number.isFinite(coins) ? coins : null,
+            priceCeiling: decision.needsCoins,
+        });
     } catch (error) {
         cat().warning(`join failed for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`, null);
         return 'error';
     }
-    if (outcome.charged > 0) {
-        pass.remainingBudget -= outcome.charged;
+    // An unlock that got no answer may have charged: it counts against the pass as if it had.
+    const spent = outcome.charged + (outcome.maybeCharged ?? 0);
+    if (spent > 0) {
+        pass.remainingBudget -= spent;
         // A charge only follows a passed affordability check, which already
         // proved Number(bankroll.coins) finite. Coerce the same way so a
         // numeric-string balance is still decremented for the rest of the pass.
         const bankroll = pass.bankroll as Bankroll;
-        bankroll.coins = Number(bankroll.coins) - outcome.charged;
+        bankroll.coins = Number(bankroll.coins) - spent;
     }
     return outcome.status;
+};
+
+/**
+ * A readable open list (empty included) is what cleanup of per-challenge
+ * settings compares against to keep a chosen-photos entry for a challenge that
+ * can still be joined. Optional-chained like every other settings call here: a
+ * partial facade must not fail the pass.
+ */
+const rememberOpenList = (candidates: Array<Challenge | null>): void => {
+    settings.rememberOpenChallengeIds?.(candidates.flatMap((c) => (c?.id == null ? [] : [c.id])));
 };
 
 /**
@@ -241,6 +288,11 @@ const runJoinPass = async (
         // aislop-ignore-next-line ai-slop/hidden-fallback -- logged via the join logger; the empty pass result is the documented contract
         return empty;
     }
+    if (candidates === null) {
+        cat().warning('could not list open challenges: the request failed', null);
+        return empty;
+    }
+    rememberOpenList(candidates);
     if (!Array.isArray(candidates) || candidates.length === 0) {
         return { ran: true, joined: 0, results: [] };
     }
@@ -249,7 +301,7 @@ const runJoinPass = async (
     const nowSec = toPassNowSec(now);
     const pass: JoinPassState = {
         bankroll,
-        remainingBudget: Number(settings.getEffectiveSetting('autoJoinCycleCoinBudget', null)) || 0,
+        remainingBudget: settings.getEffectiveSetting('autoJoinCycleCoinBudget', null),
         nowSec,
         // One diagnostic per pass, not per candidate (see warnMissingCloseTime).
         missingCloseTimeLogged: false,
@@ -282,6 +334,8 @@ const runJoinPass = async (
         results.push({ id: challenge?.id, status });
     }
 
+    // After the joins, so each one's own reads of the claims come first.
+    await pruneClosedClaims(candidates, token, deps);
     if (joined > 0) {
         cat().info(`join pass complete: joined ${joined} of ${candidates.length} open challenge(s)`, null);
     }

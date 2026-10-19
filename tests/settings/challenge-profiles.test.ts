@@ -15,10 +15,19 @@
  * uses) so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import type { MemoryStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/settings');
 import loggerModule = require('../../src/ts/logger');
+import { isPlainObject } from '../../src/ts/plainObject';
 const logger = jest.mocked(loggerModule);
+
+/** One stored profile of a loaded configuration, to edit it behind the facade's back. */
+const profileOf = (config: ReturnType<typeof settings.loadSettings>, name: string): Record<string, unknown> => {
+    const profile = config.profiles[name];
+    if (!isPlainObject(profile)) throw new Error(`no stored profile ${name}`);
+    return profile;
+};
 
 jest.mock('../../src/ts/logger', () => ({
     info: jest.fn(),
@@ -43,28 +52,15 @@ jest.mock('../../src/ts/logger', () => ({
 }));
 
 describe('settings facade — challenge profiles', () => {
-    const headlessGlobals = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let store: { value: string | null; read: jest.Mock<string | null, []>; write: jest.Mock<void, [string]> };
+    let store: MemoryStore;
 
     beforeEach(() => {
-        headlessGlobals.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-        };
-        headlessGlobals.AndroidHeadlessStore = store;
+        store = installHeadlessStore();
         settings.rememberChallengeTitles([]);
     });
 
     afterEach(() => {
-        delete headlessGlobals.__GS_HEADLESS__;
-        delete headlessGlobals.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
     describe('saveChallengeProfile / getChallengeProfiles', () => {
@@ -73,9 +69,9 @@ describe('settings facade — challenge profiles', () => {
         });
 
         test('round-trips a saved profile', () => {
-            expect(settings.saveChallengeProfile('2-pic tactic', { exposure: 80, autoFill: true })).toBe(true);
+            expect(settings.saveChallengeProfile('2-pic tactic', { exposure: 80, autoSubmit: true })).toBe(true);
             expect(settings.getChallengeProfiles()).toEqual({
-                '2-pic tactic': { exposure: 80, autoFill: true },
+                '2-pic tactic': { exposure: 80, autoSubmit: true },
             });
         });
 
@@ -158,12 +154,12 @@ describe('settings facade — challenge profiles', () => {
         test('strips a hand-injected stale key from the read view without rewriting storage', () => {
             settings.saveChallengeProfile('p', { exposure: 80 });
             const raw = settings.loadSettings();
-            raw.challengeSettings.profiles!.p.removedLegacyKey = 'stale';
+            profileOf(raw, 'p').removedLegacyKey = 'stale';
             settings.saveSettings(raw);
 
             expect(settings.getChallengeProfiles()).toEqual({ p: { exposure: 80 } });
             // Storage still carries the stale key — reads never rewrite.
-            expect(settings.loadSettings().challengeSettings.profiles!.p.removedLegacyKey).toBe('stale');
+            expect(profileOf(settings.loadSettings(), 'p').removedLegacyKey).toBe('stale');
         });
     });
 
@@ -187,8 +183,8 @@ describe('settings facade — challenge profiles', () => {
 
         test('returns the sparse override map', () => {
             settings.setChallengeOverride('exposure', '123', 80);
-            settings.setChallengeOverride('autoFill', '123', true);
-            expect(settings.getChallengeOverrides('123')).toEqual({ exposure: 80, autoFill: true });
+            settings.setChallengeOverride('autoSubmit', '123', true);
+            expect(settings.getChallengeOverrides('123')).toEqual({ exposure: 80, autoSubmit: true });
             expect(settings.getChallengeOverrides('456')).toEqual({});
         });
     });
@@ -201,8 +197,34 @@ describe('settings facade — challenge profiles', () => {
             expect(settings.applyChallengeProfile('ghost', '123')).toBe(false);
         });
 
+        test('persists nothing when the challenge layer refuses the replace (the safety net after sanitizing)', () => {
+            settings.saveChallengeProfile('p', { exposure: 80 });
+            const before = store.value;
+            let isolated: typeof settings | undefined;
+            jest.isolateModules(() => {
+                jest.doMock('../../src/ts/settings/challengeOverrides', () => ({
+                    ...jest.requireActual<typeof import('../../src/ts/settings/challengeOverrides')>(
+                        '../../src/ts/settings/challengeOverrides',
+                    ),
+                    replaceChallengeOverridesInSettings: () => false,
+                }));
+                isolated = require('../../src/ts/settings') as typeof settings;
+            });
+            jest.dontMock('../../src/ts/settings/challengeOverrides');
+            // The first load of a fresh module graph runs its once-per-process cleanup: let it, then count writes.
+            isolated!.loadSettings();
+            const settled = store.value;
+            store.write.mockClear();
+
+            expect(isolated!.applyChallengeProfile('p', '123')).toBe(false);
+
+            expect(store.write).not.toHaveBeenCalled();
+            expect(store.value).toBe(settled);
+            expect(before).not.toBeNull();
+        });
+
         test('sets listed keys and removes unlisted ones atomically', () => {
-            settings.setChallengeOverride('autoFill', '123', true);
+            settings.setChallengeOverride('autoSubmit', '123', true);
             settings.setChallengeOverride('boostTime', '123', 1800);
             settings.saveChallengeProfile('p', { exposure: 80 });
 
@@ -244,7 +266,8 @@ describe('settings facade — challenge profiles', () => {
 
             expect(settings.applyChallengeProfile('reset', '123')).toBe(true);
             expect(settings.getChallengeOverrides('123')).toEqual({});
-            expect(settings.loadSettings().challengeSettings.perChallenge['123']).toBeUndefined();
+            // Applying a profile stands it in for the rule's: the challenge keeps that, and no values of its own.
+            expect(settings.loadSettings().challenges['123']).toEqual({ suppressRuleProfile: true });
         });
 
         test('prunes profile values equal to the current global default', () => {
@@ -268,15 +291,14 @@ describe('settings facade — challenge profiles', () => {
             ).toBe(true);
 
             expect(settings.applyChallengeProfile('night tactic', '123')).toBe(true);
-            // The load-time bounds pass canonical-sorts lists (order carries
-            // no meaning), so the round-tripped arrays come back sorted.
+            // Order carries no meaning, and nothing re-sorts the lists: they come back as saved.
             expect(settings.getChallengeOverrides('123')).toEqual({
                 useScheduledFill: true,
-                scheduledFillTime: ['09:00', '21:30'],
+                scheduledFillTime: ['21:30', '09:00'],
                 scheduledFillBeforeEnd: [14400, 36000],
                 scheduledFillReplaces: true,
             });
-            expect(settings.getEffectiveSetting('scheduledFillTime', '123')).toEqual(['09:00', '21:30']);
+            expect(settings.getEffectiveSetting('scheduledFillTime', '123')).toEqual(['21:30', '09:00']);
         });
 
         test('rejects a profile carrying an invalid scheduledFillTime fail-closed', () => {
@@ -290,28 +312,28 @@ describe('settings facade — challenge profiles', () => {
             // And a profile corrupted in place after saving is rejected at apply.
             settings.saveChallengeProfile('was-fine', { scheduledFillTime: ['21:30'] });
             const raw = settings.loadSettings();
-            raw.challengeSettings.profiles!['was-fine'].scheduledFillTime = ['25:99'];
+            profileOf(raw, 'was-fine').scheduledFillTime = ['25:99'];
             settings.saveSettings(raw);
             expect(settings.applyChallengeProfile('was-fine', '123')).toBe(false);
             expect(settings.getChallengeOverrides('123')).toEqual({});
         });
 
         test('writes nothing when a stored value has become invalid (schema drift)', () => {
-            settings.setChallengeOverride('autoFill', '123', true);
+            settings.setChallengeOverride('autoSubmit', '123', true);
             settings.saveChallengeProfile('p', { exposure: 80 });
             const raw = settings.loadSettings();
-            raw.challengeSettings.profiles!.p.exposure = 999; // corrupt in place
+            profileOf(raw, 'p').exposure = 999; // corrupt in place
             settings.saveSettings(raw);
 
             expect(settings.applyChallengeProfile('p', '123')).toBe(false);
             // Pre-existing override untouched — no partial write.
-            expect(settings.getChallengeOverrides('123')).toEqual({ autoFill: true });
+            expect(settings.getChallengeOverrides('123')).toEqual({ autoSubmit: true });
         });
     });
 
     describe('automatic title profile inheritance', () => {
         beforeEach(() => {
-            settings.saveChallengeProfile('Recurring Tactic', { exposure: 80, autoFill: true });
+            settings.saveChallengeProfile('Recurring Tactic', { exposure: 80, autoSubmit: true });
             settings.setTitleRules([
                 {
                     title: 'Weekly Theme',
@@ -325,7 +347,7 @@ describe('settings facade — challenge profiles', () => {
         test('inherits profile values for the current id and a rotated id with the same title', () => {
             settings.rememberChallengeTitles([{ id: 100, title: 'Weekly Theme' }]);
             expect(settings.getEffectiveSetting('exposure', '100')).toBe(80);
-            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(true);
+            expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(true);
 
             settings.rememberChallengeTitles([{ id: 999, title: 'weekly theme' }]);
             expect(settings.getEffectiveSetting('exposure', '999')).toBe(80);
@@ -335,7 +357,7 @@ describe('settings facade — challenge profiles', () => {
             settings.rememberChallengeTitles([{ id: 100, title: 'Weekly Theme' }]);
             expect(settings.setChallengeOverride('exposure', '100', 65)).toBe(true);
             expect(settings.getEffectiveSetting('exposure', '100')).toBe(65);
-            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(true);
+            expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(true);
         });
 
         test('clears a redundant manual value against the profile baseline, not the global default', () => {
@@ -372,15 +394,15 @@ describe('settings facade — challenge profiles', () => {
         });
 
         test('batch override rejects an invalid composition without partially saving sibling values', () => {
-            settings.saveChallengeProfile('Strict', { exposure: 50, exposureTarget: 80, autoFill: true });
+            settings.saveChallengeProfile('Strict', { exposure: 50, exposureTarget: 80, autoSubmit: true });
             settings.setTitleRules([
                 { title: 'Strict Theme', profile: 'Strict', mustIncludeTags: [], shouldIncludeTags: [] },
             ]);
             settings.rememberChallengeTitles([{ id: 123, title: 'Strict Theme' }]);
 
-            expect(settings.setChallengeOverrides('123', { exposure: 90, autoFill: false })).toBe(false);
+            expect(settings.setChallengeOverrides('123', { exposure: 90, autoSubmit: false })).toBe(false);
             expect(settings.getChallengeOverrides('123')).toEqual({});
-            expect(settings.getEffectiveSetting('autoFill', '123')).toBe(true);
+            expect(settings.getEffectiveSetting('autoSubmit', '123')).toBe(true);
         });
 
         test('rejects removing an override when the inherited trigger would exceed the remaining target', () => {
@@ -402,10 +424,9 @@ describe('settings facade — challenge profiles', () => {
 
             expect(settings.applyChallengeProfile('Reset', '100')).toBe(true);
             expect(settings.getChallengeOverrides('100')).toEqual({});
-            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
-            expect(settings.getTitleProfile('Weekly Theme', '100')).toEqual({
-                name: 'Recurring Tactic',
-                values: { exposure: 80, autoFill: true },
+            expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(false);
+            expect(settings.getTitleProfile('Weekly Theme', '100')).toMatchObject({
+                profile: { name: 'Recurring Tactic', values: { exposure: 80, autoSubmit: true } },
                 suppressed: true,
             });
         });
@@ -415,11 +436,11 @@ describe('settings facade — challenge profiles', () => {
 
             expect(settings.replaceChallengeOverrides('100', { exposure: 70 }, true)).toBe(true);
             expect(settings.getEffectiveSetting('exposure', '100')).toBe(70);
-            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
+            expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(false);
 
             expect(settings.replaceChallengeOverrides('100', {}, false)).toBe(true);
             expect(settings.getEffectiveSetting('exposure', '100')).toBe(80);
-            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(true);
+            expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(true);
         });
 
         test('rejects an automatic profile assignment that conflicts with existing manual values', () => {
@@ -462,24 +483,24 @@ describe('settings facade — challenge profiles', () => {
         test('fails closed when an assigned profile is corrupt instead of applying a valid subset', () => {
             settings.rememberChallengeTitles([{ id: 100, title: 'Weekly Theme' }]);
             const raw = settings.loadSettings();
-            raw.challengeSettings.profiles!['Recurring Tactic'].exposure = 'corrupt';
+            profileOf(raw, 'Recurring Tactic').exposure = 'corrupt';
             settings.saveSettings(raw);
             logger.withCategory.mockClear();
 
-            expect(settings.getTitleProfile('Weekly Theme')).toBeNull();
-            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
+            expect(settings.getTitleProfile('Weekly Theme').profile).toBeNull();
+            expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(false);
             expect(settings.getEffectiveSetting('exposure', '100')).toBe(100);
             expect(logger.withCategory).not.toHaveBeenCalled();
         });
 
         test('does not exact-match an over-length observed title to its 200-character prefix', () => {
             const prefix = 'x'.repeat(settings.MAX_TITLE_LENGTH);
-            settings.saveChallengeProfile('Long', { autoFill: true });
+            settings.saveChallengeProfile('Long', { autoSubmit: true });
             settings.setTitleRules([{ title: prefix, profile: 'Long', mustIncludeTags: [], shouldIncludeTags: [] }]);
             settings.rememberChallengeTitles([{ id: 100, title: `${prefix}-different-suffix` }]);
 
-            expect(settings.getTitleProfile(`${prefix}-different-suffix`)).toBeNull();
-            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
+            expect(settings.getTitleProfile(`${prefix}-different-suffix`).profile).toBeNull();
+            expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(false);
         });
     });
 });

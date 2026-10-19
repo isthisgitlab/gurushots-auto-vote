@@ -8,9 +8,18 @@
 import * as logger from '../../logger';
 import { firedRecord } from '../../scenarios/evaluate';
 import type { ScenarioState } from '../../types/stores';
-import type { ActionEffects, ActionHandler, RunnerContext, ScenarioAction, ValidatedRule } from './types';
-import { log, nowSec } from './support';
-import { ACTIONS } from './actions';
+import type {
+    ActionEffects,
+    ActionHandler,
+    NotDoneOutcome,
+    RunnerContext,
+    ScenarioAction,
+    SpendAction,
+    ValidatedRule,
+} from './types';
+import { isSpend, limitOf, log, nowSec } from './support';
+import type { Retry } from './support';
+import { ACTIONS, settleUnclearSpend } from './actions';
 
 /** Notices kept for the host notifiers: the newest, within a day. */
 const OUTBOX_LIMIT = 20;
@@ -43,6 +52,217 @@ const applyEffects = (before: ScenarioState, effects: ActionEffects, at: number)
 };
 
 /**
+ * State when a step stops its rule. The rule resumes at that step when it was committed.
+ *
+ * A spend that got no answer may have gone through: it commits the rule from here, so the retry resumes at this step
+ * (marked on `inFlight` itself, which survives anything that only changes `lastError`) and never spends it again,
+ * and it counts toward the scenario's spend limit. The markers of the step's other spends (an edit of the scenario
+ * can leave several) stay with it, so reverting the edit never spends one of them. When the retry cannot show the
+ * spend landed (`halt`) the rule ends here and is recorded as fired with the action it stopped after, so its repeat
+ * policy holds it (evaluate).
+ */
+const stoppedAt = (
+    state: ScenarioState,
+    stop: {
+        rule: ValidatedRule;
+        index: number;
+        result: NotDoneOutcome;
+        message: string;
+        at: number;
+        committed: boolean;
+        timezone: string;
+    },
+): ScenarioState => {
+    const { rule, index, result, message, at, committed, timezone } = stop;
+    const next: ScenarioState = { ...state, inFlight: null };
+    if (result.halt) {
+        next.fired = {
+            ...state.fired,
+            [rule.id]: {
+                ...firedRecord(state, at, timezone),
+                unclearHalt: result.unclear,
+                haltOrigin: result.origin,
+            },
+        };
+    } else if (committed || result.spent) {
+        // (The state's own marker is this step's: the one before a spend, or the one the step before it left. Its
+        // `pending` is this step's own spend, which was made or refused: it is not carried.)
+        const prior = state.inFlight;
+        const unclear = [...(prior?.unclear ?? []), ...(result.unclear ? [result.unclear] : [])];
+        // `unclearAt`: when the spend got no answer, for the card to tell a later problem from it.
+        const marker = unclear.length
+            ? {
+                  unclear,
+                  unclearAt: result.unclear ? at : prior?.unclearAt,
+                  ...(prior?.lost?.length ? { lost: prior.lost } : {}),
+              }
+            : {};
+        next.inFlight = { ruleId: rule.id, actionIndex: index, ...marker };
+    }
+    if (result.status !== 'deferred') next.lastError = { at, message };
+    return applyEffects(next, { spent: result.spent }, at);
+};
+
+/**
+ * Which marker the step about to run is the retry of: its spend got no answer (counted already), or it was written
+ * down before it was made and nothing says it was (not counted yet). Null when it is not a retry.
+ */
+const retryOf = (start: ScenarioState, ruleId: string, firstStep: boolean, action: ScenarioAction): Retry | null => {
+    const marker = firstStep && start.inFlight?.ruleId === ruleId ? start.inFlight : null;
+    if (marker?.unclear?.some((type) => type === action.type)) {
+        // Counted already; the app, not GuruShots, did not know when it came from a marker the app absorbed.
+        return { count: false, origin: marker.lost?.some((type) => type === action.type) ? 'pending' : 'unclear' };
+    }
+    return marker?.pending === action.type ? { count: true, origin: 'pending' } : null;
+};
+
+/**
+ * A `pending` marker the step now running is not for (the scenario was edited since) is a spend that may have gone
+ * through, and nothing will look at: it becomes an `unclear` one, counted, so that reverting the edit does not spend
+ * it again.
+ */
+const absorbLeftover = (state: ScenarioState, own: SpendAction | undefined): ScenarioState => {
+    const { inFlight } = state;
+    if (!inFlight?.pending || inFlight.pending === own) return state;
+    const { pending, ...rest } = inFlight;
+    return {
+        ...state,
+        spent: { ...state.spent, [limitOf(pending)]: (state.spent[limitOf(pending)] ?? 0) + 1 },
+        inFlight: {
+            ...rest,
+            lost: [...(inFlight.lost ?? []), pending],
+            unclear: [...(inFlight.unclear ?? []), pending],
+            unclearAt: inFlight.unclearAt ?? nowSec(),
+        },
+    };
+};
+
+/**
+ * Writes down, BEFORE it is made, the spend a step is about to make (`inFlight.pending`). If the result of the spend
+ * is then never written (a crash, a lock held, a full disk), the next run finds the marker and looks at the live
+ * challenge instead of spending again, in whatever process it runs.
+ *
+ * @returns the state as written, or null when it could not be written: then nothing is spent
+ */
+const markPending = (
+    ctx: RunnerContext,
+    state: ScenarioState,
+    at: { ruleId: string; index: number; spend: SpendAction },
+): ScenarioState | null => {
+    const marked: ScenarioState = {
+        ...state,
+        inFlight: { ...state.inFlight, ruleId: at.ruleId, actionIndex: at.index, pending: at.spend },
+    };
+    return ctx.ledger.set(ctx.challengeId, marked) === 'saved' ? marked : null;
+};
+
+/**
+ * The write-ahead of the step now running, for it to call just before its request: it makes sure the step lock is
+ * still this process's (one that went stale while the machine slept may have been taken over: the step is then another
+ * process's, and nothing is spent), then writes the marker onto the state the rule holds and keeps what was written
+ * as that state.
+ */
+const spendWriter =
+    (
+        ctx: RunnerContext,
+        at: { ruleId: string; index: number },
+        held: { get: () => ScenarioState; set: (state: ScenarioState) => void },
+    ) =>
+    (spend: SpendAction): boolean => {
+        if (ctx.stepLock?.held && !ctx.stepLock.held()) {
+            log().warning(
+                `${logger.challengeTag(ctx.challenge)} the lock of this challenge's steps was lost to another process — not spending`,
+                null,
+            );
+            return false;
+        }
+        const marked = markPending(ctx, held.get(), { ...at, spend });
+        if (marked) held.set(marked);
+        return marked !== null;
+    };
+
+/**
+ * Writes down the state a step left, trying once more when the first write fails (a lock held for a moment after a
+ * spend that is known to have landed must not turn into a rule that stops for want of a write).
+ */
+const saveResult = (ctx: RunnerContext, state: ScenarioState): boolean => {
+    const first = ctx.ledger.set(ctx.challengeId, state);
+    if (first === 'saved') return true;
+    // Reset meanwhile: its progress is not to be brought back, so there is nothing to try again or to warn about.
+    if (first === 'refused') return false;
+    const second = ctx.ledger.set(ctx.challengeId, state);
+    if (second === 'saved') return true;
+    if (second === 'refused') return false;
+    log().warning(
+        `${logger.challengeTag(ctx.challenge)} the result of the last step could not be written down: the next pass may stop this rule needlessly`,
+        null,
+    );
+    return false;
+};
+
+/**
+ * One action of a rule. A step whose spend got no answer is never spent again: its retry only looks at the live
+ * challenge.
+ */
+const runAction = (ctx: RunnerContext, state: ScenarioState, action: ScenarioAction, retry: Retry | null) =>
+    retry && isSpend(action)
+        ? settleUnclearSpend(action, ctx, state, retry)
+        : // ACTIONS pairs each type with its handler; the union call needs the widened view.
+          (ACTIONS[action.type] as ActionHandler<ScenarioAction>)(action, ctx, state);
+
+/**
+ * The state when a rule has gone through all its steps: recorded as fired, with the phase change that was waiting
+ * for it. A phase change takes effect when the rule finishes, so an interrupted rule always resumes in the phase it
+ * belongs to. A step passed over in this firing stays visible as the last problem.
+ */
+const finishRule = (
+    ctx: RunnerContext,
+    rule: ValidatedRule,
+    startState: ScenarioState,
+    before: ScenarioState,
+    { gotoPhase, skippedStep }: { gotoPhase: string | null; skippedStep: { at: number; message: string } | null },
+): { state: ScenarioState; completed: boolean } => {
+    const at = nowSec();
+    let state: ScenarioState = {
+        ...before,
+        inFlight: null,
+        lastError: skippedStep,
+        fired: { ...before.fired, [rule.id]: firedRecord(startState, at, ctx.timezone) },
+    };
+    if (gotoPhase !== null && gotoPhase !== state.phase) {
+        log().info(
+            `${logger.challengeTag(ctx.challenge)} scenario "${ctx.scenario.name}": phase ${state.phase} → ${gotoPhase}`,
+            null,
+        );
+        state = { ...state, phase: gotoPhase, phaseEnteredAt: at };
+    }
+    return { state, completed: saveResult(ctx, state) };
+};
+
+/**
+ * What a step that did not go through comes to: a committed rule passes over a skipped step and carries on, any
+ * other stops the rule there (and so does a state that could not be written down).
+ */
+const notDone = (
+    ctx: RunnerContext,
+    rule: ValidatedRule,
+    state: ScenarioState,
+    step: { action: ScenarioAction; index: number; result: NotDoneOutcome; at: number; committed: boolean },
+): { state: ScenarioState; stop: boolean; skippedStep: { at: number; message: string } | null } => {
+    const { action, index, result, at, committed } = step;
+    const message = `${rule.label ?? rule.id} → ${action.type}: ${result.message}`;
+    log().warning(`${logger.challengeTag(ctx.challenge)} scenario "${ctx.scenario.name}": ${message}`, null);
+    if (result.status === 'skipped' && committed) {
+        const skippedStep = { at, message };
+        const next = { ...state, lastError: skippedStep, inFlight: { ruleId: rule.id, actionIndex: index + 1 } };
+        return { state: next, stop: !saveResult(ctx, next), skippedStep };
+    }
+    const next = stoppedAt(state, { rule, index, result, message, at, committed, timezone: ctx.timezone });
+    saveResult(ctx, next);
+    return { state: next, stop: true, skippedStep: null };
+};
+
+/**
  * Execute one rule from `startIndex`. Returns the new state and whether the
  * rule finished (its actions all went through or were passed over).
  */
@@ -54,28 +274,27 @@ const runRule = async (
     const { rule, startIndex } = fire;
     const tag = logger.challengeTag(ctx.challenge);
     let state = startState;
-    let committed = startIndex > 0;
+    // A rule that was interrupted after a step went through, or whose spend got no answer, is committed to its steps.
+    let committed = startIndex > 0 || startState.inFlight?.ruleId === rule.id;
     let gotoPhase: string | null = null;
     let skippedStep: { at: number; message: string } | null = null;
     for (let index = startIndex; index < rule.do.length; index++) {
         const action = rule.do[index];
-        // ACTIONS pairs each type with its handler; the union call needs the widened view.
-        const result = await (ACTIONS[action.type] as ActionHandler<ScenarioAction>)(action, ctx, state);
+        const retry = retryOf(startState, rule.id, index === startIndex, action);
+        state = absorbLeftover(state, isSpend(action) ? action.type : undefined);
+        // A spend is written down by the step itself, just before its request (see lockedCurrencySpend); one that
+        // could not be is not made. A retry makes no spend.
+        ctx.beforeSpend = retry
+            ? null
+            : spendWriter(ctx, { ruleId: rule.id, index }, { get: () => state, set: (next) => (state = next) });
+        const result = await runAction(ctx, state, action, retry);
         const at = nowSec();
         if (result.status !== 'done') {
-            const message = `${rule.label ?? rule.id} → ${action.type}: ${result.message}`;
-            log().warning(`${tag} scenario "${ctx.scenario.name}": ${message}`, null);
-            if (result.status === 'skipped' && committed) {
-                // Committed rules pass over a skipped step and carry on.
-                skippedStep = { at, message };
-                state = { ...state, lastError: skippedStep, inFlight: { ruleId: rule.id, actionIndex: index + 1 } };
-                ctx.ledger.set(ctx.challengeId, state);
-                continue;
-            }
-            state = { ...state, inFlight: committed ? { ruleId: rule.id, actionIndex: index } : null };
-            if (result.status !== 'deferred') state.lastError = { at, message };
-            ctx.ledger.set(ctx.challengeId, state);
-            return { state, completed: false };
+            const stopped = notDone(ctx, rule, state, { action, index, result, at, committed });
+            state = stopped.state;
+            if (stopped.stop) return { state, completed: false };
+            skippedStep = stopped.skippedStep;
+            continue;
         }
         committed = true;
         gotoPhase = result.goto ?? gotoPhase;
@@ -84,25 +303,12 @@ const runRule = async (
             inFlight: { ruleId: rule.id, actionIndex: index + 1 },
             lastAction: { at, ruleId: rule.id, action: action.type, outcome: 'done' },
         };
-        ctx.ledger.set(ctx.challengeId, state);
+        const saved = saveResult(ctx, state);
         log().info(`${tag} scenario "${ctx.scenario.name}": ${rule.label ?? rule.id} → ${action.type}`, null);
+        // A step that landed and could not be written down is the last one this pass: the next step could spend too.
+        if (!saved) return { state, completed: false };
     }
-    const at = nowSec();
-    state = {
-        ...state,
-        inFlight: null,
-        // A step passed over in this firing stays visible as the last problem.
-        lastError: skippedStep,
-        fired: { ...state.fired, [rule.id]: firedRecord(startState, at, ctx.timezone) },
-    };
-    // A phase change takes effect when the rule finishes, so an interrupted
-    // rule always resumes in the phase it belongs to.
-    if (gotoPhase !== null && gotoPhase !== state.phase) {
-        log().info(`${tag} scenario "${ctx.scenario.name}": phase ${state.phase} → ${gotoPhase}`, null);
-        state = { ...state, phase: gotoPhase, phaseEnteredAt: at };
-    }
-    ctx.ledger.set(ctx.challengeId, state);
-    return { state, completed: true };
+    return finishRule(ctx, rule, startState, state, { gotoPhase, skippedStep });
 };
 
 export { withNotice, runRule };

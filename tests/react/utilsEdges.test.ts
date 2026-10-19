@@ -31,7 +31,7 @@ describe('getGroupApplicability', () => {
             applicable: true,
             reasonKey: null,
         });
-        expect(getGroupApplicability('autoFill', invalid({ max_photo_submits: 2 }))).toEqual({
+        expect(getGroupApplicability('autoSubmit', invalid({ max_photo_submits: 2 }))).toEqual({
             applicable: true,
             reasonKey: null,
         });

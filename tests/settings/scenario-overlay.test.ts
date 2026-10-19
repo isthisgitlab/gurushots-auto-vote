@@ -5,9 +5,11 @@
  * never touched.
  */
 
-import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import type { MemoryStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/settings');
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
+import { isNumber, isRecordOf, isShape, parseJsonAs } from '../helpers/parseJson';
 const { scenarioStateLedger, mockScenarioStateLedger, initialState } =
     require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
 
@@ -30,48 +32,23 @@ const plan = {
     version: 1,
     start: 'buildup',
     phases: {
-        buildup: { settings: { exposure: 10, exposureTarget: 12, autoFill: false } },
+        buildup: { settings: { exposure: 10, exposureTarget: 12, autoSubmit: false } },
         done: {},
     },
 };
 
 describe('scenario phase-settings overlay', () => {
-    const headlessGlobals = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let store: {
-        value: string | null;
-        read: jest.Mock<string | null, []>;
-        write: jest.Mock<void, [string]>;
-        readKey: jest.Mock<string | null, [string]>;
-        writeKey: jest.Mock<void, [string, string]>;
-        keys: Record<string, string>;
-    };
+    let store: MemoryStore;
 
     beforeEach(() => {
-        headlessGlobals.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            keys: {},
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-            readKey: jest.fn((key) => store.keys[key] ?? null),
-            writeKey: jest.fn((key, data) => {
-                store.keys[key] = data;
-            }),
-        };
-        headlessGlobals.AndroidHeadlessStore = store;
+        store = installHeadlessStore();
         settings.rememberChallengeTitles([{ id: 7, title: 'Big show', type: 'exhibition' }]);
         settings.setGlobalDefault('exposure', 100);
         settings.setGlobalDefault('exposureTarget', 100);
     });
 
     afterEach(() => {
-        delete headlessGlobals.__GS_HEADLESS__;
-        delete headlessGlobals.AndroidHeadlessStore;
+        removeHeadlessStore();
         settings.rememberChallengeTitles([]);
     });
 
@@ -86,16 +63,16 @@ describe('scenario phase-settings overlay', () => {
 
     test('in a phase, its settings win over the manual override and rules', () => {
         assign();
-        settings.setChallengeOverride('autoFill', '7', true);
-        settings.setTitleRules([{ type: 'exhibition', autoFill: true }]);
+        settings.setChallengeOverride('autoSubmit', '7', true);
+        settings.setTitleRules([{ type: 'exhibition', autoSubmit: true }]);
         scenarioStateLedger.set(7, initialState('Plan', 'buildup', 1000));
         expect(settings.getEffectiveSetting('exposure', '7')).toBe(10);
         expect(settings.getEffectiveSetting('exposureTarget', 7)).toBe(12);
-        expect(settings.getEffectiveSetting('autoFill', '7')).toBe(false);
+        expect(settings.getEffectiveSetting('autoSubmit', '7')).toBe(false);
         // Keys the phase does not set, the global view and the stored overrides are unchanged.
         expect(settings.getEffectiveSetting('autoBoost', '7')).toBe(settings.getGlobalDefault('autoBoost'));
         expect(settings.getEffectiveSetting('exposure')).toBe(100);
-        expect(settings.getChallengeOverrides('7')).toEqual({ scenario: 'Plan', autoFill: true });
+        expect(settings.getChallengeOverrides('7')).toEqual({ scenario: 'Plan', autoSubmit: true });
     });
 
     test('the assignment itself is never overlaid', () => {
@@ -117,7 +94,7 @@ describe('scenario phase-settings overlay', () => {
         [
             'unreadable state',
             () => {
-                store.keys.gs_scenario_state = '{broken';
+                store.keys.set('gs_scenario_state', '{broken');
             },
         ],
     ])('no overlay with %s', (label, arrange) => {
@@ -137,10 +114,13 @@ describe('scenario phase-settings overlay', () => {
     test('no overlay when the stored scenario no longer validates', () => {
         assign();
         scenarioStateLedger.set(7, initialState('Plan', 'buildup', 1));
-        const blob = JSON.parse(store.value!) as AppSettings & {
-            challengeSettings: { scenarios: Record<string, { version: number }> };
-        };
-        blob.challengeSettings.scenarios.Plan.version = 99;
+        const blob = parseJsonAs(
+            store.value!,
+            isShape<{ scenarios: Record<string, { version: number }> }>({
+                scenarios: isRecordOf(isShape<{ version: number }>({ version: isNumber })),
+            }),
+        );
+        blob.scenarios.Plan.version = 99;
         store.value = JSON.stringify(blob);
         expect(settings.getEffectiveSetting('exposure', '7')).toBe(100);
     });
@@ -151,13 +131,13 @@ describe('scenario phase-settings overlay', () => {
         expect(settings.getEffectiveSetting('exposure', '7')).toBe(10);
     });
 
-    test('mock mode reads the in-memory ledger, never the persisted one', () => {
+    test('mock mode reads the in-memory ledger, never the persisted one', async () => {
         assign();
         settings.setSetting('mock', true);
         scenarioStateLedger.set(7, initialState('Plan', 'buildup', 1));
         expect(settings.getEffectiveSetting('exposure', '7')).toBe(100);
         mockScenarioStateLedger.set(7, initialState('Plan', 'buildup', 1));
         expect(settings.getEffectiveSetting('exposure', '7')).toBe(10);
-        mockScenarioStateLedger.remove(7);
+        await mockScenarioStateLedger.remove(7);
     });
 });

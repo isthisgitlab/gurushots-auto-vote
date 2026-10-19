@@ -1,14 +1,7 @@
 import { useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { Modal, ModalActions } from '@/components/ui/Modal';
-
-import type { RendererGlobals } from '../../../types/capacitor';
-
-// Detect a real native (Android) platform without importing the node-flavored
-// runtime module into the browser bundle. The background-permission guidance
-// only applies when actually running natively — calling isNativePlatform()
-// (not just checking it exists) excludes any Capacitor web target.
-const isCapacitorPlatform = () => (globalThis as RendererGlobals).Capacitor?.isNativePlatform?.() === true;
 
 /**
  * One-time first-run welcome. Explains what the app does and, on Android,
@@ -18,7 +11,7 @@ const isCapacitorPlatform = () => (globalThis as RendererGlobals).Capacitor?.isN
  */
 export function WelcomeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void | Promise<void> }) {
     const { t } = useTranslation();
-    const showBatteryGuidance = isCapacitorPlatform();
+    const { batteryGuidance: showBatteryGuidance } = usePlatformCapabilities();
     // Stable across renders: Modal's open effect (focus trap, keydown
     // listener, scroll lock) re-runs whenever its onClose changes.
     const close = useCallback(() => void onClose(), [onClose]);
@@ -44,7 +37,7 @@ export function WelcomeModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
             </div>
 
             <ModalActions>
-                <button type="button" className="btn btn-primary btn-sm" onClick={close}>
+                <button type="button" className="btn btn-neutral btn-sm" onClick={close}>
                     {t('onboarding.gotIt')}
                 </button>
             </ModalActions>

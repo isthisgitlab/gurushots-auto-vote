@@ -13,8 +13,10 @@
  * uses) so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore, RuleMatchChallenge } from '../../src/ts/types/settings';
+import type { RuleMatchChallenge } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/settings');
+import { ruleLogLabel, MAX_CLOSE_TIMES_PER_RULE } from '../../src/ts/settings/titleRuleSanitize';
 
 jest.mock('../../src/ts/logger', () => ({
     info: jest.fn(),
@@ -50,28 +52,13 @@ const overridesFor = (target: RuleMatchChallenge | string) => {
 };
 
 describe('settings facade — title-keyed tag rules', () => {
-    const headlessGlobals = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let store: { value: string | null; read: jest.Mock<string | null, []>; write: jest.Mock<void, [string]> };
-
     beforeEach(() => {
-        headlessGlobals.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-        };
-        headlessGlobals.AndroidHeadlessStore = store;
+        installHeadlessStore();
         settings.rememberChallengeTitles([]);
     });
 
     afterEach(() => {
-        delete headlessGlobals.__GS_HEADLESS__;
-        delete headlessGlobals.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
     describe('getTitleRules / setTitleRules', () => {
@@ -197,14 +184,14 @@ describe('settings facade — title-keyed tag rules', () => {
      * and silently stop following a later change to the global setting.
      */
     describe('inline rule overrides', () => {
-        test('round-trips autoJoin, autoFill and the join window', () => {
+        test('round-trips autoJoin, autoSubmit and the join window', () => {
             const ok = settings.setTitleRules([
                 {
                     title: 'abc',
                     mustIncludeTags: [],
                     shouldIncludeTags: [],
                     autoJoin: true,
-                    autoFill: false,
+                    autoSubmit: false,
                     autoJoinWithinHoursOfEnd: 24,
                 },
             ]);
@@ -212,7 +199,7 @@ describe('settings facade — title-keyed tag rules', () => {
             expect(settings.getTitleRules()[0]).toMatchObject({
                 title: 'abc',
                 autoJoin: true,
-                autoFill: false,
+                autoSubmit: false,
                 autoJoinWithinHoursOfEnd: 24,
             });
         });
@@ -557,6 +544,181 @@ describe('settings facade — title-keyed tag rules', () => {
         });
     });
 
+    /**
+     * The close-time condition: the end time the challenge card shows, read in the
+     * app's timezone setting, any date.
+     */
+    describe('closesAt conditions', () => {
+        // 2026-06-15: Europe/Riga is on summer time (UTC+3).
+        const RIGA_1710 = { title: 'x', close_time: Date.UTC(2026, 5, 15, 14, 10, 30) / 1000 };
+        const UTC_1710 = { title: 'x', close_time: Date.UTC(2026, 5, 15, 17, 10, 30) / 1000 };
+        const save = (...rules: Record<string, unknown>[]) =>
+            settings.setTitleRules(rules.map((r) => ({ mustIncludeTags: [], shouldIncludeTags: [], ...r })));
+        const skip = { closesAt: '17:10', autoJoin: false };
+
+        test('stores a strict HH:MM, rejects an invalid one, and reads an empty one as unset', () => {
+            expect(save(skip)).toBe(true);
+            expect(settings.getTitleRules()).toEqual([
+                { ...skip, title: '', mustIncludeTags: [], shouldIncludeTags: [] },
+            ]);
+            for (const bad of ['25:00', '7:10', '17:10:00', 1710]) expect(save({ ...skip, closesAt: bad })).toBe(false);
+            expect(save({ title: 'abc', autoJoin: false, closesAt: '' })).toBe(true);
+            expect(settings.getTitleRules()[0]).not.toHaveProperty('closesAt');
+            // A rule whose only condition is an empty close time has no condition at all: dropped.
+            expect(save({ autoJoin: false, closesAt: '' })).toBe(true);
+            expect(settings.getTitleRules()).toEqual([]);
+        });
+
+        test.each([
+            ['a list with a blank', ['17:10', ''], { closesAt: '17:10' }],
+            ['a list that repeats a time', ['17:10', '17:10'], { closesAt: '17:10' }],
+            ['a list whose first entry is blank', ['', '18:10'], { closesAt: '18:10' }],
+            ['padded entries', [' 17:10 ', '18:10 '], { closesAt: '17:10', closesAtTimes: ['17:10', '18:10'] }],
+        ])(
+            'stores %s as the first time, and the list only when two or more remain',
+            (_name, closesAtTimes, expected) => {
+                expect(save({ autoJoin: false, closesAtTimes })).toBe(true);
+                expect(settings.getTitleRules()).toEqual([
+                    { ...expected, autoJoin: false, title: '', mustIncludeTags: [], shouldIncludeTags: [] },
+                ]);
+            },
+        );
+
+        test('a non-empty list replaces closesAt, which then mirrors its first time', () => {
+            expect(save({ autoJoin: false, closesAt: '09:00', closesAtTimes: ['17:10', '18:10'] })).toBe(true);
+            expect(settings.getTitleRules()[0]).toMatchObject({ closesAt: '17:10', closesAtTimes: ['17:10', '18:10'] });
+            // An empty list leaves the single time alone, and no list is written.
+            expect(save({ autoJoin: false, closesAt: '09:00', closesAtTimes: [] })).toBe(true);
+            expect(settings.getTitleRules()[0]).toMatchObject({ closesAt: '09:00' });
+            expect(settings.getTitleRules()[0]).not.toHaveProperty('closesAtTimes');
+        });
+
+        test('refuses a list with an invalid time, a non-text entry or a list that is not one, and one over the cap', () => {
+            for (const bad of [['17:10', 'x'], ['17:10', 7], [null], '17:10', { 0: '17:10' }]) {
+                expect(save({ autoJoin: false, closesAtTimes: bad })).toBe(false);
+            }
+            const times = (count: number) =>
+                Array.from({ length: count }, (_, i) => `${String(i).padStart(2, '0')}:00`);
+            expect(MAX_CLOSE_TIMES_PER_RULE).toBe(24);
+            expect(save({ autoJoin: false, closesAtTimes: times(24) })).toBe(true);
+            expect(settings.getTitleRules()[0].closesAtTimes).toHaveLength(24);
+            expect(save({ autoJoin: false, closesAtTimes: [...times(24), '23:59'] })).toBe(false);
+            // Repeats do not count against the cap: they are dropped first.
+            expect(save({ autoJoin: false, closesAtTimes: [...times(24), ...times(24)] })).toBe(true);
+        });
+
+        test('the same set of times is one rule, whatever its order or whether it is a list or a single time', () => {
+            save({ closesAt: '17:10', autoJoin: false }, { closesAtTimes: ['17:10'], autoJoin: true });
+            expect(settings.getTitleRules()).toHaveLength(1);
+            expect(settings.getTitleRules()[0].autoJoin).toBe(true);
+            save(
+                { closesAtTimes: ['17:10', '18:10'], autoJoin: false },
+                { closesAtTimes: ['18:10', '17:10'], autoJoin: true },
+            );
+            expect(settings.getTitleRules()).toHaveLength(1);
+            save(
+                { closesAtTimes: ['17:10', '18:10'], autoJoin: false },
+                { closesAtTimes: ['17:10', '19:10'], autoJoin: false },
+            );
+            expect(settings.getTitleRules()).toHaveLength(2);
+        });
+
+        test('a listed time makes a malformed closesAt irrelevant: the matcher uses the list and the sanitizer stores it', () => {
+            settings.setSetting('timezone', 'UTC');
+            expect(save({ autoJoin: false, closesAt: '25:00', closesAtTimes: ['17:10'] })).toBe(true);
+            expect(settings.getTitleRules()[0]).toMatchObject({ closesAt: '17:10' });
+            expect(settings.getTitleRules()[0]).not.toHaveProperty('closesAtTimes');
+            expect(overridesFor(UTC_1710)).toEqual({ autoJoin: false });
+            // With no time listed the malformed closesAt is refused, as ever.
+            expect(save({ autoJoin: false, closesAt: '25:00', closesAtTimes: [''] })).toBe(false);
+        });
+
+        test('a rule closing at any listed time resolves at each of them', () => {
+            settings.setSetting('timezone', 'UTC');
+            save({ closesAtTimes: ['17:10', '18:10'], autoJoin: false });
+            const at1810 = { title: 'x', close_time: Date.UTC(2026, 5, 15, 18, 10, 0) / 1000 };
+            const at1910 = { title: 'x', close_time: Date.UTC(2026, 5, 15, 19, 10, 0) / 1000 };
+            expect(overridesFor(UTC_1710)).toEqual({ autoJoin: false });
+            expect(overridesFor(at1810)).toEqual({ autoJoin: false });
+            expect(overridesFor(at1910)).toEqual({});
+        });
+
+        test('different close times are different rules; the same one de-duplicates', () => {
+            save(skip, { ...skip, closesAt: '17:20' });
+            expect(settings.getTitleRules().map((rule) => rule.closesAt)).toEqual(['17:10', '17:20']);
+            save(skip, { ...skip, autoJoin: true });
+            expect(settings.getTitleRules()).toHaveLength(1);
+            expect(settings.getTitleRules()[0].autoJoin).toBe(true);
+        });
+
+        test('the log label falls back to the close time, but only a strict one', () => {
+            expect(ruleLogLabel({ closesAt: '17:10' }, undefined)).toBe('closes 17:10');
+            expect(ruleLogLabel({ closesAt: '17:10', challengeTag: 'Comm' }, undefined)).toBe('Comm');
+            expect(ruleLogLabel({ closesAt: '17:10' }, 'Hats')).toBe('Hats');
+            expect(ruleLogLabel({ closesAt: 'evil\nlog line' }, undefined)).toBe('(untitled rule)');
+            expect(ruleLogLabel({ closesAt: '25:00' }, undefined)).toBe('(untitled rule)');
+            expect(ruleLogLabel({ closesAtTimes: ['17:10', '18:10'] }, undefined)).toBe('closes 17:10, 18:10');
+            expect(ruleLogLabel({ closesAtTimes: ['17:10', 'evil\nlog line'] }, undefined)).toBe('(untitled rule)');
+            // A long list is one short line: the first three, then an ellipsis.
+            const times = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
+            expect(ruleLogLabel({ closesAtTimes: times.slice(0, 3) }, undefined)).toBe('closes 00:00, 01:00, 02:00');
+            expect(ruleLogLabel({ closesAtTimes: times.slice(0, 4) }, undefined)).toBe('closes 00:00, 01:00, 02:00, …');
+            expect(ruleLogLabel({ closesAtTimes: times }, undefined)).toBe('closes 00:00, 01:00, 02:00, …');
+        });
+
+        test('resolves in the app timezone, not the device clock', () => {
+            settings.setSetting('timezone', 'Europe/Riga');
+            save(skip);
+            expect(overridesFor(RIGA_1710)).toEqual({ autoJoin: false });
+            expect(overridesFor(UTC_1710)).toEqual({});
+            settings.setSetting('timezone', 'UTC');
+            expect(overridesFor(UTC_1710)).toEqual({ autoJoin: false });
+            expect(overridesFor(RIGA_1710)).toEqual({});
+        });
+
+        test('list order decides against a title rule that opts in', () => {
+            settings.setSetting('timezone', 'UTC');
+            const titled = { title: 'x', autoJoin: true };
+            save(skip, titled);
+            expect(overridesFor(UTC_1710)).toEqual({ autoJoin: false });
+            save(titled, skip);
+            expect(overridesFor(UTC_1710)).toEqual({ autoJoin: true });
+        });
+
+        test('an opt-in rule joins only its close time when auto-join is off globally', () => {
+            settings.setSetting('timezone', 'UTC');
+            settings.setGlobalDefault('autoJoin', false);
+            save({ closesAt: '17:10', autoJoin: true });
+            const at1720 = { title: 'x', close_time: Date.UTC(2026, 5, 15, 17, 20, 0) / 1000 };
+            expect(overridesFor(UTC_1710)).toEqual({ autoJoin: true });
+            expect(settings.hasRuleJoinOptIn(UTC_1710)).toBe(true);
+            expect(overridesFor(at1720)).toEqual({});
+            expect(settings.hasRuleJoinOptIn(at1720)).toBe(false);
+        });
+
+        test('getTitleProfile and tag rules read the close time in the app timezone too', () => {
+            settings.setSetting('timezone', 'Europe/Riga');
+            settings.saveChallengeProfile('Late', { exposure: 80 });
+            save({ closesAt: '17:10', profile: 'Late' });
+            expect(settings.getTitleProfile(RIGA_1710)).toMatchObject({ profile: { name: 'Late' } });
+            expect(settings.getTitleProfile(UTC_1710).profile).toBeNull();
+            save({ closesAt: '17:10', mustIncludeTags: ['hat'] });
+            expect(settings.getEffectiveTagSetting('mustIncludeTags', RIGA_1710)).toEqual(['hat']);
+            expect(settings.getEffectiveTagSetting('mustIncludeTags', UTC_1710)).toEqual([]);
+        });
+
+        test('an empty timezone setting reads in UTC, like the challenge cards', () => {
+            settings.setSetting('timezone', '');
+            settings.saveChallengeProfile('Late', { exposure: 80 });
+            save({ closesAt: '17:10', profile: 'Late' });
+            expect(settings.getTitleProfile(UTC_1710)).toMatchObject({ profile: { name: 'Late' } });
+            expect(settings.getTitleProfile(RIGA_1710).profile).toBeNull();
+            save({ closesAt: '17:10', mustIncludeTags: ['hat'] });
+            expect(settings.getEffectiveTagSetting('mustIncludeTags', UTC_1710)).toEqual(['hat']);
+            expect(settings.getEffectiveTagSetting('mustIncludeTags', RIGA_1710)).toEqual([]);
+        });
+    });
+
     describe('getEffectiveTagSetting', () => {
         test('with no rules, equals the global default ("no filter" = empty)', () => {
             const challenge = { id: 1, title: 'Anything' };
@@ -626,9 +788,9 @@ describe('settings facade — title-keyed tag rules', () => {
         });
 
         test('a non-tag key falls through to the plain id-keyed resolution', () => {
-            settings.setGlobalDefault('autoFill', true);
+            settings.setGlobalDefault('autoSubmit', true);
             const challenge = { id: 3, title: 'Whatever' };
-            expect(settings.getEffectiveTagSetting('autoFill', challenge)).toBe(true);
+            expect(settings.getEffectiveTagSetting('autoSubmit', challenge)).toBe(true);
         });
 
         test('a challenge without a title returns the base', () => {
@@ -641,7 +803,7 @@ describe('settings facade — title-keyed tag rules', () => {
 
     describe('getTitleProfile', () => {
         test('resolves an exact title case-insensitively and returns sanitized values', () => {
-            settings.saveChallengeProfile('Portrait Tactic', { exposure: 80, autoFill: true });
+            settings.saveChallengeProfile('Portrait Tactic', { exposure: 80, autoSubmit: true });
             settings.setTitleRules([
                 {
                     title: 'Weekly Portraits',
@@ -651,11 +813,11 @@ describe('settings facade — title-keyed tag rules', () => {
                 },
             ]);
 
-            expect(settings.getTitleProfile(' weekly PORTRAITS ')).toEqual({
+            expect(settings.getTitleProfile(' weekly PORTRAITS ').profile).toEqual({
                 name: 'Portrait Tactic',
-                values: { exposure: 80, autoFill: true },
+                values: { exposure: 80, autoSubmit: true },
             });
-            expect(settings.getTitleProfile('Other')).toBeNull();
+            expect(settings.getTitleProfile('Other').profile).toBeNull();
         });
 
         test('deleting an assigned profile removes only its part of each title rule', () => {
@@ -679,7 +841,7 @@ describe('settings facade — title-keyed tag rules', () => {
 
             expect(settings.saveChallengeProfile('TACTIC', { exposure: 70 })).toBe(true);
             expect(settings.getTitleRules()[0].profile).toBe('TACTIC');
-            expect(settings.getTitleProfile('Portraits')).toEqual({ name: 'TACTIC', values: { exposure: 70 } });
+            expect(settings.getTitleProfile('Portraits').profile).toEqual({ name: 'TACTIC', values: { exposure: 70 } });
         });
     });
 });

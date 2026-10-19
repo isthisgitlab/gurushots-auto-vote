@@ -1,4 +1,6 @@
+import { useId } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { interp } from '@/utils/interp';
 import {
     CONDITION_FIELDS,
     ACTION_FIELDS,
@@ -27,8 +29,8 @@ type ValueChange = (next: unknown) => void;
  * validates; the real validator runs on save and on simulate.
  */
 
-const CONTROL = 'input input-sm input-bordered w-full';
-const SELECT = 'select select-sm select-bordered w-full';
+const CONTROL = 'input input-sm w-full';
+const SELECT = 'select select-sm w-full';
 
 /**
  * One labelled cell of an item's field grid — a named group, since a cell can
@@ -53,16 +55,22 @@ function OptionalText({
     onChange,
     label,
     type = 'text',
+    placeholder,
+    describedBy,
 }: {
     value: string | number | undefined;
     onChange: ValueChange;
     label: string;
     type?: 'text' | 'number';
+    placeholder?: string;
+    describedBy?: string;
 }) {
     return (
         <input
             {...(type === 'number' ? { type: 'number' as const } : { type: 'text' as const })}
             aria-label={label}
+            aria-describedby={describedBy}
+            placeholder={placeholder}
             className={CONTROL}
             value={value ?? ''}
             onChange={(e) => {
@@ -71,6 +79,30 @@ function OptionalText({
                 else onChange(type === 'number' ? Number(raw) : raw);
             }}
         />
+    );
+}
+
+/**
+ * An optional duration, with an example of the notation and a caption naming the forms it takes.
+ */
+function DurationInput({
+    value,
+    onChange,
+    label,
+}: {
+    value: string | number | undefined;
+    onChange: ValueChange;
+    label: string;
+}) {
+    const { t } = useTranslation();
+    const hintId = useId();
+    return (
+        <>
+            <OptionalText label={label} value={value} onChange={onChange} placeholder="1d 6h" describedBy={hintId} />
+            <span id={hintId} className="text-base-content/70">
+                {t('app.sbDurationHint')}
+            </span>
+        </>
     );
 }
 
@@ -239,6 +271,7 @@ function FieldInput({
                 <ValueInput type="number" label={label} value={scalar} onChange={onChange} />
             );
         case 'duration':
+            return <DurationInput label={label} value={scalar} onChange={onChange} />;
         case 'slot':
             return field.optional ? (
                 <OptionalText label={label} value={scalar} onChange={onChange} />
@@ -397,9 +430,9 @@ export function ItemEditor({
     const fields = spec.table[type] ?? [];
     return (
         <div className={`rounded border border-base-300 p-2 space-y-2 ${kind === 'selector' ? 'bg-base-200' : ''}`}>
-            <div className="flex gap-2 items-center">
+            <div className="flex flex-wrap gap-2 items-center">
                 <select
-                    className={SELECT}
+                    className={`${SELECT} min-w-40 flex-1`}
                     aria-label={t('app.sbPickType')}
                     value={type}
                     onChange={(e) => onChange(spec.make(e.currentTarget.value, { phases }))}
@@ -433,36 +466,50 @@ export function ItemEditor({
 }
 
 /**
- * Remove / move buttons for one list item.
+ * Remove / move buttons for one list item. `itemName` (what the item is, and its place in the list) goes into each
+ * button's accessible name, since a list repeats the same three buttons per item.
  */
 function ListControls({
     index,
     count,
+    itemName,
     onMove,
     onRemove,
 }: {
     index: number;
     count: number;
+    itemName: string;
     onMove: (delta: number) => void;
     onRemove: () => void;
 }) {
     const { t } = useTranslation();
+    const nameOf = (actionKey: string) => interp(t('app.actionOnItem'), { action: t(actionKey), item: itemName });
     return (
         <div className="flex gap-1 shrink-0">
-            <button type="button" className="btn btn-xs btn-ghost" disabled={index === 0} onClick={() => onMove(-1)}>
+            <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                disabled={index === 0}
+                aria-label={nameOf('app.sbMoveUp')}
+                onClick={() => onMove(-1)}
+            >
                 <span aria-hidden="true">↑</span>
-                <span className="sr-only">{t('app.sbMoveUp')}</span>
             </button>
             <button
                 type="button"
-                className="btn btn-xs btn-ghost"
+                className="btn btn-sm btn-ghost"
                 disabled={index === count - 1}
+                aria-label={nameOf('app.sbMoveDown')}
                 onClick={() => onMove(1)}
             >
                 <span aria-hidden="true">↓</span>
-                <span className="sr-only">{t('app.sbMoveDown')}</span>
             </button>
-            <button type="button" className="btn btn-xs btn-ghost text-error" onClick={onRemove}>
+            <button
+                type="button"
+                className="btn btn-sm btn-ghost text-error"
+                aria-label={nameOf('app.sbRemove')}
+                onClick={onRemove}
+            >
                 {t('app.sbRemove')}
             </button>
         </div>
@@ -488,6 +535,11 @@ function ItemList({
     const { t } = useTranslation();
     const spec = KINDS[kind];
     const list: unknown[] = Array.isArray(value) ? value : [];
+    // "<type> <position>", e.g. "Boost an entry 2": names the item in its buttons.
+    const itemName = (item: unknown, index: number) => {
+        const type = (item as Record<string, unknown> | null | undefined)?.[spec.key];
+        return `${typeof type === 'string' ? t(`${spec.label}${type}`) : ''} ${index + 1}`.trim();
+    };
     return (
         <div className="space-y-2">
             {list.map((item, index) => (
@@ -502,6 +554,7 @@ function ItemList({
                         <ListControls
                             index={index}
                             count={list.length}
+                            itemName={itemName(item, index)}
                             onMove={(delta) => onChange(moveItem(list, index, delta))}
                             onRemove={() => onChange(list.filter((_, i) => i !== index))}
                         />
@@ -509,7 +562,7 @@ function ItemList({
                 />
             ))}
             <select
-                className="select select-xs select-bordered"
+                className="select select-sm"
                 aria-label={t(addLabel)}
                 value=""
                 onChange={(e) => onChange([...list, spec.make(e.currentTarget.value, { phases })])}

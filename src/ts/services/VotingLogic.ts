@@ -14,7 +14,7 @@
  *   boostPrefill.ts     pre-boost fill window state
  *   ruleEngine.ts       the shared rule engine (_runVotingRules)
  *   voteDecisions.ts    auto/manual vote evaluators
- *   entryPick.ts        boost/turbo entry selection and boost fill-new mode
+ *   entryPick.ts        boost/turbo entry selection (pins included), fill-new modes and Emergency Fill window
  *   boostTurbo.ts       boost/turbo apply decisions, Emergency Fill override
  *   deadlineActions.ts  deadline-action thresholds, ordering and description
  *   joinDecision.ts     pure auto-join decision
@@ -41,8 +41,16 @@ export const getEffectiveBoostTime = thresholds.getEffectiveBoostTime;
 export const getEffectiveKeyUnlockedBoostTime = thresholds.getEffectiveKeyUnlockedBoostTime;
 export const pickBoostEntry = entryPick.pickBoostEntry;
 export const resolveBoostFillNewMode = entryPick.resolveBoostFillNewMode;
-export const isWithinEmergencyWindow = boostTurbo.isWithinEmergencyWindow;
+export const pickTurboEntry = entryPick.pickTurboEntry;
+export const resolveTurboFillNewMode = entryPick.resolveTurboFillNewMode;
+export const resolvePin = entryPick.resolvePin;
+export const livePinnedIds = entryPick.livePinnedIds;
+export const pinReleaseAt = entryPick.pinReleaseAt;
+export const pinFallbackOf = entryPick.pinFallbackOf;
+export const describePinFallback = entryPick.describePinFallback;
+export const isWithinEmergencyWindow = entryPick.isWithinEmergencyWindow;
 export const shouldApplyBoost = boostTurbo.shouldApplyBoost;
+export const isBoostDueForMission = boostTurbo.isBoostDueForMission;
 export const getBoostHoldUntil = boostTurbo.getBoostHoldUntil;
 export const shouldPlayAutoTurbo = boostTurbo.shouldPlayAutoTurbo;
 export const isTurboEarnSaved = boostTurbo.isTurboEarnSaved;
@@ -50,6 +58,7 @@ export const shouldApplyTurbo = boostTurbo.shouldApplyTurbo;
 export const pickEntryAvoidingConflict = entryPick.pickEntryAvoidingConflict;
 export const getAutoFillThresholdSec = deadlineActions.getAutoFillThresholdSec;
 export const getBoostThresholdSec = deadlineActions.getBoostThresholdSec;
+export const isBoostBlocked = deadlineActions.isBoostBlocked;
 export const orderDeadlineActions = deadlineActions.orderDeadlineActions;
 export const describeDeadlineActions = deadlineActions.describeDeadlineActions;
 export { shouldJoinChallenge, getScheduledFillState, getVotingPauseState, getBoostPrefillState, resolveEntryIndex };

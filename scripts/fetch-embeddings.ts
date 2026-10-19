@@ -51,6 +51,7 @@ export { GENERIC_TOKEN_RE, ENTRY_NAME } from './fetch-embeddings/config';
 export { sha256OfString, sha256OfFile } from './fetch-embeddings/support';
 export {
     collectAuthoredWords,
+    isConceptsConfig,
     parseGloveLine,
     normalize,
     retrofit,

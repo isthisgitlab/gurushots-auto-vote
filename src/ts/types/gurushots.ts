@@ -12,6 +12,15 @@
 /** Unix time in seconds, as the API sends it. */
 type UnixSeconds = number;
 
+/**
+ * When an entry went into its challenge, as the app recorded it: `exact` for a photo the app submitted itself, else the
+ * time a challenge fetch first showed it (it went in at or before then).
+ */
+export interface EntryEnteredTime {
+    at: UnixSeconds;
+    exact: boolean;
+}
+
 /** One of the member's own photos entered in a challenge. */
 export interface RankingEntry {
     id: string;
@@ -26,6 +35,8 @@ export interface RankingEntry {
     turbo?: boolean;
     boosting?: boolean;
     boosted?: boolean;
+    /** App-set, never from the API: when this entry went in (see EntryEnteredTime). Any server field of this name is discarded. */
+    appEntered?: EntryEnteredTime;
 }
 
 export interface RankingTotal {
@@ -58,6 +69,8 @@ export interface MemberRanking {
 }
 
 export type BoostState = 'LOCKED' | 'MISSED' | 'AVAILABLE' | 'AVAILABLE_KEY' | 'USED' | 'UNAVAILABLE' | (string & {});
+/** Which game a turbo session is: the classic one, or Snap (yes/no questions). Only the web read reports it. */
+type TurboMode = 'classic' | 'snap' | (string & {});
 type TurboState = 'FREE' | 'IN_PROGRESS' | 'TIMER' | 'WON' | 'LOCKED' | 'USED' | 'UNAVAILABLE' | (string & {});
 
 export interface MemberBoost {
@@ -68,6 +81,8 @@ export interface MemberBoost {
 
 export interface MemberTurbo {
     state?: TurboState;
+    /** Which game the next turbo session is; the bot plays a turbo only when this is 'classic' or 'snap'. */
+    mode?: TurboMode;
     /** Unix seconds the turbo timer opens; null when not on a timer. */
     time_to_open?: UnixSeconds | null;
     max_selections?: number;
@@ -137,12 +152,36 @@ export interface Challenge {
      * the cadence decision so the next cycle lands on it.
      */
     boostHoldUntil?: UnixSeconds;
+    /** App-set, never from the API (like `appEntered`): the team match running on this challenge, when the member's team has one. */
+    teamMatch?: TeamMatch;
+}
+
+/** Both teams' vote totals in a team match, from our side (`us`) and the opponent's (`them`). */
+export interface TeamMatch {
+    us: { name: string; votes: number };
+    them: { name: string; votes: number };
+}
+
+/** The WEB get_teams (limit=1): the member's team, only read when `state.status` is STATUS_JOINED. */
+export interface TeamsResponse {
+    state?: { status?: string };
+    data?: { teams?: Array<{ id?: number }> };
+}
+
+/** The WEB get_match: the challenge a team's match runs on and each side's total votes. */
+export interface MatchResponse {
+    data?: { challenge_id?: number; teams?: Array<{ id?: number; name?: string; total_votes?: number }> };
 }
 
 /** get_my_active_challenges. `fetchFailed` marks a failed request (empty list). */
 export interface ActiveChallengesResponse {
     challenges: Challenge[];
     fetchFailed?: boolean;
+}
+
+/** The WEB get_my_active_challenges: only each challenge's id and turbo are read. */
+export interface WebActiveChallengesResponse {
+    challenges?: Array<{ id: number | string; member?: { turbo?: MemberTurbo | null } }>;
 }
 
 /** One photo offered for voting. */
@@ -174,10 +213,15 @@ export interface SuccessResponse {
     success?: boolean;
 }
 
-/** `{ ok, raw }` from a spend / submit / apply call; `raw` is null when the request failed. */
+/**
+ * `{ ok, raw }` from a spend / submit / apply call; `raw` is null when the request failed. `unclear` is set by a
+ * spend that goes out once: the request was sent and no usable answer came, so it may have been processed.
+ * A refusal (`raw` null, not unclear) was not.
+ */
 export interface ActionResult {
     ok: boolean;
     raw: SuccessResponse | null;
+    unclear?: boolean;
 }
 
 /** rest_mobile/signup. */
@@ -188,6 +232,36 @@ export interface LoginResponse {
 /** get_member_challenges: the challenges the member has not joined yet. */
 export interface MemberChallengesResponse {
     items?: Challenge[];
+}
+
+/**
+ * A Discover row's challenge: an open one (no `status`) or one that has not started yet
+ * (`status: 'upcoming'`, a future `start_time`). The literal is the only marker; the open
+ * rows' own server status is dropped so it cannot be mistaken for it.
+ */
+export interface DiscoverChallenge extends Omit<Challenge, 'status'> {
+    status?: 'upcoming';
+}
+
+/**
+ * A challenge as the Discover list receives it: the API item plus what the
+ * Chosen Photos settings say for it. `chosenOwn` is the list saved for this
+ * challenge alone; `chosenEffectiveCount` is how many photos the join would
+ * actually use once every layer is resolved (0 under another account's list).
+ */
+export interface OpenChallenge extends DiscoverChallenge, ChosenAnnotation {}
+
+/**
+ * What the Chosen Photos settings say about one open challenge. `chosenOwn` is the
+ * list saved for it alone — empty while that list was saved under another account,
+ * whose photo ids are never sent (`chosenOwnCount` still says how many there are).
+ * `chosenEffectiveCount` is how many photos the join would use once every layer is
+ * resolved (0 under another account's list).
+ */
+export interface ChosenAnnotation {
+    chosenOwn: string[];
+    chosenOwnCount: number;
+    chosenEffectiveCount: number;
 }
 
 /** get_bankroll, raw. */
@@ -294,6 +368,51 @@ export interface TurboSelectionResult {
     raw: TurboSelectionResponse | null;
 }
 
+/** start_turbo_session: '2.0' is a Snap session, '1.0' the classic game. */
+export interface StartTurboSessionResponse {
+    success?: boolean;
+    session_type?: string;
+    session_id?: string;
+    /** Answers already given in this session. */
+    position?: number;
+    caption?: string | null;
+    sub_caption?: string | null;
+    /** Untrusted elements: narrowed to well-formed photos by startTurboSession. */
+    images?: unknown[];
+}
+
+/** submit_snap_vote. */
+export interface SnapVoteResponse {
+    success?: boolean;
+    /** True on the last answer of the session. */
+    completed?: boolean;
+    community_pct?: number | null;
+    error_code?: number | null;
+    message?: string | null;
+}
+
+/** One photo of a Snap session. */
+export interface SnapImage {
+    imageId: string;
+    memberId: string;
+}
+
+/** A started turbo session, normalized from start_turbo_session. */
+export type TurboSession =
+    | { kind: 'classic' }
+    | { kind: 'snap'; sessionId: string; position: number; caption: string; images: SnapImage[] };
+
+/** The outcome of one Snap answer; `unclear` means it was sent and may have been processed. */
+export interface SnapVoteResult {
+    ok: boolean;
+    completed: boolean;
+    communityPct: number | null;
+    errorCode: number | null;
+    unclear: boolean;
+    /** True only when a response body came back; false for a request that was refused before an answer or never left. */
+    serverAnswered: boolean;
+}
+
 /** The outcome of playing one challenge's Turbo mini-game. */
 export interface TurboMiniGameResult {
     played: number;
@@ -302,6 +421,31 @@ export interface TurboMiniGameResult {
     doubleFailed: number;
     won: boolean;
 }
+
+/** Why a Snap game stopped: finished, or the first thing that kept it from going on. */
+export type SnapStopReason =
+    | 'completed'
+    | 'no-model'
+    | 'unparsed-caption'
+    | 'judge-failed'
+    | 'unavailable'
+    | 'withdrawn'
+    | 'request-failed'
+    | 'vote-unclear'
+    | 'cancelled';
+
+/** The outcome of playing one challenge's Snap game; `answered` counts the answers that landed in this run. */
+export interface SnapGameResult {
+    answered: number;
+    total: number;
+    /** Mean community agreement (%) over this run's answers; null with none. */
+    meanAgreement: number | null;
+    won: boolean;
+    stopReason: SnapStopReason;
+}
+
+/** The outcome of one turbo game, tagged by which game it was. */
+export type TurboGameResult = ({ kind: 'classic' } & TurboMiniGameResult) | ({ kind: 'snap' } & SnapGameResult);
 
 /** A finished challenge from get_my_completed_challenges. */
 export interface CompletedChallenge {

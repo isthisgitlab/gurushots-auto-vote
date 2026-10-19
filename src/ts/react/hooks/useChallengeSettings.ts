@@ -10,7 +10,8 @@ import * as ipc from '@/api/ipc';
  *
  * Returns:
  *   hasCustomSettings   any perChallenge key has an override
- *   autoFillEnabled     effective autoFill value
+ *   autoSubmitEnabled     effective autoSubmit value
+ *   manualPhotosOnly    effective manualPhotosOnly value
  *   isCompact           effective compactCards value
  *   hasCompactOverride  whether compactCards has a per-challenge override
  *   toggleCompact()     flip the per-card density (or remove the override)
@@ -29,7 +30,8 @@ export function useChallengeSettings(
     settingsVersion: number = 0,
 ) {
     const [hasCustomSettings, setHasCustomSettings] = useState(false);
-    const [autoFillEnabled, setAutoFillEnabled] = useState(false);
+    const [autoSubmitEnabled, setAutoSubmitEnabled] = useState(false);
+    const [manualPhotosOnly, setManualPhotosOnly] = useState(false);
     const [isCompact, setIsCompact] = useState(initialCompact);
     const [hasCompactOverride, setHasCompactOverride] = useState(false);
 
@@ -60,13 +62,15 @@ export function useChallengeSettings(
             if (!current()) return;
             setHasCustomSettings(overrideResults.some((o) => o !== null));
 
-            const [fillOn, compact, compactOverride] = await Promise.all([
-                ipc.getEffectiveSetting('autoFill', id),
+            const [fillOn, manualOnly, compact, compactOverride] = await Promise.all([
+                ipc.getEffectiveSetting('autoSubmit', id),
+                ipc.getEffectiveSetting('manualPhotosOnly', id),
                 ipc.getEffectiveSetting('compactCards', id),
                 ipc.getChallengeOverride('compactCards', id),
             ]);
             if (!current()) return;
-            setAutoFillEnabled(fillOn === true);
+            setAutoSubmitEnabled(fillOn === true);
+            setManualPhotosOnly(manualOnly === true);
             setIsCompact(compact === true);
             setHasCompactOverride(compactOverride !== null);
         } catch {
@@ -99,7 +103,8 @@ export function useChallengeSettings(
 
     return {
         hasCustomSettings,
-        autoFillEnabled,
+        autoSubmitEnabled,
+        manualPhotosOnly,
         isCompact,
         hasCompactOverride,
         toggleCompact,

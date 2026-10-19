@@ -5,13 +5,19 @@ import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import { isAutoJoinActive } from '../../services/joinChallenges';
+import { forgetFailedMemberId, resolveMemberId } from '../../services/autoFill';
+import { chosenAnnotator, annotateOpenIds, MAX_ANNOTATED_IDS } from './chosenAnnotations';
+import { rememberOpenChallenges } from '../../services/openChallengeCache';
+import { fetchUpcoming, mergeDiscoverLists } from '../../services/discoverChallenges';
+import { accountGeneration } from '../../services/accountScope';
+import { dropContext } from '../../services/libraryCache';
 import { getAutoClaimStatus } from '../../services/autoClaim';
 import { rememberChallenges } from '../../windows/quitGuard';
 import { sanitizeForLog, refuseInvalidArgs } from './shared';
 
 import type { IpcReplyFn } from '../registerHandlers';
 import type { joinChallengeSingle } from '../../services/joinChallenges';
-import type { ActiveChallengesResponse, Bankroll, Challenge } from '../../types/gurushots';
+import type { ActiveChallengesResponse, Bankroll, Challenge, OpenChallenge } from '../../types/gurushots';
 
 const handleGetAutoClaimStatus = (async () => {
     try {
@@ -28,19 +34,21 @@ const handleGetActiveChallenges = (async (): Promise<ActiveChallengesResponse> =
         // The token never travels from the renderer: it is read from the store.
         // No token is the pre-login state, answered with the failed-fetch shape
         // (the renderer polls this, so no warning per call).
-        const { token } = settings.loadSettings();
+        const { auth, app } = settings.loadSettings();
+        const { token } = auth;
+        const { mock } = app;
         if (!token) return { challenges: [], fetchFailed: true };
         const strategy = apiFactory.getApiStrategy();
         const result: ActiveChallengesResponse = await strategy.getActiveChallenges(token);
         // Feeds the quit confirmation. A failed fetch keeps the previous
         // list — an empty one would wave through a quit mid-boost-window.
-        if (!result?.fetchFailed) rememberChallenges(result?.challenges);
+        if (!result?.fetchFailed) rememberChallenges(result?.challenges, mock === true);
         return result;
     } catch (error) {
         // Never throw to the renderer (architecture invariant). Return the
         // same `{ challenges, fetchFailed }` shape the happy path uses so
         // useActiveChallenges' "always resolves a list shape" assumption
-        // holds — a corrupted settings.json during getApiStrategy() must
+        // holds — a corrupted config.json during getApiStrategy() must
         // surface as a failed fetch, not a raw stack in the error UI.
         logger.withCategory('api').error('Error handling get-active-challenges request:', error);
         return { challenges: [], fetchFailed: true };
@@ -62,7 +70,23 @@ const handleAuthenticate = (async (event: unknown, username: string, password: s
         const { ok, token, error } = auth.extractAuthResult(response);
 
         if (ok) {
-            settings.setSetting('token', token);
+            // A login that could not be saved would sign the user out at the next start: say so now.
+            if (auth.switchAccountToken(token) === false) {
+                logger
+                    .withCategory('authentication')
+                    .error('Authentication succeeded but the token was not saved', null);
+                return { success: false as const, error: 'token-not-saved' };
+            }
+            // The login form pre-fills the name while "Stay logged in" is on.
+            const nameSaved = settings.setSetting(
+                'lastUsername',
+                settings.getSetting('stayLoggedIn') === true ? String(username) : '',
+            );
+            if (!nameSaved) {
+                logger
+                    .withCategory('authentication')
+                    .warning('The user name for the login form could not be saved; the login itself was');
+            }
             logger.withCategory('authentication').info('🔐 Authentication successful', { success: true });
             return { success: true as const };
         }
@@ -111,23 +135,119 @@ const handleGetAutoJoinActive = (async () => {
     }
 }) satisfies IpcReplyFn;
 
-// List un-joined ("open") challenges for the Discover view / CLI.
+const idsOf = (items: ReadonlyArray<Challenge | null>): Array<string | number> =>
+    items.flatMap((c) => (c?.id == null ? [] : [c.id]));
+
 /**
- * @param filter - Server-side filter; defaults to 'open'.
+ * The upcoming list, or null when it could not be had: a failure never costs the open list its
+ * place. The log line carries the filter and the kind of failure only — no token, no member.
  */
-const handleGetMemberChallenges = (async (event?: unknown, filter?: string) => {
+const fetchUpcomingOrNull = async (token: string, strategy: apiFactory.ApiStrategy): Promise<Challenge[] | null> => {
+    try {
+        const upcoming = await fetchUpcoming(token, strategy.getMemberChallenges);
+        if (upcoming === null)
+            logger.withCategory('api').warning('Could not list challenges (filter=upcoming: failed)');
+        return upcoming;
+    } catch (error) {
+        const kind = error instanceof Error ? error.name : typeof error;
+        logger.withCategory('api').warning(`Could not list challenges (filter=upcoming: ${kind})`);
+        // aislop-ignore-next-line ai-slop/hidden-fallback -- logged just above; null is the documented "could not be had" outcome
+        return null;
+    }
+};
+
+// List the challenges Discover shows (and the CLI's `discover`): the open (un-joined) ones and, when
+// discoverUpcomingHours is above 0, the upcoming ones starting within that many hours. The handler
+// decides what to fetch; the renderer sends nothing.
+const handleGetMemberChallenges = (async () => {
     try {
         const guard = auth.requireAuthToken('member challenges');
         if (!guard.ok) return guard.response;
         const strategy = apiFactory.getApiStrategy();
-        const items: Challenge[] | null = await strategy.getMemberChallenges(
-            guard.token,
-            filter === undefined ? 'open' : filter,
-        );
-        return { success: true as const, items: Array.isArray(items) ? items : [] };
+        const generation = accountGeneration();
+        const [open, upcoming] = await Promise.all([
+            strategy.getMemberChallenges(guard.token, 'open'),
+            // Fetched whatever the window: every upcoming id is what keeps its chosen photos from cleanup.
+            fetchUpcomingOrNull(guard.token, strategy),
+        ]);
+        // The account logged out (or changed) while the lists were on their way: they are not this
+        // account's to remember.
+        if (generation !== accountGeneration()) {
+            return { success: false as const, error: 'The account changed while listing challenges', items: [] };
+        }
+        if (open === null) return { success: false as const, error: 'Could not list challenges', items: [] };
+        // These lists keep a chosen-photos entry alive for a challenge that is not joined yet (see
+        // cleanupStaleChallengeSetting); the upcoming one is written only from a successful fetch.
+        settings.rememberOpenChallengeIds(idsOf(open));
+        if (upcoming !== null) settings.rememberUpcomingChallenges(upcoming);
+        const merged = mergeDiscoverLists({
+            open,
+            upcoming: upcoming ?? [],
+            hours: settings.getEffectiveSetting('discoverUpcomingHours', null),
+            nowSec: Date.now() / 1000,
+        });
+        // A challenge the upcoming feed dropped but the open one does not list yet stays in the
+        // cache, so its rules (by title or tags) still resolve while it is "starting now".
+        const fetched = new Set(idsOf(upcoming ?? []).map(String));
+        const lingering = Array.from(settings.getUpcomingChallengeIds() ?? []).filter((id) => !fetched.has(id));
+        rememberOpenChallenges(merged, lingering);
+        const annotate = await chosenAnnotator(guard.token);
+        return {
+            success: true as const,
+            items: merged.map((item): OpenChallenge => ({ ...item, ...annotate(item) })),
+        };
     } catch (error) {
         logger.withCategory('api').error('Error handling get-member-challenges request:', error);
         return { ...errorResult(error, 'Failed to list challenges'), items: [] };
+    }
+}) satisfies IpcReplyFn;
+
+// The Chosen Photos annotations of open challenges, read from the settings: what the Discover
+// rows re-read when a setting changes, without fetching the challenge list again. The only request
+// it can make is the signed-in member's identity lookup, cached per token (retried at most every
+// 60 s after a failure) and skipped when already resolved.
+/**
+ * @param ids - the open challenges' ids
+ */
+const handleGetOpenChosenAnnotations = (async (event: unknown, ids: Array<string | number>) => {
+    if (!Array.isArray(ids) || ids.length > MAX_ANNOTATED_IDS || !ids.every(isIdArg)) {
+        return refuseInvalidArgs('join', 'get-open-chosen-annotations');
+    }
+    try {
+        const { token } = settings.loadSettings().auth;
+        return { success: true as const, annotations: await annotateOpenIds(ids, token) };
+    } catch (error) {
+        logger.withCategory('join').error('Error handling get-open-chosen-annotations request:', error);
+        return { ...errorResult(error, 'Failed to read the chosen photos'), annotations: {} };
+    }
+}) satisfies IpcReplyFn;
+
+// The user's explicit "check the account again" (the chooser's Retry when it could not tell whose
+// account the saved list belongs to). It evicts the cached failed identity lookup for this token and
+// resolves the member only: no library walk, so a retry costs one profile request and repeats
+// nothing the listing on screen already read. `memberId` is the signed-in account, or the check
+// failed (`account-check-failed`) and may be tried again shortly, or there is no session
+// (`not-logged-in`). The eviction is rate-limited in memberIdentity: the first eviction always gets
+// through; later ones are spaced from the last eviction (presses inside the gap are answered from
+// the cache), so it never costs more than one request per gap.
+const handleConfirmAccount = (async () => {
+    try {
+        const guard = auth.requireAuthToken('account check');
+        // Signed out is not a failed check: Retry cannot help, so the renderer says to log in again.
+        if (!guard.ok) return { success: false as const, error: 'not-logged-in' as const };
+        forgetFailedMemberId(guard.token);
+        const memberId = await resolveMemberId(
+            guard.token,
+            apiFactory.getApiStrategy().getCurrentMemberProfile,
+            logger,
+            'join',
+        );
+        return memberId === null
+            ? { success: false as const, error: 'account-check-failed' as const }
+            : { success: true as const, memberId };
+    } catch (error) {
+        logger.withCategory('join').error('Error handling confirm-account request:', error);
+        return errorResult(error, 'Failed to check the account');
     }
 }) satisfies IpcReplyFn;
 
@@ -137,14 +257,30 @@ const handleGetMemberChallenges = (async (event?: unknown, filter?: string) => {
 // so this handler stays thin.
 /**
  * @param spendCoins - Only `true` authorizes a paid join.
+ * @param expectedCost - The cost the caller's confirmation named: a challenge that now costs more is
+ *   not joined (it answers `needs-confirm` with the live cost). Absent: the current cost is accepted.
  */
-const handleJoinChallenge = (async (event: unknown, challengeId: string | number, spendCoins?: boolean) => {
+const handleJoinChallenge = (async (
+    event: unknown,
+    challengeId: string | number,
+    spendCoins?: boolean,
+    expectedCost?: number,
+) => {
     if (!isIdArg(challengeId)) return refuseInvalidArgs('join', 'join-challenge');
+    if (
+        expectedCost !== undefined &&
+        !(typeof expectedCost === 'number' && Number.isFinite(expectedCost) && expectedCost >= 0)
+    ) {
+        return refuseInvalidArgs('join', 'join-challenge');
+    }
     const safeId = sanitizeForLog(challengeId);
     try {
         logger
             .withCategory('join')
-            .info(`▶️ Join request: Challenge=${safeId}, spendCoins=${spendCoins === true}`, null);
+            .info(
+                `▶️ Join request: Challenge=${safeId}, spendCoins=${spendCoins === true}, expectedCost=${expectedCost ?? 'none'}`,
+                null,
+            );
         const guard = auth.requireAuthToken('join');
         if (!guard.ok) return guard.response;
         const strategy = apiFactory.getApiStrategy();
@@ -152,13 +288,18 @@ const handleJoinChallenge = (async (event: unknown, challengeId: string | number
             challengeId,
             spendCoins === true,
             guard.token,
+            ...(expectedCost === undefined ? [] : [expectedCost]),
         );
+        // Joining enters photos, so which ones the challenge now accepts has changed.
+        if (outcome?.status === 'joined') dropContext(guard.token, challengeId);
         return {
             success: outcome?.status === 'joined',
             status: outcome?.status,
             cost: outcome?.cost,
             coins: outcome?.coins,
             challengeId: outcome?.challengeId,
+            reason: outcome?.reason,
+            coinsBefore: outcome?.coinsBefore,
         };
     } catch (error) {
         logger.withCategory('join').error('Error handling join-challenge request:', error);
@@ -166,12 +307,42 @@ const handleJoinChallenge = (async (event: unknown, challengeId: string | number
     }
 }) satisfies IpcReplyFn;
 
+/**
+ * The user forgetting a payment that could not be confirmed (the claim of an unlock that got no answer, or one from
+ * before accounts were told apart), after checking GuruShots shows the coins were not taken: the next join of the
+ * challenge asks for its price. Never touches a claim known to be charged.
+ */
+const handleForgetUnconfirmedPayment = (async (event: unknown, challengeId: string | number) => {
+    // A plain challenge id only: a claim is keyed `<member id>:<challenge id>`, and an id with a colon in it must
+    // never be able to name another record.
+    if (!isIdArg(challengeId) || !/^\d+$/.test(String(challengeId))) {
+        return refuseInvalidArgs('join', 'forget-unconfirmed-payment');
+    }
+    try {
+        logger
+            .withCategory('join')
+            .info(`▶️ Forget unconfirmed payment: Challenge=${sanitizeForLog(challengeId)}`, null);
+        const guard = auth.requireAuthToken('forget payment');
+        if (!guard.ok) return { ...guard.response, status: 'not-authenticated' as const };
+        const outcome = await apiFactory.getApiStrategy().forgetUnconfirmedPayment(challengeId, guard.token);
+        return outcome.status === 'forgotten'
+            ? { success: true as const, status: outcome.status }
+            : { success: false as const, error: outcome.status, status: outcome.status };
+    } catch (error) {
+        logger.withCategory('join').error('Error handling forget-unconfirmed-payment request:', error);
+        return errorResult(error, 'Failed to forget the payment');
+    }
+}) satisfies IpcReplyFn;
+
 export {
+    handleForgetUnconfirmedPayment,
     handleGetAutoClaimStatus,
     handleGetActiveChallenges,
     handleAuthenticate,
     handleGetBankroll,
     handleGetAutoJoinActive,
     handleGetMemberChallenges,
+    handleGetOpenChosenAnnotations,
+    handleConfirmAccount,
     handleJoinChallenge,
 };

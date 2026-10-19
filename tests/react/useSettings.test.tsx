@@ -13,17 +13,17 @@ import { invalid } from '../helpers/invalid';
 
 describe('useSettings', () => {
     test('loads settings and exposes getSetting', async () => {
-        jest.mocked(window.api.getSettings).mockResolvedValueOnce(invalid({ theme: 'dark' }));
+        jest.mocked(window.api.getSettings).mockResolvedValueOnce(invalid({ app: { theme: 'dark' } }));
         const { result } = renderHook(() => useSettings());
 
         await waitFor(() => expect(result.current.loading).toBe(false));
-        expect(result.current.settings).toEqual({ theme: 'dark' });
+        expect(result.current.settings).toEqual({ app: { theme: 'dark' } });
         expect(result.current.getSetting('theme')).toBe('dark');
         expect(result.current.getSetting('missing')).toBeUndefined();
     });
 
     test('updateSetting persists over IPC and applies the value optimistically', async () => {
-        jest.mocked(window.api.getSettings).mockResolvedValueOnce(invalid({ theme: 'dark', language: 'en' }));
+        jest.mocked(window.api.getSettings).mockResolvedValueOnce(invalid({ app: { theme: 'dark', language: 'en' } }));
         const { result } = renderHook(() => useSettings());
         await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -32,7 +32,36 @@ describe('useSettings', () => {
         });
 
         expect(window.api.setSetting).toHaveBeenCalledWith('language', 'lv');
-        expect(result.current.settings).toEqual({ theme: 'dark', language: 'lv' });
+        expect(result.current.settings).toEqual({ app: { theme: 'dark', language: 'lv' } });
+    });
+
+    test('updateSetting resolves true for a write that landed, even when the bridge answers nothing', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValueOnce(invalid({ app: { theme: 'dark' } }));
+        const { result } = renderHook(() => useSettings());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        let landed;
+        await act(async () => {
+            landed = await result.current.updateSetting('theme', 'light');
+        });
+        expect(landed).toBe(true);
+    });
+
+    test('a write the handler refuses (false) resolves false: no optimistic update, no throw, no refetch', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValueOnce(invalid({ app: { theme: 'dark' } }));
+        jest.mocked(window.api.setSetting).mockResolvedValueOnce(false);
+        const { result } = renderHook(() => useSettings());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        let landed;
+        await act(async () => {
+            landed = await result.current.updateSetting('theme', 'light');
+        });
+
+        expect(landed).toBe(false);
+        expect(result.current.settings).toEqual({ app: { theme: 'dark' } });
+        expect(result.current.error).toBeNull();
+        expect(window.api.getSettings).toHaveBeenCalledTimes(1);
     });
 
     test('with nothing loaded, getSetting is undefined and an update keeps settings null', async () => {
@@ -50,8 +79,8 @@ describe('useSettings', () => {
 
     test('a failed write refetches the real state and rethrows', async () => {
         jest.mocked(window.api.getSettings)
-            .mockResolvedValueOnce(invalid({ theme: 'dark' }))
-            .mockResolvedValueOnce(invalid({ theme: 'from-disk' }));
+            .mockResolvedValueOnce(invalid({ app: { theme: 'dark' } }))
+            .mockResolvedValueOnce(invalid({ app: { theme: 'from-disk' } }));
         const failure = new Error('disk full');
         jest.mocked(window.api.setSetting).mockRejectedValueOnce(failure);
         const { result } = renderHook(() => useSettings());
@@ -69,7 +98,7 @@ describe('useSettings', () => {
         expect(thrown).toBe(failure);
         expect(window.api.getSettings).toHaveBeenCalledTimes(2);
         // The refetch replaced the optimistic path with what is really on disk.
-        expect(result.current.settings).toEqual({ theme: 'from-disk' });
+        expect(result.current.settings).toEqual({ app: { theme: 'from-disk' } });
     });
 });
 

@@ -23,24 +23,15 @@ const isWithinFinalWindow = (closeTime: number, now: number, windowSec: number =
 };
 
 /**
- * The last-minute threshold in minutes, clamped to the schema's range (1..59),
- * mirroring finalWindowDuration and voteBeforeFinalWindowLeadMin in
- * _runVotingRules.
+ * The last-minute threshold in minutes: validated to the schema's range (1..59)
+ * when settings load. A NaN here would make the window comparison false, so the
+ * last-minute rule would NEVER fire — and because the voting pause sits above
+ * final-window, last-minute is the one rule a pause deliberately cannot block.
  *
- * Without the clamp a corrupt or under-mocked value makes the window
- * comparison NaN-false, so the last-minute rule NEVER fires. Because the
- * voting pause sits above final-window, that is the difference between "votes
- * late" and "never votes at all": last-minute is the one rule a pause
- * deliberately cannot block.
- *
- * Shared by the gate and by the log/message strings so the two can't disagree:
- * reading it raw for display while gating on the clamped value would print
- * "lastminute threshold (NaNm)" on a rule that had just fired at 10m.
+ * Shared by the gate and by the log/message strings so the two can't disagree.
  */
-const getEffectiveLastMinuteThreshold = (challengeId: string): number => {
-    const threshold = Number(settings.getEffectiveSetting('lastMinuteThreshold', challengeId));
-    return Number.isFinite(threshold) && threshold >= 1 && threshold <= 59 ? threshold : 10;
-};
+const getEffectiveLastMinuteThreshold = (challengeId: string): number =>
+    settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
 
 /**
  * Check if a challenge is within the last minute threshold
@@ -115,17 +106,10 @@ const getEffectiveBoostTime = (challengeId: string): number => {
  * @param challengeId - Challenge ID
  * @returns Seconds before close within which a key-unlocked boost is applied
  */
-const getEffectiveKeyUnlockedBoostTime = (challengeId: string): number => {
-    const value = settings.getEffectiveSetting('keyUnlockedBoostTime', challengeId);
+const getEffectiveKeyUnlockedBoostTime = (challengeId: string): number =>
     // An explicit 0 means "never auto-apply", matching the 0-is-off convention boostTime and
-    // emergencyFill already use, and it is a value both the schema and the GUI input accept —
-    // so it must be honoured rather than quietly replaced by the default. Only a genuinely
-    // unusable value (missing, null, NaN, negative — reachable from an under-mocked caller or
-    // a hand-edited settings file) falls back to the schema default. Type-checked rather than
-    // coerced, because Number(null) is 0 and would otherwise read as a deliberate "off".
-    const raw = typeof value === 'number' ? value : Number.NaN;
-    return Number.isFinite(raw) && raw >= 0 ? raw : 900;
-};
+    // emergencySubmit already use; the schema accepts it, so it is honoured.
+    settings.getEffectiveSetting('keyUnlockedBoostTime', challengeId);
 
 const getEffectiveTurboTime = (challengeId: string): number => {
     return settings.getEffectiveSetting('turboTime', challengeId);

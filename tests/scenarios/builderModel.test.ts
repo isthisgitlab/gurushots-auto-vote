@@ -43,7 +43,7 @@ describe('phases', () => {
                     },
                 ],
             },
-            later: { settings: { autoFill: false } },
+            later: { settings: { autoSubmit: false } },
         },
     };
 
@@ -62,7 +62,7 @@ describe('phases', () => {
         expect(Object.keys(renamed.phases)).toEqual(['first', 'end']);
         expect(renamed.start).toBe('first');
         expect(renamed.phases.first.rules![0].do[0]).toEqual({ type: 'goto', phase: 'end' });
-        expect(renamed.phases.end).toEqual({ settings: { autoFill: false } });
+        expect(renamed.phases.end).toEqual({ settings: { autoSubmit: false } });
     });
 
     test('renamePhase refuses a no-op, an empty name and a taken name', () => {

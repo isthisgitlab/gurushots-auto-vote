@@ -8,9 +8,14 @@ import * as logger from '../../logger';
 import * as settings from '../../settings';
 import { refreshApi, getMiddleware } from '../../apiFactory';
 import { clearAuthToken } from '../../services/auth';
+import { errorMessage } from '../../errorMessage';
+import { LOGOUT_NOT_SAVED } from '../../ipc/logoutCode';
 import { createReadlineInterface, askYesNo, askInput, askSecret } from '../prompts';
 
-const handleLogin = async () => {
+/**
+ * @returns whether a token was saved: false for a non-terminal session, rejected credentials, an unsaved token or an error
+ */
+const handleLogin = async (): Promise<boolean> => {
     // askSecret's mute only works on a real terminal — _writeToOutput is
     // bypassed when stdin is piped or when readline runs in non-terminal
     // mode. Refuse interactive login in that case so a user piping
@@ -22,7 +27,7 @@ const handleLogin = async () => {
             .error(
                 'Interactive login requires a terminal. Run the `login` command directly in a terminal session — piped or redirected stdin is not supported because the password prompt cannot mute echo.',
             );
-        return;
+        return false;
     }
 
     const rl = createReadlineInterface();
@@ -31,7 +36,7 @@ const handleLogin = async () => {
         logger.withCategory('ui').info('=== GuruShots Auto Voter - Login ===');
 
         const userSettings = settings.loadSettings();
-        const currentMockMode = userSettings.mock;
+        const currentMockMode = userSettings.app.mock;
 
         logger.withCategory('ui').info(`Current mode: ${currentMockMode ? 'MOCK' : 'REAL'}`);
 
@@ -66,13 +71,13 @@ const handleLogin = async () => {
         if (loginResult.success) {
             logger.withCategory('authentication').endOperation('login-auth', 'Login successful');
             logger.withCategory('authentication').success(`Token saved for ${useMockMode ? 'MOCK' : 'REAL'} mode`);
-        } else {
-            logger
-                .withCategory('authentication')
-                .endOperation('login-auth', null, loginResult.error || 'Unknown error');
+            return true;
         }
+        logger.withCategory('authentication').endOperation('login-auth', null, loginResult.error || 'Unknown error');
+        return false;
     } catch (error) {
         logger.withCategory('authentication').error('Login error', error);
+        return false;
     } finally {
         rl.close();
     }
@@ -83,13 +88,31 @@ const handleLogin = async () => {
  * (both just blank the token in settings); the next vote/run reports
  * "Not authenticated" until the user logs in again.
  */
-const handleLogout = async () => {
-    const hadToken = await clearAuthToken();
-    if (hadToken) {
+const handleLogout = async (): Promise<boolean> => {
+    let hadToken: boolean;
+    try {
+        hadToken = await clearAuthToken();
+    } catch (error) {
+        logger
+            .withCategory('authentication')
+            .error(
+                `Logout was not saved (${errorMessage(error) === LOGOUT_NOT_SAVED ? 'the saved settings are not in use' : (errorMessage(error) ?? 'unknown error')}); you are still logged in. Fix the settings (see settings-recovery) and run logout again`,
+            );
+        return false;
+    }
+    // A logout made while the saved settings could not be loaded just now is recorded, and holds when they are.
+    if (settings.isSignOutOwed()) {
+        logger
+            .withCategory('authentication')
+            .warning(
+                'Logout recorded, but the saved settings could not be loaded just now, so the login may still be stored; it is cleared as soon as they are loaded (the next run, or settings-recovery retry)',
+            );
+    } else if (hadToken) {
         logger.withCategory('authentication').success('Logged out — token cleared');
     } else {
         logger.withCategory('ui').info('Already logged out — no token was set');
     }
+    return true;
 };
 
 export { handleLogin, handleLogout };

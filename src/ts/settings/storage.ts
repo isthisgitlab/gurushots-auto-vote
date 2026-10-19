@@ -1,8 +1,8 @@
 /**
- * Persistence transport + path / runtime detection helpers.
+ * Persistence transport for the settings.
  *
- * Electron / CLI: settings live in a JSON file read/written synchronously
- * through fs at userData/settings.json.
+ * Electron / CLI: the configuration lives in a JSON file read/written synchronously through fs at
+ * userData/config.json.
  *
  * Capacitor: the WebView has no fs and @capacitor/preferences is async-
  * only, so we hydrate an in-memory cache once at boot (initializeAsync)
@@ -10,160 +10,725 @@
  * synchronously so consumers see the new value immediately, then fire
  * an async write-behind so the next launch sees the change.
  *
+ * Two files go through the same transport (`createSettingsFile`): the configuration (`storage`: read, saved, set
+ * aside when it is unusable) and `settings.json` (`legacyStorage`: read for the import, and overwritten by the mirror
+ * that keeps it current in settings format 1 for older builds).
+ *
  * @capacitor/preferences is lazy-required only inside isCapacitor()
- * guards so non-Capacitor bundles never resolve it.
+ * guards so non-Capacitor bundles never resolve it. The generic JSON store
+ * other stores are made with lives in jsonStore.ts and is re-exported here.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as logger from '../logger';
-const { isSourceCode, getAppName } = logger;
 import * as runtime from '../runtime';
 
-import type { App } from 'electron';
-import type { PreferencesPlugin } from '@capacitor/preferences';
-import type { AndroidHeadlessStore } from '../types/settings';
 import { errorMessage } from '../errorMessage';
+import { sweepStaleTemps, writeAtomicOwnerOnly } from './atomicWrite';
+import { getCapacitorPreferences, listPreferenceKeys, removePreferenceKeys } from './capacitorPreferences';
+import {
+    areWritesRefused,
+    createJsonStore,
+    discardStores,
+    refuseWrites,
+    resumeWrites,
+    settleStores,
+} from './jsonStore';
+import { headlessSettingsWrite, headlessStore, keyedSettingsBridge, saveThroughCas } from './storeTransport';
+import { rebaseConfigText } from './settingsMerge';
+import {
+    electronApp,
+    getDefaultMockSetting,
+    getEnvironmentInfo,
+    getLegacySettingsPath,
+    getSettingsPath,
+    getUserDataPath,
+} from './userDataPaths';
+import { compareAndWrite } from '../services/NativeAutovoteBridge';
+
+import type { HeadlessSettingsBridge } from './storeTransport';
+
+/** The Preferences key of the settings.json blob (what `settings.json` is on a desktop). */
+const LEGACY_SETTINGS_KEY = 'gurushots-settings';
+/** The Preferences key of the configuration (what `config.json` is on a desktop). */
+const CONFIG_KEY = 'gurushots-config';
+
+// The backup of an unparseable Capacitor value lives under its key plus this suffix and the time it was set aside (a
+// later one never replaces an earlier). Before the time was added it was the suffix alone.
+const CORRUPT_SUFFIX = '_corrupt';
+// A copy kept of a settings.json that could not be imported (Start fresh) when `settings.json.original` is taken: under its key plus this suffix and the time.
+const UNIMPORTABLE_SUFFIX = '_unimportable';
+
+// Whether a settings save of the app window was given up: its change is in no store (and the cache is back to what is
+// stored, unless a later write is queued), and `droppedAfter` is the last write issued by then. Cleared by the next
+// write issued after that one that lands.
+let saveDropped = false;
+let droppedAfter = 0;
+// How many saves were given up in this process: each one is a notice of its own, so a repeat of the same cause is told
+// apart from the one a window already showed.
+let droppedSerial = 0;
+let saveDroppedListener: (() => void) | null = null;
 
 /**
- * The Android headless-service bridge, read at call time (absent everywhere
- * else).
+ * Why a settings save of the app window was given up: the background service kept changing the settings (`conflict`),
+ * the blob is past the size the native store takes (`too-large`), or the store refused or failed it (`storage`).
  */
-const headlessStore = (): AndroidHeadlessStore | undefined =>
-    (globalThis as typeof globalThis & { AndroidHeadlessStore?: AndroidHeadlessStore }).AndroidHeadlessStore;
+type SaveDroppedCause = 'conflict' | 'too-large' | 'storage' | 'logout-lost';
 
-// Try to import electron, but don't fail if it's not available (CLI context)
-let electronApp: App | null | undefined = null;
-try {
-    const electron = require('electron') as typeof import('electron');
-    electronApp = electron.app;
-} catch (error) {
-    // Electron not available (CLI context), we'll use fallback
-    logger.withCategory('ui').info('Running in CLI context - using fallback userData path:', errorMessage(error));
-}
+let droppedCause: SaveDroppedCause = 'storage';
 
-const SETTINGS_KEY = 'gurushots-settings';
-
-let capacitorInitialized = false;
-let cachedSettingsJson: string | null = null;
-let capacitorPreferences: PreferencesPlugin | null = null;
-
-// Serializes Capacitor write-behind so concurrent full-blob writes apply
-// in issue order — an earlier write can never resolve after a later one
-// and clobber it. flushPendingWrites() awaits the tail so callers can
-// guarantee durability (e.g. before the WebView is suspended).
-let writeChain = Promise.resolve();
-
-const getCapacitorPreferences = (): PreferencesPlugin => {
-    if (capacitorPreferences) return capacitorPreferences;
-    const plugin: PreferencesPlugin = (require('@capacitor/preferences') as typeof import('@capacitor/preferences'))
-        .Preferences;
-    capacitorPreferences = plugin;
-    return plugin;
+// The errno of a failed file operation (`EACCES`, `EIO`), for a log line: the error's own message names the path, which
+// holds the user's account name.
+const errnoOf = (err: unknown): string => {
+    const code = typeof err === 'object' && err !== null && 'code' in err ? err.code : undefined;
+    return typeof code === 'string' ? code : 'unknown error';
 };
 
-// Paths whose refused chmod has been logged. A path is dropped again (and the
-// recovery logged) once a chmod on it succeeds, so a file that stays
-// unrestrictable warns once per failure episode rather than on every write.
-const warnedUnrestrictable = new Set<string>();
+// The cause of a save that threw: the code the native plugin rejected with (`too-large`), or the one a save that lost
+// to the other writer on every attempt carries (`conflict`); anything else is the store's failure.
+const causeOf = (err: unknown): SaveDroppedCause => {
+    const code = typeof err === 'object' && err !== null && 'code' in err ? err.code : undefined;
+    return code === 'too-large' || code === 'conflict' ? code : 'storage';
+};
+
+// A change of the user's that is given up is a notice of its own, even when it repeats the cause of the one reported: the
+// window shows it again (`again`). A write the app issues itself (the restore of the configuration, which a read tries
+// again at once) reports a repeat once, or a store that refuses every write would make the window read, try and report in
+// a loop.
+const setSaveDropped = (dropped: boolean, cause: SaveDroppedCause = 'storage', again = false) => {
+    if (saveDropped === dropped && (!dropped || (droppedCause === cause && !again))) return;
+    if (dropped) droppedSerial++;
+    saveDropped = dropped;
+    droppedCause = cause;
+    saveDroppedListener?.();
+};
+
+/** Whether a settings save of the app window was given up, and its change is not in the stored settings. */
+const isSaveDropped = (): boolean => saveDropped;
+
+/** Why the save reported by {@link isSaveDropped} was given up (`storage` while none is). */
+const getSaveDroppedCause = (): SaveDroppedCause => droppedCause;
+
+/** How many saves were given up so far: the one reported by {@link isSaveDropped} is the latest. */
+const getSaveDroppedSerial = (): number => droppedSerial;
 
 /**
- * Write a userData file owner-only (0o600), creating its directory 0o700.
- * The mode passed to writeFileSync only applies when the file is created, so
- * an existing file is chmod'ed to 0o600 before the new content lands in it:
- * when that chmod succeeds the data is never written into a file other local
- * users can read. A chmod that reaches no file (ENOENT: it does not exist yet;
- * EACCES: a directory on its path cannot be searched) is skipped silently: the
- * write then creates it with 0o600 or fails with its own error, and a "could
- * not restrict" warning would point at the wrong fix. A chmod the filesystem
- * refuses (a file owned by another uid, a vfat/SMB/FUSE mount) is logged with
- * what it needs, once per failure episode (until a chmod on that path succeeds
- * again, which is logged as the recovery), and does not fail the write: the
- * data still persists. The files can carry the auth token. The file is
- * rewritten in place rather than replaced by a rename, because settingsWatcher
- * watches its inode.
+ * Tells `listener` whenever {@link isSaveDropped} changes, so a window can re-read the settings (the one subscriber is
+ * replaced by the next).
  */
-const writeOwnerOnly = (filePath: string, data: string) => {
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    }
-    try {
-        fs.chmodSync(filePath, 0o600);
-        if (warnedUnrestrictable.delete(filePath)) {
-            logger.withCategory('settings').info(`Restricted ${filePath} to owner-only`);
-        }
-    } catch (err) {
-        const code = err instanceof Error && 'code' in err && typeof err.code === 'string' ? err.code : undefined;
-        if (code !== 'ENOENT' && code !== 'EACCES' && !warnedUnrestrictable.has(filePath)) {
-            warnedUnrestrictable.add(filePath);
-            const reason = code ?? errorMessage(err) ?? 'unknown error';
-            logger
-                .withCategory('settings')
-                .warning(
-                    `Could not restrict ${filePath} to owner-only (${reason}); other local users may be able to read it. It must be a regular file owned by the account this app runs as, on a filesystem that supports permissions (not FAT, SMB or FUSE); once it is, the next save restricts it automatically.`,
-                );
-        }
-    }
-    fs.writeFileSync(filePath, data, { encoding: 'utf8', mode: 0o600 });
+const onSaveDroppedChange = (listener: (() => void) | null): void => {
+    saveDroppedListener = listener;
 };
 
-const storage = {
+/**
+ * What moving an unusable settings value aside came to: where it went, or why it did not. Where the move is only queued
+ * (the Android app window) `moved` says later whether it was made.
+ */
+type QuarantineResult = { ok: true; path: string; moved?: Promise<boolean> } | { ok: false; error: string };
+
+/**
+ * How a queued Capacitor write ended: `written` (Preferences holds the text), `declined` (the compare-and-write found
+ * another context's text there and took that: the write had nothing to do), or `failed` (nothing was written).
+ */
+type QueuedWriteOutcome = 'written' | 'declined' | 'failed';
+
+/**
+ * What `writeIfAbsent` came to: it was saved, a value was already there (`current`), or the save failed. Where the save
+ * is only queued (the Android app window) `landed` says how it ended, once it has: until then the text is shown by the
+ * cache, and nothing that depends on it being stored may be done.
+ */
+type WriteIfAbsentResult =
+    | { outcome: 'saved'; landed?: Promise<QueuedWriteOutcome> }
+    | { outcome: 'exists'; current: string | null }
+    | { outcome: 'failed' };
+
+/**
+ * What a `write` came to: `ok` (the text is saved, or shown by the cache and queued), and, where the save is only
+ * queued (the Android app window), `landed`, which says how the queued write ended once it has: until then the text is
+ * shown by the cache, and nothing that depends on it being stored may be done.
+ */
+type WriteResult = { ok: boolean; landed?: Promise<QueuedWriteOutcome> };
+
+/** What one compare-and-overwrite of a settings file's text came to: `conflict`: it no longer held what was expected. */
+type OverwriteOutcome = 'written' | 'conflict' | 'failed';
+
+type SettingsFileOptions = {
+    /** the file in the user-data directory */
+    fileName: string;
+    /** the Preferences key (Capacitor) and the native bridge key (Android) */
+    prefKey: string;
+    /** the full path of the file, read at call time */
+    filePath: () => string;
+    /** a change made again on the text the other Android context saved meanwhile (a plain overwrite for `settings.json`) */
+    rebase: (base: string | null, ours: string, theirs: string | null) => string;
+    /** the Android service reaches the key through the bridge's own read/write pair, not through the keyed calls */
+    dedicatedBridge: boolean;
+    /** a given-up write of this file is reported to the window (the configuration's only) */
+    reportsDroppedSaves: boolean;
+};
+
+/** When a copy was made (ms since the epoch), from the time in its name; null if the name has none. */
+const copyMadeAt = (copy: string): number | null => {
+    const stamp = /-(\d{4}-\d\d-\d\dT\d\d)-(\d\d)-(\d\d)-(\d{3}Z)$/.exec(path.basename(copy));
+    const madeAt = stamp ? Date.parse(`${stamp[1]}:${stamp[2]}:${stamp[3]}.${stamp[4]}`) : Number.NaN;
+    return Number.isNaN(madeAt) ? null : madeAt;
+};
+
+/** Whether a copy is at least `ageMs` old; one whose name has no time is taken for old. 0: any copy. */
+const copyIsOlderThan = (copy: string, ageMs: number): boolean => {
+    const madeAt = copyMadeAt(copy);
+    return ageMs <= 0 || madeAt === null || Date.now() - madeAt >= ageMs;
+};
+
+// The time a value was set aside, as part of the name it is kept under.
+const setAsideStamp = (): string => new Date().toISOString().replace(/[:.]/g, '-');
+
+const createSettingsFile = (options: SettingsFileOptions) => {
+    const { fileName, prefKey, filePath, rebase, dedicatedBridge, reportsDroppedSaves } = options;
+    let capacitorInitialized = false;
+    let cachedJson: string | null = null;
+    // Whether a quarantined copy of this file exists in Preferences (the app window learns it when it hydrates).
+    let hasBackupKey = false;
+
+    // What the app window knows Preferences to hold for the key: what it read, or saved last. The compare-and-write
+    // of the next save expects it, and the change is made again on what the background service saved since.
+    let persistedJson: string | null = null;
+    // The text the Android service's JS last read from the native store: the text its next write is a change of.
+    let headlessBase: string | null = null;
+
+    // Serializes Capacitor write-behind so concurrent full-blob writes apply in issue order — an earlier write can
+    // never resolve after a later one and clobber it. flush() awaits the tail so callers can guarantee durability
+    // (e.g. before the WebView is suspended).
+    let writeChain = Promise.resolve();
+
+    // Bumped by discard: a queued write finds the number changed on its turn and puts nothing down.
+    let writeGeneration = 0;
+    // Bumped by every write and by moving the stored value aside: a write that finds it moved on is not the latest,
+    // and leaves the cache to the one that is.
+    let writeSerial = 0;
+
+    // Temp files an earlier crash left beside the file are swept on the first write.
+    let swept = false;
+    const sweepOnce = (file: string) => {
+        if (swept) return;
+        swept = true;
+        sweepStaleTemps(file);
+    };
+
+    const bridge = (): HeadlessSettingsBridge | undefined => {
+        if (dedicatedBridge) return headlessStore();
+        return keyedSettingsBridge(prefKey);
+    };
+
+    // Saves the text the app window changed (`data`, made from `base`, the cache before the change): only if
+    // Preferences still holds what was last known of it, else the change is made again on what the background service
+    // saved since (`update` decides what is saved from what is there). Once the latest write is saved, the cache holds
+    // the saved text.
+    const saveThroughCasWith = async (
+        update: (stored: string | null) => string | null,
+        serial: number,
+    ): Promise<string | null> => {
+        let saved = persistedJson;
+        const result = await saveThroughCas(
+            prefKey,
+            getCapacitorPreferences,
+            persistedJson,
+            (stored) => {
+                const next = update(stored);
+                saved = next ?? stored;
+                return next;
+            },
+            (expected, text) => compareAndWrite(prefKey, expected, text),
+        );
+        persistedJson = saved;
+        if (serial === writeSerial) cachedJson = saved;
+        return result;
+    };
+
+    // Queues the write of a change of the cache: after the writes before it, as a compare-and-write.
+    const queueCapacitorWrite = (
+        update: (stored: string | null) => string | null,
+        userChange: boolean,
+    ): Promise<QueuedWriteOutcome> => {
+        const issuedIn = writeGeneration;
+        const serial = ++writeSerial;
+        const ended = writeChain
+            .then(async (): Promise<QueuedWriteOutcome> => {
+                if (issuedIn !== writeGeneration) return 'failed';
+                const result = await saveThroughCasWith(update, serial);
+                // A write issued before the one given up does not carry its change either.
+                if (reportsDroppedSaves && serial > droppedAfter) setSaveDropped(false);
+                return result === null ? 'declined' : 'written';
+            })
+            .catch((err): QueuedWriteOutcome => {
+                logger.withCategory('settings').error('Capacitor preferences write failed:', err);
+                if (issuedIn !== writeGeneration) return 'failed';
+                // What the cache shows must be what is stored: the change was not saved, and no later write carries
+                // it (each carries its own).
+                if (serial === writeSerial) cachedJson = persistedJson;
+                if (!reportsDroppedSaves) return 'failed';
+                // The window is told, so the user can make the change again.
+                droppedAfter = writeSerial;
+                setSaveDropped(true, causeOf(err), userChange);
+                return 'failed';
+            });
+        writeChain = ended.then(() => undefined);
+        return ended;
+    };
+
     /**
-     * Returns the raw settings JSON string, or null if not yet written.
+     * Runs `task` on this file's write chain, after the writes queued before it; `fallback` when the file was
+     * discarded meanwhile or the task threw (logged).
      */
-    readRaw: (): string | null => {
-        if (runtime.isHeadlessService()) {
-            // Background WebView: read from the native bridge backed by the
-            // same store the app's @capacitor/preferences uses, so the token
-            // and settings stay in sync between app and background.
-            const store = headlessStore();
-            return (store && store.read()) || null;
+    const enqueue = <T>(task: () => Promise<T>, fallback: T): Promise<T> => {
+        const issuedIn = writeGeneration;
+        const ended = writeChain
+            .then(() => (issuedIn === writeGeneration ? task() : fallback))
+            .catch((err): T => {
+                logger.withCategory('settings').error(`Capacitor ${fileName} write failed:`, err);
+                return fallback;
+            });
+        writeChain = ended.then(() => undefined);
+        return ended;
+    };
+
+    // The stored text where it is the app's own to read: the Android window's cache, or the file.
+    const readHere = (): string | null => {
+        if (runtime.isCapacitor()) return cachedJson;
+        const file = filePath();
+        if (!fs.existsSync(file)) return null;
+        return fs.readFileSync(file, 'utf8');
+    };
+
+    // The copies of this file set aside beside it (a desktop): `<file>.corrupt-<time>` and `<file>.unimportable-<time>`.
+    const setAsideFiles = (): string[] => {
+        try {
+            const file = filePath();
+            const prefixes = [CORRUPT_SUFFIX, UNIMPORTABLE_SUFFIX].map(
+                (suffix) => `${path.basename(file)}.${suffix.slice(1)}-`,
+            );
+            return fs
+                .readdirSync(path.dirname(file))
+                .filter((name) => prefixes.some((prefix) => name.startsWith(prefix)))
+                .map((name) => path.join(path.dirname(file), name));
+        } catch {
+            return [];
         }
-        if (runtime.isCapacitor()) {
-            return cachedSettingsJson;
-        }
-        const settingsPath = getSettingsPath();
-        if (!fs.existsSync(settingsPath)) return null;
-        return fs.readFileSync(settingsPath, 'utf8');
-    },
-    /**
-     * Writes the raw settings JSON string. Sync on Electron/CLI; cache + async write-behind on Capacitor.
-     */
-    writeRaw: (data: string) => {
+    };
+
+    const write = (data: string): WriteResult => {
+        if (areWritesRefused()) return { ok: false };
         if (runtime.isHeadlessService()) {
-            // Persist through the native bridge to the shared store; the
-            // commit is synchronous so a later read() in the same cycle
-            // sees the new value.
+            // Persist through the native bridge to the shared store, as a change of the text this context read: the
+            // app window saves the same blob, and what it saved meanwhile is kept (see headlessSettingsWrite). The
+            // commit is synchronous so a later read() in the same cycle sees the new value.
             try {
-                headlessStore()?.write(data);
+                const saved = headlessSettingsWrite(bridge(), rebase, headlessBase, data);
+                if (saved === null) {
+                    // The native side says why: the blob is past its size limit, it changed under the write, or the commit failed.
+                    const why = bridge()?.lastWriteRefusal?.();
+                    logger
+                        .withCategory('settings')
+                        .error(`Headless store refused the settings write${why ? ` (${why})` : ''}`, null);
+                    return { ok: false };
+                }
+                headlessBase = saved;
             } catch (err) {
                 logger.withCategory('settings').error('Headless store write failed:', err);
+                return { ok: false };
             }
-            return;
+            return { ok: true };
         }
         if (runtime.isCapacitor()) {
-            // Update the cache so synchronous reads see the new value
-            // immediately, then fire async write-behind to Preferences.
-            // Do NOT flip capacitorInitialized here — only initializeAsync
-            // owns that flag. If a write happens before initializeAsync
-            // resolves and we flipped the flag, initializeAsync would
-            // skip its hydration and previously-persisted settings would
-            // be lost on the next read of an unwritten key.
-            cachedSettingsJson = data;
-            // Chain onto the previous write so persistence is ordered. A
-            // failed write is logged but does not break the chain for the
-            // next one (the cache still holds the latest value).
-            writeChain = writeChain
-                .then(() => getCapacitorPreferences().set({ key: SETTINGS_KEY, value: data }))
-                .catch((err) => {
-                    logger.withCategory('settings').error('Capacitor preferences write failed:', err);
-                });
-            return;
+            // Update the cache so synchronous reads see the new value immediately, then fire async write-behind
+            // to Preferences. Do NOT flip capacitorInitialized here — only initializeAsync owns that flag. If a
+            // write happens before initializeAsync resolves and we flipped the flag, initializeAsync would skip
+            // its hydration and previously-persisted settings would be lost on the next read of an unwritten key.
+            const base = cachedJson;
+            cachedJson = data;
+            return { ok: true, landed: queueCapacitorWrite((stored) => rebase(base, data, stored), true) };
         }
-        writeOwnerOnly(getSettingsPath(), data);
-    },
+        const file = filePath();
+        sweepOnce(file);
+        writeAtomicOwnerOnly(file, data);
+        return { ok: true };
+    };
+
+    return {
+        /**
+         * Returns the raw JSON string, or null if not yet written.
+         */
+        readRaw: (): string | null => {
+            if (runtime.isHeadlessService()) {
+                // Background WebView: read from the native bridge backed by the same store the app's
+                // @capacitor/preferences uses, so the token and settings stay in sync between app and background.
+                headlessBase = bridge()?.read() || null;
+                return headlessBase;
+            }
+            return readHere();
+        },
+        /**
+         * Writes the raw JSON string. Sync on Electron/CLI (replaced atomically, so a reader or a crash never sees a
+         * cut-off file); cache + async write-behind on Capacitor, where `landed` says how the queued write ended.
+         *
+         * @returns `ok` false when the Android service's native store refused the write; true otherwise (a failed fs write throws)
+         */
+        write,
+        /** `write`, for the caller that has no use for `landed`. */
+        writeRaw: (data: string): boolean => write(data).ok,
+        /**
+         * Writes the raw JSON string only if nothing is stored yet: the write of an import, which two contexts (the app
+         * window and the background service) may both try. On Android the native compare-and-write decides which
+         * one is first; the other finds what the first saved (`exists`, with the text) and has nothing to write. On a
+         * desktop the caller holds the import lock, so what it found missing is still missing.
+         */
+        writeIfAbsent: (data: string): WriteIfAbsentResult => {
+            if (areWritesRefused()) return { outcome: 'failed' };
+            if (runtime.isHeadlessService()) {
+                try {
+                    const answer = bridge();
+                    if (!answer) {
+                        headlessBase = data;
+                        return { outcome: 'saved' };
+                    }
+                    if (answer.write(data) !== false) {
+                        headlessBase = data;
+                        return { outcome: 'saved' };
+                    }
+                    const current = answer.read();
+                    if (current !== null) {
+                        headlessBase = current;
+                        return { outcome: 'exists', current };
+                    }
+                    logger
+                        .withCategory('settings')
+                        .error(
+                            `Headless store refused the settings write (${answer.lastWriteRefusal?.() || 'refused'})`,
+                            null,
+                        );
+                } catch (err) {
+                    logger.withCategory('settings').error('Headless store write failed:', err);
+                }
+                return { outcome: 'failed' };
+            }
+            if (runtime.isCapacitor()) {
+                // The cache shows the import at once; if the service saved first, the compare-and-write finds its text
+                // and the cache takes that (`declined`). Whether it landed is for `landed` to say.
+                cachedJson = data;
+                return {
+                    outcome: 'saved',
+                    landed: queueCapacitorWrite((stored) => (stored === null ? data : null), false),
+                };
+            }
+            const file = filePath();
+            if (fs.existsSync(file)) return { outcome: 'exists', current: fs.readFileSync(file, 'utf8') };
+            writeAtomicOwnerOnly(file, data);
+            return { outcome: 'saved' };
+        },
+        /**
+         * The stored text as a read that changes nothing: unlike `readRaw`, it does not move what the Android service's
+         * next write is a change of, so it may be made between a read and the write that rests on it. The same text as
+         * `readRaw` everywhere else.
+         */
+        peekRaw: (): string | null => {
+            if (!runtime.isHeadlessService()) return readHere();
+            const answer = headlessStore();
+            return (answer?.readKey ? answer.readKey(prefKey) : answer?.read()) ?? null;
+        },
+        /**
+         * Overwrites the stored text with `data` only while it still is `expected` (null: none is stored): the one
+         * compare-and-set of a file that two processes (the app and the CLI) or contexts (the Android service) may
+         * both write. Where the save is only queued (the Android app window) use `readStored` / `casStored` instead.
+         */
+        overwriteIf: (expected: string | null, data: string): OverwriteOutcome => {
+            if (areWritesRefused()) return 'failed';
+            try {
+                if (runtime.isHeadlessService()) {
+                    const answer = bridge();
+                    if (!answer) return 'failed';
+                    if (answer.read() !== expected) return 'conflict';
+                    if (answer.write(data) === false)
+                        return answer.lastWriteRefusal?.() === 'conflict' ? 'conflict' : 'failed';
+                    headlessBase = data;
+                    return 'written';
+                }
+                const file = filePath();
+                if ((fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null) !== expected) return 'conflict';
+                sweepOnce(file);
+                writeAtomicOwnerOnly(file, data);
+                return 'written';
+            } catch (err) {
+                logger.withCategory('settings').error(`${fileName} could not be overwritten:`, err);
+                return 'failed';
+            }
+        },
+        /**
+         * The Android app window's read of what Preferences holds for the key now (not its cache, which it leaves as
+         * it is): the text another context saved since is seen.
+         */
+        peekStored: async (): Promise<string | null> => (await getCapacitorPreferences().get({ key: prefKey })).value,
+        /**
+         * The Android app window's compare-and-overwrite of the key: saved only while it still holds `expected`
+         * (null: nothing), and the cache then holds `data`.
+         *
+         * @returns whether it was saved (false: the key had changed)
+         * @throws when the store refused the write or it was past the size the native store takes
+         */
+        casStored: async (expected: string | null, data: string): Promise<boolean> => {
+            if (areWritesRefused()) throw new Error('writes are refused while local data is deleted');
+            const answer = compareAndWrite(prefKey, expected, data);
+            let saved: boolean;
+            if (answer === null) {
+                await getCapacitorPreferences().set({ key: prefKey, value: data });
+                saved = true;
+            } else {
+                saved = (await answer).saved;
+            }
+            if (saved) {
+                cachedJson = data;
+                persistedJson = data;
+                writeSerial++;
+            }
+            return saved;
+        },
+        enqueue,
+        /**
+         * Keeps a copy of `raw` (a settings text that could not be imported) beside this file under a name of its own
+         * (`<file>.unimportable-<time>`), owner-only; nothing that is there is replaced or removed. The Android
+         * service cannot make one, so it says so (the app window uses `keepUnimportableOnChain`).
+         */
+        keepUnimportable: (raw: string): QuarantineResult => {
+            if (runtime.isHeadlessService()) {
+                return { ok: false, error: 'the background service cannot keep a copy of a settings value' };
+            }
+            const copy = `${filePath()}.${UNIMPORTABLE_SUFFIX.slice(1)}-${setAsideStamp()}`;
+            try {
+                writeAtomicOwnerOnly(copy, raw);
+                return { ok: true, path: copy };
+            } catch (err) {
+                return { ok: false, error: errorMessage(err) ?? 'unknown error' };
+            }
+        },
+        /**
+         * `keepUnimportable` for the Android app window: the copy is kept in Preferences under
+         * `<key>_unimportable-<time>`. For a task that runs on this file's write chain (`enqueue`), which has the writes
+         * queued before it done already.
+         *
+         * @returns the key it was stored under; null when it could not be
+         */
+        keepUnimportableOnChain: async (raw: string): Promise<string | null> => {
+            const key = `${prefKey}${UNIMPORTABLE_SUFFIX}-${setAsideStamp()}`;
+            try {
+                await getCapacitorPreferences().set({ key, value: raw });
+                return key;
+            } catch (err) {
+                logger.withCategory('settings').error(`Capacitor ${fileName} copy write failed:`, err);
+                return null;
+            }
+        },
+        /** Where the file lives, for a message: the file, or the preference key where there is no file. */
+        location: (): string => (runtime.isHeadlessService() || runtime.isCapacitor() ? prefKey : filePath()),
+        /**
+         * Whether what a read answers is what is stored: false only where the answer is a cache that has not been
+         * filled yet (the app window before initializeAsync resolved) or no bridge answers (the Android service).
+         */
+        isLoaded: (): boolean => {
+            if (runtime.isHeadlessService()) return headlessStore() !== undefined;
+            if (runtime.isCapacitor()) return capacitorInitialized;
+            return true;
+        },
+        /**
+         * Whether what a read answers is stored: false only in the Android app window while a write of its own, queued
+         * and not landed yet, is what the cache shows (it is stored when it lands, and the cache goes back to what is
+         * stored when it fails).
+         */
+        isPersisted: (): boolean =>
+            !runtime.isCapacitor() || runtime.isHeadlessService() || cachedJson === persistedJson,
+        /**
+         * Whether an unusable copy of this file was set aside earlier (`<file>.corrupt-<time>`; on Capacitor a
+         * `<key>_corrupt…` preference, which the window learns when it hydrates, and the service cannot see).
+         */
+        hasQuarantined: (): boolean => {
+            if (runtime.isHeadlessService()) return false;
+            if (runtime.isCapacitor()) return hasBackupKey;
+            try {
+                const prefix = `${path.basename(filePath())}.corrupt-`;
+                return fs.readdirSync(path.dirname(filePath())).some((name) => name.startsWith(prefix));
+            } catch {
+                return false;
+            }
+        },
+        /** The text of a copy kept of this file (a desktop), by its path; throws when it cannot be read. */
+        readCopy: (copy: string): string => fs.readFileSync(copy, 'utf8'),
+        /** Whether a copy kept of this file (a desktop) is still there. */
+        hasCopy: (copy: string): boolean => fs.existsSync(copy),
+        /**
+         * Where a path leads when it is where this file keeps a copy of an unusable one: beside it, and named as such
+         * (`<file>.unimportable-<time>`); null otherwise. A path the marker remembers is taken as one only if it is.
+         * The path is judged by where it leads (a `..` in it is resolved), and the resolved path is the answer.
+         */
+        keptCopyPath: (copy: string): string | null => {
+            const resolved = path.resolve(copy);
+            return path.dirname(resolved) === path.dirname(path.resolve(filePath())) &&
+                path.basename(resolved).startsWith(`${path.basename(filePath())}.${UNIMPORTABLE_SUFFIX.slice(1)}-`)
+                ? resolved
+                : null;
+        },
+        /** When a copy kept of this file was made (ms since the epoch), from the time in its name; null if the name has none. */
+        keptCopyMadeAt: (copy: string): number | null => copyMadeAt(copy),
+        /**
+         * Changes the copies set aside beside this file (`<file>.corrupt-<time>`, `<file>.unimportable-<time>`) where
+         * the files can be read and written at once (a desktop): `change` gets each copy's text and answers the text to
+         * keep in its place, or null to leave it. A copy that cannot be read or written is logged (never its text) and
+         * left as it is.
+         *
+         * @param olderThanMs - only the copies at least this old (the time is in their name; 0: every copy)
+         * @returns whether every copy was handled (rewritten, or nothing to change): false when one could not be
+         */
+        rewriteSetAside: (change: (text: string) => string | null, olderThanMs = 0): boolean => {
+            let every = true;
+            for (const copy of setAsideFiles()) {
+                if (!copyIsOlderThan(copy, olderThanMs)) continue;
+                try {
+                    const next = change(fs.readFileSync(copy, 'utf8'));
+                    if (next !== null) writeAtomicOwnerOnly(copy, next);
+                } catch (err) {
+                    every = false;
+                    logger
+                        .withCategory('settings')
+                        .error(`${path.basename(copy)} could not be rewritten: ${errnoOf(err)}`);
+                }
+            }
+            return every;
+        },
+        /**
+         * `rewriteSetAside` for the Android app window: the copies are the Preferences keys `<key>_corrupt…` and
+         * `<key>_unimportable…`. For a task that runs on this file's write chain (`enqueue`).
+         *
+         * @returns whether every copy was handled (rewritten, or nothing to change): false when one could not be
+         */
+        rewriteSetAsideOnChain: async (change: (text: string) => string | null, olderThanMs = 0): Promise<boolean> => {
+            const preferences = getCapacitorPreferences();
+            const copies = (await preferences.keys()).keys.filter(
+                (key) =>
+                    [CORRUPT_SUFFIX, UNIMPORTABLE_SUFFIX].some((suffix) => key.startsWith(`${prefKey}${suffix}`)) &&
+                    copyIsOlderThan(key, olderThanMs),
+            );
+            let every = true;
+            for (const key of copies) {
+                try {
+                    const { value } = await preferences.get({ key });
+                    const next = value === null ? null : change(value);
+                    if (next !== null) await preferences.set({ key, value: next });
+                } catch (err) {
+                    every = false;
+                    logger.withCategory('settings').error(`Capacitor ${key} could not be rewritten: ${errnoOf(err)}`);
+                }
+            }
+            return every;
+        },
+        /**
+         * Moves a value that cannot be used out of the way, so the next save does not overwrite it: the file is
+         * renamed to `<file>.corrupt-<time>` (Electron/CLI); the Preferences value is copied to
+         * `<key>_corrupt-<time>`, then removed from its own key, and the cache emptied (Capacitor). The Android
+         * service cannot do either, so it reports a failure and the caller refuses to save.
+         */
+        quarantineRaw: (raw: string): QuarantineResult => {
+            if (runtime.isHeadlessService()) {
+                return { ok: false, error: 'the background service cannot set an unusable settings value aside' };
+            }
+            if (runtime.isCapacitor()) {
+                const backupKey = `${prefKey}${CORRUPT_SUFFIX}-${setAsideStamp()}`;
+                cachedJson = null;
+                const hadBackupKey = hasBackupKey;
+                hasBackupKey = true;
+                ++writeSerial;
+                const moved = writeChain
+                    .then(async () => {
+                        const preferences = getCapacitorPreferences();
+                        await preferences.set({ key: backupKey, value: raw });
+                        await preferences.remove({ key: prefKey });
+                        persistedJson = null;
+                        return true;
+                    })
+                    .catch((err) => {
+                        logger.withCategory('settings').error('Capacitor preferences backup write failed:', err);
+                        // The value was not moved: Preferences still holds it, the cache shows what is stored again (a
+                        // write queued meanwhile, a restore, cannot change what is stored over the damaged value, and
+                        // must not be shown in place of it), and there is no copy of it.
+                        cachedJson = persistedJson;
+                        hasBackupKey = hadBackupKey;
+                        return false;
+                    });
+                writeChain = moved.then(() => undefined);
+                return { ok: true, path: backupKey, moved };
+            }
+            const file = filePath();
+            const backupPath = `${file}.corrupt-${setAsideStamp()}`;
+            try {
+                fs.renameSync(file, backupPath);
+                return { ok: true, path: backupPath };
+            } catch (err) {
+                return { ok: false, error: errorMessage(err) ?? 'unknown error' };
+            }
+        },
+        /**
+         * Async initialization for Capacitor builds: hydrates the cache from Preferences. No-op elsewhere.
+         */
+        initializeAsync: async () => {
+            if (!runtime.isCapacitor() || runtime.isHeadlessService() || capacitorInitialized) return;
+            try {
+                const prefs = getCapacitorPreferences();
+                const { value } = await prefs.get({ key: prefKey });
+                cachedJson = value; // null if no preferences entry exists
+                persistedJson = value;
+                hasBackupKey = (await prefs.keys()).keys.some((key) => key.startsWith(`${prefKey}${CORRUPT_SUFFIX}`));
+            } catch (err) {
+                logger.withCategory('settings').error('Capacitor preferences read failed:', err);
+                cachedJson = null;
+                persistedJson = null;
+            } finally {
+                capacitorInitialized = true;
+            }
+        },
+        /** The in-flight Capacitor write-behind chain (see flushPendingWrites). */
+        flush: () => writeChain,
+        /** Gives up every write still queued and empties the caches. */
+        discard: async (): Promise<void> => {
+            writeGeneration++;
+            cachedJson = null;
+            persistedJson = null;
+            hasBackupKey = false;
+            await writeChain;
+        },
+        fileName,
+        prefKey,
+    };
 };
+
+/** The configuration (`config.json`, `gurushots-config`). */
+const storage = createSettingsFile({
+    fileName: 'config.json',
+    prefKey: CONFIG_KEY,
+    filePath: getSettingsPath,
+    rebase: rebaseConfigText,
+    dedicatedBridge: true,
+    reportsDroppedSaves: true,
+});
+
+/**
+ * `settings.json` (`gurushots-settings`): read for the import, and overwritten (never merged) by the mirror that keeps
+ * it current in settings format 1 (formatOneMirror.ts).
+ */
+const legacyStorage = createSettingsFile({
+    fileName: 'settings.json',
+    prefKey: LEGACY_SETTINGS_KEY,
+    filePath: getLegacySettingsPath,
+    rebase: (_base, ours) => ours,
+    dedicatedBridge: false,
+    reportsDroppedSaves: false,
+});
 
 /**
  * Async initialization for Capacitor builds. The React entry on Android
@@ -172,17 +737,7 @@ const storage = {
  * Electron/CLI where the fs path serves reads directly.
  */
 const initializeAsync = async () => {
-    if (!runtime.isCapacitor() || capacitorInitialized) return;
-    try {
-        const prefs = getCapacitorPreferences();
-        const { value } = await prefs.get({ key: SETTINGS_KEY });
-        cachedSettingsJson = value; // null if no preferences entry exists
-    } catch (err) {
-        logger.withCategory('settings').error('Capacitor preferences read failed:', err);
-        cachedSettingsJson = null;
-    } finally {
-        capacitorInitialized = true;
-    }
+    await Promise.all([storage.initializeAsync(), legacyStorage.initializeAsync()]);
 };
 
 /**
@@ -195,187 +750,44 @@ const initializeAsync = async () => {
  * succeeded". On Electron/CLI writes are already synchronous, so this is the
  * initial already-resolved promise and awaiting it is an immediate no-op.
  */
-const flushPendingWrites = () => writeChain;
-
-// One-shot notice if a legacy dev directory exists elsewhere. The legacy
-// Electron dev location is `<parent>/gurushots-auto-vote-dev`, while
-// runtime.getAppUserDataPath appends `-dev` to userData. When the two differ
-// (userData basename ≠ package name) the legacy dir may still hold a settings.json.
-let legacyDevDirChecked = false;
-/** @param userDataPath */
-const warnIfLegacyDevDir = (userDataPath: string) => {
-    if (legacyDevDirChecked) return;
-    legacyDevDirChecked = true;
-    if (!(electronApp && electronApp.getPath) || !isSourceCode()) return;
-    try {
-        const legacy = path.join(path.dirname(electronApp.getPath('userData')), 'gurushots-auto-vote-dev');
-        if (legacy !== userDataPath && fs.existsSync(path.join(legacy, 'settings.json'))) {
-            logger
-                .withCategory('settings')
-                .warning(
-                    `Dev settings found at ${legacy}, but settings are read from ${userDataPath} — move settings.json there if your values look reset`,
-                );
-        }
-    } catch {
-        // Purely informational — never block settings resolution.
-    }
-};
-
-// Define the settings file path in the userData directory. Resolution lives
-// in runtime.getAppUserDataPath — the ONE implementation shared with the
-// logger, so logs and settings can never land in different directories.
-const getSettingsPath = () => {
-    const userDataPath = runtime.getAppUserDataPath();
-    warnIfLegacyDevDir(userDataPath);
-    return path.join(userDataPath, 'settings.json');
+const flushPendingWrites = async () => {
+    await Promise.all([storage.flush(), legacyStorage.flush()]);
 };
 
 /**
- * Determine the default mock setting based on environment.
- * Dev wins over prod when both signals are set; default is prod (mock disabled).
+ * Gives up every write still queued (settings and every createJsonStore store), empties the caches, and makes every
+ * store refuse writes, so that nothing is persisted again while local data is deleted. Resolves once the writes
+ * already handed to Preferences have landed, so that removing their keys afterwards removes them for good.
  */
-const getDefaultMockSetting = () => {
-    if (runtime.isDevelopment()) return true;
-    return false;
+const discardPendingWrites = async (): Promise<void> => {
+    refuseWrites();
+    saveDropped = false;
+    droppedCause = 'storage';
+    discardStores();
+    await Promise.all([storage.discard(), legacyStorage.discard()]);
+    await settleStores();
 };
 
-// Get the userData directory path (useful for debugging)
-const getUserDataPath = () => {
-    return path.dirname(getSettingsPath());
-};
-
-// Get current environment information
-const getEnvironmentInfo = () => {
-    const isElectronPackaged = electronApp ? electronApp.isPackaged : false;
-    const isBuiltApp = isElectronPackaged || !isSourceCode();
-
-    return {
-        ...runtime.getEnvSnapshot(),
-        defaultMock: getDefaultMockSetting(),
-        platform: process.platform,
-        userDataPath: getUserDataPath(),
-        isSourceCode: isSourceCode(),
-        isElectronPackaged: isElectronPackaged,
-        isBuiltApp: isBuiltApp,
-        appName: getAppName(),
-    };
-};
-
-const readHeadlessKey = (prefKey: string, fallback: string | null): string | null => {
-    try {
-        // aislop-ignore-next-line ai-slop/hidden-fallback -- an absent key is the caller's cached value; the read contract
-        return headlessStore()?.readKey?.(prefKey) ?? fallback;
-    } catch (err) {
-        logger.withCategory('settings').error(`Headless ${prefKey} read failed:`, err);
-        // aislop-ignore-next-line ai-slop/hidden-fallback -- logged via the settings logger; the caller's cached value is the read contract
-        return fallback;
-    }
-};
-
-const writeHeadlessKey = (prefKey: string, data: string) => {
-    try {
-        headlessStore()?.writeKey?.(prefKey, data);
-    } catch (err) {
-        logger.withCategory('settings').error(`Headless ${prefKey} write failed:`, err);
-    }
-};
-
-/**
- * Generic platform-aware JSON store — the same transport pattern the
- * settings store above uses, packaged for other stores (metadata.ts).
- *
- *   - Electron/CLI: synchronous fs at userData/<fileName>, left at mode
- *     0o600 after every write (userData JSON can carry tokens/state that
- *     other local users have no business reading).
- *   - Capacitor app WebView: hydrate-once cache (initializeAsync) +
- *     ordered async write-behind to @capacitor/preferences under prefKey.
- *   - Android headless service: the native keyed preference bridge persists
- *     supported stores; unsupported keys retain their per-cycle memory cache.
- */
-const createJsonStore = ({ fileName, prefKey }: { fileName: string; prefKey: string }) => {
-    let initialized = false;
-    let cachedJson: string | null = null;
-    let chain = Promise.resolve();
-
-    const filePath = () => path.join(path.dirname(getSettingsPath()), fileName);
-
-    return {
-        /**
-         * Raw JSON string, or null when never written.
-         */
-        readRaw: (): string | null => {
-            if (runtime.isHeadlessService()) {
-                return readHeadlessKey(prefKey, cachedJson);
-            }
-            if (runtime.isCapacitor()) {
-                return cachedJson;
-            }
-            const p = filePath();
-            if (!fs.existsSync(p)) return null;
-            return fs.readFileSync(p, 'utf8');
-        },
-        /**
-         * Sync on Electron/CLI; cache + ordered write-behind on Capacitor; native keyed bridge on headless.
-         */
-        writeRaw: (data: string) => {
-            if (runtime.isHeadlessService()) {
-                cachedJson = data;
-                writeHeadlessKey(prefKey, data);
-                return;
-            }
-            if (runtime.isCapacitor()) {
-                cachedJson = data;
-                chain = chain
-                    .then(() => getCapacitorPreferences().set({ key: prefKey, value: data }))
-                    .catch((err) => {
-                        logger.withCategory('settings').error(`Capacitor ${prefKey} write failed:`, err);
-                    });
-                return;
-            }
-            writeOwnerOnly(filePath(), data);
-        },
-        /** Hydrate the Capacitor cache once at boot. No-op elsewhere. */
-        initializeAsync: async () => {
-            if (!runtime.isCapacitor() || runtime.isHeadlessService() || initialized) return;
-            try {
-                const { value } = await getCapacitorPreferences().get({ key: prefKey });
-                cachedJson = value;
-            } catch (err) {
-                logger.withCategory('settings').error(`Capacitor ${prefKey} read failed:`, err);
-                cachedJson = null;
-            } finally {
-                initialized = true;
-            }
-        },
-        /**
-         * Re-read the Capacitor preference into the cache — for a store the
-         * Android background service (a separate JS context) also writes.
-         * Waits for this context's own queued writes first, so none is lost.
-         * No-op off the Capacitor app WebView.
-         */
-        refreshAsync: async () => {
-            if (!runtime.isCapacitor() || runtime.isHeadlessService()) return;
-            await chain;
-            try {
-                const { value } = await getCapacitorPreferences().get({ key: prefKey });
-                cachedJson = value;
-                initialized = true;
-            } catch (err) {
-                logger.withCategory('settings').error(`Capacitor ${prefKey} refresh failed:`, err);
-            }
-        },
-        /** Await to guarantee the write-behind queue has drained. */
-        flushPendingWrites: () => chain,
-        /** fs path (Electron/CLI) — for debug/info surfaces. */
-        getFilePath: filePath,
-    };
-};
-
+export type { QueuedWriteOutcome, SaveDroppedCause };
 export {
+    LEGACY_SETTINGS_KEY,
+    CONFIG_KEY,
+    CORRUPT_SUFFIX,
+    UNIMPORTABLE_SUFFIX,
+    discardPendingWrites,
+    resumeWrites,
+    listPreferenceKeys,
+    removePreferenceKeys,
     storage,
+    legacyStorage,
+    isSaveDropped,
+    getSaveDroppedCause,
+    getSaveDroppedSerial,
+    onSaveDroppedChange,
     initializeAsync,
     flushPendingWrites,
     getSettingsPath,
+    getLegacySettingsPath,
     getDefaultMockSetting,
     getUserDataPath,
     getEnvironmentInfo,

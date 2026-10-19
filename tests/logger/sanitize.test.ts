@@ -1,3 +1,4 @@
+import { parseJson } from '../helpers/parseJson';
 /**
  * sanitizeForLog covers the redaction contract that protects on-disk logs
  * from leaking auth tokens / passwords. Each test below maps to one
@@ -36,6 +37,8 @@ describe('sanitizeForLog', () => {
             apiKey: 'k',
             secret: 's',
             cookie: 'c',
+            'set-cookie': 'sc',
+            setCookie: 'sc2',
             authorization: 'z',
             TOKEN: 't2',
             Password: 'p2',
@@ -111,8 +114,25 @@ describe('sanitizeForLog', () => {
 
     test('does not mutate the input object', () => {
         const input = { token: 'plain', user: { password: 'hunter2' } };
-        const snapshot = JSON.parse(JSON.stringify(input)) as typeof input;
+        const snapshot = parseJson(JSON.stringify(input));
         sanitizeForLog(input);
         expect(input).toEqual(snapshot);
+    });
+});
+
+describe('account identifiers', () => {
+    test.each(['email', 'login', 'username', 'userName', 'user_name', 'user-name', 'phone', 'EMAIL'])(
+        'redacts %s',
+        (key) => {
+            expect(sanitizeForLog({ [key]: 'value', other: 'kept' })).toEqual({ [key]: '[REDACTED]', other: 'kept' });
+        },
+    );
+
+    test('does not redact keys that merely contain an identifier word', () => {
+        expect(sanitizeForLog({ emailSent: true, loginCount: 2, phoneme: 'a' })).toEqual({
+            emailSent: true,
+            loginCount: 2,
+            phoneme: 'a',
+        });
     });
 });

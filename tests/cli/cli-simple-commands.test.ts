@@ -29,8 +29,10 @@ jest.mock('../../src/ts/logger', () => {
 });
 
 jest.mock('../../src/ts/settings', () => ({
+    getSetting: jest.fn(),
     loadSettings: jest.fn(() => ({ mock: false })),
     setSetting: jest.fn(),
+    isSignOutOwed: jest.fn(() => false),
 }));
 
 jest.mock('../../src/ts/apiFactory', () => {
@@ -48,7 +50,12 @@ jest.mock('../../src/ts/cli/prompts', () => ({
 }));
 
 jest.mock('../../src/ts/ipc/actions.handlers', () => {
-    const handlers = { 'get-bankroll': jest.fn(), 'get-member-challenges': jest.fn(), 'join-challenge': jest.fn() };
+    const handlers = {
+        'get-bankroll': jest.fn(),
+        'get-member-challenges': jest.fn(),
+        'join-challenge': jest.fn(),
+        'forget-unconfirmed-payment': jest.fn(),
+    };
     return { __handlers: handlers, buildHandlers: jest.fn(() => handlers) };
 });
 
@@ -61,6 +68,7 @@ const mockHasBundledModel = jest.fn(async () => true);
 jest.mock('../../src/ts/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
 
 import { invalid } from '../helpers/invalid';
+import { DEFAULT_TIMEZONE } from '../../src/ts/settings/uiDefaults';
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import loggerModule = require('../../src/ts/logger');
@@ -89,7 +97,7 @@ type HandlersMock = {
     __handlers: jest.Mocked<
         Pick<
             ReturnType<typeof actionsHandlersModule.buildHandlers>,
-            'get-bankroll' | 'get-member-challenges' | 'join-challenge'
+            'get-bankroll' | 'get-member-challenges' | 'join-challenge' | 'forget-unconfirmed-payment'
         >
     >;
 };
@@ -107,7 +115,8 @@ const pkg = jest.requireActual<typeof import('../../package.json')>('../../packa
 
 const { handleLogin, handleLogout } = require('../../src/ts/cli/commands/auth') as typeof authCommandsModule;
 const { showBankroll } = require('../../src/ts/cli/commands/bankroll') as typeof bankrollModule;
-const { showDiscover, joinChallengeCmd } = require('../../src/ts/cli/commands/join') as typeof joinModule;
+const { showDiscover, joinChallengeCmd, forgetPaymentCmd } =
+    require('../../src/ts/cli/commands/join') as typeof joinModule;
 const { checkUpdates } = require('../../src/ts/cli/commands/update') as typeof updateModule;
 const { showLogs } = require('../../src/ts/cli/commands/logs') as typeof logsModule;
 
@@ -152,7 +161,7 @@ describe('auth: login', () => {
         prompts.createReadlineInterface.mockReturnValue(invalid(rl));
         prompts.askInput.mockResolvedValue('me@x.io');
         prompts.askSecret.mockResolvedValue('pw');
-        settings.loadSettings.mockReturnValue(invalid({ mock: false }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { mock: false } }));
     });
     afterEach(() => {
         restore(process.stdin, ttyDesc.in);
@@ -164,7 +173,7 @@ describe('auth: login', () => {
         [true, false],
     ])('refuses a non-terminal session (stdin TTY=%p, stdout TTY=%p)', async (inTTY, outTTY) => {
         setTTY(inTTY, outTTY);
-        await handleLogin();
+        await expect(handleLogin()).resolves.toBe(false);
         expect(prompts.createReadlineInterface).not.toHaveBeenCalled();
         expect(msgs('error')[0]).toMatch(/requires a terminal/);
     });
@@ -172,7 +181,7 @@ describe('auth: login', () => {
     test('keeps the mode and saves the token on success', async () => {
         prompts.askYesNo.mockResolvedValueOnce(false);
         apiFactory.__mw.cliLogin.mockResolvedValue(invalid({ success: true }));
-        await handleLogin();
+        await expect(handleLogin()).resolves.toBe(true);
         expect(msgs('info')).toContain('Current mode: REAL');
         expect(settings.setSetting).not.toHaveBeenCalled();
         expect(apiFactory.refreshApi).toHaveBeenCalled();
@@ -190,10 +199,10 @@ describe('auth: login', () => {
     });
 
     test('switches from MOCK to REAL mode and reports a failed login', async () => {
-        settings.loadSettings.mockReturnValue(invalid({ mock: true }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { mock: true } }));
         prompts.askYesNo.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
         apiFactory.__mw.cliLogin.mockResolvedValue({ success: false, error: 'bad creds' });
-        await handleLogin();
+        await expect(handleLogin()).resolves.toBe(false);
         expect(msgs('info')).toContain('Current mode: MOCK');
         expect(settings.setSetting).toHaveBeenCalledWith('mock', false);
         expect(msgs('success')).toEqual(['Mode changed to: REAL']);
@@ -203,13 +212,13 @@ describe('auth: login', () => {
     test('a failed login without an error message falls back to "Unknown error"', async () => {
         prompts.askYesNo.mockResolvedValueOnce(false);
         apiFactory.__mw.cliLogin.mockResolvedValue(invalid({ success: false }));
-        await handleLogin();
+        await expect(handleLogin()).resolves.toBe(false);
         expect(logger.__calls.find((c) => c.level === 'endOperation')!.data).toBe('Unknown error');
     });
 
     test('a thrown error is logged and the readline is still closed', async () => {
         prompts.askYesNo.mockRejectedValueOnce(new Error('stdin closed'));
-        await handleLogin();
+        await expect(handleLogin()).resolves.toBe(false);
         expect(msgs('error')).toEqual(['Login error']);
         expect(rl.close).toHaveBeenCalled();
     });
@@ -226,6 +235,42 @@ describe('auth: logout', () => {
         clearAuthToken.mockResolvedValue(false);
         await handleLogout();
         expect(msgs('info')).toEqual(['Already logged out — no token was set']);
+    });
+
+    test('a logout recorded for settings that cannot be loaded just now says so, and not that the token was cleared', async () => {
+        clearAuthToken.mockResolvedValue(false);
+        settings.isSignOutOwed.mockReturnValueOnce(true);
+
+        await expect(handleLogout()).resolves.toBe(true);
+
+        expect(msgs('warning')).toEqual([expect.stringContaining('Logout recorded')]);
+        expect(msgs('success')).toEqual([]);
+        expect(msgs('info')).toEqual([]);
+    });
+
+    test('a logout the saved settings refused says so in words, not by its code', async () => {
+        clearAuthToken.mockRejectedValue(new Error('logout-not-saved'));
+
+        await expect(handleLogout()).resolves.toBe(false);
+
+        expect(msgs('error')).toEqual([expect.stringContaining('(the saved settings are not in use)')]);
+    });
+
+    test('a logout refused for a reason that carries no message is still told', async () => {
+        clearAuthToken.mockRejectedValue('weird');
+
+        await expect(handleLogout()).resolves.toBe(false);
+
+        expect(msgs('error')).toEqual([expect.stringContaining('(unknown error)')]);
+    });
+
+    test('a logout the settings refused is an error, not a success: the user is told they are still logged in', async () => {
+        clearAuthToken.mockRejectedValue(new Error('The sign-out could not be saved'));
+
+        await expect(handleLogout()).resolves.toBe(false);
+
+        expect(msgs('error')).toEqual([expect.stringContaining('you are still logged in')]);
+        expect(msgs('success')).toEqual([]);
     });
 });
 
@@ -274,7 +319,7 @@ describe('discover', () => {
     ])('reports %p', async (result, line) => {
         handlers['get-member-challenges'].mockResolvedValue(invalid(result));
         await showDiscover();
-        expect(handlers['get-member-challenges']).toHaveBeenCalledWith(null, 'open');
+        expect(handlers['get-member-challenges']).toHaveBeenCalledWith(null);
         expect(msgs('info')).toContain(line);
     });
 
@@ -296,20 +341,283 @@ describe('discover', () => {
         expect(info).toContain('  • [2] dogs (?) — free');
         expect(info).toContain('  • [3] untitled (?) — free');
         expect(info).toContain('  • [undefined] untitled (?) — free');
-        expect(info.some((l) => l.includes('join <id> --yes'))).toBe(true);
+        expect(info.some((l) => l.includes('join <id> --yes --max-coins=<cost>'))).toBe(true);
+        expect(info).toContain('=== Open and upcoming challenges ===');
+        // No upcoming row, no upcoming advice.
+        expect(info.some((l) => l.includes('list-photos'))).toBe(false);
+    });
+
+    test('shows the type or the badge, the photo count and the tags that add something', async () => {
+        handlers['get-member-challenges'].mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    { id: 1, title: 'A', type: 'flash', join_coins: 5, max_photo_submits: 3, tags: ['Exhibition'] },
+                    { id: 2, title: 'B', badge: 'Team match', join_coins: 0, max_photo_submits: 1 },
+                    { id: 3, title: 'C', type: 'default', tags: ['Default', '2 photos', 'No comm', 'Comm'] },
+                    { id: 4, title: 'D', type: 'default', max_photo_submits: '4', join_coins: 0 },
+                ],
+            }),
+        );
+        await showDiscover();
+        const info = msgs('info');
+        expect(info).toContain('  • [1] A (flash) — 3 photos — 5 coins — tags: Exhibition');
+        // No type: the badge stands in. One photo is not worth a count.
+        expect(info).toContain('  • [2] B (Team match) — free');
+        // A tag that repeats the type or says the photo count shows nothing new.
+        expect(info).toContain('  • [3] C (default) — free — tags: No comm, Comm');
+        expect(info).toContain('  • [4] D (default) — 4 photos — free');
+    });
+
+    test('strips terminal control from a tag and from the badge, and a tags value that is no list still prints the line', async () => {
+        const esc = String.fromCharCode(27);
+        handlers['get-member-challenges'].mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    { id: 1, title: 'A', badge: `Sp${esc}[31mecial\n`, tags: [`Ex${esc}[2Jh\nib\r`, 'Plain'] },
+                    { id: 2, title: 'B', type: 'default', tags: 'Exhibition' },
+                    { id: 3, title: 'C', type: 'default', tags: { 0: 'Exhibition' } },
+                    { id: 4, title: 'D', type: 'default', tags: [7, null, ''] },
+                    { id: 5, title: 'E', type: 'default', tags: [`${esc}[31m${esc}[0m`, '\n', 'Kept'] },
+                ],
+            }),
+        );
+        await showDiscover();
+        const info = msgs('info');
+        expect(info).toContain('  • [1] A (Special) — free — tags: Exh ib, Plain');
+        expect(info).toContain('  • [2] B (default) — free');
+        expect(info).toContain('  • [3] C (default) — free');
+        expect(info).toContain('  • [4] D (default) — free');
+        // A tag that is nothing but control characters is empty once stripped: it is not listed, not even as a comma.
+        expect(info).toContain('  • [5] E (default) — free — tags: Kept');
+        expect(all()).not.toContain(esc);
+        expect(all()).not.toContain('\r');
+    });
+
+    test('an upcoming challenge shows its tags before the start', async () => {
+        handlers['get-member-challenges'].mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    {
+                        id: 9,
+                        title: 'Soon',
+                        type: 'flash',
+                        join_coins: 0,
+                        status: 'upcoming',
+                        start_time: Date.now() / 1000 + 3600,
+                        max_photo_submits: 2,
+                        tags: ['Comm'],
+                    },
+                ],
+            }),
+        );
+        await showDiscover();
+        expect(msgs('info').some((l) => /\(flash\) — 2 photos — free — tags: Comm — starts in/.test(l))).toBe(true);
+    });
+
+    describe('the end time', () => {
+        // 1700000000 = 2023-11-14 22:13 UTC.
+        const CLOSE = 1_700_000_000;
+        const lineOf = async (item: object, timezone: string) => {
+            settings.getSetting.mockReturnValue(timezone);
+            handlers['get-member-challenges'].mockResolvedValue(
+                invalid({ success: true, items: [{ id: 1, title: 'A', type: 'flash', join_coins: 0, ...item }] }),
+            );
+            await showDiscover();
+            return msgs('info')
+                .filter((l) => l.startsWith('  • [1]'))
+                .at(-1);
+        };
+
+        test('is written as the challenge card writes it, in the timezone setting and not the device clock', async () => {
+            expect(await lineOf({ close_time: CLOSE }, 'UTC')).toBe(
+                '  • [1] A (flash) — free — ends 14/11/2023, 22:13',
+            );
+            expect(await lineOf({ close_time: CLOSE }, 'Asia/Tokyo')).toBe(
+                '  • [1] A (flash) — free — ends 15/11/2023, 07:13',
+            );
+        });
+
+        test('reads in the default timezone setting (Europe/Riga)', async () => {
+            // The settings facade answers the default when none is stored, so that is what the command is given.
+            expect(await lineOf({ close_time: CLOSE }, DEFAULT_TIMEZONE)).toBe(
+                '  • [1] A (flash) — free — ends 15/11/2023, 00:13',
+            );
+        });
+
+        describe('the device clock', () => {
+            afterEach(() => {
+                jest.restoreAllMocks();
+            });
+
+            // Without a timeZone option toLocaleString reads the device clock. A sentinel makes that branch observable
+            // on any host (process.env.TZ does not reach Node under Jest); a call that names a zone goes through, so an
+            // invalid one still throws its real RangeError into the fallback.
+            const pinDeviceClock = (): void => {
+                const real = Date.prototype.toLocaleString;
+                jest.spyOn(Date.prototype, 'toLocaleString').mockImplementation(function (
+                    this: Date,
+                    locales?: Intl.LocalesArgument,
+                    options?: Intl.DateTimeFormatOptions,
+                ) {
+                    return options?.timeZone ? real.call(this, locales, options) : 'DEVICE';
+                });
+            };
+
+            test('“local” is written on the device clock, in no named zone', async () => {
+                pinDeviceClock();
+                expect(await lineOf({ close_time: CLOSE }, 'local')).toBe('  • [1] A (flash) — free — ends DEVICE');
+            });
+
+            test('a zone that is not valid is written in UTC, not on the device clock', async () => {
+                pinDeviceClock();
+                expect(await lineOf({ close_time: CLOSE }, 'Not/AZone')).toBe(
+                    '  • [1] A (flash) — free — ends 14/11/2023, 22:13',
+                );
+            });
+        });
+
+        test.each([
+            ['missing', {}],
+            ['zero', { close_time: 0 }],
+            ['negative', { close_time: -5 }],
+            ['not a number', { close_time: 'soon' }],
+            ['infinite', { close_time: Infinity }],
+            ['null', { close_time: null }],
+            ['beyond the dates a clock can write', { close_time: 1e13 }],
+        ])('is left out when close_time is %s', async (_name, item) => {
+            expect(await lineOf(item, 'UTC')).toBe('  • [1] A (flash) — free');
+        });
+
+        test('follows the start of an upcoming challenge, and the tags and photo count come before it', async () => {
+            const nowSec = Date.now() / 1000;
+            const line = await lineOf(
+                {
+                    status: 'upcoming',
+                    start_time: nowSec + 3600,
+                    close_time: CLOSE,
+                    max_photo_submits: 2,
+                    tags: ['Comm'],
+                },
+                'UTC',
+            );
+            expect(line).toMatch(
+                /^ {2}• \[1\] A \(flash\) — 2 photos — free — tags: Comm — starts in .+ — ends 14\/11\/2023, 22:13$/,
+            );
+        });
+
+        test('a numeric string is a time, like the cost', async () => {
+            expect(await lineOf({ close_time: String(CLOSE) }, 'UTC')).toContain(' — ends 14/11/2023, 22:13');
+        });
+    });
+
+    test('prints the cost as a number, whatever the server sent', async () => {
+        const esc = String.fromCharCode(27);
+        handlers['get-member-challenges'].mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    { id: 1, title: 'A', join_coins: `5\r${esc}[2Jgone` },
+                    { id: 2, title: 'B', join_coins: '12' },
+                    { id: 3, title: 'C', join_coins: 40 },
+                ],
+            }),
+        );
+        await showDiscover();
+        const info = msgs('info');
+        // A value that is no number is not printed at all; one that is, is printed as the number.
+        expect(info).toContain('  • [1] A (?) — free');
+        expect(info).toContain('  • [2] B (?) — 12 coins');
+        expect(info).toContain('  • [3] C (?) — 40 coins');
+        expect(all()).not.toContain(String.fromCharCode(27));
+        expect(all()).not.toContain('\r');
+    });
+
+    describe('upcoming challenges', () => {
+        const NOW_SEC = 1_800_000_000;
+        beforeEach(() => {
+            jest.spyOn(Date, 'now').mockReturnValue(NOW_SEC * 1000);
+        });
+        afterEach(() => jest.mocked(Date.now).mockRestore());
+
+        test('are marked "starts in …", and followed by the steps to choose their photos', async () => {
+            handlers['get-member-challenges'].mockResolvedValue(
+                invalid({
+                    success: true,
+                    items: [
+                        { id: 1, title: 'Open One', type: 'default', join_coins: 0 },
+                        {
+                            id: 2,
+                            title: 'Soon',
+                            type: 'flash',
+                            join_coins: 100,
+                            status: 'upcoming',
+                            start_time: NOW_SEC + 2 * 3600 + 15 * 60,
+                        },
+                    ],
+                }),
+            );
+            await showDiscover();
+            const info = msgs('info');
+            expect(info).toContain('  • [1] Open One (default) — free');
+            expect(info).toContain('  • [2] Soon (flash) — 100 coins — starts in 2h 15m');
+            expect(info).toContain('  list-photos --challenge=<id>');
+            expect(info).toContain(`  set-setting chosenPhotos '["<photo id>"]' --challenge=<id>`);
+            expect(info.some((l) => l.includes('cannot be joined until they start'))).toBe(true);
+        });
+
+        test('a list of upcoming challenges alone offers no join instructions, only the photo steps', async () => {
+            handlers['get-member-challenges'].mockResolvedValue(
+                invalid({
+                    success: true,
+                    items: [{ id: 2, title: 'Soon', status: 'upcoming', join_coins: 0, start_time: NOW_SEC + 600 }],
+                }),
+            );
+            await showDiscover();
+            const info = msgs('info');
+            expect(info.some((l) => l.includes('Join with:') || l.includes('join <id>'))).toBe(false);
+            expect(info).toContain('  list-photos --challenge=<id>');
+        });
+
+        test("print the server's text without terminal control sequences", async () => {
+            const esc = String.fromCharCode(27);
+            handlers['get-member-challenges'].mockResolvedValue(
+                invalid({
+                    success: true,
+                    items: [
+                        {
+                            id: `7${esc}[2J`,
+                            title: `Evil${esc}]0;owned${String.fromCharCode(7)} title`,
+                            type: `fl${esc}[31mash`,
+                            status: 'upcoming',
+                            start_time: NOW_SEC + 600,
+                        },
+                        { id: 8, url: `dogs${esc}[1A`, status: 'upcoming', start_time: NOW_SEC + 600 },
+                    ],
+                }),
+            );
+            await showDiscover();
+            const printed = all();
+            expect(printed).not.toContain(esc);
+            expect(printed).not.toContain(String.fromCharCode(7));
+            expect(printed).toContain('Evil');
+            expect(printed).toContain('dogs');
+        });
     });
 });
 
 describe('join', () => {
     test('requires authentication', async () => {
         apiFactory.__mw.isAuthenticated.mockReturnValue(false);
-        await joinChallengeCmd('1');
+        expect(await joinChallengeCmd('1')).toBe(1);
         expect(handlers['join-challenge']).not.toHaveBeenCalled();
     });
 
     test('exits with usage when no id is given', async () => {
         await expect(joinChallengeCmd(undefined)).rejects.toThrow('exit:1');
-        expect(msgs('info')).toEqual(['Usage: join <id> [--yes]']);
+        expect(msgs('info')).toEqual(['Usage: join <id> [--yes [--max-coins=<coins>]]']);
     });
 
     test.each([
@@ -317,10 +625,12 @@ describe('join', () => {
         [{ status: 'skipped-unaffordable', cost: 10, coins: 3 }, 'error', 'needs 10, you have 3'],
         [{ status: 'skipped-unaffordable', cost: 10 }, 'error', 'you have ?'],
         [{ status: 'balance-unknown' }, 'error', 'Could not read your coin balance'],
-        [{ status: 'charged-pending-submit' }, 'error', 'you will NOT be charged again'],
+        [{ status: 'charged-pending-submit' }, 'error', 'Re-run "join 7" to retry the submit'],
         [{ status: 'failed-no-charge' }, 'error', 'Could not join 7. No coins were charged.'],
         [{ status: 'skipped-no-photo' }, 'error', 'No eligible photo'],
         [{ status: 'unavailable' }, 'info', 'not open to join'],
+        [{ status: 'not-started' }, 'info', "has not started yet, so it can't be joined"],
+        [{ status: 'not-started' }, 'info', 'set-setting chosenPhotos \'["<photo id>"]\' --challenge=7'],
         [{ status: 'busy' }, 'info', 'already in progress'],
         [{ status: 'not-authenticated' }, 'error', 'Not logged in'],
         [{ status: 'fetch-failed' }, 'error', 'Could not reach GuruShots'],
@@ -332,6 +642,87 @@ describe('join', () => {
         expect(handlers['join-challenge']).toHaveBeenCalledTimes(1);
         expect(handlers['join-challenge']).toHaveBeenCalledWith(null, '7', false);
         expect(msgs(level).some((m) => m.includes(text))).toBe(true);
+    });
+
+    test('coins spent but no photo qualifies: the line says what is missing, not just to re-run', async () => {
+        handlers['join-challenge'].mockResolvedValue(
+            invalid({ status: 'charged-pending-submit', reason: 'no-photo', cost: 100 }),
+        );
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([
+            'Coins were already spent on 7, but no photo qualifies for this challenge. Add an eligible photo, then re-run "join 7" — you will NOT be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.',
+        ]);
+    });
+
+    const RERUN = 'Re-run "join 7": it only submits your photo, so you are never charged twice.';
+    const FORGET = 'If the GuruShots website shows the coins were not taken, run "forget-payment 7" and join again.';
+    const CHECK =
+        'Other coin activity since then changes the difference, and this app does not decide whether the payment went through: the coin history on the GuruShots website is what counts.';
+
+    test('a payment that got no answer says so, that a retry only submits, and how to forget it', async () => {
+        handlers['join-challenge'].mockResolvedValue(
+            invalid({ status: 'charged-pending-submit', reason: 'unconfirmed', cost: 100 }),
+        );
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([
+            `The payment for 7 got no answer, so it may or may not have gone through, and the join did not finish. ${RERUN} ${FORGET}`,
+        ]);
+        expect(handlers['get-bankroll']).not.toHaveBeenCalled();
+    });
+
+    test('with the balance recorded before the payment, it is set beside the one GuruShots reports now', async () => {
+        handlers['join-challenge'].mockResolvedValue(
+            invalid({ status: 'charged-pending-submit', reason: 'unconfirmed', cost: 100, coinsBefore: 500 }),
+        );
+        handlers['get-bankroll'].mockResolvedValue(invalid({ success: true, coins: 400 }));
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([
+            `The payment for 7 got no answer, so it may or may not have gone through, and the join did not finish. Coins before this payment: 500; GuruShots reports 400 now. ${CHECK} ${RERUN} ${FORGET}`,
+        ]);
+    });
+
+    test.each([
+        ['could not be read', { success: false }, 'Coins before this payment: 500. '],
+        ['is not a number', { success: true, coins: 'many' }, 'Coins before this payment: 500. '],
+    ])('a balance now that %s leaves the one from before alone', async (_name, bankroll, text) => {
+        handlers['join-challenge'].mockResolvedValue(
+            invalid({ status: 'charged-pending-submit', reason: 'unconfirmed', coinsBefore: 500 }),
+        );
+        handlers['get-bankroll'].mockResolvedValue(invalid(bankroll));
+        await joinChallengeCmd('7');
+        expect(msgs('error')[0]).toContain(`${text}${CHECK}`);
+        expect(msgs('error')[0]).not.toContain('reports');
+    });
+
+    test("an earlier payment record is worded as an older version's, possibly another account's, and shows no balances", async () => {
+        handlers['join-challenge'].mockResolvedValue(
+            invalid({ status: 'charged-pending-submit', reason: 'earlier-payment', cost: 100, coinsBefore: 500 }),
+        );
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([
+            `Challenge 7 has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. The join did not finish. ${RERUN} The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.`,
+        ]);
+        expect(msgs('error')[0]).not.toContain('forget-payment');
+        expect(handlers['get-bankroll']).not.toHaveBeenCalled();
+    });
+
+    test('an account that could not be identified says so, instead of "no coins were charged"', async () => {
+        handlers['join-challenge'].mockResolvedValue(
+            invalid({ status: 'failed-no-charge', reason: 'account-unknown', cost: 100 }),
+        );
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([
+            'Could not confirm which account is logged in, so this attempt to join 7 spent no coins. Try again shortly, or run "login" again.',
+        ]);
+    });
+
+    test('a challenge this account has already joined says so and spent nothing, and is not a success of this call', async () => {
+        handlers['join-challenge'].mockResolvedValue(
+            invalid({ status: 'failed-no-charge', reason: 'already-joined', cost: 100 }),
+        );
+        expect(await joinChallengeCmd('7')).toBe(1);
+        expect(msgs('info')).toEqual(['This account has already joined 7; nothing was spent.']);
+        expect(msgs('error')).toEqual([]);
     });
 
     test('an invalid-args refusal prints the invalid-id text, not the retry fallback', async () => {
@@ -347,14 +738,54 @@ describe('join', () => {
         expect(msgs('debug')).toEqual(['join status=weird']);
     });
 
+    // Only a challenge that was joined exits 0: anything else did not join it.
+    test.each([
+        ['joined', 0],
+        ['failed-no-charge', 1],
+        ['charged-pending-submit', 1],
+        ['skipped-unaffordable', 1],
+        ['balance-unknown', 1],
+        ['skipped-no-photo', 1],
+        ['unavailable', 1],
+        ['not-started', 1],
+        ['busy', 1],
+        ['not-authenticated', 1],
+        ['fetch-failed', 1],
+        ['weird', 1],
+    ])('a join answering %s exits %i', async (status, code) => {
+        handlers['join-challenge'].mockResolvedValue(invalid({ status }));
+        expect(await joinChallengeCmd('7')).toBe(code);
+    });
+
+    test('a paid challenge priced without --yes exits 1 (nothing was joined); confirmed and joined it exits 0', async () => {
+        handlers['join-challenge'].mockResolvedValue(invalid({ status: 'needs-confirm', cost: 25 }));
+        expect(await joinChallengeCmd('7')).toBe(1);
+        handlers['join-challenge']
+            .mockResolvedValueOnce(invalid({ status: 'needs-confirm', cost: 25 }))
+            .mockResolvedValueOnce(invalid({ status: 'joined' }));
+        expect(await joinChallengeCmd('7', { yes: true })).toBe(0);
+        handlers['join-challenge']
+            .mockResolvedValueOnce(invalid({ status: 'needs-confirm', cost: 25 }))
+            .mockResolvedValueOnce(invalid({ status: 'failed-no-charge' }));
+        expect(await joinChallengeCmd('7', { yes: true })).toBe(1);
+    });
+
     test('a paid challenge without --yes prints the cost and spends nothing', async () => {
         handlers['join-challenge'].mockResolvedValue(invalid({ status: 'needs-confirm', cost: 25 }));
         await joinChallengeCmd('7');
         expect(handlers['join-challenge']).toHaveBeenCalledTimes(1);
         expect(msgs('info')).toEqual([
             'Challenge 7 is a PAID challenge — joining costs 25 coins.',
-            'To spend the coins and join, re-run: join 7 --yes',
+            'To spend the coins and join, re-run: join 7 --yes --max-coins=25',
         ]);
+    });
+
+    test('the cost it prints is a number, whatever the handler sent', async () => {
+        handlers['join-challenge'].mockResolvedValue(invalid({ status: 'needs-confirm', cost: '25\r\u001b[2Jfree' }));
+        await joinChallengeCmd('7');
+        expect(msgs('info').join('\n')).not.toContain(String.fromCharCode(27));
+        expect(msgs('info').join('\n')).not.toContain('\r');
+        expect(msgs('info')[0]).toBe('Challenge 7 is a PAID challenge — joining costs NaN coins.');
     });
 
     test('a paid challenge with --yes spends and reports the confirmed join', async () => {
@@ -362,8 +793,98 @@ describe('join', () => {
             .mockResolvedValueOnce(invalid({ status: 'needs-confirm', cost: 25 }))
             .mockResolvedValueOnce(invalid({ status: 'joined' }));
         await joinChallengeCmd('7', { yes: true });
-        expect(handlers['join-challenge']).toHaveBeenLastCalledWith(null, '7', true);
+        // --yes alone caps the spend at the cost that was printed.
+        expect(handlers['join-challenge']).toHaveBeenLastCalledWith(null, '7', true, 25);
         expect(msgs('info')).toContain('✅ Joined challenge 7.');
+    });
+
+    test('--max-coins is the most the confirmed join may cost', async () => {
+        handlers['join-challenge']
+            .mockResolvedValueOnce(invalid({ status: 'needs-confirm', cost: 25 }))
+            .mockResolvedValueOnce(invalid({ status: 'joined' }));
+        await joinChallengeCmd('7', { yes: true, maxCoins: 25 });
+        expect(handlers['join-challenge']).toHaveBeenLastCalledWith(null, '7', true, 25);
+        expect(msgs('info')).toContain('✅ Joined challenge 7.');
+    });
+
+    test('a price that rose past --max-coins is refused with the new cost, and nothing is spent', async () => {
+        handlers['join-challenge']
+            .mockResolvedValueOnce(invalid({ status: 'needs-confirm', cost: 25 }))
+            .mockResolvedValueOnce(invalid({ success: false, status: 'needs-confirm', cost: 40 }));
+        await joinChallengeCmd('7', { yes: true, maxCoins: 25 });
+        expect(msgs('error')).toEqual([
+            'Challenge 7 costs 40 coins, more than --max-coins allows. Nothing was spent — to pay this cost, re-run: join 7 --yes --max-coins=40',
+        ]);
+        expect(msgs('info')).not.toContain('✅ Joined challenge 7.');
+    });
+
+    test('with --yes alone, a price that rose is worded against the cost shown, not a --max-coins nobody passed', async () => {
+        handlers['join-challenge']
+            .mockResolvedValueOnce(invalid({ status: 'needs-confirm', cost: 25 }))
+            .mockResolvedValueOnce(invalid({ success: false, status: 'needs-confirm', cost: 40 }));
+        await joinChallengeCmd('7', { yes: true });
+        expect(msgs('error')).toEqual([
+            'Challenge 7 costs 40 coins, more than the 25 coins shown. Nothing was spent — to pay this cost, re-run: join 7 --yes --max-coins=40',
+        ]);
+    });
+});
+
+describe('forget-payment', () => {
+    test('requires authentication', async () => {
+        apiFactory.__mw.isAuthenticated.mockReturnValue(false);
+        expect(await forgetPaymentCmd('1')).toBe(1);
+        expect(handlers['forget-unconfirmed-payment']).not.toHaveBeenCalled();
+    });
+
+    test('exits with usage when no id is given', async () => {
+        await expect(forgetPaymentCmd(undefined)).rejects.toThrow('exit:1');
+        expect(msgs('info')).toEqual(['Usage: forget-payment <id>']);
+        expect(handlers['forget-unconfirmed-payment']).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        [
+            'forgotten',
+            'info',
+            'Forgot the unconfirmed payment for 7. If the coins were in fact taken, joining it again charges you a second time, and auto-join may join it again within its coin budget. Run "join 7"',
+        ],
+        [
+            'legacy-record',
+            'error',
+            'is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days.',
+        ],
+        ['nothing-to-forget', 'error', 'Nothing to forget for 7'],
+        [
+            'busy',
+            'error',
+            'A join of 7 is in progress, or another process is using the saved payment records. Nothing was changed.',
+        ],
+        ['account-unknown', 'error', 'Could not confirm which account is logged in, so nothing was changed'],
+        ['locks-unavailable', 'error', 'The app cannot create its lock files in its data folder'],
+        ['not-authenticated', 'error', 'Not logged in'],
+        [
+            'unreadable',
+            'error',
+            'Restart the app and try again; if it keeps happening, the join-state file needs attention — check the log',
+        ],
+    ] as const)('answer %s is reported', async (status, level, text) => {
+        handlers['forget-unconfirmed-payment'].mockResolvedValue(
+            status === 'forgotten' ? { success: true, status } : { success: false, error: status, status },
+        );
+        // Only a payment that was forgotten is a success; every other answer exits 1.
+        expect(await forgetPaymentCmd('7')).toBe(status === 'forgotten' ? 0 : 1);
+        expect(handlers['forget-unconfirmed-payment']).toHaveBeenCalledWith(null, '7');
+        expect(msgs(level).some((m) => m.includes(text))).toBe(true);
+    });
+
+    test.each([
+        [{ success: false, error: 'invalid-args' }],
+        [{ success: false, error: 'No authentication token found' }],
+        [{ success: false, error: 'x', status: 'weird' }],
+    ])('an answer the command has no line for (%p) is a failure', async (answer) => {
+        handlers['forget-unconfirmed-payment'].mockResolvedValue(invalid(answer));
+        expect(await forgetPaymentCmd('7')).toBe(1);
+        expect(msgs('error')).toEqual(['Could not forget the payment for 7 right now. Please try again.']);
     });
 });
 

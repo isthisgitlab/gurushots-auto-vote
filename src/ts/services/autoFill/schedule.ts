@@ -27,7 +27,7 @@ const getEffectiveScheduleRows = remapScheduleRows;
  * a non-finite max (never NaN — a NaN would poison orderDeadlineActions'
  * sort downstream).
  *
- * @param schedule - the challenge's effective autoFillSchedule
+ * @param schedule - the challenge's effective autoSubmitSchedule
  * @param maxPhotoSubmits - challenge.max_photo_submits
  */
 const resolveScheduleTarget = (
@@ -55,7 +55,7 @@ const resolveScheduleTarget = (
  * fills sort against boost/turbo/emergency correctly; the same defensive
  * rules as resolveScheduleTarget apply.
  *
- * @param schedule - the challenge's effective autoFillSchedule
+ * @param schedule - the challenge's effective autoSubmitSchedule
  * @param entryCount - current number of entries
  * @param maxPhotoSubmits - challenge.max_photo_submits
  */

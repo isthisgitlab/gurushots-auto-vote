@@ -2,7 +2,7 @@
  * Unit tests for the CLI currency commands (unlock-boost / swap /
  * fill-exposure). They mirror `join <id> [--yes]`: without --yes nothing is
  * spent — the cost and the re-run line are printed — and swap --yes must name
- * the previewed replacement with --to. The IPC handlers are mocked; the tests
+ * the replacement with --to (the previewed suggestion, or a photo the user chose). The IPC handlers are mocked; the tests
  * assert the dispatch and the confirmation gate.
  */
 
@@ -115,6 +115,13 @@ describe.each([
         expect(contains(msgsAt('error'), 'none of that currency left')).toBe(true);
     });
 
+    test('a spend that got no answer says it may have gone through, not that it was rejected', async () => {
+        handlers[channel].mockResolvedValue({ success: false, outcome: 'unclear' });
+        await cmd('111', { yes: true });
+        expect(contains(msgsAt('error'), 'may or may not have gone through')).toBe(true);
+        expect(contains(msgsAt('error'), 'rejected')).toBe(false);
+    });
+
     test('unknown challenge: nothing dispatched', async () => {
         await cmd('999', { yes: true });
         expect(handlers[channel]).not.toHaveBeenCalled();
@@ -129,17 +136,58 @@ describe('swap', () => {
         expect(contains(msgsAt('info'), 'swap --challenge=111 --image=old1 --to=new9 --yes')).toBe(true);
     });
 
-    test('--yes with the matching --to swaps', async () => {
-        handlers['swap-entry-photo'].mockResolvedValue({ success: true, outcome: 'ok' });
-        await swapCmd('111', { imageId: 'old1', to: 'new9', yes: true });
-        expect(handlers['swap-entry-photo']).toHaveBeenCalledWith(null, '111', 'old1', 'new9', true);
+    test('without --yes the suggestion is previewed, not a chosen photo', async () => {
+        await swapCmd('111', { imageId: 'old1' });
+        expect(handlers['preview-swap-photo']).toHaveBeenCalledWith(null, '111', 'old1', undefined);
+        expect(contains(msgsAt('info'), 'checks that the challenge accepts')).toBe(false);
     });
 
-    test('--yes when the suggestion changed since the preview: refuses, spends nothing', async () => {
-        await swapCmd('111', { imageId: 'old1', to: 'different', yes: true });
+    test('--to without --yes: previews the named photo, prints it with the cost, the server-check note and the re-run line', async () => {
+        handlers['preview-swap-photo'].mockResolvedValue({ success: true, candidate: { id: 'mine', member_id: 'm' } });
+        await swapCmd('111', { imageId: 'old1', to: 'mine' });
+        expect(handlers['preview-swap-photo']).toHaveBeenCalledWith(null, '111', 'old1', 'mine');
         expect(handlers['swap-entry-photo']).not.toHaveBeenCalled();
-        expect(contains(msgsAt('error'), 'now new9')).toBe(true);
+        expect(contains(msgsAt('info'), 'old1 → mine')).toBe(true);
+        expect(contains(msgsAt('info'), 'balance 7 → 6')).toBe(true);
+        expect(contains(msgsAt('info'), 'checks that the challenge accepts mine when the swap is spent')).toBe(true);
+        expect(contains(msgsAt('info'), 'list-photos --challenge=111')).toBe(true);
+        expect(contains(msgsAt('info'), 'swap --challenge=111 --image=old1 --to=mine --yes')).toBe(true);
     });
+
+    test('--to with --yes: previews the named photo as chosen, then spends exactly it', async () => {
+        handlers['preview-swap-photo'].mockResolvedValue({ success: true, candidate: { id: 'mine', member_id: 'm' } });
+        handlers['swap-entry-photo'].mockResolvedValue({ success: true, outcome: 'ok' });
+        await swapCmd('111', { imageId: 'old1', to: 'mine', yes: true });
+        expect(handlers['preview-swap-photo']).toHaveBeenCalledWith(null, '111', 'old1', 'mine');
+        expect(handlers['swap-entry-photo']).toHaveBeenCalledWith(null, '111', 'old1', 'mine', true);
+        expect(msgsAt('success')).toHaveLength(1);
+    });
+
+    test('a chosen photo that is already entered is reported in plain words, nothing spent', async () => {
+        handlers['preview-swap-photo'].mockResolvedValue({ success: false, outcome: 'already-entered' });
+        await swapCmd('111', { imageId: 'old1', to: 'mine', yes: true });
+        expect(handlers['swap-entry-photo']).not.toHaveBeenCalled();
+        expect(contains(msgsAt('error'), 'already entered in this challenge')).toBe(true);
+    });
+
+    test('a swap offer that went stale is reported without pointing at a new suggestion', async () => {
+        handlers['swap-entry-photo'].mockResolvedValue({ success: false, outcome: 'stale-candidate' });
+        await swapCmd('111', { imageId: 'old1', to: 'new9', yes: true });
+        expect(contains(msgsAt('error'), 'expired or changed')).toBe(true);
+        expect(contains(msgsAt('error'), 'new suggestion')).toBe(false);
+    });
+
+    test.each(['bad id', 'x'.repeat(65), 'a/b'])(
+        'a malformed --to (%s) names the flag; nothing is previewed or spent',
+        async (to) => {
+            await swapCmd('111', { imageId: 'old1', to, yes: true });
+            expect(handlers['preview-swap-photo']).not.toHaveBeenCalled();
+            expect(handlers['swap-entry-photo']).not.toHaveBeenCalled();
+            expect(
+                contains(msgsAt('error'), 'Invalid --to photo id: use the id list-photos --challenge=<id> shows.'),
+            ).toBe(true);
+        },
+    );
 
     test('--yes without --to: refuses and names the flag to add', async () => {
         await swapCmd('111', { imageId: 'old1', yes: true });

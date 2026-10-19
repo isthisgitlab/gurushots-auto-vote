@@ -7,12 +7,15 @@
  * round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import type { MemoryStore } from '../helpers/headlessStore';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 import rules = require('../../src/ts/settings/challengeRules');
 import settings = require('../../src/ts/settings');
+import { isConfig } from '../helpers/storedShapes';
+import { parseJsonAs } from '../helpers/parseJson';
 
 jest.mock('../../src/ts/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
@@ -35,6 +38,9 @@ const cat = invalid<{
 
 const HOUR = 3600;
 const START = 1_700_000_000;
+const ZONE = 'UTC';
+// 2026-06-15 17:10:59 UTC (20:10 in Europe/Riga, which is on summer time).
+const CLOSE_1710_UTC = Date.UTC(2026, 5, 15, 17, 10, 59) / 1000;
 // A challenge payload as the API sends it; `hours` sets its runtime.
 const challenge = ({ hours = 24, ...over }: Partial<Challenge> & { hours?: number } = {}) => ({
     title: 'Seaside',
@@ -47,7 +53,7 @@ const challenge = ({ hours = 24, ...over }: Partial<Challenge> & { hours?: numbe
 });
 
 describe('settings/challengeRules — pure matcher', () => {
-    const target = (over?: Parameters<typeof challenge>[0]) => rules.ruleMatchTarget(challenge(over));
+    const target = (over?: Parameters<typeof challenge>[0]) => rules.ruleMatchTarget(challenge(over), ZONE);
 
     test('normalizers bound photo counts and runtime hours, treating empties as absent', () => {
         expect(rules.normalizeRulePics(4)).toBe(4);
@@ -57,6 +63,23 @@ describe('settings/challengeRules — pure matcher', () => {
         expect(rules.normalizeRuleHours('0.5')).toBe(0.5);
         for (const bad of [0, -1, 2001, 'x', '', null, undefined, Infinity]) {
             expect(rules.normalizeRuleHours(bad)).toBeNull();
+        }
+    });
+
+    test('normalizeRuleClosesAt: absent is null, a strict HH:MM is kept, anything else is false', () => {
+        for (const absent of [undefined, null, '']) expect(rules.normalizeRuleClosesAt(absent)).toBeNull();
+        expect(rules.normalizeRuleClosesAt('17:10')).toBe('17:10');
+        for (const bad of ['25:00', '7:10', '17:10:00', ' 17:10', 1710, {}, true]) {
+            expect(rules.normalizeRuleClosesAt(bad)).toBe(false);
+        }
+    });
+
+    test('close time of day is read in the given zone and floored, or null when unreadable', () => {
+        const close = { close_time: CLOSE_1710_UTC };
+        expect(rules.challengeCloseTimeOfDay(close, 'UTC')).toBe('17:10');
+        expect(rules.challengeCloseTimeOfDay(close, 'Europe/Riga')).toBe('20:10');
+        for (const bad of [{}, { close_time: 0 }, { close_time: -5 }, { close_time: 'x' }, null, undefined]) {
+            expect(rules.challengeCloseTimeOfDay(bad, 'UTC')).toBeNull();
         }
     });
 
@@ -70,13 +93,14 @@ describe('settings/challengeRules — pure matcher', () => {
     });
 
     test('a bare title and a missing target normalize to empty keys', () => {
-        expect(rules.ruleMatchTarget('  Hats ')).toMatchObject({ titleKey: 'hats', tagKeys: [], pics: null });
-        expect(rules.ruleMatchTarget(null)).toEqual({
+        expect(rules.ruleMatchTarget('  Hats ', ZONE)).toMatchObject({ titleKey: 'hats', tagKeys: [], pics: null });
+        expect(rules.ruleMatchTarget(null, ZONE)).toEqual({
             titleKey: '',
             tagKeys: [],
             typeKey: '',
             pics: null,
             runtimeHours: null,
+            closeTimeOfDay: null,
         });
     });
 
@@ -99,11 +123,104 @@ describe('settings/challengeRules — pure matcher', () => {
         expect(rules.ruleMatches(atMostDay, target({ start_time: undefined }))).toBe(false);
     });
 
+    test('a closesAt condition matches the card time, and fails closed on an unreadable close_time', () => {
+        const rule = { closesAt: '17:10' };
+        expect(rules.ruleMatches(rule, target({ close_time: CLOSE_1710_UTC }))).toBe(true);
+        expect(rules.ruleMatches(rule, target({ close_time: CLOSE_1710_UTC + 60 }))).toBe(false);
+        expect(rules.ruleMatches(rule, target({ close_time: CLOSE_1710_UTC - 60 }))).toBe(false);
+        expect(rules.ruleMatches(rule, target({ close_time: undefined }))).toBe(false);
+        // The same instant reads differently in another zone.
+        expect(rules.ruleMatches(rule, rules.ruleMatchTarget({ close_time: CLOSE_1710_UTC }, 'Europe/Riga'))).toBe(
+            false,
+        );
+    });
+
+    test('an invalid stored closesAt matches nothing, alone or AND-ed with a matching condition', () => {
+        const hit = target({ close_time: CLOSE_1710_UTC, title: 'Seaside', type: 'default' });
+        expect(rules.ruleMatches({ closesAt: '25:00' }, hit)).toBe(false);
+        expect(rules.ruleMatches({ closesAt: '25:00', type: 'default' }, hit)).toBe(false);
+        expect(rules.ruleMatches({ closesAt: '25:00', title: 'Seaside' }, hit)).toBe(false);
+        expect(rules.ruleMatches({ closesAt: '17:10', title: 'Seaside', type: 'default' }, hit)).toBe(true);
+    });
+
+    describe('several close times', () => {
+        const at1710 = () => target({ close_time: CLOSE_1710_UTC });
+        const at1810 = () => target({ close_time: CLOSE_1710_UTC + 3600 });
+        const at1910 = () => target({ close_time: CLOSE_1710_UTC + 7200 });
+
+        test('closing at any listed time is enough, and nothing else matches', () => {
+            const rule = { closesAtTimes: ['17:10', '18:10'] };
+            expect(rules.ruleMatches(rule, at1710())).toBe(true);
+            expect(rules.ruleMatches(rule, at1810())).toBe(true);
+            expect(rules.ruleMatches(rule, at1910())).toBe(false);
+            expect(rules.ruleMatches(rule, target({ close_time: undefined }))).toBe(false);
+        });
+
+        test('a list-only rule is a condition, turns the close time on, and sorts as a close-time rule', () => {
+            const list = { closesAtTimes: ['17:10', '18:10'] };
+            expect(rules.hasRuleCondition(list)).toBe(true);
+            const close = challenge({ close_time: CLOSE_1710_UTC });
+            expect(rules.matchingRules([list], close, 'UTC')).toEqual([list]);
+            expect(rules.matchingRules([list], close, 'Europe/Riga')).toEqual([]);
+            const runtime = { minHours: 168 };
+            const type = { type: 'flash' };
+            expect(rules.sortRulesByDefaultOrder([type, list, runtime])).toEqual([runtime, list, type]);
+        });
+
+        test('a non-empty list wins over closesAt; an empty one or one of blanks falls back to it', () => {
+            expect(rules.ruleMatches({ closesAt: '17:10', closesAtTimes: ['18:10'] }, at1710())).toBe(false);
+            expect(rules.ruleMatches({ closesAt: '17:10', closesAtTimes: ['18:10'] }, at1810())).toBe(true);
+            for (const empty of [[], [''], ['  ', ''], null, undefined]) {
+                const rule = { closesAt: '17:10', closesAtTimes: empty };
+                expect(rules.ruleMatches(rule, at1710())).toBe(true);
+                expect(rules.ruleMatches(rule, at1810())).toBe(false);
+            }
+        });
+
+        test('a malformed stored list matches nothing, alone or next to a valid closesAt', () => {
+            for (const bad of ['17:10', 17, {}, [17], ['17:10', 'x'], ['17:10', null], ['7:10'], ['17:10:00']]) {
+                expect(rules.ruleMatches({ closesAt: '17:10', closesAtTimes: bad }, at1710())).toBe(false);
+                expect(rules.ruleMatches({ closesAtTimes: bad, type: 'default' }, at1710())).toBe(false);
+                expect(rules.hasRuleCondition({ closesAtTimes: bad })).toBe(false);
+            }
+            // A bad single time beside an empty list is still a bad single time.
+            expect(rules.ruleMatches({ closesAt: '25:00', closesAtTimes: [''] }, at1710())).toBe(false);
+        });
+
+        test('a listed time wins over a malformed closesAt, which only counts when no time is listed', () => {
+            const rule = { closesAt: '25:00', closesAtTimes: ['17:10'] };
+            expect(rules.normalizeRuleCloseTimes(rule)).toEqual(['17:10']);
+            expect(rules.ruleMatches(rule, at1710())).toBe(true);
+            expect(rules.ruleMatches(rule, at1810())).toBe(false);
+            expect(rules.hasRuleCondition(rule)).toBe(true);
+            expect(rules.normalizeRuleCloseTimes({ closesAt: '25:00', closesAtTimes: [''] })).toBe(false);
+        });
+
+        test('entries are trimmed, blanks and repeats are dropped', () => {
+            expect(rules.normalizeRuleCloseTimes({ closesAtTimes: [' 17:10 ', '', '17:10', '18:10'] })).toEqual([
+                '17:10',
+                '18:10',
+            ]);
+            expect(rules.normalizeRuleCloseTimes({ closesAt: '17:10' })).toEqual(['17:10']);
+            expect(rules.normalizeRuleCloseTimes({})).toBeNull();
+            expect(rules.normalizeRuleCloseTimes(null)).toBeNull();
+            expect(rules.normalizeRuleCloseTimes({ closesAt: '25:00' })).toBe(false);
+        });
+
+        test('the other conditions still have to hold', () => {
+            const rule = { closesAtTimes: ['17:10', '18:10'], type: 'flash' };
+            expect(rules.ruleMatches(rule, target({ close_time: CLOSE_1710_UTC, type: 'flash' }))).toBe(true);
+            expect(rules.ruleMatches(rule, target({ close_time: CLOSE_1710_UTC, type: 'default' }))).toBe(false);
+        });
+    });
+
     test('a title condition needs a title; a rule with no condition matches nothing', () => {
-        expect(rules.ruleMatches({ title: 'Seaside' }, rules.ruleMatchTarget({ tags: ['x'] }))).toBe(false);
+        expect(rules.ruleMatches({ title: 'Seaside' }, rules.ruleMatchTarget({ tags: ['x'] }, ZONE))).toBe(false);
         expect(rules.ruleMatches({ autoJoin: true }, target())).toBe(false);
         expect(rules.hasRuleCondition({ autoJoin: true })).toBe(false);
         expect(rules.hasRuleCondition({ maxHours: 24 })).toBe(true);
+        expect(rules.hasRuleCondition({ closesAt: '17:10' })).toBe(true);
+        expect(rules.hasRuleCondition({ closesAt: '25:00' })).toBe(false);
         expect(rules.hasRuleCondition({ title: 'x' })).toBe(true);
     });
 
@@ -119,9 +236,18 @@ describe('settings/challengeRules — pure matcher', () => {
     test('matchingRules keeps list order and tolerates a non-array list', () => {
         const a = { pics: 4 };
         const b = { title: 'Seaside' };
-        expect(rules.matchingRules([a, { pics: 2 }, b], challenge())).toEqual([a, b]);
-        expect(rules.matchingRules(null, challenge())).toEqual([]);
-        expect(rules.matchingRules([], challenge())).toEqual([]);
+        expect(rules.matchingRules([a, { pics: 2 }, b], challenge(), ZONE)).toEqual([a, b]);
+        expect(rules.matchingRules(null, challenge(), ZONE)).toEqual([]);
+        expect(rules.matchingRules([], challenge(), ZONE)).toEqual([]);
+    });
+
+    test('matchingRules reads the close time in the given zone', () => {
+        const skip = { closesAt: '17:10' };
+        const close = challenge({ close_time: CLOSE_1710_UTC });
+        expect(rules.matchingRules([skip], close, 'UTC')).toEqual([skip]);
+        expect(rules.matchingRules([skip], close, 'Europe/Riga')).toEqual([]);
+        // No rule carries a valid closesAt: other rules still match without the close time being read.
+        expect(rules.matchingRules([{ pics: 4 }, { closesAt: 'x' }], close, 'UTC')).toEqual([{ pics: 4 }]);
     });
 
     describe('sortRulesByDefaultOrder', () => {
@@ -169,6 +295,24 @@ describe('settings/challengeRules — pure matcher', () => {
             expect(rules.sortRulesByDefaultOrder([mixed, exact])).toEqual([exact, mixed]);
         });
 
+        test('a close-time rule ranks after runtime and before type, and below every title rule', () => {
+            const closes = { closesAt: '17:10' };
+            const runtime = { minHours: 168 };
+            const type = { type: 'flash' };
+            const titled = { title: 'Hats', match: 'contains' };
+            expect(rules.sortRulesByDefaultOrder([type, closes, runtime, titled])).toEqual([
+                titled,
+                runtime,
+                closes,
+                type,
+            ]);
+            // An invalid close time is no condition, so it takes no slot.
+            expect(rules.sortRulesByDefaultOrder([{ closesAt: '25:00', type: 'flash' }, closes])).toEqual([
+                closes,
+                { closesAt: '25:00', type: 'flash' },
+            ]);
+        });
+
         test('returns a new array and an empty one for a non-array', () => {
             const list = [{ pics: 2 }, { title: 'a' }];
             const sorted = rules.sortRulesByDefaultOrder(list);
@@ -180,37 +324,53 @@ describe('settings/challengeRules — pure matcher', () => {
 });
 
 describe('settings facade — class conditions and the rule cascade', () => {
-    const headlessGlobals = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
-        AndroidHeadlessStore?: AndroidHeadlessStore;
-    };
-    let store: { value: string | null; read: jest.Mock<string | null, []>; write: jest.Mock<void, [string]> };
+    let store: MemoryStore;
     const seed = (obj: Record<string, unknown>) => {
-        store.value = JSON.stringify({ _challengeRulesOrderedV1: true, ...obj });
+        store.value = JSON.stringify(obj);
         settings.loadSettings();
         store.write.mockClear();
     };
-    const saved = () => JSON.parse(store.value!) as AppSettings;
-    const base = (over = {}) => ({ challengeSettings: { globalDefaults: {}, ...over } });
+    const saved = () => parseJsonAs(store.value!, isConfig);
+    // A stored configuration with these layers: the global defaults, each challenge's own values by id, the profiles,
+    // the rules and the ids whose rule profile is suppressed.
+    const base = (
+        over: {
+            defaults?: Record<string, unknown>;
+            challenges?: Record<string, Record<string, unknown>>;
+            profiles?: Record<string, unknown>;
+            rules?: unknown[];
+            suppressed?: Record<string, boolean>;
+            scenarios?: Record<string, unknown>;
+        } = {},
+    ) => {
+        const ids = new Set([...Object.keys(over.challenges ?? {}), ...Object.keys(over.suppressed ?? {})]);
+        return {
+            version: 2,
+            defaults: over.defaults ?? {},
+            challenges: Object.fromEntries(
+                [...ids].map((id) => [
+                    id,
+                    {
+                        ...(over.challenges?.[id] ? { values: over.challenges[id] } : {}),
+                        ...(over.suppressed?.[id] ? { suppressRuleProfile: true } : {}),
+                    },
+                ]),
+            ),
+            profiles: over.profiles ?? {},
+            rules: over.rules ?? [],
+            scenarios: over.scenarios ?? {},
+        };
+    };
     const withTags = (rule: Record<string, unknown>) => ({ mustIncludeTags: [], shouldIncludeTags: [], ...rule });
 
     beforeEach(() => {
-        headlessGlobals.__GS_HEADLESS__ = true;
-        store = {
-            value: null,
-            read: jest.fn(() => store.value),
-            write: jest.fn((d) => {
-                store.value = d;
-            }),
-        };
-        headlessGlobals.AndroidHeadlessStore = store;
+        store = installHeadlessStore();
         settings.rememberChallengeTitles([]);
         jest.clearAllMocks();
     });
 
     afterAll(() => {
-        delete headlessGlobals.__GS_HEADLESS__;
-        delete headlessGlobals.AndroidHeadlessStore;
+        removeHeadlessStore();
     });
 
     describe('setTitleRules — class conditions', () => {
@@ -222,10 +382,9 @@ describe('settings facade — class conditions and the rule cascade', () => {
                     { minHours: '', maxHours: '', pics: '', type: '', title: '', autoJoin: true },
                 ]),
             ).toBe(true);
-            expect(saved().challengeSettings.titleRules).toEqual([
+            expect(saved().rules).toEqual([
                 withTags({ title: '', type: 'flash', pics: 4, minHours: 24, maxHours: 168, autoJoin: true }),
             ]);
-            expect(saved()._challengeRulesOrderedV1).toBe(true);
         });
 
         test.each([
@@ -265,7 +424,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
                 base({
                     profiles: { P: { exposure: 70 } },
                     // A manual target below the profile's trigger: the pair is invalid.
-                    perChallenge: { c1: { exposureTarget: 60 } },
+                    challenges: { c1: { exposureTarget: 60 } },
                 }),
             );
             settings.rememberChallengeTitles([{ id: 'c1', ...challenge() }]);
@@ -282,7 +441,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
             seed(
                 base({
                     profiles: { Quad: { exposure: 70 }, Long: { exposure: 40, boostTime: 600 } },
-                    titleRules: [
+                    rules: [
                         withTags({ title: '', pics: 4, maxHours: 24, profile: 'Quad' }),
                         withTags({ title: '', pics: 4, profile: 'Long' }),
                     ],
@@ -292,7 +451,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
             expect(settings.resolveRuleSetting('exposure', day)).toEqual({ value: 70 });
             // Long's other keys do not leak in beside Quad's.
             expect(settings.resolveRuleSetting('boostTime', day)).toBeNull();
-            expect(settings.getTitleProfile(day)).toEqual({ name: 'Quad', values: { exposure: 70 } });
+            expect(settings.getTitleProfile(day).profile).toEqual({ name: 'Quad', values: { exposure: 70 } });
             // A week-long 4-photo challenge misses the first rule and gets Long.
             expect(settings.resolveRuleSetting('exposure', challenge({ hours: 168 }))).toEqual({ value: 40 });
         });
@@ -301,29 +460,29 @@ describe('settings facade — class conditions and the rule cascade', () => {
             seed(
                 base({
                     profiles: { P: { autoJoinWithinHoursOfEnd: 12, exposure: 70 } },
-                    titleRules: [
+                    rules: [
                         withTags({ title: 'Seaside', autoJoinWithinHoursOfEnd: 2 }),
-                        withTags({ title: '', pics: 4, profile: 'P', autoFill: true }),
+                        withTags({ title: '', pics: 4, profile: 'P', autoSubmit: true }),
                     ],
                 }),
             );
             expect(settings.resolveRuleSetting('autoJoinWithinHoursOfEnd', challenge())).toEqual({ value: 2 });
             expect(settings.resolveRuleSetting('exposure', challenge())).toEqual({ value: 70 });
-            expect(settings.resolveRuleSetting('autoFill', challenge())).toEqual({ value: true });
+            expect(settings.resolveRuleSetting('autoSubmit', challenge())).toEqual({ value: true });
             expect(settings.resolveRuleSetting('autoJoin', challenge())).toBeNull();
         });
 
         test('a hand-edited reserved profile name on a rule resolves to no profile', () => {
-            seed(base({ titleRules: [withTags({ title: 'Seaside', profile: '__proto__' })] }));
-            expect(settings.getTitleProfile(challenge())).toBeNull();
+            seed(base({ rules: [withTags({ title: 'Seaside', profile: '__proto__' })] }));
+            expect(settings.getTitleProfile(challenge()).profile).toBeNull();
             expect(settings.resolveRuleSetting('exposure', challenge())).toBeNull();
         });
 
         test('photo tags come from the first matching rule that lists them for that key', () => {
             seed(
                 base({
-                    globalDefaults: { mustIncludeTags: [], shouldIncludeTags: [] },
-                    titleRules: [
+                    defaults: { mustIncludeTags: [], shouldIncludeTags: [] },
+                    rules: [
                         withTags({ title: 'Seaside', shouldIncludeTags: ['sea'] }),
                         withTags({ title: '', pics: 4, mustIncludeTags: ['quad'], shouldIncludeTags: ['x'] }),
                     ],
@@ -334,11 +493,176 @@ describe('settings facade — class conditions and the rule cascade', () => {
         });
     });
 
+    describe('getTitleProfile — what the matching rules contribute', () => {
+        // Where a value comes from: the rule's title and its 1-based place in the list.
+        const rule = (title: string | undefined, index: number, viaProfile = false) => ({
+            ...(title === undefined ? {} : { title }),
+            index,
+            ...(viaProfile ? { viaProfile } : {}),
+        });
+
+        test('a rule-assigned scenario, auto-join and chosen photos are inline values with the rule that set them', () => {
+            seed(
+                base({
+                    rules: [
+                        withTags({ title: 'Seaside', scenario: 'Plan', autoJoin: true, chosenPhotos: ['p1', 'p2'] }),
+                    ],
+                }),
+            );
+            const seaside = rule('Seaside', 1);
+            expect(settings.getTitleProfile('Seaside')).toEqual({
+                profile: null,
+                suppressed: false,
+                ruleValues: { scenario: 'Plan', autoJoin: true, chosenPhotos: ['p1', 'p2'] },
+                inlineValues: { scenario: 'Plan', autoJoin: true, chosenPhotos: ['p1', 'p2'] },
+                ruleSources: { scenario: seaside, autoJoin: seaside, chosenPhotos: seaside },
+                inlineSources: { scenario: seaside, autoJoin: seaside, chosenPhotos: seaside },
+            });
+        });
+
+        test('nothing matching gives empty layers and no profile', () => {
+            seed(base({ rules: [withTags({ title: 'Other', scenario: 'Plan' })] }));
+            expect(settings.getTitleProfile('Seaside')).toEqual({
+                profile: null,
+                suppressed: false,
+                ruleValues: {},
+                inlineValues: {},
+                ruleSources: {},
+                inlineSources: {},
+            });
+        });
+
+        test('a rule matched only by tags or by type is read through the remembered facts, by id', () => {
+            seed(
+                base({
+                    rules: [
+                        withTags({ title: '', challengeTag: 'Exhibition', scenario: 'ByTag' }),
+                        withTags({ title: '', type: 'flash', autoSubmit: true }),
+                    ],
+                }),
+            );
+            settings.rememberChallengeTitles([
+                { id: 1, title: 'Whatever', tags: ['Exhibition'], type: 'default' },
+                { id: 2, title: 'Whatever', tags: [], type: 'flash' },
+            ]);
+            // The bare title matches neither rule: only the fact-enriched challenge does.
+            expect(settings.getTitleProfile('Whatever').inlineValues).toEqual({});
+            expect(settings.getTitleProfile('Whatever', 1)).toMatchObject({
+                inlineValues: { scenario: 'ByTag' },
+                ruleSources: { scenario: rule(undefined, 1) },
+            });
+            expect(settings.getTitleProfile('Whatever', 2)).toMatchObject({
+                inlineValues: { autoSubmit: true },
+                ruleSources: { autoSubmit: rule(undefined, 2) },
+            });
+        });
+
+        test('with several matching rules the first wins per key, and each key names the rule that set it', () => {
+            seed(
+                base({
+                    rules: [
+                        withTags({ title: 'Seaside', scenario: 'First' }),
+                        withTags({ title: 'Sea', match: 'contains', scenario: 'Second', autoJoin: true }),
+                    ],
+                }),
+            );
+            const info = settings.getTitleProfile('Seaside');
+            expect(info.inlineValues).toEqual({ scenario: 'First', autoJoin: true });
+            expect(info.ruleSources).toEqual({ scenario: rule('Seaside', 1), autoJoin: rule('Sea', 2) });
+            expect(info.inlineSources).toEqual(info.ruleSources);
+        });
+
+        test("the rule's profile and inline values are separate layers, inline winning in the combined one", () => {
+            seed(
+                base({
+                    profiles: { Quad: { exposure: 70, autoSubmit: false } },
+                    rules: [withTags({ title: 'Seaside', profile: 'Quad', autoSubmit: true, scenario: 'Plan' })],
+                }),
+            );
+            const seaside = rule('Seaside', 1);
+            expect(settings.getTitleProfile('Seaside')).toEqual({
+                profile: { name: 'Quad', values: { exposure: 70, autoSubmit: false } },
+                suppressed: false,
+                ruleValues: { autoSubmit: true, scenario: 'Plan', exposure: 70 },
+                inlineValues: { autoSubmit: true, scenario: 'Plan' },
+                // exposure comes from the profile of that same rule.
+                ruleSources: { autoSubmit: seaside, scenario: seaside, exposure: rule('Seaside', 1, true) },
+                inlineSources: { autoSubmit: seaside, scenario: seaside },
+            });
+        });
+
+        test("a key an earlier rule's profile supplies is not credited to a later rule that sets it inline; the other layer is", () => {
+            seed(
+                base({
+                    profiles: { Quad: { autoSubmit: false } },
+                    rules: [
+                        withTags({ title: 'Seaside', profile: 'Quad' }),
+                        withTags({ title: 'Sea', match: 'contains', autoSubmit: true, autoJoin: true }),
+                    ],
+                }),
+            );
+            const info = settings.getTitleProfile('Seaside');
+            // While the profile applies: autoSubmit is the profile's (rule 1), autoJoin the later rule's own.
+            expect(info.ruleValues).toEqual({ autoSubmit: false, autoJoin: true });
+            expect(info.ruleSources).toEqual({ autoSubmit: rule('Seaside', 1, true), autoJoin: rule('Sea', 2) });
+            // Once the profile is suppressed, the later rule's inline autoSubmit is what runs.
+            expect(info.inlineValues).toEqual({ autoSubmit: true, autoJoin: true });
+            expect(info.inlineSources).toEqual({ autoSubmit: rule('Sea', 2), autoJoin: rule('Sea', 2) });
+        });
+
+        test('a title of only spaces names nothing: the rule is untitled', () => {
+            seed(base({ rules: [withTags({ title: '   ', challengeTag: 'Comm', autoSubmit: true })] }));
+            settings.rememberChallengeTitles([{ id: 3, title: 'Seaside', tags: ['Comm'] }]);
+            expect(settings.getTitleProfile('Seaside', 3).ruleSources).toEqual({ autoSubmit: { index: 1 } });
+        });
+
+        test('a hand-edited title that is no text names nothing either', () => {
+            seed(base({ rules: [withTags({ title: 42, challengeTag: 'Comm', autoSubmit: true })] }));
+            settings.rememberChallengeTitles([{ id: 3, title: 'Seaside', tags: ['Comm'] }]);
+            expect(settings.getTitleProfile('Seaside', 3).ruleSources).toEqual({ autoSubmit: { index: 1 } });
+        });
+
+        test('with the profile suppressed the inline values still apply and the profile still shows, flagged', () => {
+            seed(
+                base({
+                    profiles: { Quad: { exposure: 70 } },
+                    rules: [withTags({ title: 'Seaside', profile: 'Quad', scenario: 'Plan' })],
+                    suppressed: { '7': true },
+                }),
+            );
+            settings.rememberChallengeTitles([{ id: 7, title: 'Seaside' }]);
+            expect(settings.getTitleProfile('Seaside', 7)).toMatchObject({
+                profile: { name: 'Quad' },
+                suppressed: true,
+                inlineValues: { scenario: 'Plan' },
+                inlineSources: { scenario: rule('Seaside', 1) },
+            });
+        });
+
+        test('an untitled rule is named by its place in the list, and a hand-edited invalid inline value contributes nothing', () => {
+            seed(
+                base({
+                    rules: [
+                        withTags({ title: 'Other', scenario: 'Unrelated' }),
+                        withTags({ title: '', challengeTag: 'Comm', autoSubmit: true }),
+                        withTags({ title: 'Seaside', autoJoin: 'not a boolean' }),
+                    ],
+                }),
+            );
+            settings.rememberChallengeTitles([{ id: 3, title: 'Seaside', tags: ['Comm'] }]);
+            const info = settings.getTitleProfile('Seaside', 3);
+            expect(info.inlineValues).toEqual({ autoSubmit: true });
+            // The untitled rule carries no title, only its place (the renderer words it, translated).
+            expect(info.ruleSources).toEqual({ autoSubmit: { index: 2 } });
+            expect(info.ruleSources.autoSubmit).not.toHaveProperty('title');
+        });
+    });
+
     describe('id-keyed resolution through the facts cache', () => {
         const rulesForQuad = () =>
             base({
                 profiles: { Quad: { exposure: 70 } },
-                titleRules: [withTags({ title: '', pics: 4, minHours: 24, profile: 'Quad', autoFill: true })],
+                rules: [withTags({ title: '', pics: 4, minHours: 24, profile: 'Quad', autoSubmit: true })],
             });
 
         test('a joined challenge resolves class rules by id, including the inline auto-submit', () => {
@@ -348,15 +672,14 @@ describe('settings facade — class conditions and the rule cascade', () => {
                 { id: 8, ...challenge({ hours: 2 }) },
             ]);
             expect(settings.getEffectiveSetting('exposure', '7')).toBe(70);
-            expect(settings.getEffectiveSetting('autoFill', '7')).toBe(true);
-            expect(settings.getEffectiveSetting('autoFill', '8')).toBe(false);
-            expect(settings.getTitleProfile('Seaside', 7)).toEqual({
-                name: 'Quad',
-                values: { exposure: 70 },
+            expect(settings.getEffectiveSetting('autoSubmit', '7')).toBe(true);
+            expect(settings.getEffectiveSetting('autoSubmit', '8')).toBe(false);
+            expect(settings.getTitleProfile('Seaside', 7)).toMatchObject({
+                profile: { name: 'Quad', values: { exposure: 70 } },
                 suppressed: false,
             });
             // An explicit payload field beats the remembered fact.
-            expect(settings.getTitleProfile({ title: 'Seaside', max_photo_submits: 2 }, 7)).toBeNull();
+            expect(settings.getTitleProfile({ title: 'Seaside', max_photo_submits: 2 }, 7).profile).toBeNull();
         });
 
         test('an unknown id resolves nothing and a non-numeric or over-long fact is dropped', () => {
@@ -371,9 +694,9 @@ describe('settings facade — class conditions and the rule cascade', () => {
         test('a per-challenge override equal to the GLOBAL value still sticks against a rule value', () => {
             seed(rulesForQuad());
             settings.rememberChallengeTitles([{ id: 7, ...challenge() }]);
-            expect(settings.setChallengeOverride('autoFill', '7', false)).toBe(true);
-            expect(saved().challengeSettings.perChallenge['7']).toEqual({ autoFill: false });
-            expect(settings.getEffectiveSetting('autoFill', '7')).toBe(false);
+            expect(settings.setChallengeOverride('autoSubmit', '7', false)).toBe(true);
+            expect(saved().challenges['7']).toEqual({ values: { autoSubmit: false } });
+            expect(settings.getEffectiveSetting('autoSubmit', '7')).toBe(false);
         });
 
         test('suppressing the rule profile keeps the rule inline values', () => {
@@ -381,14 +704,14 @@ describe('settings facade — class conditions and the rule cascade', () => {
             settings.rememberChallengeTitles([{ id: 7, ...challenge() }]);
             expect(settings.replaceChallengeOverrides('7', {}, true)).toBe(true);
             expect(settings.getEffectiveSetting('exposure', '7')).toBe(100);
-            expect(settings.getEffectiveSetting('autoFill', '7')).toBe(true);
+            expect(settings.getEffectiveSetting('autoSubmit', '7')).toBe(true);
             expect(settings.getTitleProfile('Seaside', 7)).toMatchObject({ suppressed: true });
         });
     });
 
     describe('hasRuleJoinOptIn', () => {
         const optIn = (rule: Record<string, unknown>, target = challenge({ tags: ['Comm'] })) => {
-            seed(base({ profiles: { P: { exposure: 70 } }, titleRules: [withTags(rule)] }));
+            seed(base({ profiles: { P: { exposure: 70 } }, rules: [withTags(rule)] }));
             return settings.hasRuleJoinOptIn(target);
         };
 
@@ -411,7 +734,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
         seed(
             base({
                 profiles: { P: { exposure: 70 } },
-                titleRules: [
+                rules: [
                     withTags({ title: '', pics: 4, profile: 'P', autoJoin: true }),
                     withTags({ title: 'Only', profile: 'P' }),
                     withTags({ title: 'Broken', profile: 'P', autoJoin: 'yes' }),
@@ -419,6 +742,6 @@ describe('settings facade — class conditions and the rule cascade', () => {
             }),
         );
         expect(settings.deleteChallengeProfile('P')).toBe(true);
-        expect(saved().challengeSettings.titleRules).toEqual([withTags({ title: '', pics: 4, autoJoin: true })]);
+        expect(saved().rules).toEqual([withTags({ title: '', pics: 4, autoJoin: true })]);
     });
 });

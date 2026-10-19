@@ -1,8 +1,8 @@
 /**
  * Pure helpers over the named challenge-settings profiles map
- * (`challengeSettings.profiles`): caps, name normalization and lookup, and
+ * (`profiles`): caps, name normalization and lookup, and
  * schema sanitization of a profile's values. No persistence — the callers in
- * profiles.ts / titleRules.ts / migrations.ts own the load/save.
+ * profiles.ts / titleRules.ts own the load/save.
  *
  * Profiles are stored as `{ [displayName]: { [settingKey]: value } }` —
  * name-keyed, NOT challenge-id-keyed, because ids rotate and id-keyed state
@@ -14,8 +14,10 @@
 import * as logger from '../logger';
 import { schemaEntry, validateSetting } from './schema';
 import { challengeValueSetIsValid } from './defaults';
+import { loggableSettingValue } from './logValue';
+import { isDroppedOffValue } from './ruleBehaviour';
 
-import type { AppSettings, ChallengeValues } from '../types/settings';
+import type { ChallengeValues } from '../types/settings';
 
 const MAX_CHALLENGE_PROFILES = 50;
 const MAX_PROFILE_NAME_LENGTH = 60;
@@ -38,15 +40,6 @@ const profileNameForLog = (name: unknown): string =>
         .slice(0, 80);
 
 /**
- * Returns the stored profiles map when it is a plain object, else `{}`.
- * Never returns arrays or primitives from a corrupted blob.
- */
-const readProfilesMap = (settings: AppSettings): Record<string, ChallengeValues> => {
-    const stored = settings.challengeSettings?.profiles;
-    return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
-};
-
-/**
  * Find the stored key of the profile matching a normalized name, skipping
  * reserved/prototype-shaped stored keys. Returns null when absent.
  */
@@ -64,7 +57,8 @@ const _profileSchemaValues = (values: ChallengeValues): ChallengeValues => {
     for (const key of Object.keys(values)) {
         // Prototype-shaped keys fall out here too: SETTINGS_SCHEMA['__proto__']
         // resolves to Object.prototype, whose .perChallenge is undefined.
-        if (schemaEntry(key)?.perChallenge) whitelisted[key] = values[key];
+        // An on-only key's `false` is dropped, not rejected: it lives only in a challenge's own override.
+        if (schemaEntry(key)?.perChallenge && !isDroppedOffValue(key, values[key])) whitelisted[key] = values[key];
     }
     return whitelisted;
 };
@@ -86,7 +80,11 @@ const _validatedProfileValues = (
             continue;
         }
         if (!failClosed) continue;
-        _logProfileValidationFailure(logInvalid, `Invalid profile value for setting ${key}:`, value);
+        _logProfileValidationFailure(
+            logInvalid,
+            `Invalid profile value for setting ${key}:`,
+            loggableSettingValue(key, value),
+        );
         return null;
     }
     return sanitized;
@@ -142,7 +140,6 @@ export {
     RESERVED_PROFILE_NAMES,
     normalizeProfileName,
     profileNameForLog,
-    readProfilesMap,
     findProfileKey,
     sanitizeProfileValues,
 };

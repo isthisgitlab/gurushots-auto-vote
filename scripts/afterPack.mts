@@ -13,10 +13,14 @@
  * ID), and flipping fuses invalidates that signature, so we re-apply the ad-hoc
  * signature via resetAdHocDarwinSignature.
  *
- * Note: EmbeddedAsarIntegrityValidation is deliberately left un-flipped — it is
- * macOS-only and requires electron-builder's asar-integrity wiring to be exactly
- * right or the app fails to launch; OnlyLoadAppFromAsar already blocks loading a
- * swapped-in unpacked app dir (asar:true is the electron-builder default here).
+ * EmbeddedAsarIntegrityValidation is turned on wherever electron-builder embeds
+ * the asar header hash: the macOS Info.plist (ElectronAsarIntegrity) and the
+ * Windows executable's INTEGRITY resource. Linux carries no hash, so the fuse
+ * stays off there. With the fuse on, Electron refuses to start when app.asar was
+ * modified after packing; the macOS build also fails here if the plist entry is
+ * missing, since a fuse without a hash would make the app unlaunchable.
+ * OnlyLoadAppFromAsar additionally blocks loading an unpacked app dir swapped in
+ * beside the asar (asar:true is the electron-builder default here).
  */
 
 import fs from 'node:fs';
@@ -53,6 +57,14 @@ const pruneForeignOnnxBinaries = (resourcesDir: string, targetOs: string, target
     }
 };
 
+// Throws unless electron-builder wrote the asar header hash into the app's Info.plist.
+const assertMacAsarIntegrity = (appBundle: string) => {
+    const plist = fs.readFileSync(path.join(appBundle, 'Contents', 'Info.plist'), 'utf8');
+    if (!plist.includes('<key>ElectronAsarIntegrity</key>') || !plist.includes('<key>Resources/app.asar</key>')) {
+        throw new Error(`${appBundle}: Info.plist has no ElectronAsarIntegrity entry for Resources/app.asar`);
+    }
+};
+
 export default async function afterPack(context: AfterPackContext) {
     const { appOutDir, packager, electronPlatformName, arch } = context;
     const productName = packager.appInfo.productFilename;
@@ -60,6 +72,7 @@ export default async function afterPack(context: AfterPackContext) {
 
     let electronBinary;
     if (isMac) {
+        assertMacAsarIntegrity(path.join(appOutDir, `${productName}.app`));
         electronBinary = path.join(appOutDir, `${productName}.app`, 'Contents', 'MacOS', productName);
     } else if (electronPlatformName === 'win32') {
         electronBinary = path.join(appOutDir, `${productName}.exe`);
@@ -93,6 +106,8 @@ export default async function afterPack(context: AfterPackContext) {
         [FuseV1Options.EnableCookieEncryption]: true,
         // Refuse to load an app dir swapped in beside the asar.
         [FuseV1Options.OnlyLoadAppFromAsar]: true,
+        // Refuse to start from an app.asar that no longer matches the embedded header hash.
+        [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: isMac || electronPlatformName === 'win32',
     });
 
     console.log(`[afterPack] Hardened Electron fuses for ${electronPlatformName}: ${electronBinary}`);

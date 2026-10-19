@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { useAutoClear } from '@/hooks/useAutoClear';
 import { useKeyUnlock, useFillExposure } from '@/api/useCurrencyActions';
 import { interp } from '@/utils/interp';
 import { spentOrStale } from '@/utils/spentOrStale';
 import { ActionButton } from '@/components/ui/ActionButton';
+import { InlineError } from '@/components/ui/InlineError';
+import { BusyContent } from '@/components/ui/LoadingSpinner';
+
 import { CurrencyConfirmModal, currencyOutcomeText } from './CurrencyConfirmModal';
 
 import type { Bankroll, Challenge } from '../../../types/gurushots';
@@ -13,8 +15,6 @@ import type { Bankroll, Challenge } from '../../../types/gurushots';
  * A bankroll spend hook's state envelope (useKeyUnlock / useFillExposure).
  */
 type CurrencySpendAction = ReturnType<typeof useKeyUnlock>;
-
-const ERROR_DISPLAY_MS = 5000;
 
 /**
  * Card-cell button that spends one unit of a bankroll currency on the
@@ -52,8 +52,6 @@ function CurrencyActionButton({
     const [confirmOpen, setConfirmOpen] = useState(false);
     const { run, loading, error, clearError } = action;
 
-    useAutoClear(error, clearError, ERROR_DISPLAY_MS);
-
     const handleConfirm = async () => {
         const result = await run(challengeId);
         setConfirmOpen(false);
@@ -63,24 +61,21 @@ function CurrencyActionButton({
     return (
         <>
             <ActionButton
-                variant="accent"
+                variant="cost"
                 error={error}
                 className="mt-1"
                 onClick={() => setConfirmOpen(true)}
                 disabled={loading}
+                aria-busy={loading}
             >
-                {loading ? (
-                    <span className="loading loading-spinner loading-xs" />
-                ) : (
-                    <>
-                        {icon} {label}
-                    </>
-                )}
+                <BusyContent busy={loading} label={label}>
+                    {icon} {label}
+                </BusyContent>
             </ActionButton>
             {error && (
-                <div className="text-error text-xs mt-1" role="alert">
+                <InlineError className="mt-1" onDismiss={clearError}>
                     {currencyOutcomeText(t, error)}
-                </div>
+                </InlineError>
             )}
             <CurrencyConfirmModal
                 isOpen={confirmOpen}

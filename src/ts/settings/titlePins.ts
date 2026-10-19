@@ -1,18 +1,26 @@
 /**
- * Persisted first-seen challenge-title pins (`challengeSettings.titlePins`,
+ * Persisted first-seen challenge-title pins (the `titlePins.json` cache store,
  * `{ [id]: title }`): an internal, automatically-maintained cache that defeats
- * a server-side rename mid-challenge. Sole owner of the pin-cap warning latch.
+ * a server-side rename mid-challenge. It is a cache store beside the
+ * configuration, not a part of it. Sole owner of the pin-cap warning latch.
  *
  * No IPC wiring — deliberate asymmetry with titleRules (which has a
  * user-facing editor).
  */
 
 import * as logger from '../logger';
-import { loadSettings, saveSettings } from './persistence';
+import { isPlainObject } from '../plainObject';
+import { createJsonStore } from './storage';
 import { MAX_TITLE_LENGTH } from './titleRuleSanitize';
 
+import type { ThroughResult } from '../types/stores';
+
+// Shared: the Android service pins titles too, so every write is a change of what is stored then, saved by the native
+// compare-and-write (never the app window's cache written whole).
+const titlePinStore = createJsonStore({ fileName: 'titlePins.json', prefKey: 'gs_title_pins', shared: true });
+
 // Defensive cap on the pin map size so an anomalously large challenge list
-// can't bloat the shared settings blob. Real active lists are tens of
+// can't bloat the cache store. Real active lists are tens of
 // entries; 500 is far above anything GuruShots returns.
 const MAX_TITLE_PINS = 500;
 
@@ -32,27 +40,88 @@ const _isPinnableTitle = (title: unknown): title is string =>
 /**
  * Own-property copy of the valid pins in a stored map. Iterating own keys
  * means an id named `__proto__`/`constructor` can never surface a prototype
- * member; non-string / whitespace-only / over-length values a corrupted blob
+ * member; non-string / whitespace-only / over-length values a corrupted file
  * might carry are dropped.
  */
 const _validPins = (stored: unknown): Record<string, string> => {
     const pins: Record<string, string> = {};
-    if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
-        const map = stored as Record<string, unknown>;
-        for (const id of Object.keys(map)) {
-            const title = map[id];
+    if (isPlainObject(stored)) {
+        for (const id of Object.keys(stored)) {
+            const title = stored[id];
             if (_isPinnableTitle(title)) pins[id] = title;
         }
     }
     return pins;
 };
 
+// The parsed map of the last text read, so a lookup per setting read does not parse an unchanged file again.
+let lastRaw: string | null = null;
+let lastStored: unknown = null;
+
+// A stored text as the map it holds. A text that is not readable JSON holds none.
+const _parse = (raw: string | null): unknown => {
+    try {
+        return raw === null ? null : JSON.parse(raw);
+    } catch {
+        // an unreadable cache holds no pins; the next merge rewrites it
+        return null;
+    }
+};
+
+/**
+ * The stored map as the file holds it.
+ */
+const _readStored = (): unknown => {
+    const raw = titlePinStore.readRaw();
+    if (raw === lastRaw) return lastStored;
+    lastRaw = raw;
+    lastStored = _parse(raw);
+    return lastStored;
+};
+
+/**
+ * The valid pins in the store.
+ */
+const _readPins = (): Record<string, string> => _validPins(_readStored());
+
 /**
  * Get the persisted first-seen challenge-title pins as `{ [id]: title }`.
  * Returns a defensive copy so callers can't mutate stored state around
  * mergeTitlePins' validation.
  */
-const getTitlePins = (): Record<string, string> => _validPins(loadSettings().challengeSettings?.titlePins);
+const getTitlePins = (): Record<string, string> => _readPins();
+
+// The pins of a stored map that are strings, as stored.
+const _stringPins = (stored: unknown): Record<string, string> =>
+    isPlainObject(stored)
+        ? Object.fromEntries(
+              Object.entries(stored).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+          )
+        : {};
+
+/**
+ * Every pin the store holds as a string, as stored (no pin is judged here: the readers do, each by its own rule), for the
+ * mirror of the configuration to carry whole.
+ */
+const storedTitlePins = (): Record<string, string> => _stringPins(_readStored());
+
+/**
+ * `storedTitlePins` for the Android app window, whose cache may be behind what the background service pinned since:
+ * read from Preferences.
+ */
+const storedTitlePinsNow = async (): Promise<Record<string, string>> =>
+    _stringPins(_parse(await titlePinStore.peekStored()));
+
+/**
+ * The title pinned for one challenge id, or '' when there is none. A pin is a string below the title cap, as the
+ * title lookup of a rule match has always read it (a whitespace-only one is a title that matches nothing).
+ */
+const pinnedTitleFor = (challengeId: string): string => {
+    const stored = _readStored();
+    if (!isPlainObject(stored) || !Object.hasOwn(stored, challengeId)) return '';
+    const title = stored[challengeId];
+    return typeof title === 'string' && title.length < MAX_TITLE_LENGTH ? title : '';
+};
 
 /**
  * The pinnable `[id, title]` entries of a caller-supplied adds map.
@@ -90,6 +159,43 @@ const _addPins = (pins: Record<string, string>, addEntries: Array<[string, strin
     }
 };
 
+// Told after every write of the pins (the mirror of the configuration holds them: see persistence.ts).
+let onWritten: (() => void) | null = null;
+
+/** Sets the one listener that hears of every write of the pins. */
+const onTitlePinsChange = (listener: (() => void) | null): void => {
+    onWritten = listener;
+};
+
+// What a change of the pins came to: told to the mirror once it is stored; a failure is logged.
+const _landed = (result: ThroughResult, notify: boolean): boolean => {
+    if (result === 'failed') {
+        logger.withCategory('settings').error('Could not save the title pins', null);
+        return false;
+    }
+    if (notify) onWritten?.();
+    return true;
+};
+
+/**
+ * Saves the map `change` makes of the pins as they are stored when the write is made (not of what was read earlier, the
+ * app window's cache among it): where the Android service pins titles too, a pin it saved meanwhile is kept. `change`
+ * may run more than once and makes the same change each time.
+ *
+ * @returns false when the store could not be written; where the write is only queued (the Android app window) true
+ *   once it is queued, and a write that does not land is logged
+ */
+const _change = (change: (stored: Record<string, unknown>) => Record<string, unknown>, notify: boolean): boolean => {
+    const update = (current: string | null): string => {
+        const parsed = _parse(current);
+        return JSON.stringify(change(isPlainObject(parsed) ? parsed : {}), null, 2);
+    };
+    const now = titlePinStore.updateNow(update);
+    if (now !== null) return _landed(now, notify);
+    void titlePinStore.updateThrough(update).then((result) => _landed(result, notify));
+    return true;
+};
+
 /**
  * Merge title pins into the persisted map — never a wholesale replace. Inside
  * the write the stored map is re-read; `adds` apply only to ids with no
@@ -102,19 +208,46 @@ const mergeTitlePins = (adds: Record<string, string>, removeIds?: readonly strin
     const removeList = Array.isArray(removeIds) ? removeIds.filter((id) => typeof id === 'string') : [];
     if (addEntries.length === 0 && removeList.length === 0) return true;
 
-    const settings = loadSettings();
-    const challengeSettings = settings.challengeSettings;
-    const pins = _validPins(challengeSettings.titlePins);
-    for (const id of removeList) {
-        delete pins[id];
-    }
-    _addPins(pins, addEntries);
-    if (Object.keys(pins).length < MAX_TITLE_PINS) {
-        titlePinCapWarned = false;
-    }
-
-    challengeSettings.titlePins = pins;
-    return saveSettings(settings);
+    return _change((stored) => {
+        const pins = _validPins(stored);
+        for (const id of removeList) {
+            delete pins[id];
+        }
+        _addPins(pins, addEntries);
+        if (Object.keys(pins).length < MAX_TITLE_PINS) {
+            titlePinCapWarned = false;
+        }
+        return pins;
+    }, true);
 };
 
-export { getTitlePins, mergeTitlePins };
+/**
+ * Put the pins an import found into the cache, as it found them (every read validates what it takes): a pin the cache
+ * holds for the same challenge gives way to the one `settings.json` held, which was seen first.
+ *
+ * It tells the mirror nothing: the configuration the pins belong to is not stored yet, and the mirror is made once it is.
+ *
+ * @returns false when the store could not be written
+ */
+const importTitlePins = (imported: Record<string, string>): boolean =>
+    _change((stored) => ({ ...stored, ...imported }), false);
+
+/**
+ * Forget every pin (a reset of the settings does, as it always has).
+ *
+ * @returns false when the store could not be written
+ */
+const clearTitlePins = (): boolean => _change(() => ({}), true);
+
+export {
+    clearTitlePins,
+    getTitlePins,
+    importTitlePins,
+    mergeTitlePins,
+    onTitlePinsChange,
+    pinnedTitleFor,
+    storedTitlePins,
+    storedTitlePinsNow,
+    titlePinStore,
+    MAX_TITLE_PINS,
+};

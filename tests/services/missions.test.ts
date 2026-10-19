@@ -1,5 +1,5 @@
 /**
- * Tests for services/missions.ts — recognising the join / fill / turbo / vote
+ * Tests for services/missions.ts — recognising the join / fill / turbo / boost / vote
  * missions by name, what each still needs, the per-kind settings gate, the
  * change-only summary log, and counting a landed action down.
  */
@@ -30,6 +30,7 @@ const {
     classifyMission,
     loadMissionNeeds,
     consumeMission,
+    neediestFillMission,
     isMissionVoteCandidate,
     missionVoteQuota,
     registerMissionNeeds,
@@ -51,7 +52,7 @@ const mission = (name: string, current: number, required: number, over: Partial<
 
 const enable = (...keys: string[]) =>
     settings.getEffectiveSetting.mockImplementation((key) => (keys.includes(key) ? true : undefined));
-const ALL = ['missionJoinEarly', 'missionUseFills', 'missionSaveTurbos', 'missionVote'];
+const ALL = ['missionJoinEarly', 'missionUseFills', 'missionSaveTurbos', 'missionUseBoosts', 'missionVote'];
 const infoMessages = () => logger.__level.info.mock.calls.map((c) => c[0]);
 
 beforeEach(() => {
@@ -61,9 +62,9 @@ beforeEach(() => {
 });
 
 test('manual Turbo wins update only active missions for the same account', () => {
-    const first = { join: 0, fill: 0, turbo: 2, vote: 0 };
-    const second = { join: 0, fill: 0, turbo: 2, vote: 0 };
-    const otherAccount = { join: 0, fill: 0, turbo: 1, vote: 0 };
+    const first = { join: 0, fill: 0, turbo: 2, boost: 0, vote: 0 };
+    const second = { join: 0, fill: 0, turbo: 2, boost: 0, vote: 0 };
+    const otherAccount = { join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 };
     const stopFirst = registerMissionNeeds('tok', first);
     const stopSecond = registerMissionNeeds('tok', second);
     const stopOther = registerMissionNeeds('other', otherAccount);
@@ -83,7 +84,7 @@ test('manual Turbo wins update only active missions for the same account', () =>
 });
 
 test('nested registrations keep the same mission state active until both release it', () => {
-    const needs = { join: 0, fill: 0, turbo: 2, vote: 0 };
+    const needs = { join: 0, fill: 0, turbo: 2, boost: 0, vote: 0 };
     const stopOuter = registerMissionNeeds('tok', needs);
     const stopInner = registerMissionNeeds('tok', needs);
     try {
@@ -123,13 +124,67 @@ describe('classifyMission', () => {
         ['Vote on 1.000 photos', 'vote'],
         ['Get 500 votes', null],
         ['Receive a vote for your photo', null],
+        // The count never matters: the keyword does.
+        ['Use 1 fill', 'fill'],
+        ['Use 2 fills', 'fill'],
+        ['Win 1 turbo', 'turbo'],
+        ['Win 3 turbos', 'turbo'],
+        ['Use a boost', 'boost'],
+        ['Use 2 boosts', 'boost'],
+        ['Join 1 challenge', 'join'],
+        ['Vote on 1 photo', 'vote'],
+        // A flash vote mission moves through the normal flash voting, not the vote spread.
+        ['Vote on 30 photos in Flash', null],
     ])('%s → %s', (name, kind) => {
         expect(classifyMission({ id: 1, name })).toBe(kind);
+    });
+
+    test('a vote mission whose description names flash is not a vote mission', () => {
+        expect(
+            classifyMission({ id: 1, name: 'Vote on 30 photos', description: 'Vote in Flash challenges' }),
+        ).toBeNull();
+        expect(classifyMission({ id: 1, description: 'Vote on 30 photos in Flash' })).toBeNull();
+        expect(classifyMission({ id: 1, name: 'Vote on 30 photos', description: 'Vote in any challenge' })).toBe(
+            'vote',
+        );
+    });
+
+    test('an all-star mission that mentions boosts is not a boost mission', () => {
+        expect(classifyMission({ id: 1, name: 'Get All Star', description: 'Use a boost to get there' })).toBeNull();
     });
 
     test('falls back to the description and survives a missing name', () => {
         expect(classifyMission({ id: 1, description: 'Join 3 challenges' })).toBe('join');
         expect(classifyMission(invalid(null))).toBeNull();
+    });
+
+    test.each([
+        // The action the mission asks for is the first keyword, not the reward it goes on to name.
+        ['Join 3 challenges and get 2 fills', 'join'],
+        ['Join 3 challenges to win 2 Turbos', 'join'],
+        ['Use Fill 3 times to get a free join', 'fill'],
+        ['Win Turbo 4 times and join a challenge', 'turbo'],
+        ['Get 2 fills for joining 3 challenges', 'fill'],
+        ['Win Turbo 3 times to boost your photo', 'turbo'],
+    ])('%s → %s', (name, kind) => {
+        expect(classifyMission({ id: 1, name })).toBe(kind);
+    });
+
+    test('the name says what is asked for, the description is only its fallback', () => {
+        expect(classifyMission({ id: 1, name: 'Join 3 challenges', description: 'Reward: get 2 fills' })).toBe('join');
+        expect(classifyMission({ id: 1, name: 'Daily mission', description: 'Join 3 challenges, get 2 fills' })).toBe(
+            'join',
+        );
+        expect(classifyMission({ id: 1, name: 'Daily mission', description: 'Reach the top' })).toBeNull();
+    });
+
+    test('a join mission that names fills in its description is not a fill mission', async () => {
+        const needs = await loadMissionNeeds('tok', NOW_MS, {
+            getMyMissions: jest.fn(async () => [
+                mission('Join 3 challenges', 0, 3, { description: 'Join 3 challenges and get 2 fills' }),
+            ]),
+        });
+        expect(needs).toEqual({ join: 3, fill: 0, turbo: 0, boost: 0, vote: 0 });
     });
 });
 
@@ -148,8 +203,10 @@ describe('loadMissionNeeds', () => {
             join: 5,
             fill: 2,
             turbo: 4,
+            boost: 0,
             vote: 300,
             turboRequirements: [{ remaining: 4, expiresAtSec: NOW_SEC + 3600 }],
+            fillMissions: [{ id: 'Use Fill 3 times', required: 3, current: 1, remaining: 2, spentThisPass: 0 }],
         });
         expect(d.getMyMissions).toHaveBeenCalledWith('tok');
     });
@@ -165,7 +222,7 @@ describe('loadMissionNeeds', () => {
                 mission('Win Turbo 2 times', 0, 2, invalid({ expiration_timestamp: undefined, progress: null })),
             ]),
         );
-        expect(needs).toEqual({ join: 0, fill: 0, turbo: 0, vote: 0 });
+        expect(needs).toEqual({ join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 });
     });
 
     test('a mission without an expiry stays active; the larger of two same-kind needs wins', async () => {
@@ -197,6 +254,7 @@ describe('loadMissionNeeds', () => {
             join: 0,
             fill: 0,
             turbo: 4,
+            boost: 0,
             vote: 0,
             turboRequirements: [
                 { remaining: 4, expiresAtSec: NOW_SEC + 4 * 3600 },
@@ -216,8 +274,29 @@ describe('loadMissionNeeds', () => {
             join: 0,
             fill: 0,
             turbo: 4,
+            boost: 0,
             vote: 0,
             turboRequirements: [{ remaining: 4, expiresAtSec: NOW_SEC + 3600 }],
+        });
+    });
+
+    test('a boost need is only read while Use Boosts for Missions is on', async () => {
+        const list = deps([mission('Use 2 boosts', 1, 3)]);
+        enable('missionUseBoosts');
+        await expect(loadMissionNeeds('tok', NOW_MS, list)).resolves.toEqual({
+            join: 0,
+            fill: 0,
+            turbo: 0,
+            boost: 2,
+            vote: 0,
+        });
+        enable('missionJoinEarly');
+        await expect(loadMissionNeeds('tok', NOW_MS, list)).resolves.toEqual({
+            join: 0,
+            fill: 0,
+            turbo: 0,
+            boost: 0,
+            vote: 0,
         });
     });
 
@@ -232,6 +311,7 @@ describe('loadMissionNeeds', () => {
             join: 0,
             fill: 0,
             turbo: 3,
+            boost: 0,
             vote: 0,
             turboRequirements: [{ remaining: 3, expiresAtSec: NOW_SEC + 3600 }],
         });
@@ -251,6 +331,7 @@ describe('loadMissionNeeds', () => {
             join: 0,
             fill: 0,
             turbo: 0,
+            boost: 0,
             vote: 0,
         });
         await expect(
@@ -357,12 +438,58 @@ describe('missionVoteQuota', () => {
 
 describe('consumeMission', () => {
     test('counts a landed action down, never below 0, and ignores null', () => {
-        const needs = { join: 1, fill: 0, turbo: 2, vote: 0 };
+        const needs = { join: 1, fill: 0, turbo: 2, boost: 1, vote: 0 };
         consumeMission(needs, 'turbo');
         consumeMission(needs, 'join');
         consumeMission(needs, 'join');
         consumeMission(needs, 'fill');
-        expect(needs).toEqual({ join: 0, fill: 0, turbo: 1, vote: 0 });
+        consumeMission(needs, 'boost');
+        consumeMission(needs, 'boost');
+        expect(needs).toEqual({ join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 });
         expect(() => consumeMission(null, 'join')).not.toThrow();
+    });
+
+    test('a fill counts toward every "Use Fill" mission, never below what it needs', () => {
+        const mission = (id: string, remaining: number) => ({
+            id,
+            required: 5,
+            current: 0,
+            remaining,
+            spentThisPass: 0,
+        });
+        const needs = {
+            join: 0,
+            fill: 2,
+            turbo: 0,
+            boost: 0,
+            vote: 0,
+            fillMissions: [mission('a', 2), mission('b', 1)],
+        };
+        consumeMission(needs, 'fill');
+        expect(needs.fillMissions.map((m) => m.remaining)).toEqual([1, 0]);
+        consumeMission(needs, 'fill');
+        consumeMission(needs, 'fill');
+        expect(needs.fillMissions.map((m) => m.remaining)).toEqual([0, 0]);
+        expect(needs.fill).toBe(0);
+    });
+});
+
+describe('neediestFillMission', () => {
+    const mission = (id: string, remaining: number) => ({ id, required: 5, current: 0, remaining, spentThisPass: 0 });
+
+    test('is the "Use Fill" mission that still needs the most, and none when none does', () => {
+        const needs = {
+            join: 0,
+            fill: 3,
+            turbo: 0,
+            boost: 0,
+            vote: 0,
+            fillMissions: [mission('a', 1), mission('b', 3), mission('c', 0)],
+        };
+        expect(neediestFillMission(needs)?.id).toBe('b');
+        needs.fillMissions = [mission('c', 0)];
+        expect(neediestFillMission(needs)).toBeNull();
+        expect(neediestFillMission({ join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 })).toBeNull();
+        expect(neediestFillMission(null)).toBeNull();
     });
 });

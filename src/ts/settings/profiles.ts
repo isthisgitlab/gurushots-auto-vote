@@ -15,15 +15,16 @@ import {
     RESERVED_PROFILE_NAMES,
     normalizeProfileName,
     profileNameForLog,
-    readProfilesMap,
     findProfileKey,
     sanitizeProfileValues,
 } from './profileStore';
 import { sanitizeTitleRuleInline } from './titleRuleSanitize';
 import { titleProfileComposesWithKnownOverrides } from './ruleResolution';
-import { replaceChallengeOverridesInSettings, trimmedChallengeId } from './challengeOverrides';
+import { ownChallengeValues, replaceChallengeOverridesInSettings, trimmedChallengeId } from './challengeOverrides';
+import { ON_ONLY_KEYS } from './ruleBehaviour';
 
-import type { AppSettings, ChallengeIdInput, ChallengeValues, TitleRule } from '../types/settings';
+import type { ConfigV2 } from '../types/config';
+import type { ChallengeIdInput, ChallengeValues, TitleRule } from '../types/settings';
 
 const _isReservedName = (name: unknown): boolean => RESERVED_PROFILE_NAMES.has(normalizeProfileName(name));
 
@@ -35,7 +36,7 @@ const _isReservedName = (name: unknown): boolean => RESERVED_PROFILE_NAMES.has(n
  */
 const getChallengeProfiles = (): Record<string, ChallengeValues> => {
     const settings = loadSettings();
-    const stored = readProfilesMap(settings);
+    const stored = settings.profiles;
     const globalDefaults = globalChallengeValues(settings);
     const profiles: Record<string, ChallengeValues> = {};
     for (const name of Object.keys(stored)) {
@@ -47,12 +48,12 @@ const getChallengeProfiles = (): Record<string, ChallengeValues> => {
 };
 
 const _updateAssignedProfileRules = (
-    settings: AppSettings,
+    settings: ConfigV2,
     normalizedName: string,
     displayName: string,
     values: ChallengeValues,
 ): boolean => {
-    const rules = settings.challengeSettings.titleRules;
+    const rules = settings.rules;
     const assigned = rules.filter((rule) => normalizeProfileName(rule?.profile) === normalizedName);
     if (assigned.some((rule) => !titleProfileComposesWithKnownOverrides(settings, rule, values))) {
         logger
@@ -64,7 +65,7 @@ const _updateAssignedProfileRules = (
         return false;
     }
     if (assigned.length) {
-        settings.challengeSettings.titleRules = rules.map((rule) =>
+        settings.rules = rules.map((rule) =>
             normalizeProfileName(rule?.profile) === normalizedName ? { ...rule, profile: displayName } : rule,
         );
     }
@@ -77,10 +78,10 @@ const _updateAssignedProfileRules = (
  * in place). `existed` reports whether that profile was present.
  */
 const _profilesWithout = (
-    stored: Record<string, ChallengeValues>,
+    stored: Record<string, unknown>,
     normalized: string,
-): { profiles: Record<string, ChallengeValues>; existed: boolean } => {
-    const profiles: Record<string, ChallengeValues> = {};
+): { profiles: Record<string, unknown>; existed: boolean } => {
+    const profiles: Record<string, unknown> = {};
     let existed = false;
     for (const existingName of Object.keys(stored)) {
         const key = normalizeProfileName(existingName);
@@ -115,10 +116,9 @@ const saveChallengeProfile = (name: unknown, values: unknown): boolean => {
         return false;
     }
 
-    const challengeSettings = settings.challengeSettings;
     // Rebuilt via own-property copy: drops prototype-named keys a corrupted
     // blob might carry.
-    const { profiles, existed } = _profilesWithout(readProfilesMap(settings), normalized);
+    const { profiles, existed } = _profilesWithout(settings.profiles, normalized);
     if (!existed && Object.keys(profiles).length >= MAX_CHALLENGE_PROFILES) {
         logger
             .withCategory('settings')
@@ -128,7 +128,7 @@ const saveChallengeProfile = (name: unknown, values: unknown): boolean => {
 
     if (existed && !_updateAssignedProfileRules(settings, normalized, trimmed, sanitized)) return false;
     profiles[trimmed] = sanitized;
-    challengeSettings.profiles = profiles;
+    settings.profiles = profiles;
     return saveSettings(settings);
 };
 
@@ -157,18 +157,18 @@ const deleteChallengeProfile = (name: unknown): boolean => {
         return false;
     }
     const settings = loadSettings();
-    const stored = readProfilesMap(settings);
+    const stored = settings.profiles;
     const storedKey = findProfileKey(stored, normalized);
     if (storedKey === null) {
         return false;
     }
     delete stored[storedKey];
-    settings.challengeSettings.profiles = stored;
+    settings.profiles = stored;
 
     // A deleted profile cannot remain as an invisible stale assignment. Keep
     // any tags or inline overrides on the same rule; drop the row only when the
     // profile was its sole contribution.
-    settings.challengeSettings.titleRules = settings.challengeSettings.titleRules.flatMap((rule) => {
+    settings.rules = settings.rules.flatMap((rule) => {
         if (normalizeProfileName(rule?.profile) !== normalized) return [rule];
         const kept = _ruleWithoutProfile(rule);
         return kept ? [kept] : [];
@@ -204,7 +204,7 @@ const applyChallengeProfile = (name: unknown, challengeId: ChallengeIdInput): bo
     }
 
     const settings = loadSettings();
-    const stored = readProfilesMap(settings);
+    const stored = settings.profiles;
     const storedKey = findProfileKey(stored, normalized);
     if (storedKey === null) {
         logger.withCategory('settings').error(`Profile not found: "${profileNameForLog(name)}"`, null);
@@ -222,8 +222,17 @@ const applyChallengeProfile = (name: unknown, challengeId: ChallengeIdInput): bo
     // Safety net: sanitizeProfileValues already validated these values against
     // the same {globals + profile} context, so this only fails if a schema rule
     // starts depending on the challenge id. Kept so nothing invalid is persisted.
-    /* istanbul ignore if */
-    if (!replaceChallengeOverridesInSettings(settings, id, sanitized, true)) return false;
+    // A profile never holds an on-only key's `false`, so replacing every override would silently
+    // switch the challenge's own Manual Only off: that value stays, unless the profile sets the key itself
+    // (a profile's "on" turns it on even over the challenge's own `false`).
+    const own = ownChallengeValues(settings, id) ?? {};
+    const kept = Object.fromEntries(
+        ON_ONLY_KEYS.filter((key) => Object.hasOwn(own, key) && !Object.hasOwn(sanitized, key)).map((key) => [
+            key,
+            own[key],
+        ]),
+    );
+    if (!replaceChallengeOverridesInSettings(settings, id, { ...sanitized, ...kept }, true)) return false;
     return saveSettings(settings);
 };
 
@@ -231,7 +240,7 @@ const applyChallengeProfile = (name: unknown, challengeId: ChallengeIdInput): bo
  * Seed the curated "intent" presets (settings/intentProfiles.ts) into the
  * named-profiles store on first run. Idempotent and collision-safe:
  *
- *  - A per-profile marker in `challengeSettings.seededProfiles` (normalized
+ *  - A per-profile marker in `seededProfiles` (normalized
  *    names) records which intents were already seeded, so deleting one does
  *    NOT resurrect it on the next run.
  *  - An intent is written only when no profile with that normalized name
@@ -249,11 +258,8 @@ const applyChallengeProfile = (name: unknown, challengeId: ChallengeIdInput): bo
  */
 const seedIntentProfiles = (): boolean => {
     const settings = loadSettings();
-    const priorSeeded = Array.isArray(settings.challengeSettings?.seededProfiles)
-        ? settings.challengeSettings.seededProfiles
-        : [];
-    const seededSet = new Set(priorSeeded.map(normalizeProfileName));
-    const stored = readProfilesMap(settings);
+    const seededSet = new Set(settings.seededProfiles.map(normalizeProfileName));
+    const stored = settings.profiles;
     // Live count of real (non-reserved) profiles, kept in step with successful
     // saves so the cap pre-check stays accurate across the loop.
     let profileCount = Object.keys(stored).filter((name) => !_isReservedName(name)).length;
@@ -303,7 +309,7 @@ const seedIntentProfiles = (): boolean => {
     // so re-load fresh before recording the seed markers to avoid clobbering
     // them with this now-stale snapshot.
     const fresh = loadSettings();
-    fresh.challengeSettings.seededProfiles = Array.from(seededSet);
+    fresh.seededProfiles = Array.from(seededSet);
     return saveSettings(fresh);
 };
 

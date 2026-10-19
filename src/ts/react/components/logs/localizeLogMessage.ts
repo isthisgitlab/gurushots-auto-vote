@@ -6,8 +6,11 @@ const placeholders = /\{(\d+)\}/g;
 const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const logLabels: Record<string, string> = {
     Fill: 'Iesniegšana',
-    autoFill: 'Automātiskā iesniegšana',
-    AutoFill: 'Automātiskā iesniegšana',
+    autoSubmit: 'Automātiskā iesniegšana',
+    AutoSubmit: 'Automātiskā iesniegšana',
+    emergencySubmit: 'Ārkārtas iesniegšana',
+    manualFill: 'Manuālā iesniegšana',
+    fillNew: 'Jauna foto iesniegšana',
     join: 'Pievienošanās',
     Join: 'Pievienošanās',
 };

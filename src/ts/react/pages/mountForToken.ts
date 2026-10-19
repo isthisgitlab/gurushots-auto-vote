@@ -11,8 +11,9 @@ import { mountLogin } from './Login';
 
 /**
  * @param hasToken - whether a session token is stored; without one Login mounts
+ * @param startupError - an IPC failure to show on Login (the shell could not read the session state)
  */
-export const mountForToken = (hasToken: boolean) => {
+export const mountForToken = (hasToken: boolean, startupError?: string) => {
     const container = document.getElementById('root');
     if (container) {
         while (container.firstChild) container.removeChild(container.firstChild);
@@ -20,6 +21,6 @@ export const mountForToken = (hasToken: boolean) => {
     if (hasToken) {
         mountApp();
     } else {
-        mountLogin();
+        mountLogin(startupError);
     }
 };

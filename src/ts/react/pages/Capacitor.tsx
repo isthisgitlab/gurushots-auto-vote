@@ -15,7 +15,7 @@ import type { RendererGlobals } from '../../types/capacitor';
 // must happen after this assignment.
 (globalThis as RendererGlobals).__capacitorBootstrap = true;
 
-import { installBridge, subscribe } from '../../bridge/capacitor';
+import { installBridge, seedBridgeProfiles, subscribe } from '../../bridge/capacitor';
 import { initializeAsync as initSettings, flushPendingWrites, getSetting } from '../../settings';
 import { initializeMetadataAsync, flushMetadataWrites } from '../../metadata';
 import { initializeJoinStateAsync, flushJoinStateWrites } from '../../joinStateStore';
@@ -24,6 +24,7 @@ import { initializeAutoSpendAsync, flushAutoSpendWrites } from '../../currencyAu
 import { initializeEntryAgesAsync, flushEntryAgeWrites } from '../../entryAgeStore';
 import { initializeScenarioStateAsync, flushScenarioStateWrites } from '../../scenarioStateStore';
 import { initializeDiagnosticsAsync, flushDiagnosticsWrites } from '../../services/semantic/diagnostics';
+import { initializePhotoStatsAsync, flushPhotoStatsWrites } from '../../services/photoStats';
 import { isCapacitor } from '../../runtime';
 import { withCategory } from '../../logger';
 import { mountForToken } from './mountForToken';
@@ -43,22 +44,30 @@ const bootstrap = async () => {
     if (isCapacitor()) {
         installBridge();
         await initSettings();
-        // Metadata rides the same platform-aware transport — hydrate its
-        // cache too so per-challenge vote metadata survives relaunches.
-        await initializeMetadataAsync();
-        // Join-state markers (paid-unlock idempotency) ride the same transport;
-        // hydrate them so a paid retry after relaunch never re-unlocks (double
-        // charge) on Android.
-        await initializeJoinStateAsync();
-        // Swap-back records (which slot can restore a boosted/turbo'd photo).
-        await initializeSwapBackAsync();
-        // Automatic exposure-fill counts (the per-challenge fill cap).
-        await initializeAutoSpendAsync();
-        // When each entry entered its challenge (the boost fresh-entry wait).
-        await initializeEntryAgesAsync();
-        // Where each challenge is in its user-defined scenario (phase, memory).
-        await initializeScenarioStateAsync();
-        await initializeDiagnosticsAsync();
+        // Seeding reads and writes the settings, so it waits for them to be hydrated.
+        seedBridgeProfiles();
+        // The stores below ride the same platform-aware transport and are independent of each other, so they hydrate
+        // together; the mount waits for all of them. None of the initializers rejects: each catches its own read
+        // error and still marks itself initialized (createJsonStore), so one failed read never blocks the others
+        // or the mount.
+        await Promise.all([
+            // Per-challenge vote metadata survives relaunches.
+            initializeMetadataAsync(),
+            // Join-state markers (paid-unlock idempotency): a paid retry after relaunch never re-unlocks (double
+            // charge) on Android.
+            initializeJoinStateAsync(),
+            // Swap-back records (which slot can restore a boosted/turbo'd photo).
+            initializeSwapBackAsync(),
+            // Automatic exposure-fill counts (the per-challenge fill cap).
+            initializeAutoSpendAsync(),
+            // When each entry entered its challenge (the boost fresh-entry wait).
+            initializeEntryAgesAsync(),
+            // Where each challenge is in its user-defined scenario (phase, memory).
+            initializeScenarioStateAsync(),
+            initializeDiagnosticsAsync(),
+            // Photo stats (the ranking signals fetched per photo): hydrated so a relaunch does not refetch them all.
+            initializePhotoStatsAsync(),
+        ]);
 
         // Settings writes are write-behind (cache now, persist async). When
         // the OS backgrounds or tears down the WebView, push the latest
@@ -72,8 +81,12 @@ const bootstrap = async () => {
                 void flushSwapBackWrites();
                 void flushAutoSpendWrites();
                 void flushEntryAgeWrites();
-                void flushScenarioStateWrites();
+                // The scenario stores' flush says when a write did not persist: logged, and nothing to undo here.
+                flushScenarioStateWrites().catch((err) =>
+                    withCategory('general').error('Scenario state not persisted', err),
+                );
                 void flushDiagnosticsWrites();
+                void flushPhotoStatsWrites();
             } catch {
                 // never let a teardown handler throw
             }

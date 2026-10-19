@@ -22,11 +22,11 @@ describe('schema defaults', () => {
 });
 
 describe('challengeValueSetIsValid', () => {
-    const { challengeValueSetIsValid, getDefaultSettings } =
+    const { challengeValueSetIsValid, schemaDefaults } =
         require('../../src/ts/settings/defaults') as typeof defaultsModule;
 
     test('a candidate key the schema does not know is not validated', () => {
-        const values = getDefaultSettings().challengeSettings.globalDefaults;
+        const values = schemaDefaults();
         expect(challengeValueSetIsValid({ ...values, noSuchSetting: 'x' }, { noSuchSetting: 'x' })).toBe(true);
     });
 });

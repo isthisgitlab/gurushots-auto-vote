@@ -16,24 +16,29 @@ import * as logger from './logger';
 import { authenticate } from './api/login';
 import {
     fetchChallengesAndVote,
+    applyBoostsOnSuspend,
     getActiveChallenges,
     applyBoost,
-    runTurboMiniGame,
+    runTurboGame,
     joinChallenge,
+    forgetUnconfirmedPayment,
+    submitToChallenge,
+    swapPhoto,
 } from './strategies/real';
 import { getVoteImages, submitVotes } from './api/voting';
 import { applyBoostToEntry } from './api/boost';
 import { applyTurbo } from './api/turbo';
-import { getEligiblePhotos, getImageData, submitToChallenge } from './api/submissions';
+import { getEligiblePhotos, getEligiblePhotosWalk, getImageData } from './api/submissions';
 import { getMemberChallenges, getBankroll } from './api/join';
 import { getCurrentMemberProfile, searchTagAutocomplete } from './api/tags';
-import { keyUnlock, swapPhoto, exposureAutofill } from './api/currency';
+import { keyUnlock, exposureAutofill } from './api/currency';
 import { mockApiClient } from './mock';
 
 const realApi = {
     authenticate,
     fetchChallengesAndVote,
-    runTurboMiniGame,
+    applyBoostsOnSuspend,
+    runTurboGame,
     getActiveChallenges,
     getVoteImages,
     submitVotes,
@@ -41,6 +46,7 @@ const realApi = {
     applyBoostToEntry,
     applyTurbo,
     getEligiblePhotos,
+    getEligiblePhotosWalk,
     getImageData,
     submitToChallenge,
     getMemberChallenges,
@@ -48,6 +54,7 @@ const realApi = {
     getCurrentMemberProfile,
     searchTagAutocomplete,
     joinChallenge,
+    forgetUnconfirmedPayment,
     keyUnlock,
     swapPhoto,
     exposureAutofill,
@@ -79,7 +86,8 @@ const withMockDebug =
 const mockApi: ApiStrategy = {
     authenticate: withMockDebug('authentication', mockApiClient.authenticate),
     fetchChallengesAndVote: withMockDebug('fetchChallengesAndVote', mockApiClient.fetchChallengesAndVote),
-    runTurboMiniGame: withMockDebug('runTurboMiniGame', mockApiClient.runTurboMiniGame),
+    applyBoostsOnSuspend: withMockDebug('applyBoostsOnSuspend', mockApiClient.applyBoostsOnSuspend),
+    runTurboGame: withMockDebug('runTurboGame', mockApiClient.runTurboGame),
     getActiveChallenges: withMockDebug('getActiveChallenges', mockApiClient.getActiveChallenges),
     getVoteImages: withMockDebug('getVoteImages', mockApiClient.getVoteImages),
     submitVotes: withMockDebug('submitVotes', mockApiClient.submitVotes),
@@ -87,6 +95,7 @@ const mockApi: ApiStrategy = {
     applyBoostToEntry: withMockDebug('applyBoostToEntry', mockApiClient.applyBoostToEntry),
     applyTurbo: withMockDebug('applyTurbo', mockApiClient.applyTurbo),
     getEligiblePhotos: withMockDebug('getEligiblePhotos', mockApiClient.getEligiblePhotos),
+    getEligiblePhotosWalk: withMockDebug('getEligiblePhotosWalk', mockApiClient.getEligiblePhotosWalk),
     getImageData: withMockDebug('getImageData', mockApiClient.getImageData),
     submitToChallenge: withMockDebug('submitToChallenge', mockApiClient.submitToChallenge),
     getMemberChallenges: withMockDebug('getMemberChallenges', mockApiClient.getMemberChallenges),
@@ -94,6 +103,7 @@ const mockApi: ApiStrategy = {
     getCurrentMemberProfile: withMockDebug('getCurrentMemberProfile', mockApiClient.getCurrentMemberProfile),
     searchTagAutocomplete: withMockDebug('searchTagAutocomplete', mockApiClient.searchTagAutocomplete),
     joinChallenge: withMockDebug('joinChallenge', mockApiClient.joinChallenge),
+    forgetUnconfirmedPayment: withMockDebug('forgetUnconfirmedPayment', mockApiClient.forgetUnconfirmedPayment),
     keyUnlock: withMockDebug('keyUnlock', mockApiClient.keyUnlock),
     swapPhoto: withMockDebug('swapPhoto', mockApiClient.swapPhoto),
     exposureAutofill: withMockDebug('exposureAutofill', mockApiClient.exposureAutofill),
@@ -118,12 +128,12 @@ const getApiStrategy = ({ mock }: { mock?: boolean } = {}): ApiStrategy => {
         return mock ? mockApi : realApi;
     }
     const userSettings = settings.loadSettings();
-    if (lastMockSetting !== userSettings.mock || !currentStrategy) {
+    if (lastMockSetting !== userSettings.app.mock || !currentStrategy) {
         logger.withCategory('api').debug('=== API Factory Debug ===', null);
-        logger.withCategory('settings').debug(`Mock setting: ${userSettings.mock}`);
-        logger.withCategory('settings').debug(`Token exists: ${!!userSettings.token}`);
+        logger.withCategory('settings').debug(`Mock setting: ${userSettings.app.mock}`);
+        logger.withCategory('settings').debug(`Token exists: ${!!userSettings.auth.token}`);
 
-        if (userSettings.mock) {
+        if (userSettings.app.mock) {
             logger.withCategory('api').info('✅ Using MOCK API strategy for development/testing', null);
             currentStrategy = mockApi;
         } else {
@@ -131,7 +141,7 @@ const getApiStrategy = ({ mock }: { mock?: boolean } = {}): ApiStrategy => {
             currentStrategy = realApi;
         }
 
-        lastMockSetting = userSettings.mock;
+        lastMockSetting = userSettings.app.mock;
         currentMiddleware = null;
     }
     return currentStrategy;

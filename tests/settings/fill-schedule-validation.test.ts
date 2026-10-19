@@ -1,5 +1,5 @@
 /**
- * Validation rules for the autoFillSchedule setting: an array of at most 3
+ * Validation rules for the autoSubmitSchedule setting: an array of at most 3
  * strict { count, seconds } rows — count an integer 2..4 (unique across the
  * array; GuruShots challenges allow at most 4 images and entry 1 always
  * exists), seconds an integer 0..MAX_SCHEDULE_SECONDS (30 days). Mirrors the
@@ -11,10 +11,10 @@ import type * as schemaModule from '../../src/ts/settings/schema';
 
 const { validateSetting } = require('../../src/ts/settings/schema') as typeof schemaModule;
 
-const KEY = 'autoFillSchedule';
+const KEY = 'autoSubmitSchedule';
 const MAX_SECONDS = 30 * 24 * 3600;
 
-describe('autoFillSchedule schema validation', () => {
+describe('autoSubmitSchedule schema validation', () => {
     test('empty array is valid (deliberate opt-out — auto-fill never submits)', () => {
         expect(validateSetting(KEY, [])).toBe(true);
     });

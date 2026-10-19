@@ -10,6 +10,7 @@
 
 import type * as loggerModule from '../../src/ts/logger';
 import type * as settingsModule from '../../src/ts/settings';
+import type * as runtimeModule from '../../src/ts/runtime';
 import type * as randomizerModule from '../../src/ts/api/randomizer';
 import type * as guardsModule from '../../src/ts/cli/guards';
 import type * as authModule from '../../src/ts/cli/commands/auth';
@@ -17,11 +18,15 @@ import type * as votingModule from '../../src/ts/cli/commands/voting';
 import type * as actionsModule from '../../src/ts/cli/commands/actions';
 import type * as bankrollModule from '../../src/ts/cli/commands/bankroll';
 import type * as joinModule from '../../src/ts/cli/commands/join';
+import type * as pinModule from '../../src/ts/cli/commands/pin';
+import type * as photosModule from '../../src/ts/cli/commands/photos';
 import type * as updateModule from '../../src/ts/cli/commands/update';
 import type * as logsModule from '../../src/ts/cli/commands/logs';
 import type * as settingsCommandsModule from '../../src/ts/cli/commands/settings';
 import type * as scenariosModule from '../../src/ts/cli/commands/scenarios';
+import type * as cliSessionLockModule from '../../src/ts/settings/cliSessionLock';
 import { invalid } from '../helpers/invalid';
+import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
 
 type Mods = {
     logger: jest.MockedObjectDeep<typeof loggerModule> & { __calls: { level: string; msg: unknown }[] };
@@ -33,10 +38,13 @@ type Mods = {
     actions: jest.MockedObjectDeep<typeof actionsModule>;
     bankroll: jest.MockedObjectDeep<typeof bankrollModule>;
     join: jest.MockedObjectDeep<typeof joinModule>;
+    pin: jest.MockedObjectDeep<typeof pinModule>;
+    photos: jest.MockedObjectDeep<typeof photosModule>;
     update: jest.MockedObjectDeep<typeof updateModule>;
     logs: jest.MockedObjectDeep<typeof logsModule>;
     cmd: jest.MockedObjectDeep<typeof settingsCommandsModule>;
     scenarios: jest.MockedObjectDeep<typeof scenariosModule>;
+    sessionLock: jest.MockedObjectDeep<typeof cliSessionLockModule> & { __release: jest.Mock<void, []> };
 };
 type Loaded = Mods & { msgs: (level: string) => string[]; exitCodes: unknown[] };
 
@@ -44,15 +52,34 @@ jest.mock('../../src/ts/logger', () => {
     const calls: { level: string; msg: unknown }[] = [];
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg });
     const cat = { info: rec('info'), error: rec('error'), debug: rec('debug'), warning: rec('warning') };
-    return { __calls: calls, withCategory: jest.fn(() => cat), cleanup: jest.fn() };
+    // printLine is the console-only writer: what reaches it is never a one-line log entry.
+    return {
+        __calls: calls,
+        withCategory: jest.fn(() => cat),
+        printLine: rec('stdout'),
+        printDocument: rec('stdout'),
+        printStderr: rec('stderr'),
+        cleanup: jest.fn(),
+    };
 });
 
 jest.mock('../../src/ts/settings', () => ({
-    loadSettings: jest.fn(() => ({ mock: false })),
+    loadSettings: jest.fn(() => ({ app: { mock: false } })),
+    getSettingsRecovery: jest.fn(() => null),
+    getSetting: jest.fn(() => 1),
+    setSetting: jest.fn(() => true),
     seedIntentProfiles: jest.fn(),
+    // The facade's check, as the plain image-id pattern.
+    isPinnableImageId: jest.fn((value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value)),
 }));
 
 jest.mock('../../src/ts/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
+
+// The marker a running command holds in the user-data directory: recorded, never written.
+jest.mock('../../src/ts/settings/cliSessionLock', () => {
+    const release = jest.fn<void, []>();
+    return { __release: release, holdCliSessionLock: jest.fn(() => release) };
+});
 
 // This test loads real command helpers while fs is globally mocked. Mock
 // Electron so its package entry point does not try to download a binary.
@@ -98,8 +125,22 @@ jest.mock('../../src/ts/cli/commands/actions', () => {
     };
 });
 
+jest.mock('../../src/ts/cli/commands/pin', () => ({
+    PIN_USAGE: 'Usage: pin --challenge=<id> [--boost=<imageId|none>] [--turbo=<imageId|none>]',
+    pinCmd: jest.fn(),
+}));
+
 jest.mock('../../src/ts/cli/commands/bankroll', () => ({ showBankroll: jest.fn() }));
-jest.mock('../../src/ts/cli/commands/join', () => ({ showDiscover: jest.fn(), joinChallengeCmd: jest.fn() }));
+jest.mock('../../src/ts/cli/commands/join', () => ({
+    showDiscover: jest.fn(),
+    joinChallengeCmd: jest.fn(async () => 0),
+    forgetPaymentCmd: jest.fn(async () => 0),
+}));
+jest.mock('../../src/ts/cli/commands/photos', () => ({
+    ...jest.requireActual<typeof import('../../src/ts/cli/commands/photos')>('../../src/ts/cli/commands/photos'),
+    listPhotosCmd: jest.fn(async () => 0),
+    suggestPhotosCmd: jest.fn(async () => 0),
+}));
 jest.mock('../../src/ts/cli/commands/update', () => ({ checkUpdates: jest.fn() }));
 jest.mock('../../src/ts/cli/commands/logs', () => ({ showLogs: jest.fn() }));
 jest.mock('../../src/ts/cli/commands/scenarios', () =>
@@ -113,6 +154,7 @@ jest.mock('../../src/ts/cli/commands/scenarios', () =>
             'deleteScenarioCmd',
             'scenarioStatusCmd',
             'scenarioResetCmd',
+            'scenarioResetAllCmd',
             'scenarioDryRunCmd',
             'scenarioSimulateCmd',
             'scenarioVocabulary',
@@ -123,6 +165,8 @@ jest.mock('../../src/ts/cli/commands/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
     setGlobalDefault: jest.fn(),
+    beforeChosenPhotosWrite: jest.fn(async () => () => undefined),
+    clearChosenPhotos: jest.fn(() => true),
     listSettings: jest.fn(),
     resetSetting: jest.fn(),
     resetAllSettings: jest.fn(),
@@ -174,10 +218,13 @@ const run = async (argv: string[], setup?: (mods: Mods) => void) => {
             actions: require('../../src/ts/cli/commands/actions') as typeof actionsModule,
             bankroll: require('../../src/ts/cli/commands/bankroll') as typeof bankrollModule,
             join: require('../../src/ts/cli/commands/join') as typeof joinModule,
+            pin: require('../../src/ts/cli/commands/pin') as typeof pinModule,
+            photos: require('../../src/ts/cli/commands/photos') as typeof photosModule,
             update: require('../../src/ts/cli/commands/update') as typeof updateModule,
             logs: require('../../src/ts/cli/commands/logs') as typeof logsModule,
             cmd: require('../../src/ts/cli/commands/settings') as typeof settingsCommandsModule,
             scenarios: require('../../src/ts/cli/commands/scenarios') as typeof scenariosModule,
+            sessionLock: require('../../src/ts/settings/cliSessionLock') as typeof cliSessionLockModule,
         });
         setup?.(m);
         require('../../src/ts/cli/cli');
@@ -194,10 +241,36 @@ describe('startup', () => {
         const m = await run(['status']);
         expect(m.randomizer.initializeHeaders).toHaveBeenCalled();
         expect(m.settings.seedIntentProfiles).toHaveBeenCalled();
-        expect(Object.keys(processHandlers).sort()).toEqual(['uncaughtException', 'unhandledRejection']);
+        // `exit` releases the session marker `status` holds like every command that loads the settings.
+        expect(Object.keys(processHandlers).sort()).toEqual(['exit', 'uncaughtException', 'unhandledRejection']);
         expect(m.voting.showStatus).toHaveBeenCalled();
         expect(m.exitCodes).toEqual([0]);
         expect(m.logger.cleanup).toHaveBeenCalled();
+    });
+
+    test('saved settings that are not in use are said on stderr before the command runs', async () => {
+        const m = await run(['status'], (mods) =>
+            mods.settings.getSettingsRecovery.mockReturnValue({
+                code: 'settings-corrupt',
+                path: '/u/settings.json.corrupt-1',
+                blocking: false,
+            }),
+        );
+        expect(m.msgs('stderr')).toEqual([expect.stringContaining('/u/settings.json.corrupt-1')]);
+        expect(m.voting.showStatus).toHaveBeenCalled();
+        expect(m.exitCodes).toEqual([0]);
+    });
+
+    test('with the settings in use nothing is said', async () => {
+        const m = await run(['status']);
+        expect(m.msgs('stderr')).toEqual([]);
+    });
+
+    test('the unofficial-tool notice is said on stderr before the command runs, once', async () => {
+        const m = await run(['status'], (mods) => mods.settings.getSetting.mockReturnValue(0));
+        expect(m.msgs('stderr')).toEqual([expect.stringContaining('not affiliated with or endorsed by GuruShots')]);
+        expect(m.settings.setSetting).toHaveBeenCalledWith('noticeAcknowledgedVersion', CURRENT_NOTICE_VERSION);
+        expect(m.voting.showStatus).toHaveBeenCalled();
     });
 
     test('a failed intent-profile seed is a warning, not fatal', async () => {
@@ -211,9 +284,31 @@ describe('startup', () => {
         expect(m.exitCodes).toEqual([0]);
     });
 
+    test.each([
+        [true, 0],
+        [false, 1],
+    ])('login that answers %p (token saved) exits %p', async (saved, code) => {
+        const m = await run(['login'], (mods) => mods.auth.handleLogin.mockResolvedValue(saved));
+        expect(m.exitCodes).toEqual([code]);
+    });
+
     test('a thrown command exits 1', async () => {
         const m = await run(['login'], (mods) => mods.auth.handleLogin.mockRejectedValue(new Error('x')));
         expect(m.msgs('error')).toEqual(['Error']);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test('a user-data folder that cannot be created is said in plain words and exits 1', async () => {
+        const m = await run(['status'], (mods) =>
+            mods.randomizer.initializeHeaders.mockImplementation(() => {
+                const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
+                throw new runtime.UserDataUnavailableError('/data/gurushots', 'EACCES');
+            }),
+        );
+        expect(m.msgs('error')).toEqual([expect.stringContaining('/data/gurushots')]);
+        expect(m.msgs('error')[0]).toContain('EACCES');
+        expect(m.msgs('error')).not.toContain('Error');
+        expect(m.voting.showStatus).not.toHaveBeenCalled();
         expect(m.exitCodes).toEqual([1]);
     });
 
@@ -240,18 +335,131 @@ describe('startup', () => {
     });
 });
 
+describe('the CLI session marker', () => {
+    test.each([
+        ['vote', []],
+        ['run', []],
+        ['start', []],
+        ['login', []],
+        ['logout', []],
+        ['boost', ['--challenge=1']],
+        ['turbo', ['--challenge=1']],
+        ['submit', ['--challenge=1']],
+        ['join', ['1']],
+        ['swap', ['--challenge=1']],
+        ['fill-exposure', ['--challenge=1']],
+        ['set-setting', ['exposure', '80']],
+        ['reset-all-settings', []],
+        ['discover', []],
+        ['check-updates', []],
+        // Anything that loads the settings can write them back, so the read-only commands hold it too.
+        ['status', []],
+        ['get-setting', ['exposure']],
+        ['list-settings', []],
+        ['list-profiles', []],
+        ['list-photos', []],
+        ['list-scenarios', []],
+        ['logs', []],
+        ['help-settings', []],
+    ])('%s holds it until the process exits', async (command, tail) => {
+        const m = await run([command, ...tail]);
+
+        expect(m.sessionLock.holdCliSessionLock).toHaveBeenCalledTimes(1);
+        // Released when the process exits, however it ends; never earlier.
+        expect(processHandlers.exit).toBe(m.sessionLock.__release);
+        expect(m.sessionLock.__release).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['help', []],
+        ['--help', []],
+        ['-h', []],
+        ['licenses', []],
+        ['reset-data', []],
+    ])('%s holds none: it never loads the settings, or checks for sessions itself', async (command, tail) => {
+        const m = await run([command, ...tail]);
+
+        expect(m.sessionLock.holdCliSessionLock).not.toHaveBeenCalled();
+        expect(processHandlers.exit).toBeUndefined();
+    });
+
+    test.each([[[]], [['frobnicate']], [['constructor']]])(
+        'none is held for %p (no command, or an unknown one)',
+        async (argv) => {
+            const m = await run(argv);
+
+            expect(m.sessionLock.holdCliSessionLock).not.toHaveBeenCalled();
+        },
+    );
+
+    test('is held before the settings are first written (the headers, the presets), and before the command runs', async () => {
+        const m = await run(['logout']);
+
+        expect(m.sessionLock.holdCliSessionLock.mock.invocationCallOrder[0]).toBeLessThan(
+            m.randomizer.initializeHeaders.mock.invocationCallOrder[0],
+        );
+        expect(m.sessionLock.holdCliSessionLock.mock.invocationCallOrder[0]).toBeLessThan(
+            m.settings.seedIntentProfiles.mock.invocationCallOrder[0],
+        );
+        expect(m.sessionLock.holdCliSessionLock.mock.invocationCallOrder[0]).toBeLessThan(
+            m.auth.handleLogout.mock.invocationCallOrder[0],
+        );
+    });
+
+    test('a marker that cannot be written is one warning with the cause, and the command still runs', async () => {
+        const m = await run(['logout'], (mods) =>
+            mods.sessionLock.holdCliSessionLock.mockImplementation(() => {
+                throw Object.assign(new Error("EACCES: permission denied, open '/Users/me/data/cli-session-1.lock'"), {
+                    code: 'EACCES',
+                });
+            }),
+        );
+
+        expect(m.msgs('warning')).toEqual([
+            "Could not mark this command as running (a local-data wipe will not wait for it): EACCES: permission denied, open 'cli-session-1.lock'",
+        ]);
+        expect(m.auth.handleLogout).toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual([]);
+        expect(m.exitCodes).toEqual([0]);
+        expect(processHandlers.exit).toBeUndefined();
+    });
+
+    test('a marker failure with no message is still one warning', async () => {
+        const m = await run(['logout'], (mods) =>
+            mods.sessionLock.holdCliSessionLock.mockImplementation(() => {
+                throw null;
+            }),
+        );
+
+        expect(m.msgs('warning')).toEqual([expect.stringContaining('unknown error')]);
+        expect(m.exitCodes).toEqual([0]);
+    });
+});
+
 describe('help and unknown commands', () => {
     test.each([['help'], ['--help'], ['-h']])('%s prints help in REAL mode', async (flag) => {
         const m = await run([flag]);
-        const [text] = m.msgs('info');
+        // The help is printed whole, on the console only, with its line breaks (not as a log entry).
+        expect(m.msgs('info')).toEqual([]);
+        const [text] = m.msgs('stdout');
+        expect(text.split('\n').length).toBeGreaterThan(30);
+        expect(text).toContain('\nCommands:\n  login    - Authenticate with GuruShots and save token\n  logout ');
         expect(text).toContain('GuruShots Auto Voter - CLI (REAL MODE)');
         expect(text).toContain('Current mode: REAL (live API calls)');
+        // clear-chosen-photos clears every list; a single challenge's list goes with reset-setting.
+        expect(text).toContain('clear-chosen-photos');
+        expect(text).toContain('reset-setting chosenPhotos --challenge=<id>');
+        expect(text).toContain(
+            "To use no chosen photos for that challenge (overriding rules / global):\n             set-setting chosenPhotos '[]' --challenge=<id>",
+        );
         expect(m.exitCodes).toEqual([0]);
     });
 
     test('help in MOCK mode says so', async () => {
-        const m = await run(['help'], (mods) => mods.settings.loadSettings.mockReturnValue(invalid({ mock: true })));
-        const [text] = m.msgs('info');
+        const m = await run(['help'], (mods) =>
+            mods.settings.loadSettings.mockReturnValue(invalid({ app: { mock: true } })),
+        );
+        const [text] = m.msgs('stdout');
         expect(text).toContain('(MOCK MODE)');
         expect(text).toContain('Current mode: MOCK (simulated API calls)');
     });
@@ -351,6 +559,74 @@ describe('challenge-scoped actions', () => {
         expect(m.exitCodes).toEqual([0]);
     });
 
+    test.each([
+        [['--challenge=5'], {}],
+        [['--challenge=5', '--boost=abc'], { boost: 'abc' }],
+        [['--challenge=5', '--turbo=none'], { turbo: null }],
+        [['--turbo=NONE', '--challenge', '5', '--boost=x'], { boost: 'x', turbo: null }],
+        [['--challenge=5', '--boost=entry_007', '--turbo=a-B_9'], { boost: 'entry_007', turbo: 'a-B_9' }],
+        [['--challenge=5', '--boost=none', '--turbo=none'], { boost: null, turbo: null }],
+    ])('pin %p', async (tail, pins) => {
+        const m = await run(['pin', ...tail], (mods) => mods.pin.pinCmd.mockResolvedValue(true));
+        expect(m.guards.requireChallenge).toHaveBeenCalledWith({ challengeId: '5' }, m.pin.PIN_USAGE);
+        expect(m.pin.pinCmd).toHaveBeenCalledWith('5', pins);
+        expect(m.exitCodes).toEqual([0]);
+    });
+
+    test('pin exits 1 when the pin could not be read or saved', async () => {
+        const m = await run(['pin', '--challenge=5', '--boost=abc'], (mods) =>
+            mods.pin.pinCmd.mockResolvedValue(false),
+        );
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test.each([['--boost='], ['--turbo=']])('pin %s with no value is a usage error', async (flag) => {
+        const m = await run(['pin', '--challenge=5', flag]);
+        expect(m.pin.pinCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual([`${flag.slice(0, -1)} needs an image id, or none to clear the pin`]);
+        expect(m.msgs('info')).toEqual([m.pin.PIN_USAGE]);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test.each([
+        [['--boost', 'abc']],
+        [['--boots=abc']],
+        [['--boost=abc', 'stray']],
+        [['--yes']],
+        [['--boost=a', '--boost=b']],
+        [['--turbo=a', '--turbo=b']],
+    ])('pin %p is a usage error, never a listing', async (tail) => {
+        const m = await run(['pin', '--challenge=5', ...tail]);
+        expect(m.pin.pinCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual(['Wrong arguments']);
+        expect(m.msgs('info')).toEqual([m.pin.PIN_USAGE]);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test.each([
+        ['--boost=has space', 'boost'],
+        ['--turbo=a\nb', 'turbo'],
+        ['--boost=' + 'a'.repeat(65), 'boost'],
+        ['--turbo=../x', 'turbo'],
+    ])('pin %j names the characters an image id may use and logs no raw input', async (arg, kind) => {
+        const m = await run(['pin', '--challenge=5', arg]);
+        expect(m.pin.pinCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual([
+            `--${kind} takes an image id: letters, digits, _ and -, at most 64 characters (or none to clear the pin)`,
+        ]);
+        expect(m.msgs('info')).toEqual([m.pin.PIN_USAGE]);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test('pin --boost and --turbo naming the same image is a usage error', async () => {
+        const m = await run(['pin', '--challenge=5', '--boost=abc', '--turbo=abc']);
+        expect(m.pin.pinCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual([
+            '--boost and --turbo name the same image: a photo is pinned for one feature only',
+        ]);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
     test('turbo', async () => {
         const m = await run(['turbo', '--challenge=5']);
         expect(m.actions.turboChallenge).toHaveBeenCalledWith('5');
@@ -401,6 +677,147 @@ describe('challenge-scoped actions', () => {
         expect(m.join.joinChallengeCmd).toHaveBeenCalledWith('77', { yes: true });
         expect(m.exitCodes).toEqual([0]);
     });
+
+    test.each([
+        [0, 0],
+        [1, 1],
+    ])('join exits with what the command answers (%p): 1 when it did not join', async (answer, code) => {
+        const m = await run(['join', '77'], (mods) => mods.join.joinChallengeCmd.mockResolvedValue(answer));
+        expect(m.exitCodes).toEqual([code]);
+    });
+
+    test('join --max-coins names the most a confirmed join may cost', async () => {
+        const m = await run(['join', '77', '--yes', '--max-coins=30']);
+        expect(m.join.joinChallengeCmd).toHaveBeenCalledWith('77', { yes: true, maxCoins: 30 });
+        const zero = await run(['join', '77', '--yes', '--max-coins=0']);
+        expect(zero.join.joinChallengeCmd).toHaveBeenCalledWith('77', { yes: true, maxCoins: 0 });
+    });
+
+    // `join` spends coins: anything that is not exactly `<id> [--yes] [--max-coins=<digits>]` joins nothing.
+    test.each([
+        [['77', '--yes', '--max-coins=']],
+        [['77', '--yes', '--max-coins=abc']],
+        [['77', '--yes', '--max-coins=-5']],
+        [['77', '--yes', '--max-coins=1.5']],
+        [['77', '--yes', `--max-coins=${'9'.repeat(400)}`]],
+        [['77', '--yes', `--max-coins=${'9'.repeat(17)}`]],
+        [['77', '--yes', '--max-coins', '25']],
+        [['77', '--yes', '--max-coins']],
+        [['--max-coins', '25', '77', '--yes']],
+        [['77', '--yes', '--max-coin=25']],
+        [['77', '--yes', '--maxcoins=25']],
+        [['77', '--yes', '--max-coins=25', '--max-coins=30']],
+        [['77', '--yes', '--yes']],
+        [['77', '--force']],
+        [['77', '88', '--yes']],
+        [['77', '-y']],
+    ])('join %p is a usage error and joins nothing', async (args) => {
+        const m = await run(['join', ...args]);
+        expect(m.join.joinChallengeCmd).not.toHaveBeenCalled();
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test('join takes the id and the flags in any order, and the largest cap that is an exact integer', async () => {
+        const safe = String(Number.MAX_SAFE_INTEGER);
+        const m = await run(['join', '--max-coins=25', '--yes', '77']);
+        expect(m.join.joinChallengeCmd).toHaveBeenCalledWith('77', { yes: true, maxCoins: 25 });
+        const big = await run(['join', '77', `--max-coins=${safe}`]);
+        expect(big.join.joinChallengeCmd).toHaveBeenCalledWith('77', { yes: false, maxCoins: Number(safe) });
+        // No id still reaches the command, which prints its usage.
+        const none = await run(['join', '--yes']);
+        expect(none.join.joinChallengeCmd).toHaveBeenCalledWith(undefined, { yes: true });
+    });
+});
+
+describe('forget-payment', () => {
+    test.each([
+        [0, 0],
+        [1, 1],
+    ])('takes exactly one plain challenge id, and exits with what the command answers (%p)', async (answer, code) => {
+        const m = await run(['forget-payment', '77'], (mods) => mods.join.forgetPaymentCmd.mockResolvedValue(answer));
+        expect(m.join.forgetPaymentCmd).toHaveBeenCalledWith('77');
+        expect(m.exitCodes).toEqual([code]);
+    });
+
+    // It changes what a later join pays for, so anything but `<digits>` touches nothing: a colon in the id
+    // would reach a record that is keyed by account.
+    test.each([
+        [[]],
+        [['77', '88']],
+        [['--yes']],
+        [['77', '--yes']],
+        [['--challenge=77']],
+        [['555:123']],
+        [['abc']],
+        [['-1']],
+        [['1.5']],
+        [['7 7']],
+        [['']],
+    ])('forget-payment %p is a usage error and forgets nothing', async (args) => {
+        const m = await run(['forget-payment', ...args]);
+        expect(m.join.forgetPaymentCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual(['Wrong arguments']);
+        expect(m.exitCodes).toEqual([1]);
+    });
+});
+
+describe('list-photos', () => {
+    test.each([
+        [['list-photos'], null, null],
+        [['list-photos', '--challenge=5'], '5', null],
+        [['list-photos', '--search=sunset'], null, 'sunset'],
+        [['list-photos', '--search', 'sun set', '--challenge', '5'], '5', 'sun set'],
+    ])('%j reads the library', async (argv, challengeId, search) => {
+        const m = await run(argv);
+        expect(m.photos.listPhotosCmd).toHaveBeenCalledWith(challengeId, search);
+        expect(m.exitCodes).toEqual([0]);
+    });
+
+    test("the exit code is the command's", async () => {
+        const m = await run(['list-photos'], (mods) => mods.photos.listPhotosCmd.mockResolvedValue(1));
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test.each([
+        [['list-photos', 'extra']],
+        [['list-photos', '--search']],
+        [['list-photos', '--search=a', 'stray']],
+        [['list-photos', '--searchx']],
+        [['list-photos', '--search-term=a']],
+        // --suggest ranks for one challenge and is not a search.
+        [['list-photos', '--suggest']],
+        [['list-photos', '--search=a', '--suggest']],
+        [['list-photos', '--challenge=5', '--suggest', '--search=a']],
+        [['list-photos', '--challenge=5', '--suggest', '--search', 'a']],
+        [['list-photos', '--challenge=5', '--suggest', '--suggest']],
+        [['list-photos', '--challenge=5', '--suggest', 'stray']],
+    ])('%j is a usage error', async (argv) => {
+        const m = await run(argv);
+        expect(m.photos.listPhotosCmd).not.toHaveBeenCalled();
+        expect(m.photos.suggestPhotosCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual(['Wrong arguments']);
+        expect(m.msgs('info')).toEqual([
+            'Usage: list-photos [--challenge=<id>] [--search=<tag>]  or  list-photos --challenge=<id> --suggest',
+        ]);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test.each([[['list-photos', '--challenge=5', '--suggest']], [['list-photos', '--suggest', '--challenge', '5']]])(
+        '%j ranks the challenge’s photos without reading the library',
+        async (argv) => {
+            const m = await run(argv);
+            expect(m.photos.suggestPhotosCmd).toHaveBeenCalledWith('5');
+            expect(m.photos.listPhotosCmd).not.toHaveBeenCalled();
+            expect(m.exitCodes).toEqual([0]);
+        },
+    );
+
+    test("the suggestions' exit code is the command's", async () => {
+        const m = await run(['list-photos', '--challenge=5', '--suggest'], (mods) =>
+            mods.photos.suggestPhotosCmd.mockResolvedValue(1),
+        );
+        expect(m.exitCodes).toEqual([1]);
+    });
 });
 
 describe('settings commands', () => {
@@ -417,9 +834,62 @@ describe('settings commands', () => {
     });
 
     test('set-setting with key, value and challenge', async () => {
-        const m = await run(['set-setting', '--challenge', '5', 'exposure', '80']);
+        const m = await run(['set-setting', '--challenge', '5', 'exposure', '80'], (mods) =>
+            mods.cmd.setSetting.mockReturnValue(true),
+        );
         expect(m.cmd.setSetting).toHaveBeenCalledWith('exposure', '80', '5');
         expect(m.exitCodes).toEqual([0]);
+    });
+
+    test.each([
+        [true, 1],
+        [false, 0],
+    ])('set-setting stamps the chosen-photos owner only after a saved write (%p)', async (saved, stamped) => {
+        const stamp = jest.fn<void, []>();
+        const m = await run(['set-setting', 'chosenPhotos', '["a"]', '--challenge=5'], (mods) => {
+            mods.cmd.beforeChosenPhotosWrite.mockResolvedValue(stamp);
+            mods.cmd.setSetting.mockReturnValue(saved);
+        });
+        expect(m.cmd.beforeChosenPhotosWrite).toHaveBeenCalledWith('chosenPhotos', '["a"]');
+        // The check (and its warning) comes before the write; the stamp after it.
+        expect(m.cmd.beforeChosenPhotosWrite.mock.invocationCallOrder[0]).toBeLessThan(
+            m.cmd.setSetting.mock.invocationCallOrder[0],
+        );
+        expect(stamp).toHaveBeenCalledTimes(stamped);
+        expect(m.exitCodes).toEqual([saved ? 0 : 1]);
+    });
+
+    test.each([
+        [true, 0],
+        [false, 1],
+    ])(
+        'set-setting exit code follows the result: a name that is no setting or a value it refuses fails (%p → %p)',
+        async (saved, code) => {
+            const m = await run(['set-setting', 'exposure', '999'], (mods) =>
+                mods.cmd.setSetting.mockReturnValue(saved),
+            );
+            expect(m.exitCodes).toEqual([code]);
+        },
+    );
+
+    test.each([[['--challenge=5']], [['5']], [['--yes']]])(
+        'clear-chosen-photos %p is refused, since it clears every list',
+        async (tail) => {
+            const m = await run(['clear-chosen-photos', ...tail]);
+            expect(m.cmd.clearChosenPhotos).not.toHaveBeenCalled();
+            expect(m.msgs('error')).toEqual([`Unexpected arguments: ${tail.join(' ')}`]);
+            expect(m.msgs('info')).toEqual(['Usage: clear-chosen-photos']);
+            expect(m.exitCodes[0]).toBe(1);
+        },
+    );
+
+    test.each([
+        [true, 0],
+        [false, 1],
+    ])('clear-chosen-photos exit code follows the result (%p → %p)', async (ok, code) => {
+        const m = await run(['clear-chosen-photos'], (mods) => mods.cmd.clearChosenPhotos.mockReturnValue(ok));
+        expect(m.cmd.clearChosenPhotos).toHaveBeenCalledTimes(1);
+        expect(m.exitCodes).toEqual([code]);
     });
 
     test.each([[[]], [['exposure']]])('set-setting %p missing key/value exits 1', async (tail) => {
@@ -450,9 +920,33 @@ describe('settings commands', () => {
     });
 
     test('set-global-default with key and value', async () => {
-        const m = await run(['set-global-default', 'exposure', '80']);
+        const m = await run(['set-global-default', 'exposure', '80'], (mods) =>
+            mods.cmd.setGlobalDefault.mockReturnValue(true),
+        );
         expect(m.cmd.setGlobalDefault).toHaveBeenCalledWith('exposure', '80');
         expect(m.exitCodes).toEqual([0]);
+    });
+
+    test('set-global-default of a name that is no setting, or a refused value, exits 1', async () => {
+        const m = await run(['set-global-default', 'nope', '80'], (mods) =>
+            mods.cmd.setGlobalDefault.mockReturnValue(false),
+        );
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test.each([
+        [true, 1],
+        [false, 0],
+    ])('set-global-default stamps the chosen-photos owner only after a saved write (%p)', async (saved, stamped) => {
+        const stamp = jest.fn<void, []>();
+        const m = await run(['set-global-default', 'chosenPhotos', '["a"]'], (mods) => {
+            mods.cmd.beforeChosenPhotosWrite.mockResolvedValue(stamp);
+            mods.cmd.setGlobalDefault.mockReturnValue(saved);
+        });
+        expect(m.cmd.beforeChosenPhotosWrite.mock.invocationCallOrder[0]).toBeLessThan(
+            m.cmd.setGlobalDefault.mock.invocationCallOrder[0],
+        );
+        expect(stamp).toHaveBeenCalledTimes(stamped);
     });
 
     test.each([[[]], [['exposure']]])('set-global-default %p missing args exits 1', async (tail) => {
@@ -531,6 +1025,7 @@ describe('scenario commands', () => {
         [['scenario-dry-run', '--challenge=7'], 'scenarioDryRunCmd', ['7']],
         [['scenario-simulate', '--challenge=7'], 'scenarioSimulateCmd', ['7']],
         [['scenario-reset', '--challenge=7'], 'scenarioResetCmd', ['7']],
+        [['scenario-reset', '--all'], 'scenarioResetAllCmd', []],
         [['scenario-vocabulary'], 'scenarioVocabulary', []],
     ])('%p runs %s', async (argv, fn, args) => {
         const m = await run(argv);
@@ -551,6 +1046,17 @@ describe('scenario commands', () => {
         expect(m.msgs('error')).toContain('Wrong arguments');
         expect(m.exitCodes).toEqual([1]);
     });
+
+    test.each([[['scenario-reset', '--all', '--challenge=7']], [['scenario-reset', '--all', 'x']]])(
+        '%p: --all takes no other arguments, and resets nothing',
+        async (argv) => {
+            const m = await run(argv);
+            expect(m.msgs('error')).toContain('--all takes no other arguments');
+            expect(m.scenarios.scenarioResetAllCmd).not.toHaveBeenCalled();
+            expect(m.scenarios.scenarioResetCmd).not.toHaveBeenCalled();
+            expect(m.exitCodes).toEqual([1]);
+        },
+    );
 
     test('a failing command exits with its code', async () => {
         const m = await run(['delete-scenario', 'Plan'], (mods) =>

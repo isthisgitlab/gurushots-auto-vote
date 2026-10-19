@@ -46,7 +46,7 @@ export function EntryPhoto({ entry }: { entry: RankingEntry }) {
     // A well-formed URL can still fail — a since-deleted photo, an absent `3_`
     // rendition, an offline session. Same outcome as a malformed id: show
     // nothing rather than a broken-image glyph.
-    const showPhoto = useImageLoads(thumbUrl);
+    const [showPhoto, photoRef] = useImageLoads(thumbUrl);
 
     // Past this check every URL below is a string: a null thumbUrl never
     // loads, and the larger renders are built from the same ids.
@@ -67,7 +67,7 @@ export function EntryPhoto({ entry }: { entry: RankingEntry }) {
                 visible edge to read as a control rather than decoration. */}
             <button
                 type="button"
-                className="ring-base-300 hover:ring-primary focus-visible:ring-primary block h-6 w-6 overflow-hidden rounded ring-1 focus:outline-none focus-visible:ring-2"
+                className="ring-base-300 hover:ring-base-content focus-visible:ring-base-content block h-8 w-8 pointer-coarse:h-11 pointer-coarse:w-11 overflow-hidden rounded ring-1 focus:outline-none focus-visible:ring-2"
                 onClick={() => setFullOpen(true)}
                 onMouseEnter={() => setHovered(true)}
                 onMouseLeave={() => setHovered(false)}
@@ -76,6 +76,7 @@ export function EntryPhoto({ entry }: { entry: RankingEntry }) {
                 {/* Decorative: the button carries the accessible name, so an alt
                     here would make a screen reader announce the photo twice. */}
                 <img
+                    ref={photoRef}
                     src={thumbUrl as string}
                     alt=""
                     loading="lazy"
@@ -110,7 +111,7 @@ export function EntryPhoto({ entry }: { entry: RankingEntry }) {
                     referrerPolicy="no-referrer"
                     className="max-h-[70vh] w-full rounded object-contain"
                 />
-                <div className="text-base-content/60 mt-2 text-xs">
+                <div className="text-base-content/70 mt-2 text-xs">
                     {t('app.rank')} {entry.rank} · {entry.votes} {t('app.votes')}
                 </div>
             </Modal>

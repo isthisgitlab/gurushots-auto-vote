@@ -56,10 +56,25 @@ describe('Capacitor entry', () => {
         token = 'tok',
         getSettingThrows = false,
         initSettingsRejects = null,
-    }: { native?: boolean; token?: string; getSettingThrows?: boolean; initSettingsRejects?: Error | null } = {}) => {
+        deferHydrations = false,
+    }: {
+        native?: boolean;
+        token?: string;
+        getSettingThrows?: boolean;
+        initSettingsRejects?: Error | null;
+        deferHydrations?: boolean;
+    } = {}) => {
+        // With deferHydrations the eight store hydrations stay pending until a test calls the resolver they leave here.
+        const releases: Array<() => void> = [];
+        const hydration = () =>
+            deferHydrations
+                ? jest.fn(() => new Promise<void>((resolve) => releases.push(resolve)))
+                : jest.fn().mockResolvedValue(undefined);
         const m = {
+            releases,
             subscribers: {} as Record<string, () => void>,
             installBridge: jest.fn(),
+            seedBridgeProfiles: jest.fn(),
             subscribe: jest.fn((event: string, cb: () => void): void => {
                 m.subscribers[event] = cb;
             }),
@@ -71,20 +86,22 @@ describe('Capacitor entry', () => {
                 if (getSettingThrows) throw new Error('not hydrated');
                 return token;
             }),
-            initializeMetadataAsync: jest.fn().mockResolvedValue(undefined),
+            initializeMetadataAsync: hydration(),
             flushMetadataWrites: jest.fn(),
-            initializeJoinStateAsync: jest.fn().mockResolvedValue(undefined),
+            initializeJoinStateAsync: hydration(),
             flushJoinStateWrites: jest.fn(),
-            initializeSwapBackAsync: jest.fn().mockResolvedValue(undefined),
+            initializeSwapBackAsync: hydration(),
             flushSwapBackWrites: jest.fn(),
-            initializeAutoSpendAsync: jest.fn().mockResolvedValue(undefined),
+            initializeAutoSpendAsync: hydration(),
             flushAutoSpendWrites: jest.fn(),
-            initializeEntryAgesAsync: jest.fn().mockResolvedValue(undefined),
+            initializeEntryAgesAsync: hydration(),
             flushEntryAgeWrites: jest.fn(),
-            initializeScenarioStateAsync: jest.fn().mockResolvedValue(undefined),
-            flushScenarioStateWrites: jest.fn(),
-            initializeDiagnosticsAsync: jest.fn().mockResolvedValue(undefined),
+            initializeScenarioStateAsync: hydration(),
+            flushScenarioStateWrites: jest.fn(async () => {}),
+            initializeDiagnosticsAsync: hydration(),
             flushDiagnosticsWrites: jest.fn(),
+            initializePhotoStatsAsync: hydration(),
+            flushPhotoStatsWrites: jest.fn(),
             isCapacitor: jest.fn(() => native),
             categoryError: jest.fn(),
             withCategory: jest.fn((): Pick<CategoryLogger, 'error'> => ({ error: m.categoryError })),
@@ -92,7 +109,11 @@ describe('Capacitor entry', () => {
             mountLogin: jest.fn(),
         };
         jest.isolateModules(() => {
-            jest.doMock(`${SRC}/bridge/capacitor`, () => ({ installBridge: m.installBridge, subscribe: m.subscribe }));
+            jest.doMock(`${SRC}/bridge/capacitor`, () => ({
+                installBridge: m.installBridge,
+                seedBridgeProfiles: m.seedBridgeProfiles,
+                subscribe: m.subscribe,
+            }));
             jest.doMock(`${SRC}/settings`, () => ({
                 initializeAsync: m.initSettings,
                 flushPendingWrites: m.flushPendingWrites,
@@ -126,6 +147,10 @@ describe('Capacitor entry', () => {
                 initializeDiagnosticsAsync: m.initializeDiagnosticsAsync,
                 flushDiagnosticsWrites: m.flushDiagnosticsWrites,
             }));
+            jest.doMock(`${SRC}/services/photoStats`, () => ({
+                initializePhotoStatsAsync: m.initializePhotoStatsAsync,
+                flushPhotoStatsWrites: m.flushPhotoStatsWrites,
+            }));
             jest.doMock(`${SRC}/runtime`, () => ({ isCapacitor: m.isCapacitor }));
             jest.doMock(`${SRC}/logger`, () => ({ withCategory: m.withCategory }));
             jest.doMock('@/pages/App', () => ({ mountApp: m.mountApp }));
@@ -147,16 +172,21 @@ describe('Capacitor entry', () => {
         return root;
     };
 
-    test('native bootstrap: bridge, store hydration in order, then App mount', async () => {
+    test('native bootstrap: bridge, settings, then the stores hydrate together, then App mounts', async () => {
         const root = addRoot('stale-a', 'stale-b');
-        const m = load();
+        const m = load({ deferHydrations: true });
         await flush();
 
         expect((globalThis as RendererGlobals).__capacitorBootstrap).toBe(true);
 
-        const order = [
-            m.installBridge,
-            m.initSettings,
+        // The settings come first, and seeding reads and writes them: only after they are hydrated.
+        const first = [m.installBridge, m.initSettings, m.seedBridgeProfiles].map(
+            (fn) => fn.mock.invocationCallOrder[0],
+        );
+        expect(first).toEqual([...first].sort((a, b) => a - b));
+
+        // All eight hydrations have started while none has resolved, so the App has not mounted.
+        const hydrations = [
             m.initializeMetadataAsync,
             m.initializeJoinStateAsync,
             m.initializeSwapBackAsync,
@@ -164,9 +194,22 @@ describe('Capacitor entry', () => {
             m.initializeEntryAgesAsync,
             m.initializeScenarioStateAsync,
             m.initializeDiagnosticsAsync,
-            m.mountApp,
-        ].map((fn) => fn.mock.invocationCallOrder[0]);
-        expect(order).toEqual([...order].sort((a, b) => a - b));
+            m.initializePhotoStatsAsync,
+        ];
+        for (const fn of hydrations) {
+            expect(fn).toHaveBeenCalledTimes(1);
+            expect(fn.mock.invocationCallOrder[0]).toBeGreaterThan(m.seedBridgeProfiles.mock.invocationCallOrder[0]);
+        }
+        expect(m.releases).toHaveLength(8);
+        expect(m.mountApp).not.toHaveBeenCalled();
+
+        // It mounts only once the last of them has resolved.
+        for (const release of m.releases.slice(0, -1)) release();
+        await flush();
+        expect(m.mountApp).not.toHaveBeenCalled();
+        m.releases.at(-1)!();
+        await flush();
+        expect(m.mountApp).toHaveBeenCalledTimes(1);
         expect(m.mountLogin).not.toHaveBeenCalled();
         // Stale DOM from a previous tree is cleared before mounting.
         expect(root.childNodes).toHaveLength(0);
@@ -184,6 +227,7 @@ describe('Capacitor entry', () => {
             m.flushEntryAgeWrites,
             m.flushScenarioStateWrites,
             m.flushDiagnosticsWrites,
+            m.flushPhotoStatsWrites,
         ];
 
         const hidden = jest.spyOn(document, 'hidden', 'get').mockReturnValue(false);
@@ -202,6 +246,15 @@ describe('Capacitor entry', () => {
             throw new Error('io');
         });
         expect(() => winListeners.pagehide()).not.toThrow();
+    });
+
+    test('a scenario write that did not persist is logged by the teardown flush, not left as an unhandled rejection', async () => {
+        const m = load();
+        await flush();
+        m.flushScenarioStateWrites.mockRejectedValueOnce(new Error('not persisted'));
+        winListeners.pagehide();
+        await flush();
+        expect(m.categoryError).toHaveBeenCalledWith('Scenario state not persisted', expect.any(Error));
     });
 
     test('login-success and logout re-mount by the current token', async () => {
@@ -230,6 +283,7 @@ describe('Capacitor entry', () => {
         await flush();
         expect(m.installBridge).not.toHaveBeenCalled();
         expect(m.initSettings).not.toHaveBeenCalled();
+        expect(m.seedBridgeProfiles).not.toHaveBeenCalled();
         expect(docListeners.visibilitychange).toBeUndefined();
         expect(m.mountApp).toHaveBeenCalledTimes(1);
     });

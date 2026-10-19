@@ -140,6 +140,31 @@ describe('headless adapter', () => {
         await expect(adapter({ method: 'post', url: URL, headers: {}, data: '' })).rejects.toThrow(SyntaxError);
     });
 
+    test.each([
+        ['an array', []],
+        ['a result with no status', { body: '{}' }],
+        ['a non-numeric status', { status: '200', body: '{}' }],
+        ['a result with no body', { status: 200 }],
+        ['a non-string body', { status: 200, body: {} }],
+        ['a non-string error', { error: 5, status: 200, body: '{}' }],
+    ])('rejects a malformed native result (%s)', async (_name, result) => {
+        const adapter = await captureHeadlessAdapter();
+        installNativeBridge(result);
+
+        await expect(adapter({ method: 'post', url: URL, headers: {}, data: '' })).rejects.toThrow(
+            'Malformed native HTTP result',
+        );
+    });
+
+    test('keeps only string header values from the native result', async () => {
+        const adapter = await captureHeadlessAdapter();
+        installNativeBridge({ status: 200, body: '{}', headers: { a: '1', b: 2, c: null } });
+
+        const response = await adapter({ method: 'post', url: URL, headers: {}, data: '' });
+
+        expect(response.headers).toEqual({ a: '1' });
+    });
+
     test('JSON-encodes an object body, sends "" for no body, and defaults method/headers', async () => {
         const adapter = await captureHeadlessAdapter();
         const request = installNativeBridge({ status: 200, body: '{}' });
@@ -261,6 +286,82 @@ describe('retry classification', () => {
             expect.objectContaining({ status: 'NO_RESPONSE', responseData: null, timeout: false }),
         ]);
     });
+
+    test('a failed response logs only its error, message and retry_after fields, never the rest of the body', async () => {
+        defaultSettings({ apiMaxRetries: 0 });
+        axios.mockRejectedValue(
+            httpError(400, {
+                error: 'Bad request',
+                message: 'nope\nforged line',
+                retry_after: 3,
+                ok: false,
+                email: 'me@example.com',
+                profile: { token: 'abc123', name: 'Me' },
+            }),
+        );
+
+        await makePostRequest(URL, {}, '');
+
+        const [entry] = apiLogEntries('API Error Response');
+        expect(entry).toEqual(
+            expect.objectContaining({
+                status: 400,
+                responseData: { error: 'Bad request', message: 'nope forged line', retry_after: 3 },
+            }),
+        );
+        expect(JSON.stringify(entry)).not.toMatch(/me@example\.com|abc123|profile/);
+    });
+
+    test('a failed response with a boolean field or no allowlisted field logs just those', async () => {
+        defaultSettings({ apiMaxRetries: 0 });
+        axios.mockRejectedValueOnce(httpError(400, { error: false, other: 1 }));
+        axios.mockRejectedValueOnce(httpError(502, '<html>gateway</html>'));
+
+        await makePostRequest(URL, {}, '');
+        await makePostRequest(URL, {}, '');
+
+        expect(apiLogEntries('API Error Response')).toEqual([
+            expect.objectContaining({ status: 400, responseData: { error: false } }),
+            expect.objectContaining({ status: 502, responseData: null }),
+        ]);
+    });
+});
+
+describe('account endpoints are logged without their response body', () => {
+    const ACCOUNT_URLS = [
+        'https://api.gurushots.com/rest_mobile/signup',
+        'https://api.gurushots.com/rest/get_current_member_profile',
+    ];
+
+    test.each(ACCOUNT_URLS)('%s: a success logs status and timing only', async (url) => {
+        axios.mockResolvedValueOnce({ status: 200, headers: {}, data: { token: 't', member_id: 'm' } });
+
+        await makePostRequest(url, {}, '');
+
+        const [entry] = apiLogEntries('API Response');
+        expect(entry).toEqual(expect.objectContaining({ url, status: 200 }));
+        expect(entry).not.toHaveProperty('responseData');
+    });
+
+    test.each(ACCOUNT_URLS)('%s: a failure logs status and error only', async (url) => {
+        defaultSettings({ apiMaxRetries: 0 });
+        axios.mockRejectedValue(httpError(401, { email: 'me@example.com' }));
+
+        await makePostRequest(url, {}, '');
+
+        const [entry] = apiLogEntries('API Error Response');
+        expect(entry).toEqual(expect.objectContaining({ url, status: 401 }));
+        expect(entry).not.toHaveProperty('responseData');
+        expect(JSON.stringify(entry)).not.toContain('me@example.com');
+    });
+
+    test('any other endpoint still logs its response body', async () => {
+        axios.mockResolvedValueOnce({ status: 200, headers: {}, data: { ok: 1 } });
+
+        await makePostRequest(URL, {}, '');
+
+        expect(apiLogEntries('API Response')).toEqual([expect.objectContaining({ responseData: { ok: 1 } })]);
+    });
 });
 
 const warnings = () =>
@@ -369,20 +470,5 @@ describe('retry delay selection', () => {
 
         await expect(makePostRequest(URL, {}, '')).resolves.toBeNull();
         expect(timing.sleep).toHaveBeenCalledWith(30_000);
-    });
-});
-
-describe('retry settings coercion', () => {
-    test.each([
-        ['null', null, 4],
-        ['a non-numeric string', 'lots', 4],
-        ['a numeric string', '1', 2],
-        ['a fractional value (floored)', 2.9, 3],
-    ])('apiMaxRetries of %s gives the expected attempt count', async (_label, value, attempts) => {
-        defaultSettings({ apiMaxRetries: value });
-        axios.mockRejectedValue(httpError(502, null));
-
-        await expect(makePostRequest(URL, {}, '')).resolves.toBeNull();
-        expect(axios).toHaveBeenCalledTimes(attempts);
     });
 });

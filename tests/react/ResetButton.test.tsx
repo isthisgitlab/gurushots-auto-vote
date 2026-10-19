@@ -7,26 +7,23 @@ import { render, fireEvent } from './helpers/test-utils';
 import { ResetButton, ResetIcon } from '@/components/ui/ResetButton';
 
 describe('ResetButton', () => {
-    test('renders the outlined button with title and reset icon', () => {
+    test('renders the outlined button, named by its label, with the reset icon', () => {
         const onClick = jest.fn();
-        const { container } = render(<ResetButton title="app.resetToDefaultNotSaved" onClick={onClick} />);
+        const { container } = render(<ResetButton label="app.resetToDefaultNotSaved" onClick={onClick} />);
 
         const button = container.querySelector('button')!;
         expect(button.className).toBe('btn btn-outline btn-sm');
+        expect(button.getAttribute('type')).toBe('button');
+        expect(button.getAttribute('aria-label')).toBe('app.resetToDefaultNotSaved');
         expect(button.getAttribute('title')).toBe('app.resetToDefaultNotSaved');
         const svg = button.querySelector('svg')!;
         expect(svg).not.toBeNull();
         expect(svg.getAttribute('class')).toBe('w-4 h-4');
     });
 
-    test('omits the title attribute when no title is given', () => {
-        const { container } = render(<ResetButton onClick={jest.fn()} />);
-        expect(container.querySelector('button')!.hasAttribute('title')).toBe(false);
-    });
-
     test('fires onClick', () => {
         const onClick = jest.fn();
-        const { container } = render(<ResetButton onClick={onClick} />);
+        const { container } = render(<ResetButton label="reset" onClick={onClick} />);
         fireEvent.click(container.querySelector('button')!);
         expect(onClick).toHaveBeenCalledTimes(1);
     });

@@ -248,7 +248,7 @@ describe('TranslationContext', () => {
             mockApi.getSetting.mockClear();
             const staleT = ctx.t;
 
-            act(() => fire({ language: 'en', theme: 'dark' }));
+            act(() => fire({ app: { language: 'en', theme: 'dark' } }));
 
             expect(ctx.language).toBe('en');
             expect(ctx.t).not.toBe(staleT);
@@ -266,7 +266,7 @@ describe('TranslationContext', () => {
             const { findByText } = renderProvider();
             await findByText('ready');
 
-            act(() => fire({ language: 'de' }));
+            act(() => fire({ app: { language: 'de' } }));
 
             expect(ctx.language).toBe('en');
         });
@@ -277,7 +277,7 @@ describe('TranslationContext', () => {
             mockTranslator.setCurrentLanguage.mockClear();
             const before = ctx;
 
-            act(() => fire({ theme: 'dark' }));
+            act(() => fire({ app: { theme: 'dark' } }));
             act(() => fire(undefined));
 
             expect(ctx).toBe(before);

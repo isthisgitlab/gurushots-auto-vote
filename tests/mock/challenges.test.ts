@@ -27,3 +27,15 @@ describe('generateMockChallenges', () => {
         }
     });
 });
+
+describe('the mock team match', () => {
+    test('exactly one joined, active challenge carries a team match, with the opponent ahead', () => {
+        const { challenges } = generateMockChallenges();
+        const withMatch = challenges.filter((c) => 'teamMatch' in c);
+
+        expect(withMatch).toHaveLength(1);
+        const [challenge] = withMatch;
+        expect(challenge.status).toBe('active');
+        expect(challenge.teamMatch?.them.votes).toBeGreaterThan(challenge.teamMatch?.us.votes ?? Infinity);
+    });
+});

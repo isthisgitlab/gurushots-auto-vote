@@ -9,11 +9,16 @@
  */
 
 const getAllWindowsMock = jest.fn<unknown[], []>(() => []);
+const relaunchMock = jest.fn<void, []>();
+const exitMock = jest.fn<void, [number]>();
 
 jest.mock('electron', () => ({
     BrowserWindow: { getAllWindows: getAllWindowsMock },
+    app: { relaunch: relaunchMock, exit: exitMock },
 }));
 jest.mock('../../src/ts/settings');
+jest.mock('../../src/ts/settings/localData', () => ({ wipeLocalData: jest.fn() }));
+jest.mock('../../src/ts/thirdPartyNotices', () => ({ loadThirdPartyNotices: jest.fn() }));
 jest.mock('../../src/ts/metadata', () => ({ cleanupStaleMetadata: jest.fn() }));
 jest.mock('../../src/ts/apiFactory', () => ({
     refreshApi: jest.fn(),
@@ -30,13 +35,14 @@ import metadataModule = require('../../src/ts/metadata');
 const metadata = jest.mocked(metadataModule);
 import apiFactoryModule = require('../../src/ts/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
+import localDataModule = require('../../src/ts/settings/localData');
+const localData = jest.mocked(localDataModule);
+import noticesModule = require('../../src/ts/thirdPartyNotices');
+const notices = jest.mocked(noticesModule);
 import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
 const { buildHandlers, register } = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
 
 type ChannelImpl = Parameters<IpcMain['handle']>[1];
-// Rows that address settings methods and handler channels by name.
-type MockTable = Record<string, jest.Mock<never, unknown[]>>;
-type HandlerTable = Record<string, (...args: unknown[]) => unknown>;
 
 const boom = () => {
     throw new Error('boom');
@@ -46,31 +52,35 @@ let handlers: ReturnType<typeof buildHandlers>;
 
 beforeEach(() => {
     jest.clearAllMocks();
-    settings.getDefaultSettings = jest.fn().mockReturnValue({ theme: 'light', boostTime: 3600 });
+    settings.getDefaultSettings = jest.fn().mockReturnValue({ app: { theme: 'light', boostTime: 3600 } });
     handlers = buildHandlers();
 });
 
 describe('get-settings', () => {
     test('returns the loaded settings without the token, plus hasToken', async () => {
-        settings.loadSettings = jest.fn().mockReturnValue({ token: 'secret', theme: 'dark' });
+        jest.mocked(settings.loadSettings).mockReturnValue(
+            invalid({ auth: { token: 'secret' }, app: { theme: 'dark' } }),
+        );
         const result = await handlers['get-settings']();
-        expect(result).toEqual({ theme: 'dark', hasToken: true });
-        expect(result).not.toHaveProperty('token');
+        expect(result).toEqual({ app: { theme: 'dark' }, hasToken: true });
+        expect(result).not.toHaveProperty('auth');
     });
 
     test('reports hasToken false for an empty or missing token', async () => {
-        settings.loadSettings = jest.fn().mockReturnValue({ token: '', theme: 'dark' });
-        await expect(handlers['get-settings']()).resolves.toEqual({ theme: 'dark', hasToken: false });
-        settings.loadSettings = jest.fn().mockReturnValue({ theme: 'dark' });
-        await expect(handlers['get-settings']()).resolves.toEqual({ theme: 'dark', hasToken: false });
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: '' }, app: { theme: 'dark' } });
+        await expect(handlers['get-settings']()).resolves.toEqual({ app: { theme: 'dark' }, hasToken: false });
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: {}, app: { theme: 'dark' } });
+        await expect(handlers['get-settings']()).resolves.toEqual({ app: { theme: 'dark' }, hasToken: false });
     });
 
     test('falls back to defaults (still token-free) when loading throws', async () => {
         settings.loadSettings = jest.fn(boom);
-        settings.getDefaultSettings = jest.fn().mockReturnValue({ token: '', theme: 'light', boostTime: 3600 });
+        settings.getDefaultSettings = jest
+            .fn()
+            .mockReturnValue({ auth: { token: '' }, app: { theme: 'light', boostTime: 3600 } });
         const result = await handlers['get-settings']();
-        expect(result).toEqual({ theme: 'light', boostTime: 3600, hasToken: false });
-        expect(result).not.toHaveProperty('token');
+        expect(result).toEqual({ app: { theme: 'light', boostTime: 3600 }, hasToken: false });
+        expect(result).not.toHaveProperty('auth');
         expect(settings.getDefaultSettings).toHaveBeenCalled();
     });
 });
@@ -82,15 +92,24 @@ describe('get-setting', () => {
         expect(settings.getSetting).toHaveBeenCalledWith('theme');
     });
 
-    test.each(['token', 'hasToken'])('never returns the %s key', async (key) => {
+    test.each(['auth', 'token', 'hasToken', 'apiHeaders'])('never returns the %s key', async (key) => {
         settings.getSetting = jest.fn().mockReturnValue('secret');
         await expect(handlers['get-setting']({}, key)).resolves.toBeNull();
         expect(settings.getSetting).not.toHaveBeenCalled();
     });
 
+    test.each(['lastUsername', 'chosenPhotosMemberId'])(
+        'answers the account key %s: the renderer reads it',
+        async (key) => {
+            settings.getSetting = jest.fn().mockReturnValue('me');
+            await expect(handlers['get-setting']({}, key)).resolves.toBe('me');
+            expect(settings.getSetting).toHaveBeenCalledWith(key);
+        },
+    );
+
     test('rejects a non-string key and returns null (no default for it)', async () => {
         settings.getSetting = jest.fn();
-        await expect(handlers['get-setting']({}, 42)).resolves.toBeNull();
+        await expect(handlers['get-setting']({}, invalid(42))).resolves.toBeNull();
         expect(settings.getSetting).not.toHaveBeenCalled();
     });
 
@@ -112,18 +131,32 @@ describe('set-setting', () => {
         expect(settings.setSetting).toHaveBeenCalledWith('theme', 'dark');
     });
 
-    test.each(['token', 'hasToken'])('refuses to write the %s key and does not broadcast', async (key) => {
-        const broadcastSettingsChange = jest.fn();
+    test.each(['auth', 'token', 'hasToken', 'apiHeaders', 'lastUsername', 'chosenPhotosMemberId'])(
+        'refuses to write the %s key and does not broadcast',
+        async (key) => {
+            const broadcastSettingsChange = jest.fn();
+            settings.setSetting = jest.fn().mockReturnValue(true);
+            const h = buildHandlers({ broadcastSettingsChange });
+            await expect(h['set-setting']({}, key, 'planted')).resolves.toBe(false);
+            expect(settings.setSetting).not.toHaveBeenCalled();
+            expect(broadcastSettingsChange).not.toHaveBeenCalled();
+        },
+    );
+
+    test('Stay Logged In is one write: the facade forgets the saved user name with it, and the answer is the facade’s', async () => {
         settings.setSetting = jest.fn().mockReturnValue(true);
-        const h = buildHandlers({ broadcastSettingsChange });
-        await expect(h['set-setting']({}, key, 'planted')).resolves.toBe(false);
-        expect(settings.setSetting).not.toHaveBeenCalled();
-        expect(broadcastSettingsChange).not.toHaveBeenCalled();
+        await expect(handlers['set-setting']({}, 'stayLoggedIn', false)).resolves.toBe(true);
+        expect(settings.setSetting).toHaveBeenCalledTimes(1);
+        expect(settings.setSetting).toHaveBeenCalledWith('stayLoggedIn', false);
+
+        settings.setSetting = jest.fn().mockReturnValue(false);
+        await expect(handlers['set-setting']({}, 'stayLoggedIn', false)).resolves.toBe(false);
+        expect(settings.setSetting).toHaveBeenCalledTimes(1);
     });
 
     test('returns false for a non-string key without writing', async () => {
         settings.setSetting = jest.fn();
-        await expect(handlers['set-setting']({}, null, 'x')).resolves.toBe(false);
+        await expect(handlers['set-setting']({}, invalid(null), 'x')).resolves.toBe(false);
         expect(settings.setSetting).not.toHaveBeenCalled();
     });
 
@@ -135,11 +168,16 @@ describe('set-setting', () => {
     test('broadcasts the freshly loaded settings after a successful write', async () => {
         const broadcastSettingsChange = jest.fn();
         settings.setSetting = jest.fn().mockReturnValue(true);
-        settings.loadSettings = jest.fn().mockReturnValue({ token: 'secret', language: 'lv', theme: 'dark' });
+        settings.loadSettings = jest
+            .fn()
+            .mockReturnValue({ auth: { token: 'secret' }, app: { language: 'lv', theme: 'dark' } });
         const h = buildHandlers({ broadcastSettingsChange });
 
         await expect(h['set-setting']({}, 'language', 'lv')).resolves.toBe(true);
-        expect(broadcastSettingsChange).toHaveBeenCalledWith({ language: 'lv', theme: 'dark', hasToken: true });
+        expect(broadcastSettingsChange).toHaveBeenCalledWith({
+            app: { language: 'lv', theme: 'dark' },
+            hasToken: true,
+        });
     });
 
     test('does not broadcast a rejected write', async () => {
@@ -155,29 +193,62 @@ describe('set-setting', () => {
 describe('save-settings', () => {
     test('saves, then broadcasts the stored settings without the token', async () => {
         const broadcastSettingsChange = jest.fn();
-        settings.saveSettings = jest.fn().mockReturnValue(true);
-        settings.loadSettings = jest.fn().mockReturnValue({ token: 'secret', theme: 'dark', language: 'en' });
+        settings.saveAppSettings = jest.fn().mockReturnValue(true);
+        settings.loadSettings = jest
+            .fn()
+            .mockReturnValue({ auth: { token: 'secret' }, app: { theme: 'dark', language: 'en' } });
         const h = buildHandlers({ broadcastSettingsChange });
 
         await expect(h['save-settings']({}, { theme: 'dark' })).resolves.toBe(true);
-        expect(settings.saveSettings).toHaveBeenCalledWith({ theme: 'dark' });
-        expect(broadcastSettingsChange).toHaveBeenCalledWith({ theme: 'dark', language: 'en', hasToken: true });
+        expect(settings.saveAppSettings).toHaveBeenCalledWith({ theme: 'dark' });
+        expect(broadcastSettingsChange).toHaveBeenCalledWith({
+            app: { theme: 'dark', language: 'en' },
+            hasToken: true,
+        });
+    });
+
+    test('strips the sign-in keys from the payload too: a renderer cannot write them', async () => {
+        settings.saveAppSettings = jest.fn().mockReturnValue(true);
+        settings.loadSettings = jest.fn().mockReturnValue({ app: { theme: 'dark' }, auth: { apiHeaders: { a: 'b' } } });
+        await expect(
+            handlers['save-settings'](
+                {},
+                {
+                    apiHeaders: { evil: '1' },
+                    lastUsername: 'evil',
+                    chosenPhotosMemberId: 'evil',
+                    auth: { token: 'evil' },
+                    theme: 'dark',
+                },
+            ),
+        ).resolves.toBe(true);
+        expect(settings.saveAppSettings).toHaveBeenCalledWith({ theme: 'dark' });
+    });
+
+    test('get-settings then save-settings of its app block round-trips without touching the sign-in state', async () => {
+        const stored = { auth: { token: 'secret', apiHeaders: { a: 'b' } }, app: { theme: 'dark' } };
+        settings.loadSettings = jest.fn().mockReturnValue(stored);
+        settings.saveAppSettings = jest.fn().mockReturnValue(true);
+        const fetched = await handlers['get-settings']();
+        expect(fetched).not.toHaveProperty('auth');
+        await expect(handlers['save-settings']({}, fetched.app)).resolves.toBe(true);
+        expect(settings.saveAppSettings).toHaveBeenCalledWith({ theme: 'dark' });
     });
 
     test('strips token and hasToken from the payload before saving and from the broadcast', async () => {
         const broadcastSettingsChange = jest.fn();
-        settings.saveSettings = jest.fn().mockReturnValue(true);
-        settings.loadSettings = jest.fn().mockReturnValue({ token: 'stored', theme: 'dark' });
+        settings.saveAppSettings = jest.fn().mockReturnValue(true);
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 'stored' }, app: { theme: 'dark' } });
         const h = buildHandlers({ broadcastSettingsChange });
 
         await expect(h['save-settings']({}, { token: 'planted', hasToken: false, theme: 'dark' })).resolves.toBe(true);
-        expect(settings.saveSettings).toHaveBeenCalledWith({ theme: 'dark' });
-        expect(broadcastSettingsChange).toHaveBeenCalledWith({ theme: 'dark', hasToken: true });
+        expect(settings.saveAppSettings).toHaveBeenCalledWith({ theme: 'dark' });
+        expect(broadcastSettingsChange).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 
     test('does not broadcast when the save fails', async () => {
         const broadcastSettingsChange = jest.fn();
-        settings.saveSettings = jest.fn().mockReturnValue(false);
+        settings.saveAppSettings = jest.fn().mockReturnValue(false);
         const h = buildHandlers({ broadcastSettingsChange });
 
         await expect(h['save-settings']({}, { theme: 'dark' })).resolves.toBe(false);
@@ -185,18 +256,18 @@ describe('save-settings', () => {
     });
 
     test('succeeds without a broadcaster (CLI / Capacitor shape)', async () => {
-        settings.saveSettings = jest.fn().mockReturnValue(true);
+        settings.saveAppSettings = jest.fn().mockReturnValue(true);
         await expect(handlers['save-settings']({}, { theme: 'dark' })).resolves.toBe(true);
     });
 
     test.each([null, 'str', 5, undefined])('rejects non-object payload %p', async (bad) => {
-        settings.saveSettings = jest.fn();
-        await expect(handlers['save-settings']({}, bad)).resolves.toBe(false);
-        expect(settings.saveSettings).not.toHaveBeenCalled();
+        settings.saveAppSettings = jest.fn();
+        await expect(handlers['save-settings']({}, invalid(bad))).resolves.toBe(false);
+        expect(settings.saveAppSettings).not.toHaveBeenCalled();
     });
 
-    test('returns false when saveSettings throws', async () => {
-        settings.saveSettings = invalid(jest.fn(boom));
+    test('returns false when saveAppSettings throws', async () => {
+        settings.saveAppSettings = invalid(jest.fn(boom));
         await expect(handlers['save-settings']({}, { theme: 'dark' })).resolves.toBe(false);
     });
 });
@@ -216,6 +287,7 @@ describe('get-environment-info', () => {
             defaultMock: true,
             platform: process.platform,
             userDataPath: 'unknown',
+            launchedAt: undefined,
         });
     });
 });
@@ -236,61 +308,6 @@ describe('refresh-api', () => {
             throw null;
         });
         await expect(handlers['refresh-api']()).resolves.toEqual({ success: false, error: 'Failed to refresh API' });
-    });
-});
-
-describe('boost threshold channels', () => {
-    test('get-boost-threshold reads the effective boostTime for the challenge', async () => {
-        settings.getEffectiveSetting = jest.fn().mockReturnValue(900);
-        await expect(handlers['get-boost-threshold']({}, 'c1')).resolves.toBe(900);
-        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('boostTime', 'c1');
-    });
-
-    test('get-boost-threshold falls back to the schema default when it throws', async () => {
-        settings.getEffectiveSetting = invalid(jest.fn(boom));
-        settings.SETTINGS_SCHEMA = invalid({ boostTime: { default: 1234 } });
-        await expect(handlers['get-boost-threshold']({}, 'c1')).resolves.toBe(1234);
-    });
-
-    test('set-boost-threshold writes a stringified per-challenge override', async () => {
-        settings.setChallengeOverride = jest.fn();
-        await expect(handlers['set-boost-threshold']({}, 42, 600)).resolves.toEqual({ success: true });
-        expect(settings.setChallengeOverride).toHaveBeenCalledWith('boostTime', '42', 600);
-    });
-
-    test('set-boost-threshold returns the error envelope when challengeId is missing', async () => {
-        settings.setChallengeOverride = jest.fn();
-        const result = await handlers['set-boost-threshold']({}, invalid(undefined), 600);
-        expect(result.success).toBe(false);
-        expect(typeof (result as Extract<typeof result, { success: false }>).error).toBe('string');
-        expect(settings.setChallengeOverride).not.toHaveBeenCalled();
-    });
-
-    test('set-default-boost-threshold writes the global default', async () => {
-        settings.setGlobalDefault = jest.fn();
-        await expect(handlers['set-default-boost-threshold']({}, 300)).resolves.toEqual({ success: true });
-        expect(settings.setGlobalDefault).toHaveBeenCalledWith('boostTime', 300);
-    });
-
-    test('set-default-boost-threshold returns the error envelope when it throws', async () => {
-        settings.setGlobalDefault = invalid(jest.fn(boom));
-        await expect(handlers['set-default-boost-threshold']({}, 300)).resolves.toEqual({
-            success: false,
-            error: 'boom',
-        });
-    });
-
-    test.each([
-        ['set-boost-threshold', 'setChallengeOverride', ['c1', 600], 'Failed to set boost threshold'],
-        ['set-default-boost-threshold', 'setGlobalDefault', [300], 'Failed to set default boost threshold'],
-    ])('%s falls back to a fixed message when the write throws null', async (channel, method, args, expected) => {
-        invalid<MockTable>(settings)[method] = jest.fn(() => {
-            throw null;
-        });
-        await expect(invalid<HandlerTable>(handlers)[channel]({}, ...args)).resolves.toEqual({
-            success: false,
-            error: expected,
-        });
     });
 });
 
@@ -353,15 +370,502 @@ describe('get-settings-schema', () => {
 });
 
 describe('cleanup-stale-metadata', () => {
-    test('delegates the active ids to metadata.cleanupStaleMetadata', async () => {
-        metadata.cleanupStaleMetadata.mockReturnValue(true);
-        await expect(handlers['cleanup-stale-metadata']({}, invalid([1, 2]))).resolves.toBe(true);
-        expect(metadata.cleanupStaleMetadata).toHaveBeenCalledWith([1, 2]);
+    beforeEach(() => {
+        settings.getSetting = jest.fn().mockReturnValue(false);
     });
 
-    test('returns false when cleanup throws', async () => {
+    test('delegates the active ids, as strings, to metadata.cleanupStaleMetadata', async () => {
+        metadata.cleanupStaleMetadata.mockReturnValue(true);
+        await expect(handlers['cleanup-stale-metadata']({}, [1, '2'])).resolves.toEqual({ success: true });
+        expect(metadata.cleanupStaleMetadata).toHaveBeenCalledWith(['1', '2']);
+    });
+
+    test('a cleanup that did not save is an error result', async () => {
+        metadata.cleanupStaleMetadata.mockReturnValue(false);
+        await expect(handlers['cleanup-stale-metadata']({}, ['1'])).resolves.toEqual({
+            success: false,
+            error: 'The metadata could not be saved',
+        });
+    });
+
+    test('an error is an error result with its message', async () => {
         metadata.cleanupStaleMetadata.mockImplementationOnce(boom);
-        await expect(handlers['cleanup-stale-metadata']({}, invalid([1]))).resolves.toBe(false);
+        await expect(handlers['cleanup-stale-metadata']({}, ['1'])).resolves.toEqual({
+            success: false,
+            error: 'boom',
+        });
+    });
+
+    test.each([
+        ['not an array', 'abc'],
+        ['missing', undefined],
+        ['an item that is not an id', ['1', {}]],
+        ['a blank id', ['1', '  ']],
+        ['an over-long id', ['9'.repeat(65)]],
+    ])('refuses %s without touching the metadata', async (_name, ids) => {
+        await expect(handlers['cleanup-stale-metadata']({}, invalid(ids))).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+        expect(metadata.cleanupStaleMetadata).not.toHaveBeenCalled();
+    });
+
+    test('in mock mode it does nothing: the active list holds mock ids, and the real metadata survives', async () => {
+        settings.getSetting = jest.fn().mockReturnValue(true);
+        await expect(handlers['cleanup-stale-metadata']({}, ['mock-1'])).resolves.toEqual({ success: true });
+        expect(metadata.cleanupStaleMetadata).not.toHaveBeenCalled();
+    });
+});
+
+describe('cleanup-stale-challenge-setting', () => {
+    beforeEach(() => {
+        settings.getSetting = jest.fn().mockReturnValue(false);
+    });
+
+    test('passes a list of ids to the settings layer and says it was saved', async () => {
+        jest.mocked(settings.cleanupStaleChallengeSetting).mockReturnValue(true);
+        await expect(handlers['cleanup-stale-challenge-setting']({}, ['1', '2'])).resolves.toEqual({ success: true });
+        expect(settings.cleanupStaleChallengeSetting).toHaveBeenCalledWith(['1', '2']);
+    });
+
+    test('ids are compared the way perChallenge is keyed: numeric ids become strings, untrimmed ones are trimmed', async () => {
+        jest.mocked(settings.cleanupStaleChallengeSetting).mockReturnValue(true);
+        await handlers['cleanup-stale-challenge-setting']({}, [7, ' 8 ', '9']);
+        expect(settings.cleanupStaleChallengeSetting).toHaveBeenCalledWith(['7', '8', '9']);
+    });
+
+    test.each([
+        ['not an array', 'abc'],
+        ['missing', undefined],
+        ['empty, which would prune every challenge', []],
+        ['an item that is not an id', ['1', {}]],
+        ['a blank id', ['1', '  ']],
+        ['an over-long id', ['9'.repeat(65)]],
+    ])('refuses %s without touching the settings', async (_name, ids) => {
+        jest.mocked(settings.cleanupStaleChallengeSetting).mockClear();
+        await expect(handlers['cleanup-stale-challenge-setting']({}, invalid(ids))).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+        expect(settings.cleanupStaleChallengeSetting).not.toHaveBeenCalled();
+    });
+
+    test('a save that failed is an error result, never read as success', async () => {
+        jest.mocked(settings.cleanupStaleChallengeSetting).mockReturnValue(false);
+        await expect(handlers['cleanup-stale-challenge-setting']({}, ['1'])).resolves.toEqual({
+            success: false,
+            error: 'The settings file could not be saved',
+        });
+    });
+
+    test('an error is an error result with its message', async () => {
+        settings.cleanupStaleChallengeSetting = invalid(jest.fn(boom));
+        await expect(handlers['cleanup-stale-challenge-setting']({}, ['1'])).resolves.toEqual({
+            success: false,
+            error: 'boom',
+        });
+    });
+
+    test('in mock mode it does nothing: the active list holds mock ids, and the real overrides survive', async () => {
+        settings.cleanupStaleChallengeSetting = jest.fn().mockReturnValue(true);
+        settings.getSetting = jest.fn().mockReturnValue(true);
+        await expect(handlers['cleanup-stale-challenge-setting']({}, ['mock-1'])).resolves.toEqual({ success: true });
+        expect(settings.cleanupStaleChallengeSetting).not.toHaveBeenCalled();
+    });
+});
+
+describe('the recovery of the stored settings', () => {
+    // Start fresh and re-import are answered by their detailed forms, which also say what became of settings.json and which
+    // file was read.
+    const channels = [
+        ['retry-settings-import', 'retryImportDetailed'],
+        ['start-fresh-settings', 'startFreshDetailed'],
+        ['reimport-settings-from-v1', 'reimportFromV1Detailed'],
+        ['acknowledge-import-report', 'acknowledgeImportReport'],
+    ] as const;
+    type Method = (typeof channels)[number][1];
+    // What each action answers when it worked: a boolean, or the detail the answer carries.
+    const worked = (method: Method) =>
+        method === 'startFreshDetailed'
+            ? { ok: true, keptAt: '/data/settings.json.original' }
+            : method === 'reimportFromV1Detailed'
+              ? { ok: true, setAside: null, source: '/data/settings.json.unimportable-1' }
+              : method === 'retryImportDetailed'
+                ? { ok: true }
+                : true;
+    const didNot = (method: Method) =>
+        method === 'startFreshDetailed'
+            ? { ok: false, keptAt: null }
+            : method === 'reimportFromV1Detailed'
+              ? { ok: false, setAside: null, source: '/data/settings.json' }
+              : method === 'retryImportDetailed'
+                ? { ok: false }
+                : false;
+    const answerOf = (channel: (typeof channels)[number][0]) =>
+        channel === 'start-fresh-settings'
+            ? { success: true, kept: { kind: 'path', path: '/data/settings.json.original' } }
+            : channel === 'reimport-settings-from-v1'
+              ? { success: true, setAside: null, source: '/data/settings.json.unimportable-1' }
+              : { success: true };
+
+    test.each(channels)('%s runs %s, then announces the settings to every window', async (channel, method) => {
+        const broadcastSettingsChange = jest.fn();
+        settings[method] = jest.fn().mockReturnValue(worked(method));
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 't' }, app: { theme: 'dark' } });
+        const h = buildHandlers({ broadcastSettingsChange });
+
+        await expect(h[channel]()).resolves.toEqual(answerOf(channel));
+
+        expect(settings[method]).toHaveBeenCalledTimes(1);
+        expect(broadcastSettingsChange).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
+    });
+
+    test.each([
+        ['a copy written under a key (the Android window)', Promise.resolve('gurushots-settings_original'), 'stored'],
+        ['a copy that could not be written yet', Promise.resolve(null), 'pending'],
+    ])('start-fresh-settings waits for %s and says %s', async (_name, landed, kind) => {
+        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null, landed });
+
+        await expect(handlers['start-fresh-settings']()).resolves.toEqual({ success: true, kept: { kind } });
+    });
+
+    test('start-fresh-settings says nothing was reset when a configuration was in place already (a restore that came through)', async () => {
+        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null, adopted: true });
+
+        await expect(handlers['start-fresh-settings']()).resolves.toEqual({
+            success: true,
+            kept: { kind: 'adopted' },
+        });
+    });
+
+    test('start-fresh-settings says settings.json could not be read, so it was left as it is', async () => {
+        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null, unreadable: true });
+
+        await expect(handlers['start-fresh-settings']()).resolves.toEqual({
+            success: true,
+            kept: { kind: 'unreadable' },
+        });
+    });
+
+    test('start-fresh-settings says there was nothing to keep', async () => {
+        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null });
+
+        await expect(handlers['start-fresh-settings']()).resolves.toEqual({ success: true, kept: { kind: 'none' } });
+    });
+
+    test.each(channels)(
+        '%s answers the failure code when the action did not work, and announces nothing',
+        async (channel, method) => {
+            const broadcastSettingsChange = jest.fn();
+            settings[method] = jest.fn().mockReturnValue(didNot(method));
+            const h = buildHandlers({ broadcastSettingsChange });
+
+            // A report that could not be saved is not an import that failed.
+            await expect(h[channel]()).resolves.toEqual({
+                success: false,
+                error: channel === 'acknowledge-import-report' ? 'import-report-not-saved' : 'settings-import-failed',
+            });
+
+            expect(broadcastSettingsChange).not.toHaveBeenCalled();
+        },
+    );
+
+    test.each(channels)('%s never throws to the renderer', async (channel, method) => {
+        settings[method] = invalid(jest.fn(boom));
+        await expect(handlers[channel]()).resolves.toEqual({ success: false, error: 'boom' });
+        settings[method] = invalid(
+            jest.fn(() => {
+                throw null;
+            }),
+        );
+        await expect(handlers[channel]()).resolves.toEqual({
+            success: false,
+            error: 'Failed to recover the settings',
+        });
+    });
+
+    test('works without a broadcaster (CLI / Capacitor shape)', async () => {
+        settings.retryImportDetailed = jest.fn().mockReturnValue({ ok: true });
+        await expect(handlers['retry-settings-import']()).resolves.toEqual({ success: true });
+    });
+
+    test('retry-settings-import says nothing was imported when a configuration was in place already', async () => {
+        settings.retryImportDetailed = jest.fn().mockReturnValue({ ok: true, adopted: true });
+
+        await expect(handlers['retry-settings-import']()).resolves.toEqual({ success: true, adopted: true });
+    });
+
+    test('reimport-settings-from-v1 says where the settings that were in use went', async () => {
+        settings.reimportFromV1Detailed = jest
+            .fn()
+            .mockReturnValue({ ok: true, setAside: '/data/config.json.corrupt-1', source: '/data/settings.json' });
+
+        await expect(handlers['reimport-settings-from-v1']()).resolves.toEqual({
+            success: true,
+            setAside: '/data/config.json.corrupt-1',
+            source: '/data/settings.json',
+        });
+    });
+});
+
+describe('get-import-report', () => {
+    test('answers the report the settings hold, or null when there was no import', async () => {
+        const report = {
+            at: '2026-10-16T09:00:00.000Z',
+            refsBlocked: [
+                'rules[0].profile: "Gone"',
+                {
+                    holder: { kind: 'rule' as const, number: 3, title: 'Macro' },
+                    refers: 'profile' as const,
+                    name: 'Night',
+                },
+            ],
+            acknowledged: false,
+        };
+        settings.getImportReport = jest.fn().mockReturnValue(report);
+        await expect(handlers['get-import-report']()).resolves.toEqual({ success: true, report });
+        settings.getImportReport = jest.fn().mockReturnValue(null);
+        await expect(handlers['get-import-report']()).resolves.toEqual({ success: true, report: null });
+    });
+
+    test('never throws to the renderer', async () => {
+        settings.getImportReport = invalid(jest.fn(boom));
+        await expect(handlers['get-import-report']()).resolves.toEqual({ success: false, error: 'boom' });
+        settings.getImportReport = invalid(
+            jest.fn(() => {
+                throw null;
+            }),
+        );
+        await expect(handlers['get-import-report']()).resolves.toEqual({
+            success: false,
+            error: 'The import report could not be read',
+        });
+    });
+});
+
+describe('get-settings-recovery', () => {
+    test('reports the settings layer recovery, or null', async () => {
+        settings.getSettingsRecovery = jest
+            .fn()
+            .mockReturnValue({ code: 'settings-corrupt', path: '/u/config.json.corrupt-1' });
+        await expect(handlers['get-settings-recovery']()).resolves.toEqual({
+            success: true,
+            recovery: { code: 'settings-corrupt', path: '/u/config.json.corrupt-1' },
+        });
+        settings.getSettingsRecovery = jest.fn().mockReturnValue(null);
+        settings.getSettingsSaveDropped = jest.fn().mockReturnValue(null);
+        await expect(handlers['get-settings-recovery']()).resolves.toEqual({ success: true, recovery: null });
+    });
+
+    test('reports a change the window could not save when the stored settings are in use', async () => {
+        settings.getSettingsRecovery = jest.fn().mockReturnValue(null);
+        settings.getSettingsSaveDropped = jest
+            .fn()
+            .mockReturnValue({ code: 'settings-save-dropped', path: 'gurushots-config' });
+        await expect(handlers['get-settings-recovery']()).resolves.toEqual({
+            success: true,
+            recovery: { code: 'settings-save-dropped', path: 'gurushots-config' },
+        });
+    });
+
+    test('a recovery of the stored settings comes before a dropped save', async () => {
+        settings.getSettingsRecovery = jest
+            .fn()
+            .mockReturnValue({ code: 'settings-unreadable', path: '/u/s.json', blocking: true });
+        settings.getSettingsSaveDropped = jest
+            .fn()
+            .mockReturnValue({ code: 'settings-save-dropped', path: 'gurushots-config' });
+        await expect(handlers['get-settings-recovery']()).resolves.toEqual({
+            success: true,
+            recovery: { code: 'settings-unreadable', path: '/u/s.json', blocking: true },
+        });
+    });
+});
+
+describe('a save the window gave up', () => {
+    test('is announced like a settings change, with the settings as the window now has them', () => {
+        const broadcast = jest.fn();
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 'secret' }, app: { theme: 'dark' } });
+        buildHandlers({ broadcastSettingsChange: broadcast });
+
+        const [listener] = settings.onSettingsSaveDroppedChange.mock.calls.at(-1) ?? [];
+        listener?.();
+
+        expect(broadcast).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
+    });
+
+    test('is not listened for where nothing is announced', () => {
+        settings.onSettingsSaveDroppedChange.mockClear();
+        settings.onSettingsRecoveryChange.mockClear();
+        buildHandlers();
+        expect(settings.onSettingsSaveDroppedChange).not.toHaveBeenCalled();
+        expect(settings.onSettingsRecoveryChange).not.toHaveBeenCalled();
+    });
+});
+
+describe('a block a read cleared', () => {
+    test('is announced like a settings change, so that a notice shown for it is read again', () => {
+        const broadcast = jest.fn();
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 'secret' }, app: { theme: 'dark' } });
+        buildHandlers({ broadcastSettingsChange: broadcast });
+
+        const [listener] = settings.onSettingsRecoveryChange.mock.calls.at(-1) ?? [];
+        listener?.();
+
+        expect(broadcast).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
+    });
+});
+
+describe('get-third-party-notices', () => {
+    test('returns the notices text', async () => {
+        notices.loadThirdPartyNotices.mockResolvedValue('LICENSES');
+        await expect(handlers['get-third-party-notices']()).resolves.toEqual({ success: true, text: 'LICENSES' });
+    });
+
+    test('an unreadable asset is an error result', async () => {
+        notices.loadThirdPartyNotices.mockRejectedValue(new Error('ENOENT'));
+        await expect(handlers['get-third-party-notices']()).resolves.toEqual({ success: false, error: 'ENOENT' });
+    });
+
+    test('falls back to a fixed message when the failure has none', async () => {
+        notices.loadThirdPartyNotices.mockRejectedValue(null);
+        await expect(handlers['get-third-party-notices']()).resolves.toEqual({
+            success: false,
+            error: 'The third-party notices could not be read',
+        });
+    });
+});
+
+describe('wipe-local-data', () => {
+    test('wipes, then hands over to the shell', async () => {
+        const afterWipe = jest.fn();
+        localData.wipeLocalData.mockResolvedValue({ success: true, removed: ['x'] });
+        await expect(buildHandlers({ afterWipe })['wipe-local-data']()).resolves.toEqual({ success: true });
+        expect(afterWipe).toHaveBeenCalledTimes(1);
+    });
+
+    test('works without a shell hook (CLI shape)', async () => {
+        localData.wipeLocalData.mockResolvedValue({ success: true, removed: [] });
+        await expect(handlers['wipe-local-data']()).resolves.toEqual({ success: true });
+    });
+
+    test('a refusal is passed on and the shell is not told to relaunch', async () => {
+        const afterWipe = jest.fn();
+        localData.wipeLocalData.mockResolvedValue({ success: false, error: 'busy' });
+        await expect(buildHandlers({ afterWipe })['wipe-local-data']()).resolves.toEqual({
+            success: false,
+            error: 'busy',
+        });
+        expect(afterWipe).not.toHaveBeenCalled();
+    });
+
+    test('a partial failure keeps the reload request for the window to act on', async () => {
+        const afterWipe = jest.fn();
+        localData.wipeLocalData.mockResolvedValue({ success: false, error: 'x', removed: [], reload: true });
+        await expect(buildHandlers({ afterWipe })['wipe-local-data']()).resolves.toEqual({
+            success: false,
+            error: 'x',
+            removed: [],
+            reload: true,
+        });
+        expect(afterWipe).not.toHaveBeenCalled();
+    });
+
+    test('never throws across IPC', async () => {
+        localData.wipeLocalData.mockRejectedValue(new Error('boom'));
+        await expect(handlers['wipe-local-data']()).resolves.toEqual({ success: false, error: 'boom' });
+    });
+});
+
+describe('clear-chosen-photos', () => {
+    test('removes the lists, broadcasts the change and reports how many went', async () => {
+        const broadcast = jest.fn();
+        jest.mocked(settings.clearChosenPhotos).mockReturnValue(4);
+        jest.mocked(settings.loadSettings).mockReturnValue(
+            invalid({ auth: { token: 'secret' }, app: { theme: 'dark' } }),
+        );
+        await expect(buildHandlers({ broadcastSettingsChange: broadcast })['clear-chosen-photos']()).resolves.toEqual({
+            success: true,
+            removed: 4,
+        });
+        expect(broadcast).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
+    });
+
+    test('works without a broadcast listener', async () => {
+        jest.mocked(settings.clearChosenPhotos).mockReturnValue(0);
+        await expect(handlers['clear-chosen-photos']()).resolves.toEqual({ success: true, removed: 0 });
+    });
+
+    test('a save that failed is an error result, with no broadcast', async () => {
+        const broadcast = jest.fn();
+        jest.mocked(settings.clearChosenPhotos).mockReturnValue(null);
+        await expect(buildHandlers({ broadcastSettingsChange: broadcast })['clear-chosen-photos']()).resolves.toEqual({
+            success: false,
+            error: 'The settings file could not be saved',
+        });
+        expect(broadcast).not.toHaveBeenCalled();
+    });
+
+    test('never throws across IPC', async () => {
+        settings.clearChosenPhotos = invalid(jest.fn(boom));
+        await expect(handlers['clear-chosen-photos']()).resolves.toEqual({ success: false, error: 'boom' });
+    });
+});
+
+describe('set-entry-pin', () => {
+    const pin = (broadcast?: jest.Mock<void, [object]>, ...args: [unknown, unknown, unknown]) =>
+        invalid<(event: unknown, ...a: unknown[]) => Promise<unknown>>(
+            buildHandlers({ broadcastSettingsChange: broadcast })['set-entry-pin'],
+        )({}, ...args);
+
+    test('pins a photo, broadcasts the change and answers success', async () => {
+        const broadcast = jest.fn();
+        jest.mocked(settings.setEntryPin).mockReturnValue('ok');
+        jest.mocked(settings.loadSettings).mockReturnValue(
+            invalid({ auth: { token: 'secret' }, app: { theme: 'dark' } }),
+        );
+        await expect(pin(broadcast, 'boost', 100, 'img_a')).resolves.toEqual({ success: true });
+        expect(settings.setEntryPin).toHaveBeenCalledWith('boost', 100, 'img_a');
+        expect(broadcast).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
+    });
+
+    test('clears a pin (imageId null) and works without a broadcast listener', async () => {
+        jest.mocked(settings.setEntryPin).mockReturnValue('ok');
+        await expect(pin(undefined, 'turbo', '100', null)).resolves.toEqual({ success: true });
+        expect(settings.setEntryPin).toHaveBeenCalledWith('turbo', '100', null);
+    });
+
+    test.each([
+        ['an unknown feature', 'bogus', 100, 'img_a'],
+        ['a missing feature', undefined, 100, 'img_a'],
+        ['a challenge id that is not an id', 'boost', {}, 'img_a'],
+        ['a blank challenge id', 'boost', '  ', 'img_a'],
+        ['an image id that is not an id', 'boost', 100, {}],
+        ['a blank image id', 'boost', 100, ''],
+    ])('refuses %s without touching the settings or broadcasting', async (_name, kind, challengeId, imageId) => {
+        const broadcast = jest.fn();
+        await expect(pin(broadcast, kind, challengeId, imageId)).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+        expect(settings.setEntryPin).not.toHaveBeenCalled();
+        expect(broadcast).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['a refused argument', 'invalid', 'invalid-args'],
+        ['the pin cap', 'cap', 'pin-cap-reached'],
+        ['a failed write', 'write-failed', 'pin-write-failed'],
+    ] as const)('%s is its own error code, with no broadcast', async (_name, outcome, error) => {
+        const broadcast = jest.fn();
+        jest.mocked(settings.setEntryPin).mockReturnValue(outcome);
+        await expect(pin(broadcast, 'boost', 100, 'has space')).resolves.toEqual({ success: false, error });
+        expect(broadcast).not.toHaveBeenCalled();
+    });
+
+    test('never throws across IPC', async () => {
+        settings.setEntryPin = invalid(jest.fn(boom));
+        await expect(pin(undefined, 'boost', 100, 'img_a')).resolves.toEqual({ success: false, error: 'boom' });
     });
 });
 
@@ -381,17 +885,38 @@ describe('register (Electron)', () => {
         const winA = { isDestroyed: () => false, webContents: { send: jest.fn() } };
         const winB = { isDestroyed: () => false, webContents: { send: jest.fn() } };
         getAllWindowsMock.mockReturnValue([winA, winB]);
-        settings.saveSettings = jest.fn().mockReturnValue(true);
-        settings.loadSettings = jest.fn().mockReturnValue({ token: 'secret', theme: 'dark' });
+        settings.saveAppSettings = jest.fn().mockReturnValue(true);
+        jest.mocked(settings.loadSettings).mockReturnValue(
+            invalid({ auth: { token: 'secret' }, app: { theme: 'dark' } }),
+        );
         const ipcMain = makeIpcMain();
         register(invalid(ipcMain));
 
         const payload = { theme: 'dark' };
         await expect(ipcMain.channels.get('save-settings')!(invalid(undefined), payload)).resolves.toBe(true);
 
-        const sent = { theme: 'dark', hasToken: true };
+        const sent = { app: { theme: 'dark' }, hasToken: true };
         expect(winA.webContents.send).toHaveBeenCalledWith('settings-changed', sent);
         expect(winB.webContents.send).toHaveBeenCalledWith('settings-changed', sent);
+    });
+
+    test('relaunches the app once the wipe has been answered', async () => {
+        jest.useFakeTimers();
+        try {
+            localData.wipeLocalData.mockResolvedValue({ success: true, removed: [] });
+            const ipcMain = makeIpcMain();
+            register(invalid(ipcMain));
+
+            await expect(ipcMain.channels.get('wipe-local-data')!(invalid(undefined))).resolves.toEqual({
+                success: true,
+            });
+            expect(relaunchMock).not.toHaveBeenCalled();
+            jest.advanceTimersByTime(200);
+            expect(relaunchMock).toHaveBeenCalledTimes(1);
+            expect(exitMock).toHaveBeenCalledWith(0);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     test('skips a window destroyed mid-save and still reports the write as saved', async () => {
@@ -405,14 +930,17 @@ describe('register (Electron)', () => {
         };
         const open = { isDestroyed: () => false, webContents: { send: jest.fn() } };
         getAllWindowsMock.mockReturnValue([closed, open]);
-        settings.saveSettings = jest.fn().mockReturnValue(true);
-        settings.loadSettings = jest.fn().mockReturnValue({ theme: 'dark' });
+        settings.saveAppSettings = jest.fn().mockReturnValue(true);
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: '' }, app: { theme: 'dark' } });
         const ipcMain = makeIpcMain();
         register(invalid(ipcMain));
 
         await expect(ipcMain.channels.get('save-settings')!(invalid(undefined), { theme: 'dark' })).resolves.toBe(true);
 
         expect(closed.webContents.send).not.toHaveBeenCalled();
-        expect(open.webContents.send).toHaveBeenCalledWith('settings-changed', { theme: 'dark', hasToken: false });
+        expect(open.webContents.send).toHaveBeenCalledWith('settings-changed', {
+            app: { theme: 'dark' },
+            hasToken: false,
+        });
     });
 });

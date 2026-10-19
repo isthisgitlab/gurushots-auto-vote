@@ -19,21 +19,13 @@ import { oneLine as oneLineId } from '../../format/logSafe';
 
 /**
  * Lead seconds before the boost-apply instant during which the pre-boost fill
- * runs. Clamped to the schema's 1..59 minute range; anything outside it (a
- * hand-edited file, an under-mocked caller, a non-number) falls back to the
- * schema default of 15 minutes. The lower bound MUST match
- * soonestBoostPrefillStart's guard in thresholdWindow/leadWindows.ts (>= 60s) so the vote
- * rule and the scheduler's cadence cap can't disagree for the same corrupt input.
+ * runs. voteBeforeBoostLeadMin is validated to the schema's 1..59 minute range,
+ * the same range soonestBoostPrefillStart clamps to in thresholdWindow/leadWindows.ts,
+ * so the vote rule and the scheduler's cadence cap agree.
  * @returns lead in seconds
  */
-const getBoostPrefillLeadSec = (challengeId: string): number => {
-    // Coerced, not read raw: both cadence resolvers hand thresholdWindow/leadWindows.ts a
-    // `Number(...) * 60`, so reading the raw value here would let a hand-edited
-    // string ("20") clamp to the 15m default on this side while the scheduler
-    // capped on 20m. Coercing keeps the two guards genuinely identical.
-    const raw = Number(settings.getEffectiveSetting('voteBeforeBoostLeadMin', challengeId));
-    return Number.isFinite(raw) && raw >= 1 && raw <= 59 ? raw * 60 : 900;
-};
+const getBoostPrefillLeadSec = (challengeId: string): number =>
+    settings.getEffectiveSetting('voteBeforeBoostLeadMin', challengeId) * 60;
 
 /**
  * Pre-boost fill state for a challenge at `now`.
@@ -65,8 +57,8 @@ const getBoostPrefillLeadSec = (challengeId: string): number => {
  * Emergency Fill override in shouldApplyBoost applies an available boost as soon
  * as the challenge is inside the emergency window, ignoring autoBoost and
  * boostTime. boostApplyThreshold does not model that, so a user who raises
- * `emergencyFill` above the effective boost window gets the boost spent BEFORE
- * this fill window opens. Not the default (emergencyFill 300s sits below both
+ * `emergencySubmit` above the effective boost window gets the boost spent BEFORE
+ * this fill window opens. Not the default (emergencySubmit 300s sits below both
  * boost windows), and the cost is a fill that arrives too late rather than a
  * wrong action.
  *

@@ -73,9 +73,9 @@ export const resolveConfigsFailSoft = <T>(
 // Fall back to the id so a missing/empty title never logs as "undefined".
 export const challengeLabel = (challenge: Challenge) => challenge.title || `challenge ${challenge.id}`;
 
-// 60..3540s == 1..59 min; mirrors VotingLogic's lead-minute clamps (rawLeadMin,
-// getBoostPrefillLeadSec) so a corrupt sub-minute/over-max override falls back
-// to the schema default (15 min) identically here.
+// 60..3540s == 1..59 min, the range voteBeforeFinalWindowLeadMin and voteBeforeBoostLeadMin are
+// validated to; a resolver value outside it (missing, NaN, sub-minute, over-max) falls back to
+// the schema default (15 min).
 export const clampLeadSec = (leadSec: number) =>
     Number.isFinite(leadSec) && leadSec >= 60 && leadSec <= 3540 ? leadSec : 900;
 

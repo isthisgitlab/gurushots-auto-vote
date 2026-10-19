@@ -10,13 +10,17 @@
  * module registry, and flushes the async main() before asserting.
  */
 
+// The shape of a stored configuration: app preferences and the sign-in state sit under their containers, and a bare
+// name is read through getSetting (the facade looks it up in either).
 jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(() => ({
-        token: 'super-secret-token',
-        theme: 'dark',
-        apiHeaders: { authorization: 'Bearer abc' },
+        version: 2,
+        app: { theme: 'dark' },
+        auth: { token: 'super-secret-token', apiHeaders: { authorization: 'Bearer abc' } },
     })),
-    SETTINGS_SCHEMA: {},
+    getSetting: jest.fn((key: string) => ({ token: 'super-secret-token', theme: 'dark' })[key as 'token' | 'theme']),
+    SETTINGS_SCHEMA: { exposure: {}, theme: {} },
+    getGlobalDefault: jest.fn((key: string) => ({ exposure: 80 })[key as 'exposure']),
 }));
 
 // Faithful stand-in for the logger's key-based deep redaction (the real
@@ -76,6 +80,7 @@ jest.mock('../../src/ts/cli/commands/settings', () => ({
     resetAllSettings: jest.fn(() => true),
 }));
 
+import type * as settingsCli from '../../scripts/settings-cli';
 import { invalid } from '../helpers/invalid';
 
 import sharedCommandsModule = require('../../src/ts/cli/commands/settings');
@@ -102,7 +107,7 @@ const runScript = async (...argv: string[]) => {
     try {
         scriptHooks.beforeRequire?.({ exitSpy });
         jest.isolateModules(() => {
-            require('../../scripts/settings-cli');
+            void (require('../../scripts/settings-cli') as typeof settingsCli).run();
         });
         await scriptHooks.afterRequire?.();
         // main() is async; flush its promise chain before asserting.
@@ -253,9 +258,38 @@ describe('settings-cli get formatting and lookup', () => {
     });
 
     test('get of a nested path prints the leaf value', async () => {
-        const { output } = await runScript('get', 'apiHeaders.authorization');
+        const { output } = await runScript('get', 'auth.apiHeaders.authorization');
 
-        expect(output).toBe('apiHeaders.authorization: "[REDACTED]"');
+        expect(output).toBe('auth.apiHeaders.authorization: "[REDACTED]"');
+    });
+
+    test('a bare name of an app or sign-in setting is read through the facade', async () => {
+        const { output } = await runScript('get', 'theme');
+
+        expect(output).toBe('theme: "dark"');
+        expect(settings.getSetting).toHaveBeenCalledWith('theme');
+    });
+
+    test('a schema key that is no app setting is read as the global default `set` writes it as', async () => {
+        const { output, exitCalls } = await runScript('get', 'exposure');
+
+        expect(output).toBe('exposure: 80');
+        expect(settings.getGlobalDefault).toHaveBeenCalledWith('exposure');
+        expect(exitCalls).not.toContain(1);
+    });
+
+    test('a schema key that is also an app setting is read as the app setting', async () => {
+        const { output } = await runScript('get', 'theme');
+
+        expect(output).toBe('theme: "dark"');
+        expect(settings.getGlobalDefault).not.toHaveBeenCalled();
+    });
+
+    test('a container of the configuration is read as a path, not through the facade', async () => {
+        const { output } = await runScript('get', 'app');
+
+        expect(output).toContain('theme: "dark"');
+        expect(settings.getSetting).not.toHaveBeenCalled();
     });
 
     test('an unknown key exits 1 with a not-found error', async () => {

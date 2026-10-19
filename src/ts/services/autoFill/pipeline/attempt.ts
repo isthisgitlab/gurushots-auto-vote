@@ -4,11 +4,145 @@
 
 import { finalizePick } from '../../photoPicker';
 import { refreshChallengeState } from '../challengeState';
-import { describeSubmitFailure, logPopularityPick, logSelectionDetails } from '../fillLogging';
-import type { FillAttemptParams, FillAttemptResult } from '../../../types/autoFill';
+import { resolveSemanticScores } from '../candidates';
+import {
+    clearChosenSkip,
+    enteredIds,
+    logChosenSkipOnce,
+    refuseRememberedChosen,
+    resolveChosenPhotos,
+    resolveMissingChosen,
+} from '../chosenPhotos';
+import { describeSubmitFailure, logPopularityPicks, logSelectionDetails } from '../fillLogging';
+import type { FillAttemptParams, FillAttemptResult, FillLabel, RankDeps } from '../../../types/autoFill';
+import type { Challenge } from '../../../types/gurushots';
+import type { ChosenPick, IgnoreWords, LibraryUsage, PickerPhoto, ScoredCandidate } from '../../../types/photoPicker';
 import { errorMessage } from '../../../errorMessage';
 import { loadFillCandidates, scoreFillCandidates } from './scoring';
 import { recordUncertainSubmission, verifyFillPick } from './verify';
+
+// The paths that honour Submit Only Chosen Photos. Emergency fill exists so no
+// slot is left empty at the buzzer and manual fill is explicit user intent, so
+// neither does; both still rank the chosen photos first. The photo suggestions
+// rank the way the scheduled fill picks, so they honour it too, except the swap picker's (`ignoreOnly`): a swap
+// ignores Submit Only by design.
+const ONLY_LABELS: ReadonlySet<string> = new Set(['autoSubmit', 'fillNew', 'suggest']);
+
+/**
+ * The log prefix of a ranking that reads the Chosen Photos settings: a fill path, or the
+ * submit-free photo suggestions (which is not a FillLabel, so runFillAttempt never takes it).
+ */
+type ChosenLabel = FillLabel | 'suggest';
+
+/** What the chosen-photo steps read: no submitter, so the suggestions cannot reach one. */
+type ChosenParams = { label: ChosenLabel; challenge: Challenge; token: string; deps: RankDeps };
+
+/** `ignoreOnly`: the pick ranks the chosen photos first but never enforces Submit Only (the swap picker's Auto). */
+type PlanParams = ChosenParams & { ignoreOnly?: boolean };
+
+/**
+ * What the Chosen Photos settings mean for this attempt: the resolved settings,
+ * whether Submit Only applies on this path, the chosen photos not yet entered,
+ * and the pick options the scorer takes (null when no list is set).
+ */
+const planChosen = async ({ label, challenge, token, deps, ignoreOnly = false }: PlanParams) => {
+    const settings = await resolveChosenPhotos({
+        read: (key) =>
+            key === 'chosenPhotosMemberId'
+                ? deps.settings?.getSetting?.(key)
+                : deps.settings?.getEffectiveSetting(key, String(challenge.id)),
+        token,
+        getCurrentMemberProfile: deps.getCurrentMemberProfile,
+        logger: deps.logger,
+        label,
+    });
+    const enforceOnly = settings.only && ONLY_LABELS.has(label) && !ignoreOnly;
+    const entered = enteredIds(challenge);
+    const chosen: ChosenPick | null =
+        settings.ids.length > 0
+            ? { ids: settings.ids, only: enforceOnly, inOrder: settings.inOrder, excludeIds: entered }
+            : null;
+    return { settings, enforceOnly, unentered: settings.ids.filter((id) => !entered.has(id)), chosen };
+};
+
+/**
+ * The loaded candidates plus any chosen photo the themed search did not return
+ * but the library holds (found by one lookup — never on the emergency path,
+ * which only reuses what an earlier lookup found), scored like the rest.
+ */
+const addMissedChosen = async ({
+    label,
+    challenge,
+    token,
+    deps,
+    wantCount,
+    unentered,
+    inOrder,
+    loaded,
+    usage,
+}: ChosenParams & {
+    wantCount: number;
+    unentered: string[];
+    inOrder: boolean;
+    /** What the chosen-photo lookup reads eligibility for (submit when omitted). */
+    usage?: LibraryUsage;
+    loaded: Extract<Awaited<ReturnType<typeof loadFillCandidates>>, { status: 'loaded' }>;
+}) => {
+    const { eligible, semanticScores, ignoreWords } = loaded;
+    const missed = await resolveMissingChosen({
+        challenge,
+        token,
+        ids: unentered,
+        eligible,
+        wantCount,
+        allowWalk: label !== 'emergencySubmit' && !loaded.walkedUnfiltered,
+        inOrder,
+        deps,
+        label,
+        usage,
+    });
+    if (missed.length === 0) return { eligible, semanticScores };
+    const missedScores = await resolveSemanticScores(challenge, missed, { ...deps, ignoreWords });
+    return {
+        eligible: [...eligible, ...missed],
+        semanticScores: missedScores ? new Map([...(semanticScores ?? []), ...missedScores]) : semanticScores,
+    };
+};
+
+/**
+ * What a submitted fill leaves in the log and in the uncertain-subject record:
+ * why the popularity tiers decided (when they did), the exact ranking inputs of
+ * each submitted photo, and any weak subject evidence.
+ */
+const explainSubmission = ({
+    label,
+    challenge,
+    deps,
+    scored,
+    picked,
+    contested,
+    contestedIds,
+    chosenIds,
+    inOrder,
+    visualEvidence,
+    ignoreWords,
+}: Pick<FillAttemptParams, 'label' | 'challenge' | 'deps'> & {
+    scored: ScoredCandidate[];
+    picked: string[];
+    contested: PickerPhoto[];
+    contestedIds: Set<string>;
+    chosenIds: ReadonlySet<string> | null;
+    inOrder: boolean;
+    visualEvidence: Set<string> | null;
+    ignoreWords: IgnoreWords;
+}) => {
+    const { logger } = deps;
+    if (contested.length > 0) {
+        logPopularityPicks({ label, challenge, scored, chosenIds, inOrder, contestedIds, picked, logger });
+    }
+    logSelectionDetails({ prefix: label, challenge, scored, picked, contestedIds, chosenIds, inOrder, logger });
+    recordUncertainSubmission({ challenge, label, scored, picked, visualEvidence, ignoreWords, chosenIds, deps });
+};
 
 /**
  * The one fill pipeline all four public entry points share:
@@ -20,7 +154,7 @@ import { recordUncertainSubmission, verifyFillPick } from './verify';
  * submitNewEntryForAction all run this exact sequence and differ only in
  * their entry guards, their per-path hooks, and how they map the outcome to
  * their own return shape — so the sequence lives here once, parameterized by
- * `label` (the log prefix: autoFill/emergencyFill/manualFill/fillNew, which
+ * `label` (the log prefix: autoSubmit/emergencySubmit/manualFill/fillNew, which
  * also names the refresh flow) and the hooks below. Every log line the
  * pipeline emits keeps the exact wording the four paths always had.
  *
@@ -38,8 +172,16 @@ import { recordUncertainSubmission, verifyFillPick } from './verify';
  * rest of the voting pass. The helper only returns the submitted `picked`
  * ids; each entry point owns its reflect behavior.
  *
+ * The user's chosen photos (Chosen Photos / Submit Only Chosen Photos) are
+ * resolved here, from `deps.settings`, rather than threaded in by each path:
+ * they rank first (see scoreFillCandidates), a chosen photo the themed fetch
+ * missed is looked up once (see resolveMissingChosen), and with Submit Only on
+ * a challenge with no usable chosen photo ends as `no-chosen` instead of being
+ * topped up. They are NOT resolved in loadFillCandidates, which the swap
+ * ranking shares and which must keep ranking exactly as it did.
+ *
  * Hooks (each used by exactly one path; all optional):
- *   - probeStandDown({ eligible, semanticScores }) → truthy to stand down
+ *   - probeStandDown({ eligible, semanticScores, chosen }) → truthy to stand down
  *     before the real pick (emergency fill's dry-run "would the staggered
  *     path have filled this?" probe — it must not emit fallback warnings,
  *     so the hook runs its own picker call without onFallback).
@@ -60,19 +202,47 @@ const runFillAttempt = async ({
     wantCount,
     mustIncludeTags,
     shouldIncludeTags,
-    fillWithoutTagMatch,
+    submitWithoutTagMatch,
     probeStandDown = null,
     onEmptyPick = null,
     onRefreshed = null,
 }: FillAttemptParams): Promise<FillAttemptResult> => {
     const { logger, submitToChallenge } = deps;
+    const {
+        settings: chosenSettings,
+        enforceOnly,
+        unentered,
+        chosen,
+    } = await planChosen({ label, challenge, token, deps });
+    // Every chosen photo is already an entry here: nothing is left to choose,
+    // so there is nothing to fetch either.
+    if (enforceOnly && unentered.length === 0) {
+        logChosenSkipOnce(logger, challenge, label, 'all-entered');
+        return { status: 'no-chosen' };
+    }
+
     const loaded = await loadFillCandidates({ label, challenge, token, deps, mustIncludeTags, shouldIncludeTags });
     if (loaded.status === 'fetch-error') {
         return loaded;
     }
-    const { eligible, semanticScores, ignoreWords } = loaded;
+    const { ignoreWords } = loaded;
+    const { eligible, semanticScores } = await addMissedChosen({
+        label,
+        challenge,
+        token,
+        deps,
+        wantCount,
+        unentered,
+        inOrder: chosenSettings.inOrder,
+        loaded,
+    });
 
-    if (probeStandDown && probeStandDown({ eligible, semanticScores })) {
+    // The stand-down probe asks what the NORMAL path would do, so it sees the
+    // setting as saved even where this path would not honour Submit Only.
+    if (
+        probeStandDown &&
+        probeStandDown({ eligible, semanticScores, chosen: chosen && { ...chosen, only: chosenSettings.only } })
+    ) {
         return { status: 'probe-stand-down' };
     }
 
@@ -82,7 +252,7 @@ const runFillAttempt = async ({
     // on every scheduler cycle inside the emergency window, usually to stand
     // down. Enriching before it would spend a burst of get_image_data requests
     // per cycle to submit nothing. Do not "fix" this asymmetry.
-    const { scored, contested, contestedIds } = await scoreFillCandidates({
+    const { scored, contested, contestedIds, chosenIds, orderedIds } = await scoreFillCandidates({
         label,
         challenge,
         token,
@@ -93,16 +263,27 @@ const runFillAttempt = async ({
         wantCount,
         mustIncludeTags,
         shouldIncludeTags,
-        fillWithoutTagMatch,
+        submitWithoutTagMatch,
+        chosen,
     });
 
-    let picked = finalizePick(scored, wantCount);
+    // With Submit Only the pool holds nothing but chosen photos, so an empty
+    // pool means none of them can be submitted. That is a deliberate skip, not
+    // an empty library.
+    if (enforceOnly && scored.length === 0) {
+        logChosenSkipOnce(logger, challenge, label, 'none-usable');
+        return { status: 'no-chosen' };
+    }
+    clearChosenSkip(challenge);
+
+    const inOrder = chosenSettings.inOrder;
+    let picked = finalizePick(scored, wantCount, chosenIds, inOrder ? orderedIds : null);
     if (picked.length === 0) {
         if (onEmptyPick) {
             return { status: 'no-pick', detail: onEmptyPick(eligible) };
         }
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .info(`${label}: no eligible photos for ${logger.challengeTag(challenge)}`, null);
         return { status: 'no-pick', detail: null };
     }
@@ -126,7 +307,7 @@ const runFillAttempt = async ({
         }
     }
 
-    const verified = await verifyFillPick(challenge, scored, eligible, picked, ignoreWords, deps);
+    const verified = await verifyFillPick(challenge, scored, eligible, picked, ignoreWords, deps, chosenIds, inOrder);
     picked = verified.picked;
 
     try {
@@ -137,29 +318,33 @@ const runFillAttempt = async ({
             // that then stood down on the live re-check or was rejected — an
             // entry they would go looking for and never find. `picked` is also
             // final only here: onRefreshed can replace it.
-            if (contested.length > 0) {
-                logPopularityPick(label, challenge, scored, contestedIds, picked, logger);
-            }
-            logSelectionDetails({ prefix: label, challenge, scored, picked, contestedIds, logger });
-            recordUncertainSubmission({
-                challenge,
+            explainSubmission({
                 label,
+                challenge,
+                deps,
                 scored,
                 picked,
+                contested,
+                contestedIds,
+                chosenIds,
+                inOrder,
                 visualEvidence: verified.visualEvidence,
                 ignoreWords,
-                deps,
             });
             return { status: 'submitted', picked };
         }
+        // Any body that came back with a submit that was not ok is the server's answer: the remembered
+        // photos in this pick are held back for a short while (it does not say which one it refused).
+        // Only no body at all (null raw) or a throw is "no answer", and teaches nothing.
+        if (result?.raw) refuseRememberedChosen(challenge, picked, Date.now());
         const reason = describeSubmitFailure(result && result.raw);
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .warning(`${label}: submit rejected for ${logger.challengeTag(challenge)}: ${reason}`, null);
         return { status: 'submit-rejected', reason };
     } catch (error) {
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .warning(
                 `${label}: submit threw for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`,
                 null,
@@ -168,4 +353,4 @@ const runFillAttempt = async ({
     }
 };
 
-export { runFillAttempt };
+export { runFillAttempt, planChosen, addMissedChosen };

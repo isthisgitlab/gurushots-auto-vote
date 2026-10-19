@@ -16,9 +16,16 @@
  *     that should tick the final minute. Callers own any "Ended" guard.
  *       2d3h→"2d 3h 5m", 1h→"1h 0m", 90→"1m 30s", 30→"30s"
  *
+ * Latvian ("lv") reads "m" as metres, so its minutes are written "min": 3700→"1h 1min".
+ *
  * @param seconds - Duration in seconds (not an absolute timestamp).
+ * @param options.locale - the UI language; only the minute unit depends on it
  */
-const formatDuration = (seconds: number, { includeSeconds = false }: { includeSeconds?: boolean } = {}): string => {
+const formatDuration = (
+    seconds: number,
+    { includeSeconds = false, locale = 'en' }: { includeSeconds?: boolean; locale?: string } = {},
+): string => {
+    const m = locale === 'lv' ? 'min' : 'm';
     const total = Math.max(0, Math.floor(seconds || 0));
     const days = Math.floor(total / 86400);
     const hours = Math.floor((total % 86400) / 3600);
@@ -26,16 +33,16 @@ const formatDuration = (seconds: number, { includeSeconds = false }: { includeSe
     const secs = total % 60;
 
     if (includeSeconds) {
-        if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-        if (hours > 0) return `${hours}h ${minutes}m`;
-        if (minutes > 0) return `${minutes}m ${secs}s`;
+        if (days > 0) return `${days}d ${hours}h ${minutes}${m}`;
+        if (hours > 0) return `${hours}h ${minutes}${m}`;
+        if (minutes > 0) return `${minutes}${m} ${secs}s`;
         return `${secs}s`;
     }
 
-    if (total < 60) return '<1m';
+    if (total < 60) return `<1${m}`;
     if (days > 0) return `${days}d ${hours}h`;
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${minutes}m`;
+    if (hours > 0) return `${hours}h ${minutes}${m}`;
+    return `${minutes}${m}`;
 };
 
 export { formatDuration };

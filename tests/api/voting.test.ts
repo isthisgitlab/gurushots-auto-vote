@@ -102,6 +102,18 @@ describe('voting', () => {
             expect(result).toEqual(mockResponse);
         });
 
+        test('percent-encodes the challenge url so a crafted value cannot add form fields', async () => {
+            makePostRequest.mockResolvedValueOnce({ images: [] });
+
+            await getVoteImages(invalid({ id: '1', title: 'T', url: 'a&b=c d' }), 'test-token');
+
+            expect(makePostRequest).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.anything(),
+                'limit=100&url=a%26b%3Dc%20d',
+            );
+        });
+
         test('should return null when no images', async () => {
             const mockChallenge = { title: 'Test Challenge', url: 'test-url' };
             const mockToken = 'test-token';
@@ -141,6 +153,23 @@ describe('voting', () => {
                 expect.stringContaining('c_id=123'),
             );
             expect(result).toEqual(mockResponse);
+        });
+
+        test('percent-encodes the challenge id in the vote body', async () => {
+            makePostRequest.mockResolvedValueOnce({ success: true });
+
+            await submitVotes(
+                {
+                    challenge: { id: '1&c_id=2', title: 'T' },
+                    voting: { exposure: { exposure_factor: 50 } },
+                    images: [{ id: 'img1', ratio: 25 }],
+                },
+                'test-token',
+            );
+
+            const body = String(makePostRequest.mock.calls[0][2]);
+            expect(body).toMatch(/^c_id=1%26c_id%3D2&/);
+            expect(body.match(/c_id=/g)).toHaveLength(1);
         });
 
         test('should not POST an image-less vote when exposure already meets the target', async () => {

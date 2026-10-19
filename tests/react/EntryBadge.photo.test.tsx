@@ -10,10 +10,9 @@
  *     existed before this feature, with no broken image in it.
  */
 
-import { fireEvent, render, screen } from './helpers/test-utils';
+import { act, fireEvent, render, screen } from './helpers/test-utils';
 import { EntryBadge } from '@/components/app/EntryBadge';
 import type { RankingEntry } from '../../src/ts/types/gurushots';
-import { invalid } from '../helpers/invalid';
 
 const mockBoostState = { applyBoost: jest.fn(), loading: false, error: null, clearError: jest.fn() };
 const mockTurboState = { applyTurbo: jest.fn(), loading: false, error: null, clearError: jest.fn() };
@@ -38,6 +37,7 @@ const photoEntry = (overrides = {}) => ({
 const renderBadge = (entry: RankingEntry) =>
     render(
         <EntryBadge
+            timezone="local"
             entry={entry}
             challengeId={777}
             boostAvailable={false}
@@ -45,6 +45,7 @@ const renderBadge = (entry: RankingEntry) =>
             onBoostApplied={() => {}}
             onTurboApplied={() => {}}
             onSwapped={() => {}}
+            onChooseSwap={() => {}}
         />,
     );
 
@@ -73,27 +74,14 @@ describe('EntryBadge — entry thumbnail', () => {
 
     // A well-formed URL can still 404 (deleted photo, missing rendition) or
     // fail offline. That must hide the chip, not leave a broken-image glyph.
-    test('a failed image load hides the chip entirely', async () => {
-        const RealImage = window.Image;
-        // Stand-in that reports failure as soon as a src is assigned.
-        window.Image = invalid(
-            class {
-                declare onerror?: () => void;
-                set src(_value: string) {
-                    queueMicrotask(() => this.onerror?.());
-                }
-            },
-        );
-        try {
-            renderBadge(photoEntry());
-            // Let the probe's microtask and the resulting re-render settle.
-            await new Promise((resolve) => setTimeout(resolve, 0));
-            expect(document.querySelector('img')).toBeNull();
-            // The rest of the badge survives.
-            expect(screen.getByText(/42/)).toBeTruthy();
-        } finally {
-            window.Image = RealImage;
-        }
+    test('a failed image load hides the chip entirely', () => {
+        renderBadge(photoEntry());
+        act(() => {
+            document.querySelector('img')!.dispatchEvent(new Event('error'));
+        });
+        expect(document.querySelector('img')).toBeNull();
+        // The rest of the badge survives.
+        expect(screen.getByText(/42/)).toBeTruthy();
     });
 
     test('hovering asks the CDN for a larger, uncropped render of the same photo', () => {

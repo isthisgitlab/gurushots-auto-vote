@@ -4,7 +4,7 @@
  * Callers import this facade; the ranking lives in ./photoPicker/*.
  */
 
-import { stem, tokenise, matches, tokeniseTagList } from './photoPicker/stemming';
+import { stem, stripTags, tokenise, matches, tokeniseTagList } from './photoPicker/stemming';
 import { abstractTitleWords, detectLetterPrefix, parseNegation, readChallengeTheme } from './photoPicker/title';
 import {
     buildChallengeKeywords,
@@ -19,20 +19,26 @@ import {
     SEMANTIC_SUPPORT_CAP,
     hasThemeMatch,
     selectEnrichmentSet,
+    selectBlockEnrichmentSet,
+    splitByChosen,
     finalizePick,
 } from './photoPicker/tiers';
-import { pickPhotosForChallenge, buildScoredCandidates } from './photoPicker/candidates';
+import { pickPhotosForChallenge, buildScoredCandidates, buildChosenCandidates } from './photoPicker/candidates';
 
 export {
     pickPhotosForChallenge,
     buildScoredCandidates,
+    buildChosenCandidates,
     selectEnrichmentSet,
+    selectBlockEnrichmentSet,
+    splitByChosen,
     finalizePick,
     hasThemeMatch,
     buildSearchTerms,
     detectLetterPrefix,
     parseNegation,
     readChallengeTheme,
+    stripTags,
     labelWordStems,
     labelStemGroups,
     SEMANTIC_MATCH_FLOOR,

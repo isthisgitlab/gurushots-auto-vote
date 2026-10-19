@@ -20,9 +20,21 @@ jest.mock('../../src/ts/windows/quitGuard', () => ({ rememberChallenges: jest.fn
 
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
-import { claimTurboRun, releaseTurboRun } from '../../src/ts/services/turboRunLock';
+import {
+    __resetSnapUnavailableForTests,
+    claimTurboRun,
+    markSnapUnavailable,
+    releaseTurboRun,
+} from '../../src/ts/services/turboRunLock';
 import { registerMissionNeeds } from '../../src/ts/services/missions';
+import { clearOpenChallenges } from '../../src/ts/services/openChallengeCache';
+import { isPlainObject } from '../../src/ts/plainObject';
+import type { TurboGameResult } from '../../src/ts/types/gurushots';
+import type { JoinSingleResult } from '../../src/ts/services/joinChallenges/shared';
+import type { ForgetOutcome } from '../../src/ts/services/joinChallenges/forgetPayment';
 
+import loggerModule = require('../../src/ts/logger');
+const logger = jest.mocked(loggerModule);
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import apiFactoryModule = require('../../src/ts/apiFactory');
@@ -36,6 +48,9 @@ const autoFill = jest.mocked(autoFillModule);
 import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
 import type * as logCategoriesModule from '../helpers/logCategories';
 import type * as actions_handlersModule from '../../src/ts/ipc/actions.handlers';
+import type * as accountScopeModule from '../../src/ts/services/accountScope';
+import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
+import type * as discoverChallengesModule from '../../src/ts/services/discoverChallenges';
 import type * as autoClaimModule from '../../src/ts/services/autoClaim';
 const { rememberChallenges } = jest.mocked(require('../../src/ts/windows/quitGuard') as typeof quitGuardModule);
 const { logCategories } = require('../helpers/logCategories') as typeof logCategoriesModule;
@@ -49,7 +64,7 @@ const { extractAuthResult: realExtractAuthResult } =
 const NOW = () => Math.floor(Date.now() / 1000);
 
 const setToken = (token: string | null) => {
-    settings.loadSettings = jest.fn().mockReturnValue({ token });
+    settings.loadSettings = jest.fn().mockReturnValue({ auth: { token }, app: { mock: false } });
 };
 
 const stubStrategy = <O extends object = {}>(overrides: O = invalid<O>({})) => {
@@ -59,7 +74,8 @@ const stubStrategy = <O extends object = {}>(overrides: O = invalid<O>({})) => {
         applyBoostToEntry: jest.fn(),
         getEligiblePhotos: jest.fn(),
         submitToChallenge: jest.fn(),
-        runTurboMiniGame: jest.fn(),
+        runTurboGame: jest.fn(),
+        getCurrentMemberProfile: jest.fn(),
         ...overrides,
     };
     apiFactory.getApiStrategy = jest.fn().mockReturnValue(strategy);
@@ -76,19 +92,54 @@ const stubAuthGuardFail = () => {
         .mockReturnValue({ ok: false, response: { success: false, error: 'No authentication token found' } });
 };
 
+// What the Chosen Photos settings resolve to, as the join resolves them: the challenge's own
+// list first, then a matching rule, then the global default; plus who saved it and who is signed in.
+const mockChosenSettings = ({
+    own = {},
+    inherited = [],
+    rule = null,
+    savedBy = '',
+    current = 'member-1',
+}: {
+    own?: Record<string, string[]>;
+    inherited?: string[];
+    rule?: { value: string[] } | null;
+    savedBy?: string;
+    current?: string | null;
+}) => {
+    jest.mocked(settings.getChallengeOverride).mockImplementation(
+        invalid((key: string, id: string) => (key === 'chosenPhotos' ? (own[id] ?? null) : null)),
+    );
+    jest.mocked(settings.resolveRuleSetting).mockReturnValue(invalid(rule));
+    jest.mocked(settings.getEffectiveSetting).mockReturnValue(invalid(inherited));
+    jest.mocked(settings.getSetting).mockReturnValue(invalid(savedBy));
+    jest.mocked(autoFill.peekMemberId).mockReturnValue(current);
+};
+
 // Note on module-scoped state: turboRunLock keeps its set at module scope.
 // The handler's try/finally always clears its slot, so as
 // long as every test awaits the calls it makes, the Set stays empty between
 // tests — no jest.resetModules() needed (and it would defeat module-top
 // jest.mock() bindings anyway by giving the handler fresh mock instances).
 const { buildHandlers } = require('../../src/ts/ipc/actions.handlers') as typeof actions_handlersModule;
+const { clearUpcomingCache } = require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
+const { bumpAccountGeneration } = require('../../src/ts/services/accountScope') as typeof accountScopeModule;
+const { writeListing, readFresh, clearLibraryCache } =
+    require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
 
 type Handlers = ReturnType<typeof buildHandlers>;
 // A zero-parameter handler invoked the way ipcMain does, with the event first.
 type WithEvent<F> = F extends (...args: infer A) => infer R ? (event: object, ...args: A) => R : never;
 
+// The Discover handler takes no argument from the renderer, and is invoked with the event first.
+const listChallenges = () =>
+    invalid<WithEvent<Handlers['get-member-challenges']>>(buildHandlers()['get-member-challenges'])({});
+
 beforeEach(() => {
     jest.clearAllMocks();
+    // The upcoming list is cached for a minute per account; every test starts without it.
+    clearUpcomingCache();
+    clearLibraryCache();
 });
 
 describe('get-active-challenges', () => {
@@ -102,7 +153,14 @@ describe('get-active-challenges', () => {
         expect(strategy.getActiveChallenges).toHaveBeenCalledWith('tok');
         expect(result).toEqual({ challenges: [{ id: 1 }] });
         // Feeds the quit-while-boost-window-open confirmation.
-        expect(rememberChallenges).toHaveBeenCalledWith([{ id: 1 }]);
+        expect(rememberChallenges).toHaveBeenCalledWith([{ id: 1 }], false);
+    });
+
+    test('records the mock setting the list was fetched under', async () => {
+        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 'tok' }, app: { mock: true } });
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 1 }] }) });
+        await buildHandlers()['get-active-challenges']();
+        expect(rememberChallenges).toHaveBeenCalledWith([{ id: 1 }], true);
     });
 
     test('a failed fetch keeps the quit guard on its previous list', async () => {
@@ -118,7 +176,7 @@ describe('get-active-challenges', () => {
         stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue(undefined) });
         const handlers = buildHandlers();
         await expect(handlers['get-active-challenges']()).resolves.toBeUndefined();
-        expect(rememberChallenges).toHaveBeenCalledWith(undefined);
+        expect(rememberChallenges).toHaveBeenCalledWith(undefined, false);
     });
 
     test('never throws to the renderer — returns the fetchFailed list shape on error', async () => {
@@ -160,6 +218,7 @@ describe('authenticate', () => {
 
     beforeEach(() => {
         auth.extractAuthResult = invalid(realExtractAuthResult);
+        auth.switchAccountToken.mockReset();
         settings.setSetting = jest.fn();
         mockSurface = { authenticate: jest.fn() };
         realSurface = { authenticate: jest.fn() };
@@ -177,7 +236,8 @@ describe('authenticate', () => {
         expect(realSurface.authenticate).not.toHaveBeenCalled();
         expect(result).toEqual({ success: true });
         expect(result).not.toHaveProperty('token');
-        expect(settings.setSetting).toHaveBeenCalledWith('token', 'mock-token-xyz');
+        // Stored through the account switch, so a login on top of another session drops the old one's memory.
+        expect(auth.switchAccountToken).toHaveBeenCalledWith('mock-token-xyz');
     });
 
     test('real path selects the real surface and persists the token', async () => {
@@ -194,7 +254,7 @@ describe('authenticate', () => {
         expect(realSurface.authenticate).toHaveBeenCalledWith('user@example.com', 'pw');
         expect(result).toEqual({ success: true });
         expect(result).not.toHaveProperty('token');
-        expect(settings.setSetting).toHaveBeenCalledWith('token', 'real-token');
+        expect(auth.switchAccountToken).toHaveBeenCalledWith('real-token');
     });
 
     test('real path accepts a token under access_token (the _login parity fix)', async () => {
@@ -202,7 +262,7 @@ describe('authenticate', () => {
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'u', 'p', false);
         expect(result).toEqual({ success: true });
-        expect(settings.setSetting).toHaveBeenCalledWith('token', 'alt-token');
+        expect(auth.switchAccountToken).toHaveBeenCalledWith('alt-token');
     });
 
     test('returns failure when API returns null', async () => {
@@ -254,7 +314,7 @@ describe('play-auto-turbo', () => {
                         id: 123,
                         title: 'C',
                         close_time: now + 3600,
-                        member: { turbo: { state: 'WON' } },
+                        member: { turbo: { state: 'WON', mode: 'classic' } },
                     },
                 ],
             }),
@@ -279,20 +339,27 @@ describe('play-auto-turbo', () => {
                         id: 123,
                         title: 'C',
                         close_time: now + 3600,
-                        member: { turbo: { state: 'FREE' } },
+                        member: { turbo: { state: 'FREE', mode: 'classic' } },
                     },
                 ],
             }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
-        strategy.runTurboMiniGame.mockResolvedValue({ played: 5, correct: 5, won: true, flipped: 0, doubleFailed: 0 });
+        strategy.runTurboGame.mockResolvedValue({
+            kind: 'classic',
+            played: 5,
+            correct: 5,
+            won: true,
+            flipped: 0,
+            doubleFailed: 0,
+        });
         const handlers = buildHandlers();
-        const needs = { join: 0, fill: 0, turbo: 1, vote: 0 };
+        const needs = { join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 };
         const unregister = registerMissionNeeds('tok', needs);
         try {
             const result = await handlers['play-auto-turbo']({}, '123', 'C');
             expect(result.success).toBe(true);
-            expect(strategy.runTurboMiniGame).toHaveBeenCalled();
+            expect(strategy.runTurboGame).toHaveBeenCalled();
             expect(needs.turbo).toBe(0);
         } finally {
             unregister?.();
@@ -308,7 +375,7 @@ describe('play-auto-turbo', () => {
                 .mockResolvedValue({ challenges: [{ id: 123, title: 'C', close_time: now + 3600 }] }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-        strategy.runTurboMiniGame.mockResolvedValue({ played: 0, correct: 0, won: false });
+        strategy.runTurboGame.mockResolvedValue({ kind: 'classic', played: 0, correct: 0, won: false });
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result).toMatchObject({ success: false, error: 'No battles to play right now' });
@@ -323,14 +390,21 @@ describe('play-auto-turbo', () => {
                 .mockResolvedValue({ challenges: [{ id: 123, title: 'C', close_time: now + 3600 }] }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-        strategy.runTurboMiniGame.mockResolvedValue({ played: 5, correct: 0, won: false, flipped: 5, doubleFailed: 1 });
+        strategy.runTurboGame.mockResolvedValue({
+            kind: 'classic',
+            played: 5,
+            correct: 0,
+            won: false,
+            flipped: 5,
+            doubleFailed: 1,
+        });
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result.success).toBe(false);
         expect(result.error).toMatch(/not earned/i);
         // Whitelist check: only the documented fields are forwarded.
         expect(Object.keys((result as Extract<typeof result, { result: unknown }>).result || {}).sort()).toEqual(
-            ['correct', 'doubleFailed', 'flipped', 'played', 'won'].sort(),
+            ['correct', 'doubleFailed', 'flipped', 'kind', 'played', 'won'].sort(),
         );
     });
 
@@ -344,7 +418,7 @@ describe('play-auto-turbo', () => {
         });
         const strategy = stubStrategy({ getActiveChallenges: jest.fn().mockReturnValue(firstHang) });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-        strategy.runTurboMiniGame.mockResolvedValue({ played: 5, correct: 5, won: true });
+        strategy.runTurboGame.mockResolvedValue({ kind: 'classic', played: 5, correct: 5, won: true });
         const handlers = buildHandlers();
 
         const firstPromise = handlers['play-auto-turbo']({}, '123', 'C');
@@ -463,8 +537,20 @@ describe('id-taking action handlers — invalid args', () => {
         [
             'fill-challenge-now',
             'fill-challenge-now',
-            'autoFill',
+            'autoSubmit',
             (h: Handlers, id: unknown) => h['fill-challenge-now']({}, invalid<string>(id), 'one'),
+        ],
+        [
+            'submit-picked-photos',
+            'submit-picked-photos',
+            'autoSubmit',
+            (h: Handlers, id: unknown) => h['submit-picked-photos']({}, invalid<string>(id), ['abc']),
+        ],
+        [
+            'suggest-photos',
+            'suggest-photos',
+            'autoSubmit',
+            (h: Handlers, id: unknown) => h['suggest-photos']({}, invalid<string>(id)),
         ],
         [
             'apply-boost-to-entry',
@@ -502,12 +588,14 @@ describe('id-taking action handlers — invalid args', () => {
                 for (const fn of [
                     strategy.applyTurbo,
                     strategy.applyBoostToEntry,
-                    strategy.runTurboMiniGame,
+                    strategy.runTurboGame,
                     strategy.joinChallenge,
                 ]) {
                     expect(fn).not.toHaveBeenCalled();
                 }
                 expect(autoFill.fillChallengeNow).not.toHaveBeenCalled();
+                expect(autoFill.submitPickedPhotos).not.toHaveBeenCalled();
+                expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
             },
         );
     });
@@ -517,7 +605,7 @@ describe('id-taking action handlers — invalid args', () => {
             id,
             title: 'C',
             close_time: NOW() + 3600,
-            member: { turbo: { state: 'FREE' } },
+            member: { turbo: { state: 'FREE', mode: 'classic' } },
         });
 
         test('play-auto-turbo plays the mini-game', async () => {
@@ -526,7 +614,7 @@ describe('id-taking action handlers — invalid args', () => {
                 getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge()] }),
             });
             votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-            strategy.runTurboMiniGame.mockResolvedValue({
+            strategy.runTurboGame.mockResolvedValue({
                 played: 1,
                 correct: 1,
                 won: false,
@@ -534,7 +622,7 @@ describe('id-taking action handlers — invalid args', () => {
                 doubleFailed: 0,
             });
             await buildHandlers()['play-auto-turbo']({}, id, 'Title');
-            expect(strategy.runTurboMiniGame).toHaveBeenCalledTimes(1);
+            expect(strategy.runTurboGame).toHaveBeenCalledTimes(1);
         });
 
         test('fill-challenge-now fills the challenge', async () => {
@@ -585,7 +673,7 @@ describe('fill-challenge-now', () => {
         expect(result).toEqual({ success: false, error: 'Challenge no longer active' });
     });
 
-    test('passes normalised mode (anything other than "all" → "one") to autoFill', async () => {
+    test('passes normalised mode (anything other than "all" → "one") to autoSubmit', async () => {
         stubAuthGuardOk();
         const liveChallenge = { id: 123, title: 'C' };
         stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }) });
@@ -626,6 +714,354 @@ describe('fill-challenge-now', () => {
         // an empty stub instead of the real module would break tag-rule
         // resolution and silently degrade.
         expect(depsArg.settings).toBe(settings);
+    });
+});
+
+describe('submit-picked-photos', () => {
+    const liveChallenge = { id: 123, title: 'C' };
+    // The module is auto-mocked (typed by jest.mocked): start each use from a bare mock.
+    const stubSubmitPicked = () => autoFill.submitPickedPhotos.mockReset();
+
+    test.each([
+        ['a non-array', 'abc'],
+        ['an empty list', []],
+        ['more than the chosen-photos cap', Array.from({ length: 21 }, (_, i) => `p${i}`)],
+        ['duplicates', ['a', 'a']],
+        ['a non-string element', ['a', 7]],
+        // eslint-disable-next-line no-sparse-arrays -- the hole is the case
+        ['a sparse array', ['a', , 'c']],
+        ['an id failing the id pattern', ['ok', 'not ok!']],
+    ])('refuses %s with the invalid-args code, before touching auth or the API', async (_label, imageIds) => {
+        stubAuthGuardOk();
+        stubStrategy();
+        const result = await buildHandlers()['submit-picked-photos']({}, '123', invalid<string[]>(imageIds));
+        expect(result).toEqual({ success: false, error: 'invalid-args' });
+        expect(logCategories('warning', 'Refused submit-picked-photos: invalid id argument', null)).toEqual([
+            'autoSubmit',
+        ]);
+        expect(auth.requireAuthToken).not.toHaveBeenCalled();
+        expect(apiFactory.getApiStrategy).not.toHaveBeenCalled();
+        expect(autoFill.submitPickedPhotos).not.toHaveBeenCalled();
+    });
+
+    test('rejects when auth guard fails', async () => {
+        stubAuthGuardFail();
+        const result = await buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+        expect(result).toEqual({ success: false, error: 'No authentication token found' });
+    });
+
+    test('rejects when the challenge is no longer active', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 999 }] }) });
+        const result = await buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+        expect(result).toEqual({ success: false, error: 'Challenge no longer active' });
+        expect(autoFill.submitPickedPhotos).not.toHaveBeenCalled();
+    });
+
+    test('submits the ids to the live challenge through the strategy and returns the service result', async () => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
+        });
+        stubSubmitPicked().mockResolvedValue({ success: true, submitted: 2 });
+        const result = await buildHandlers()['submit-picked-photos']({}, '123', ['a', 'b']);
+        expect(result).toEqual({ success: true, submitted: 2 });
+        expect(autoFill.submitPickedPhotos).toHaveBeenCalledWith(liveChallenge, 'tok', ['a', 'b'], {
+            logger: expect.any(Object),
+            submitToChallenge: strategy.submitToChallenge,
+        });
+        expect(autoFill.submitPickedPhotos.mock.calls[0][3].logger.withCategory).toBe(logger.withCategory);
+    });
+
+    test('logs the challenge and the number of photos, never the ids', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }) });
+        stubSubmitPicked().mockResolvedValue({ success: true, submitted: 1 });
+        await buildHandlers()['submit-picked-photos']({}, '123', ['secretphoto']);
+        const logged = logger.withCategory.mock.results.flatMap((result) =>
+            Object.values(result.value as Record<string, jest.Mock<unknown, unknown[]>>).flatMap(
+                (fn): unknown[][] => fn.mock.calls,
+            ),
+        );
+        expect(JSON.stringify(logged)).not.toContain('secretphoto');
+        expect(logCategories('info', '📝 Manual pick request: Challenge=123, Photos=1', null)).toEqual(['autoSubmit']);
+    });
+
+    test.each([
+        ['its message', new Error('network down'), 'network down'],
+        ['the generic fallback', new Error(''), 'Failed to submit photos'],
+    ])('answers %s instead of throwing, and logs the error under autoSubmit', async (_label, err, expected) => {
+        stubAuthGuardOk();
+        stubStrategy({ getActiveChallenges: jest.fn().mockRejectedValue(err) });
+        await expect(buildHandlers()['submit-picked-photos']({}, '123', ['a'])).resolves.toEqual({
+            success: false,
+            error: expected,
+        });
+        expect(logCategories('error', 'Error handling submit-picked-photos request:', err)).toEqual(['autoSubmit']);
+    });
+
+    describe('a second submit for the same challenge', () => {
+        const stubLive = () =>
+            stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }) });
+
+        test('is turned away as submit-busy while the first runs, without sending, and goes through after it ends', async () => {
+            stubAuthGuardOk();
+            stubLive();
+            let finish: (value: { success: true; submitted: number }) => void = () => undefined;
+            const submitPicked = stubSubmitPicked().mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+            const handlers = buildHandlers();
+            const first = handlers['submit-picked-photos']({}, '123', ['a']);
+            // The numeric and string forms of an id are the same challenge.
+            await expect(handlers['submit-picked-photos']({}, 123, ['b'])).resolves.toEqual({
+                success: false,
+                error: 'submit-busy',
+            });
+            await expect(handlers['submit-picked-photos']({}, '123', ['a'])).resolves.toEqual({
+                success: false,
+                error: 'submit-busy',
+            });
+            // Each refusal says so in the log, naming the challenge and never the photos.
+            expect(
+                logCategories(
+                    'info',
+                    '📝 Manual pick request refused: a submit for Challenge=123 is already running',
+                    null,
+                ),
+            ).toEqual(['autoSubmit', 'autoSubmit']);
+            finish({ success: true, submitted: 1 });
+            await expect(first).resolves.toEqual({ success: true, submitted: 1 });
+            expect(submitPicked).toHaveBeenCalledTimes(1);
+
+            submitPicked.mockResolvedValue({ success: true, submitted: 1 });
+            await expect(handlers['submit-picked-photos']({}, '123', ['a'])).resolves.toEqual({
+                success: true,
+                submitted: 1,
+            });
+            expect(submitPicked).toHaveBeenCalledTimes(2);
+        });
+
+        test.each([
+            [
+                'the auth guard fails',
+                () => {
+                    stubAuthGuardFail();
+                    stubStrategy();
+                },
+            ],
+            [
+                'the challenge is no longer active',
+                () => {
+                    stubAuthGuardOk();
+                    stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 999 }] }) });
+                },
+            ],
+        ])('is not refused as busy after a submit that returned early because %s', async (_label, stubEarlyReturn) => {
+            const handlers = buildHandlers();
+            stubEarlyReturn();
+            const first = await handlers['submit-picked-photos']({}, '123', ['a']);
+            expect(first.success).toBe(false);
+            expect(first).not.toEqual({ success: false, error: 'submit-busy' });
+            const second = await handlers['submit-picked-photos']({}, '123', ['a']);
+            expect(second).toEqual(first);
+            expect(autoFill.submitPickedPhotos).not.toHaveBeenCalled();
+        });
+
+        test('does not hold another challenge, and a submit that throws releases its own', async () => {
+            stubAuthGuardOk();
+            stubLive();
+            let finish: (value: { success: true; submitted: number }) => void = () => undefined;
+            const submitPicked = stubSubmitPicked().mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+            const handlers = buildHandlers();
+            const first = handlers['submit-picked-photos']({}, '123', ['a']);
+            await expect(handlers['submit-picked-photos']({}, '124', ['a'])).resolves.toEqual({
+                success: false,
+                error: 'Challenge no longer active',
+            });
+            finish({ success: true, submitted: 1 });
+            await first;
+            stubAuthGuardOk();
+            stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 125 }] }) });
+            submitPicked.mockRejectedValueOnce(new Error('boom'));
+            await expect(handlers['submit-picked-photos']({}, '125', ['a'])).resolves.toEqual({
+                success: false,
+                error: 'boom',
+            });
+            submitPicked.mockResolvedValueOnce({ success: true, submitted: 1 });
+            await expect(handlers['submit-picked-photos']({}, '125', ['a'])).resolves.toEqual({
+                success: true,
+                submitted: 1,
+            });
+        });
+    });
+});
+
+describe('suggest-photos', () => {
+    const liveChallenge = { id: 123, title: 'C' };
+    const photo = (id: string, extra: object = {}) => ({
+        id,
+        labels: ['Pink'],
+        permission: { allowed: true },
+        ...extra,
+    });
+    const suggested = (ids: string[] = ['a1', 'b2'], statsLimited = false) => ({
+        status: 'suggested' as const,
+        photos: ids.map((id) => photo(id)),
+        statsLimited,
+    });
+    const mapped = (id: string) => ({
+        id,
+        labels: ['Pink'],
+        allowed: true,
+        message: null,
+        uploadDate: null,
+    });
+    const stubLive = (challenges: object[] = [liveChallenge]) =>
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges }) });
+    const suggest = (id: string | number = '123') => buildHandlers()['suggest-photos']({}, id);
+
+    beforeEach(() => {
+        autoFill.suggestFillPhotos.mockReset().mockResolvedValue(suggested());
+        autoFill.resolveMemberId.mockReset().mockResolvedValue('member-9');
+        stubAuthGuardOk();
+        stubLive();
+    });
+
+    test('rejects when the auth guard fails, without ranking', async () => {
+        stubAuthGuardFail();
+        await expect(suggest()).resolves.toEqual({ success: false, error: 'No authentication token found' });
+        expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+    });
+
+    test('answers challenge-ended when the live challenge is gone or could not be read', async () => {
+        stubLive([{ id: 999 }]);
+        await expect(suggest()).resolves.toEqual({ success: false, error: 'challenge-ended' });
+        expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+    });
+
+    test('ranks the live challenge with settings and the strategy, no submitter, and answers the mapped photos with the member id', async () => {
+        const strategy = stubLive();
+        const result = await suggest();
+        expect(result).toEqual({
+            success: true,
+            memberId: 'member-9',
+            photos: [mapped('a1'), mapped('b2')],
+            statsLimited: false,
+        });
+        expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(1);
+        const [challenge, token, deps] = autoFill.suggestFillPhotos.mock.calls[0];
+        expect(challenge).toBe(liveChallenge);
+        expect(token).toBe('tok');
+        expect(deps.settings).toBe(settings);
+        expect(deps.getEligiblePhotos).toBe(strategy.getEligiblePhotos);
+        expect(deps).not.toHaveProperty('submitToChallenge');
+        expect(autoFill.resolveMemberId).toHaveBeenCalledWith(
+            'tok',
+            strategy.getCurrentMemberProfile,
+            expect.anything(),
+            'suggest',
+        );
+    });
+
+    test.each([['submit' as const], ['swap' as const], [undefined]])(
+        'forwards the usage %s to the ranking, which reads submit eligibility when it is not given',
+        async (usage) => {
+            await buildHandlers()['suggest-photos']({}, '123', usage);
+            const [, , , count, opts] = autoFill.suggestFillPhotos.mock.calls[0];
+            expect(count).toBeUndefined();
+            expect(opts).toEqual({ usage });
+        },
+    );
+
+    test.each([['everyone'], [null], [7], [{}]])('refuses the usage %j before looking up the token', async (usage) => {
+        const handlers = buildHandlers();
+        await expect(handlers['suggest-photos']({}, '123', invalid<'swap'>(usage))).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+        expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+    });
+
+    test('reports statsLimited', async () => {
+        autoFill.suggestFillPhotos.mockResolvedValue(suggested(['a1'], true));
+        await expect(suggest()).resolves.toMatchObject({ success: true, statsLimited: true });
+    });
+
+    test('offers only photos whose id is a safe token, best first', async () => {
+        autoFill.suggestFillPhotos.mockResolvedValue(suggested(['b2', 'not ok!', 'a1']));
+        const result = await suggest();
+        expect(result).toMatchObject({ success: true, photos: [mapped('b2'), mapped('a1')] });
+    });
+
+    test('answers no-eligible when no suggested photo has a safe id', async () => {
+        autoFill.suggestFillPhotos.mockResolvedValue(suggested(['not ok!']));
+        await expect(suggest()).resolves.toEqual({ success: false, error: 'no-eligible' });
+        expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        [{ status: 'fetch-error' as const, error: new Error('secret network text') }, 'fetch-failed'],
+        [{ status: 'no-chosen-entered' as const }, 'no-chosen-entered'],
+        [{ status: 'no-chosen-unusable' as const }, 'no-chosen-unusable'],
+        [{ status: 'no-match' as const }, 'no-match'],
+        [{ status: 'no-eligible' as const }, 'no-eligible'],
+    ])('maps the service answer %j to the code %s', async (answer, code) => {
+        autoFill.suggestFillPhotos.mockResolvedValue(answer);
+        await expect(suggest()).resolves.toEqual({ success: false, error: code });
+    });
+
+    test('a failed ranking leaves nothing behind: the next call ranks again', async () => {
+        autoFill.suggestFillPhotos.mockResolvedValueOnce({ status: 'no-match' });
+        await suggest();
+        await expect(suggest()).resolves.toMatchObject({ success: true });
+        expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
+    });
+
+    test('answers suggest-busy while a ranking runs (for any challenge), and again after it ends', async () => {
+        let finish: (value: ReturnType<typeof suggested>) => void = () => undefined;
+        autoFill.suggestFillPhotos.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+        const first = suggest('123');
+        await expect(suggest('124')).resolves.toEqual({ success: false, error: 'suggest-busy' });
+        expect(logCategories('info', '📝 Photo suggestions refused: a ranking is already running', null)).toEqual([
+            'autoSubmit',
+        ]);
+        finish(suggested());
+        await expect(first).resolves.toMatchObject({ success: true });
+        expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(1);
+        // The flag was released: this one reaches the live-challenge read, which no longer has 124.
+        await expect(suggest('124')).resolves.toEqual({ success: false, error: 'challenge-ended' });
+    });
+
+    test('a ranking that throws answers suggest-failed with no raw text, logs it, and releases the flag', async () => {
+        const err = new Error('secret token abc');
+        autoFill.suggestFillPhotos.mockRejectedValueOnce(err);
+        const result = await suggest();
+        expect(result).toEqual({ success: false, error: 'suggest-failed' });
+        expect(JSON.stringify(result)).not.toContain('secret');
+        expect(logCategories('error', 'Error handling suggest-photos request:', err)).toEqual(['autoSubmit']);
+        await expect(suggest()).resolves.toMatchObject({ success: true });
+    });
+
+    test('logs the challenge, never a photo id', async () => {
+        await suggest();
+        const logged = logger.withCategory.mock.results.flatMap((result) =>
+            Object.values(result.value as Record<string, jest.Mock<unknown, unknown[]>>).flatMap(
+                (fn): unknown[][] => fn.mock.calls,
+            ),
+        );
+        expect(JSON.stringify(logged)).not.toContain('a1');
+        expect(logCategories('info', '📝 Photo suggestions request: Challenge=123', null)).toEqual(['autoSubmit']);
+    });
+
+    describe('when the account changes meanwhile', () => {
+        test('answers account-changed for a ranking that began under the old account, and ranks again next time', async () => {
+            autoFill.suggestFillPhotos.mockImplementationOnce(async () => {
+                bumpAccountGeneration();
+                return suggested();
+            });
+            await expect(suggest()).resolves.toEqual({ success: false, error: 'account-changed' });
+            await expect(suggest()).resolves.toMatchObject({ success: true });
+            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
+        });
     });
 });
 
@@ -683,13 +1119,401 @@ describe('get-bankroll', () => {
 });
 
 describe('get-member-challenges', () => {
-    test('defaults the filter to "open" and returns items', async () => {
+    test('asks for the open list and the upcoming one itself, and returns the open items', async () => {
         stubAuthGuardOk();
         const strategy = stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue([{ id: 1 }]) });
-        const handlers = buildHandlers();
-        const result = await handlers['get-member-challenges']({});
+        const result = await listChallenges();
         expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'open');
-        expect(result).toEqual({ success: true, items: [{ id: 1 }] });
+        expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'upcoming');
+        expect(result).toEqual({
+            success: true,
+            items: [{ id: 1, chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 }],
+        });
+    });
+
+    describe('each open challenge says what is chosen for it', () => {
+        const open = async () => {
+            stubAuthGuardOk();
+            stubStrategy({
+                getMemberChallenges: jest.fn().mockResolvedValue([{ id: 7, title: 'Pink' }, {}, { id: 8 }]),
+            });
+            const result = await listChallenges();
+            return result.success ? result.items : [];
+        };
+
+        beforeEach(() => {
+            clearOpenChallenges();
+            mockChosenSettings({});
+            // As the real lookup does when it cannot tell: no member, never undefined.
+            jest.mocked(autoFill.resolveMemberId).mockReset().mockResolvedValue(null);
+        });
+
+        test('its own list, and the count that applies when it is the one in force', async () => {
+            mockChosenSettings({ own: { '7': ['a', 'b'] } });
+            const items = await open();
+            expect(items[0]).toEqual({
+                id: 7,
+                title: 'Pink',
+                chosenOwn: ['a', 'b'],
+                chosenOwnCount: 2,
+                chosenEffectiveCount: 2,
+            });
+            // No list of its own and none inherited.
+            expect(items[2]).toEqual({ id: 8, chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 });
+        });
+
+        test('a list inherited from a rule or the global default counts, with nothing of its own', async () => {
+            mockChosenSettings({ inherited: ['g1', 'g2', 'g3'] });
+            expect((await open())[0]).toEqual(
+                expect.objectContaining({ chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 3 }),
+            );
+            mockChosenSettings({ rule: { value: ['r1'] } });
+            expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: [], chosenEffectiveCount: 1 }));
+        });
+
+        test('an item with no id is passed through with nothing chosen', async () => {
+            mockChosenSettings({ inherited: ['g1'] });
+            expect((await open())[1]).toEqual({ chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 });
+        });
+
+        test('a list saved under another account is counted but its ids are never sent, and nothing applies', async () => {
+            mockChosenSettings({ own: { '7': ['secret-a', 'secret-b'] }, inherited: ['g1'], savedBy: 'member-0' });
+            const [row] = await open();
+            expect(row).toEqual(expect.objectContaining({ chosenOwn: [], chosenOwnCount: 2, chosenEffectiveCount: 0 }));
+            expect(JSON.stringify(await open())).not.toContain('secret');
+        });
+
+        test('the same account, or no owner on record, gets its ids', async () => {
+            mockChosenSettings({ own: { '7': ['secret-a'] }, savedBy: 'member-1' });
+            expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: ['secret-a'] }));
+            mockChosenSettings({ own: { '7': ['secret-a'] }, savedBy: '' });
+            expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: ['secret-a'] }));
+        });
+
+        test('with an owner on record and the signed-in member not known yet, the ids are withheld but the list still applies', async () => {
+            mockChosenSettings({ own: { '7': ['secret-a', 'secret-b'] }, savedBy: 'member-0', current: null });
+            const [row] = await open();
+            expect(row).toEqual(expect.objectContaining({ chosenOwn: [], chosenOwnCount: 2, chosenEffectiveCount: 2 }));
+            expect(JSON.stringify(row)).not.toContain('secret');
+        });
+
+        describe('on a fresh launch the signed-in member is resolved before the ids are withheld', () => {
+            afterEach(() => {
+                jest.mocked(autoFill.resolveMemberId).mockReset();
+                jest.mocked(autoFill.peekMemberId).mockReset();
+            });
+
+            test('a member a lookup already resolved costs no lookup of its own', async () => {
+                mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0', current: 'member-0' });
+                const [row] = await open();
+                expect(row).toEqual(expect.objectContaining({ chosenOwn: ['a', 'b'] }));
+                expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
+            });
+
+            // peekMemberId knows nobody until the lookup has run, as in a fresh process; the lookup then answers.
+            const unknownUntilResolved = (resolvesTo: string | null) => {
+                jest.mocked(autoFill.peekMemberId).mockReturnValue(null);
+                jest.mocked(autoFill.resolveMemberId).mockResolvedValue(resolvesTo);
+            };
+
+            test('the owner is the signed-in member: its own ids are sent', async () => {
+                mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0' });
+                unknownUntilResolved('member-0');
+                const [row] = await open();
+                expect(row).toEqual(expect.objectContaining({ chosenOwn: ['a', 'b'], chosenOwnCount: 2 }));
+                expect(autoFill.resolveMemberId).toHaveBeenCalledTimes(1);
+                expect(autoFill.resolveMemberId).toHaveBeenCalledWith(
+                    'tok',
+                    // The strategy's own lookup, as the fill path hands it over.
+                    expect.any(Function),
+                    expect.anything(),
+                    'join',
+                );
+            });
+
+            test('another account: the ids stay withheld and nothing applies', async () => {
+                mockChosenSettings({ own: { '7': ['secret-a'] }, savedBy: 'member-0' });
+                unknownUntilResolved('member-9');
+                const [row] = await open();
+                expect(row).toEqual(
+                    expect.objectContaining({ chosenOwn: [], chosenOwnCount: 1, chosenEffectiveCount: 0 }),
+                );
+                expect(JSON.stringify(row)).not.toContain('secret');
+            });
+
+            test('a lookup that fails keeps withholding, and the list still applies', async () => {
+                mockChosenSettings({ own: { '7': ['secret-a'] }, savedBy: 'member-0' });
+                unknownUntilResolved(null);
+                const [row] = await open();
+                expect(row).toEqual(
+                    expect.objectContaining({ chosenOwn: [], chosenOwnCount: 1, chosenEffectiveCount: 1 }),
+                );
+            });
+        });
+
+        test('the owner and the signed-in member are looked up once per request, not once per challenge', async () => {
+            mockChosenSettings({ own: { '7': ['a'], '8': ['b'] } });
+            await open();
+            expect(settings.getSetting).toHaveBeenCalledTimes(1);
+            expect(autoFill.peekMemberId).toHaveBeenCalledTimes(1);
+        });
+    });
+});
+
+describe('get-open-chosen-annotations — read from the settings, with one cached identity lookup', () => {
+    const ask = (ids: unknown) =>
+        invalid<(event: unknown, ids: unknown) => Promise<unknown>>(buildHandlers()['get-open-chosen-annotations'])(
+            {},
+            ids,
+        );
+
+    beforeEach(() => {
+        clearOpenChallenges();
+        jest.mocked(settings.loadSettings).mockReturnValue(invalid({ auth: { token: 'tok' } }));
+        mockChosenSettings({ own: { '7': ['a', 'b'] }, inherited: ['g'] });
+        jest.mocked(autoFill.resolveMemberId).mockReset().mockResolvedValue(null);
+    });
+
+    describe("the signed-in member is resolved when no lookup has, so a fresh launch does not withhold the user's own list", () => {
+        afterEach(() => {
+            jest.mocked(autoFill.resolveMemberId).mockReset();
+            jest.mocked(autoFill.peekMemberId).mockReset();
+        });
+
+        test('a member a lookup already resolved costs no lookup of its own', async () => {
+            stubStrategy();
+            mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0', current: 'member-0' });
+            await expect(ask([7])).resolves.toEqual({
+                success: true,
+                annotations: { '7': { chosenOwn: ['a', 'b'], chosenOwnCount: 2, chosenEffectiveCount: 2 } },
+            });
+            expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
+        });
+
+        const unknownUntilResolved = (resolvesTo: string | null) => {
+            jest.mocked(autoFill.peekMemberId).mockReturnValue(null);
+            jest.mocked(autoFill.resolveMemberId).mockResolvedValue(resolvesTo);
+        };
+
+        test('the member resolves to the owner: the ids are sent', async () => {
+            stubStrategy();
+            mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0' });
+            unknownUntilResolved('member-0');
+            await expect(ask([7])).resolves.toEqual({
+                success: true,
+                annotations: { '7': { chosenOwn: ['a', 'b'], chosenOwnCount: 2, chosenEffectiveCount: 2 } },
+            });
+            expect(autoFill.resolveMemberId).toHaveBeenCalledTimes(1);
+        });
+
+        test('the member resolves to another account: the ids stay withheld', async () => {
+            stubStrategy();
+            mockChosenSettings({ own: { '7': ['secret-a'] }, savedBy: 'member-0' });
+            unknownUntilResolved('member-9');
+            const result = await ask([7]);
+            expect(result).toEqual({
+                success: true,
+                annotations: { '7': { chosenOwn: [], chosenOwnCount: 1, chosenEffectiveCount: 0 } },
+            });
+            expect(JSON.stringify(result)).not.toContain('secret');
+        });
+
+        test('a failed lookup keeps withholding; with no token there is no lookup at all', async () => {
+            stubStrategy();
+            mockChosenSettings({ own: { '7': ['secret-a'] }, savedBy: 'member-0' });
+            unknownUntilResolved(null);
+            expect(JSON.stringify(await ask([7]))).not.toContain('secret');
+            jest.mocked(autoFill.resolveMemberId).mockClear();
+            jest.mocked(settings.loadSettings).mockReturnValue(invalid({ auth: { token: '' } }));
+            await ask([7]);
+            expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
+        });
+    });
+
+    test('answers from the settings, without fetching the challenge list or touching an entry', async () => {
+        const strategy = stubStrategy();
+        await expect(ask([7, '8'])).resolves.toEqual({
+            success: true,
+            annotations: {
+                '7': { chosenOwn: ['a', 'b'], chosenOwnCount: 2, chosenEffectiveCount: 2 },
+                '8': { chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 1 },
+            },
+        });
+        expect(auth.requireAuthToken).not.toHaveBeenCalled();
+        // None of the strategy's endpoints was reached.
+        expect(strategy.getActiveChallenges).not.toHaveBeenCalled();
+        expect(strategy.getEligiblePhotos).not.toHaveBeenCalled();
+        expect(strategy.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a rule keyed on the title resolves through the open list the last fetch returned', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue([{ id: 9, title: 'Rule Match' }]) });
+        await listChallenges();
+        mockChosenSettings({ rule: { value: ['r1'] } });
+        await ask([9]);
+        expect(settings.resolveRuleSetting).toHaveBeenCalledWith(
+            'chosenPhotos',
+            expect.objectContaining({ id: 9, title: 'Rule Match' }),
+        );
+    });
+
+    test('logging out forgets the remembered open list: the same id resolves as a bare id again', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue([{ id: 9, title: 'Rule Match' }]) });
+        await listChallenges();
+        clearOpenChallenges();
+        await ask([9]);
+        expect(settings.resolveRuleSetting).toHaveBeenLastCalledWith('chosenPhotos', { id: 9 });
+    });
+
+    test("under another account's list the ids are never sent", async () => {
+        mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0' });
+        const result = await ask([7]);
+        expect(result).toEqual({
+            success: true,
+            annotations: { '7': { chosenOwn: [], chosenOwnCount: 2, chosenEffectiveCount: 0 } },
+        });
+        expect(JSON.stringify(result)).not.toContain('"a"');
+    });
+
+    test('with an owner on record and the member not known yet, the ids are withheld but the list applies', async () => {
+        mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0', current: null });
+        await expect(ask([7])).resolves.toEqual({
+            success: true,
+            annotations: { '7': { chosenOwn: [], chosenOwnCount: 2, chosenEffectiveCount: 2 } },
+        });
+    });
+
+    test.each([
+        ['not an array', '7'],
+        ['an item that is not an id', [7, {}]],
+        ['a blank id', ['  ']],
+        ['one id too many (301)', Array.from({ length: 301 }, (_, i) => i + 1)],
+    ])('refuses %s', async (_name, ids) => {
+        await expect(ask(ids)).resolves.toEqual({ success: false, error: 'invalid-args' });
+    });
+
+    // Up to 300: the open list and the 100 upcoming rows Discover shows.
+    test.each([[200], [250], [300]])('%p ids are answered, and 300 is the most', async (count) => {
+        const ids = Array.from({ length: count }, (_, i) => i + 1);
+        const result = await ask(ids);
+        if (!isPlainObject(result) || result.success !== true || !isPlainObject(result.annotations)) {
+            throw new Error('expected a successful answer');
+        }
+        expect(Object.keys(result.annotations)).toHaveLength(count);
+    });
+
+    test('an empty list is fine', async () => {
+        await expect(ask([])).resolves.toEqual({ success: true, annotations: {} });
+    });
+
+    test('a failing settings read is an error result, never a throw', async () => {
+        jest.mocked(settings.loadSettings).mockImplementation(() => {
+            throw new Error('read failed');
+        });
+        await expect(ask([7])).resolves.toEqual({ success: false, error: 'read failed', annotations: {} });
+        jest.mocked(settings.loadSettings).mockImplementation(() => {
+            throw new Error('');
+        });
+        await expect(ask([7])).resolves.toEqual({
+            success: false,
+            error: 'Failed to read the chosen photos',
+            annotations: {},
+        });
+    });
+});
+
+describe('forget-unconfirmed-payment', () => {
+    test('forgets through the strategy and answers success', async () => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({
+            forgetUnconfirmedPayment: jest
+                .fn<Promise<ForgetOutcome>, [string | number, string]>()
+                .mockResolvedValue({ status: 'forgotten', challengeId: 5 }),
+        });
+        const result = await buildHandlers()['forget-unconfirmed-payment']({}, 5);
+        expect(strategy.forgetUnconfirmedPayment).toHaveBeenCalledWith(5, 'tok');
+        expect(result).toEqual({ success: true, status: 'forgotten' });
+    });
+
+    test.each([
+        'nothing-to-forget',
+        'legacy-record',
+        'busy',
+        'account-unknown',
+        'unreadable',
+        'locks-unavailable',
+        'not-authenticated',
+    ] as const)('a %s answer is a failure that names it, and never throws', async (status) => {
+        stubAuthGuardOk();
+        stubStrategy({
+            forgetUnconfirmedPayment: jest
+                .fn<Promise<ForgetOutcome>, [string | number, string]>()
+                .mockResolvedValue({ status, challengeId: 5 }),
+        });
+        expect(await buildHandlers()['forget-unconfirmed-payment']({}, 5)).toEqual({
+            success: false,
+            error: status,
+            status,
+        });
+    });
+
+    // A claim is keyed `<member id>:<challenge id>`: an id with a colon in it could name another account's record.
+    test.each([['555:123'], ['abc'], ['1.5'], ['-1'], [' 5'], ['5\n'], ['0x10'], [1.5], [-1]])(
+        'the id %p is not a plain challenge id: refused, and nothing is forgotten',
+        async (id) => {
+            stubAuthGuardOk();
+            const strategy = stubStrategy({ forgetUnconfirmedPayment: jest.fn() });
+            expect(await buildHandlers()['forget-unconfirmed-payment']({}, invalid(id))).toMatchObject({
+                success: false,
+                error: 'invalid-args',
+            });
+            expect(strategy.forgetUnconfirmedPayment).not.toHaveBeenCalled();
+        },
+    );
+
+    test.each([['123'], [123]])('a plain id (%p) goes through', async (id) => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({
+            forgetUnconfirmedPayment: jest
+                .fn<Promise<ForgetOutcome>, [string | number, string]>()
+                .mockResolvedValue({ status: 'forgotten', challengeId: id }),
+        });
+        expect(await buildHandlers()['forget-unconfirmed-payment']({}, id)).toEqual({
+            success: true,
+            status: 'forgotten',
+        });
+        expect(strategy.forgetUnconfirmedPayment).toHaveBeenCalledWith(id, 'tok');
+    });
+
+    test.each([[undefined], [null], [{}], [''], [[]]])(
+        'an invalid id %p is refused, and nothing is forgotten',
+        async (id) => {
+            stubAuthGuardOk();
+            const strategy = stubStrategy({ forgetUnconfirmedPayment: jest.fn() });
+            const result = await buildHandlers()['forget-unconfirmed-payment']({}, invalid(id));
+            expect(result).toMatchObject({ success: false, error: 'invalid-args' });
+            expect(strategy.forgetUnconfirmedPayment).not.toHaveBeenCalled();
+        },
+    );
+
+    test('without a login it forgets nothing', async () => {
+        stubAuthGuardFail();
+        const strategy = stubStrategy({ forgetUnconfirmedPayment: jest.fn() });
+        // The status is what the dialog words as "log in again": the guard's reply alone would read as "try again".
+        expect(await buildHandlers()['forget-unconfirmed-payment']({}, 5)).toEqual({
+            success: false,
+            error: 'No authentication token found',
+            status: 'not-authenticated',
+        });
+        expect(strategy.forgetUnconfirmedPayment).not.toHaveBeenCalled();
+    });
+
+    test('a strategy that throws becomes a {success,error} reply', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ forgetUnconfirmedPayment: jest.fn().mockRejectedValue(new Error('boom')) });
+        expect(await buildHandlers()['forget-unconfirmed-payment']({}, 5)).toMatchObject({ success: false });
     });
 });
 
@@ -703,6 +1527,108 @@ describe('join-challenge', () => {
         const result = await handlers['join-challenge']({}, 5, true);
         expect(strategy.joinChallenge).toHaveBeenCalledWith(5, true, 'tok');
         expect(result).toMatchObject({ success: true, status: 'joined', cost: 100 });
+    });
+
+    test('the balance the join recorded before a payment travels with the answer as it is', async () => {
+        stubAuthGuardOk();
+        stubStrategy({
+            joinChallenge: jest
+                .fn<Promise<JoinSingleResult>, [string | number, boolean, string, number?]>()
+                .mockResolvedValueOnce({
+                    status: 'charged-pending-submit',
+                    challengeId: 5,
+                    cost: 100,
+                    reason: 'unconfirmed',
+                    coinsBefore: 500,
+                })
+                .mockResolvedValueOnce({ status: 'joined', challengeId: 5, cost: 100 }),
+        });
+        expect(await buildHandlers()['join-challenge']({}, 5, true)).toMatchObject({
+            reason: 'unconfirmed',
+            coinsBefore: 500,
+        });
+        // Which answers carry one is decided where the join is made (performJoin), not here.
+        expect(await buildHandlers()['join-challenge']({}, 5, true)).toMatchObject({ coinsBefore: undefined });
+    });
+
+    test('an upcoming challenge is not joined: not-started is a failure that carries its status', async () => {
+        stubAuthGuardOk();
+        stubStrategy({
+            joinChallenge: jest.fn().mockResolvedValue({ status: 'not-started', cost: 0, challengeId: 5 }),
+        });
+        const result = await buildHandlers()['join-challenge']({}, 5, true);
+        expect(result).toMatchObject({ success: false, status: 'not-started', challengeId: 5 });
+    });
+
+    test('the cost the confirmation named is passed on, and only when there is one', async () => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({ joinChallenge: jest.fn().mockResolvedValue({ status: 'joined' }) });
+        await buildHandlers()['join-challenge']({}, 5, true, 100);
+        expect(strategy.joinChallenge).toHaveBeenLastCalledWith(5, true, 'tok', 100);
+        await buildHandlers()['join-challenge']({}, 5, true, 0);
+        expect(strategy.joinChallenge).toHaveBeenLastCalledWith(5, true, 'tok', 0);
+        await buildHandlers()['join-challenge']({}, 5, true);
+        expect(strategy.joinChallenge).toHaveBeenLastCalledWith(5, true, 'tok');
+    });
+
+    test.each([
+        ['-1', -1],
+        ['NaN', Number.NaN],
+        ['Infinity', Number.POSITIVE_INFINITY],
+        ['a string', '5'],
+        ['null', null],
+        ['an object', {}],
+    ])('a cost that is %s is refused, and joins nothing', async (_name, expectedCost) => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({ joinChallenge: jest.fn() });
+        await expect(buildHandlers()['join-challenge']({}, 5, true, invalid(expectedCost))).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+        expect(strategy.joinChallenge).not.toHaveBeenCalled();
+    });
+
+    test('the reason a paid retry could not finish travels with the answer, and is absent otherwise', async () => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({
+            joinChallenge: jest
+                .fn<Promise<JoinSingleResult>, [string | number, boolean, string, number?]>()
+                .mockResolvedValueOnce({
+                    status: 'charged-pending-submit',
+                    challengeId: 5,
+                    cost: 100,
+                    reason: 'no-photo',
+                })
+                .mockResolvedValueOnce({ status: 'charged-pending-submit', challengeId: 5, cost: 100 }),
+        });
+        const withReason = await buildHandlers()['join-challenge']({}, 5, false);
+        const without = await buildHandlers()['join-challenge']({}, 5, false);
+        expect(withReason).toMatchObject({ success: false, status: 'charged-pending-submit', reason: 'no-photo' });
+        expect(without).toMatchObject({ status: 'charged-pending-submit', reason: undefined });
+        expect(strategy.joinChallenge).toHaveBeenCalledTimes(2);
+    });
+
+    test('the log names the cap that is enforced, a number or "none"', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ joinChallenge: jest.fn().mockResolvedValue({ status: 'joined' }) });
+        await buildHandlers()['join-challenge']({}, 5, true, 100);
+        await buildHandlers()['join-challenge']({}, 5, true, 0);
+        await buildHandlers()['join-challenge']({}, 5, false);
+        const line = (cap: string) =>
+            `▶️ Join request: Challenge=5, spendCoins=${cap === 'none' ? 'false' : 'true'}, expectedCost=${cap}`;
+        expect(logCategories('info', line('100'), null)).toEqual(['join']);
+        expect(logCategories('info', line('0'), null)).toEqual(['join']);
+        expect(logCategories('info', line('none'), null)).toEqual(['join']);
+    });
+
+    test('a price that rose answers needs-confirm with the live cost', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ joinChallenge: jest.fn().mockResolvedValue({ status: 'needs-confirm', cost: 150 }) });
+        expect(await buildHandlers()['join-challenge']({}, 5, true, 100)).toMatchObject({
+            success: false,
+            status: 'needs-confirm',
+            cost: 150,
+        });
     });
 
     test('a paid challenge without spendCoins does not report success (needs-confirm)', async () => {
@@ -799,11 +1725,23 @@ describe('authenticate — error fallback', () => {
 });
 
 describe('play-auto-turbo — manual bypass and result shaping', () => {
+    beforeEach(() => __resetSnapUnavailableForTests());
+
+    const snapResult = (overrides: Partial<Extract<TurboGameResult, { kind: 'snap' }>> = {}) => ({
+        kind: 'snap' as const,
+        answered: 10,
+        total: 10,
+        meanAgreement: 72,
+        won: true,
+        stopReason: 'completed' as const,
+        ...overrides,
+    });
+
     const liveTurboChallenge = (overrides = {}) => ({
         id: 123,
         title: 'Live Title',
         close_time: NOW() + 3600,
-        member: { turbo: { state: 'FREE' } },
+        member: { turbo: { state: 'FREE', mode: 'classic' } },
         ...overrides,
     });
 
@@ -811,16 +1749,27 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
         setToken('tok');
         const strategy = stubStrategy({
             getActiveChallenges: jest.fn().mockResolvedValue({
-                challenges: [liveTurboChallenge({ member: { turbo: { state: 'TIMER', time_to_open: NOW() - 10 } } })],
+                challenges: [
+                    liveTurboChallenge({
+                        member: { turbo: { state: 'TIMER', mode: 'classic', time_to_open: NOW() - 10 } },
+                    }),
+                ],
             }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
-        strategy.runTurboMiniGame.mockResolvedValue({ played: 3, correct: 3, won: true, flipped: 0, doubleFailed: 0 });
+        strategy.runTurboGame.mockResolvedValue({
+            kind: 'classic',
+            played: 3,
+            correct: 3,
+            won: true,
+            flipped: 0,
+            doubleFailed: 0,
+        });
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result).toEqual({
             success: true,
-            result: { played: 3, correct: 3, won: true, flipped: 0, doubleFailed: 0 },
+            result: { kind: 'classic', played: 3, correct: 3, won: true, flipped: 0, doubleFailed: 0 },
         });
     });
 
@@ -828,20 +1777,169 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
         setToken('tok');
         const strategy = stubStrategy({
             getActiveChallenges: jest.fn().mockResolvedValue({
-                challenges: [liveTurboChallenge({ member: { turbo: { state: 'TIMER', time_to_open: NOW() + 600 } } })],
+                challenges: [
+                    liveTurboChallenge({
+                        member: { turbo: { state: 'TIMER', mode: 'classic', time_to_open: NOW() + 600 } },
+                    }),
+                ],
             }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result).toEqual({ success: false, error: 'Turbo not playable (state=TIMER)' });
-        expect(strategy.runTurboMiniGame).not.toHaveBeenCalled();
+        expect(strategy.runTurboGame).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['FREE', 'FREE'],
+        ['IN_PROGRESS', 'IN_PROGRESS'],
+        ['TIMER', 'TIMER'],
+    ])('plays a Snap-mode %s turbo through the manual bypass', async (state) => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [
+                    liveTurboChallenge({ member: { turbo: { state, mode: 'snap', time_to_open: NOW() - 10 } } }),
+                ],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        strategy.runTurboGame.mockResolvedValue(snapResult());
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toEqual({ success: true, result: snapResult() });
+        expect(strategy.runTurboGame).toHaveBeenCalledTimes(1);
+    });
+
+    test('a Snap turbo that is not playable is refused with its state', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { mode: 'snap' } } })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toEqual({ success: false, error: 'Turbo not playable (state=unknown)' });
+        expect(strategy.runTurboGame).not.toHaveBeenCalled();
+    });
+
+    test('a manual run ignores the unavailable marker, so the user can retry a Snap', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { state: 'FREE', mode: 'snap' } } })],
+            }),
+        });
+        markSnapUnavailable(123);
+        // The real decision (autoTurbo off in the stubbed settings) declines; the manual path still plays.
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        strategy.runTurboGame.mockResolvedValue(snapResult());
+        const handlers = buildHandlers();
+        await expect(handlers['play-auto-turbo']({}, '123', 'C')).resolves.toMatchObject({ success: true });
+        expect(strategy.runTurboGame).toHaveBeenCalledTimes(1);
+    });
+
+    test('a manual run passes no cancellation, so a stopped autovote does not stop it', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { state: 'FREE', mode: 'snap' } } })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
+        strategy.runTurboGame.mockResolvedValue(snapResult());
+        await buildHandlers()['play-auto-turbo']({}, '123', 'C');
+        expect(strategy.runTurboGame.mock.calls[0]).toHaveLength(2);
+    });
+
+    test.each([
+        [
+            'no-model',
+            'Snap needs the vision model, which this build does not include; turn on snapYesWithoutModel to play it',
+        ],
+        ['withdrawn', 'Snap is no longer offered for this challenge'],
+        ['unavailable', 'Snap is no longer offered for this challenge'],
+        ['unparsed-caption', 'Snap question could not be answered'],
+        ['judge-failed', 'Snap question could not be answered'],
+        ['request-failed', 'Snap was interrupted; try again later'],
+        ['vote-unclear', 'Snap was interrupted; try again later'],
+        ['cancelled', 'Snap was interrupted; try again later'],
+    ] as const)('a Snap game that stopped on %s answers with a fixed error', async (stopReason, error) => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { state: 'FREE', mode: 'snap' } } })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
+        const stopped = snapResult({ answered: 4, meanAgreement: 61, won: false, stopReason });
+        strategy.runTurboGame.mockResolvedValue(stopped);
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toEqual({ success: false, error, result: stopped });
+    });
+
+    test('a Snap result is whitelisted field by field', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { state: 'FREE', mode: 'snap' } } })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
+        strategy.runTurboGame.mockResolvedValue({ ...snapResult(), secret: 'leak' } as ReturnType<typeof snapResult>);
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(Object.keys((result as Extract<typeof result, { result: unknown }>).result || {}).sort()).toEqual(
+            ['answered', 'kind', 'meanAgreement', 'stopReason', 'total', 'won'].sort(),
+        );
+    });
+
+    test('a classic-mode FREE turbo still plays through the manual bypass', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { state: 'FREE', mode: 'classic' } } })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        strategy.runTurboGame.mockResolvedValue({
+            kind: 'classic',
+            played: 3,
+            correct: 3,
+            won: true,
+            flipped: 0,
+            doubleFailed: 0,
+        });
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toMatchObject({ success: true });
+        expect(strategy.runTurboGame).toHaveBeenCalledTimes(1);
+    });
+
+    test('refuses a turbo with no mode without playing it', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { state: 'FREE' } } })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toEqual({ success: false, error: 'Turbo mode unknown; try again later' });
+        expect(strategy.runTurboGame).not.toHaveBeenCalled();
     });
 
     test('reports state=unknown when the challenge has no turbo state', async () => {
         setToken('tok');
         stubStrategy({
-            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveTurboChallenge({ member: {} })] }),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { mode: 'classic' } } })],
+            }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
         const handlers = buildHandlers();
@@ -868,17 +1966,17 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
             getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveTurboChallenge({ title: '' })] }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-        strategy.runTurboMiniGame.mockResolvedValue({ played: 1, correct: 1 });
+        strategy.runTurboGame.mockResolvedValue({ kind: 'classic', played: 1, correct: 1 });
         const handlers = buildHandlers();
 
         await handlers['play-auto-turbo']({}, '123', 'Caller Title');
-        expect(strategy.runTurboMiniGame).toHaveBeenLastCalledWith(
+        expect(strategy.runTurboGame).toHaveBeenLastCalledWith(
             expect.objectContaining({ id: 123, title: 'Caller Title' }),
             'tok',
         );
 
         await handlers['play-auto-turbo']({}, '123', invalid(undefined));
-        expect(strategy.runTurboMiniGame).toHaveBeenLastCalledWith(
+        expect(strategy.runTurboGame).toHaveBeenLastCalledWith(
             expect.objectContaining({ id: 123, title: 'challenge 123' }),
             'tok',
         );
@@ -890,7 +1988,7 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
             getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveTurboChallenge()] }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-        strategy.runTurboMiniGame.mockResolvedValue(null);
+        strategy.runTurboGame.mockResolvedValue(null);
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result).toEqual({ success: false, error: 'Turbo not earned — try again later', result: null });
@@ -1013,18 +2111,51 @@ describe('get-bankroll — errors', () => {
 describe('get-member-challenges — filter, shape and errors', () => {
     test('returns the auth guard response when not authenticated', async () => {
         stubAuthGuardFail();
-        await expect(buildHandlers()['get-member-challenges']({})).resolves.toEqual({
+        await expect(listChallenges()).resolves.toEqual({
             success: false,
             error: 'No authentication token found',
         });
     });
 
-    test('passes an explicit filter through and coerces a non-array result to []', async () => {
+    test('remembers the open list for the settings cleanup — readable ids only, and only when the fetch succeeded', async () => {
         stubAuthGuardOk();
+        stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue([{ id: 1 }, { id: '2' }, {}, null]) });
+        await listChallenges();
+        expect(settings.rememberOpenChallengeIds).toHaveBeenLastCalledWith([1, '2']);
+        settings.rememberOpenChallengeIds.mockClear();
+        settings.rememberUpcomingChallenges.mockClear();
+        stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue(null) });
+        await listChallenges();
+        expect(settings.rememberOpenChallengeIds).not.toHaveBeenCalled();
+        expect(settings.rememberUpcomingChallenges).not.toHaveBeenCalled();
+    });
+
+    test('a failed open list is a failure, not an empty list, and nothing is remembered', async () => {
+        stubAuthGuardOk();
+        clearOpenChallenges();
         const strategy = stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue(null) });
-        const result = await buildHandlers()['get-member-challenges']({}, 'all');
-        expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'all');
-        expect(result).toEqual({ success: true, items: [] });
+        expect(await listChallenges()).toEqual({ success: false, error: 'Could not list challenges', items: [] });
+        // Both lists were asked for, and neither is kept: not the ids, not the challenges.
+        expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'open');
+        expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'upcoming');
+        expect(settings.rememberOpenChallengeIds).not.toHaveBeenCalled();
+        expect(settings.rememberUpcomingChallenges).not.toHaveBeenCalled();
+        mockChosenSettings({ rule: { value: ['r1'] } });
+        setToken('tok');
+        await invalid<(event: object, ids: unknown) => Promise<unknown>>(
+            buildHandlers()['get-open-chosen-annotations'],
+        )({}, [1]);
+        expect(settings.resolveRuleSetting).toHaveBeenLastCalledWith('chosenPhotos', { id: 1 });
+    });
+
+    test('a failed open list is a failure even when the upcoming list came', async () => {
+        stubAuthGuardOk();
+        stubStrategy({
+            getMemberChallenges: jest.fn(async (_token: string, filter: string) =>
+                filter === 'upcoming' ? [{ id: 2, start_time: 9_999_999_999 }] : null,
+            ),
+        });
+        expect(await listChallenges()).toEqual({ success: false, error: 'Could not list challenges', items: [] });
     });
 
     test.each([
@@ -1034,11 +2165,303 @@ describe('get-member-challenges — filter, shape and errors', () => {
     ])('returns %s with an empty list when listing throws', async (_label, err, expected) => {
         stubAuthGuardOk();
         stubStrategy({ getMemberChallenges: jest.fn().mockRejectedValue(err) });
-        await expect(buildHandlers()['get-member-challenges']({})).resolves.toEqual({
+        await expect(listChallenges()).resolves.toEqual({
             success: false,
             items: [],
             error: expected,
         });
+    });
+});
+
+describe('get-member-challenges — upcoming challenges', () => {
+    const T0 = 1_800_000_000;
+    const HOUR = 3600;
+    const up = (id: number, startsIn: number, over: object = {}) => ({
+        id,
+        title: `Up ${id}`,
+        status: 'upcoming',
+        start_time: T0 + startsIn,
+        ...over,
+    });
+    // The server answers each filter apart; a function as `upcoming` is called, and may throw.
+    const lists = (open: unknown, upcoming: unknown) =>
+        jest.fn(async (_token: string, filter: string) => {
+            if (filter === 'upcoming' && typeof upcoming === 'function') (upcoming as () => void)();
+            return filter === 'upcoming' ? upcoming : open;
+        });
+    const throwing = (value: unknown) => () => {
+        throw value;
+    };
+    const withWindow = (hours: unknown) =>
+        jest
+            .mocked(settings.getEffectiveSetting)
+            .mockImplementation(invalid((key: string) => (key === 'discoverUpcomingHours' ? hours : [])));
+    const shown = async () => {
+        const result = await listChallenges();
+        return result.success ? result.items.map((c) => [c.id, c.status]) : [];
+    };
+
+    beforeEach(() => {
+        jest.spyOn(Date, 'now').mockReturnValue(T0 * 1000);
+        clearOpenChallenges();
+        mockChosenSettings({});
+        stubAuthGuardOk();
+        withWindow(24);
+        settings.getUpcomingChallengeIds.mockReset();
+    });
+    afterEach(() => jest.mocked(Date.now).mockRestore());
+
+    test('merges them behind the open ones: the open copy wins, started and non-finite items drop, soonest first', async () => {
+        stubStrategy({
+            getMemberChallenges: lists(
+                [{ id: 1, status: 'started' }, { id: 5 }],
+                [
+                    up(30, 3 * HOUR),
+                    up(5, 2 * HOUR), // also open: the open copy
+                    up(20, 1 * HOUR),
+                    up(21, 1 * HOUR), // same start: by id
+                    up(40, -60), // already started (server lag)
+                    up(41, 0), // starts this very second: not after now
+                    up(42, Number.NaN),
+                    up(43, 25 * HOUR), // outside the window
+                    { id: 44, status: 'upcoming' }, // no start_time
+                    null,
+                ],
+            ),
+        });
+        expect(await shown()).toEqual([
+            [1, undefined], // an open row carries no status, whatever the server said
+            [5, undefined],
+            [20, 'upcoming'],
+            [21, 'upcoming'],
+            [30, 'upcoming'],
+        ]);
+    });
+
+    test('the window: 24 h by default, the far end inclusive, a custom value, and 0 = off', async () => {
+        stubStrategy({ getMemberChallenges: lists([], [up(1, 24 * HOUR), up(2, 24 * HOUR + 1), up(3, 100 * HOUR)]) });
+        expect(await shown()).toEqual([[1, 'upcoming']]);
+        clearUpcomingCache();
+        withWindow(100);
+        expect(await shown()).toEqual([
+            [1, 'upcoming'],
+            [2, 'upcoming'],
+            [3, 'upcoming'],
+        ]);
+        clearUpcomingCache();
+        withWindow(0);
+        expect(await shown()).toEqual([]);
+    });
+
+    test('shows at most the 100 soonest upcoming rows', async () => {
+        const many = Array.from({ length: 150 }, (_, i) => up(1000 + i, 60 + i));
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], many) });
+        const result = await listChallenges();
+        expect(result.success && result.items).toHaveLength(101);
+        expect(result.success && result.items.at(-1)?.id).toBe(1099);
+    });
+
+    test('records EVERY upcoming id for the cleanup, whatever the window shows, even with the window at 0', async () => {
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], [up(2, HOUR), up(3, 100 * HOUR), up(4, -5)]) });
+        withWindow(0);
+        expect(await shown()).toEqual([[1, undefined]]);
+        expect(settings.rememberUpcomingChallenges).toHaveBeenLastCalledWith([
+            expect.objectContaining({ id: 2 }),
+            expect.objectContaining({ id: 3 }),
+            expect.objectContaining({ id: 4 }),
+        ]);
+        expect(settings.rememberOpenChallengeIds).toHaveBeenLastCalledWith([1]);
+    });
+
+    test('a failed upcoming fetch keeps the open list and the previous upcoming ids, and logs the filter and the kind only', async () => {
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], null) });
+        expect(await shown()).toEqual([[1, undefined]]);
+        expect(settings.rememberUpcomingChallenges).not.toHaveBeenCalled();
+        expect(settings.rememberOpenChallengeIds).toHaveBeenCalledWith([1]);
+        expect(logCategories('warning', 'Could not list challenges (filter=upcoming: failed)')).toEqual(['api']);
+
+        // Thrown, with the account's token and a member id in the message: neither reaches the log.
+        const secret = new TypeError('401 for tok member-77');
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], throwing(secret)) });
+        expect(await shown()).toEqual([[1, undefined]]);
+        expect(settings.rememberUpcomingChallenges).not.toHaveBeenCalled();
+        expect(logCategories('warning', 'Could not list challenges (filter=upcoming: TypeError)')).toEqual(['api']);
+        expect(logCategories('warning', 'Could not list challenges (filter=upcoming: failed)')).toEqual(['api']);
+        const logged = JSON.stringify(
+            jest
+                .mocked(logger.withCategory)
+                .mock.results.flatMap(
+                    (r) =>
+                        jest.mocked((r.value as { warning: jest.MockedFunction<(m: string) => void> }).warning).mock
+                            .calls,
+                ),
+        );
+        expect(logged).not.toContain('tok');
+        expect(logged).not.toContain('member-77');
+        // A thrown value that is no Error is named by its type.
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], throwing('boom')) });
+        clearUpcomingCache();
+        await shown();
+        expect(logCategories('warning', 'Could not list challenges (filter=upcoming: string)')).toEqual(['api']);
+    });
+
+    test('an empty upcoming answer is a real one: the recorded ids become empty', async () => {
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], []) });
+        await shown();
+        expect(settings.rememberUpcomingChallenges).toHaveBeenLastCalledWith([]);
+    });
+
+    test('the upcoming list is fetched once for a burst of calls, again after a minute or a logout, and a failure is not kept', async () => {
+        const strategy = stubStrategy({ getMemberChallenges: lists([{ id: 1 }], [up(2, HOUR)]) });
+        const upcomingCalls = () =>
+            strategy.getMemberChallenges.mock.calls.filter(([, filter]) => filter === 'upcoming').length;
+        await Promise.all([shown(), shown(), shown()]);
+        await shown();
+        expect(upcomingCalls()).toBe(1);
+        // The open list is never cached.
+        expect(strategy.getMemberChallenges.mock.calls.filter(([, filter]) => filter === 'open')).toHaveLength(4);
+        jest.mocked(Date.now).mockReturnValue((T0 + 59) * 1000);
+        await shown();
+        expect(upcomingCalls()).toBe(1);
+        jest.mocked(Date.now).mockReturnValue((T0 + 61) * 1000);
+        await shown();
+        expect(upcomingCalls()).toBe(2);
+        clearUpcomingCache();
+        await shown();
+        expect(upcomingCalls()).toBe(3);
+
+        // A failed fetch is asked again on the next call.
+        const flaky = stubStrategy({ getMemberChallenges: lists([{ id: 1 }], null) });
+        clearUpcomingCache();
+        await shown();
+        await shown();
+        expect(flaky.getMemberChallenges.mock.calls.filter(([, filter]) => filter === 'upcoming')).toHaveLength(2);
+    });
+
+    test('accounts do not share the cache', async () => {
+        const strategy = stubStrategy({ getMemberChallenges: lists([], [up(2, HOUR)]) });
+        await shown();
+        auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'other', settings: {} });
+        await shown();
+        expect(strategy.getMemberChallenges.mock.calls.filter(([, filter]) => filter === 'upcoming')).toEqual([
+            ['tok', 'upcoming'],
+            ['other', 'upcoming'],
+        ]);
+    });
+
+    test('a challenge the upcoming feed has dropped but the open one does not list yet keeps resolving its rules', async () => {
+        // First load: 2 is upcoming. The settings facade (mocked here) has recorded it.
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], [up(2, 60, { title: 'Rule Match' })]) });
+        await listChallenges();
+        // Its start passes: the feed drops it, the open list lacks it, and the facade still holds its id.
+        clearUpcomingCache();
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], []) });
+        settings.getUpcomingChallengeIds.mockReturnValue(new Set(['2']));
+        await listChallenges();
+        mockChosenSettings({ rule: { value: ['r1'] } });
+        setToken('tok');
+        const annotations = invalid<(event: object, ids: unknown) => Promise<unknown>>(
+            buildHandlers()['get-open-chosen-annotations'],
+        );
+        await expect(annotations({}, [2])).resolves.toEqual({
+            success: true,
+            annotations: { '2': { chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 1 } },
+        });
+        // Resolved by its remembered title, not as a bare id.
+        expect(settings.resolveRuleSetting).toHaveBeenCalledWith(
+            'chosenPhotos',
+            expect.objectContaining({ id: 2, title: 'Rule Match' }),
+        );
+    });
+
+    test('an id the facade no longer holds is forgotten with the rest of the old list', async () => {
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], [up(2, 60, { title: 'Rule Match' })]) });
+        await listChallenges();
+        clearUpcomingCache();
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], []) });
+        settings.getUpcomingChallengeIds.mockReturnValue(new Set());
+        await listChallenges();
+        mockChosenSettings({ rule: { value: ['r1'] } });
+        setToken('tok');
+        const annotations = invalid<(event: object, ids: unknown) => Promise<unknown>>(
+            buildHandlers()['get-open-chosen-annotations'],
+        );
+        await annotations({}, [2]);
+        expect(settings.resolveRuleSetting).toHaveBeenLastCalledWith('chosenPhotos', { id: 2 });
+    });
+
+    describe('a request still in flight when the account is forgotten (logout, account switch)', () => {
+        const inFlight = () => {
+            let release: (value: unknown) => void = () => undefined;
+            const gate = new Promise((resolve) => (release = resolve));
+            const getMemberChallenges = jest.fn(async (_token: string, filter: string) => {
+                await gate;
+                return filter === 'upcoming' ? [up(2, HOUR)] : [{ id: 1 }];
+            });
+            stubStrategy({ getMemberChallenges });
+            return { release: () => release(undefined) };
+        };
+
+        test('writes nothing: no id lists, no cached challenges, and says so', async () => {
+            const { release } = inFlight();
+            const pending = listChallenges();
+            bumpAccountGeneration(); // what logout / an account switch does (forgetAccountMemory)
+            release();
+            expect(await pending).toEqual({
+                success: false,
+                error: 'The account changed while listing challenges',
+                items: [],
+            });
+            expect(settings.rememberOpenChallengeIds).not.toHaveBeenCalled();
+            expect(settings.rememberUpcomingChallenges).not.toHaveBeenCalled();
+            // The cache holds nothing of it: the id resolves as a bare id.
+            mockChosenSettings({ rule: { value: ['r1'] } });
+            setToken('tok');
+            await invalid<(event: object, ids: unknown) => Promise<unknown>>(
+                buildHandlers()['get-open-chosen-annotations'],
+            )({}, [2]);
+            expect(settings.resolveRuleSetting).toHaveBeenLastCalledWith('chosenPhotos', { id: 2 });
+        });
+
+        test('the account being the same, the same request writes as usual', async () => {
+            const { release } = inFlight();
+            const pending = listChallenges();
+            release();
+            expect((await pending).success).toBe(true);
+            expect(settings.rememberOpenChallengeIds).toHaveBeenCalledWith([1]);
+        });
+    });
+
+    test('annotations resolve through the merged list: a rule keyed on an upcoming title gives its list', async () => {
+        stubStrategy({
+            getMemberChallenges: lists([{ id: 1, title: 'Open' }], [up(2, HOUR, { title: 'Rule Match' })]),
+        });
+        await listChallenges();
+        mockChosenSettings({ rule: { value: ['r1'] } });
+        setToken('tok');
+        await expect(
+            invalid<(event: object, ids: unknown) => Promise<unknown>>(buildHandlers()['get-open-chosen-annotations'])(
+                {},
+                [2],
+            ),
+        ).resolves.toEqual({
+            success: true,
+            annotations: { '2': { chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 1 } },
+        });
+        expect(settings.resolveRuleSetting).toHaveBeenCalledWith(
+            'chosenPhotos',
+            expect.objectContaining({ id: 2, title: 'Rule Match' }),
+        );
+    });
+
+    test('keeps the upcoming rows annotated like open ones, with their own saved list', async () => {
+        stubStrategy({ getMemberChallenges: lists([], [up(2, HOUR)]) });
+        mockChosenSettings({ own: { '2': ['early'] } });
+        withWindow(24);
+        const result = await listChallenges();
+        expect(result.success && result.items[0]).toEqual(
+            expect.objectContaining({ id: 2, status: 'upcoming', chosenOwn: ['early'], chosenOwnCount: 1 }),
+        );
     });
 });
 
@@ -1117,6 +2540,166 @@ describe('register', () => {
         await expect(channels.get('get-bankroll')!(invalid(undefined))).resolves.toEqual({
             success: false,
             error: 'No authentication token found',
+        });
+    });
+});
+
+describe('the library listing an action of this window outdates', () => {
+    const live = { id: 123, title: 'C' };
+    // A listing kept for the challenge (and one for another), as the chooser's walk leaves them.
+    const keepListings = () => {
+        const listing = {
+            photos: [],
+            memberId: 'm',
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        };
+        writeListing('tok', '123', listing);
+        writeListing('tok', '124', listing);
+        writeListing('tok', null, listing);
+    };
+    const kept = (id: string | null) => readFresh('tok', id) !== null;
+    const expectDropped = () => {
+        expect(kept('123')).toBe(false);
+        // Only that challenge's: another's, and the no-challenge one, stay.
+        expect(kept('124')).toBe(true);
+        expect(kept(null)).toBe(true);
+    };
+    const expectKept = () => expect([kept('123'), kept('124'), kept(null)]).toEqual([true, true, true]);
+    const liveStrategy = () =>
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [live] }) });
+
+    describe('submit-picked-photos', () => {
+        test.each([
+            ['is done', () => Promise.resolve({ success: true, submitted: 1 })],
+            ['is refused', () => Promise.resolve({ success: false, error: 'submit-rejected' })],
+            ['is unclear', () => Promise.resolve({ success: false, error: 'submit-unclear' })],
+            ['throws after the challenge was read', () => Promise.reject(new Error('boom'))],
+        ])('drops the challenge’s listing when the submit %s', async (_name, outcome) => {
+            stubAuthGuardOk();
+            liveStrategy();
+            keepListings();
+            autoFill.submitPickedPhotos.mockReset().mockImplementation(invalid(outcome));
+            await buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+            expectDropped();
+        });
+
+        test.each([
+            ['invalid arguments', () => buildHandlers()['submit-picked-photos']({}, '123', invalid<string[]>('x'))],
+            [
+                'no token',
+                () => {
+                    stubAuthGuardFail();
+                    return buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+                },
+            ],
+            [
+                'a challenge that is no longer active',
+                () => {
+                    stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }) });
+                    return buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+                },
+            ],
+        ])('keeps it with %s: nothing was sent', async (_name, act) => {
+            stubAuthGuardOk();
+            keepListings();
+            await act();
+            expectKept();
+        });
+
+        test('keeps it when a second submit is turned away as busy, and drops it once the first one ends', async () => {
+            stubAuthGuardOk();
+            liveStrategy();
+            keepListings();
+            let finish: (value: { success: true; submitted: number }) => void = () => undefined;
+            autoFill.submitPickedPhotos.mockReset().mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+            const first = buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+            await expect(buildHandlers()['submit-picked-photos']({}, '123', ['b'])).resolves.toEqual({
+                success: false,
+                error: 'submit-busy',
+            });
+            expectKept();
+            finish({ success: true, submitted: 1 });
+            await first;
+            expectDropped();
+        });
+    });
+
+    describe('fill-challenge-now', () => {
+        test.each([
+            ['is done', () => Promise.resolve({ success: true, submitted: 1, skipped: 0 })],
+            [
+                'finds nothing to submit',
+                () => Promise.resolve({ success: false, submitted: 0, skipped: 2, error: 'x' }),
+            ],
+            ['throws', () => Promise.reject(new Error('boom'))],
+        ])('drops the challenge’s listing when the fill %s', async (_name, outcome) => {
+            stubAuthGuardOk();
+            liveStrategy();
+            keepListings();
+            autoFill.fillChallengeNow = jest.fn().mockImplementation(outcome);
+            await buildHandlers()['fill-challenge-now']({}, '123', 'one');
+            expectDropped();
+        });
+
+        test.each([
+            ['invalid arguments', () => buildHandlers()['fill-challenge-now']({}, invalid<string>({}), 'one')],
+            [
+                'no token',
+                () => {
+                    stubAuthGuardFail();
+                    return buildHandlers()['fill-challenge-now']({}, '123', 'one');
+                },
+            ],
+            [
+                'a challenge that is no longer active',
+                () => {
+                    stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }) });
+                    return buildHandlers()['fill-challenge-now']({}, '123', 'one');
+                },
+            ],
+        ])('keeps it with %s: nothing was filled', async (_name, act) => {
+            stubAuthGuardOk();
+            keepListings();
+            await act();
+            expectKept();
+        });
+    });
+
+    describe('join-challenge', () => {
+        test('drops the challenge’s listing when it joined', async () => {
+            stubAuthGuardOk();
+            stubStrategy({ joinChallenge: jest.fn().mockResolvedValue({ status: 'joined', challengeId: 123 }) });
+            keepListings();
+            await buildHandlers()['join-challenge']({}, 123, true);
+            expectDropped();
+        });
+
+        test.each([
+            ['needs-confirm', { status: 'needs-confirm', challengeId: 123, cost: 50 }],
+            ['not-started', { status: 'not-started', challengeId: 123 }],
+            ['no answer', null],
+        ])('keeps it when the join comes to %s', async (_name, outcome) => {
+            stubAuthGuardOk();
+            stubStrategy({ joinChallenge: jest.fn().mockResolvedValue(outcome) });
+            keepListings();
+            await buildHandlers()['join-challenge']({}, 123, true);
+            expectKept();
+        });
+
+        test('keeps it with invalid arguments, no token or a throw', async () => {
+            keepListings();
+            stubAuthGuardOk();
+            await buildHandlers()['join-challenge']({}, invalid<string>({}), true);
+            stubAuthGuardFail();
+            await buildHandlers()['join-challenge']({}, 123, true);
+            stubAuthGuardOk();
+            stubStrategy({ joinChallenge: jest.fn().mockRejectedValue(new Error('boom')) });
+            await buildHandlers()['join-challenge']({}, 123, true);
+            expectKept();
         });
     });
 });

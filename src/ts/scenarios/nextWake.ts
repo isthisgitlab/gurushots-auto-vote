@@ -9,6 +9,10 @@
  * Waking at an instant where nothing ends up firing is harmless; sleeping
  * past one is the bug the scheduler's boundary invariant exists to prevent —
  * so every bound yields a candidate, whichever way it flips.
+ *
+ * `phaseClock: false` leaves the in-phase bounds out: a plan that has not started has no phase
+ * clock (the real one starts on the first pass that runs it), so a synthetic `startState(now)`
+ * must not pull every wake in to `now + min`. Every other bound is still used.
  */
 
 import { occurrencesOf } from '../scheduling/wallClock';
@@ -52,7 +56,7 @@ const rangeInstants = (
  */
 const collectInstants = (
     condition: ScenarioCondition,
-    ctx: { challenge: Challenge; state: ScenarioEngineState; now: number; timezone: string },
+    ctx: { challenge: Challenge; state: ScenarioEngineState; now: number; timezone: string; phaseClock: boolean },
     into: number[],
 ) => {
     const start = finite(ctx.challenge.start_time);
@@ -69,9 +73,15 @@ const collectInstants = (
             into.push(...rangeInstants(start, durationBound(condition.min), durationBound(condition.max)));
             break;
         case 'inPhaseFor':
-            into.push(
-                ...rangeInstants(ctx.state.phaseEnteredAt, durationBound(condition.min), durationBound(condition.max)),
-            );
+            if (ctx.phaseClock) {
+                into.push(
+                    ...rangeInstants(
+                        ctx.state.phaseEnteredAt,
+                        durationBound(condition.min),
+                        durationBound(condition.max),
+                    ),
+                );
+            }
             break;
         case 'elapsedPercent':
             if (start !== null && close !== null && close > start) {
@@ -98,17 +108,19 @@ const nextWakeAt = ({
     challenge,
     now,
     timezone,
+    phaseClock = true,
 }: {
     scenario: ScenarioDocument;
     state: ScenarioEngineState;
     challenge: Challenge;
     now: number;
     timezone: string;
+    phaseClock?: boolean;
 }): number | null => {
     const close = finite(challenge?.close_time);
     if (close === null || now >= close) return null;
     const rules = scenario.phases[state.phase]?.rules ?? [];
-    const ctx = { challenge, state, now, timezone };
+    const ctx = { challenge, state, now, timezone, phaseClock };
     const instants: number[] = [];
     for (const rule of rules) {
         for (const condition of rule.if ?? []) collectInstants(condition, ctx, instants);

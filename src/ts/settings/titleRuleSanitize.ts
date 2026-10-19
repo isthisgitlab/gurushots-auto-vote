@@ -13,10 +13,12 @@ import {
     normalizeTag,
     normalizeRulePics,
     normalizeRuleHours,
+    normalizeRuleCloseTimes,
     titleRuleTitles,
     ruleConditions,
 } from './challengeRules';
 import { normalizeProfileName, findProfileKey } from './profileStore';
+import { TITLE_RULE_INLINE_KEYS, ruleInlineEntries } from './ruleBehaviour';
 
 import type { ChallengeValues, TitleRule } from '../types/settings';
 import type { RuleLike } from './challengeRules';
@@ -31,22 +33,15 @@ const MAX_TITLE_LENGTH = 200;
 // One rule may list several titles that share the same behaviour, so the user
 // doesn't have to duplicate a whole rule per recurring challenge.
 const MAX_TITLES_PER_RULE = 50;
+// Likewise for the end times of one rule.
+const MAX_CLOSE_TIMES_PER_RULE = 24;
+// A rule's close times in a log line: the first few, so a long list stays one short line.
+const MAX_LOGGED_CLOSE_TIMES = 3;
 
-/**
- * Settings a rule may override INLINE, without going through a named profile.
- * Deliberately a short allowlist rather than "every perChallenge key": these
- * are the ones that decide whether an UN-JOINED candidate is acted on at all,
- * and an un-joined challenge has no cached id for a per-challenge override to
- * key off — so a rule is the only place they can be expressed. Richer setups
- * belong in a named profile, which this composes with (inline wins).
- */
-const TITLE_RULE_INLINE_KEYS = [
-    'autoJoin',
-    'autoFill',
-    'autoJoinWithinHoursOfEnd',
-    'autoJoinAfterPercentElapsed',
-    'scenario',
-];
+type ClassConditions = Pick<
+    TitleRule,
+    'challengeTag' | 'type' | 'pics' | 'minHours' | 'maxHours' | 'closesAt' | 'closesAtTimes'
+>;
 
 /**
  * Pull the inline overrides off one rule, validated against the schema. Returns
@@ -57,12 +52,9 @@ const TITLE_RULE_INLINE_KEYS = [
  */
 const sanitizeTitleRuleInline = (rule: RuleLike): ChallengeValues | null => {
     const out: ChallengeValues = {};
-    for (const key of TITLE_RULE_INLINE_KEYS) {
-        if (!rule || !Object.prototype.hasOwnProperty.call(rule, key)) continue;
-        const value = rule[key];
-        // An empty string / null is how the editor spells "inherit" for a
-        // cleared number or an unset select; treat it as absent, not as 0.
-        if (value === null || value === undefined || value === '') continue;
+    // ruleInlineEntries leaves out an empty string / null: that is how the editor spells "inherit"
+    // for a cleared number or an unset select, absent rather than 0.
+    for (const [key, value] of rule ? ruleInlineEntries(rule) : []) {
         if (!validateSetting(key, value)) return null;
         out[key] = value;
     }
@@ -98,6 +90,7 @@ const titleRuleKey = (rule: RuleLike): string => {
         conditions.pics ?? '',
         conditions.minHours ?? '',
         conditions.maxHours ?? '',
+        Array.isArray(conditions.closeTimes) ? [...conditions.closeTimes].sort().join('\u0001') : '',
     ].join('\u0000');
 };
 
@@ -140,37 +133,47 @@ const _ruleNumberCondition = (raw: unknown, normalize: (value: unknown) => numbe
 
 /**
  * The non-title conditions of a rule, sanitized for storage: challenge tag,
- * challenge type, photo count and runtime range. Returns null when any
- * supplied value is invalid.
+ * challenge type, photo count, runtime range and close times (`closesAt` is the first, `closesAtTimes` is
+ * written only when there are two or more). Returns null when any supplied value is invalid.
  */
-const _sanitizeRuleClassConditions = (
-    rule: RuleLike,
-): Pick<TitleRule, 'challengeTag' | 'type' | 'pics' | 'minHours' | 'maxHours'> | null => {
+const _sanitizeRuleClassConditions = (rule: RuleLike): ClassConditions | null => {
     const challengeTag = typeof rule?.challengeTag === 'string' ? rule.challengeTag.trim() : '';
     const type = normalizeTag(rule?.type);
     const pics = _ruleNumberCondition(rule?.pics, normalizeRulePics);
     const minHours = _ruleNumberCondition(rule?.minHours, normalizeRuleHours);
     const maxHours = _ruleNumberCondition(rule?.maxHours, normalizeRuleHours);
-    if (pics === false || minHours === false || maxHours === false) return null;
+    const closeTimes = normalizeRuleCloseTimes(rule);
+    if (pics === false || minHours === false || maxHours === false || closeTimes === false) return null;
+    if (closeTimes !== null && closeTimes.length > MAX_CLOSE_TIMES_PER_RULE) return null;
     if (challengeTag.length > MAX_TITLE_LENGTH || type.length > MAX_TITLE_LENGTH) return null;
     // An inverted range can never match; refuse it rather than store a dead rule.
     if (minHours !== null && maxHours !== null && minHours > maxHours) return null;
-    const out: Pick<TitleRule, 'challengeTag' | 'type' | 'pics' | 'minHours' | 'maxHours'> = {};
+    const out: ClassConditions = {};
     if (challengeTag) out.challengeTag = challengeTag;
     if (type) out.type = type;
     if (pics !== null) out.pics = pics;
     if (minHours !== null) out.minHours = minHours;
     if (maxHours !== null) out.maxHours = maxHours;
+    if (closeTimes !== null) out.closesAt = closeTimes[0];
+    if (closeTimes !== null && closeTimes.length > 1) out.closesAtTimes = closeTimes;
     return out;
 };
 
 // What a rejected rule is called in the log: its first title, else its tag or
-// type, else a generic marker (a photo-count/runtime-only rule has no name).
-const ruleLogLabel = (rule: RuleLike, title: string | undefined): string =>
-    title ||
-    (typeof rule?.challengeTag === 'string' && rule.challengeTag.trim()) ||
-    (typeof rule?.type === 'string' && rule.type.trim()) ||
-    '(untitled rule)';
+// type, else its close times (only strict 'HH:MM' values, so renderer input
+// never reaches the log), else a generic marker (a photo-count/runtime-only
+// rule has no name).
+const ruleLogLabel = (rule: RuleLike, title: string | undefined): string => {
+    const closeTimes = normalizeRuleCloseTimes(rule);
+    return (
+        title ||
+        (typeof rule?.challengeTag === 'string' && rule.challengeTag.trim()) ||
+        (typeof rule?.type === 'string' && rule.type.trim()) ||
+        (closeTimes &&
+            `closes ${closeTimes.slice(0, MAX_LOGGED_CLOSE_TIMES).join(', ')}${closeTimes.length > MAX_LOGGED_CLOSE_TIMES ? ', …' : ''}`) ||
+        '(untitled rule)'
+    );
+};
 
 /**
  * What a rule does when it matches — its tag lists, canonical profile name and
@@ -251,6 +254,7 @@ const sanitizeTitleRule = (
 export {
     MAX_TITLE_RULES,
     MAX_TITLE_LENGTH,
+    MAX_CLOSE_TIMES_PER_RULE,
     TITLE_RULE_INLINE_KEYS,
     sanitizeTitleRuleInline,
     sanitizeTitleRule,

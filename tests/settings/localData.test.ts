@@ -1,0 +1,879 @@
+/**
+ * "Delete all local data": the registry lists every store the app persists (a
+ * source scan fails for a createJsonStore call site that is not listed), and the
+ * wipe refuses while the app is working, gives up pending writes, deletes every
+ * registry entry (files and directories on desktop, Preferences keys on
+ * Capacitor), clears the Electron session, and re-creates nothing afterwards.
+ */
+
+// A partial mock of the real fs, so the failure of one delete can be injected.
+jest.mock('node:fs', () => {
+    const actual = jest.requireActual<typeof import('node:fs')>('node:fs');
+    return { __esModule: true, ...actual, default: actual };
+});
+jest.unmock('path');
+jest.unmock('node:path');
+jest.mock('../../src/ts/runtime', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
+}));
+jest.mock('../../src/ts/logger', () => {
+    const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
+    return {
+        info: jest.fn(),
+        warning: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        isDevMode: jest.fn(() => false),
+        isSourceCode: jest.fn(() => true),
+        getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
+        withCategory: jest.fn(() => cat),
+    };
+});
+const mockPreferences = {
+    set: jest.fn<Promise<void>, [{ key: string; value: string }]>(() => Promise.resolve()),
+    get: jest.fn<Promise<{ value: string | null }>, [{ key: string }]>(() => Promise.resolve({ value: null })),
+    remove: jest.fn<Promise<void>, [{ key: string }]>(() => Promise.resolve()),
+    keys: jest.fn<Promise<{ keys: string[] }>, []>(() => Promise.resolve({ keys: [] })),
+};
+jest.mock('@capacitor/preferences', () => ({ Preferences: mockPreferences }), { virtual: true });
+const mockSession = {
+    clearStorageData: jest.fn<Promise<void>, []>(() => Promise.resolve()),
+    clearCache: jest.fn<Promise<void>, []>(() => Promise.resolve()),
+};
+const mockDefaultSession = {
+    clearStorageData: jest.fn<Promise<void>, []>(() => Promise.resolve()),
+    clearCache: jest.fn<Promise<void>, []>(() => Promise.resolve()),
+};
+const mockFromPartition = jest.fn((_partition: string) => mockSession);
+jest.mock('electron', () => ({ session: { fromPartition: mockFromPartition, defaultSession: mockDefaultSession } }));
+
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { APP_PARTITION } from '../../src/ts/index/session';
+import type * as runtimeModule from '../../src/ts/runtime';
+import type * as localDataModule from '../../src/ts/settings/localData';
+import type * as storageModule from '../../src/ts/settings/storage';
+import type * as settingsModule from '../../src/ts/settings';
+import type * as cancellationModule from '../../src/ts/voting/cancellation';
+import type * as lockModule from '../../src/ts/settings/cliSessionLock';
+import type * as passActivityModule from '../../src/ts/voting/passActivity';
+
+const SRC_ROOT = path.join(__dirname, '..', '..', 'src', 'ts');
+
+const sourceFiles = (dir: string): string[] =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) return sourceFiles(full);
+        return /\.tsx?$/.test(entry.name) ? [full] : [];
+    });
+
+/** The `{ ... }` argument of each `createJsonStore(` and `createSettingsFile(` call of a source text. */
+const callArguments = (text: string): string[] => {
+    const found: string[] = [];
+    for (const match of text.matchAll(/(?:createJsonStore|createSettingsFile)\(\s*\{/g)) {
+        let depth = 0;
+        for (let i = match.index + match[0].length - 1; i < text.length; i++) {
+            if (text[i] === '{') depth++;
+            if (text[i] === '}' && --depth === 0) {
+                found.push(text.slice(match.index + match[0].length - 1, i + 1));
+                break;
+            }
+        }
+    }
+    return found;
+};
+
+const literalOrConstant = (value: string, text: string): string => {
+    const literal = /^'([^']+)'$/.exec(value.trim());
+    if (literal) return literal[1];
+    const constant = new RegExp(`const ${value.trim()}\\s*=\\s*'([^']+)'`).exec(text);
+    if (!constant) throw new Error(`cannot resolve ${value}`);
+    return constant[1];
+};
+
+describe('the local-data registry', () => {
+    const { LOCAL_DATA_STORES } = require('../../src/ts/settings/localData') as typeof localDataModule;
+
+    // Every store: the createJsonStore ones, and the two settings files storage.ts makes with createSettingsFile.
+    const callSites = sourceFiles(SRC_ROOT).flatMap((file) => {
+        const text = fs.readFileSync(file, 'utf8');
+        return callArguments(text).map((args) => {
+            const fileName = /fileName:\s*('[^']+')/.exec(args)?.[1];
+            const prefKey = /prefKey:\s*([A-Za-z_'][^,}\n]*)/.exec(args)?.[1];
+            if (!fileName || !prefKey) throw new Error(`cannot read a store call in ${file}`);
+            return {
+                file: path.relative(SRC_ROOT, file),
+                fileName: literalOrConstant(fileName, text),
+                prefKey: literalOrConstant(prefKey, text),
+            };
+        });
+    });
+
+    test('the scan finds the stores (so it cannot pass on an empty list)', () => {
+        expect(callSites.length).toBeGreaterThanOrEqual(9);
+    });
+
+    test.each(callSites.map((site) => [site.file, site.fileName, site.prefKey]))(
+        '%s: store %s / %s is in the registry',
+        (_file, fileName, prefKey) => {
+            expect(LOCAL_DATA_STORES).toContainEqual({ fileName, prefKey });
+        },
+    );
+
+    test('the registry holds nothing the source does not create', () => {
+        const created = callSites.map((site) => `${site.fileName}|${site.prefKey}`);
+        const listed = LOCAL_DATA_STORES.map((store) => `${store.fileName}|${store.prefKey}`);
+        expect(listed.filter((entry) => !created.includes(entry))).toEqual([]);
+    });
+
+    test('the configuration, settings.json and the copy kept of it, the import marker and the title pins are in it', () => {
+        expect(LOCAL_DATA_STORES).toEqual(
+            expect.arrayContaining([
+                { fileName: 'config.json', prefKey: 'gurushots-config' },
+                { fileName: 'settings.json', prefKey: 'gurushots-settings' },
+                { fileName: 'settings.json.original', prefKey: 'gurushots-settings_original' },
+                { fileName: 'v2-import.json', prefKey: 'gs_v2_import' },
+                { fileName: 'titlePins.json', prefKey: 'gs_title_pins' },
+            ]),
+        );
+    });
+
+    test('names are unique', () => {
+        expect(new Set(LOCAL_DATA_STORES.map((s) => s.fileName)).size).toBe(LOCAL_DATA_STORES.length);
+        expect(new Set(LOCAL_DATA_STORES.map((s) => s.prefKey)).size).toBe(LOCAL_DATA_STORES.length);
+    });
+});
+
+type Ctx = {
+    runtime: typeof runtimeModule;
+    localData: typeof localDataModule;
+    storage: typeof storageModule;
+    settings: typeof settingsModule;
+    cancellation: typeof cancellationModule;
+    lock: typeof lockModule;
+    passActivity: typeof passActivityModule;
+};
+
+const g = globalThis as typeof globalThis & {
+    Capacitor?: { isNativePlatform: () => boolean; Plugins?: Record<string, unknown> };
+};
+
+describe('wipeLocalData', () => {
+    let root: string;
+    let userData: string;
+    let visionParent: string;
+    let ctx: Ctx;
+
+    const load = () => {
+        jest.isolateModules(() => {
+            const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
+            jest.spyOn(runtime, 'getAppUserDataPath').mockReturnValue(userData);
+            jest.spyOn(runtime, 'getUserDataDir').mockReturnValue(visionParent);
+            ctx = {
+                runtime,
+                localData: require('../../src/ts/settings/localData') as typeof localDataModule,
+                storage: require('../../src/ts/settings/storage') as typeof storageModule,
+                settings: require('../../src/ts/settings') as typeof settingsModule,
+                cancellation: require('../../src/ts/voting/cancellation') as typeof cancellationModule,
+                lock: require('../../src/ts/settings/cliSessionLock') as typeof lockModule,
+                passActivity: require('../../src/ts/voting/passActivity') as typeof passActivityModule,
+            };
+        });
+    };
+
+    /** Every file, backup and directory the wipe is to remove, filled with something. */
+    const fillUserData = () => {
+        for (const { fileName } of ctx.localData.LOCAL_DATA_STORES) {
+            fs.writeFileSync(path.join(userData, fileName), '{"x":1}');
+        }
+        fs.writeFileSync(path.join(userData, 'settings.json.corrupt-2026-01-01T00-00-00-000Z'), 'broken');
+        fs.writeFileSync(path.join(userData, 'settings.json.unimportable-2026-01-01T00-00-00-000Z'), 'broken');
+        fs.writeFileSync(path.join(userData, 'config.json.corrupt-2026-01-02T00-00-00-000Z'), 'broken');
+        fs.writeFileSync(path.join(userData, 'config.json.corrupt-2026-01-03T00-00-00-000Z'), 'broken');
+        fs.writeFileSync(path.join(userData, 'statelock-config-import.lock'), 'token');
+        fs.writeFileSync(path.join(userData, 'settings.json.12.abcd1234.tmp'), 'half');
+        fs.writeFileSync(path.join(userData, 'statelock-scenario.lock'), 'token');
+        fs.writeFileSync(path.join(userData, 'joinlock-77.lock.stale-9'), 'token');
+        fs.mkdirSync(path.join(userData, 'logs'));
+        fs.writeFileSync(path.join(userData, 'logs', 'app-2026-01-01.log'), 'line');
+        fs.mkdirSync(path.join(visionParent, 'vision', 'abc'), { recursive: true });
+        fs.writeFileSync(path.join(visionParent, 'vision', 'abc', 'model.bin'), 'bytes');
+        // Something that is not the app's stays.
+        fs.writeFileSync(path.join(userData, 'Cookies'), 'chromium');
+    };
+
+    beforeEach(() => {
+        root = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-wipe-'));
+        userData = path.join(root, 'userData');
+        visionParent = path.join(root, 'cli-data');
+        fs.mkdirSync(userData);
+        fs.mkdirSync(visionParent);
+        mockPreferences.set.mockClear();
+        mockPreferences.remove.mockClear();
+        mockSession.clearStorageData.mockClear();
+        mockSession.clearCache.mockClear();
+        mockDefaultSession.clearStorageData.mockClear();
+        mockDefaultSession.clearCache.mockClear();
+        mockFromPartition.mockClear();
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+        delete g.Capacitor;
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    describe('desktop (files)', () => {
+        test('removes the session markers and a .stale- copy of a join or scenario lock, and nothing else that merely looks like one', async () => {
+            load();
+            for (const name of [
+                'cli-session-4242.lock',
+                'cli-session.lock',
+                'web-server-4343.lock',
+                'desktop-app.lock',
+                'joinlock-77.lock.stale-12-abcd1234',
+                'statelock-scenario.lock.stale-12-abcd1234',
+            ]) {
+                fs.writeFileSync(path.join(userData, name), '{"pid":1}');
+            }
+            for (const name of [
+                'cli-session-4242.lock.bak',
+                'cli-session-x.lock',
+                'cli-session.lock.stale-12',
+                'other.lock.stale-12',
+                'web-server-4343.lockstale-1',
+            ]) {
+                fs.writeFileSync(path.join(userData, name), 'keep');
+            }
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(result.success).toBe(true);
+            expect(fs.readdirSync(userData).sort()).toEqual([
+                'cli-session-4242.lock.bak',
+                'cli-session-x.lock',
+                'cli-session.lock.stale-12',
+                'other.lock.stale-12',
+                'web-server-4343.lockstale-1',
+            ]);
+        });
+
+        test('deletes every registry entry, its backups and temp files, the lock files and both directories', async () => {
+            load();
+            fillUserData();
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(result.success).toBe(true);
+            expect(fs.readdirSync(userData)).toEqual(['Cookies']);
+            expect(fs.existsSync(path.join(visionParent, 'vision'))).toBe(false);
+            const { removed } = result as Extract<typeof result, { success: true }>;
+            expect(removed).toEqual(
+                expect.arrayContaining([
+                    path.join(userData, 'config.json'),
+                    path.join(userData, 'config.json.corrupt-2026-01-02T00-00-00-000Z'),
+                    path.join(userData, 'config.json.corrupt-2026-01-03T00-00-00-000Z'),
+                    path.join(userData, 'settings.json'),
+                    path.join(userData, 'settings.json.original'),
+                    path.join(userData, 'settings.json.unimportable-2026-01-01T00-00-00-000Z'),
+                    path.join(userData, 'v2-import.json'),
+                    path.join(userData, 'titlePins.json'),
+                    path.join(userData, 'statelock-config-import.lock'),
+                    path.join(userData, 'metadata.json'),
+                    path.join(userData, 'logs'),
+                    path.join(visionParent, 'vision'),
+                ]),
+            );
+        });
+
+        test('nothing the wipe deleted is re-created by a write that comes after it (or was pending)', async () => {
+            load();
+            fillUserData();
+            const metadataStore = ctx.storage.createJsonStore({
+                fileName: 'metadata.json',
+                prefKey: 'gurushots-metadata',
+            });
+
+            await ctx.localData.wipeLocalData({
+                // Writes made while it runs and right after: settings, a store, a store's atomic write, the token write.
+                clearSession: async () => {
+                    expect(ctx.storage.storage.writeRaw('{"token":"late"}')).toBe(false);
+                    metadataStore.writeRaw('{"late":1}');
+                    expect(await metadataStore.updateThrough(() => '{"late":2}')).toBe('failed');
+                },
+            });
+            expect(ctx.settings.setSetting('token', 'later')).toBe(false);
+            metadataStore.writeRaw('{"later":1}');
+
+            expect(fs.readdirSync(userData)).toEqual(['Cookies']);
+        });
+
+        test('stops a voting pass that is under way', async () => {
+            load();
+            ctx.cancellation.reset();
+
+            await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(ctx.cancellation.isCancelled()).toBe(true);
+        });
+
+        test('a user-data directory that cannot be listed still has its listed entries deleted', async () => {
+            load();
+            fillUserData();
+            const realReaddir = fs.readdirSync;
+            jest.spyOn(fs, 'readdirSync').mockImplementation(((dir: fs.PathLike, ...rest: unknown[]) => {
+                if (String(dir) === userData) throw new Error('EIO');
+                return (realReaddir as (...args: unknown[]) => unknown)(dir, ...rest);
+            }) as typeof fs.readdirSync);
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(result.success).toBe(true);
+            expect(fs.existsSync(path.join(userData, 'settings.json'))).toBe(false);
+            expect(fs.existsSync(path.join(userData, 'logs'))).toBe(false);
+            // Only what the listing would have found beside them stays.
+            expect(fs.existsSync(path.join(userData, 'statelock-scenario.lock'))).toBe(true);
+        });
+
+        test('works on a directory that holds none of it', async () => {
+            load();
+            await expect(ctx.localData.wipeLocalData({ clearSession: async () => {} })).resolves.toEqual({
+                success: true,
+                removed: [],
+            });
+        });
+
+        test('the files the settings are restored from go before config.json, and a busy file is retried', async () => {
+            load();
+            fillUserData();
+            const realRm = fs.rmSync;
+            const order: string[] = [];
+            const rm = jest.spyOn(fs, 'rmSync').mockImplementation(((target: fs.PathLike, options?: fs.RmOptions) => {
+                order.push(path.basename(String(target)));
+                return realRm(target, options);
+            }) as typeof fs.rmSync);
+
+            await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            const restoreSources = ['settings.json', 'settings.json.original', 'v2-import.json'];
+            expect(order.slice(0, 3)).toEqual(restoreSources);
+            expect(order.indexOf('config.json')).toBeGreaterThan(
+                Math.max(...restoreSources.map((f) => order.indexOf(f))),
+            );
+            expect(order.at(-1)).toBe('config.json');
+            expect(rm).toHaveBeenCalledWith(
+                path.join(userData, 'config.json'),
+                expect.objectContaining({ recursive: true, force: true, maxRetries: 3, retryDelay: 100 }),
+            );
+        });
+
+        test('settings.json that cannot be removed keeps config.json, so the next load does not restore a sign-in from the mirror', async () => {
+            load();
+            const config = JSON.stringify({ version: 2, auth: { token: 'secret' }, app: {} });
+            fs.writeFileSync(path.join(userData, 'config.json'), config);
+            fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ token: 'secret' }));
+            fs.writeFileSync(path.join(userData, 'metadata.json'), '{}');
+            const realRm = fs.rmSync;
+            jest.spyOn(fs, 'rmSync').mockImplementation(((target: fs.PathLike, options?: fs.RmOptions) => {
+                if (path.basename(String(target)) === 'settings.json')
+                    throw new Error('EPERM: operation not permitted');
+                return realRm(target, options);
+            }) as typeof fs.rmSync);
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(result).toEqual({
+                success: false,
+                error: expect.stringContaining('settings.json (EPERM: operation not permitted)'),
+                removed: [path.join(userData, 'metadata.json')],
+            });
+            // config.json was left alone (not deleted for a mirror to bring back); the rest is gone.
+            expect(fs.readFileSync(path.join(userData, 'config.json'), 'utf8')).toBe(config);
+            expect(fs.existsSync(path.join(userData, 'metadata.json'))).toBe(false);
+            // The app keeps running on a consistent state: the stores write again, and a load reads config.json as it was.
+            expect(ctx.storage.storage.writeRaw(config)).toBe(true);
+            expect(ctx.storage.storage.readRaw()).toBe(config);
+        });
+
+        test('a path that cannot be removed fails the wipe, names it, deletes the rest and lets stores write again', async () => {
+            load();
+            fillUserData();
+            const realRm = fs.rmSync;
+            jest.spyOn(fs, 'rmSync').mockImplementation(((target: fs.PathLike, options?: fs.RmOptions) => {
+                if (String(target).endsWith('metadata.json')) throw new Error('EBUSY: resource busy');
+                return realRm(target, options);
+            }) as typeof fs.rmSync);
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(result).toEqual({
+                success: false,
+                error: expect.stringContaining(`${path.join(userData, 'metadata.json')} (EBUSY: resource busy)`),
+                removed: expect.arrayContaining([path.join(userData, 'settings.json'), path.join(userData, 'logs')]),
+            });
+            // What failed is not listed as removed.
+            expect(result.success === false && result.removed).not.toContain(path.join(userData, 'metadata.json'));
+            expect(fs.existsSync(path.join(userData, 'settings.json'))).toBe(false);
+            expect(fs.existsSync(path.join(userData, 'logs'))).toBe(false);
+            // The app is still running: its stores work again.
+            expect(ctx.storage.storage.writeRaw('{}')).toBe(true);
+        });
+
+        test('a failure with no message and a wipe step that throws are reported', async () => {
+            load();
+            fillUserData();
+            jest.spyOn(fs, 'rmSync').mockImplementationOnce(() => {
+                throw null;
+            });
+            const first = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            expect(first).toEqual({
+                success: false,
+                error: expect.stringContaining('(unknown error)'),
+                removed: expect.any(Array),
+            });
+
+            load();
+            const second = await ctx.localData.wipeLocalData({
+                clearSession: async () => {
+                    throw new Error('session gone');
+                },
+            });
+            expect(second).toEqual({ success: false, error: 'session gone', removed: expect.any(Array) });
+
+            load();
+            const third = await ctx.localData.wipeLocalData({
+                stopScheduler: () => {
+                    throw null;
+                },
+            });
+            expect(third).toEqual({ success: false, error: 'unknown error', removed: [] });
+        });
+    });
+
+    describe('refusing', () => {
+        // The parent process (the test runner's shell or the runner itself) is a live process that is not this one.
+        const CLI_MARKER = 'cli-session-4242.lock';
+        const WEB_MARKER = 'web-server-4343.lock';
+        const markerOfAnotherProcess = (fileName: string) =>
+            fs.writeFileSync(path.join(userData, fileName), JSON.stringify({ pid: process.ppid }));
+
+        const expectNothingTouched = () => {
+            expect(fs.existsSync(path.join(userData, 'metadata.json'))).toBe(true);
+            expect(ctx.cancellation.isCancelled()).toBe(false);
+            expect(ctx.storage.storage.writeRaw('{"autovoteRunning":true}')).toBe(true);
+        };
+
+        test('while a voting pass is under way (busy-pass), touching nothing', async () => {
+            load();
+            fillUserData();
+            const endPass = ctx.passActivity.beginVotingPass();
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            endPass();
+
+            expect(result).toEqual({ success: false, error: 'busy-pass' });
+            expectNothingTouched();
+        });
+
+        test('while a CLI session holds its marker (busy-cli), touching nothing', async () => {
+            load();
+            fillUserData();
+            markerOfAnotherProcess(CLI_MARKER);
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(result).toEqual({ success: false, error: 'busy-cli' });
+            expectNothingTouched();
+        });
+
+        test('while the desktop app holds its marker (busy-app), touching nothing', async () => {
+            load();
+            fillUserData();
+            markerOfAnotherProcess('desktop-app.lock');
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(result).toEqual({ success: false, error: 'busy-app' });
+            expectNothingTouched();
+        });
+
+        test('while a CLI process holds the shared cli-session.lock marker (busy-cli), touching nothing', async () => {
+            load();
+            fillUserData();
+            markerOfAnotherProcess('cli-session.lock');
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(result).toEqual({ success: false, error: 'busy-cli' });
+            expectNothingTouched();
+        });
+
+        test('while the web server holds its marker (busy-web), touching nothing', async () => {
+            load();
+            fillUserData();
+            markerOfAnotherProcess(WEB_MARKER);
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(result).toEqual({ success: false, error: 'busy-web' });
+            expectNothingTouched();
+        });
+
+        test('while any of several CLI processes holds its marker (busy-cli): one leaving does not free the wipe', async () => {
+            load();
+            fillUserData();
+            markerOfAnotherProcess(CLI_MARKER);
+            markerOfAnotherProcess('cli-session-4545.lock');
+
+            fs.rmSync(path.join(userData, CLI_MARKER));
+            const oneLeft = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            fs.rmSync(path.join(userData, 'cli-session-4545.lock'));
+            const noneLeft = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(oneLeft).toEqual({ success: false, error: 'busy-cli' });
+            expect(noneLeft.success).toBe(true);
+        });
+
+        test('names the CLI session first, then the app, then the web server, then the pass', async () => {
+            load();
+            markerOfAnotherProcess(CLI_MARKER);
+            markerOfAnotherProcess('desktop-app.lock');
+            markerOfAnotherProcess(WEB_MARKER);
+            const endPass = ctx.passActivity.beginVotingPass();
+
+            const all = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            fs.rmSync(path.join(userData, CLI_MARKER));
+            const appAndRest = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            fs.rmSync(path.join(userData, 'desktop-app.lock'));
+            const webAndPass = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            fs.rmSync(path.join(userData, WEB_MARKER));
+            const onlyPass = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            endPass();
+
+            expect(all).toEqual({ success: false, error: 'busy-cli' });
+            expect(appAndRest).toEqual({ success: false, error: 'busy-app' });
+            expect(webAndPass).toEqual({ success: false, error: 'busy-web' });
+            expect(onlyPass).toEqual({ success: false, error: 'busy-pass' });
+        });
+
+        test('a pass that starts while the markers are being checked is refused (busy-pass), touching nothing', async () => {
+            load();
+            fillUserData();
+            markerOfAnotherProcess(CLI_MARKER);
+            const longAgo = new Date(Date.now() - ctx.lock.STALE_AFTER_MS - 5_000);
+            fs.utimesSync(path.join(userData, CLI_MARKER), longAgo, longAgo);
+
+            jest.useFakeTimers();
+            try {
+                const wipe = ctx.localData.wipeLocalData({ clearSession: async () => {} });
+                // The old marker is read again after the settle wait; a pass begins meanwhile.
+                await jest.advanceTimersByTimeAsync(ctx.lock.SETTLE_MS - 1);
+                const endPass = ctx.passActivity.beginVotingPass();
+                await jest.advanceTimersByTimeAsync(1);
+                await expect(wipe).resolves.toEqual({ success: false, error: 'busy-pass' });
+                endPass();
+            } finally {
+                jest.useRealTimers();
+            }
+            expectNothingTouched();
+        });
+
+        test('a saved "auto-vote running" flag alone is no activity and does not block', async () => {
+            load();
+            fillUserData();
+            fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ autovoteRunning: true }));
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(result.success).toBe(true);
+            expect(fs.existsSync(path.join(userData, 'metadata.json'))).toBe(false);
+        });
+
+        test('a stale marker (its process is gone) does not block', async () => {
+            load();
+            fs.writeFileSync(path.join(userData, CLI_MARKER), JSON.stringify({ pid: 2 ** 22 + 12345 }));
+
+            await expect(ctx.localData.wipeLocalData({ clearSession: async () => {} })).resolves.toEqual({
+                success: true,
+                removed: [path.join(userData, CLI_MARKER)],
+            });
+        });
+
+        test('a marker nobody has refreshed lately does not block, even when its process id is alive', async () => {
+            load();
+            markerOfAnotherProcess(CLI_MARKER);
+            markerOfAnotherProcess('desktop-app.lock');
+            const longAgo = new Date(Date.now() - ctx.lock.STALE_AFTER_MS - 5_000);
+            for (const name of [CLI_MARKER, 'desktop-app.lock']) {
+                fs.utimesSync(path.join(userData, name), longAgo, longAgo);
+            }
+
+            jest.useFakeTimers();
+            try {
+                const wipe = ctx.localData.wipeLocalData({ clearSession: async () => {} });
+                // Both old markers with a live process are read again after one settle wait (together), and are still old.
+                await jest.advanceTimersByTimeAsync(ctx.lock.SETTLE_MS);
+                // Judged left over (not removed by the first check), each marker goes with the rest of the data.
+                await expect(wipe).resolves.toEqual({
+                    success: true,
+                    removed: [path.join(userData, CLI_MARKER), path.join(userData, 'desktop-app.lock')],
+                });
+                expect(fs.existsSync(path.join(userData, CLI_MARKER))).toBe(false);
+                expect(fs.existsSync(path.join(userData, 'desktop-app.lock'))).toBe(false);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        test('a live holder that was asleep and wrote its marker again within a tick of waking still blocks', async () => {
+            load();
+            markerOfAnotherProcess(CLI_MARKER);
+            const longAgo = new Date(Date.now() - ctx.lock.STALE_AFTER_MS - 5_000);
+            fs.utimesSync(path.join(userData, CLI_MARKER), longAgo, longAgo);
+
+            jest.useFakeTimers();
+            try {
+                const wipe = ctx.localData.wipeLocalData({ clearSession: async () => {} });
+                await jest.advanceTimersByTimeAsync(ctx.lock.TICK_MS);
+                const now = new Date();
+                fs.utimesSync(path.join(userData, CLI_MARKER), now, now);
+                await jest.advanceTimersByTimeAsync(ctx.lock.SETTLE_MS);
+                await expect(wipe).resolves.toEqual({ success: false, error: 'busy-cli' });
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+    });
+
+    describe('Electron', () => {
+        test('clears the cookies, storage and cache of the session the windows use and of the default session', async () => {
+            load();
+            jest.spyOn(ctx.runtime, 'isElectron').mockReturnValue(true);
+
+            await ctx.localData.wipeLocalData();
+
+            expect(mockFromPartition).toHaveBeenCalledWith(APP_PARTITION);
+            expect(mockSession.clearStorageData).toHaveBeenCalledTimes(1);
+            expect(mockSession.clearCache).toHaveBeenCalledTimes(1);
+            // The default session keeps its files (Cookies, Local Storage, Cache, …) at the user-data root.
+            expect(mockDefaultSession.clearStorageData).toHaveBeenCalledTimes(1);
+            expect(mockDefaultSession.clearCache).toHaveBeenCalledTimes(1);
+        });
+
+        test('a default session that cannot be cleared fails the wipe', async () => {
+            load();
+            jest.spyOn(ctx.runtime, 'isElectron').mockReturnValue(true);
+            mockDefaultSession.clearStorageData.mockRejectedValueOnce(new Error('storage busy'));
+
+            await expect(ctx.localData.wipeLocalData()).resolves.toEqual(
+                expect.objectContaining({ success: false, error: 'storage busy' }),
+            );
+        });
+
+        test('outside Electron there is no session to clear', async () => {
+            load();
+            jest.spyOn(ctx.runtime, 'isElectron').mockReturnValue(false);
+
+            await ctx.localData.wipeLocalData();
+
+            expect(mockFromPartition).not.toHaveBeenCalled();
+            expect(mockDefaultSession.clearStorageData).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Capacitor (Preferences)', () => {
+        const wipeNative = jest.fn<Promise<{ ok: boolean }>, []>();
+
+        beforeEach(() => {
+            g.Capacitor = {
+                isNativePlatform: () => true,
+                Plugins: { AutoVoteBackground: { wipeLocalData: wipeNative, compareAndWrite: jest.fn() } },
+            };
+            wipeNative.mockReset();
+            wipeNative.mockResolvedValue({ ok: true });
+        });
+
+        test('removes the copies of unusable settings set aside under their own keys, and nothing else it did not name', async () => {
+            const aside = [
+                'gurushots-config_corrupt-2026-01-02T00-00-00-000Z',
+                'gurushots-config_corrupt-2026-02-03T00-00-00-000Z',
+                'gurushots-settings_corrupt-2026-01-02T00-00-00-000Z',
+                'gurushots-settings_unimportable-2026-01-02T00-00-00-000Z',
+            ];
+            mockPreferences.keys.mockResolvedValueOnce({ keys: [...aside, 'someone-elses-key', 'gurushots-config'] });
+            load();
+
+            const result = await ctx.localData.wipeLocalData();
+
+            const removedKeys = mockPreferences.remove.mock.calls.map(([{ key }]) => key);
+            expect(result.success).toBe(true);
+            expect(removedKeys).toEqual(expect.arrayContaining(aside));
+            expect(removedKeys).not.toContain('someone-elses-key');
+            expect(removedKeys.filter((key) => key === 'gurushots-config')).toHaveLength(1);
+            expect(removedKeys).toHaveLength(ctx.localData.LOCAL_DATA_STORES.length * 2 + aside.length);
+        });
+
+        test('asks the native plugin first, then removes every store key and the settings backup key', async () => {
+            load();
+
+            const result = await ctx.localData.wipeLocalData();
+
+            expect(wipeNative).toHaveBeenCalledTimes(1);
+            expect(result.success).toBe(true);
+            const removedKeys = mockPreferences.remove.mock.calls.map(([{ key }]) => key);
+            expect(removedKeys).toEqual(
+                expect.arrayContaining([
+                    'gurushots-config',
+                    'gurushots-config_corrupt',
+                    'gurushots-settings',
+                    'gurushots-settings_corrupt',
+                    'gurushots-settings_original',
+                    'gs_v2_import',
+                    'gs_v2_import_corrupt',
+                    'gs_title_pins',
+                    'gs_title_pins_corrupt',
+                    'gs_scenario_state',
+                    'gs_join_state',
+                    'gurushots-metadata',
+                ]),
+            );
+            expect(removedKeys).toHaveLength(ctx.localData.LOCAL_DATA_STORES.length * 2);
+            // No file system on Android: nothing under the user-data path is touched.
+            expect(fs.readdirSync(userData)).toEqual([]);
+        });
+
+        test('writes still queued are given up, so nothing puts a value back after the keys are removed', async () => {
+            load();
+            let release: () => void = () => {};
+            mockPreferences.set.mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)));
+            const store = ctx.storage.createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
+            store.writeRaw('{"first":1}');
+            store.writeRaw('{"second":2}');
+            store.writeRaw('{"third":3}');
+            ctx.storage.storage.writeRaw('{"settings":1}');
+            // The settings' write takes a few turns to reach Preferences.
+            while (mockPreferences.set.mock.calls.length < 2) await Promise.resolve();
+            expect(mockPreferences.set).toHaveBeenCalledTimes(2);
+
+            // Nothing is running: the busy check is out of the way, so the timing is the wipe's own.
+            const wiping = ctx.localData.wipeLocalData({ busyReason: () => null });
+            release();
+            await wiping;
+            store.writeRaw('{"after":1}');
+            await store.flushPendingWrites();
+
+            // The two writes already handed to Preferences (the store's first, the settings') landed before the keys were
+            // removed; the others never did.
+            expect(mockPreferences.set).toHaveBeenCalledTimes(2);
+            expect(mockPreferences.set.mock.invocationCallOrder[0]).toBeLessThan(
+                mockPreferences.remove.mock.invocationCallOrder[0],
+            );
+            // A write after the wipe is refused, so nothing is cached for the app to read either.
+            expect(store.readRaw()).toBeNull();
+            expect(mockPreferences.set).toHaveBeenCalledTimes(2);
+        });
+
+        test('a strict store whose last write did not persist does not fail the wipe', async () => {
+            load();
+            mockPreferences.set.mockRejectedValueOnce(new Error('not persisted'));
+            const strict = ctx.storage.createJsonStore({ fileName: 'x.json', prefKey: 'gs_x', strict: true });
+            strict.writeRaw('{"a":1}');
+
+            await expect(ctx.localData.wipeLocalData()).resolves.toEqual(expect.objectContaining({ success: true }));
+        });
+
+        test('a write-through still waiting its turn is given up as well, and changes nothing', async () => {
+            load();
+            let release: () => void = () => {};
+            mockPreferences.set.mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)));
+            const store = ctx.storage.createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
+            store.writeRaw('{"first":1}');
+            await Promise.resolve();
+            const update = jest.fn(() => '{"through":1}');
+            const through = store.updateThrough(update);
+
+            // Nothing is running: the busy check is out of the way, so the timing is the wipe's own.
+            const wiping = ctx.localData.wipeLocalData({ busyReason: () => null });
+            release();
+            await wiping;
+
+            await expect(through).resolves.toBe('aborted');
+            expect(update).not.toHaveBeenCalled();
+            expect(mockPreferences.set).toHaveBeenCalledTimes(1);
+        });
+
+        test('a native wipe that did not go through fails the wipe, and the stores write again', async () => {
+            load();
+            wipeNative.mockResolvedValue({ ok: false });
+
+            const result = await ctx.localData.wipeLocalData();
+
+            expect(result).toEqual({
+                success: false,
+                error: 'the background service data',
+                removed: expect.any(Array),
+                reload: true,
+            });
+            expect(ctx.storage.storage.writeRaw('{}')).toBe(true);
+        });
+
+        test('a failed wipe asks the caller to reload the window, so the app never keeps running on emptied caches', async () => {
+            load();
+            wipeNative.mockResolvedValue({ ok: false });
+
+            await expect(ctx.localData.wipeLocalData()).resolves.toEqual({
+                success: false,
+                error: 'the background service data',
+                removed: expect.any(Array),
+                reload: true,
+            });
+        });
+
+        test('a Preferences key that cannot be removed fails the wipe and asks for a reload too', async () => {
+            load();
+            mockPreferences.remove.mockRejectedValueOnce(new Error('preferences gone'));
+
+            const result = await ctx.localData.wipeLocalData();
+
+            expect(result).toEqual({ success: false, error: 'preferences gone', removed: [], reload: true });
+        });
+
+        test('a wipe that went through, or one that was refused, asks for no reload', async () => {
+            load();
+
+            const done = await ctx.localData.wipeLocalData();
+            const refused = await ctx.localData.wipeLocalData({ busyReason: () => 'busy-app' });
+
+            expect(done).not.toHaveProperty('reload');
+            expect(refused).not.toHaveProperty('reload');
+        });
+
+        test('a build without the plugin carries on', async () => {
+            load();
+            g.Capacitor = { isNativePlatform: () => true, Plugins: {} };
+
+            await expect(ctx.localData.wipeLocalData()).resolves.toEqual(expect.objectContaining({ success: true }));
+        });
+
+        test('an answer that is no object counts as not done', async () => {
+            load();
+            wipeNative.mockResolvedValue(undefined as unknown as { ok: boolean });
+
+            await expect(ctx.localData.wipeLocalData()).resolves.toEqual({
+                success: false,
+                error: 'the background service data',
+                removed: expect.any(Array),
+                reload: true,
+            });
+        });
+
+        test('with no Capacitor plugins object at all there is nothing native to ask', async () => {
+            load();
+            g.Capacitor = { isNativePlatform: () => true };
+
+            await expect(ctx.localData.wipeLocalData()).resolves.toEqual(expect.objectContaining({ success: true }));
+        });
+    });
+});

@@ -2,7 +2,7 @@
  * Fill pipeline, pick checks: the visual re-rank and the uncertain-subject record.
  */
 
-import { finalizePick, readChallengeTheme, buildThemeKeywords, scorePhoto } from '../../photoPicker';
+import { finalizePick, readChallengeTheme, buildThemeKeywords, scorePhoto, splitByChosen } from '../../photoPicker';
 import { rankVisually } from '../../visionVerifier';
 import type { Challenge } from '../../../types/gurushots';
 import type { IgnoreWords, PickerPhoto, ScoredCandidate } from '../../../types/photoPicker';
@@ -10,17 +10,19 @@ import type { FillAttemptParams, RankDeps } from '../../../types/autoFill';
 import { errorMessage } from '../../../errorMessage';
 import { oneLine } from '../../../format/logSafe';
 
-// Visual re-rank of the tag pick (see services/visionVerifier.ts). The picked
-// ids lead the shortlist so a model that abstains returns exactly them; the
-// rest of the tag ranking follows as alternatives it may promote.
-const verifyFillPick = async (
+type VerifiedPick = { picked: string[]; visualEvidence: Set<string> | null };
+
+// Visual re-rank of one ranked block (see services/visionVerifier.ts). The
+// picked ids lead the shortlist so a model that abstains returns exactly them;
+// the rest of the tag ranking follows as alternatives it may promote.
+const rankBlock = async (
     challenge: Challenge,
     scored: ScoredCandidate[],
     eligible: PickerPhoto[],
     picked: string[],
     ignoreWords: IgnoreWords,
     deps: RankDeps,
-): Promise<{ picked: string[]; visualEvidence: Set<string> | null }> => {
+): Promise<VerifiedPick> => {
     const ranked = finalizePick(scored, Math.max(12, picked.length));
     const selected = new Set(picked.map(String));
     const preferred = [...picked, ...ranked.filter((id) => !selected.has(String(id)))];
@@ -39,7 +41,7 @@ const verifyFillPick = async (
             : { picked, visualEvidence: null };
     } catch (error) {
         deps.logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .warning(
                 `Visual check failed for ${deps.logger.challengeTag(challenge)}: ${errorMessage(error) || error}`,
                 null,
@@ -48,7 +50,53 @@ const verifyFillPick = async (
     }
 };
 
-/** Persist weak subject evidence only after a photo was actually submitted. */
+/**
+ * The visual re-rank of a pick. With the user's chosen block it reorders only
+ * WITHIN a block — a chosen photo is never swapped for a top-up photo, nor the
+ * reverse — and a chosen block no larger than the slots it fills has nothing to
+ * choose between, so it is left alone and costs no model run. The rest block
+ * keeps the usual re-rank, as does an empty chosen set (the same as no list).
+ * A chosen block that goes by the user's order (`inOrder`) is never re-ranked: the
+ * photos are entered in the order picked, and the model must not reorder them.
+ */
+const verifyFillPick = async (
+    challenge: Challenge,
+    scored: ScoredCandidate[],
+    eligible: PickerPhoto[],
+    picked: string[],
+    ignoreWords: IgnoreWords,
+    deps: RankDeps,
+    chosenIds: ReadonlySet<string> | null = null,
+    inOrder: boolean = false,
+): Promise<VerifiedPick> => {
+    if (!chosenIds || chosenIds.size === 0) return rankBlock(challenge, scored, eligible, picked, ignoreWords, deps);
+    const blocks = splitByChosen(scored, chosenIds);
+    const results: VerifiedPick[] = [];
+    for (const [block, isChosen] of [
+        [blocks.chosen, true],
+        [blocks.rest, false],
+    ] as const) {
+        const blockPicked = picked.filter((id) => chosenIds.has(String(id)) === isChosen);
+        results.push(
+            blockPicked.length === 0 || (isChosen && (inOrder || block.length <= blockPicked.length))
+                ? { picked: blockPicked, visualEvidence: null }
+                : await rankBlock(challenge, block, eligible, blockPicked, ignoreWords, deps),
+        );
+    }
+    // A chosen photo is never marked uncertain, so only the top-up block's
+    // evidence is read; merging in the chosen block's would read a top-up
+    // photo as rejected whenever that block's model run abstained.
+    return {
+        picked: results.flatMap((result) => result.picked),
+        visualEvidence: results[1].visualEvidence,
+    };
+};
+
+/**
+ * Persist weak subject evidence only after a photo was actually submitted.
+ * A photo the user chose is never marked: they picked it on purpose, so
+ * automatic Boost/Turbo must not skip it as a doubtful theme match.
+ */
 const recordUncertainSubmission = ({
     challenge,
     label,
@@ -56,12 +104,14 @@ const recordUncertainSubmission = ({
     picked,
     visualEvidence,
     ignoreWords,
+    chosenIds,
     deps,
 }: Pick<FillAttemptParams, 'challenge' | 'label' | 'deps'> & {
     scored: ScoredCandidate[];
     picked: string[];
     visualEvidence: Set<string> | null;
     ignoreWords: IgnoreWords;
+    chosenIds: ReadonlySet<string> | null;
 }) => {
     if (label === 'manualFill' || !deps.entryAges || readChallengeTheme(challenge, ignoreWords).kind === 'open') return;
     const subjectWords = visualEvidence ? [] : buildThemeKeywords(challenge, ignoreWords);
@@ -71,6 +121,7 @@ const recordUncertainSubmission = ({
         // photo depicts the challenge subject.
         if (
             !entry ||
+            chosenIds?.has(String(id)) ||
             (visualEvidence
                 ? visualEvidence.has(id)
                 : entry.semantic !== 0 || scorePhoto(entry.photo, subjectWords) !== 0)
@@ -80,14 +131,14 @@ const recordUncertainSubmission = ({
         try {
             deps.entryAges.markUncertain(challenge, id, Math.floor(Date.now() / 1000));
             deps.logger
-                .withCategory('autoFill')
+                .withCategory('autoSubmit')
                 .warning(
                     `${label}: photo ${oneLine(id)} ${reason} for ${deps.logger.challengeTag(challenge)}; automatic Boost/Turbo may be skipped`,
                     null,
                 );
         } catch (error) {
             deps.logger
-                .withCategory('autoFill')
+                .withCategory('autoSubmit')
                 .warning(
                     `${label}: could not record theme uncertainty for submitted photo ${oneLine(id)}: ${errorMessage(error)}`,
                     null,

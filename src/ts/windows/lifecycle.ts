@@ -57,7 +57,7 @@ const focusExistingWindow = (win: BrowserWindow | null | undefined) => {
 };
 
 // Quit-time token cleanup, gated on holding the single-instance lock: a
-// losing second instance shares settings.json with the running primary
+// losing second instance shares config.json with the running primary
 // and must not even read it, or it could wipe the primary's session.
 const clearTokenOnQuit = (
     hasLock: boolean,
@@ -67,7 +67,7 @@ const clearTokenOnQuit = (
         return;
     }
     const userSettings = settingsFacade.loadSettings();
-    if (!userSettings.stayLoggedIn && userSettings.token) {
+    if (!userSettings.app.stayLoggedIn && userSettings.auth.token) {
         settingsFacade.setSetting('token', '');
     }
 };

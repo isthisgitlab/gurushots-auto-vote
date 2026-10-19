@@ -14,7 +14,9 @@
  * with the desktop scheduler), compute the next cadence with the shared
  * threshold/random-delay helpers, and report {ok, nextDelayMs, ...} back
  * through AndroidHeadlessBridge.onCycleComplete so the service can
- * schedule the next alarm. Reusing the JS keeps a single source of truth
+ * schedule the next alarm. A failure is reported as a stable code only
+ * (`no-token`, `voting-failed`, `cycle-failed`): the service shows it in
+ * its notification through translated text, so the detail goes to the log. Reusing the JS keeps a single source of truth
  * rather than re-porting the strategy to Kotlin.
  */
 
@@ -31,7 +33,7 @@ import {
     resolveCurrencyAuto,
     resolveScenarioWake,
 } from '../scheduling/nodeResolvers';
-import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
+import { effectiveTimezone } from '../settings/uiDefaults';
 
 import type { ActiveChallengesResponse, Challenge } from '../types/gurushots';
 import type { HeadlessGlobals } from '../types/capacitor';
@@ -56,7 +58,7 @@ const log = (msg: string, data?: unknown) => logger.withCategory('voting').info(
  * must recover on the same beat.
  */
 const computeNextDelayMs = async (token: string, prefetched: Challenge[] | null = null): Promise<number> => {
-    const userSettings = settings.loadSettings();
+    const userSettings = settings.loadSettings().app;
     try {
         let list: Challenge[];
         let fetchFailedNow = false;
@@ -70,14 +72,14 @@ const computeNextDelayMs = async (token: string, prefetched: Challenge[] | null 
             fetchFailedNow = fetched?.fetchFailed === true;
         }
         const now = Math.floor(Date.now() / 1000);
-        const lastMinuteCheckMinutes = Number(settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global')) || 1;
+        const lastMinuteCheckMinutes = settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
         const { delayMs, mode } = await computeNextCycleDelayMs(list, now, {
             resolveThreshold,
             normalDelayMs: getRandomCheckFrequencyMs(userSettings),
             lastMinuteCheckMinutes,
             minGapMs: MIN_CYCLE_GAP_MS,
             resolveScheduledFill,
-            timezone: userSettings.timezone || DEFAULT_TIMEZONE,
+            timezone: effectiveTimezone(userSettings.timezone),
             resolveFinalWindowTopUp,
             resolveBoostPrefill,
             resolveCurrencyAuto,
@@ -105,7 +107,7 @@ const reportComplete = (payload: object) => {
     }
 };
 
-const fallbackDelay = () => getRandomCheckFrequencyMs(settings.loadSettings());
+const fallbackDelay = () => getRandomCheckFrequencyMs(settings.loadSettings().app);
 
 const runOneCycle = async () => {
     try {
@@ -130,15 +132,12 @@ const runOneCycle = async () => {
         // fresh fetch there, which detects fetchFailed and caps the retry.
         const nextDelayMs = await computeNextDelayMs(token, ok ? result?.challenges : null);
         log('cycle complete', { ok, nextDelayMs });
-        reportComplete({ ok, message: (result && (result.message || result.error)) || null, nextDelayMs });
+        if (ok) return reportComplete({ ok, nextDelayMs });
+        log('voting failed', result?.message || result?.error);
+        reportComplete({ ok, error: 'voting-failed', nextDelayMs });
     } catch (err) {
-        const thrown = errorMessage(err);
-        log('cycle threw', thrown);
-        reportComplete({
-            ok: false,
-            error: thrown || 'cycle-failed',
-            nextDelayMs: fallbackDelay(),
-        });
+        log('cycle threw', errorMessage(err));
+        reportComplete({ ok: false, error: 'cycle-failed', nextDelayMs: fallbackDelay() });
     }
 };
 

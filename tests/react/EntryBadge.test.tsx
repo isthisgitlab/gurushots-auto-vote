@@ -5,8 +5,8 @@
  *     already turbo'd hides BOTH per-entry buttons (isEntryActioned).
  *   - boostAvailable / turboAvailable independently gate their buttons
  *     even when the entry isn't actioned.
- *   - The 5-second error auto-clear (useEffect + setTimeout) calls
- *     clearError so a stuck red button doesn't trap the user.
+ *   - A failed action's message is announced (role="alert") and stays until
+ *     it is dismissed or the next action starts.
  *   - The in-flight loading state disables the button and renders the
  *     spinner instead of the icon.
  *
@@ -15,7 +15,7 @@
  * them in the factory closure.
  */
 
-import { act, render, screen } from './helpers/test-utils';
+import { act, fireEvent, render, screen } from './helpers/test-utils';
 import { EntryBadge } from '@/components/app/EntryBadge';
 
 const mockBoostState = {
@@ -59,7 +59,7 @@ const baseEntry = (overrides = {}) => ({
 });
 
 // The parent callbacks are never triggered here.
-const noCallbacks = { onBoostApplied: () => {}, onTurboApplied: () => {}, onSwapped: () => {} };
+const noCallbacks = { onBoostApplied: () => {}, onTurboApplied: () => {}, onSwapped: () => {}, onChooseSwap: () => {} };
 
 beforeEach(() => {
     resetHookState();
@@ -69,6 +69,7 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
     test('shows boost button when boostAvailable and entry not actioned', () => {
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}
@@ -83,6 +84,7 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
     test('shows turbo button when turboAvailable and entry not actioned', () => {
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}
@@ -96,6 +98,7 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
     test('hides BOTH buttons when entry.boosted is true (mutual exclusion)', () => {
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry({ boosted: true })}
                 challengeId={777}
@@ -110,6 +113,7 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
     test('hides BOTH buttons when entry.turbo is truthy (mutual exclusion)', () => {
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry({ turbo: { id: 't1' } })}
                 challengeId={777}
@@ -127,6 +131,7 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
         // any entry merely *eligible* for boost.
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry({ boost: true, boosted: false })}
                 challengeId={777}
@@ -144,6 +149,7 @@ describe('EntryBadge — loading state', () => {
         mockBoostState.loading = true;
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}
@@ -163,6 +169,7 @@ describe('EntryBadge — loading state', () => {
         mockTurboState.loading = true;
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}
@@ -177,7 +184,7 @@ describe('EntryBadge — loading state', () => {
     });
 });
 
-describe('EntryBadge — error auto-clear (5s timer)', () => {
+describe('EntryBadge — a failed action stays until dismissed', () => {
     beforeEach(() => {
         jest.useFakeTimers();
     });
@@ -186,64 +193,43 @@ describe('EntryBadge — error auto-clear (5s timer)', () => {
         jest.useRealTimers();
     });
 
-    test('boost error triggers clearBoostError after 5 seconds', () => {
+    const renderBadge = () =>
+        render(
+            <EntryBadge
+                timezone="local"
+                {...noCallbacks}
+                entry={baseEntry()}
+                challengeId={777}
+                boostAvailable={true}
+                turboAvailable={true}
+            />,
+        );
+
+    test('the error is announced and is not cleared by a timer', () => {
         mockBoostState.error = 'Boost failed';
-        render(
-            <EntryBadge
-                {...noCallbacks}
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={true}
-                turboAvailable={false}
-            />,
-        );
-        expect(mockBoostState.clearError).not.toHaveBeenCalled();
+        renderBadge();
+        expect(screen.getByRole('alert')).toBeTruthy();
 
         act(() => {
-            jest.advanceTimersByTime(4999);
-        });
-        expect(mockBoostState.clearError).not.toHaveBeenCalled();
-
-        act(() => {
-            jest.advanceTimersByTime(1);
-        });
-        expect(mockBoostState.clearError).toHaveBeenCalledTimes(1);
-    });
-
-    test('turbo error triggers clearTurboError after 5 seconds', () => {
-        mockTurboState.error = 'Turbo failed';
-        render(
-            <EntryBadge
-                {...noCallbacks}
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={false}
-                turboAvailable={true}
-            />,
-        );
-        act(() => {
-            jest.advanceTimersByTime(5000);
-        });
-        expect(mockTurboState.clearError).toHaveBeenCalledTimes(1);
-    });
-
-    test('no timer scheduled when there is no error', () => {
-        // No error → useEffect early-returns; nothing should happen even
-        // after a long advance.
-        render(
-            <EntryBadge
-                {...noCallbacks}
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={true}
-                turboAvailable={true}
-            />,
-        );
-        act(() => {
-            jest.advanceTimersByTime(10_000);
+            jest.advanceTimersByTime(60_000);
         });
         expect(mockBoostState.clearError).not.toHaveBeenCalled();
         expect(mockTurboState.clearError).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toBeTruthy();
+    });
+
+    test('Dismiss clears both the boost and the turbo error', () => {
+        mockTurboState.error = 'Turbo failed';
+        renderBadge();
+        fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
+        expect(mockBoostState.clearError).toHaveBeenCalledTimes(1);
+        expect(mockTurboState.clearError).toHaveBeenCalledTimes(1);
+    });
+
+    test('no alert and no dismiss button without an error', () => {
+        renderBadge();
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'errors.dismiss' })).toBeNull();
     });
 });
 
@@ -251,6 +237,7 @@ describe('EntryBadge — error text', () => {
     const renderBadge = () =>
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}
@@ -259,10 +246,18 @@ describe('EntryBadge — error text', () => {
             />,
         );
 
-    test('shows a handler failure message as-is', () => {
-        mockBoostState.error = 'Boost failed';
+    test('shows a known handler failure translated, never the English handler text', () => {
+        mockBoostState.error = 'Failed to apply boost';
         renderBadge();
-        expect(screen.getByText('Boost failed')).toBeTruthy();
+        expect(screen.queryByText('Failed to apply boost')).toBeNull();
+        expect(screen.getByText('errors.boostFailed')).toBeTruthy();
+    });
+
+    test('an unlisted failure reads as the generic translated failure', () => {
+        mockBoostState.error = 'ECONNRESET at socket.js:12';
+        renderBadge();
+        expect(screen.queryByText(/ECONNRESET/)).toBeNull();
+        expect(screen.getByText('errors.actionFailed')).toBeTruthy();
     });
 
     test('shows translated text for the invalid-args machine code', () => {
@@ -278,6 +273,7 @@ describe('EntryBadge — error styling on button', () => {
         mockBoostState.error = 'Boost failed';
         render(
             <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}
@@ -285,14 +281,50 @@ describe('EntryBadge — error styling on button', () => {
                 turboAvailable={false}
             />,
         );
-        const button = screen.getByRole('button');
-        expect(button.className).toMatch(/btn-error/);
-        expect(button.className).not.toMatch(/btn-success/);
+        const button = screen.getByRole('button', { name: /🚀/ });
+        const tokens = button.className.split(/\s+/);
+        expect(tokens).toContain('btn-error');
+        expect(tokens).not.toContain('btn-success');
     });
 
-    test('boost button gets btn-success class when there is no error', () => {
+    test('turbo button gets btn-error class when there is a turbo error', () => {
+        mockTurboState.error = 'Turbo failed';
         render(
             <EntryBadge
+                timezone="local"
+                {...noCallbacks}
+                entry={baseEntry()}
+                challengeId={777}
+                boostAvailable={false}
+                turboAvailable={true}
+            />,
+        );
+        const tokens = screen.getByRole('button', { name: /⚡/ }).className.split(/\s+/);
+        expect(tokens).toContain('btn-error');
+        expect(tokens).not.toContain('btn-warning');
+    });
+
+    test('turbo button gets solid btn-warning when there is no error', () => {
+        render(
+            <EntryBadge
+                timezone="local"
+                {...noCallbacks}
+                entry={baseEntry()}
+                challengeId={777}
+                boostAvailable={false}
+                turboAvailable={true}
+            />,
+        );
+        const tokens = screen.getByRole('button').className.split(/\s+/);
+        expect(tokens).toContain('btn-warning');
+        expect(tokens).not.toContain('btn-outline');
+        expect(tokens).not.toContain('btn-error');
+    });
+
+    test('boost button gets solid btn-success when there is no error', () => {
+        render(
+            <EntryBadge
+                timezone="local"
                 {...noCallbacks}
                 entry={baseEntry()}
                 challengeId={777}
@@ -301,7 +333,89 @@ describe('EntryBadge — error styling on button', () => {
             />,
         );
         const button = screen.getByRole('button');
-        expect(button.className).toMatch(/btn-success/);
-        expect(button.className).not.toMatch(/btn-error/);
+        const tokens = button.className.split(/\s+/);
+        expect(tokens).toContain('btn-success');
+        expect(tokens).not.toContain('btn-outline');
+        expect(tokens).not.toContain('btn-error');
+    });
+});
+
+describe('EntryBadge — layout: an info row, then an actions row', () => {
+    const renderBadge = (props = {}) =>
+        render(
+            <EntryBadge
+                timezone="local"
+                {...noCallbacks}
+                entry={baseEntry({ appEntered: { at: 1_792_420_000, exact: true } })}
+                challengeId={777}
+                boostAvailable={false}
+                turboAvailable={false}
+                {...props}
+            />,
+        );
+    const badge = (container: Element) => container.firstElementChild!;
+
+    test('the badge is a left-aligned column, its rows 8px apart', () => {
+        const { container } = renderBadge();
+        const { classList } = badge(container);
+        // A bordered box, not a repurposed daisyUI badge.
+        for (const cls of ['rounded-box', 'border', 'border-base-300', 'p-2']) {
+            expect(classList.contains(cls)).toBe(true);
+        }
+        expect(classList.contains('badge')).toBe(false);
+        for (const cls of ['flex', 'flex-col', 'items-start', 'text-left', 'gap-2']) {
+            expect(classList.contains(cls)).toBe(true);
+        }
+        // Nothing that undoes it: the stock centring and the narrower gap.
+        for (const cls of ['items-center', 'justify-center', 'gap-1', 'flex-wrap']) {
+            expect(classList.contains(cls)).toBe(false);
+        }
+    });
+
+    test('the info row holds the rank and when it went in; the actions row holds the buttons', () => {
+        const { container } = renderBadge({ boostAvailable: true, turboAvailable: true, swapAvailable: true });
+        const [info, actions] = Array.from(badge(container).children);
+        expect(info.classList.contains('flex-wrap')).toBe(true);
+        expect(info.textContent).toContain('app.rank');
+        expect(info.textContent).toContain('app.entrySubmitted');
+        expect(info.querySelector('button')).toBeNull();
+        expect(actions.classList.contains('flex-wrap')).toBe(true);
+        expect(actions.classList.contains('gap-2')).toBe(true);
+        const labels = Array.from(actions.querySelectorAll('button')).map((button) => button.textContent);
+        expect(labels).toEqual([
+            expect.stringContaining('app.boost'),
+            expect.stringContaining('app.turbo'),
+            expect.stringContaining('app.currencySwap'),
+            expect.stringContaining('app.swapPick'),
+        ]);
+        expect(actions.textContent).not.toContain('app.rank');
+    });
+
+    test('the swap-back button is in the actions row beside Swap', () => {
+        const { container } = renderBadge({
+            swapAvailable: true,
+            swapBack: { currentId: 'e1', previousId: 'old', previousMemberId: 'm', kind: 'boost' },
+        });
+        const actions = badge(container).children[1];
+        const labels = Array.from(actions.querySelectorAll('button')).map((button) => button.textContent);
+        expect(labels).toEqual([
+            expect.stringContaining('app.currencySwap'),
+            expect.stringContaining('app.swapPick'),
+            expect.stringContaining('app.currencySwapBack'),
+        ]);
+    });
+
+    test('no actions row renders when no action is available', () => {
+        const { container } = renderBadge();
+        expect(badge(container).children).toHaveLength(1);
+        expect(container.querySelector('button')).toBeNull();
+    });
+
+    test('a failed action’s message stays below both rows', () => {
+        mockBoostState.error = 'Boost failed';
+        const { container } = renderBadge({ boostAvailable: true });
+        const children = Array.from(badge(container).children);
+        expect(children).toHaveLength(3);
+        expect(children[2].getAttribute('role')).toBe('alert');
     });
 });

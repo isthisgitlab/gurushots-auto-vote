@@ -36,14 +36,28 @@ describe('scripts/web-server.ts', () => {
         expect(parsePort(['--port=abc'])).toBeNull();
     });
 
-    test('main starts the server on dist/ and prints its URL', async () => {
+    test('main starts the server on dist/ and prints its URL, token fragment included, to stdout', async () => {
         server.startWebServer.mockResolvedValue({
             server: jest.requireActual<typeof import('node:http')>('node:http').createServer(),
-            url: 'http://localhost:4400/',
+            token: 'abc123',
+            url: 'http://localhost:4400/#t=abc123',
         });
         await main(['--port=4400']);
         expect(server.startWebServer).toHaveBeenCalledWith({ port: 4400, distDir: expect.stringMatching(/dist$/) });
-        expect(logSpy).toHaveBeenCalledWith('GuruShots Auto Vote web UI: http://localhost:4400/');
+        expect(logSpy).toHaveBeenCalledWith('GuruShots Auto Vote web UI: http://localhost:4400/#t=abc123');
+        expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    test('the process ends once the server has stopped itself (after a local-data wipe)', async () => {
+        const stopped = jest.requireActual<typeof import('node:http')>('node:http').createServer();
+        server.startWebServer.mockResolvedValue({ server: stopped, token: 't', url: 'http://localhost:4400/#t=t' });
+        const exit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+        await main(['--port=4400']);
+        expect(exit).not.toHaveBeenCalled();
+
+        stopped.emit('close');
+
+        expect(exit).toHaveBeenCalledWith(0);
     });
 
     test('main explains a taken port, and reports any other start failure', async () => {

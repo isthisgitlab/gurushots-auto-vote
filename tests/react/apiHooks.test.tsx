@@ -11,11 +11,13 @@ import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
 import { useDeadlineActions } from '@/api/useDeadlineActions';
 import { useMemberChallenges } from '@/api/useMemberChallenges';
+import { useOpenChosenAnnotations } from '@/api/useOpenChosenAnnotations';
 import { useSwapBacks } from '@/api/useSwapBacks';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 import { mockApi } from './helpers/setup';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
+import { MAX_ANNOTATED_IDS } from '../../src/ts/settings/limits';
 
 const deferred = () => {
     let resolve!: (value: unknown) => void;
@@ -33,7 +35,7 @@ beforeEach(() => {
 });
 
 describe('useAsyncIpcAction', () => {
-    test('without labels, falls back to the generic failure and error messages', async () => {
+    test('without labels, falls back to the generic failure and error codes, and logs the raw detail', async () => {
         const invoker = jest
             .fn()
             .mockResolvedValueOnce({ success: false })
@@ -44,14 +46,16 @@ describe('useAsyncIpcAction', () => {
         await act(async () => {
             await result.current.run(1);
         });
-        expect(result.current.error).toBe('Action failed');
+        expect(result.current.error).toBe('action-failed');
+        expect(mockApi.logWarning).toHaveBeenCalledWith('IPC action failed: action-failed');
 
         let ret;
         await act(async () => {
             ret = await result.current.run(2);
         });
-        expect(ret).toEqual({ success: false, error: 'Action error' });
-        expect(result.current.error).toBe('Action error');
+        expect(ret).toEqual({ success: false, error: 'action-error' });
+        expect(result.current.error).toBe('action-error');
+        expect(mockApi.logError).toHaveBeenCalledWith('IPC action threw: action-error');
 
         await act(async () => {
             ret = await result.current.run(3);
@@ -75,37 +79,37 @@ describe('useAsyncIpcAction', () => {
 });
 
 describe('useAuth transitions', () => {
-    test('login and logout rejections without a message use their fallbacks', async () => {
+    test('login and logout rejections are stored as codes', async () => {
         mockApi.login.mockRejectedValueOnce({});
         const { result } = renderHook(() => useAuth());
         await act(async () => {
             await result.current.login();
         });
-        expect(result.current.error).toBe('Login transition failed');
+        expect(result.current.error).toBe('login-transition-failed');
 
         mockApi.logout.mockRejectedValueOnce({});
         await act(async () => {
             await result.current.logout();
         });
-        expect(result.current.error).toBe('Logout failed');
+        expect(result.current.error).toBe('logout-failed');
 
         mockApi.login.mockRejectedValueOnce(null);
         await act(async () => {
             await result.current.login();
         });
-        expect(result.current.error).toBe('Login transition failed');
+        expect(result.current.error).toBe('login-transition-failed');
 
         mockApi.logout.mockRejectedValueOnce(null);
         await act(async () => {
             await result.current.logout();
         });
-        expect(result.current.error).toBe('Logout failed');
+        expect(result.current.error).toBe('logout-failed');
 
         mockApi.logout.mockRejectedValueOnce(new Error('ipc gone'));
         await act(async () => {
             await result.current.logout();
         });
-        expect(result.current.error).toBe('ipc gone');
+        expect(result.current.error).toBe('logout-failed');
 
         act(() => result.current.clearError());
         expect(result.current.error).toBeNull();
@@ -126,14 +130,14 @@ describe('useAuth transitions', () => {
 });
 
 describe('useBoost / useTurbo / useFillChallenge', () => {
-    test('useBoost forwards (challengeId, imageId) and surfaces its failure label', async () => {
+    test('useBoost forwards (challengeId, imageId) and surfaces the generic failure code', async () => {
         mockApi.applyBoost.mockResolvedValueOnce(invalid({ success: false }));
         const { result } = renderHook(() => useBoost());
         await act(async () => {
             await result.current.applyBoost('c1', 'img1');
         });
         expect(mockApi.applyBoost).toHaveBeenCalledWith('c1', 'img1');
-        expect(result.current.error).toBe('Boost failed');
+        expect(result.current.error).toBe('action-failed');
         act(() => result.current.clearError());
         expect(result.current.error).toBeNull();
     });
@@ -147,31 +151,34 @@ describe('useBoost / useTurbo / useFillChallenge', () => {
             await result.current.playAutoTurbo('c1', 'Title');
         });
         expect(mockApi.playAutoTurbo).toHaveBeenCalledWith('c1', 'Title');
-        expect(result.current.error).toBe('Auto-turbo run failed');
+        expect(result.current.error).toBe('action-failed');
 
         await act(async () => {
             await result.current.applyTurbo('c1', 'img');
         });
         expect(mockApi.applyTurbo).toHaveBeenCalledWith('c1', 'img');
         // apply side wins when both hold an error
-        expect(result.current.error).toBe('Turbo apply error');
+        expect(result.current.error).toBe('action-error');
 
         act(() => result.current.clearError());
         expect(result.current.error).toBeNull();
         expect(result.current.loading).toBe(false);
     });
 
-    test.each([[{}], [null]])('useFillChallenge forwards the mode and reports its error label (%p)', async (thrown) => {
-        mockApi.fillChallengeNow.mockRejectedValueOnce(thrown);
-        const { result } = renderHook(() => useFillChallenge());
-        await act(async () => {
-            await result.current.fillNow('c9', invalid('fill'));
-        });
-        expect(mockApi.fillChallengeNow).toHaveBeenCalledWith('c9', 'fill');
-        expect(result.current.error).toBe('Photo submit error');
-        act(() => result.current.clearError());
-        expect(result.current.error).toBeNull();
-    });
+    test.each([[{}], [null]])(
+        'useFillChallenge forwards the mode and reports the generic error code (%p)',
+        async (thrown) => {
+            mockApi.fillChallengeNow.mockRejectedValueOnce(thrown);
+            const { result } = renderHook(() => useFillChallenge());
+            await act(async () => {
+                await result.current.fillNow('c9', invalid('fill'));
+            });
+            expect(mockApi.fillChallengeNow).toHaveBeenCalledWith('c9', 'fill');
+            expect(result.current.error).toBe('action-error');
+            act(() => result.current.clearError());
+            expect(result.current.error).toBeNull();
+        },
+    );
 });
 
 describe('useDeadlineActions', () => {
@@ -181,11 +188,21 @@ describe('useDeadlineActions', () => {
         member: { boost: { state: 'AVAILABLE' }, ranking: { entries: [{ id: 'a', turbo: true }, null] } },
     });
 
+    // The block fields of an answer with nothing blocked.
+    const calm = { boostBlockedBy: null, turboBlockedBy: null, boostReleaseAt: null, turboReleaseAt: null };
+
     test('a success with a non-array actions field yields an empty list', async () => {
         mockApi.getDeadlineActions.mockResolvedValueOnce(invalid({ success: true, actions: 'x', boostBlocked: true }));
         const { result } = renderHook(() => useDeadlineActions(challenge));
         await waitFor(() => expect(result.current.loading).toBe(false));
-        expect(result.current).toEqual({ actions: [], boostBlocked: true, loading: false, error: false });
+        expect(result.current).toEqual({
+            actions: [],
+            boostBlocked: true,
+            turboBlocked: false,
+            ...calm,
+            loading: false,
+            error: false,
+        });
     });
 
     test('an unsuccessful response sets error; a success passes actions through', async () => {
@@ -200,14 +217,26 @@ describe('useDeadlineActions', () => {
     });
 
     test('a new settingsVersion refetches with the same challenge content', async () => {
-        mockApi.getDeadlineActions.mockResolvedValueOnce({ success: true, actions: [], boostBlocked: false });
+        mockApi.getDeadlineActions.mockResolvedValueOnce({
+            success: true,
+            actions: [],
+            boostBlocked: false,
+            turboBlocked: false,
+            ...calm,
+        });
         const { result, rerender } = renderHook(({ v }) => useDeadlineActions(challenge, v), {
             initialProps: { v: 0 },
         });
         await waitFor(() => expect(result.current.loading).toBe(false));
         expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(1);
 
-        mockApi.getDeadlineActions.mockResolvedValueOnce({ success: true, actions: [], boostBlocked: true });
+        mockApi.getDeadlineActions.mockResolvedValueOnce({
+            success: true,
+            actions: [],
+            boostBlocked: true,
+            turboBlocked: false,
+            ...calm,
+        });
         rerender({ v: 1 });
         await waitFor(() => expect(result.current.boostBlocked).toBe(true));
         expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
@@ -215,6 +244,181 @@ describe('useDeadlineActions', () => {
         // A re-render with the same version and content does not refetch.
         rerender({ v: 1 });
         expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+    });
+
+    test('turboBlocked passes through from the response', async () => {
+        mockApi.getDeadlineActions.mockResolvedValueOnce({
+            success: true,
+            actions: [],
+            boostBlocked: false,
+            turboBlocked: true,
+            ...calm,
+        });
+        const { result } = renderHook(() => useDeadlineActions(challenge));
+        await waitFor(() => expect(result.current.turboBlocked).toBe(true));
+    });
+
+    test('refetches once when a blocking pin is due to give way, then stops', async () => {
+        jest.useFakeTimers();
+        try {
+            const releaseAt = Math.floor(Date.now() / 1000) + 60;
+            mockApi.getDeadlineActions.mockClear();
+            mockApi.getDeadlineActions.mockResolvedValueOnce({
+                success: true,
+                actions: [],
+                boostBlocked: true,
+                turboBlocked: false,
+                ...calm,
+                boostBlockedBy: 'pin',
+                boostReleaseAt: releaseAt,
+            });
+            mockApi.getDeadlineActions.mockResolvedValueOnce({
+                success: true,
+                actions: [],
+                boostBlocked: false,
+                turboBlocked: false,
+                ...calm,
+            });
+            const { result } = renderHook(() => useDeadlineActions(challenge));
+            await waitFor(() => expect(result.current.boostBlocked).toBe(true));
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(1);
+
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(30_000);
+            });
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(1);
+
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(32_000);
+            });
+            await waitFor(() => expect(result.current.boostBlocked).toBe(false));
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(600_000);
+            });
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('after the first release refetch, the later release instant is armed again', async () => {
+        jest.useFakeTimers();
+        try {
+            const first = Math.floor(Date.now() / 1000) + 60;
+            mockApi.getDeadlineActions.mockClear();
+            const blocked = (boostReleaseAt: number) => ({
+                success: true as const,
+                actions: [],
+                boostBlocked: true,
+                turboBlocked: false,
+                ...calm,
+                boostBlockedBy: 'pin' as const,
+                boostReleaseAt,
+            });
+            mockApi.getDeadlineActions.mockResolvedValueOnce(blocked(first));
+            mockApi.getDeadlineActions.mockResolvedValueOnce(blocked(first + 600));
+            mockApi.getDeadlineActions.mockResolvedValueOnce({
+                success: true,
+                actions: [],
+                boostBlocked: false,
+                turboBlocked: false,
+                ...calm,
+            });
+            const { result } = renderHook(() => useDeadlineActions(challenge));
+            await waitFor(() => expect(result.current.boostBlocked).toBe(true));
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(62_000);
+            });
+            await waitFor(() => expect(result.current.boostReleaseAt).toBe(first + 600));
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+
+            // Not yet at the later instant: still blocked, no third fetch.
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(300_000);
+            });
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(302_000);
+            });
+            await waitFor(() => expect(result.current.boostBlocked).toBe(false));
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(3);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('a release instant already past, or too far for one timer, still arms a valid refetch', async () => {
+        jest.useFakeTimers();
+        try {
+            mockApi.getDeadlineActions.mockClear();
+            const answer = (boostReleaseAt: number | null) => ({
+                success: true as const,
+                actions: [],
+                boostBlocked: true,
+                turboBlocked: false,
+                ...calm,
+                boostBlockedBy: 'pin' as const,
+                boostReleaseAt,
+            });
+            mockApi.getDeadlineActions.mockResolvedValueOnce(answer(1));
+            mockApi.getDeadlineActions.mockResolvedValueOnce(answer(2 ** 40));
+            const { result } = renderHook(() => useDeadlineActions(challenge));
+            await waitFor(() => expect(result.current.boostBlocked).toBe(true));
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(1500);
+            });
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+            // The far instant waits out the longest single timer instead of firing at once.
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(60_000);
+            });
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('the one refetch waits for the sooner of the two release instants, and the state carries both causes', async () => {
+        jest.useFakeTimers();
+        try {
+            const soon = Math.floor(Date.now() / 1000) + 60;
+            mockApi.getDeadlineActions.mockClear();
+            mockApi.getDeadlineActions.mockResolvedValueOnce({
+                success: true,
+                actions: [],
+                boostBlocked: true,
+                turboBlocked: true,
+                boostBlockedBy: 'pin',
+                turboBlockedBy: 'pin',
+                boostReleaseAt: soon + 600,
+                turboReleaseAt: soon,
+            });
+            mockApi.getDeadlineActions.mockResolvedValueOnce({
+                success: true,
+                actions: [],
+                boostBlocked: false,
+                turboBlocked: false,
+                ...calm,
+            });
+            const { result } = renderHook(() => useDeadlineActions(challenge));
+            await waitFor(() => expect(result.current.boostBlocked).toBe(true));
+            expect(result.current).toMatchObject({
+                boostBlockedBy: 'pin',
+                turboBlockedBy: 'pin',
+                boostReleaseAt: soon + 600,
+                turboReleaseAt: soon,
+            });
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(62_000);
+            });
+            await waitFor(() => expect(result.current.boostBlocked).toBe(false));
+            expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     test('a rejection sets error; a late rejection after unmount is ignored', async () => {
@@ -233,10 +437,28 @@ describe('useDeadlineActions', () => {
         expect(second.result.current.loading).toBe(true);
     });
 
+    test('no challenge settles empty without calling the handler', async () => {
+        mockApi.getDeadlineActions.mockClear();
+        const { result, rerender } = renderHook(({ c }) => useDeadlineActions(c), {
+            initialProps: { c: null as Challenge | null | undefined },
+        });
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current).toEqual({
+            actions: [],
+            boostBlocked: false,
+            turboBlocked: false,
+            ...calm,
+            loading: false,
+            error: false,
+        });
+        rerender({ c: undefined });
+        expect(mockApi.getDeadlineActions).not.toHaveBeenCalled();
+    });
+
     test('a late success after unmount is ignored', async () => {
         const late = deferred();
         mockApi.getDeadlineActions.mockReturnValueOnce(invalid(late.promise));
-        const { result, unmount } = renderHook(() => useDeadlineActions(null));
+        const { result, unmount } = renderHook(() => useDeadlineActions(challenge));
         unmount();
         await act(async () => {
             late.resolve({ success: true, actions: [{ action: 'boost' }] });
@@ -247,12 +469,32 @@ describe('useDeadlineActions', () => {
 });
 
 describe('useMemberChallenges', () => {
-    test('a failed response empties items and surfaces the server error', async () => {
+    test('a failed response surfaces the server error, with no items before a good read', async () => {
         mockApi.getMemberChallenges.mockResolvedValueOnce({ success: false, error: 'rate_limited' });
         const { result } = renderHook(() => useMemberChallenges());
         await waitFor(() => expect(result.current.loading).toBe(false));
         expect(result.current.items).toEqual([]);
         expect(result.current.error!.message).toBe('rate_limited');
+    });
+
+    test('a failed re-read, answered or rejected, keeps the items of the last good read', async () => {
+        mockApi.getMemberChallenges.mockResolvedValueOnce(invalid({ success: true, items: [{ id: 1 }] }));
+        const { result } = renderHook(() => useMemberChallenges());
+        await waitFor(() => expect(result.current.items).toEqual([{ id: 1 }]));
+
+        mockApi.getMemberChallenges.mockResolvedValueOnce({ success: false, error: 'rate_limited' });
+        await act(async () => {
+            await result.current.refetch();
+        });
+        expect(result.current.items).toEqual([{ id: 1 }]);
+        expect(result.current.error!.message).toBe('rate_limited');
+
+        mockApi.getMemberChallenges.mockRejectedValueOnce(new Error('ipc'));
+        await act(async () => {
+            await result.current.refetch();
+        });
+        expect(result.current.items).toEqual([{ id: 1 }]);
+        expect(result.current.error!.message).toBe('ipc');
     });
 
     test('a missing response falls back to fetch_failed; a non-array success is empty', async () => {
@@ -273,6 +515,50 @@ describe('useMemberChallenges', () => {
             await result.current.refetch();
         });
         expect(result.current.items).toEqual([{ id: 1 }]);
+    });
+});
+
+describe('useOpenChosenAnnotations', () => {
+    const annotation = { chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 };
+    const idsOf = (count: number) => Array.from({ length: count }, (_, i) => String(i + 1));
+    const answerWith = (ids: ReadonlyArray<string | number>) => ({
+        success: true as const,
+        annotations: Object.fromEntries(ids.map((id) => [String(id), annotation])),
+    });
+
+    test('asks for exactly the cap in one request, and merges the parts of a longer list (301 ids: two requests)', async () => {
+        mockApi.getOpenChosenAnnotations.mockImplementation(async (ids) => invalid(answerWith(ids)));
+        const { result, rerender } = renderHook(({ ids }) => useOpenChosenAnnotations(ids), {
+            initialProps: { ids: idsOf(MAX_ANNOTATED_IDS) },
+        });
+        await waitFor(() => expect(Object.keys(result.current.annotations)).toHaveLength(MAX_ANNOTATED_IDS));
+        expect(mockApi.getOpenChosenAnnotations).toHaveBeenCalledTimes(1);
+
+        mockApi.getOpenChosenAnnotations.mockClear();
+        rerender({ ids: idsOf(MAX_ANNOTATED_IDS + 1) });
+        await waitFor(() => expect(Object.keys(result.current.annotations)).toHaveLength(MAX_ANNOTATED_IDS + 1));
+        expect(mockApi.getOpenChosenAnnotations.mock.calls.map(([ids]) => ids.length)).toEqual([MAX_ANNOTATED_IDS, 1]);
+    });
+
+    test('a part that fails leaves only its rows without annotations; no part answering leaves none', async () => {
+        mockApi.getOpenChosenAnnotations.mockImplementation(async (ids) =>
+            invalid(ids.length === MAX_ANNOTATED_IDS ? { success: false, error: 'busy' } : answerWith(ids)),
+        );
+        const { result, rerender } = renderHook(({ ids }) => useOpenChosenAnnotations(ids), {
+            initialProps: { ids: idsOf(MAX_ANNOTATED_IDS + 1) },
+        });
+        await waitFor(() => expect(Object.keys(result.current.annotations)).toEqual([String(MAX_ANNOTATED_IDS + 1)]));
+
+        mockApi.getOpenChosenAnnotations.mockRejectedValue(new Error('ipc'));
+        rerender({ ids: idsOf(2) });
+        await waitFor(() => expect(result.current.annotations).toEqual({}));
+    });
+
+    test('no ids asks nothing', async () => {
+        const { result } = renderHook(() => useOpenChosenAnnotations([]));
+        await act(async () => undefined);
+        expect(result.current.annotations).toEqual({});
+        expect(mockApi.getOpenChosenAnnotations).not.toHaveBeenCalled();
     });
 });
 
@@ -323,7 +609,7 @@ describe('useSwapBacks', () => {
 describe('useActiveChallenges unserialisable payload', () => {
     test('a payload JSON.stringify cannot encode is treated as changed and still applied', async () => {
         const weird = [{ id: 1, big: 10n }];
-        mockApi.getSettings.mockResolvedValue(invalid({ token: 'tok' }));
+        mockApi.getSettings.mockResolvedValue(invalid({ app: {} }));
         mockApi.getActiveChallenges.mockResolvedValue(invalid({ challenges: weird }));
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(result.current.loading).toBe(false));
@@ -340,7 +626,7 @@ describe('useActiveChallenges unserialisable payload', () => {
     });
 
     test('an identical payload is deduped: the data reference is kept', async () => {
-        mockApi.getSettings.mockResolvedValue(invalid({ token: 'tok' }));
+        mockApi.getSettings.mockResolvedValue(invalid({ app: {} }));
         mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ challenges: [{ id: 1 }] }));
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(result.current.loading).toBe(false));
@@ -356,7 +642,7 @@ describe('useActiveChallenges unserialisable payload', () => {
 
 describe('useActiveChallenges stale cleanup', () => {
     test('a refetch with skipCleanup applies the data without any cleanup', async () => {
-        mockApi.getSettings.mockResolvedValue(invalid({ token: 'tok' }));
+        mockApi.getSettings.mockResolvedValue(invalid({ app: {} }));
         mockApi.getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 7 }] }));
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(mockApi.cleanupStaleMetadata).toHaveBeenCalledTimes(1));
@@ -376,7 +662,7 @@ describe('useActiveChallenges stale cleanup', () => {
     });
 
     test('while autovote runs, stale-settings cleanup is skipped but metadata cleanup still runs', async () => {
-        mockApi.getSettings.mockResolvedValue(invalid({ token: 'tok' }));
+        mockApi.getSettings.mockResolvedValue(invalid({ app: {} }));
         mockApi.getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 7 }] }));
         const { result } = renderHook(() => useActiveChallenges(true));
         await waitFor(() => expect(mockApi.cleanupStaleMetadata).toHaveBeenCalledWith(['7']));

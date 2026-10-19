@@ -2,14 +2,20 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
+import { interp } from '@/utils/interp';
+import { sourceBadgeTone } from '@/utils/customizationTone';
+import type { CustomizationSource } from '@/utils/customizationTone';
 import { getScheduleShift } from '../../../services/scheduleRemap';
 import { SettingHelp } from '@/components/ui/SettingHelp';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { SettingInput, SettingLabel } from './SettingInput';
 import { SettingHintList } from './SettingHints';
 
 import type { SerializableSchemaEntry } from '../../../ipc/settings.handlers';
 import type { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
+import type { ComponentChildren } from 'preact';
 import type { Challenge } from '../../../types/gurushots';
+import type { RuleSource } from '../../../types/settings';
 import type { FillSchedule } from '../../../services/scheduleRemap';
 import type { HintsFor } from '../../../types/settingsEditor';
 
@@ -24,13 +30,59 @@ export interface ChallengeGroupContext {
     hintsFor: HintsFor;
 }
 
+/** A source badge led by the icon of its marker in ChallengeNav (decorative: the text names the source). */
+function SourceBadge({
+    source,
+    icon,
+    children,
+}: {
+    source: CustomizationSource;
+    icon: string;
+    children: ComponentChildren;
+}) {
+    return (
+        <span className={`badge ${sourceBadgeTone(source)} badge-sm`}>
+            <span aria-hidden="true">{icon} </span>
+            {children}
+        </span>
+    );
+}
+
 /**
- * Where a setting's shown value comes from: override, title-rule profile, or the global default.
+ * Where a setting's shown value comes from: override, a rule that sets it directly (named), the
+ * rule's profile, or the global default.
  */
-function ValueSourceBadge({ hasOverride, hasProfileValue }: { hasOverride: boolean; hasProfileValue: boolean }) {
+function ValueSourceBadge({
+    hasOverride,
+    ruleSource,
+    hasProfileValue,
+}: {
+    hasOverride: boolean;
+    ruleSource: RuleSource | undefined;
+    hasProfileValue: boolean;
+}) {
     const { t } = useTranslation();
-    if (hasOverride) return <span className="badge badge-accent badge-sm">{t('app.overridden')}</span>;
-    if (hasProfileValue) return <span className="badge badge-info badge-sm">{t('app.usingProfile')}</span>;
+    if (hasOverride)
+        return (
+            <SourceBadge source="manual" icon="⚙️">
+                {t('app.overridden')}
+            </SourceBadge>
+        );
+    if (ruleSource !== undefined) {
+        // A rule without a title is named by its place in the list, in the UI's language.
+        const title = ruleSource.title ?? interp(t('app.ruleNumber'), { n: ruleSource.index });
+        return (
+            <SourceBadge source="rule" icon="📏">
+                {interp(t('app.fromRule'), { title })}
+            </SourceBadge>
+        );
+    }
+    if (hasProfileValue)
+        return (
+            <SourceBadge source="profile" icon="🔄">
+                {t('app.usingProfile')}
+            </SourceBadge>
+        );
     return <span className="badge badge-ghost badge-sm">{t('app.usingGlobal')}</span>;
 }
 
@@ -50,7 +102,7 @@ function ValueSourceBadge({ hasOverride, hasProfileValue }: { hasOverride: boole
  * N time" hint would be false.
  */
 function scheduleShiftOf(key: string, value: unknown, challenge: Challenge | null | undefined): number {
-    if (key !== 'autoFillSchedule') return 0;
+    if (key !== 'autoSubmitSchedule') return 0;
     const max = challenge?.max_photo_submits;
     // Number.isInteger does not narrow: an integer here is a number. The form
     // holds this key's value, a schedule.
@@ -80,11 +132,15 @@ function ChallengeSettingCell({
         <div className={SETTING_CELL_CLASS}>
             <SettingLabel inputId={inputId} type={config.type}>
                 <span className="font-medium">{t(config.label)}</span>
-                <div className="flex gap-1">
-                    <ValueSourceBadge hasOverride={hasOverride} hasProfileValue={hasProfileValue} />
-                </div>
+                <span className="flex gap-1">
+                    <ValueSourceBadge
+                        hasOverride={hasOverride}
+                        ruleSource={form.ruleSourceOf(key)}
+                        hasProfileValue={hasProfileValue}
+                    />
+                </span>
             </SettingLabel>
-            <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
+            <p className="text-xs text-base-content/70 mb-2">{t(config.description)}</p>
             <SettingHelp helpKey={config.helpKey} />
             <SettingInput
                 id={inputId}
@@ -96,14 +152,14 @@ function ChallengeSettingCell({
                 disabled={!applicable}
             />
             {scheduleShift > 0 && (
-                <p className="text-xs text-info mt-1">
-                    {t('app.autoFillScheduleShiftHint')
+                <ToneNote tone="info" className="text-xs mt-1">
+                    {t('app.autoSubmitScheduleShiftHint')
                         .replace('{0}', String(shiftedChallenge.max_photo_submits))
                         .replace('{1}', String(shiftedChallenge.max_photo_submits + scheduleShift))}
-                </p>
+                </ToneNote>
             )}
             <SettingHintList hints={hintsFor(key)} />
-            <p className={`text-xs mt-1 ${hasOverride ? 'text-base-content/70' : 'text-base-content/40'}`}>
+            <p className="text-xs mt-1 text-base-content/70">
                 {t('app.globalDefault')}: {formatSettingDefault(defaults?.[key] ?? config.default, config, t)}
             </p>
         </div>

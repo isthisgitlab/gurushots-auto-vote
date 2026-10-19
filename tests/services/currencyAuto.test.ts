@@ -21,9 +21,11 @@ import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import currencyActionsModule = require('../../src/ts/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
+import type * as loggerModule from '../../src/ts/logger';
 import type * as currencyAutoModule from '../../src/ts/services/currencyAuto';
 import type * as currencyAutoStoreModule from '../../src/ts/currencyAutoStore';
 import type { CurrencyPassDeps } from '../../src/ts/services/currencyAuto';
+import type { FillMission, MissionNeeds } from '../../src/ts/services/missions';
 import type {
     Challenge,
     MemberBoost,
@@ -34,7 +36,8 @@ import type {
 import { invalid } from '../helpers/invalid';
 const { runAutoKey, runAutoSwap, runAutoExposureFill, runMissionFill } =
     require('../../src/ts/services/currencyAuto') as typeof currencyAutoModule;
-const { createMemoryAutoSpendLedger } = require('../../src/ts/currencyAutoStore') as typeof currencyAutoStoreModule;
+const { createMemoryAutoSpendLedger, createAutoSpendLedger } =
+    require('../../src/ts/currencyAutoStore') as typeof currencyAutoStoreModule;
 
 const NOW = 1_000_000;
 const H = 3600;
@@ -128,6 +131,7 @@ beforeEach(() => {
         currencyReserveSwaps: 0,
         currencyReserveFills: 0,
     };
+    settings.getEntryPins.mockReturnValue({ boost: null, turbo: null });
     settings.getEffectiveSetting = invalid(jest.fn((key: string) => values[key]));
     currencyActions.unlockBoostWithKey.mockResolvedValue(OK);
     currencyActions.previewSwap.mockResolvedValue({ ...OK, candidate: { id: 'new1', member_id: 'm' } });
@@ -187,11 +191,6 @@ describe('shared gates', () => {
     test('an unreadable balance refuses', async () => {
         expect(await runAutoKey(makeCtx({ bankroll: null }))).toBe(false);
         expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
-    });
-
-    test('a corrupt reserve counts as none', async () => {
-        set({ currencyReserveKeys: 'x' });
-        expect(await runAutoKey(makeCtx({ bankroll: { keys: 1 } }))).toBe(true);
     });
 
     test('another spend in flight defers the action', async () => {
@@ -254,11 +253,23 @@ describe('runAutoSwap', () => {
             'e2',
             'new1',
             'tok',
-            expect.objectContaining({ ledger: ctx.currency.swapLedger }),
+            expect.objectContaining({ ledger: ctx.currency.swapLedger, maxSwaps: 1 }),
         );
         const ranking = ctx.challenge.member.ranking;
         expect(ranking.entries.map((e) => e.id)).toEqual(['e1', 'new1']);
         expect(ranking.swaps).toEqual([{ id: 'e2' }]);
+    });
+
+    test('does nothing while Manual Only is on, however auto-swap is set', async () => {
+        set({ manualPhotosOnly: true });
+        const ctx = makeCtx();
+        expect(await runAutoSwap(ctx)).toBe(false);
+        expect(currencyActions.previewSwap).not.toHaveBeenCalled();
+        expect(currencyActions.swapEntry).not.toHaveBeenCalled();
+        expect(ctx.challenge.member.ranking.entries.map((e) => e.id)).toEqual(['e1', 'e2']);
+        // The switch is read per challenge, so turning it off brings the swap back.
+        set({ manualPhotosOnly: false });
+        expect(await runAutoSwap(makeCtx())).toBe(true);
     });
 
     test('a missing swap ledger and swap history are tolerated', async () => {
@@ -298,6 +309,50 @@ describe('runAutoSwap', () => {
         expect(await runAutoSwap(makeCtx({ challenge }))).toBe(false);
         set({ autoSwapAllowBoosted: true });
         expect(await runAutoSwap(makeCtx({ challenge }))).toBe(true);
+    });
+
+    test('never swaps out a photo pinned for a Boost or Turbo that can still fire, unless allowed', async () => {
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries = [
+            { id: 'e1', member_id: 'm', votes: 50 },
+            { id: 'e2', member_id: 'm', votes: 5 },
+        ];
+        // The configured slot (the last entry) holds the pin, so the swap steps back to the first one.
+        settings.getEntryPins.mockReturnValue({ boost: 'e2', turbo: null });
+        expect(await runAutoSwap(makeCtx({ challenge }))).toBe(true);
+        expect(currencyActions.previewSwap).toHaveBeenCalledWith(
+            555,
+            'e1',
+            'tok',
+            expect.anything(),
+            expect.anything(),
+        );
+
+        // Both entries protected (one pinned, one turbo'd): nothing qualifies.
+        jest.clearAllMocks();
+        const protectedOnly = makeChallenge();
+        protectedOnly.member.ranking.entries = [
+            { id: 'e1', member_id: 'm', votes: 50, turbo: true },
+            { id: 'e2', member_id: 'm', votes: 5 },
+        ];
+        expect(await runAutoSwap(makeCtx({ challenge: protectedOnly }))).toBe(false);
+        expect(currencyActions.swapEntry).not.toHaveBeenCalled();
+        set({ autoSwapAllowBoosted: true });
+        expect(await runAutoSwap(makeCtx({ challenge: protectedOnly }))).toBe(true);
+    });
+
+    test('a pin whose feature is spent protects nothing', async () => {
+        const challenge = makeChallenge();
+        challenge.member.boost = { state: 'USED', timeout: null };
+        settings.getEntryPins.mockReturnValue({ boost: 'e2', turbo: null });
+        expect(await runAutoSwap(makeCtx({ challenge }))).toBe(true);
+        expect(currencyActions.previewSwap).toHaveBeenCalledWith(
+            555,
+            'e2',
+            'tok',
+            expect.anything(),
+            expect.anything(),
+        );
     });
 
     test('nothing when the challenge has no entries', async () => {
@@ -356,7 +411,7 @@ describe('runAutoExposureFill', () => {
 
     test('stops at the per-challenge automatic fill cap', async () => {
         const ctx = makeCtx();
-        ctx.currency.spendLedger.addFill('555');
+        await ctx.currency.spendLedger.reserveFill('555');
         expect(await runAutoExposureFill(ctx, null)).toBe(false);
         set({ autoExposureFillMax: 2 });
         expect(await runAutoExposureFill(ctx, null)).toBe(true);
@@ -368,6 +423,57 @@ describe('runAutoExposureFill', () => {
         expect(await runAutoExposureFill(ctx, null)).toBe(false);
     });
 
+    test('a fill counted by another context since the cap was looked at is not spent past it', async () => {
+        const ctx = makeCtx();
+        const ledger = ctx.currency.spendLedger;
+        // The look at the cap sees no fill; one is counted before this one is.
+        jest.spyOn(ledger, 'fills').mockReturnValueOnce(0);
+        await ledger.reserveFill('555');
+        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        expect(ledger.fills('555')).toBe(1);
+    });
+
+    test('a fill whose count could not be written down is not made', async () => {
+        const ctx = makeCtx();
+        jest.spyOn(ctx.currency.spendLedger, 'reserveFill').mockResolvedValue(false);
+        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+    });
+
+    test('a spend that throws after the count was written down stays counted', async () => {
+        currencyActions.fillExposure.mockRejectedValue(new Error('boom'));
+        const ctx = makeCtx();
+        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(ctx.currency.spendLedger.fills('555')).toBe(1);
+    });
+
+    test('with the fills left to the background service the window spends none, the exposure rule or a mission', async () => {
+        const ctx = makeCtx();
+        (ctx.currency as CurrencyPassDeps).fillsLeftToService = true;
+        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        expect(ctx.currency.spendLedger.fills('555')).toBe(0);
+    });
+
+    test('a fill that got no answer stays counted: it may have been made', async () => {
+        currencyActions.fillExposure.mockResolvedValue({ ok: false, outcome: 'unclear' });
+        const ctx = makeCtx();
+        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(ctx.currency.spendLedger.fills('555')).toBe(1);
+    });
+
+    test('a fill deferred behind another spend is not counted', async () => {
+        let release: ((value?: unknown) => void) | undefined;
+        const held = currencyActions.withSpendLock(() => new Promise((resolve) => (release = resolve)));
+        const ctx = makeCtx();
+        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(ctx.currency.spendLedger.fills('555')).toBe(0);
+        release!();
+        await held;
+    });
+
     test('a refused fill is not counted', async () => {
         currencyActions.fillExposure.mockResolvedValue({ ok: false, outcome: 'api-failed' });
         const ctx = makeCtx();
@@ -376,43 +482,218 @@ describe('runAutoExposureFill', () => {
     });
 });
 
+// Every line the code under test has logged at info level.
+const infoLines = (): string[] =>
+    jest
+        .mocked(require('../../src/ts/logger') as typeof loggerModule)
+        .withCategory.mock.results.flatMap((result) =>
+            jest.mocked((result.value as loggerModule.CategoryLogger).info).mock.calls.map((call) => String(call[0])),
+        );
+
+// The mission needs a pass hands over, with one "Use Fill" mission (id 77: 1 of 3 done) unless told otherwise.
+const fillNeeds = (over: Partial<FillMission> = {}) => {
+    const mission = { id: '77', required: 3, current: 1, remaining: 2, spentThisPass: 0, ...over };
+    return invalid<MissionNeeds>({
+        join: 0,
+        fill: mission.remaining,
+        turbo: 0,
+        boost: 0,
+        vote: 0,
+        fillMissions: [mission],
+    });
+};
+
 describe('runMissionFill', () => {
+    // A context on a fresh challenge over a ledger the passes share: one fill raises a challenge to 100%.
+    const ctxOn = (ledger: ReturnType<typeof createMemoryAutoSpendLedger>) => {
+        const ctx = makeCtx();
+        ctx.currency.spendLedger = ledger;
+        return ctx;
+    };
+
     test('fills toward the mission regardless of the exposure rule, without touching its cap', async () => {
         set({ autoExposureFill: false, autoExposureFillBelow: 0 });
         const ctx = makeCtx({
             challenge: makeChallenge({ member: { ranking: { exposure: { exposure_factor: 95 } } } }),
         });
-        expect(await runMissionFill(ctx, 2)).toBe(true);
+        expect(await runMissionFill(ctx, fillNeeds())).toBe(true);
         expect(currencyActions.fillExposure).toHaveBeenCalledWith(555, 'tok', expect.any(Object));
         expect(ctx.challenge.member.ranking.exposure.exposure_factor).toBe(100);
         expect(ctx.currency.spendLedger.fills('555')).toBe(0);
     });
 
-    test('nothing to do without a mission need or currency endpoints', async () => {
-        expect(await runMissionFill(makeCtx(), 0)).toBe(false);
+    test('counts the fill against the mission, with the progress it had', async () => {
+        const ctx = makeCtx();
+        const needs = fillNeeds();
+        expect(await runMissionFill(ctx, needs)).toBe(true);
+        expect(ctx.currency.spendLedger.fills('mission:77')).toBe(1);
+        expect(ctx.currency.spendLedger.lastProgress('mission:77')).toBe(1);
+        expect(needs.fillMissions![0].spentThisPass).toBe(1);
+    });
+
+    test('nothing to do without a mission need, a mission to count against, a ledger or currency endpoints', async () => {
+        expect(await runMissionFill(makeCtx(), fillNeeds({ remaining: 0 }))).toBe(false);
+        expect(await runMissionFill(makeCtx(), null)).toBe(false);
+        // A need no "Use Fill" mission stands behind cannot be counted, so it is not spent on.
+        expect(
+            await runMissionFill(makeCtx(), invalid<MissionNeeds>({ join: 0, fill: 2, turbo: 0, boost: 0, vote: 0 })),
+        ).toBe(false);
+        const noLedger = makeCtx();
+        (noLedger.currency as CurrencyPassDeps).spendLedger = null;
+        expect(await runMissionFill(noLedger, fillNeeds())).toBe(false);
         const ctx = makeCtx();
         (ctx as Parameters<typeof runMissionFill>[0]).currency = null;
-        expect(await runMissionFill(ctx, 1)).toBe(false);
+        expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
     });
 
     test('skips a challenge that cannot take a fill (full exposure, fill locked)', async () => {
         const full = makeChallenge({ member: { ranking: { exposure: { exposure_factor: 100 } } } });
-        expect(await runMissionFill(makeCtx({ challenge: full }), 1)).toBe(false);
-        expect(await runMissionFill(makeCtx({ challenge: makeChallenge({ fill_locked: true }) }), 1)).toBe(false);
+        expect(await runMissionFill(makeCtx({ challenge: full }), fillNeeds())).toBe(false);
+        expect(await runMissionFill(makeCtx({ challenge: makeChallenge({ fill_locked: true }) }), fillNeeds())).toBe(
+            false,
+        );
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
     });
 
     test('keeps the fill reserve', async () => {
         set({ currencyReserveFills: 3 });
-        expect(await runMissionFill(makeCtx(), 1)).toBe(false);
+        const ctx = makeCtx();
+        expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        expect(ctx.currency.spendLedger.fills('mission:77')).toBe(0);
+    });
+
+    test('a refused fill leaves the challenge as it was, and is not counted', async () => {
+        currencyActions.fillExposure.mockResolvedValue({ ok: false, outcome: 'api-failed' });
+        const ctx = makeCtx();
+        expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
+        expect(ctx.challenge.member.ranking.exposure.exposure_factor).toBe(20);
+        expect(ctx.currency.spendLedger.fills('mission:77')).toBe(0);
+    });
+
+    test('a fill that got no answer stays counted: it may have been made', async () => {
+        currencyActions.fillExposure.mockResolvedValue({ ok: false, outcome: 'unclear' });
+        const ctx = makeCtx();
+        expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
+        expect(ctx.currency.spendLedger.fills('mission:77')).toBe(1);
+    });
+
+    test('a fill whose count could not be written down is not made', async () => {
+        const ctx = makeCtx();
+        jest.spyOn(ctx.currency.spendLedger, 'reserveFill').mockResolvedValue(false);
+        expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
     });
 
-    test('a refused fill leaves the challenge as it was', async () => {
-        currencyActions.fillExposure.mockResolvedValue({ ok: false, outcome: 'api-failed' });
-        const ctx = makeCtx();
-        expect(await runMissionFill(ctx, 1)).toBe(false);
-        expect(ctx.challenge.member.ranking.exposure.exposure_factor).toBe(20);
+    describe('a mission is not filled for on every pass', () => {
+        test('the fills stop once as many were spent as the mission asks for in all', async () => {
+            const ctx = makeCtx();
+            const ledger = ctx.currency.spendLedger;
+            await ledger.reserveFill('mission:77');
+            await ledger.reserveFill('mission:77');
+            await ledger.reserveFill('mission:77');
+            expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
+            expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+            expect(infoLines().some((line) => line.includes('3 fills already spent on mission 77'))).toBe(true);
+            // The count is held to the cap where it is written, too: not counted past it.
+            expect(ledger.fills('mission:77')).toBe(3);
+        });
+
+        test('across passes: fills that moved the mission go on, up to what it asks for', async () => {
+            const ledger = createMemoryAutoSpendLedger();
+            // Pass 1: 0 of 3 done, two challenges take a fill each.
+            const pass1 = fillNeeds({ current: 0, remaining: 3 });
+            expect(await runMissionFill(ctxOn(ledger), pass1)).toBe(true);
+            expect(await runMissionFill(ctxOn(ledger), pass1)).toBe(true);
+            // Pass 2: the mission moved to 2 of 3: one more.
+            const pass2 = fillNeeds({ current: 2, remaining: 1 });
+            expect(await runMissionFill(ctxOn(ledger), pass2)).toBe(true);
+            expect(ledger.fills('mission:77')).toBe(3);
+            // Pass 3: it asks for no more.
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ current: 2, remaining: 1 }))).toBe(false);
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(3);
+        });
+
+        test('a pass after one whose fill did not move the mission spends none, and says so once', async () => {
+            const ledger = createMemoryAutoSpendLedger();
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '88', current: 0, remaining: 3 }))).toBe(true);
+            // Next pass: the mission still reads 0 of 3.
+            const next = fillNeeds({ id: '88', current: 0, remaining: 3 });
+            expect(await runMissionFill(ctxOn(ledger), next)).toBe(false);
+            expect(await runMissionFill(ctxOn(ledger), next)).toBe(false);
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+            expect(ledger.fills('mission:88')).toBe(1);
+            expect(infoLines().filter((line) => line.includes('mission 88 did not move'))).toHaveLength(1);
+        });
+
+        test('a fill that is deferred leaves no stalled mission behind: the next pass still fills', async () => {
+            const ledger = createMemoryAutoSpendLedger();
+            // Pass 1: the fill lands at 0 of 3.
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '31', current: 0, remaining: 3 }))).toBe(true);
+            // Pass 2: the mission moved to 1, but another spend holds the lock: the fill is deferred.
+            let release: ((value?: unknown) => void) | undefined;
+            const held = currencyActions.withSpendLock(() => new Promise((resolve) => (release = resolve)));
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '31', current: 1, remaining: 2 }))).toBe(false);
+            release!();
+            await held;
+            expect(ledger.fills('mission:31')).toBe(1);
+            expect(ledger.lastProgress('mission:31')).toBe(0);
+            // Pass 3: still at 1 (nothing was spent in pass 2): not a stalled mission.
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '31', current: 1, remaining: 2 }))).toBe(true);
+            expect(infoLines().some((line) => line.includes('mission 31 did not move'))).toBe(false);
+        });
+
+        test('a fill that got no answer is not read as a mission that did not move: the next pass still fills', async () => {
+            const ledger = createMemoryAutoSpendLedger();
+            currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'unclear' });
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '32', current: 0, remaining: 3 }))).toBe(false);
+            // Counted, because it may have been made; its reserved progress is not kept.
+            expect(ledger.fills('mission:32')).toBe(1);
+            expect(ledger.lastProgress('mission:32')).toBeNull();
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '32', current: 0, remaining: 3 }))).toBe(true);
+            expect(infoLines().some((line) => line.includes('mission 32 did not move'))).toBe(false);
+        });
+
+        test('the second fill of the same pass is not held to the progress the pass started from', async () => {
+            const ledger = createMemoryAutoSpendLedger();
+            const needs = fillNeeds({ id: '99', current: 0, remaining: 3 });
+            expect(await runMissionFill(ctxOn(ledger), needs)).toBe(true);
+            expect(await runMissionFill(ctxOn(ledger), needs)).toBe(true);
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(2);
+        });
+
+        test('a mission that moves again after it stalled is filled for again', async () => {
+            const ledger = createMemoryAutoSpendLedger();
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '55', current: 0, remaining: 3 }))).toBe(true);
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '55', current: 0, remaining: 3 }))).toBe(false);
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '55', current: 1, remaining: 2 }))).toBe(true);
+        });
+
+        test('the count lasts across a restart: a ledger read again from what was saved holds the same stop', async () => {
+            const saved: { raw: string | null } = { raw: null };
+            const store = { readRaw: () => saved.raw, writeRaw: (data: string) => (saved.raw = data) };
+            expect(
+                await runMissionFill(
+                    ctxOn(createAutoSpendLedger(store)),
+                    fillNeeds({ id: '66', current: 0, remaining: 3 }),
+                ),
+            ).toBe(true);
+            const restarted = createAutoSpendLedger(store);
+            expect(await runMissionFill(ctxOn(restarted), fillNeeds({ id: '66', current: 0, remaining: 3 }))).toBe(
+                false,
+            );
+            expect(await runMissionFill(ctxOn(restarted), fillNeeds({ id: '66', current: 1, remaining: 2 }))).toBe(
+                true,
+            );
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(2);
+        });
+
+        test('a ledger that cannot be trusted spends nothing for a mission', async () => {
+            const ctx = makeCtx();
+            ctx.currency.spendLedger = createAutoSpendLedger({ readRaw: () => '{nope', writeRaw: () => {} });
+            expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
+            expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        });
     });
 });

@@ -1,22 +1,27 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
 import { openBoostWindows } from '../../../voting/boostWindow';
+import { isKnownTurboMode } from '../../../voting/turboMode';
 import { useTick } from '@/hooks/useTick';
 import { lowExposureChallenges, missedBoostChallenges } from '@/utils/challengeAlerts';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
 import { interp } from '@/utils/interp';
+import { FocusDropdown } from '@/components/ui/FocusDropdown';
 import { useId } from 'react';
 
-import type { ComponentChildren, TargetedKeyboardEvent } from 'preact';
+import type { ComponentChildren } from 'preact';
 import type { Bankroll, Challenge, MemberTurbo } from '../../../types/gurushots';
 
-// A turbo is "available" for this challenge when it's ready to apply (WON) or
-// ready to earn (FREE / in progress / cooldown elapsed).
+// A turbo is "available" for this challenge when it's ready to apply (WON, in a
+// known mode — a mode-less one is the mobile copy, whose WON can be false for a
+// Snap game) or ready to earn (FREE / in progress / cooldown elapsed) in a known
+// mode (classic or Snap); an earnable one whose mode is unknown is not counted.
 /**
  * @param now - Unix seconds
  */
 const isTurboAvailable = (turbo: MemberTurbo | undefined, now: number) => {
     const state = turbo?.state;
+    if (!isKnownTurboMode(turbo)) return false;
     if (state === 'WON' || state === 'FREE' || state === 'IN_PROGRESS') return true;
     return state === 'TIMER' && typeof turbo?.time_to_open === 'number' && turbo.time_to_open <= now;
 };
@@ -41,7 +46,7 @@ function HeaderStat({
             {children ?? (
                 <>
                     <span className="font-semibold">{value}</span>
-                    <span className="text-base-content/60">{label}</span>
+                    <span className="text-base-content/70">{label}</span>
                 </>
             )}
         </div>
@@ -70,12 +75,6 @@ function BankrollStats({ bankroll }: { bankroll: Bankroll }) {
     );
 }
 
-// DaisyUI's focus dropdown closes on blur, so Escape just drops focus. Attached
-// to the trigger and each entry button — the only focusable elements.
-const blurOnEscape = (e: TargetedKeyboardEvent<HTMLElement>) => {
-    if (e.key === 'Escape') e.currentTarget.blur();
-};
-
 /**
  * "Boosts missed" stat that opens a jump list of the challenges whose boost can
  * still be recovered with a key; each entry scrolls to its card (which takes
@@ -86,7 +85,7 @@ const blurOnEscape = (e: TargetedKeyboardEvent<HTMLElement>) => {
  * No time-left text: the header has no tick, so it would freeze between
  * refetches. Membership, like the other counts, refreshes on each challenge
  * refetch, so a challenge that closes in between stays listed until then.
- * Opening is CSS-driven (focus), so the trigger carries no aria-expanded.
+ * The trigger is a real button (see FocusDropdown).
  */
 function MissedBoostsJump({
     missed,
@@ -107,40 +106,30 @@ function MissedBoostsJump({
               ? t('app.missedBoostsNoKeys')
               : interp(t('app.missedBoostsKeysUnknown'), labels);
     return (
-        <div className="dropdown">
-            <div
-                className="btn btn-sm btn-soft btn-warning"
-                role="button"
-                tabIndex={0}
-                aria-describedby={hintId}
-                onKeyDown={blurOnEscape}
-            >
-                <span aria-hidden="true">💤</span>
-                <span className="font-semibold">{missed.length}</span>
-                <span>{t('app.statusHeaderMissedBoosts')}</span>
-                <span aria-hidden="true">▾</span>
-            </div>
-            <ul
-                tabIndex={-1}
-                className="dropdown-content menu z-[1] mt-1 p-2 shadow bg-base-100 rounded-box w-64 max-w-[calc(100vw-2rem)]"
-            >
-                <li id={hintId} className="menu-title">
-                    {hint}
+        <FocusDropdown
+            triggerClassName="btn btn-sm btn-warning"
+            describedBy={hintId}
+            menuClassName="menu z-[1] mt-1 p-2 shadow bg-base-100 rounded-box w-64 max-w-[calc(100vw-2rem)]"
+            trigger={
+                <>
+                    <span aria-hidden="true">💤</span>
+                    <span className="font-semibold">{missed.length}</span>
+                    <span>{t('app.statusHeaderMissedBoosts')}</span>
+                    <span aria-hidden="true">▾</span>
+                </>
+            }
+        >
+            <li id={hintId} className="menu-title">
+                {hint}
+            </li>
+            {missed.map((c) => (
+                <li key={c.id}>
+                    <button type="button" className="wrap-anywhere" onClick={() => scrollToChallenge(c.id)}>
+                        {c.title}
+                    </button>
                 </li>
-                {missed.map((c) => (
-                    <li key={c.id}>
-                        <button
-                            type="button"
-                            className="wrap-anywhere"
-                            onClick={() => scrollToChallenge(c.id)}
-                            onKeyDown={blurOnEscape}
-                        >
-                            {c.title}
-                        </button>
-                    </li>
-                ))}
-            </ul>
-        </div>
+            ))}
+        </FocusDropdown>
     );
 }
 
@@ -151,17 +140,25 @@ function MissedBoostsJump({
  * against a 1Hz cascade). The time is advisory: computeNextCycleDelayMs
  * recomputes each cycle, so it is `~`-prefixed like the deadline timeline.
  */
-type CountdownProps = { nextRunAt: number | null | undefined; running: boolean; titleKey?: string };
-function NextActionCountdown({ nextRunAt, running, titleKey = 'app.statusHeaderNextApprox' }: CountdownProps) {
+type CountdownProps = {
+    nextRunAt: number | null | undefined;
+    running: boolean;
+    titleKey?: string;
+    /** a fixed instant, not an estimate: rounded up and without the `~` (as the resume notice shows it) */
+    exact?: boolean;
+};
+function NextActionCountdown({ nextRunAt, running, titleKey = 'app.statusHeaderNextApprox', exact }: CountdownProps) {
     const { t } = useTranslation();
     const enabled = running && typeof nextRunAt === 'number';
     const now = useTick(1000, enabled);
     if (!running) return <span className="opacity-70">{t('app.statusHeaderNotRunning')}</span>;
     if (typeof nextRunAt !== 'number') return <span className="opacity-70">—</span>;
-    const remaining = Math.round(nextRunAt / 1000) - now;
+    const remaining = (exact ? Math.ceil : Math.round)(nextRunAt / 1000) - now;
     return (
         <span title={t(titleKey)}>
-            {remaining > 0 ? `~${formatDuration(remaining, { includeSeconds: true })}` : t('app.deadlineDue')}
+            {remaining > 0
+                ? `${exact ? '' : '~'}${formatDuration(remaining, { includeSeconds: true })}`
+                : t('app.deadlineDue')}
         </span>
     );
 }
@@ -170,7 +167,7 @@ function HeaderCountdown({ icon, labelKey, ...countdown }: { icon: string; label
     const { t } = useTranslation();
     return (
         <HeaderStat icon={icon}>
-            <span className="text-base-content/60">{t(labelKey)}:</span>
+            <span className="text-base-content/70">{t(labelKey)}:</span>
             <span className="inline-block min-w-[11ch] tabular-nums">
                 <NextActionCountdown {...countdown} />
             </span>
@@ -195,10 +192,13 @@ export function StatusHeader({
     running,
     bankroll,
     autoClaimStatus,
+    pendingStartAt,
 }: {
     challenges: Challenge[];
     nextRunAt?: number | null;
     running: boolean;
+    /** Unix ms a held auto-resume starts; the next-action stat counts down to it */
+    pendingStartAt?: number | null;
     bankroll?: Bankroll | null;
     autoClaimStatus?: { enabled: boolean; nextClaimAt: number } | null;
 }) {
@@ -217,8 +217,10 @@ export function StatusHeader({
     // and needs to see their coins before a paid join. Only fully idle + no
     // bankroll hides it.
     const hasBankroll = bankroll !== undefined && bankroll !== null;
-    // When running the bar always renders, so no extra term is needed here.
-    if (activeCount === 0 && !running && !hasBankroll) return null;
+    const pending = typeof pendingStartAt === 'number';
+    // When running the bar always renders, so no extra term is needed here. A held
+    // resume keeps it too: its countdown is the only sign of when voting starts.
+    if (activeCount === 0 && !running && !hasBankroll && !pending) return null;
 
     return (
         // The card is NOT role="status"/aria-live: the next-action countdown
@@ -236,7 +238,14 @@ export function StatusHeader({
                 <HeaderStat icon="⚡" value={turbosAvailable} label={t('app.statusHeaderTurbos')} />
                 {missedBoosts.length > 0 && <MissedBoostsJump missed={missedBoosts} bankroll={bankroll} />}
                 {lowExposureCount > 0 && <HeaderStat icon="👁" value={lowExposureCount} label={t('app.lowExposure')} />}
-                <HeaderCountdown icon="⏳" labelKey="app.statusHeaderNext" nextRunAt={nextRunAt} running={running} />
+                <HeaderCountdown
+                    icon="⏳"
+                    labelKey={pending ? 'app.statusHeaderResumesIn' : 'app.statusHeaderNext'}
+                    nextRunAt={pending ? pendingStartAt : nextRunAt}
+                    running={pending || running}
+                    titleKey={pending ? 'app.statusHeaderResumesInHint' : undefined}
+                    exact={pending}
+                />
                 {autoClaimStatus?.enabled && (
                     <HeaderCountdown
                         icon="🎁"

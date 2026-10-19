@@ -244,19 +244,21 @@ describe('getAppUserDataPath', () => {
         );
     });
 
-    test('mkdir failure without an error code reports the message and reuses an existing cwd/userData', () => {
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    test('mkdir failure without an error code reports the message in the typed error', () => {
         const rt = loadRuntime();
-        const fallback = `${process.cwd()}/userData`;
-        fs.existsSync.mockImplementation((p) => p === fallback);
+        fs.existsSync.mockReturnValue(false);
         fs.mkdirSync.mockImplementationOnce(() => {
             throw new Error('read-only fs');
         });
 
-        expect(rt.getAppUserDataPath()).toBe(fallback);
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('(read-only fs)'));
-        expect(fs.mkdirSync).toHaveBeenCalledTimes(1);
-        warnSpy.mockRestore();
+        expect(() => rt.getAppUserDataPath()).toThrow(rt.UserDataUnavailableError);
+        expect(() => {
+            fs.mkdirSync.mockImplementationOnce(() => {
+                throw new Error('read-only fs');
+            });
+            rt.getAppUserDataPath();
+        }).toThrow(/read-only fs/);
+        expect(fs.mkdirSync).toHaveBeenCalledTimes(2);
     });
 
     test('no usable fs returns the platform path untouched', () => {

@@ -34,7 +34,7 @@ for (const method of Object.keys(eventMethods)) {
 
 Object.assign(mockApi, {
     // Settings
-    getSettings: jest.fn().mockResolvedValue({}),
+    getSettings: jest.fn().mockResolvedValue({ app: {} }),
     getSetting: jest.fn().mockResolvedValue(null),
     setSetting: jest.fn().mockResolvedValue(undefined),
     saveSettings: jest.fn().mockResolvedValue(undefined),
@@ -70,7 +70,6 @@ Object.assign(mockApi, {
     // Boost — preload exposes both names; hooks call applyBoost.
     applyBoost: jest.fn().mockResolvedValue({ success: true }),
     applyBoostToEntry: jest.fn().mockResolvedValue({ success: true }),
-    getBoostThreshold: jest.fn().mockResolvedValue(30),
 
     // Turbo
     applyTurbo: jest.fn().mockResolvedValue({ success: true }),
@@ -78,6 +77,18 @@ Object.assign(mockApi, {
 
     // Auto-fill
     fillChallengeNow: jest.fn().mockResolvedValue({ success: true, submitted: 0, skipped: 0 }),
+    submitPickedPhotos: jest.fn().mockResolvedValue({ success: true, submitted: 1 }),
+    getLibraryPhotos: jest.fn().mockResolvedValue({
+        success: true,
+        photos: [],
+        memberId: 'm',
+        truncated: false,
+        wonIds: [],
+        wonCount: 0,
+        preview: false,
+        readAtMs: 1_700_000_000_000,
+        allowedKnown: true,
+    }),
 
     // Per-challenge overrides
     getChallengeOverride: jest.fn().mockResolvedValue(null),
@@ -86,6 +97,9 @@ Object.assign(mockApi, {
     setChallengeOverride: jest.fn().mockResolvedValue(true),
     removeChallengeOverride: jest.fn().mockResolvedValue(true),
     cleanupStaleChallengeSetting: jest.fn().mockResolvedValue(true),
+    clearChosenPhotos: jest.fn().mockResolvedValue({ success: true, removed: 0 }),
+    getOpenChosenAnnotations: jest.fn().mockResolvedValue({ success: true, annotations: {} }),
+    confirmAccount: jest.fn().mockResolvedValue({ success: false, error: 'account-check-failed' }),
     cleanupStaleMetadata: jest.fn().mockResolvedValue(true),
 
     // Logging
@@ -136,6 +150,10 @@ Object.assign(mockApi, {
     setTitleRules: jest.fn().mockResolvedValue(true),
     getTitleProfile: jest.fn().mockResolvedValue(null),
 
+    // Photos pinned for Boost / Turbo — none by default
+    getEntryPins: jest.fn().mockResolvedValue({ boost: null, turbo: null }),
+    setEntryPin: jest.fn().mockResolvedValue({ success: true }),
+
     // Challenge profiles
     getChallengeProfiles: jest.fn().mockResolvedValue({}),
     saveChallengeProfile: jest.fn().mockResolvedValue(true),
@@ -170,8 +188,16 @@ function fireSettingsChanged(payload?: object) {
 // Mock the page translator (translations/renderer.ts) that TranslationProvider,
 // ErrorBoundary and Modal translate through. `t` returns the key so tests can
 // assert on keys ('app.save'); override it per test with mockImplementation.
+// Keys whose text is a pattern the component fills in (no t() interpolation: callers use interp), so the filled
+// text — an accessible name made of an action and what it acts on — stays testable.
+const PATTERN_TEXT: Record<string, string> = {
+    'app.actionOnItem': '{action}: {item}',
+    'app.sbRuleN': 'Rule {n}',
+    'app.timeLeft': '{time} left',
+};
+const defaultTranslate = (key: string) => PATTERN_TEXT[key] ?? key;
 const mockTranslator = {
-    t: jest.fn((key: string) => key),
+    t: jest.fn(defaultTranslate),
     getCurrentLanguage: jest.fn().mockReturnValue('en'),
     setCurrentLanguage: jest.fn(),
 };
@@ -197,4 +223,4 @@ beforeEach(() => {
 });
 
 // Export mocks for use in tests
-export { mockApi, mockTranslator, fireSettingsChanged };
+export { mockApi, mockTranslator, defaultTranslate, fireSettingsChanged };

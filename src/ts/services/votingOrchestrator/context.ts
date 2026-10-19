@@ -21,6 +21,8 @@ export type ActionContext = {
     api: VotingPassApi;
     fillDeps: FillDeps;
     entryAges: EntryAgeLedger | null;
+    /** The pass's mission needs; absent on the sleep-boost path, which never counts. */
+    missions?: MissionNeeds | null;
 };
 
 /**
@@ -31,6 +33,7 @@ export const buildFillDeps = (api: VotingPassApi, entryAges: EntryAgeLedger | nu
     settings,
     logger,
     getEligiblePhotos: api.getEligiblePhotos,
+    getEligiblePhotosWalk: api.getEligiblePhotosWalk,
     getImageData: api.getImageData,
     submitToChallenge: api.submitToChallenge,
     entryAges,
@@ -59,6 +62,8 @@ export type PassContext = {
     missionVoteQuota: number;
     allChallenges: Challenge[];
     turboSnapshot: number;
+    /** Snap games played so far this pass: one per pass, so the pass is not held up by ten paced answers per challenge. */
+    snapGames: { played: number };
 };
 
 type FillDeps = ReturnType<typeof buildFillDeps>;

@@ -24,6 +24,7 @@ jest.mock('../../src/ts/settings/storage', () => ({
 const {
     resolveIgnoreWords,
     resolveMemberId,
+    peekMemberId,
     __resetMemberIdCache,
     refreshChallengeState,
     rankCandidatesForChallenge,
@@ -49,12 +50,12 @@ const makeCapturingLogger = () => {
     return { logger, lines, categories };
 };
 
-const makeSettings = ({ emergencyFill = 300 }: { emergencyFill?: number } = {}): jest.MockedObject<FillSettings> =>
+const makeSettings = ({ emergencySubmit = 300 }: { emergencySubmit?: number } = {}): jest.MockedObject<FillSettings> =>
     invalid({
         getEffectiveSetting: jest.fn((key: string) => {
-            if (key === 'emergencyFill') return emergencyFill;
-            if (key === 'fillWithoutTagMatch') return true;
-            if (key === 'autoFillSchedule') return [];
+            if (key === 'emergencySubmit') return emergencySubmit;
+            if (key === 'submitWithoutTagMatch') return true;
+            if (key === 'autoSubmitSchedule') return [];
             return null;
         }),
         getEffectiveTagSetting: jest.fn(() => []),
@@ -115,12 +116,12 @@ describe('resolveMemberId', () => {
     beforeEach(() => __resetMemberIdCache());
     afterEach(() => jest.useRealTimers());
 
-    test('a thrown non-Error is logged at debug under the default autoFill label', async () => {
+    test('a thrown non-Error is logged at debug under the default autoSubmit label', async () => {
         const { logger, lines, categories } = makeCapturingLogger();
         const getProfile = jest.fn().mockRejectedValue('offline');
         await expect(resolveMemberId('tok-a', getProfile, logger)).resolves.toBeNull();
-        expect(categories).toContain('autoFill');
-        expect(lines.debug).toEqual(['autoFill: identity lookup failed: offline']);
+        expect(categories).toContain('autoSubmit');
+        expect(lines.debug).toEqual(['autoSubmit: identity lookup failed: offline']);
     });
 
     test('a thrown Error uses its message and the caller label', async () => {
@@ -129,6 +130,22 @@ describe('resolveMemberId', () => {
         await expect(resolveMemberId('tok-b', getProfile, logger, 'fillNew')).resolves.toBeNull();
         expect(categories).toContain('fillNew');
         expect(lines.debug).toEqual(['fillNew: identity lookup failed: 401']);
+    });
+
+    test('peekMemberId only reads what an earlier lookup already resolved', async () => {
+        expect(peekMemberId('tok-peek')).toBeNull();
+        const getProfile = jest.fn().mockResolvedValue({ id: 'member-7' });
+        const pending = resolveMemberId('tok-peek', getProfile);
+        // The lookup is in flight: peeking neither waits for it nor starts one.
+        expect(peekMemberId('tok-peek')).toBeNull();
+        await pending;
+        await Promise.resolve();
+        expect(peekMemberId('tok-peek')).toBe('member-7');
+        expect(getProfile).toHaveBeenCalledTimes(1);
+        // A lookup that found nobody leaves nothing to peek at.
+        await resolveMemberId('tok-nobody', jest.fn().mockResolvedValue({ id: '' }));
+        await Promise.resolve();
+        expect(peekMemberId('tok-nobody')).toBeNull();
     });
 
     test('a failure without a logger still resolves to null', async () => {
@@ -170,11 +187,11 @@ describe('refreshChallengeState — warnings and flag carry-over', () => {
             makeChallenge(),
             'tok',
             { getActiveChallenges: jest.fn().mockRejectedValue(undefined), logger },
-            'autoFill',
+            'autoSubmit',
         );
         expect(result).toBe('unavailable');
         expect(lines.warning).toHaveLength(1);
-        expect(lines.warning[0]).toMatch(/^autoFill: could not refresh live challenge state for \[Challenge c1\]; /);
+        expect(lines.warning[0]).toMatch(/^autoSubmit: could not refresh live challenge state for \[Challenge c1\]; /);
     });
 
     test('a rejection with a bare string reports that string as the cause', async () => {
@@ -202,7 +219,7 @@ describe('refreshChallengeState — warnings and flag carry-over', () => {
             challenge,
             'tok',
             { getActiveChallenges: jest.fn().mockResolvedValue(response), logger },
-            'autoFill',
+            'autoSubmit',
         );
         expect(result).toBe('refreshed');
         const entries = challenge.member!.ranking!.entries!;
@@ -266,7 +283,7 @@ describe('maybeEmergencyFillChallenge', () => {
         const { logger } = makeCapturingLogger();
         const challenge = makeChallenge({ maxSubmits: 3, entries: [], closeIn: 200 });
         const deps = {
-            settings: makeSettings({ emergencyFill: 300 }),
+            settings: makeSettings({ emergencySubmit: 300 }),
             logger,
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
             submitToChallenge: jest
@@ -346,7 +363,7 @@ describe('popularity-pick explanation after a refresh truncates the batch', () =
         const challenge = makeChallenge({ maxSubmits: 3, entries: [], closeIn: 200 });
         const photo = (id: string, labels: string[]) => ({ ...allowedPhoto(id), labels });
         const deps = {
-            settings: makeSettings({ emergencyFill: 300 }),
+            settings: makeSettings({ emergencySubmit: 300 }),
             logger,
             getEligiblePhotos: jest
                 .fn()
@@ -370,7 +387,7 @@ describe('popularity-pick explanation after a refresh truncates the batch', () =
         const challenge = makeChallenge({ maxSubmits: 3, entries: [], closeIn: 200 });
         const photo = (id: string, labels: string[]) => ({ ...allowedPhoto(id), labels });
         const deps = {
-            settings: makeSettings({ emergencyFill: 300 }),
+            settings: makeSettings({ emergencySubmit: 300 }),
             logger,
             getEligiblePhotos: jest
                 .fn()
@@ -435,5 +452,84 @@ describe('themed search edge shapes', () => {
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', expect.objectContaining({ search: 'pinks' }));
         expect(result).toEqual(LIB);
         expect(lines.info.some((m) => m.includes('resolved theme'))).toBe(false);
+    });
+
+    describe('trace.readFailed: the whole library read failed, not "no photos"', () => {
+        // A read as the real one reports it: an empty list, and readState saying whether its first page failed.
+        const reading =
+            (failedFirstPage: (opts: { order?: string }) => boolean, items: LibraryPhoto[] = []) =>
+            async (_id: string | number, _tok: string, opts: Parameters<FillDeps['getEligiblePhotos']>[2] = {}) => {
+                if (opts.readState && failedFirstPage(opts)) opts.readState.firstPageFailed = true;
+                return opts.search ? [] : items;
+            };
+        const run = async (impl: ReturnType<typeof reading>) => {
+            const { logger } = makeCapturingLogger();
+            const trace = { walkedUnfiltered: false, readFailed: false };
+            const getEligiblePhotos = jest.fn<
+                ReturnType<FillDeps['getEligiblePhotos']>,
+                Parameters<FillDeps['getEligiblePhotos']>
+            >(impl);
+            const result = await fetchCandidatesForChallenge(
+                invalid({ id: 'c1', title: 'Pink' }),
+                'tok',
+                {},
+                { getEligiblePhotos, logger, trace },
+            );
+            return { result, trace };
+        };
+
+        test('both unfiltered reads failing on their first page is a failed read', async () => {
+            const { result, trace } = await run(reading(() => true));
+            expect(result).toEqual([]);
+            expect(trace).toEqual({ walkedUnfiltered: true, readFailed: true });
+        });
+
+        test('one of them succeeding, even empty, is a read library', async () => {
+            expect((await run(reading((opts) => opts.order !== 'default'))).trace.readFailed).toBe(false);
+            expect((await run(reading((opts) => opts.order === 'default'))).trace.readFailed).toBe(false);
+            expect((await run(reading(() => false))).trace.readFailed).toBe(false);
+        });
+
+        test('photos that were found are never a failed read', async () => {
+            const { result, trace } = await run(reading(() => false, LIB));
+            expect(result).toEqual(LIB);
+            expect(trace.readFailed).toBe(false);
+        });
+
+        test('a trace that did not ask for the read to be tracked gets the same calls as ever', async () => {
+            const { logger } = makeCapturingLogger();
+            const getEligiblePhotos = jest.fn<
+                ReturnType<FillDeps['getEligiblePhotos']>,
+                Parameters<FillDeps['getEligiblePhotos']>
+            >(reading(() => true));
+            const trace = { walkedUnfiltered: false };
+            await fetchCandidatesForChallenge(
+                invalid({ id: 'c1', title: 'Pink' }),
+                'tok',
+                {},
+                { getEligiblePhotos, logger, trace },
+            );
+            expect(getEligiblePhotos).toHaveBeenLastCalledWith('c1', 'tok', {
+                order: 'default',
+                logLabel: 'autoSubmit',
+            });
+            expect(trace).toEqual({ walkedUnfiltered: true });
+        });
+
+        test('no trace asked for, nothing to set', async () => {
+            const { logger } = makeCapturingLogger();
+            const getEligiblePhotos = jest.fn<
+                ReturnType<FillDeps['getEligiblePhotos']>,
+                Parameters<FillDeps['getEligiblePhotos']>
+            >(reading(() => true));
+            expect(
+                await fetchCandidatesForChallenge(
+                    invalid({ id: 'c1', title: 'Pink' }),
+                    'tok',
+                    {},
+                    { getEligiblePhotos, logger },
+                ),
+            ).toEqual([]);
+        });
     });
 });

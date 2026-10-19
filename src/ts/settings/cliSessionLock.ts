@@ -1,0 +1,232 @@
+/**
+ * The markers a running process holds in the user-data directory, each a file naming the process: a CLI process that
+ * loads the app's settings (every command but help, licenses and reset-data) holds `cli-session-<pid>.lock`, the `pnpm web`
+ * server holds `web-server-<pid>.lock` while it runs, the desktop app holds `desktop-app.lock` for its lifetime. CLI
+ * processes and web servers can run side by side, so each has its own file and "held" means any of them is live. The
+ * desktop app reads the CLI markers at startup so it does not clear a login a CLI session is using, and the local-data
+ * wipe refuses to run under any of them (the CLI checks for a live app, the app for a live CLI session or web server).
+ *
+ * A marker counts only while its process exists and the marker was refreshed lately: the holder rewrites it every
+ * HEARTBEAT_MS, so one left by a crash or a reboot goes stale even when its process id has since been given to another
+ * process. Node's timers do not count the time a machine is suspended, so the holder ticks every TICK_MS and compares
+ * wall-clock time: after a sleep (or a clock set back) it writes the marker again within a tick of waking. An old
+ * marker whose process exists is read again after SETTLE_MS (five ticks) before it is taken as inactive; one still old
+ * and unchanged then is not counted. Nothing deletes such a leftover on a check: the next holder of the same file
+ * overwrites it, and the local-data wipe removes it, so a check that finds one waits SETTLE_MS until then. A holder of a
+ * per-process marker removes the markers of its kind whose process is gone when it starts.
+ */
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { getUserDataPath } from './storage';
+import { isPlainObject } from '../plainObject';
+import { isInteger } from '../numbers';
+
+const CLI_SESSION_PREFIX = 'cli-session';
+const WEB_SERVER_PREFIX = 'web-server';
+const APP_LOCK_FILE_NAME = 'desktop-app.lock';
+
+// A marker of the per-process kinds: `<prefix>-<pid>.lock`. A CLI session marker named just `cli-session.lock` (one
+// file shared by whichever CLI process wrote it last) is read the same way, as is a leftover of one.
+const MARKER_NAME_RE = /^(?:cli-session(?:-\d+)?|web-server-\d+)\.lock$/;
+const processMarkerName = (prefix: string, pid = process.pid) => `${prefix}-${pid}.lock`;
+
+// How often a running holder refreshes its marker, and how long a marker may go unrefreshed before it is stale
+// (three beats: one late beat does not make a live session look gone). The holder checks the clock every TICK_MS and
+// writes once a beat has passed, so a holder that slept through its beats writes again within a tick of waking. An old
+// marker with a live process is read once more after SETTLE_MS, which a holder that just woke has used to write it.
+// A marker whose mtime lies more than a tick ahead of the clock (the clock was set back) is old too.
+const HEARTBEAT_MS = 30_000;
+const STALE_AFTER_MS = 3 * HEARTBEAT_MS;
+const TICK_MS = 2_000;
+const SETTLE_MS = 5 * TICK_MS;
+
+const markerPath = (fileName: string) => path.join(getUserDataPath(), fileName);
+
+/**
+ * Whether a process with this id is running (one this account may not signal still is).
+ */
+const processExists = (pid: number): boolean => {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (err) {
+        return err instanceof Error && 'code' in err && err.code === 'EPERM';
+    }
+};
+
+/**
+ * The process id a marker file names; null when it is missing or not a marker.
+ */
+const readHolder = (file: string): number | null => {
+    try {
+        const held: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+        return isPlainObject(held) && isInteger(held.pid) ? held.pid : null;
+    } catch {
+        return null;
+    }
+};
+
+type MarkerState = 'fresh' | 'old' | 'none';
+
+/** What was judged of a marker: its state, and (when another live process holds it) the holder and the mtime judged. */
+type MarkerJudgement = { state: MarkerState; pid: number; mtimeMs: number };
+
+const NO_MARKER: MarkerJudgement = { state: 'none', pid: 0, mtimeMs: 0 };
+
+/**
+ * Another process's marker: `fresh` when it is alive and was refreshed within STALE_AFTER_MS (and not more than a tick
+ * ahead of the clock), `old` when it is alive but was not (a holder that slept or whose clock was set back, or a process
+ * id reused after a crash or a reboot), `none` otherwise.
+ */
+const judgeMarker = (fileName: string): MarkerJudgement => {
+    try {
+        const file = markerPath(fileName);
+        const pid = readHolder(file);
+        if (pid === null || pid === process.pid || !processExists(pid)) return NO_MARKER;
+        const mtimeMs = fs.statSync(file).mtimeMs;
+        const sinceRefresh = Date.now() - mtimeMs;
+        return { state: sinceRefresh > STALE_AFTER_MS || sinceRefresh < -TICK_MS ? 'old' : 'fresh', pid, mtimeMs };
+    } catch {
+        return NO_MARKER;
+    }
+};
+
+/**
+ * Whether another process holds the marker. An old marker with a live process is read again after SETTLE_MS: a holder
+ * that was asleep has written it by then, so a marker that is fresh or whose mtime changed counts as held. One still
+ * old and unchanged is not (its process id was reused). It is left in place: the next holder overwrites it and the wipe
+ * deletes it. A check that waits is bounded by SETTLE_MS.
+ */
+const isMarkerActive = async (fileName: string): Promise<boolean> => {
+    const first = judgeMarker(fileName);
+    if (first.state !== 'old') return first.state === 'fresh';
+    await new Promise<void>((resolve) => {
+        setTimeout(resolve, SETTLE_MS);
+    });
+    const second = judgeMarker(fileName);
+    if (second.state !== 'old') return second.state === 'fresh';
+    return second.pid !== first.pid || second.mtimeMs !== first.mtimeMs;
+};
+
+const writeMarker = (file: string) => {
+    fs.writeFileSync(file, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }), {
+        encoding: 'utf8',
+        mode: 0o600,
+    });
+};
+
+/** Writes the marker again when it is missing or unreadable; one another process has taken over is left alone. */
+const beat = (file: string) => {
+    try {
+        const holder = readHolder(file);
+        if (holder === null || holder === process.pid) writeMarker(file);
+    } catch {
+        // the directory is gone or not writable: the next beat tries again
+    }
+};
+
+/**
+ * Every marker of one per-process kind in the user-data directory (this process's own included).
+ */
+const markerNames = (prefix: string): string[] => {
+    try {
+        return fs.readdirSync(getUserDataPath()).filter((name) => MARKER_NAME_RE.test(name) && name.startsWith(prefix));
+    } catch {
+        return [];
+    }
+};
+
+/** Whether another process holds a marker of this kind: the markers are read together, so old ones cost one wait. */
+const isKindActive = async (prefix: string): Promise<boolean> =>
+    (await Promise.all(markerNames(prefix).map((name) => isMarkerActive(name)))).some(Boolean);
+
+/**
+ * Removes the markers of this kind whose process is gone, so ones left by crashes do not pile up (every process has
+ * its own file, which no later holder overwrites).
+ */
+const removeDeadMarkers = (prefix: string) => {
+    for (const name of markerNames(prefix)) {
+        try {
+            const file = markerPath(name);
+            const pid = readHolder(file);
+            if (pid !== null && pid !== process.pid && !processExists(pid)) fs.unlinkSync(file);
+        } catch {
+            // already gone, or not removable: it is only a leftover
+        }
+    }
+};
+
+/**
+ * Takes the marker for this process and keeps it fresh until released.
+ *
+ * @returns release: stops refreshing and removes the marker, only while it is still this process's
+ */
+const holdMarker = (fileName: string): (() => void) => {
+    const file = markerPath(fileName);
+    writeMarker(file);
+    let lastBeat = Date.now();
+    const heartbeat = setInterval(() => {
+        const sinceBeat = Date.now() - lastBeat;
+        // A clock set back (a negative delta) writes at once, so readers do not see a marker from the future for long.
+        if (sinceBeat >= 0 && sinceBeat < HEARTBEAT_MS) return;
+        lastBeat = Date.now();
+        beat(file);
+    }, TICK_MS);
+    // A held marker never keeps the process alive.
+    heartbeat.unref();
+    return () => {
+        clearInterval(heartbeat);
+        try {
+            if (readHolder(file) === process.pid) fs.unlinkSync(file);
+        } catch {
+            // already gone
+        }
+    };
+};
+
+/** Whether another process holds a CLI session marker. */
+const isCliSessionActive = (): Promise<boolean> => isKindActive(CLI_SESSION_PREFIX);
+
+/** Takes this process's CLI session marker (see holdMarker). */
+const holdCliSessionLock = (): (() => void) => {
+    removeDeadMarkers(CLI_SESSION_PREFIX);
+    return holdMarker(processMarkerName(CLI_SESSION_PREFIX));
+};
+
+/** Whether another process (a `pnpm web` server) holds a web-server marker. */
+const isWebServerActive = (): Promise<boolean> => isKindActive(WEB_SERVER_PREFIX);
+
+/** Takes this process's web-server marker (see holdMarker). */
+const holdWebServerLock = (): (() => void) => {
+    removeDeadMarkers(WEB_SERVER_PREFIX);
+    return holdMarker(processMarkerName(WEB_SERVER_PREFIX));
+};
+
+/** Whether another process (the desktop app) holds the desktop-app marker. */
+const isDesktopAppActive = (): Promise<boolean> => isMarkerActive(APP_LOCK_FILE_NAME);
+
+/** Takes the desktop-app marker for this process (see holdMarker). */
+const holdDesktopAppLock = (): (() => void) => holdMarker(APP_LOCK_FILE_NAME);
+
+/** Refreshes the desktop-app marker now (the machine just woke from sleep, which its timer did not count). */
+const refreshDesktopAppLock = () => beat(markerPath(APP_LOCK_FILE_NAME));
+
+export {
+    CLI_SESSION_PREFIX,
+    WEB_SERVER_PREFIX,
+    APP_LOCK_FILE_NAME,
+    MARKER_NAME_RE,
+    processMarkerName,
+    HEARTBEAT_MS,
+    STALE_AFTER_MS,
+    TICK_MS,
+    SETTLE_MS,
+    isCliSessionActive,
+    holdCliSessionLock,
+    isWebServerActive,
+    holdWebServerLock,
+    isDesktopAppActive,
+    holdDesktopAppLock,
+    refreshDesktopAppLock,
+};

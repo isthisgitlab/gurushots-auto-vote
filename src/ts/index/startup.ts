@@ -1,19 +1,64 @@
 import { app, BrowserWindow, powerMonitor } from 'electron';
 import * as settings from '../settings';
+import { holdDesktopAppLock, isCliSessionActive, refreshDesktopAppLock } from '../settings/cliSessionLock';
 import { initializeHeaders } from '../api/randomizer';
 import * as logger from '../logger';
 import { AutoUpdater } from '../services/AutoUpdater';
 import { ensureExit } from '../windows/lifecycle';
 import { bypassQuitGuard } from '../windows/quitGuard';
+import { applyImminentBoostsOnSuspend } from '../windows/suspendBoost';
+import { failureText } from '../format/logSafe';
 import { createApplicationMenu } from '../ui/applicationMenu';
 import { appState } from './state';
 import { checkAutoLogin } from './windows';
 import { installPermissionHandlers } from './permissions';
 
 /**
- * Everything that runs once Electron has finished initialization.
+ * A login a run left behind (a crash or a kill skips the quit-time clear) is cleared at the next start unless "Stay
+ * Logged In" is on. Only the desktop app does this, and only in the instance that holds the single-instance lock
+ * (onReady runs for no other): a CLI session that is running may be using the login, so it is left alone then. Looking
+ * for a CLI session can wait a few seconds on an old marker, so this runs beside the first window rather than before
+ * it; the login window needs no token, and a login made meanwhile is never cleared (the token is read again first).
  */
-async function onReady() {
+const clearLeftoverToken = async () => {
+    try {
+        const userSettings = settings.loadSettings();
+        const leftover = userSettings.auth.token;
+        if (userSettings.app.stayLoggedIn || !leftover) return;
+        if (await isCliSessionActive()) {
+            logger
+                .withCategory('authentication')
+                .info('Kept the saved login token because a CLI session is running and may be using it', null);
+            return;
+        }
+        const now = settings.loadSettings();
+        if (now.auth.token !== leftover || now.app.stayLoggedIn) return;
+        if (settings.setSetting('token', '')) {
+            logger
+                .withCategory('authentication')
+                .info('Cleared a saved token left by an earlier run (Stay Logged In is off)', null);
+        }
+    } catch (error) {
+        logger.withCategory('authentication').error('Failed to clear a leftover token at startup:', error);
+    }
+};
+
+/**
+ * Marks this process as the running desktop app for as long as it runs, so a CLI `reset-data` waits for it instead of
+ * pulling the files out from under it. A marker that cannot be written only costs that check.
+ */
+const holdAppMarker = () => {
+    try {
+        app.on('will-quit', holdDesktopAppLock());
+    } catch (error) {
+        logger
+            .withCategory('ui')
+            .warning('Could not mark the app as running (a CLI reset-data will not wait for it):', error);
+    }
+};
+
+/** Setup that needs no window: permissions, headers, presets, the leftover login, the log cleanup and the menu. */
+const prepareApp = () => {
     logger.withCategory('ui').info(`[App] UserData path: ${settings.getUserDataPath()}`, null);
 
     // Before any window exists: a page must never see Electron's grant-by-default.
@@ -28,16 +73,35 @@ async function onReady() {
         logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
     }
 
+    // Never rejects, and never holds the first window back (see clearLeftoverToken).
+    void clearLeftoverToken();
+
     logger.cleanup();
 
     createApplicationMenu();
+};
 
+const registerPowerHandlers = () => {
     // Linux/macOS shutdown or reboot: never veto the OS with a dialog.
     powerMonitor.on('shutdown', bypassQuitGuard);
 
+    // Waking: the app marker's timer did not count the sleep, so it is refreshed now rather than at its next beat.
+    powerMonitor.on('resume', refreshDesktopAppLock);
+
+    // Sleep: a boost due soon goes out now, while the network is still up
+    // (best effort — see windows/suspendBoost.ts). Auto-vote state is read at event time.
+    powerMonitor.on('suspend', () => {
+        applyImminentBoostsOnSuspend().catch((error: unknown) => {
+            logger.withCategory('boost').error(`Boost on sleep could not run: ${failureText(error)}`, null);
+        });
+    });
+};
+
+/** Opens the first window, running the startup update check before it (auto-login) or shortly after it (login window). */
+const openFirstWindow = async () => {
     // Check if we should auto-login and run update check before creating main window
     const userSettings = settings.loadSettings();
-    const shouldAutoLogin = userSettings.token && userSettings.stayLoggedIn;
+    const shouldAutoLogin = userSettings.auth.token && userSettings.app.stayLoggedIn;
 
     // Initialize global AutoUpdater instance. Deliberately constructed
     // WITHOUT a window — unlike the windowed constructions in
@@ -74,7 +138,9 @@ async function onReady() {
             void safeCheckForUpdates();
         }, 3000); // 3 second delay
     }
+};
 
+const registerLifecycleHandlers = () => {
     // On macOS, re-create a window when dock icon is clicked and no windows are open
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -103,6 +169,17 @@ async function onReady() {
     process.on('exit', (code) => {
         logger.withCategory('ui').info(`Process exiting with code: ${code}`, null);
     });
+};
+
+/**
+ * Everything that runs once Electron has finished initialization.
+ */
+async function onReady() {
+    holdAppMarker();
+    prepareApp();
+    registerPowerHandlers();
+    await openFirstWindow();
+    registerLifecycleHandlers();
 }
 
 export { onReady };

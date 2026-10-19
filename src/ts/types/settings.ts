@@ -1,20 +1,15 @@
 /**
- * Shapes of the persisted settings blob (`settings.json` on Electron/CLI, the
- * `gurushots-settings` preference on Android). Type-only: nothing here exists
- * at runtime. Modules pull them in with
- * `import type { AppSettings } from '../types/settings'`.
+ * Setting-shaped types shared by the settings modules and the renderer. Type-only: nothing here exists at runtime. The
+ * shape of the persisted configuration itself is in ./config.
  *
- * loadSettings (settings/persistence.ts) merges the blob over
- * getDefaultSettings() and validates it: top-level values of the wrong type,
- * challengeSettings containers of the wrong kind, and setting values their
- * schema rejects are dropped for the defaults. So those are typed as the
- * defaults write them. Rules, profiles and scenarios are validated by the
- * modules that read them, so their contents are typed loosely here —
- * `unknown` values the reader narrows.
+ * loadSettings (settings/persistence.ts) validates the stored configuration: `app` and `auth` values of the wrong
+ * type, containers of the wrong kind, and setting values their schema rejects are dropped for the defaults, so those
+ * are typed as the defaults write them. Rules, profiles and scenarios are validated by the modules that read them, so
+ * their contents are typed loosely — `unknown` values the reader narrows.
  */
 
-import type { getUiDefaultSettings } from '../settings/uiDefaults';
 import type { SettingKey, SettingValues } from '../settings/schema';
+import type { ConfigAuthV2, ConfigV2 } from './config';
 
 /** A plain object whose values are not trusted yet (hand-edited file, IPC payload). */
 export type LooseRecord = { [key: string]: unknown };
@@ -55,6 +50,10 @@ export interface TitleRule {
     pics?: number;
     minHours?: number;
     maxHours?: number;
+    /** Strict 'HH:MM': the end time the challenge card shows, in the app timezone, any date. With `closesAtTimes`, the first of them. */
+    closesAt?: string;
+    /** Every end time a rule closing at any one of matches, written only when there are two or more; `closesAt` is the first. */
+    closesAtTimes?: string[];
     profile?: string;
     mustIncludeTags?: string[];
     shouldIncludeTags?: string[];
@@ -72,6 +71,36 @@ export interface RuleMatchChallenge {
     close_time?: unknown;
 }
 
+/**
+ * The rule a value comes from: its title when it has one, and its 1-based place in the rule list
+ * (the renderer words an untitled one as "rule #n", in the UI's language). `viaProfile` marks a
+ * value the rule's profile supplies rather than one the rule sets itself.
+ */
+export interface RuleSource {
+    title?: string;
+    index: number;
+    viaProfile?: boolean;
+}
+
+/**
+ * What a challenge's matching rules contribute, as the renderer reads it (`get-title-profile`):
+ * the one profile they apply, whether this challenge suppresses it, the sparse value map with and
+ * without the profile layer, and — per key — the rule each value comes from, one map per layer.
+ */
+export interface TitleRuleInfo {
+    profile: { name: string; values: ChallengeValues } | null;
+    /** A manually applied profile stands in for the rule's profile. */
+    suppressed: boolean;
+    /** Every matching rule's inline values and the applied profile's, first match winning. */
+    ruleValues: ChallengeValues;
+    /** The inline values alone (what still applies with the profile suppressed). */
+    inlineValues: ChallengeValues;
+    /** Key -> the rule its value comes from in `ruleValues`: the layer that runs while the profile applies. */
+    ruleSources: Record<string, RuleSource>;
+    /** Key -> the rule that set it in `inlineValues`: the layer that runs once the profile is suppressed. */
+    inlineSources: Record<string, RuleSource>;
+}
+
 /** The bounded match facts remembered for one active challenge. */
 export interface ChallengeFacts {
     tags: string[];
@@ -81,51 +110,51 @@ export interface ChallengeFacts {
     close_time?: number | null;
 }
 
-/** The `challengeSettings` container of the blob. */
-export interface ChallengeSettings {
-    globalDefaults: ChallengeValues;
-    /** Challenge id -> sparse override map. */
-    perChallenge: Record<string, ChallengeValues>;
-    titleRules: TitleRule[];
-    /** Challenge id -> true while a manually applied profile stands in for the title rule's profile. */
-    titleProfileSuppressions: Record<string, boolean>;
-    /** Profile display name -> sparse values. */
-    profiles?: Record<string, ChallengeValues>;
-    /** Normalized names of the intent profiles already seeded once. */
-    seededProfiles?: string[];
-    /** Scenario name -> stored document (re-validated on every read). */
-    scenarios?: Record<string, unknown>;
-    /** Challenge id -> first-seen title. */
-    titlePins?: Record<string, string>;
-    /** Legacy category rules, folded into titleRules by a load-time migration. */
-    categoryRules?: unknown[];
-}
+/** Which Boost or Turbo a pinned photo is for. */
+export type EntryPinKind = 'boost' | 'turbo';
 
-/** The whole persisted settings blob. */
-export interface AppSettings extends ReturnType<typeof getUiDefaultSettings> {
-    lastUsername: string;
-    mock: boolean;
-    token: string;
-    onboardingCompleted: boolean;
-    windowBounds: Record<WindowType, WindowBounds>;
-    challengeSettings: ChallengeSettings;
-    apiHeaders: Record<string, string>;
-    /** Top-level keys written via setSetting, and the migrations' one-time flags. */
-    [key: string]: unknown;
-}
+/** The photos one challenge pins for Boost and Turbo (entry ids); a missing key is no pin. */
+export type EntryPinRecord = { [K in EntryPinKind]?: string };
 
 /**
- * The settings a renderer sees: the stored blob without its auth token, plus
- * whether one exists. The token itself never leaves the main process.
+ * What `setEntryPin` did: `ok`; `invalid` (an argument was refused); `cap` (a new challenge over the pin cap);
+ * `write-failed` (the settings file could not be written).
  */
-export type RendererSettings = {
-    [K in keyof AppSettings as K extends 'token' ? never : K]: AppSettings[K];
-} & { token?: never; hasToken: boolean };
+export type EntryPinResult = 'ok' | 'invalid' | 'cap' | 'write-failed';
+
+/** A challenge's pins as read back: the pinned entry id per feature, null = no pin. */
+export type EntryPins = Record<EntryPinKind, string | null>;
+
+/** The sign-in keys of the configuration: the only keys of `auth`, addressed by name through getSetting / setSetting. */
+export type AuthKey = keyof ConfigAuthV2;
+
+/**
+ * The settings a renderer sees: the configuration without its `auth` block (the token, the API headers, the last
+ * user name and the chosen-photos account never leave the main process), plus whether a token exists.
+ */
+export type RendererSettings = Omit<ConfigV2, 'auth'> & { hasToken: boolean };
 
 /** The Android headless-service bridge to the native settings store. */
 export interface AndroidHeadlessStore {
     read(): string | null;
-    write(data: string): void;
+    /**
+     * Saves the settings blob only if it still holds what `read` last answered, under the lock the app window's plugin
+     * takes too. `false` when it did not: the blob changed since that read (read it again and make the change on it),
+     * or the native store refused the value. No answer counts as written.
+     */
+    write(data: string): boolean | void;
+    /**
+     * Why the latest `write` was refused: `too-large` (past the size the native store takes), `conflict` (the blob
+     * changed since the last `read`), `refused` (the store or the commit failed); '' when it was not refused.
+     */
+    lastWriteRefusal?(): 'too-large' | 'conflict' | 'refused' | '';
     readKey?(key: string): string | null;
-    writeKey?(key: string, data: string): void;
+    /** `true` when the native side persisted the value. Anything else (`false`, or no answer) is not a write a strict
+     *  store takes for one. */
+    writeKey?(key: string, data: string): boolean | void;
+    /**
+     * Saves `data` only if the key still holds what the caller read (`expected`; '' when nothing was stored), under the
+     * lock the app window's plugin takes too. `true` only when it was saved.
+     */
+    compareAndWriteKey?(key: string, expected: string, data: string): boolean;
 }

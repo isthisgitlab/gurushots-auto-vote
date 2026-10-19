@@ -35,7 +35,7 @@ export function ChipListPanel({
  * ChallengeCard (id="challenge-<id>"). Content is caller-supplied so a
  * chip can carry extra detail (e.g. the boost countdown); `className`
  * appends DaisyUI button modifiers so a caller can set a chip apart
- * (e.g. the per-challenge-override marker in ChallengeNav). The chip keeps
+ * (e.g. BoostWindowBanner's `btn-info` chips). The chip keeps
  * the stock btn-sm height like every other button; a title too long for
  * the row is truncated by ChipTitle rather than wrapping the chip taller.
  */
@@ -111,7 +111,7 @@ export function ChallengeAlertPanel<Item extends { id: Challenge['id']; title: s
         <ChipListPanel icon={icon} label={label} count={items.length}>
             {items.map((c) => (
                 <ChallengeChip key={c.id} challengeId={c.id} className={chipClassName}>
-                    <PulseDot variant={dotVariant} pulse={pulse(c)} size="status-sm" />
+                    <PulseDot variant={dotVariant} pulse={pulse(c)} size="status-sm" onBadge />
                     <ChipTitle>{c.title}</ChipTitle>
                     {detail(c)}
                 </ChallengeChip>

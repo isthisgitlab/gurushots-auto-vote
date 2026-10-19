@@ -63,6 +63,22 @@ describe('ScrollToTopButton', () => {
         expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
     });
 
+    test('clicking scrolls instantly for a user who prefers reduced motion', () => {
+        const original = globalThis.matchMedia;
+        globalThis.matchMedia = ((query: string) => ({
+            matches: query.includes('reduce'),
+        })) as unknown as typeof globalThis.matchMedia;
+        const scrollTo = jest.spyOn(window, 'scrollTo').mockImplementation(() => {});
+        setScrollY(400);
+        try {
+            render(<ScrollToTopButton />);
+            fireEvent.click(screen.getByRole('button', { name: 'app.scrollToTop' }));
+            expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'auto' });
+        } finally {
+            globalThis.matchMedia = original;
+        }
+    });
+
     test('hides again when the page returns to the top', () => {
         setScrollY(400);
         render(<ScrollToTopButton />);

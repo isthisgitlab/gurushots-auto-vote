@@ -6,9 +6,24 @@
 import { pickPhotosForChallenge } from '../photoPicker';
 import { getSlotsRemaining, reflectNewEntry } from './challengeState';
 import { runFillAttempt } from './pipeline';
+import { isManualPhotosOnly } from '../manualPhotosOnly';
 
 import type { Challenge } from '../../types/gurushots';
 import type { FillSettings, SettingsFillDeps } from '../../types/autoFill';
+
+/**
+ * Whether Submit Only Chosen Photos is on for a challenge with a non-empty list.
+ * Only read where it can change the verdict (auto-fill on, no must-include
+ * filter): every other path is settled without it.
+ */
+const onlyChosenActive = (settings: FillSettings, challengeId: string | number): boolean => {
+    const list = settings.getEffectiveSetting('chosenPhotos', String(challengeId));
+    return (
+        Array.isArray(list) &&
+        list.length > 0 &&
+        settings.getEffectiveSetting('chosenPhotosOnly', String(challengeId)) === true
+    );
+};
 
 /**
  * Whether emergency fill stands down on LIVE STATE alone, independent of timing.
@@ -17,18 +32,25 @@ import type { FillSettings, SettingsFillDeps } from '../../types/autoFill';
  * timeline and the desktop notifications) decides row visibility from the very
  * same code instead of a second copy that can silently drift.
  *
- * Covers the three state-only stand-downs maybeEmergencyFillChallenge takes
+ * Covers the state-only stand-downs maybeEmergencyFillChallenge takes
  * before any network call:
  *   - no challenge id (`undefined`/`null`, exactly the runner's own guard — an
  *     empty-string id is NOT one of them, so callers that normalise a missing id
  *     to '' must pass the raw id instead),
+ *   - Manual Only on for the challenge (it never submits by itself),
  *   - no free slot left to fill, and
  *   - "normal auto-fill already owns this challenge": auto-fill on with no
  *     must-include filter, the common configuration, in which the staggered
- *     path fills the slots and emergency fill has nothing to add.
+ *     path fills the slots and emergency fill has nothing to add. Submit Only
+ *     Chosen Photos with a non-empty list does NOT count as owning it: the
+ *     staggered path may then skip the challenge (no usable chosen photo) and
+ *     emergency fill ignores that setting, so — like a must-include filter —
+ *     it is "may fill" here and the runner's probe decides. Read from the
+ *     saved settings only; whether the list belongs to the signed-in account
+ *     is a network lookup only the runner can make.
  *
  * Deliberately NOT covered — the caller owns these:
- *   - the timing/enabled checks (`emergencyFill` seconds, close_time, whether
+ *   - the timing/enabled checks (`emergencySubmit` seconds, close_time, whether
  *     `now` is inside the window), because the view expresses them as a
  *     threshold and a due instant rather than a boolean, and
  *   - the runner's final stand-down, a dry-run probe of whether the
@@ -52,19 +74,22 @@ const evaluateEmergencyFill = (
     challenge: Challenge,
     challengeId: string | number | null | undefined,
     settings: FillSettings,
-): { standDown: boolean; autoFillEnabled: boolean; mustIncludeTags: string[] | null } => {
-    const inert: { standDown: boolean; autoFillEnabled: boolean; mustIncludeTags: string[] | null } = {
+): { standDown: boolean; autoSubmitEnabled: boolean; mustIncludeTags: string[] | null } => {
+    const inert: { standDown: boolean; autoSubmitEnabled: boolean; mustIncludeTags: string[] | null } = {
         standDown: true,
-        autoFillEnabled: false,
+        autoSubmitEnabled: false,
         mustIncludeTags: null,
     };
     if (challengeId === undefined || challengeId === null) return inert;
     if (getSlotsRemaining(challenge) <= 0) return inert;
+    // Manual Only: nothing is submitted by itself, so the deadline view drops the row too.
+    if (isManualPhotosOnly(settings, challengeId)) return inert;
 
     const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
-    const autoFillEnabled = settings.getEffectiveSetting('autoFill', String(challengeId)) === true;
+    const autoSubmitEnabled = settings.getEffectiveSetting('autoSubmit', String(challengeId)) === true;
     const mustActive = Array.isArray(mustIncludeTags) && mustIncludeTags.length > 0;
-    return { standDown: autoFillEnabled && !mustActive, autoFillEnabled, mustIncludeTags };
+    const standDown = autoSubmitEnabled && !mustActive && !onlyChosenActive(settings, challengeId);
+    return { standDown, autoSubmitEnabled, mustIncludeTags };
 };
 
 /**
@@ -72,9 +97,9 @@ const evaluateEmergencyFill = (
  * auto-fill path deliberately leaves empty right up to the deadline:
  *   (a) auto-fill is off for the challenge, or
  *   (b) a Must Include Tags filter is set, nothing matches it, and
- *       fillWithoutTagMatch is off (so the slot would stay empty).
+ *       submitWithoutTagMatch is off (so the slot would stay empty).
  *
- * When the challenge is within `emergencyFill` seconds of closing and in
+ * When the challenge is within `emergencySubmit` seconds of closing and in
  * one of those states, fill every remaining slot in a single submission,
  * relaxing the must-include hard filter (the whole point is "don't leave
  * slots empty at the buzzer"). There's no time to stagger this close to
@@ -98,7 +123,7 @@ const maybeEmergencyFillChallenge = async (
     const challengeId = challenge?.id;
     if (challengeId === undefined || challengeId === null) return 'skipped';
 
-    const emergencySeconds = settings.getEffectiveSetting('emergencyFill', String(challengeId));
+    const emergencySeconds = settings.getEffectiveSetting('emergencySubmit', String(challengeId));
     if (!Number.isFinite(emergencySeconds) || emergencySeconds <= 0) return 'disabled';
 
     const closeTime = Number(challenge.close_time);
@@ -115,37 +140,41 @@ const maybeEmergencyFillChallenge = async (
     // back the settings it resolved so nothing below re-reads them.
     const gate = evaluateEmergencyFill(challenge, challengeId, settings);
     if (gate.standDown) return 'skipped';
-    const { autoFillEnabled, mustIncludeTags } = gate;
+    const { autoSubmitEnabled, mustIncludeTags } = gate;
 
     let slotsRemaining = getSlotsRemaining(challenge);
     const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
-    const fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
+    const submitWithoutTagMatch = settings.getEffectiveSetting('submitWithoutTagMatch', String(challengeId));
 
     const attempt = await runFillAttempt({
-        label: 'emergencyFill',
+        label: 'emergencySubmit',
         challenge,
         token,
         deps,
         // Fill every remaining slot. Keep the user's tag preferences (must
-        // photos still win when they exist) but force fillWithoutTagMatch on so
+        // photos still win when they exist) but force submitWithoutTagMatch on so
         // a missing match never leaves a slot empty at the deadline — that
         // override is the whole point of emergency fill.
         wantCount: slotsRemaining,
         mustIncludeTags,
         shouldIncludeTags,
-        fillWithoutTagMatch: true,
+        submitWithoutTagMatch: true,
         // With auto-fill on and a must-include filter set, only step in if that
         // filter would leave the slot empty (a non-empty result means the normal
         // staggered path can still fill it, so stand down). With auto-fill off,
         // always step in — nothing else will fill the slot. Dry-run probe: no
-        // onFallback, and the user's real fillWithoutTagMatch setting applies.
-        probeStandDown: autoFillEnabled
-            ? ({ eligible, semanticScores }) =>
+        // onFallback, and the user's real submitWithoutTagMatch setting applies.
+        // The probe models the staggered path, so it sees the chosen photos the
+        // way that path would: with Submit Only on and none usable it would
+        // skip, which is exactly when emergency fill must step in.
+        probeStandDown: autoSubmitEnabled
+            ? ({ eligible, semanticScores, chosen }) =>
                   pickPhotosForChallenge(challenge, eligible, 1, {
                       mustIncludeTags,
                       shouldIncludeTags,
-                      fillWithoutTagMatch,
+                      submitWithoutTagMatch,
                       semanticScores,
+                      chosen,
                   }).length > 0
             : null,
         // Live re-check just before the batch submit: an entry added outside
@@ -155,9 +184,9 @@ const maybeEmergencyFillChallenge = async (
             slotsRemaining = getSlotsRemaining(challenge);
             if (slotsRemaining <= 0) {
                 logger
-                    .withCategory('autoFill')
+                    .withCategory('autoSubmit')
                     .info(
-                        `emergencyFill: live re-check shows ${logger.challengeTag(challenge)} has no free slots — an entry was added outside this run (e.g. a manual submission); standing down`,
+                        `emergencySubmit: live re-check shows ${logger.challengeTag(challenge)} has no free slots — an entry was added outside this run (e.g. a manual submission); standing down`,
                         null,
                     );
                 return { standDown: true };
@@ -169,6 +198,7 @@ const maybeEmergencyFillChallenge = async (
         },
     });
     if (attempt.status === 'no-pick') return 'no-eligible-photos';
+    // Emergency fill ignores Submit Only Chosen Photos, so it never answers 'no-chosen'.
     if (attempt.status === 'probe-stand-down' || attempt.status === 'gone' || attempt.status === 'refresh-stand-down') {
         return 'skipped';
     }
@@ -178,9 +208,9 @@ const maybeEmergencyFillChallenge = async (
     // cycle (timer order) sees the new entries and correct slot count.
     for (const id of attempt.picked) reflectNewEntry(challenge, id);
     logger
-        .withCategory('autoFill')
+        .withCategory('autoSubmit')
         .success(
-            `emergencyFill: submitted ${attempt.picked.length} entr${attempt.picked.length === 1 ? 'y' : 'ies'} for ${logger.challengeTag(challenge)} near deadline`,
+            `emergencySubmit: submitted ${attempt.picked.length} entr${attempt.picked.length === 1 ? 'y' : 'ies'} for ${logger.challengeTag(challenge)} near deadline`,
             null,
         );
     return 'submitted';

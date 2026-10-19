@@ -10,6 +10,7 @@
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
 import { mockApi } from './helpers/setup';
+import { titleRuleInfo } from './helpers/titleRules';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { ChallengeValues } from '../../src/ts/types/settings';
@@ -62,7 +63,7 @@ function readNumberInput() {
 }
 
 // The per-field reset button in SettingInput is identified by its title.
-const resetButton = () => document.querySelector('button[title="app.resetToDefaultNotSaved"]');
+const resetButton = () => document.querySelector('button[title^="app.resetToDefaultNotSaved"]');
 
 describe('ChallengeSettingsModal load cancellation', () => {
     test('discards a stale load when challengeId changes mid-fetch', async () => {
@@ -157,7 +158,7 @@ describe('ChallengeSettingsModal schema loading', () => {
         mockSchemaState.loading = true;
         mockSchemaState.schema = null;
         render(<ChallengeSettingsModal isOpen={true} onClose={jest.fn()} challengeId="1" challengeTitle="C" />);
-        expect(screen.getByLabelText('Loading')).toBeTruthy();
+        expect(screen.getByRole('status').textContent).toBe('common.loading');
     });
 
     test('keeps the form on screen during a background schema refetch', async () => {
@@ -227,6 +228,7 @@ describe('ChallengeSettingsModal group applicability', () => {
         expect(numberInputs().every((i) => i.disabled)).toBe(true);
         expect(document.body.textContent).toContain('app.naBoostUsed');
         expect(document.body.textContent).toContain('app.notApplicable');
+        expect(screen.getByText('app.notApplicable').className).toContain('badge-ghost');
     });
 
     test('leaves a group editable when its action can still apply (boost AVAILABLE)', async () => {
@@ -298,7 +300,9 @@ describe('ChallengeSettingsModal group applicability', () => {
     });
 
     test('shows an automatic title profile as the inherited value below manual overrides', async () => {
-        mockApi.getTitleProfile.mockResolvedValue({ name: 'Quick Tactic', values: { boostTime: 17 } });
+        mockApi.getTitleProfile.mockResolvedValue(
+            titleRuleInfo({ profile: { name: 'Quick Tactic', values: { boostTime: 17 } } }),
+        );
         renderWithChallenge(invalid<Challenge>({ member: { boost: { state: 'AVAILABLE' } } }));
 
         await waitFor(() => {
@@ -320,7 +324,9 @@ describe('ChallengeSettingsModal group applicability', () => {
     });
 
     test('manual profile Apply replaces the automatic baseline and saves that mode atomically', async () => {
-        mockApi.getTitleProfile.mockResolvedValue({ name: 'Automatic', values: { boostTime: 17 } });
+        mockApi.getTitleProfile.mockResolvedValue(
+            titleRuleInfo({ profile: { name: 'Automatic', values: { boostTime: 17 } } }),
+        );
         mockApi.getChallengeProfiles.mockResolvedValue({ Reset: {} });
         const onClose = jest.fn();
         render(
@@ -351,7 +357,9 @@ describe('ChallengeSettingsModal group applicability', () => {
     });
 
     test('refreshes inherited values after deleting the assigned profile in the open modal', async () => {
-        mockApi.getTitleProfile.mockResolvedValue({ name: 'Automatic', values: { boostTime: 17 } });
+        mockApi.getTitleProfile.mockResolvedValue(
+            titleRuleInfo({ profile: { name: 'Automatic', values: { boostTime: 17 } } }),
+        );
         mockApi.getChallengeProfiles.mockResolvedValue({ Automatic: { boostTime: 17 } });
         renderWithChallenge(invalid<Challenge>({ member: { boost: { state: 'AVAILABLE' } } }));
         await waitFor(() => {
@@ -366,6 +374,8 @@ describe('ChallengeSettingsModal group applicability', () => {
         });
         const deleteProfile = screen.getByRole('button', { name: 'app.deleteProfile' });
         await act(async () => invalid<void>(fireEvent.click(deleteProfile)));
+        // With the profile gone, the settings say no rule applies one: the dialog reads that again.
+        mockApi.getTitleProfile.mockResolvedValue(titleRuleInfo());
         await act(async () =>
             invalid<void>(fireEvent.click(screen.getByRole('button', { name: 'app.confirmDelete' }))),
         );
@@ -419,21 +429,21 @@ describe('ChallengeSettingsModal auto-fill schedule shift hint', () => {
     // only; restore afterwards so the other suites keep their single-field view.
     beforeEach(() => {
         mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
-        mockSchemaState.schema!.autoFillSchedule = invalid({
+        mockSchemaState.schema!.autoSubmitSchedule = invalid({
             type: 'schedule',
             default: DEFAULT_SCHEDULE,
             perChallenge: true,
-            group: 'autoFill',
-            label: 'app.autoFillSchedule',
-            description: 'app.autoFillScheduleDesc',
+            group: 'autoSubmit',
+            label: 'app.autoSubmitSchedule',
+            description: 'app.autoSubmitScheduleDesc',
         });
-        mockSchemaState.defaults!.autoFillSchedule = DEFAULT_SCHEDULE;
-        mockSchemaState.groups!.push(invalid({ id: 'autoFill', label: 'app.groupAutoFill' }));
+        mockSchemaState.defaults!.autoSubmitSchedule = DEFAULT_SCHEDULE;
+        mockSchemaState.groups!.push(invalid({ id: 'autoSubmit', label: 'app.groupAutoSubmit' }));
     });
     afterEach(() => {
-        delete mockSchemaState.schema!.autoFillSchedule;
-        delete mockSchemaState.defaults!.autoFillSchedule;
-        mockSchemaState.groups = mockSchemaState.groups!.filter((g) => g.id !== 'autoFill');
+        delete mockSchemaState.schema!.autoSubmitSchedule;
+        delete mockSchemaState.defaults!.autoSubmitSchedule;
+        mockSchemaState.groups = mockSchemaState.groups!.filter((g) => g.id !== 'autoSubmit');
     });
 
     const renderWithChallenge = (challenge: Challenge | null) =>
@@ -456,9 +466,9 @@ describe('ChallengeSettingsModal auto-fill schedule shift hint', () => {
         );
 
         await waitFor(() => {
-            expect(document.body.textContent).toContain('app.autoFillSchedule');
+            expect(document.body.textContent).toContain('app.autoSubmitSchedule');
         });
-        expect(document.body.textContent).toContain('app.autoFillScheduleShiftHint');
+        expect(document.body.textContent).toContain('app.autoSubmitScheduleShiftHint');
     });
 
     test('absent when the challenge allows the full schedule span', async () => {
@@ -470,9 +480,9 @@ describe('ChallengeSettingsModal auto-fill schedule shift hint', () => {
         );
 
         await waitFor(() => {
-            expect(document.body.textContent).toContain('app.autoFillSchedule');
+            expect(document.body.textContent).toContain('app.autoSubmitSchedule');
         });
-        expect(document.body.textContent).not.toContain('app.autoFillScheduleShiftHint');
+        expect(document.body.textContent).not.toContain('app.autoSubmitScheduleShiftHint');
     });
 
     test('null challenge (dropped off the live poll mid-session): no crash, no hint', async () => {
@@ -482,9 +492,9 @@ describe('ChallengeSettingsModal auto-fill schedule shift hint', () => {
         renderWithChallenge(null);
 
         await waitFor(() => {
-            expect(document.body.textContent).toContain('app.autoFillSchedule');
+            expect(document.body.textContent).toContain('app.autoSubmitSchedule');
         });
-        expect(document.body.textContent).not.toContain('app.autoFillScheduleShiftHint');
+        expect(document.body.textContent).not.toContain('app.autoSubmitScheduleShiftHint');
     });
 
     test('single-photo challenge: no hint (the remapped schedule is empty, no row applies)', async () => {
@@ -496,9 +506,9 @@ describe('ChallengeSettingsModal auto-fill schedule shift hint', () => {
         );
 
         await waitFor(() => {
-            expect(document.body.textContent).toContain('app.autoFillSchedule');
+            expect(document.body.textContent).toContain('app.autoSubmitSchedule');
         });
-        expect(document.body.textContent).not.toContain('app.autoFillScheduleShiftHint');
+        expect(document.body.textContent).not.toContain('app.autoSubmitScheduleShiftHint');
     });
 });
 
@@ -514,7 +524,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
 
     beforeEach(() => {
         mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
-        mockApi.getSettings.mockReset().mockResolvedValue(invalid({ timezone: 'UTC', checkFrequencyMax: 3 }));
+        mockApi.getSettings.mockReset().mockResolvedValue(invalid({ app: { timezone: 'UTC', checkFrequencyMax: 3 } }));
         mockApi.getChallengeProfiles.mockReset().mockResolvedValue({});
         for (const [key, extra] of Object.entries(SF_SCHEMA)) {
             mockSchemaState.schema![key] = invalid({
@@ -534,7 +544,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
             delete mockSchemaState.defaults![key];
         }
         mockSchemaState.groups = mockSchemaState.groups!.filter((g) => g.id !== 'scheduledFill');
-        mockApi.getSettings.mockReset().mockResolvedValue(invalid({}));
+        mockApi.getSettings.mockReset().mockResolvedValue(invalid({ app: {} }));
     });
 
     const renderWithChallenge = (
@@ -654,7 +664,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
     });
 
     test('(d) window shorter than checkFrequencyMax → short-window hint', async () => {
-        mockApi.getSettings.mockResolvedValue(invalid({ timezone: 'UTC', checkFrequencyMax: 30 }));
+        mockApi.getSettings.mockResolvedValue(invalid({ app: { timezone: 'UTC', checkFrequencyMax: 30 } }));
         mockApi.getChallengeOverrides.mockResolvedValue({
             useScheduledFill: true,
             scheduledFillTime: ['21:30'],

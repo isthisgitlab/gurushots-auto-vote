@@ -10,11 +10,16 @@ import { signal } from '@preact/signals';
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
+import { formatEndTime } from '@/utils/formatters';
+import { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } from '@/utils/levelBadge';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import type { EntryBadge as RealEntryBadge } from '@/components/app/EntryBadge';
 import type { Challenge, MemberTurbo, RankingTotal } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
 import { invalid } from '../helpers/invalid';
+import { parseJson, parseJsonObject } from '../helpers/parseJson';
+import { mockTranslator } from './helpers/setup';
+import { app, errors } from '../../src/ts/translations/english';
 
 jest.mock('@/components/app/EntryBadge', () => ({
     EntryBadge: ({
@@ -23,14 +28,26 @@ jest.mock('@/components/app/EntryBadge', () => ({
         swapAvailable,
         boostAvailable,
         turboAvailable,
+        timezone,
     }: Parameters<typeof RealEntryBadge>[0]) => (
-        <span data-testid={`entry-${entry.id}`}>
+        <span data-testid={`entry-${entry.id}`} data-timezone={timezone}>
             {JSON.stringify({ swapBack, swapAvailable, boostAvailable, turboAvailable })}
         </span>
     ),
 }));
 
 const nowSec = () => Math.floor(Date.now() / 1000);
+
+// A get-deadline-actions answer's block fields: each feature blocked by a flag or a pin (and when the pin gives way).
+type Block = { by: 'flag' | 'pin'; releaseAt?: number };
+const blocked = ({ boost, turbo }: { boost?: Block; turbo?: Block }) => ({
+    boostBlocked: boost !== undefined,
+    turboBlocked: turbo !== undefined,
+    boostBlockedBy: boost?.by ?? null,
+    turboBlockedBy: turbo?.by ?? null,
+    boostReleaseAt: boost?.releaseAt ?? null,
+    turboReleaseAt: turbo?.releaseAt ?? null,
+});
 
 const makeChallenge = (overrides = {}) =>
     buildChallenge({
@@ -93,14 +110,95 @@ beforeEach(() => {
     window.api.openExternalUrl = jest.fn().mockResolvedValue(undefined);
 });
 
+describe('a scenario whose progress can be reset from the card', () => {
+    const scenario = { name: 'Plan', start: 'main', phases: { main: { rules: [{ id: 'r', if: [], do: [] }] } } };
+    const statusOf = (state: object | null, corrupt: false | 'file' | 'record' = false) =>
+        invalid({
+            success: true,
+            assigned: 'Plan',
+            scenario,
+            corrupt,
+            timezone: 'UTC',
+            state: corrupt
+                ? null
+                : {
+                      phase: 'main',
+                      phaseEnteredAt: nowSec(),
+                      fired: {},
+                      memory: {},
+                      lastError: null,
+                      inFlight: null,
+                      ...state,
+                  },
+        });
+    const stopped = () => ({ fired: { r: { at: nowSec(), phaseEnteredAt: nowSec(), unclearHalt: 'swap' } } });
+
+    test('a stopped rule offers the reset: the dialog says what it costs, and confirming resets and reads the status again', async () => {
+        window.api.getScenarioStatus = jest.fn().mockResolvedValue(statusOf(stopped()));
+        window.api.resetScenarioState = jest.fn().mockResolvedValue({ success: true });
+        renderCard(makeChallenge());
+        fireEvent.click(await screen.findByText('app.scenarioReset'));
+        expect(screen.getByText('app.scenarioResetBody')).toBeTruthy();
+        fireEvent.click(screen.getByText('app.scenarioResetConfirm'));
+        await waitFor(() => expect(window.api.resetScenarioState).toHaveBeenCalledWith(101));
+        await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(screen.queryByText('app.scenarioResetTitle')).toBeNull());
+        expect(window.api.resetAllScenarioState).not.toHaveBeenCalled();
+    });
+
+    test('unreadable progress offers the reset of every challenge, and the dialog says that', async () => {
+        window.api.getScenarioStatus = jest.fn().mockResolvedValue(statusOf(null, 'file'));
+        window.api.resetAllScenarioState = jest.fn().mockResolvedValue({ success: true });
+        renderCard(makeChallenge());
+        fireEvent.click(await screen.findByText('app.scenarioResetAll'));
+        expect(screen.getByText('app.scenarioResetAllBody')).toBeTruthy();
+        fireEvent.click(screen.getByText('app.scenarioResetConfirm'));
+        await waitFor(() => expect(window.api.resetAllScenarioState).toHaveBeenCalledTimes(1));
+        expect(window.api.resetScenarioState).not.toHaveBeenCalled();
+    });
+
+    test('a bad record of this challenge alone is reset for this challenge alone', async () => {
+        window.api.getScenarioStatus = jest.fn().mockResolvedValue(statusOf(null, 'record'));
+        window.api.resetScenarioState = jest.fn().mockResolvedValue({ success: true });
+        renderCard(makeChallenge());
+        fireEvent.click(await screen.findByText('app.scenarioReset'));
+        expect(screen.getByText('app.scenarioResetBody')).toBeTruthy();
+        fireEvent.click(screen.getByText('app.scenarioResetConfirm'));
+        await waitFor(() => expect(window.api.resetScenarioState).toHaveBeenCalledWith(101));
+    });
+
+    test('cancelling resets nothing', async () => {
+        window.api.getScenarioStatus = jest.fn().mockResolvedValue(statusOf(stopped()));
+        window.api.resetScenarioState = jest.fn();
+        renderCard(makeChallenge());
+        fireEvent.click(await screen.findByText('app.scenarioReset'));
+        fireEvent.click(screen.getByText('app.cancel'));
+        await waitFor(() => expect(screen.queryByText('app.scenarioResetTitle')).toBeNull());
+        expect(window.api.resetScenarioState).not.toHaveBeenCalled();
+    });
+
+    test('a plan with nothing stopped offers no reset', async () => {
+        window.api.getScenarioStatus = jest.fn().mockResolvedValue(statusOf({}));
+        renderCard(makeChallenge());
+        await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalled());
+        await screen.findByText(/app\.scenarioStatusPhase/);
+        expect(screen.queryByText('app.scenarioReset')).toBeNull();
+    });
+});
+
 describe('header', () => {
-    test('the jump target accepts focus and shows a blue outline', () => {
+    test('the jump target accepts focus and shows an outline for keyboard focus and for a landed jump', () => {
         const { container } = renderCard(makeChallenge());
         const card = container.querySelector('#challenge-101')!;
         expect(card.getAttribute('tabindex')).toBe('-1');
-        expect(card.className).toContain('focus:outline-info');
-        expect(card.className).toContain('focus:outline-4');
-        expect(card.className).toContain('focus:outline-offset-4');
+        expect(card.className).toContain('focus-visible:outline-base-content');
+        expect(card.className).toContain('focus-visible:outline-4');
+        expect(card.className).toContain('focus-visible:outline-offset-4');
+        // a pointer jump sets data-landed (see scrollToChallenge), which draws the same outline
+        expect(card.className).toContain('data-[landed]:outline-base-content');
+        expect(card.className).toContain('data-[landed]:outline-4');
+        expect(card.className).toContain('data-[landed]:outline-offset-4');
+        expect(card.className).not.toMatch(/(^|\s)focus:/);
     });
 
     test('opens the challenge URL and the settings modal', async () => {
@@ -111,6 +209,20 @@ describe('header', () => {
         );
         fireEvent.click(screen.getByText('app.settings'));
         expect(onSettingsClick).toHaveBeenCalledWith(101, 'Sunset');
+    });
+
+    test.each([
+        ['a path walk', '../../account'],
+        ['a query', 'x?next=//evil.example'],
+        ['a fragment', 'x#y'],
+        ['another host', '@evil.example'],
+        ['a slash', 'a/b'],
+    ])('a challenge slug with %s opens the generic challenges page, not an attacker-shaped URL', async (_name, url) => {
+        renderCard(makeChallenge({ url }));
+        fireEvent.click(screen.getByText('gurushots.com/challenges'));
+        await waitFor(() =>
+            expect(window.api.openExternalUrl).toHaveBeenCalledWith('https://gurushots.com/challenges'),
+        );
     });
 
     test('the statistics show the counts, and 0 votes when the challenge carries none', () => {
@@ -135,6 +247,56 @@ describe('header', () => {
         fireEvent.click(screen.getByText('app.run'));
         await waitFor(() => expect(window.api.runVotingCycleForChallenge).toHaveBeenCalledWith(101));
         await waitFor(() => expect(onVoteComplete).toHaveBeenCalledTimes(2));
+    });
+
+    test.each([
+        ['Vote', 'app.vote', 'voteOnChallengeManual'],
+        ['Run', 'app.run', 'runVotingCycleForChallenge'],
+    ] as const)(
+        'a failed %s shows a translated error below the buttons until it is dismissed or retried',
+        async (_name, label, method) => {
+            jest.mocked(window.api[method])
+                .mockResolvedValueOnce({ success: false, error: 'Challenge no longer active' })
+                .mockResolvedValueOnce({ success: false, error: 'raw handler text' })
+                .mockResolvedValueOnce(invalid({ success: true }));
+            const { onVoteComplete } = renderCard(makeChallenge());
+
+            fireEvent.click(screen.getByText(label));
+            const error = await screen.findByText('errors.challengeNoLongerActive');
+            expect(error.closest('[role="alert"]')).not.toBeNull();
+            expect(onVoteComplete).not.toHaveBeenCalled();
+
+            fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
+            expect(screen.queryByText('errors.challengeNoLongerActive')).toBeNull();
+
+            fireEvent.click(screen.getByText(label));
+            expect(await screen.findByText('errors.actionFailed')).toBeTruthy();
+            expect(screen.queryByText('raw handler text')).toBeNull();
+
+            // The next press clears it, and a success leaves none.
+            fireEvent.click(screen.getByText(label));
+            await waitFor(() => expect(onVoteComplete).toHaveBeenCalledTimes(1));
+            expect(screen.queryByText('errors.actionFailed')).toBeNull();
+        },
+    );
+
+    test('Vote and Run are main actions (neutral): they cost nothing', () => {
+        renderCard(makeChallenge());
+        expect(screen.getByText('app.vote').closest('button')!.className).toContain('btn-neutral');
+        expect(screen.getByText('app.run').closest('button')!.className).toContain('btn-neutral');
+    });
+
+    test('Compact and Settings are ghost view controls, grouped to the right of Vote and Run', () => {
+        renderCard(makeChallenge());
+        const compact = screen.getByText('app.compact').closest('button')!;
+        const settings = screen.getByText('app.settings').closest('button')!;
+        expect(compact.className).toContain('btn-ghost');
+        expect(settings.className).toContain('btn-ghost');
+        const group = compact.parentElement!;
+        expect(group).toBe(settings.parentElement);
+        expect(group.className).toContain('ml-auto');
+        expect(group.contains(screen.getByText('app.vote'))).toBe(false);
+        expect(group.contains(screen.getByText('app.run'))).toBe(false);
     });
 
     test('Run is hidden while autovote runs', () => {
@@ -167,14 +329,24 @@ describe('header', () => {
 });
 
 describe('time text', () => {
-    test('reads a signal value', () => {
-        renderCard(makeChallenge(), { timeRemaining: signal('5m') });
-        expect(screen.getByText('5m').className).toBe('text-success');
+    test('reads a signal value, in a green badge with more than six hours left', () => {
+        renderCard(makeChallenge({ close_time: nowSec() + 30_000 }), { timeRemaining: signal('5m') });
+        expect(screen.getByText('5m').className).toBe('badge h-auto badge-success');
     });
 
-    test('marks Ended in red', () => {
-        renderCard(makeChallenge(), { timeRemaining: 'Ended' });
-        expect(screen.getByText('Ended').className).toBe('text-error');
+    test('marks an ended challenge (null) with the red badge, worded in the UI language', () => {
+        renderCard(makeChallenge(), { timeRemaining: null });
+        expect(screen.getByText('app.ended').className).toBe('badge h-auto badge-error');
+    });
+
+    test('a plain countdown string is a yellow badge between one and six hours left', () => {
+        renderCard(makeChallenge({ close_time: nowSec() + 7_200 }), { timeRemaining: '1h 2m' });
+        expect(screen.getByText('1h 2m').className).toBe('badge h-auto badge-warning');
+    });
+
+    test('the countdown is a red badge under an hour left', () => {
+        renderCard(makeChallenge({ close_time: nowSec() + 600 }), { timeRemaining: '9m' });
+        expect(screen.getByText('9m').className).toBe('badge h-auto badge-error');
     });
 
     test('falls back to the loading label', () => {
@@ -204,7 +376,37 @@ describe('progress', () => {
         );
         expect(screen.getByText('Keep going')).toBeTruthy();
         expect(screen.getByText(/SKILLED \(380/)).toBeTruthy();
-        expect(screen.getByText('POPULAR 1').className).toContain('badge-popular');
+        expect(screen.getByText('POPULAR 1').className).toContain(LEVEL_BADGE_CLASS.popular);
+    });
+
+    test('the progress bar carries the level colour, and the Latvian look for an unknown level', () => {
+        const { container, unmount } = renderCard(
+            withTotal({ votes: 5, rank: 1, level: 2, level_name: 'SKILLED', percent: 1, next_message: '' }),
+        );
+        const bar = container.querySelector('progress');
+        expect(bar?.className).toContain(LEVEL_PROGRESS_CLASS.skilled);
+        expect(bar?.className).not.toContain('progress-latvian');
+        unmount();
+        const unknown = renderCard(withTotal({ votes: 5, rank: 1, percent: 1, next_message: '' }));
+        expect(unknown.container.querySelector('progress')?.className).toContain('progress-latvian');
+    });
+
+    test('the percentage is visible text, and the bar is named by the "Your progress" caption', () => {
+        const { container } = renderCard(
+            withTotal({ votes: 5, rank: 1, level: 5, level_name: 'ALL STAR', percent: 42.4, next_message: '' }),
+        );
+        const bar = container.querySelector('progress')!;
+        expect(screen.getByText('42%')).toBeTruthy();
+        const caption = screen.getByText('app.yourProgress');
+        expect(bar.getAttribute('aria-labelledby')).toBe(caption.id);
+        expect(caption.id).not.toBe('');
+    });
+
+    test('a ranking total without a percentage shows no percentage text', () => {
+        const { container } = renderCard(
+            withTotal({ votes: 5, rank: 1, level: 5, level_name: 'ALL STAR', next_message: '' }),
+        );
+        expect(container.querySelector('progress')!.parentElement!.textContent).toBe('');
     });
 
     test('levels past the named table fall back to LEVEL n', () => {
@@ -255,24 +457,32 @@ describe('progress', () => {
 });
 
 describe('earn turbo', () => {
-    const turboChallenge = (turbo: MemberTurbo, extra = {}) => makeChallenge({ member: { turbo }, ...extra });
+    const turboChallenge = (turbo: MemberTurbo, extra = {}) =>
+        makeChallenge({ member: { turbo: { mode: 'classic', ...turbo } }, ...extra });
 
     test('plays turbo and refreshes on success; spinner while in flight', async () => {
         const d = deferred<Awaited<ReturnType<WindowApi['playAutoTurbo']>>>();
         window.api.playAutoTurbo = jest.fn(() => d.promise);
         const { onVoteComplete } = renderCard(turboChallenge({ state: 'FREE' }));
         fireEvent.click(screen.getByText(/app\.earnTurbo/));
-        await waitFor(() => expect(screen.queryByText(/app\.earnTurbo/)).toBeNull());
+        // While in flight the button shows a spinner but keeps its name for assistive tech, and says it is busy.
+        const busy = await screen.findByRole('button', { name: 'app.earnTurbo' });
+        await waitFor(() => expect(busy.getAttribute('aria-busy')).toBe('true'));
+        expect(busy.querySelector('.loading-spinner')).not.toBeNull();
+        expect(busy.querySelector('.sr-only')!.textContent).toBe('app.earnTurbo');
         expect(window.api.playAutoTurbo).toHaveBeenCalledWith(101, 'Sunset');
         await act(async () => d.resolve(invalid({ success: true })));
         await waitFor(() => expect(onVoteComplete).toHaveBeenCalled());
     });
 
-    test('a failed play shows the error and does not refresh', async () => {
-        window.api.playAutoTurbo = jest.fn().mockResolvedValue({ success: false, error: 'turbo broke' });
+    test('a failed play shows a translated, announced error and does not refresh', async () => {
+        window.api.playAutoTurbo = jest
+            .fn()
+            .mockResolvedValue({ success: false, error: 'Turbo not earned — try again later' });
         const { onVoteComplete } = renderCard(turboChallenge({ state: 'IN_PROGRESS' }));
         fireEvent.click(screen.getByText(/app\.earnTurbo/));
-        await waitFor(() => expect(screen.getByText('turbo broke')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('errors.turboNotEarned')).toBeTruthy());
+        expect(screen.getByText('errors.turboNotEarned').closest('[role="alert"]')).not.toBeNull();
         expect(screen.getByText(/app\.earnTurbo/).closest('button')!.className).toContain('btn-error');
         expect(onVoteComplete).not.toHaveBeenCalled();
     });
@@ -338,7 +548,8 @@ describe('fill', () => {
         window.api.fillChallengeNow = jest.fn().mockResolvedValue({ success: false, error: 'no photos' });
         const { onVoteComplete } = renderCard(makeChallenge());
         fireEvent.click(screen.getByText('+1'));
-        await waitFor(() => expect(screen.getByText('no photos')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('errors.actionFailed')).toBeTruthy());
+        expect(screen.getByRole('alert')).toBeTruthy();
         expect(screen.getByText('+1').className).toContain('btn-error');
         expect(onVoteComplete).not.toHaveBeenCalled();
     });
@@ -351,10 +562,10 @@ describe('fill', () => {
         expect(screen.queryByText('invalid-args')).toBeNull();
     });
 
-    test('+1 and +N are hidden while autovote runs', () => {
+    test('+1 and +N stay shown while autovote runs', () => {
         renderCard(makeChallenge(), { autovoteRunning: true });
-        expect(screen.queryByText('+1')).toBeNull();
-        expect(screen.queryByText('+3')).toBeNull();
+        expect(screen.getByText('+1')).toBeTruthy();
+        expect(screen.getByText('+3')).toBeTruthy();
     });
 
     test('a single open slot offers only +1; no slots or unknown max offers none', () => {
@@ -369,6 +580,209 @@ describe('fill', () => {
         renderCard(makeChallenge({ max_photo_submits: undefined, member: { ranking: { entries: undefined } } }));
         expect(screen.queryByText('+1')).toBeNull();
         expect(screen.getByText('0/')).toBeTruthy();
+    });
+});
+
+describe('pick', () => {
+    type Listing = Extract<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>, { success: true }>;
+    const idOf = (n: number) => `${String(n).padStart(8, '0')}${'a'.repeat(24)}`;
+    const listing = (): Listing => ({
+        success: true,
+        photos: [1, 2, 3].map((n) => ({
+            id: idOf(n),
+            labels: [`tag${n}`],
+            allowed: true,
+            message: null,
+            uploadDate: 1,
+        })),
+        memberId: 'c'.repeat(32),
+        truncated: false,
+        wonIds: [],
+        wonCount: 0,
+        preview: false,
+        readAtMs: 1_700_000_000_000,
+        allowedKnown: true,
+    });
+    const english = (key: string) =>
+        key.startsWith('app.')
+            ? ((app as Record<string, string>)[key.slice(4)] ?? key)
+            : key.startsWith('errors.')
+              ? ((errors as Record<string, string>)[key.slice(7)] ?? key)
+              : key;
+    const tile = (n: number) =>
+        screen.getByRole('button', { name: new RegExp(`^Photo ${String(n).padStart(8, '0')}:`) });
+    const pickButton = () => screen.getByRole('button', { name: app.fillPick });
+    const openAndPick = async (n = 1) => {
+        fireEvent.click(pickButton());
+        // Pick… opens with nothing loaded; Load all shows the library as last loaded with picking held, and the
+        // fresh read unlocks it.
+        fireEvent.click(await screen.findByRole('button', { name: app.pickLoadAll }));
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await waitFor(() => expect(tile(1).getAttribute('aria-disabled')).toBe('false'));
+        fireEvent.click(tile(n));
+    };
+    type SubmitPicked = WindowApi['submitPickedPhotos'];
+    const submitPicked = () => jest.fn<ReturnType<SubmitPicked>, Parameters<SubmitPicked>>();
+    const submit = () => fireEvent.click(screen.getByRole('button', { name: /^Submit/ }));
+    const slotsOpen = (open: number) =>
+        makeChallenge({
+            max_photo_submits: 3,
+            member: { ranking: { entries: Array.from({ length: 3 - open }, (_, i) => ({ id: i + 1 })) } },
+        });
+
+    beforeEach(() => {
+        mockTranslator.t.mockImplementation(english);
+        window.api.getLibraryPhotos = jest.fn().mockResolvedValue(listing());
+        window.api.submitPickedPhotos = submitPicked().mockResolvedValue({ success: true, submitted: 1 });
+    });
+    afterEach(() => {
+        mockTranslator.t.mockImplementation((key) => key);
+    });
+
+    test('Pick photos… sits beside +1 / +N, named for what it does, and the row wraps', () => {
+        const { container } = renderCard(makeChallenge());
+        const pick = pickButton();
+        expect(pick.textContent).toBe('Pick photos…');
+        expect(pick.getAttribute('title')).toBe('Choose which photos to submit now');
+        expect(pick.parentElement).toBe(screen.getByText('+1').parentElement);
+        expect(pick.parentElement!.className).toContain('flex-wrap');
+        expect(container.querySelector('[role="dialog"]')).toBeNull();
+    });
+
+    test('picking and submitting sends the ids, closes the picker and refreshes the card', async () => {
+        const { onVoteComplete } = renderCard(makeChallenge());
+        await openAndPick(2);
+        submit();
+        await waitFor(() => expect(window.api.submitPickedPhotos).toHaveBeenCalledWith(101, [idOf(2)]));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(onVoteComplete).toHaveBeenCalledTimes(1);
+        expect(window.api.fillChallengeNow).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['not-enough-slots', 'pickNotEnoughSlots'],
+        ['already-entered', 'pickAlreadyEntered'],
+        ['submit-rejected', 'pickRejected'],
+        ['submit-unclear', 'pickUnclear'],
+        ['Challenge no longer active', 'challengeNoLongerActive'],
+        ['something unexpected', 'actionFailed'],
+    ])(
+        '%s: the picker stays open on the translated text, the card refreshes and the listing is read again',
+        async (code, key) => {
+            window.api.submitPickedPhotos = submitPicked().mockResolvedValue({
+                success: false,
+                error: code,
+            });
+            const { onVoteComplete } = renderCard(makeChallenge());
+            await openAndPick();
+            submit();
+            await waitFor(() =>
+                expect(screen.getByRole('alert').textContent).toBe((errors as Record<string, string>)[key]),
+            );
+            expect(screen.getByRole('dialog')).toBeTruthy();
+            expect(onVoteComplete).toHaveBeenCalledTimes(1);
+            await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(3));
+        },
+    );
+
+    test.each(['invalid-args', 'No authentication token found', 'submit-busy'])(
+        '%s: nothing was sent, so nothing is refreshed',
+        async (code) => {
+            window.api.submitPickedPhotos = submitPicked().mockResolvedValue({ success: false, error: code });
+            const { onVoteComplete } = renderCard(makeChallenge());
+            await openAndPick();
+            submit();
+            await screen.findByRole('alert');
+            expect(onVoteComplete).not.toHaveBeenCalled();
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(2);
+        },
+    );
+
+    test('submit-busy: the picker says another submit is running', async () => {
+        window.api.submitPickedPhotos = submitPicked().mockResolvedValue({ success: false, error: 'submit-busy' });
+        renderCard(makeChallenge());
+        await openAndPick();
+        submit();
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(errors.pickBusy));
+    });
+
+    test('an empty answer is treated as a failure after the send: generic text and a refresh', async () => {
+        window.api.submitPickedPhotos = submitPicked().mockResolvedValue(invalid(undefined));
+        const { onVoteComplete } = renderCard(makeChallenge());
+        await openAndPick();
+        submit();
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(errors.actionFailed));
+        expect(onVoteComplete).toHaveBeenCalledTimes(1);
+    });
+
+    test('closing clears a failure: the next opening starts without it', async () => {
+        window.api.submitPickedPhotos = submitPicked().mockResolvedValue({ success: false, error: 'submit-rejected' });
+        renderCard(makeChallenge());
+        await openAndPick();
+        submit();
+        await screen.findByRole('alert');
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(screen.queryByRole('dialog')).toBeNull();
+        fireEvent.click(pickButton());
+        await screen.findByRole('button', { name: app.pickLoadAll });
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    test('while a submit is in flight every submit button is held and the picker cannot be closed', async () => {
+        const d = deferred<Awaited<ReturnType<WindowApi['submitPickedPhotos']>>>();
+        window.api.submitPickedPhotos = submitPicked().mockReturnValue(d.promise);
+        renderCard(makeChallenge());
+        await openAndPick();
+        submit();
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: /Submit/ }).getAttribute('aria-busy')).toBe('true'),
+        );
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.getByRole('dialog')).toBeTruthy();
+        // The card's own buttons sit behind the dialog, held as well.
+        for (const name of ['+1', '+3']) {
+            expect(screen.getByText(name, { selector: 'button' }).hasAttribute('disabled')).toBe(true);
+        }
+        expect(pickButton().hasAttribute('disabled')).toBe(true);
+        await act(async () => d.resolve(invalid({ success: true })));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    });
+
+    test('a fill in flight holds Pick…, and a held +1 is not what spins', async () => {
+        const d = deferred<Awaited<ReturnType<WindowApi['fillChallengeNow']>>>();
+        window.api.fillChallengeNow = jest.fn(() => d.promise);
+        renderCard(makeChallenge());
+        fireEvent.click(screen.getByText('+1'));
+        await waitFor(() => expect(pickButton().hasAttribute('disabled')).toBe(true));
+        await act(async () => d.resolve(invalid({ success: true })));
+        await waitFor(() => expect(pickButton().hasAttribute('disabled')).toBe(false));
+    });
+
+    test('a refresh that leaves no open slot keeps the picker, says so, and still delivers an answer in flight', async () => {
+        const d = deferred<Awaited<ReturnType<WindowApi['submitPickedPhotos']>>>();
+        window.api.submitPickedPhotos = submitPicked().mockReturnValue(d.promise);
+        const { rerender, onVoteComplete } = renderCard(slotsOpen(1));
+        await openAndPick();
+        submit();
+        await waitFor(() => expect(window.api.submitPickedPhotos).toHaveBeenCalled());
+        // The card is refreshed with the slot taken: the submit buttons' gate closes.
+        rerender(
+            <ChallengeCard
+                challenge={slotsOpen(0)}
+                timeRemaining="2h"
+                timezone="local"
+                autovoteRunning={false}
+                onVoteComplete={onVoteComplete}
+                onSettingsClick={jest.fn()}
+                onCurrencySpent={jest.fn()}
+            />,
+        );
+        expect(screen.queryByText('+1')).toBeNull();
+        expect(screen.getByRole('dialog')).toBeTruthy();
+        expect(screen.getByText(/^No open slots left/)).toBeTruthy();
+        await act(async () => d.resolve(invalid({ success: true })));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(onVoteComplete).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -390,30 +804,19 @@ describe('entries, tags and alerts', () => {
         );
         expect(screen.getByText('night')).toBeTruthy();
         expect(screen.getByText('city')).toBeTruthy();
-        await waitFor(() =>
-            expect(
-                (
-                    JSON.parse(screen.getByTestId('entry-2').textContent) as Pick<
-                        Parameters<typeof RealEntryBadge>[0],
-                        'swapBack'
-                    >
-                ).swapBack,
-            ).not.toBeNull(),
-        );
-        expect(JSON.parse(screen.getByTestId('entry-2').textContent)).toEqual({
+        await waitFor(() => expect(parseJsonObject(screen.getByTestId('entry-2').textContent).swapBack).not.toBeNull());
+        expect(parseJson(screen.getByTestId('entry-2').textContent)).toEqual({
             swapBack: { currentId: '2', previousId: '9', previousMemberId: 'm', kind: 'turbo' },
             swapAvailable: false,
             boostAvailable: true,
             turboAvailable: true,
         });
-        expect(
-            (
-                JSON.parse(screen.getByTestId('entry-1').textContent) as Pick<
-                    Parameters<typeof RealEntryBadge>[0],
-                    'swapBack'
-                >
-            ).swapBack,
-        ).toBeNull();
+        expect(parseJsonObject(screen.getByTestId('entry-1').textContent).swapBack).toBeNull();
+    });
+
+    test('hands each entry the timezone its submit time is written in', () => {
+        renderCard(makeChallenge({ member: { ranking: { entries: [{ id: 1 }] } } }), { timezone: 'Europe/Riga' });
+        expect(screen.getByTestId('entry-1').getAttribute('data-timezone')).toBe('Europe/Riga');
     });
 
     test('a settings change refreshes the deadline preview in place, without remounting the card', async () => {
@@ -426,7 +829,7 @@ describe('entries, tags and alerts', () => {
         jest.mocked(window.api.getDeadlineActions).mockResolvedValue({
             success: true,
             actions: [],
-            boostBlocked: true,
+            ...blocked({ boost: { by: 'flag' } }),
         });
         rerender(
             <ChallengeCard
@@ -441,15 +844,127 @@ describe('entries, tags and alerts', () => {
             />,
         );
 
-        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('app.boostConflictWarning'));
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('app.conflictFlag'));
         expect(window.api.getDeadlineActions).toHaveBeenCalledTimes(2);
         expect(container.firstChild).toBe(root);
     });
 
-    test('shows the boost/turbo conflict warning from the deadline preview', async () => {
-        window.api.getDeadlineActions = jest.fn().mockResolvedValue({ success: true, actions: [], boostBlocked: true });
-        renderCard(makeChallenge());
-        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('app.boostConflictWarning'));
+    describe('the conflict warning names its cause', () => {
+        const releaseAt = nowSec() + 1800;
+        const when = formatEndTime(releaseAt, 'local');
+        const answer = (blockedBy: Parameters<typeof blocked>[0]) => {
+            window.api.getDeadlineActions = jest
+                .fn()
+                .mockResolvedValue({ success: true, actions: [], ...blocked(blockedBy) });
+        };
+        const alerts = () => screen.getAllByRole('alert').map((alert) => alert.textContent);
+        const english = (key: string) =>
+            key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
+
+        beforeEach(() => mockTranslator.t.mockImplementation(english));
+        afterEach(() => mockTranslator.t.mockImplementation((key) => key));
+
+        test.each([
+            [
+                'Boost',
+                { boost: { by: 'flag' as const } },
+                "Boost can't apply: your only entry already has Turbo (they can't share an entry). Add another entry to use both.",
+            ],
+            [
+                'Turbo',
+                { turbo: { by: 'flag' as const } },
+                "Turbo can't apply: your only entry already has Boost (they can't share an entry). Add another entry to use both.",
+            ],
+        ])('%s blocked by a flag asks for another entry', async (_name, blockedBy, text) => {
+            answer(blockedBy);
+            renderCard(makeChallenge());
+            await waitFor(() => expect(alerts()).toEqual([text]));
+        });
+
+        test.each([
+            [
+                'Boost',
+                { boost: { by: 'pin' as const, releaseAt } },
+                `Boost is waiting: the photo is pinned for Turbo. If Turbo isn't ready by ${when}, Boost goes on that photo. Unpin it or add another entry to use Boost sooner.`,
+            ],
+            [
+                'Turbo',
+                { turbo: { by: 'pin' as const, releaseAt } },
+                `Turbo is waiting: the photo is pinned for Boost. If Boost isn't ready by ${when}, Turbo goes on that photo. Unpin it or add another entry to use Turbo sooner.`,
+            ],
+        ])('%s blocked by a pin that gives way names the time', async (_name, blockedBy, text) => {
+            answer(blockedBy);
+            renderCard(makeChallenge());
+            await waitFor(() => expect(alerts()).toEqual([text]));
+        });
+
+        test.each([
+            [
+                'Boost',
+                { boost: { by: 'pin' as const } },
+                "Boost won't apply: the photo is pinned for Turbo, and the pin won't give way (Emergency Submit is off or Turbo is ready). Unpin it or add another entry.",
+            ],
+            [
+                'Turbo',
+                { turbo: { by: 'pin' as const } },
+                "Turbo won't apply: the photo is pinned for Boost, and the pin won't give way (Emergency Submit is off or Boost is ready). Unpin it or add another entry.",
+            ],
+        ])('%s blocked by a pin that never gives way says to unpin', async (_name, blockedBy, text) => {
+            answer(blockedBy);
+            renderCard(makeChallenge());
+            await waitFor(() => expect(alerts()).toEqual([text]));
+        });
+
+        test('the compact tile shows both notes whole (no clamp, no title standing in for the text)', async () => {
+            window.api.getEffectiveSetting = jest.fn(async (key) => key === 'compactCards');
+            answer({ boost: { by: 'pin', releaseAt }, turbo: { by: 'flag' } });
+            renderCard(makeChallenge());
+            // The compact tile's note leads with the warning icon; the detailed card's alert box has none.
+            await waitFor(() => expect(screen.getAllByRole('alert')[0].querySelector('svg')).not.toBeNull());
+            const [boost, turbo] = screen.getAllByRole('alert');
+            expect(boost.textContent).toBe(
+                `${app.conflictPinReleases
+                    .replace(/\{kind\}/g, 'Boost')
+                    .replace(/\{other\}/g, 'Turbo')
+                    .replace('{time}', when)}`,
+            );
+            expect(boost.className).not.toContain('line-clamp');
+            expect(boost.hasAttribute('title')).toBe(false);
+            expect(turbo.textContent).toBe(
+                "Turbo can't apply: your only entry already has Boost (they can't share an entry). Add another entry to use both.",
+            );
+            // The warning icon is a separate, decorative cue ahead of the words.
+            expect(boost.querySelector('svg')!.getAttribute('class')).toContain('text-warning');
+        });
+
+        test('a reworded warning for the same feature updates the same element', async () => {
+            answer({ turbo: { by: 'flag' } });
+            const challenge = makeChallenge();
+            const { rerender } = renderCard(challenge, { settingsVersion: 0 });
+            const first = await screen.findByRole('alert');
+            answer({ turbo: { by: 'pin' as const, releaseAt } });
+            rerender(
+                <ChallengeCard
+                    challenge={challenge}
+                    settingsVersion={1}
+                    timeRemaining="2h"
+                    timezone="local"
+                    autovoteRunning={false}
+                    onVoteComplete={jest.fn()}
+                    onSettingsClick={jest.fn()}
+                    onCurrencySpent={jest.fn()}
+                />,
+            );
+            await waitFor(() => expect(screen.getByRole('alert').textContent).toContain(when));
+            expect(screen.getByRole('alert')).toBe(first);
+        });
+
+        test('nothing is shown while nothing is blocked', async () => {
+            answer({});
+            renderCard(makeChallenge());
+            await waitFor(() => expect(window.api.getDeadlineActions).toHaveBeenCalled());
+            expect(screen.queryByRole('alert')).toBeNull();
+        });
     });
 
     test('low exposure turns the border and exposure figure red; an open boost adds a ring', () => {
@@ -464,11 +979,13 @@ describe('entries, tags and alerts', () => {
         const card = container.querySelector('#challenge-101')!;
         expect(card.className).toContain('border-2 border-error');
         expect(card.className).toContain('ring-2 ring-info ring-offset-2');
-        expect(card.className).toContain('focus:outline-4 focus:outline-info focus:outline-offset-4');
+        expect(card.className).toContain(
+            'focus-visible:outline-4 focus-visible:outline-base-content focus-visible:outline-offset-4',
+        );
         card.scrollIntoView = jest.fn();
         scrollToChallenge(101);
         expect(document.activeElement).toBe(card);
-        expect(screen.getByText('5%').className).toBe('text-error font-bold');
+        expect(screen.getByText('5%').className).toBe('badge h-auto badge-error');
     });
 
     test('a healthy card has a plain border and no ring', () => {
@@ -476,6 +993,56 @@ describe('entries, tags and alerts', () => {
         const card = container.querySelector('#challenge-101')!;
         expect(card.className).toMatch(/^border rounded-lg/);
         expect(card.className).not.toContain('ring-2');
+        expect(screen.getByText('80%').className).toBe('badge h-auto badge-success');
+    });
+
+    test('boost and turbo statuses are badges in their tone, and a muted state stays plain text', () => {
+        const states = (boost: string, turbo: string) => ({
+            member: {
+                boost: { state: boost, timeout: 0 },
+                turbo: { state: turbo, mode: 'classic', time_to_open: null },
+                ranking: {
+                    entries: [],
+                    exposure: { exposure_factor: 55 },
+                    total: { votes: 0, rank: 0, level: 0, percent: 0, next_message: '' },
+                },
+            },
+        });
+        const cases: Array<[string, string, string, string, string, string]> = [
+            [
+                'AVAILABLE_KEY',
+                'app.available',
+                'IN_PROGRESS',
+                'app.stateInProgress',
+                'badge h-auto badge-info',
+                'badge h-auto badge-warning',
+            ],
+            ['USED', 'app.used', 'FREE', 'app.stateFree', 'badge h-auto badge-success', 'badge h-auto badge-info'],
+            [
+                'LOCKED',
+                'app.stateLocked',
+                'UNAVAILABLE',
+                'app.unavailable',
+                'text-base-content/70',
+                'text-base-content/70',
+            ],
+        ];
+        for (const [boost, boostText, turbo, turboText, boostClass, turboClass] of cases) {
+            const view = renderCard(makeChallenge(states(boost, turbo)));
+            expect(screen.getByText(boostText).className).toBe(boostClass);
+            expect(screen.getByText(turboText).className).toBe(turboClass);
+            view.unmount();
+        }
+    });
+
+    test('exposure is a yellow badge under 50%, and plain before the start or after the close', () => {
+        const low = renderCard(makeChallenge({ member: { ranking: { exposure: { exposure_factor: 30 } } } }));
+        expect(screen.getByText('30%').className).toBe('badge h-auto badge-warning');
+        low.unmount();
+        const notStarted = renderCard(makeChallenge({ start_time: nowSec() + 600 }));
+        expect(screen.getByText('80%').className).toBe('');
+        notStarted.unmount();
+        renderCard(makeChallenge({ close_time: nowSec() - 600 }));
         expect(screen.getByText('80%').className).toBe('');
     });
 

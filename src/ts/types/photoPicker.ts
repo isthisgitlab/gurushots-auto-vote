@@ -13,6 +13,9 @@ import type { Challenge, LibraryPhoto } from './gurushots';
  */
 export type ChallengeText = Partial<Pick<Challenge, 'id' | 'title' | 'url' | 'welcome_message'>>;
 
+/** What a library listing's eligibility marks are read for: entering a challenge, or swapping an entry's photo. */
+export type LibraryUsage = 'submit' | 'swap';
+
 /** Title words the user asked the picker to ignore (the `ignoreTitleWords` setting). */
 export type IgnoreWords = Iterable<string> | null;
 
@@ -78,11 +81,40 @@ export interface TagOptions {
     ignoreWords?: IgnoreWords;
 }
 
+/**
+ * The user's chosen photos for one pick (the Chosen Photos settings, resolved).
+ * The ids only FILTER the candidates the server already offered.
+ */
+export interface ChosenPick {
+    /** Photo ids to rank first; an empty list means no preference. */
+    ids: readonly string[];
+    /** Pick only these: with none usable the pick is empty rather than topped up. */
+    only: boolean;
+    /**
+     * Enter the chosen photos in the order of `ids` instead of ranking them with the scorer. A photo
+     * the filters, the entries or the library rule out is skipped and the next one in the list is used.
+     */
+    inOrder: boolean;
+    /** Ids already entered in this challenge, removed from the pool as a set. */
+    excludeIds?: ReadonlySet<string> | null;
+}
+
 /** pickPhotosForChallenge / buildScoredCandidates options. */
 export interface PickOptions extends TagOptions {
-    fillWithoutTagMatch?: boolean;
+    submitWithoutTagMatch?: boolean;
     semanticScores?: SemanticScoreMap | null;
     onFallback?: ((info: PickFallbackInfo) => void) | null;
+    /** Honoured by pickPhotosForChallenge and buildChosenCandidates; buildScoredCandidates ignores it. */
+    chosen?: ChosenPick | null;
+}
+
+/** The scored pool split into the user's chosen photos and the rest (buildChosenCandidates). */
+export interface ChosenCandidates {
+    scored: ScoredCandidate[];
+    /** Ids of the chosen block inside `scored`; null when no chosen photos were asked for. */
+    chosenIds: ReadonlySet<string> | null;
+    /** The same ids in the order the user picked them (the list's order), for a pick that goes by it. */
+    orderedIds: readonly string[];
 }
 
 /** One candidate's tier record from buildScoredCandidates. */

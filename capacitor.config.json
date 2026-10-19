@@ -1,5 +1,8 @@
 {
     "appId": "com.isthisgitlab.gurushotsautovote",
     "appName": "GuruShots Auto Vote",
-    "webDir": "dist"
+    "webDir": "dist",
+    "android": {
+        "zoomEnabled": true
+    }
 }

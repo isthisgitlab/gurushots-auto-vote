@@ -47,6 +47,20 @@ describe('NativeAutovoteBridge', () => {
         });
     });
 
+    test('says once that the plugin is not registered, however often it is asked for', () => {
+        const warning = jest.fn();
+        jest.mocked(
+            require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
+        ).withCategory.mockReturnValue(invalid({ warning }));
+        g.Capacitor = { Plugins: {} };
+        const bridge = loadBridge();
+        expect(bridge.isAvailable()).toBe(false);
+        expect(bridge.compareAndWrite('gs_join_state', null, '{}')).toBeNull();
+        expect(bridge.isAvailable()).toBe(false);
+        expect(warning).toHaveBeenCalledTimes(1);
+        expect(warning).toHaveBeenCalledWith('AutoVoteBackground plugin not registered on this build');
+    });
+
     test('reports unavailable when the plugin is not registered on the build', async () => {
         g.Capacitor = { Plugins: {} };
         const bridge = loadBridge();
@@ -59,6 +73,8 @@ describe('NativeAutovoteBridge', () => {
             start: jest.fn().mockResolvedValue({ running: true }),
             stop: jest.fn().mockResolvedValue({ running: false }),
             getStatus: jest.fn().mockResolvedValue({ running: true, nextDelayMs: 180000 }),
+            compareAndWrite: jest.fn(),
+            wipeLocalData: jest.fn(),
         };
         g.Capacitor = { Plugins: { AutoVoteBackground: plugin } };
         const bridge = loadBridge();
@@ -74,6 +90,8 @@ describe('NativeAutovoteBridge', () => {
             start: jest.fn().mockRejectedValue(new Error('boom')),
             stop: jest.fn().mockRejectedValue(new Error('stop boom')),
             getStatus: jest.fn().mockRejectedValue(new Error('status boom')),
+            compareAndWrite: jest.fn(),
+            wipeLocalData: jest.fn(),
         };
         g.Capacitor = { Plugins: { AutoVoteBackground: plugin } };
         const bridge = loadBridge();
@@ -94,6 +112,8 @@ describe('NativeAutovoteBridge', () => {
             start: jest.fn().mockRejectedValue(startFailure),
             stop: jest.fn().mockRejectedValue(stopFailure),
             getStatus: jest.fn().mockRejectedValue(new Error('status boom')),
+            compareAndWrite: jest.fn(),
+            wipeLocalData: jest.fn(),
         };
         g.Capacitor = { Plugins: { AutoVoteBackground: plugin } };
         const bridge = loadBridge();
@@ -122,5 +142,29 @@ describe('NativeAutovoteBridge', () => {
 
         expect(bridge.isAvailable()).toBe(false);
         expect(warning).toHaveBeenCalledWith('NativeAutovoteBridge.getPlugin failed', 'bridge not ready');
+    });
+
+    describe('compareAndWrite (the app window changing a store the service changes too)', () => {
+        test('goes to the plugin with the key, what the caller read and the new value, and answers what it did', async () => {
+            const compareAndWrite = jest.fn().mockResolvedValue({ saved: false, current: '{"a":1}' });
+            g.Capacitor = { Plugins: { AutoVoteBackground: invalid({ compareAndWrite }) } };
+            const bridge = loadBridge();
+            await expect(bridge.compareAndWrite('gs_join_state', null, '{"b":1}')).resolves.toEqual({
+                saved: false,
+                current: '{"a":1}',
+            });
+            expect(compareAndWrite).toHaveBeenCalledWith({ key: 'gs_join_state', expected: null, value: '{"b":1}' });
+        });
+
+        test('is null where there is no plugin (a build without the service): the caller is the only writer', () => {
+            g.Capacitor = { Plugins: {} };
+            expect(loadBridge().compareAndWrite('gs_join_state', null, '{}')).toBeNull();
+        });
+
+        test('a rejection of the plugin reaches the caller, who treats it as not saved', async () => {
+            const compareAndWrite = jest.fn().mockRejectedValue(new Error('not saved'));
+            g.Capacitor = { Plugins: { AutoVoteBackground: invalid({ compareAndWrite }) } };
+            await expect(loadBridge().compareAndWrite('gs_join_state', null, '{}')).rejects.toThrow('not saved');
+        });
     });
 });

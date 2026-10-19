@@ -4,7 +4,7 @@
  * ignore-words lookup, and the semantic scores the picker ranks with.
  */
 
-import { buildSearchTerms, detectLetterPrefix, parseNegation, readChallengeTheme } from '../photoPicker';
+import { buildSearchTerms, detectLetterPrefix, parseNegation, readChallengeTheme, stripTags } from '../photoPicker';
 import { getSemanticScores } from '../semantic';
 import * as lexicon from '../semantic/lexicon';
 import { resolveTermsToTags } from '../tagResolver';
@@ -127,11 +127,49 @@ const describeTheme = (theme: ChallengeTheme, challenge: Challenge): string => {
             : theme.kind === 'subject'
               ? `has the subject ${theme.subjects.map((s) => `"${s}"`).join(', ')} (its description repeats it)`
               : 'has no subject its description confirms, so its title is searched head-noun first';
-    const description = String(challenge.welcome_message ?? '')
-        .replace(/<[^>]*>/g, ' ')
+    const description = stripTags(String(challenge.welcome_message ?? ''))
         .replace(/\s+/g, ' ')
         .trim();
     return `${verdict}. Description: "${description}"`;
+};
+
+/** Whether a candidate list holds a photo the challenge allows. */
+const hasEligible = (list: PickerPhoto[]) =>
+    list.some((p) => p && p.permission && p.permission.allowed === true && p.id);
+
+/**
+ * The unfiltered library read: the vote-ordered walk, then the API's default order when that holds nothing
+ * eligible. A caller that started `trace.readFailed` at false is told when both reads failed on their first page.
+ */
+const readUnfilteredLibrary = async (
+    challengeId: string | number,
+    token: string,
+    getEligiblePhotos: RankDeps['getEligiblePhotos'],
+    {
+        logLabel,
+        usageOpt,
+        trace,
+    }: { logLabel: string; usageOpt: { usage?: string }; trace?: { walkedUnfiltered: boolean; readFailed?: boolean } },
+): Promise<PickerPhoto[]> => {
+    // Only a caller that asked (by starting `readFailed` at false) gets the read tracked.
+    const byVotesRead = { firstPageFailed: false };
+    const defaultRead = { firstPageFailed: false };
+    const tracked = (readState: typeof byVotesRead) => (trace?.readFailed === undefined ? {} : { readState });
+    const byVotes = await getEligiblePhotos(challengeId, token, {
+        paginate: true,
+        logLabel,
+        ...tracked(byVotesRead),
+        ...usageOpt,
+    });
+    if (hasEligible(byVotes)) return byVotes;
+    const byDefault = await getEligiblePhotos(challengeId, token, {
+        order: 'default',
+        logLabel,
+        ...tracked(defaultRead),
+        ...usageOpt,
+    });
+    if (trace && byVotesRead.firstPageFailed && defaultRead.firstPageFailed) trace.readFailed = true;
+    return byDefault;
 };
 
 /**
@@ -148,11 +186,11 @@ const describeTheme = (theme: ChallengeTheme, challenge: Challenge): string => {
  * caller's catch handles it.
  *
  * The returned set is fed unchanged into pickPhotosForChallenge, so the
- * must/should/fillWithoutTagMatch ranking semantics are preserved.
+ * must/should/submitWithoutTagMatch ranking semantics are preserved.
  *
  * @param challenge - challenge with id and (optional) title
  * @param deps
- *   logLabel: the calling flow ('autoFill' default, or 'join') — used as the log
+ *   logLabel: the calling flow ('autoSubmit' default, or 'join') — used as the log
  *   category and message prefix so a join's messages aren't attributed to auto-fill.
  *   searchTagAutocomplete / getCurrentMemberProfile: OPTIONAL. Supplying both
  *   enables tag resolution on the miss path (see the retry below). Omit either
@@ -160,6 +198,11 @@ const describeTheme = (theme: ChallengeTheme, challenge: Challenge): string => {
  *   is what keeps every existing caller and test valid.
  *   usage: 'submit' (default) or 'swap' — which server-side eligibility view the
  *   library reads (a swap replaces an entry instead of adding one).
+ *   trace: optional out-parameter; `walkedUnfiltered` is set when the fetch had
+ *   to walk the whole unfiltered library, i.e. when every photo it can reach is
+ *   already in the result (the chosen-photos lookup then has nothing to add);
+ *   `readFailed` (a caller starts it at false to ask for it) is set when that unfiltered read could not be made at all (both attempts failed on their first
+ *   page), so an empty result is a read that failed, not a library with nothing eligible in it.
  */
 const fetchCandidatesForChallenge = async (
     challenge: Challenge,
@@ -168,13 +211,15 @@ const fetchCandidatesForChallenge = async (
     {
         getEligiblePhotos,
         logger,
-        logLabel = 'autoFill',
+        logLabel = 'autoSubmit',
         searchTagAutocomplete,
         getCurrentMemberProfile,
         usage = 'submit',
+        trace,
     }: Pick<RankDeps, 'getEligiblePhotos' | 'searchTagAutocomplete' | 'getCurrentMemberProfile' | 'logger'> & {
         logLabel?: string;
         usage?: string;
+        trace?: { walkedUnfiltered: boolean; readFailed?: boolean };
     },
 ): Promise<PickerPhoto[]> => {
     const challengeId = challenge.id;
@@ -293,9 +338,6 @@ const fetchCandidatesForChallenge = async (
         });
         return Array.from(byId.values());
     };
-    const hasEligible = (list: PickerPhoto[]) =>
-        list.some((p) => p && p.permission && p.permission.allowed === true && p.id);
-
     if (terms.length > 0) {
         const fromUserTags = buildSearchTerms(null, tagOpts).length > 0;
         const union = await searchUnion(terms);
@@ -371,9 +413,8 @@ const fetchCandidatesForChallenge = async (
     // full PAGINATE_BUDGET_MS default rather than the tighter themed budget: by
     // the time it runs the themed searches have already found nothing, and this
     // is the last chance to put ANY photo in the slot.
-    const byVotes = await getEligiblePhotos(challengeId, token, { paginate: true, logLabel, ...usageOpt });
-    if (hasEligible(byVotes)) return byVotes;
-    return getEligiblePhotos(challengeId, token, { order: 'default', logLabel, ...usageOpt });
+    if (trace) trace.walkedUnfiltered = true;
+    return readUnfilteredLibrary(challengeId, token, getEligiblePhotos, { logLabel, usageOpt, trace });
 };
 
 export { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge };

@@ -14,6 +14,7 @@ import * as logger from '../../logger';
 import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
 import { getMiddleware } from '../../apiFactory';
 import { findActiveChallenge } from '../../services/findActiveChallenge';
+import { CHOSEN_PHOTO_ID_RE } from '../../settings/limits';
 
 import type { Challenge } from '../../types/gurushots';
 import type { NullEventHandlers } from '../../types/cli';
@@ -92,7 +93,11 @@ const boostChallenge = async (challengeId: string, { imageId = null }: { imageId
         if (response) {
             logger.withCategory('boost').success(`Boost applied to "${challenge.title}"`);
         } else {
-            logger.withCategory('boost').error(`Failed to apply boost to "${challenge.title}" (see log for reason)`);
+            logger
+                .withCategory('boost')
+                .error(
+                    `Failed to apply boost to "${challenge.title}" (see log for reason). To boost one photo yourself, pass --image=<id>`,
+                );
         }
     } catch (err) {
         logger.withCategory('boost').error(`Failed to apply boost: ${errorMessage(err) || err}`);
@@ -133,15 +138,15 @@ const fillChallenge = async (challengeId: string, { all = false }: { all?: boole
         const result = await handlers()['fill-challenge-now'](null, challengeId, mode);
         if (result?.success) {
             logger
-                .withCategory('autoFill')
+                .withCategory('autoSubmit')
                 .success(
                     `${result.message || `Submitted photos to "${challenge.title}"`} (submitted ${result.submitted ?? 0}, skipped ${result.skipped ?? 0})`,
                 );
         } else {
-            logger.withCategory('autoFill').error(actionError(result, 'Failed to submit photos'));
+            logger.withCategory('autoSubmit').error(actionError(result, 'Failed to submit photos'));
         }
     } catch (err) {
-        logger.withCategory('autoFill').error(`Failed to submit photos: ${errorMessage(err) || err}`);
+        logger.withCategory('autoSubmit').error(`Failed to submit photos: ${errorMessage(err) || err}`);
     }
 };
 
@@ -157,10 +162,13 @@ const OUTCOME_TEXT: Record<string, string> = {
     'no-balance': 'You have none of that currency left.',
     'balance-unknown': 'Could not read your balance, so nothing was spent. Try again shortly.',
     'no-alternative': 'No different photo is available to swap in.',
-    'stale-candidate':
-        'The replacement photo changed since the preview. Nothing was spent — re-run without --yes to see the new suggestion.',
+    'stale-candidate': 'The swap offer expired or changed since the preview. Nothing was spent — run the swap again.',
+    'already-entered':
+        'That photo is already entered in this challenge. Nothing was spent — run the swap again with a different photo.',
     busy: 'Another currency action is still running. Try again in a moment.',
     'invalid-args': INVALID_ID_TEXT,
+    unclear:
+        'The request got no answer, so it may or may not have gone through. Check the challenge (or your balance) before trying again.',
     'api-failed': 'GuruShots rejected the request. Nothing further was attempted — check the log for details.',
 };
 
@@ -249,12 +257,12 @@ const unlockBoostCmd = async (challengeId: string, { yes = false }: { yes?: bool
         run: () => currencyHandlers()['key-unlock-boost'](null, challengeId, true),
     });
 
-const SWAP_USAGE = 'Usage: swap --challenge=<id> --image=<id> [--to=<id> --yes]';
+const SWAP_USAGE = 'Usage: swap --challenge=<id> --image=<id> [--to=<id>] [--yes]';
 const SWAP_BACK_USAGE = 'Usage: swap-back --challenge=<id> --image=<id> [--yes]';
 
 /**
  * Reads swap's own flags from the args left after --challenge:
- * --image=<id> (the entry to replace), --to=<id> (the confirmed replacement), --yes.
+ * --image=<id> (the entry to replace), --to=<id> (the photo to swap in), --yes.
  */
 const parseSwapFlags = (rest: string[]) => {
     const flag = (name: string) => {
@@ -265,9 +273,11 @@ const parseSwapFlags = (rest: string[]) => {
 };
 
 /**
- * Spend a SWAP to replace entered photo `imageId` with the app's best-ranked
- * different photo. The dry run prints the suggested replacement; --yes must
- * repeat it as --to=<id>, and is refused if the suggestion changed since.
+ * Spend a SWAP to replace entered photo `imageId`. Without --to the dry run
+ * prints the app's best-ranked different photo, and --yes must repeat it as
+ * --to=<id>. With --to the named photo is the replacement, as chosen (nothing
+ * is ranked; the server checks eligibility when the swap is spent): the dry run
+ * prints it, and --to=<id> --yes spends it.
  * Returns false on a usage error (no --image), true otherwise.
  */
 const swapCmd = async (
@@ -279,10 +289,14 @@ const swapCmd = async (
         logger.withCategory('ui').info(SWAP_USAGE);
         return false;
     }
+    if (to && !CHOSEN_PHOTO_ID_RE.test(to)) {
+        logger.withCategory('ui').error('Invalid --to photo id: use the id list-photos --challenge=<id> shows.');
+        return true;
+    }
     const challenge = await resolveChallenge(challengeId);
     if (!challenge) return true;
     try {
-        const preview = await currencyHandlers()['preview-swap-photo'](null, challengeId, imageId);
+        const preview = await currencyHandlers()['preview-swap-photo'](null, challengeId, imageId, to ?? undefined);
         if (!preview?.success) {
             logger.withCategory('currency').error(describeOutcome(preview));
             return true;
@@ -291,6 +305,13 @@ const swapCmd = async (
         if (!yes) {
             logger.withCategory('currency').info(`Swap in "${challenge.title}": ${imageId} → ${newId}`);
             await printCost('swaps');
+            if (to) {
+                logger
+                    .withCategory('currency')
+                    .info(
+                        `GuruShots checks that the challenge accepts ${newId} when the swap is spent; list-photos --challenge=${challengeId} shows the photos it accepts.`,
+                    );
+            }
             logger
                 .withCategory('currency')
                 .info(
@@ -298,14 +319,10 @@ const swapCmd = async (
                 );
             return true;
         }
-        if (!to || to !== newId) {
+        if (!to) {
             logger
                 .withCategory('currency')
-                .error(
-                    to
-                        ? `The suggested replacement is now ${newId}, not ${to}. Nothing was spent — re-run with --to=${newId} --yes to confirm it.`
-                        : `Add --to=${newId} to confirm the replacement (run without --yes first to review it).`,
-                );
+                .error(`Add --to=${newId} to confirm the replacement (run without --yes first to review it).`);
             return true;
         }
         const result = await currencyHandlers()['swap-entry-photo'](null, challengeId, imageId, newId, true);
@@ -378,6 +395,8 @@ const fillExposureCmd = async (challengeId: string, { yes = false }: { yes?: boo
 
 export {
     boostChallenge,
+    resolveChallenge,
+    actionError,
     turboChallenge,
     fillChallenge,
     unlockBoostCmd,

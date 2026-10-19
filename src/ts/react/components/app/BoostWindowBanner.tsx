@@ -1,12 +1,15 @@
 import type { Challenge } from '../../../types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
+import { interp } from '@/utils/interp';
 import { openBoostWindows } from '../../../voting/boostWindow';
 import { useTick } from '@/hooks/useTick';
 import { ChallengeAlertPanel } from './ChallengeChips';
 
-const countdownDetail = (c: { remaining: number | null }) =>
-    c.remaining != null && <span className="font-semibold">· {formatDuration(c.remaining)} left</span>;
+const countdownDetail = (t: (key: string) => string) => (c: { remaining: number | null }) =>
+    c.remaining != null && (
+        <span className="font-semibold">· {interp(t('app.timeLeft'), { time: formatDuration(c.remaining) })}</span>
+    );
 
 /**
  * Compact summary placed above the challenge list naming the challenges whose
@@ -38,7 +41,7 @@ export function BoostWindowBanner({ challenges }: { challenges: Challenge[] }) {
             items={openBoostWindows(challenges, now)}
             chipClassName="btn-info"
             dotVariant="info"
-            detail={countdownDetail}
+            detail={countdownDetail(t)}
         />
     );
 }

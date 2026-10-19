@@ -4,6 +4,7 @@ import * as logger from '../logger';
 import { translationManager } from '../translations/index';
 import { AutoUpdater } from '../services/AutoUpdater';
 import { appState } from '../index/state';
+import { restrictToLogsChannels } from '../ipc/registerHandlers';
 import * as packageInfo from '../../../package.json';
 
 import type { MenuItemConstructorOptions } from 'electron';
@@ -232,13 +233,15 @@ function openLogsWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             sandbox: true,
-            // Same bundle as the main windows (scripts/build-react.ts): the
-            // sandboxed preload cannot require() the relative channel manifest,
-            // so the raw src/ts/preload.ts would leave this window without window.api.
-            preload: appPath('dist', 'preload-bundle.js'),
+            // The reduced bundle (scripts/build-react.ts): the sandboxed preload cannot
+            // require() the relative channel manifest, so it ships pre-bundled, and it
+            // exposes only the log feed (preloadLogs.ts).
+            preload: appPath('dist', 'preloadLogs-bundle.js'),
         },
         show: false,
     });
+    // The main process holds this window to the same set, whatever its preload exposes.
+    restrictToLogsChannels(win.webContents);
     logsWindow = win;
     win.on('closed', () => {
         if (logsWindow === win) logsWindow = null;

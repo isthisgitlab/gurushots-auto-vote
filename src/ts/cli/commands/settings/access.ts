@@ -44,7 +44,7 @@ export const setSetting = (key: string, value: string, challengeId: string | nul
             if (settings.setChallengeOverride(key, challengeId, parsedValue)) {
                 logger
                     .withCategory('settings')
-                    .success(`Set ${key} = ${JSON.stringify(parsedValue)} for challenge ${challengeId}`);
+                    .success(`Set ${key} = ${formatSettingForLog(key, parsedValue)} for challenge ${challengeId}`);
                 return true;
             }
             logger
@@ -70,11 +70,24 @@ export const setSetting = (key: string, value: string, challengeId: string | nul
             return setGlobalDefault(key, value);
         }
 
+        // A name that is neither a schema key nor an app or sign-in key is not a setting: the facade would keep it
+        // as an `app` value nothing reads, and the command would report that as set.
+        const known = settings.getDefaultSettings();
+        if (!Object.hasOwn(known.app, key) && !Object.hasOwn(known.auth, key)) {
+            logUnknownSchemaKey(key, [
+                ...new Set([
+                    ...Object.keys(settings.SETTINGS_SCHEMA),
+                    ...Object.keys(known.app),
+                    ...Object.keys(known.auth),
+                ]),
+            ]);
+            return false;
+        }
         if (!settings.setSetting(key, parsedValue)) {
             logger.withCategory('settings').error(`Failed to save setting '${key}' - validation failed`);
             return false;
         }
-        logger.withCategory('settings').success(`Set ${key} = ${JSON.stringify(parsedValue)}`);
+        logger.withCategory('settings').success(`Set ${key} = ${formatSettingForLog(key, parsedValue)}`);
         return true;
     } catch (error) {
         logger.withCategory('settings').error(`Error setting '${key}'`, error);
@@ -98,16 +111,20 @@ export const setGlobalDefault = (key: string, value: string): boolean => {
         const success = settings.setGlobalDefault(key, parsedValue);
         if (success) {
             const actualValue = settings.getGlobalDefault(key);
-            logger.withCategory('settings').success(`Set global default ${key} = ${JSON.stringify(actualValue)}`);
+            logger
+                .withCategory('settings')
+                .success(`Set global default ${key} = ${formatSettingForLog(key, actualValue)}`);
             return true;
         }
         logger.withCategory('settings').error(`Failed to set global default '${key}' - validation failed`);
-        logger.withCategory('settings').error(`Value ${JSON.stringify(parsedValue)} is invalid for this setting`);
+        logger
+            .withCategory('settings')
+            .error(`Value ${formatSettingForLog(key, parsedValue)} is invalid for this setting`);
 
         const config = schema[key] as SettingsSchemaEntry;
         logger
             .withCategory('settings')
-            .info(`Setting info: ${config.type} type, default: ${JSON.stringify(config.default)}`);
+            .info(`Setting info: ${config.type} type, default: ${formatSettingForLog(key, config.default)}`);
         return false;
     } catch (error) {
         logger.withCategory('settings').error(`Error setting global default '${key}'`, error);

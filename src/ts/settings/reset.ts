@@ -1,28 +1,27 @@
 /**
- * Reset helpers (single top-level key, one or all global defaults, the whole
- * blob minus essential user data) and the "modified from default" checks.
+ * Reset helpers (single app key, one or all global defaults, the whole
+ * configuration minus essential user data) and the "modified from default" checks.
  */
 
 import * as logger from '../logger';
-import { SETTINGS_SCHEMA, schemaEntry } from './schema';
-import { loadSettings, saveSettings, setSetting, cleanupObsoleteSettings } from './persistence';
+import { schemaEntry } from './schema';
+import { loadSettings, saveSettings, setSetting } from './persistence';
 import { getDefaultSettings, valuesEqual } from './defaults';
 import { getGlobalDefault, setGlobalDefault } from './challengeOverrides';
-
-import type { AppSettings, ChallengeValues } from '../types/settings';
+import { clearTitlePins } from './titlePins';
 
 /**
  * Reset a single setting to its default value
  */
 const resetSetting = (key: string): boolean => {
-    const defaultSettings = getDefaultSettings();
+    const { app } = getDefaultSettings();
 
-    if (!Object.prototype.hasOwnProperty.call(defaultSettings, key)) {
+    if (!Object.prototype.hasOwnProperty.call(app, key)) {
         logger.withCategory('settings').error(`Invalid setting key: ${key}`, null);
         return false;
     }
 
-    return setSetting(key, defaultSettings[key]);
+    return setSetting(key, app[key]);
 };
 
 /**
@@ -44,49 +43,45 @@ const resetGlobalDefault = (settingKey: string): boolean => {
  */
 const resetAllGlobalDefaults = (): boolean => {
     const settings = loadSettings();
-    const challengeSettings = settings.challengeSettings;
-
-    // Reset all global defaults to schema defaults
-    const globalDefaults: ChallengeValues = {};
-    Object.keys(SETTINGS_SCHEMA).forEach((key) => {
-        globalDefaults[key] = schemaEntry(key)?.default;
-    });
-
-    challengeSettings.globalDefaults = globalDefaults;
+    // A global default that is not stored is the schema default.
+    settings.defaults = {};
     return saveSettings(settings);
 };
 
 /**
- * Reset all settings to their default values (preserves only essential user data)
+ * Reset all settings to their default values (preserves only essential user data: the whole sign-in state, the mock
+ * mode, and the record of the settings.json import), and forget the title pins
  */
 const resetAllSettings = (): boolean => {
     const currentSettings = loadSettings();
 
     // Start with defaults, preserving only essential user data. loadSettings
-    // merges over the defaults, so these keys are always present.
-    const newSettings: AppSettings = { ...getDefaultSettings() };
-    for (const key of ['token', 'mock', 'apiHeaders']) {
-        newSettings[key] = currentSettings[key];
+    // fills what a file lacks, so the sign-in state and `mock` are always present.
+    const newSettings = getDefaultSettings();
+    newSettings.auth = currentSettings.auth;
+    newSettings.app.mock = currentSettings.app.mock;
+    if (currentSettings.imported) newSettings.imported = currentSettings.imported;
+
+    if (!saveSettings(newSettings)) return false;
+    // The pins the cache holds go with the rest, as `titlePins` of settings format 1 did. The configuration is reset
+    // whether or not they are: a pin store that cannot be written is said, not reported as a reset that failed.
+    if (!clearTitlePins()) {
+        logger
+            .withCategory('settings')
+            .warning('The settings were reset, but the saved title pins could not be cleared');
     }
-
-    const saveResult = saveSettings(newSettings);
-
-    if (saveResult) {
-        cleanupObsoleteSettings();
-    }
-
-    return saveResult;
+    return true;
 };
 
 /**
  * Check if a setting has been modified from its default value
  */
 const isSettingModified = (key: string): boolean => {
-    const defaultSettings = getDefaultSettings();
-    if (!Object.prototype.hasOwnProperty.call(defaultSettings, key)) {
+    const { app } = getDefaultSettings();
+    if (!Object.prototype.hasOwnProperty.call(app, key)) {
         return false;
     }
-    return !valuesEqual(loadSettings()[key], defaultSettings[key]);
+    return !valuesEqual(loadSettings().app[key], app[key]);
 };
 
 /**

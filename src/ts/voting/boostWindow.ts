@@ -25,6 +25,37 @@ const isBoostWindowOpen = (boost: MemberBoost | null | undefined, now: number): 
 };
 
 /**
+ * Whether the boost is key-unlocked: AVAILABLE_KEY, or AVAILABLE with no positive timeout (nothing counts down).
+ */
+const isKeyUnlockedBoost = (boost: MemberBoost | null | undefined): boolean => {
+    const timeout = boost?.timeout;
+    return (
+        boost?.state === 'AVAILABLE_KEY' ||
+        (boost?.state === 'AVAILABLE' && !(typeof timeout === 'number' && timeout > 0))
+    );
+};
+
+/**
+ * The instant a boost stops being usable (Unix seconds): its own timeout for a
+ * timer-based boost (AVAILABLE with a positive timeout), else the challenge close.
+ */
+const boostDeadline = (challenge: Challenge | null | undefined): number => {
+    const boost = challenge?.member?.boost;
+    const timeout = boost?.timeout;
+    return boost?.state === 'AVAILABLE' && typeof timeout === 'number' && timeout > 0
+        ? timeout
+        : Number(challenge?.close_time);
+};
+
+/**
+ * Seconds to the boost timeout (timer-based) or the challenge end (key-unlocked).
+ *
+ * @param now - Current time (Unix seconds)
+ */
+const secondsToBoostDeadline = (challenge: Challenge | null | undefined, now: number): number =>
+    boostDeadline(challenge) - now;
+
+/**
  * Challenges whose boost window is open right now, as display entries sorted
  * soonest-expiring first. Shared by the CLI status view and the GUI banner.
  *
@@ -96,7 +127,7 @@ const boostApplyThreshold = (
     const b: MemberBoost = boost || {};
     const timeout = b.timeout;
     const hasTimeout = typeof timeout === 'number' && timeout > 0;
-    if (b.state === 'AVAILABLE_KEY' || (b.state === 'AVAILABLE' && !hasTimeout)) {
+    if (isKeyUnlockedBoost(b)) {
         return { thresholdSec: keyUnlockedBoostTimeSec, branch: 'key' };
     }
     if (b.state === 'AVAILABLE' && hasTimeout) {
@@ -105,4 +136,11 @@ const boostApplyThreshold = (
     return { thresholdSec: -Infinity, branch: null };
 };
 
-export { isBoostWindowOpen, openBoostWindows, boostApplyThreshold };
+export {
+    isBoostWindowOpen,
+    isKeyUnlockedBoost,
+    boostDeadline,
+    secondsToBoostDeadline,
+    openBoostWindows,
+    boostApplyThreshold,
+};

@@ -5,10 +5,24 @@
  * before each action, persist after each, unreadable state halts).
  */
 
+import * as settings from '../../settings';
 import * as currencyActions from '../currencyActions';
+import { isManualPhotosOnly } from '../manualPhotosOnly';
 import { submitNewEntryForAction, reflectNewEntry, reflectEntryFlag, getSlotsRemaining } from '../autoFill';
 import { selectEntry, entriesOf } from '../../scenarios/selectors';
-import type { ActedChallenge, ActionHandler, ActionType, ScenarioAction, SwapPhoto } from './types';
+import { isKeyUnlockedBoost } from '../../voting/boostWindow';
+import { isKnownTurboMode } from '../../voting/turboMode';
+import type {
+    ActedChallenge,
+    ActionHandler,
+    ActionOutcome,
+    ActionType,
+    RunnerContext,
+    ScenarioAction,
+    SpendAction,
+    SwapPhoto,
+} from './types';
+import type { ScenarioState } from '../../types/stores';
 import {
     BOOST_APPLICABLE,
     currencyDeps,
@@ -20,11 +34,22 @@ import {
     selectContext,
     skipped,
     spendAllowed,
+    unclearHalted,
+    limitOf,
 } from './support';
+import type { Retry } from './support';
+
+// With Manual Only on the voting pass never runs a scenario at all (votingOrchestrator.ts), so this is defence in
+// depth: a step that enters or swaps a photo is skipped here too. What a skip comes to is the rule's usual skip
+// semantics (scenarioRunner/rule.ts): a rule with no completed step yet stops there without firing and retries on
+// later passes, so it runs once the switch is off; a rule whose earlier step already went through moves past the
+// skipped step for good.
+const MANUAL_PHOTOS_SKIP = 'Manual Only is on';
 
 const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type: K }>> } = {
     enterPhoto: async (action, ctx, state) => {
         const { challenge, pass } = ctx;
+        if (isManualPhotosOnly(settings, challenge.id)) return skipped(MANUAL_PHOTOS_SKIP);
         const photoId = rememberedPhoto(action.photo, state);
         if (photoId === undefined)
             return skipped(`memory slot "${(action.photo as { memory: string }).memory}" is empty`);
@@ -35,6 +60,7 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
             if (filled.reason === 'no-slots') return skipped('no free entry slot');
             if (filled.reason === 'challenge-gone') return skipped('the challenge is no longer active');
             if (filled.reason === 'no-eligible') return skipped('no eligible photo to enter');
+            if (filled.reason === 'no-chosen') return skipped('no chosen photo can be entered');
             if (!filled.ok) return failed(`no photo was entered (${filled.reason})`);
             enteredId = String(filled.imageId);
         } else {
@@ -54,6 +80,7 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
 
     swap: async (action, ctx, state) => {
         const { challenge, pass } = ctx;
+        if (isManualPhotosOnly(settings, challenge.id)) return skipped(MANUAL_PHOTOS_SKIP);
         const newPhoto = rememberedPhoto(action.with, state);
         if (newPhoto === undefined)
             return skipped(`memory slot "${(action.with as { memory: string }).memory}" is empty`);
@@ -68,7 +95,7 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
 
         let replacement: SwapPhoto | null =
             newPhoto === null ? null : { id: newPhoto, member_id: String(target.member_id ?? '') };
-        const refused = await lockedCurrencySpend('swap', ctx, async () => {
+        const refused = await lockedCurrencySpend('swap', ctx, async (request) => {
             if (replacement === null) {
                 const preview = await currencyActions.previewSwap(
                     challenge.id,
@@ -80,10 +107,14 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
                 // An ok preview always carries its candidate.
                 replacement = preview.candidate as SwapPhoto;
             }
-            return currencyActions.swapEntry(challenge.id, target.id, replacement.id, pass.token, {
-                ...currencyDeps(ctx),
-                ledger: pass.currency.swapLedger ?? null,
-            });
+            // The preview is a read: only the swap itself is written down first.
+            const photo = replacement;
+            return request(() =>
+                currencyActions.swapEntry(challenge.id, target.id, photo.id, pass.token, {
+                    ...currencyDeps(ctx),
+                    ledger: pass.currency.swapLedger ?? null,
+                }),
+            );
         });
         if (refused) return refused;
         // The spend went through, so the replacement was given or previewed.
@@ -121,6 +152,8 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
         if (challenge.member?.turbo?.state !== 'WON') {
             return skipped(`no won turbo to apply (${challenge.member?.turbo?.state ?? 'unknown'})`);
         }
+        // A turbo without a mode is the mobile copy, whose WON can be false for a Snap game.
+        if (!isKnownTurboMode(challenge.member.turbo)) return skipped('the turbo mode is unknown');
         const target = selectEntry(action.entry, challenge, selectContext(state));
         if (!target) return skipped('no entry matches the turbo target');
         const result = await pass.api.applyTurbo(challenge.id, String(target.id), pass.token);
@@ -134,8 +167,8 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
     unlockBoost: async (action, ctx, state) => {
         const blocked = await spendAllowed('unlockBoost', ctx, state);
         if (blocked) return skipped(blocked);
-        const refused = await lockedCurrencySpend('unlockBoost', ctx, () =>
-            currencyActions.unlockBoostWithKey(ctx.challenge.id, ctx.pass.token, currencyDeps(ctx)),
+        const refused = await lockedCurrencySpend('unlockBoost', ctx, (request) =>
+            request(() => currencyActions.unlockBoostWithKey(ctx.challenge.id, ctx.pass.token, currencyDeps(ctx))),
         );
         if (refused) return refused;
         const member = (ctx.challenge as ActedChallenge).member;
@@ -146,8 +179,8 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
     fillExposure: async (action, ctx, state) => {
         const blocked = await spendAllowed('fillExposure', ctx, state);
         if (blocked) return skipped(blocked);
-        const refused = await lockedCurrencySpend('fillExposure', ctx, () =>
-            currencyActions.fillExposure(ctx.challenge.id, ctx.pass.token, currencyDeps(ctx)),
+        const refused = await lockedCurrencySpend('fillExposure', ctx, (request) =>
+            request(() => currencyActions.fillExposure(ctx.challenge.id, ctx.pass.token, currencyDeps(ctx))),
         );
         if (refused) return refused;
         const ranking = (ctx.challenge as ActedChallenge).member.ranking;
@@ -176,4 +209,48 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
     notify: async (action) => done({ notice: action.message }),
 };
 
-export { ACTIONS };
+/**
+ * Whether a spend that got no answer has positively taken effect on the live challenge: the boost is unlocked by a
+ * key, the exposure is full, the replacement photo is entered. Anything the live state cannot show — a swap whose
+ * replacement a selector chooses, a challenge that is gone — is not it.
+ */
+const spendLanded = async (
+    action: ScenarioAction & { type: SpendAction },
+    ctx: RunnerContext,
+    state: ScenarioState,
+): Promise<{ landed: boolean; remember: Record<string, string> }> => {
+    const none = { landed: false, remember: {} };
+    if (!(await refreshLive(ctx))) return none;
+    const { challenge } = ctx;
+    if (action.type === 'unlockBoost') {
+        // Unlocked, or already applied to a photo since: either way the key was spent.
+        const boost = challenge.member?.boost;
+        return { ...none, landed: isKeyUnlockedBoost(boost) || boost?.state === 'USED' };
+    }
+    if (action.type === 'fillExposure') {
+        return { ...none, landed: Number(challenge.member?.ranking?.exposure?.exposure_factor) >= 100 };
+    }
+    // Only a swap is left, whose replacement is known only when the step names it.
+    const photo = rememberedPhoto(action.with, state);
+    if (typeof photo !== 'string' || !entriesOf(challenge).some((entry) => String(entry.id) === photo)) return none;
+    return { landed: true, remember: action.rememberAdded ? { [action.rememberAdded]: photo } : {} };
+};
+
+/**
+ * The retry of a step whose spend got no answer. It never spends: it passes over the step when the live challenge
+ * shows the spend landed, and otherwise ends the rule, since the step cannot be repeated and the steps after it
+ * were meant to follow a spend that did happen.
+ */
+const settleUnclearSpend = async (
+    action: ScenarioAction & { type: SpendAction },
+    ctx: RunnerContext,
+    state: ScenarioState,
+    from: Retry,
+): Promise<ActionOutcome> => {
+    const { landed, remember } = await spendLanded(action, ctx, state);
+    // A spend that got no answer was counted when it was marked; one recovered from its pending marker is counted now.
+    if (landed) return done({ remember, ...(from.count ? { spent: limitOf(action.type) } : {}) });
+    return unclearHalted(action.type, from);
+};
+
+export { ACTIONS, settleUnclearSpend };

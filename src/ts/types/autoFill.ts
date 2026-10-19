@@ -10,10 +10,11 @@
 import type * as LoggerModule from '../logger';
 import type * as SettingsModule from '../settings';
 import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from './gurushots';
-import type { PickerPhoto, SemanticScoreMap } from './photoPicker';
+import type { ChosenPick, PickerPhoto, SemanticScoreMap } from './photoPicker';
 import type { EntryAgeLedger } from './stores';
 import type {
     getEligiblePhotos as GetEligiblePhotos,
+    getEligiblePhotosWalk as GetEligiblePhotosWalk,
     getImageData as GetImageData,
     submitToChallenge as SubmitToChallenge,
 } from '../api/submissions';
@@ -24,13 +25,14 @@ import type {
 import type { getActiveChallenges as GetActiveChallenges } from '../strategies/real/activeChallenges';
 import type { rankVisually as RankVisually } from '../services/visionVerifier';
 import type { getSemanticScores as GetSemanticScores } from '../services/semantic';
+import type { StatsBudget } from '../services/photoStats';
 
 /** The logger surface the fill paths use: the facade module, or a stand-in with the same two members. */
 export type FillLogger = Pick<typeof LoggerModule, 'withCategory' | 'challengeTag'>;
 
 /** The settings facade surface the fill paths read. */
 export type FillSettings = Pick<typeof SettingsModule, 'getEffectiveSetting' | 'getEffectiveTagSetting'> &
-    Partial<Pick<typeof SettingsModule, 'getEffectiveIgnoreTitleWords'>>;
+    Partial<Pick<typeof SettingsModule, 'getEffectiveIgnoreTitleWords' | 'getSetting'>>;
 
 /** The endpoints and seams the candidate fetch and ranking read. */
 export interface RankDeps {
@@ -38,6 +40,8 @@ export interface RankDeps {
     settings?: FillSettings | null;
     logger: FillLogger;
     getEligiblePhotos(...args: Parameters<typeof GetEligiblePhotos>): ReturnType<typeof GetEligiblePhotos>;
+    /** Without it, a chosen photo missing from the themed fetch is not looked for. */
+    getEligiblePhotosWalk?(...args: Parameters<typeof GetEligiblePhotosWalk>): ReturnType<typeof GetEligiblePhotosWalk>;
     /** Without it, stat enrichment is skipped. */
     getImageData?(...args: Parameters<typeof GetImageData>): ReturnType<typeof GetImageData>;
     /** Enables the pre-submit live re-check; without it the fill proceeds on pass-start data. */
@@ -47,6 +51,8 @@ export interface RankDeps {
     getCurrentMemberProfile?(
         ...args: Parameters<typeof GetCurrentMemberProfile>
     ): ReturnType<typeof GetCurrentMemberProfile>;
+    /** Stat enrichment spends this budget instead of the voting pass's (a run outside any pass: photo suggestions). */
+    statsBudget?: StatsBudget;
     /** Test seams; default to the real modules. */
     rankVisually?: typeof RankVisually;
     getSemanticScores?: typeof GetSemanticScores;
@@ -69,7 +75,7 @@ export type AdoptableMember = ChallengeMember & {
 };
 
 /** The log prefix of a submitting fill path. */
-type FillLabel = 'autoFill' | 'emergencyFill' | 'manualFill' | 'fillNew';
+export type FillLabel = 'autoSubmit' | 'emergencySubmit' | 'manualFill' | 'fillNew';
 
 /** What onRefreshed may answer after the live re-check. */
 interface RefreshVerdict {
@@ -77,10 +83,14 @@ interface RefreshVerdict {
     picked?: string[];
 }
 
-/** The loaded candidate set a stand-down probe sees. */
+/**
+ * The loaded candidate set a stand-down probe sees, with the chosen photos as
+ * the normal (staggered) path would use them — its own `only`, not the caller's.
+ */
 interface LoadedCandidates {
     eligible: PickerPhoto[];
     semanticScores: SemanticScoreMap | null;
+    chosen: ChosenPick | null;
 }
 
 /** runFillAttempt's parameters. */
@@ -93,7 +103,7 @@ export interface FillAttemptParams {
     mustIncludeTags: readonly string[] | null;
     shouldIncludeTags: readonly string[] | null;
     /** undefined → the picker's default (true). */
-    fillWithoutTagMatch: boolean | undefined;
+    submitWithoutTagMatch: boolean | undefined;
     probeStandDown?: ((loaded: LoadedCandidates) => boolean) | null;
     onEmptyPick?: ((eligible: PickerPhoto[]) => string) | null;
     onRefreshed?: ((picked: string[]) => RefreshVerdict | null) | null;
@@ -109,6 +119,8 @@ export interface FetchErrorResult {
 export type FillAttemptResult =
     | FetchErrorResult
     | { status: 'probe-stand-down' }
+    /** Submit Only Chosen Photos is on and no chosen photo can be submitted: nothing was picked on purpose. */
+    | { status: 'no-chosen' }
     | { status: 'no-pick'; detail: string | null }
     | { status: 'gone' }
     | { status: 'refresh-stand-down' }

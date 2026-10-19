@@ -12,8 +12,13 @@
 
 import * as logger from '../logger';
 import { runVotingPass } from '../services/votingOrchestrator';
+import { runSuspendBoosts } from '../services/votingOrchestrator/boost';
 import { createMemoryEntryTracker } from '../services/newEntryTracker';
-import { runJoinPass, joinChallengeSingle } from '../services/joinChallenges';
+import {
+    runJoinPass,
+    joinChallengeSingle,
+    forgetUnconfirmedPayment as forgetPayment,
+} from '../services/joinChallenges';
 import type { JoinDeps } from '../services/joinChallenges';
 import { runClaimPass } from '../services/autoClaim';
 import { loadMissionNeeds, registerMissionNeeds } from '../services/missions';
@@ -36,6 +41,7 @@ const mockEntryTracker = createMemoryEntryTracker();
 
 // In-memory automatic-fill counter for the mock pass (process lifetime).
 const mockAutoSpendLedger = createMemoryAutoSpendLedger();
+// Shared with the mock endpoints (mock/apiClient.ts), so a fetch sees what the pass and a manual submit recorded.
 const mockEntryAgeLedger = createMemoryEntryAgeLedger();
 
 // Endpoints runVotingPass reads off `api`.
@@ -47,9 +53,10 @@ const VOTING_PASS_ENDPOINTS = [
     'applyBoostToEntry',
     'applyTurbo',
     'getEligiblePhotos',
+    'getEligiblePhotosWalk',
     'getImageData',
     'submitToChallenge',
-    'runTurboMiniGame',
+    'runTurboGame',
     'searchTagAutocomplete',
     'getCurrentMemberProfile',
 ] as const;
@@ -75,6 +82,7 @@ const JOIN_ENDPOINTS = [
     'coinsUnlock',
     'submitToChallenge',
     'getEligiblePhotos',
+    'getEligiblePhotosWalk',
     'searchTagAutocomplete',
     'getCurrentMemberProfile',
     'getActiveChallenges',
@@ -163,6 +171,20 @@ const mockVotingPassDeps = (client: MockEndpoints, token: string, missions: Miss
 });
 
 /**
+ * The mock counterpart of forgetting an unconfirmed payment: the same service over the mock deps, whose
+ * join-state store is null, so there is never a claim to forget.
+ */
+const createMockForget = (client: MockEndpoints): typeof realModule.forgetUnconfirmedPayment =>
+    mockMethod(
+        {
+            name: 'forgetUnconfirmedPayment',
+            tokenArg: 1,
+            onNoToken: (challengeId) => ({ status: 'not-authenticated', challengeId }),
+        },
+        async (challengeId, token) => forgetPayment(challengeId, token, mockJoinDeps(client)),
+    );
+
+/**
  * @param client - the assembled mock endpoints
  */
 const createMockStrategy = (client: MockEndpoints) => {
@@ -182,8 +204,11 @@ const createMockStrategy = (client: MockEndpoints) => {
             },
             onNoToken: (challengeId) => ({ status: 'not-authenticated', challengeId, cost: 0 }),
         },
-        async (challengeId, spendCoins, token) =>
-            joinChallengeSingle(challengeId, token, mockJoinDeps(client), { spendCoins: spendCoins === true }),
+        async (challengeId, spendCoins, token, expectedCost) =>
+            joinChallengeSingle(challengeId, token, mockJoinDeps(client), {
+                spendCoins: spendCoins === true,
+                ...(expectedCost === undefined ? {} : { expectedCost }),
+            }),
     );
 
     /**
@@ -214,7 +239,25 @@ const createMockStrategy = (client: MockEndpoints) => {
         }
     };
 
-    return { joinChallenge, fetchChallengesAndVote };
+    /**
+     * The mock counterpart of the real strategy's applyBoostsOnSuspend: the same
+     * shared runSuspendBoosts over the pass's mock endpoints and the in-memory
+     * entry-age ledger (mock mode must never touch the real entryAges file).
+     */
+    const applyBoostsOnSuspend: typeof realModule.applyBoostsOnSuspend = async (challenges, token, now) =>
+        runSuspendBoosts(
+            challenges,
+            token,
+            { api: pickEndpoints(client, VOTING_PASS_ENDPOINTS), entryAges: mockEntryAgeLedger },
+            now,
+        );
+
+    return {
+        joinChallenge,
+        forgetUnconfirmedPayment: createMockForget(client),
+        fetchChallengesAndVote,
+        applyBoostsOnSuspend,
+    };
 };
 
-export { createMockStrategy };
+export { createMockStrategy, mockEntryAgeLedger };

@@ -10,8 +10,10 @@
  */
 
 import type * as pathModule from 'node:path';
+import type * as checkSizeDelta from '../../scripts/check-size-delta';
 import type * as zlibModule from 'node:zlib';
 import type * as cryptoModule from 'node:crypto';
+import { parseJson } from '../helpers/parseJson';
 
 const realPath = jest.requireActual<typeof pathModule>('path');
 const zlib = jest.requireActual<typeof zlibModule>('zlib');
@@ -40,7 +42,7 @@ jest.mock('fs', () => mockFs);
 
 const ROOT = realPath.join(__dirname, '..', '..');
 const BASELINE = realPath.join(ROOT, '.size-baseline.json');
-const NAMES = ['app', 'login', 'logs', 'capacitor', 'web', 'headless', 'preload'];
+const NAMES = ['app', 'login', 'logs', 'capacitor', 'web', 'headless', 'preload', 'preloadLogs'];
 const bundlePath = (name: string) => realPath.join(ROOT, 'dist', `${name}-bundle.js`);
 
 const brotli = (buf: Buffer) =>
@@ -102,7 +104,7 @@ describe('scripts/check-size-delta.ts', () => {
         process.argv = ['node', 'scripts/check-size-delta.ts', ...args];
         try {
             jest.isolateModules(() => {
-                require('../../scripts/check-size-delta');
+                (require('../../scripts/check-size-delta') as typeof checkSizeDelta).main();
             });
         } catch (err) {
             if (err instanceof ExitCalled) return err.code;
@@ -191,7 +193,7 @@ describe('scripts/check-size-delta.ts', () => {
             expect(run(['--update'])).toBe(1);
             const { preload, ...rest } = sizes;
             void preload;
-            expect(JSON.parse(mockFiles.get(BASELINE) as string)).toEqual(rest);
+            expect(parseJson(String(mockFiles.get(BASELINE)))).toEqual(rest);
             expect(err()).toContain('bundle not found at dist/preload-bundle.js');
         });
     });

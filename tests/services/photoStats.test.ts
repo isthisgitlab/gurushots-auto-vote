@@ -10,6 +10,8 @@
 
 // In-memory stand-in for the cross-platform JSON store.
 let storeData: string | null = null;
+const mockInitializeAsync = jest.fn(async () => {});
+const mockFlushPendingWrites = jest.fn(async () => {});
 jest.mock('../../src/ts/settings/storage', () => ({
     createJsonStore: () => ({
         readRaw: () => storeData,
@@ -17,7 +19,8 @@ jest.mock('../../src/ts/settings/storage', () => ({
             storeData = data;
         },
         getFilePath: () => '/tmp/photo-stats.json',
-        initializeAsync: async () => {},
+        initializeAsync: mockInitializeAsync,
+        flushPendingWrites: mockFlushPendingWrites,
     }),
 }));
 
@@ -29,11 +32,20 @@ jest.mock('../../src/ts/logger', () => {
 import photoStats = require('../../src/ts/services/photoStats');
 import type { PickerPhoto } from '../../src/ts/types/photoPicker';
 import type { RankDeps } from '../../src/ts/types/autoFill';
-import type { PhotoStatsFile } from '../../src/ts/services/photoStats';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
-const { enrichCandidates, resetPassState, MAX_ENRICH_PER_FILL, MAX_ENRICH_PER_PASS, MAX_CACHE_ENTRIES, STATS_TTL_MS } =
-    photoStats;
+import { isPhotoStatsFile } from '../helpers/storedShapes';
+import { parseJson, parseJsonAs } from '../helpers/parseJson';
+const {
+    enrichCandidates,
+    resetPassState,
+    createStatsBudget,
+    statsBudgetTripped,
+    MAX_ENRICH_PER_FILL,
+    MAX_ENRICH_PER_PASS,
+    MAX_CACHE_ENTRIES,
+    STATS_TTL_MS,
+} = photoStats;
 const { __level: log } = invalid<{ __level: LevelMock }>(require('../../src/ts/logger'));
 
 /** The per-category logger double the logger mock above hands out (and exposes as `__level`). */
@@ -55,6 +67,16 @@ const payload = (votes: number, views: number, achievementCount = 0) => ({
     votes,
     views,
     achievements: Array.from({ length: achievementCount }, (_, i) => ({ name: `a${i}` })),
+});
+
+describe('the Android bootstrap hooks of the stats store', () => {
+    test("hydrate and flush are the store's own", async () => {
+        await photoStats.initializePhotoStatsAsync();
+        await photoStats.flushPhotoStatsWrites();
+
+        expect(mockInitializeAsync).toHaveBeenCalledTimes(1);
+        expect(mockFlushPendingWrites).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('photoStats.enrichCandidates', () => {
@@ -97,7 +119,7 @@ describe('photoStats.enrichCandidates', () => {
     });
 
     test('a "__proto__" key in the payload cannot pollute Object.prototype', async () => {
-        const evil = JSON.parse('{"votes":5,"views":5,"achievements":[],"__proto__":{"polluted":true}}') as unknown;
+        const evil = parseJson('{"votes":5,"views":5,"achievements":[],"__proto__":{"polluted":true}}');
         const getImageData = jest.fn().mockResolvedValue(evil);
         await enrichCandidates([photo('p1')], 'tok', { getImageData });
         expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
@@ -203,7 +225,7 @@ describe('photoStats.enrichCandidates', () => {
         expect(out[0]).toEqual(
             expect.objectContaining({ votes: 373147, views: 12000, achievementCount: 10, statsKnown: true }),
         );
-        expect((JSON.parse(storeData) as PhotoStatsFile).photos.portfolio.fetchedAt).toBe(fetchedAt);
+        expect(parseJsonAs(storeData, isPhotoStatsFile).photos.portfolio.fetchedAt).toBe(fetchedAt);
     });
 
     test('a failed refresh preserves expired counts, including after the breaker opens', async () => {
@@ -223,7 +245,7 @@ describe('photoStats.enrichCandidates', () => {
         const second = await enrichCandidates(input, 'tok', { getImageData });
         expect(getImageData).not.toHaveBeenCalled();
         expect(second[0]).toEqual(expect.objectContaining({ votes: 100000, statsKnown: true }));
-        expect((JSON.parse(storeData) as PhotoStatsFile).photos.portfolio.fetchedAt).toBe(fetchedAt);
+        expect(parseJsonAs(storeData, isPhotoStatsFile).photos.portfolio.fetchedAt).toBe(fetchedAt);
     });
 
     test('one photo failing leaves only that photo unknown', async () => {
@@ -274,6 +296,62 @@ describe('photoStats.enrichCandidates', () => {
             .mockResolvedValue(null);
         await enrichCandidates([photo('a'), photo('b'), photo('c'), photo('d')], 'tok', { getImageData });
         expect(log.warning).not.toHaveBeenCalled();
+    });
+
+    describe('a budget of its own (a run outside any voting pass)', () => {
+        test('starts untripped, and each one is separate', () => {
+            const budget = createStatsBudget();
+            expect(statsBudgetTripped(budget)).toBe(false);
+            expect(statsBudgetTripped(createStatsBudget())).toBe(false);
+        });
+
+        test('its failure breaker opens without a warning and leaves the pass’s lookups alone', async () => {
+            const budget = createStatsBudget();
+            const failing = jest.fn().mockResolvedValue(null);
+            const many = Array.from({ length: MAX_ENRICH_PER_FILL }, (_, i) => photo(`p${i}`));
+            await enrichCandidates(many, 'tok', { getImageData: failing, statsBudget: budget });
+            expect(statsBudgetTripped(budget)).toBe(true);
+            expect(failing.mock.calls.length).toBeLessThan(MAX_ENRICH_PER_FILL);
+            expect(log.warning).not.toHaveBeenCalled();
+
+            // The same budget issues nothing more, while the pass's own still does.
+            failing.mockClear();
+            await enrichCandidates([photo('again')], 'tok', { getImageData: failing, statsBudget: budget });
+            expect(failing).not.toHaveBeenCalled();
+            const working = jest.fn().mockResolvedValue(payload(1, 1));
+            await enrichCandidates([photo('pass')], 'tok', { getImageData: working });
+            expect(working).toHaveBeenCalledTimes(1);
+        });
+
+        const batch = (prefix: string, size = MAX_ENRICH_PER_FILL) =>
+            Array.from({ length: size }, (_, i) => photo(`${prefix}${i}`));
+
+        test('a fill’s worth of successful lookups is not limited', async () => {
+            const budget = createStatsBudget();
+            const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+            await enrichCandidates(batch('a'), 'tok', { getImageData, statsBudget: budget });
+            expect(getImageData).toHaveBeenCalledTimes(MAX_ENRICH_PER_FILL);
+            expect(statsBudgetTripped(budget)).toBe(false);
+            expect(log.warning).not.toHaveBeenCalled();
+        });
+
+        test('a fill’s worth spends the cap: a further call starts no lookup and is not tripped, and the pass’s ceiling is not spent', async () => {
+            const budget = createStatsBudget();
+            const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+            await enrichCandidates(batch('a'), 'tok', { getImageData, statsBudget: budget });
+            getImageData.mockClear();
+            await enrichCandidates(batch('b', 3), 'tok', { getImageData, statsBudget: budget });
+            expect(getImageData).not.toHaveBeenCalled();
+            expect(statsBudgetTripped(budget)).toBe(false);
+            expect(log.warning).not.toHaveBeenCalled();
+
+            // Cached photos are still answered free from it, and the pass's own budget is whole.
+            const [cached] = await enrichCandidates([photo('a0')], 'tok', { getImageData, statsBudget: budget });
+            expect(cached.statsKnown).toBe(true);
+            expect(getImageData).not.toHaveBeenCalled();
+            for (let i = 0; i < 7; i++) await enrichCandidates(batch(`c${i}-`), 'tok', { getImageData });
+            expect(getImageData).toHaveBeenCalledTimes(7 * MAX_ENRICH_PER_FILL);
+        });
     });
 
     test('degrades to stats-unknown when no getImageData is injected', async () => {
@@ -408,7 +486,7 @@ describe('photoStats.enrichCandidates', () => {
         const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
         await enrichCandidates([photo('brand-new')], 'tok', { getImageData });
 
-        const persisted = (JSON.parse(storeData) as PhotoStatsFile).photos;
+        const persisted = parseJsonAs(storeData, isPhotoStatsFile).photos;
         expect(Object.keys(persisted).length).toBeLessThanOrEqual(MAX_CACHE_ENTRIES);
         // Newest survive, oldest are dropped — a flipped comparator would
         // silently invert this and nothing else would notice.

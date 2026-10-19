@@ -1,6 +1,6 @@
 /**
  * Auto-fill — the cycle-driven, schedule-based fill: at most one photo per
- * scheduler cycle, spaced by the user's autoFillSchedule.
+ * scheduler cycle, spaced by the user's autoSubmitSchedule.
  */
 
 import { getScheduleShift } from '../scheduleRemap';
@@ -8,6 +8,7 @@ import { resolveScheduleTarget } from './schedule';
 import { getEntries, getSlotsRemaining, reflectNewEntry } from './challengeState';
 import { runFillAttempt } from './pipeline';
 import { finiteOr } from '../../numbers';
+import { isManualPhotosOnly } from '../manualPhotosOnly';
 
 import type { Challenge } from '../../types/gurushots';
 import type { SettingsFillDeps } from '../../types/autoFill';
@@ -32,8 +33,9 @@ const maybeAutoFillChallenge = async (
     const { settings, logger } = deps;
     const challengeId = challenge?.id;
     if (challengeId === undefined || challengeId === null) return 'skipped';
+    if (isManualPhotosOnly(settings, challengeId)) return 'disabled';
 
-    const enabled = settings.getEffectiveSetting('autoFill', String(challengeId));
+    const enabled = settings.getEffectiveSetting('autoSubmit', String(challengeId));
     if (enabled !== true) return 'disabled';
 
     const closeTime = Number(challenge.close_time);
@@ -44,7 +46,7 @@ const maybeAutoFillChallenge = async (
     let slotsRemaining = getSlotsRemaining(challenge);
     if (slotsRemaining <= 0) return 'skipped';
 
-    const schedule = settings.getEffectiveSetting('autoFillSchedule', String(challengeId));
+    const schedule = settings.getEffectiveSetting('autoSubmitSchedule', String(challengeId));
     // Distinct from 'disabled' (toggle off): the toggle is on but there is no
     // schedule to act on — a deliberate opt-out state the GUI editor warns about.
     if (!Array.isArray(schedule) || schedule.length === 0) return 'no-schedule';
@@ -63,9 +65,9 @@ const maybeAutoFillChallenge = async (
         const maxTarget = resolveScheduleTarget(schedule, 0, max);
         if (desired > 0 && desired === maxTarget && maxTarget < max) {
             logger
-                .withCategory('autoFill')
+                .withCategory('autoSubmit')
                 .warning(
-                    `autoFill: schedule tops out at ${maxTarget} entries but ${logger.challengeTag(challenge)} allows ${max} — remaining slots are left to emergency fill`,
+                    `autoSubmit: schedule tops out at ${maxTarget} entries but ${logger.challengeTag(challenge)} allows ${max} — remaining slots are left to emergency fill`,
                     null,
                 );
         }
@@ -74,25 +76,25 @@ const maybeAutoFillChallenge = async (
 
     const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
     const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
-    const fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
+    const submitWithoutTagMatch = settings.getEffectiveSetting('submitWithoutTagMatch', String(challengeId));
 
     const attempt = await runFillAttempt({
-        label: 'autoFill',
+        label: 'autoSubmit',
         challenge,
         token,
         deps,
         wantCount: 1,
         mustIncludeTags,
         shouldIncludeTags,
-        fillWithoutTagMatch,
+        submitWithoutTagMatch,
         onRefreshed: () => {
             slotsRemaining = getSlotsRemaining(challenge);
             const entryCount = getEntries(challenge).length;
             if (slotsRemaining <= 0 || entryCount >= desired) {
                 logger
-                    .withCategory('autoFill')
+                    .withCategory('autoSubmit')
                     .info(
-                        `autoFill: live re-check shows ${logger.challengeTag(challenge)} already has ${entryCount} entries (target ${desired}) — an entry was added outside this run (e.g. a manual submission); standing down`,
+                        `autoSubmit: live re-check shows ${logger.challengeTag(challenge)} already has ${entryCount} entries (target ${desired}) — an entry was added outside this run (e.g. a manual submission); standing down`,
                         null,
                     );
                 return { standDown: true };
@@ -101,7 +103,10 @@ const maybeAutoFillChallenge = async (
         },
     });
     if (attempt.status === 'no-pick') return 'no-eligible-photos';
-    if (attempt.status === 'gone' || attempt.status === 'refresh-stand-down') return 'skipped';
+    // 'no-chosen': Submit Only Chosen Photos left the challenge alone (already explained in the log).
+    if (attempt.status === 'gone' || attempt.status === 'refresh-stand-down' || attempt.status === 'no-chosen') {
+        return 'skipped';
+    }
     if (attempt.status !== 'submitted') return 'error';
 
     // Reflect the consumed slot locally so a due turbo/boost later this
@@ -130,9 +135,9 @@ const maybeAutoFillChallenge = async (
     // the live re-check merged fresh state), so `- 1` is the post-submit count
     // — keep this log after the reflect, not before.
     logger
-        .withCategory('autoFill')
+        .withCategory('autoSubmit')
         .success(
-            `autoFill: submitted 1 entry for ${logger.challengeTag(challenge)} (${slotsRemaining - 1} slots remain${shiftNote})`,
+            `autoSubmit: submitted 1 entry for ${logger.challengeTag(challenge)} (${slotsRemaining - 1} slots remain${shiftNote})`,
             null,
         );
     return 'submitted';

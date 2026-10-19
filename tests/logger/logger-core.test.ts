@@ -6,7 +6,9 @@
  * be pinned per scenario.
  */
 
+import vm from 'node:vm';
 import type * as LoggerModule from '../../src/ts/logger';
+import { SHIM_BANNER } from '../../scripts/lib/browser-shims';
 import { invalid } from '../helpers/invalid';
 
 const LOGS_DIR = '/ud/logs';
@@ -143,6 +145,71 @@ describe('module load: logs directory', () => {
         expect(logger.getRecentLogs()).toEqual([]);
     });
 
+    test('printLine keeps line breaks, which writeLog flattens to one line', () => {
+        const { logger } = loadLogger();
+        logger.printLine('first\nsecond\n  third');
+        expect(logSpy).toHaveBeenCalledWith('first\nsecond\n  third');
+        // The protection of the log entry itself is unchanged.
+        logger.info('first\nsecond');
+        expect(lastEntry(logger).message).toBe('ℹ️ First second');
+    });
+
+    test('printLine strips terminal control but keeps line breaks and tabs', () => {
+        const { logger } = loadLogger();
+        const ESC = String.fromCharCode(27);
+        logger.printLine(`a${ESC}[31mred${ESC}[0m\tb\u202Ec\r\nd`);
+        expect(logSpy).toHaveBeenCalledWith('ared\tbc\nd');
+    });
+
+    test('printLine and printStderr cut a text past the length cap before redacting it', () => {
+        const { logger } = loadLogger();
+        logger.printLine(`password: hunter2 ${'x'.repeat(40000)}`);
+        const printed = String(logSpy.mock.calls.at(-1)?.[0]);
+        expect(printed).not.toContain('hunter2');
+        expect(printed.length).toBeLessThan(16500);
+        expect(printed.endsWith('…')).toBe(true);
+        logger.printStderr(`token=abc ${'y'.repeat(40000)}`);
+        const warned = String(errorSpy.mock.calls.at(-1)?.[0]);
+        expect(warned.length).toBeLessThan(16500);
+        expect(warned).not.toContain('abc');
+    });
+
+    test('a message past the length cap is cut before it is redacted and written', () => {
+        const { logger } = loadLogger();
+        logger.info(`password: hunter2 ${'x'.repeat(40000)}`);
+        const message = lastEntry(logger).message;
+        expect(message).not.toContain('hunter2');
+        expect(message.length).toBeLessThan(16500);
+        expect(message.endsWith('…')).toBe(true);
+    });
+
+    test('printDocument keeps the text as it is, with its layout, but strips control characters', () => {
+        const { logger, fs } = loadLogger();
+        const sink = jest.fn();
+        g.sendLogToGUI = sink;
+        const ESC = String.fromCharCode(27);
+        // Credential-looking text is NOT redacted (that would corrupt a JSON document).
+        logger.printDocument(`{\n\t"a": "token: x"\r\n}${ESC}[31m\u0007 \u202Eend`);
+        expect(logSpy).toHaveBeenCalledWith('{\n\t"a": "token: x"\n} end');
+        expect(fs.appendFileSync).not.toHaveBeenCalled();
+        expect(sink).not.toHaveBeenCalled();
+        expect(logger.getRecentLogs()).toEqual([]);
+    });
+
+    test('printStderr writes to the error stream only, redacted', () => {
+        const { logger, fs } = loadLogger();
+        logger.printStderr('note: password=hunter2');
+        expect(errorSpy).toHaveBeenCalledWith('note: password=[REDACTED]');
+        expect(logSpy).not.toHaveBeenCalled();
+        expect(fs.appendFileSync).not.toHaveBeenCalled();
+    });
+
+    test('printLine redacts credentials folded into the text', () => {
+        const { logger } = loadLogger();
+        logger.printLine('auth token=abc123 password: hunter2');
+        expect(logSpy).toHaveBeenCalledWith('auth token=[REDACTED] password: [REDACTED]');
+    });
+
     test('reports an unreadable logs dir on the console only', () => {
         const fs = makeFs({
             readdirSync: jest.fn(() => {
@@ -170,6 +237,29 @@ describe('module load: logs directory', () => {
         fs.readdirSync.mockClear();
         logger.cleanup();
         expect(fs.readdirSync).not.toHaveBeenCalled();
+    });
+
+    test('treats the renderer bundle fs shim (no chmodSync) as no fs: no dir, no chmod, no error', () => {
+        const shim = { ...makeFs(), chmodSync: undefined };
+        const { logger } = loadLogger({ fs: invalid<ReturnType<typeof makeFs>>(shim) });
+
+        expect(debugSpy).toHaveBeenCalledWith(
+            '[logger] fs not available; skipping file-based logging:',
+            'fs is the bundler shim',
+        );
+        expect(shim.mkdirSync).not.toHaveBeenCalled();
+        expect(errorSpy).not.toHaveBeenCalled();
+        logger.info('hello');
+        expect(shim.appendFileSync).not.toHaveBeenCalled();
+    });
+
+    test('the real renderer bundle fs shim has no chmodSync, which files.ts relies on to detect it', () => {
+        // What a bundle's `require('node:fs')` returns once the banner has run.
+        const shim = vm.runInNewContext(`${SHIM_BANNER};require('node:fs')`) as Record<string, unknown>;
+
+        expect(typeof shim.existsSync).toBe('function');
+        expect(typeof shim.mkdirSync).toBe('function');
+        expect(shim.chmodSync).toBeUndefined();
     });
 });
 
@@ -318,7 +408,7 @@ describe('writeLog routing and fan-out', () => {
             logger.getLogFile(),
         ]);
         expect(fs.appendFileSync.mock.calls.map(([, , options]) => options)).toEqual(Array(4).fill({ mode: 0o600 }));
-        expect(fs.appendFileSync.mock.calls[3][1]).toMatch(/\[INFO\] \[CLI\] \[general\] ℹ️ Plain\n={80}\n$/);
+        expect(fs.appendFileSync.mock.calls[3][1]).toMatch(/\] ℹ️ \[INFO\] \[CLI\] \[general\] Plain\n={80}\n$/);
     });
 
     test('serialises sanitized object data and bare-string data into the file line', () => {
@@ -327,7 +417,18 @@ describe('writeLog routing and fan-out', () => {
         logger.info('str', 'detail');
 
         expect(fs.appendFileSync.mock.calls[0][1]).toContain(JSON.stringify({ token: '[REDACTED]', n: 1 }, null, 2));
-        expect(fs.appendFileSync.mock.calls[1][1]).toContain('] ℹ️ Str\ndetail\n');
+        expect(fs.appendFileSync.mock.calls[1][1]).toContain('] ℹ️ [INFO] [CLI] [general] Str\ndetail\n');
+    });
+
+    test('printLine writes the console only: no file, no ring buffer, no GUI feed', () => {
+        const { logger, fs } = loadLogger();
+        const sink = jest.fn();
+        g.sendLogToGUI = sink;
+        logger.printLine('  \u2022 p1');
+        expect(logSpy).toHaveBeenCalledWith('  \u2022 p1');
+        expect(fs.appendFileSync).not.toHaveBeenCalled();
+        expect(sink).not.toHaveBeenCalled();
+        expect(logger.getRecentLogs()).toEqual([]);
     });
 
     test('a failing disk write never throws out of the logger', () => {
@@ -348,6 +449,22 @@ describe('writeLog routing and fan-out', () => {
         expect(logSpy).toHaveBeenLastCalledWith(expect.stringContaining('\x1b[33m[WARN]\x1b[0m'));
         logger.startOperation('op-x', 'custom', invalid('TRACE'));
         expect(logSpy).toHaveBeenLastCalledWith(expect.stringContaining('\x1b[37m[TRACE]\x1b[0m'));
+    });
+
+    test('puts the icon right after the timestamp on the console line', () => {
+        const { logger } = loadLogger();
+        logger.warning('careful', null, 'voting');
+        const line = String(logSpy.mock.lastCall?.[0]);
+        expect(line).toContain('\x1b[0m ⚠️ \x1b[33m[WARN]\x1b[0m');
+        expect(line.endsWith('[voting]\x1b[0m Careful')).toBe(true);
+    });
+
+    test('keeps an indented row indented in the text column, after its own icon', () => {
+        const { logger } = loadLogger();
+        logger.info('  • app.x: 1 → 2', null, 'settings');
+        const line = String(logSpy.mock.lastCall?.[0]);
+        expect(line).toContain('\x1b[0m ℹ️ \x1b[34m[INFO]\x1b[0m');
+        expect(line.endsWith('[settings]\x1b[0m   • app.x: 1 → 2')).toBe(true);
     });
 
     test('fans entries out to the GUI sink with seq + plain message', () => {
@@ -383,11 +500,18 @@ describe('writeLog routing and fan-out', () => {
         expect(messageOf(() => logger.info('[Challenge 1: x] voted'))).toBe('ℹ️ [Challenge 1: x] Voted');
     });
 
-    test('leaves blank, indented and banner lines without an icon', () => {
+    test('gives blank, indented and banner lines the level icon, keeping their text as written', () => {
         const { logger } = loadLogger();
-        for (const message of ['', '  Status:  Default', '\nSettings:\nMore', '=== Login ===', '--- Cycle 1 ---']) {
+        for (const [message, expected] of [
+            ['', 'ℹ️ '],
+            ['  Status:  Default', 'ℹ️   Status:  Default'],
+            ['  list-photos --challenge=<id>', 'ℹ️   list-photos --challenge=<id>'],
+            ['\nSettings:\nMore', 'ℹ️  Settings: More'],
+            ['=== Login ===', 'ℹ️ === Login ==='],
+            ['--- Cycle 1 ---', 'ℹ️ --- Cycle 1 ---'],
+        ]) {
             logger.info(message);
-            expect(lastEntry(logger).message).toBe(message.replaceAll('\n', ' '));
+            expect(lastEntry(logger).message).toBe(expected);
         }
     });
 

@@ -4,6 +4,7 @@
  * mock returns each key verbatim, so labels/placeholders are the i18n keys.
  */
 
+import { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { TitleTagRulesEditor } from '@/components/app/TitleTagRulesEditor';
 import type { TitleRule } from '../../src/ts/types/settings';
@@ -96,7 +97,15 @@ describe('TitleTagRulesEditor', () => {
             { title: 'B', mustIncludeTags: ['y'], shouldIncludeTags: [] },
         ];
         render(<TitleTagRulesEditor value={value} onChange={onChange} />);
-        const removeButtons = screen.getAllByRole('button', { name: 'app.removeTitleTagRule' });
+        const removeButtons = screen.getAllByRole('button', { name: /^app\.removeTitleTagRule \d+$/ });
+        expect(removeButtons[0].className).toContain('btn-error');
+        expect(removeButtons[0].className).not.toContain('btn-outline');
+        // Set apart from the reorder buttons, and named by its rule so the two are not the same control to a reader.
+        expect(removeButtons[0].className).toContain('ml-auto');
+        expect(removeButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
+            'app.removeTitleTagRule 1',
+            'app.removeTitleTagRule 2',
+        ]);
         fireEvent.click(removeButtons[0]);
         expect(onChange).toHaveBeenCalledWith([{ title: 'B', mustIncludeTags: ['y'], shouldIncludeTags: [] }]);
     });
@@ -164,8 +173,8 @@ describe('TitleTagRulesEditor', () => {
         test('choosing Off emits false, not inherit', () => {
             const onChange = jest.fn();
             render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
-            pick('app.titleRuleAutoFill', 'off');
-            expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoFill: false })]);
+            pick('app.titleRuleAutoSubmit', 'off');
+            expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoSubmit: false })]);
         });
 
         test('returning to Inherit emits the empty sentinel the sanitizer drops', () => {
@@ -173,6 +182,117 @@ describe('TitleTagRulesEditor', () => {
             render(<TitleTagRulesEditor value={rowWith({ autoJoin: true })} onChange={onChange} />);
             pick('app.titleRuleAutoJoin', '');
             expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoJoin: '' })]);
+        });
+
+        describe('chosen photos', () => {
+            const ID = `00000001${'a'.repeat(24)}`;
+            beforeEach(() => {
+                window.api.getSetting = jest.fn().mockResolvedValue('');
+                window.api.getLibraryPhotos = jest.fn().mockResolvedValue({
+                    success: true,
+                    photos: [{ id: ID, labels: [], allowed: true, message: null, uploadDate: null }],
+                    memberId: null,
+                    truncated: false,
+                    wonIds: [],
+                    wonCount: 0,
+                    preview: false,
+                    readAtMs: 1_700_000_000_000,
+                    allowedKnown: false,
+                });
+            });
+
+            test('a rule that sets nothing inherits, with no Clear', () => {
+                render(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+                const group = screen.getByRole('group', { name: 'app.chosenPhotos' });
+                expect(group.textContent).toContain('app.titleRuleInherit');
+                expect(screen.queryByRole('button', { name: 'app.titleRuleInherit' })).toBeNull();
+            });
+
+            test("'' (a cleared draft) also reads as inherit", () => {
+                render(<TitleTagRulesEditor value={rowWith({ chosenPhotos: '' })} onChange={jest.fn()} />);
+                expect(screen.getByRole('group', { name: 'app.chosenPhotos' }).textContent).toContain(
+                    'app.titleRuleInherit',
+                );
+            });
+
+            test('choosing photos stores the list on the rule', async () => {
+                const onChange = jest.fn();
+                render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+                fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
+                fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserTileLabel' }));
+                fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
+                await waitFor(() =>
+                    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotos: [ID] })]),
+                );
+                // A rule has no challenge to read eligibility through.
+                expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined, 'cached', 'submit');
+            });
+
+            test('an explicit empty list means none, and Inherit writes the empty sentinel', () => {
+                const onChange = jest.fn();
+                render(<TitleTagRulesEditor value={rowWith({ chosenPhotos: [] })} onChange={onChange} />);
+                expect(screen.getByRole('group', { name: 'app.chosenPhotos' }).textContent).toContain('app.none');
+                fireEvent.click(screen.getByRole('button', { name: 'app.titleRuleInherit' }));
+                expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotos: '' })]);
+            });
+
+            test('Submit Only is a three-way select like the other inline overrides', () => {
+                const onChange = jest.fn();
+                render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+                expect(screen.getByLabelText<HTMLSelectElement>('app.chosenPhotosOnly').value).toBe('');
+                pick('app.chosenPhotosOnly', 'on');
+                expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotosOnly: true })]);
+            });
+
+            test('the pick-order flag is a three-way select too, with no reach warning', () => {
+                const onChange = jest.fn();
+                render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+                expect(screen.getByLabelText<HTMLSelectElement>('app.chosenPhotosInOrder').value).toBe('');
+                pick('app.chosenPhotosInOrder', 'on');
+                expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotosInOrder: true })]);
+            });
+
+            test('Manual Only offers inherit and on only: a rule never holds off', () => {
+                const onChange = jest.fn();
+                render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+                const select = screen.getByLabelText<HTMLSelectElement>('app.manualPhotosOnly');
+                expect([...select.options].map((option) => option.value)).toEqual(['', 'on']);
+                expect(select.value).toBe('');
+                pick('app.manualPhotosOnly', 'on');
+                expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ manualPhotosOnly: true })]);
+                pick('app.manualPhotosOnly', '');
+                expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ manualPhotosOnly: '' })]);
+            });
+
+            test('a stored false reads as inherit, not as an option the select lacks', () => {
+                render(<TitleTagRulesEditor value={rowWith({ manualPhotosOnly: false })} onChange={jest.fn()} />);
+                expect(screen.getByLabelText<HTMLSelectElement>('app.manualPhotosOnly').value).toBe('');
+            });
+
+            test('Manual Only on a rule says what it does to the rule, directly under its own select', () => {
+                const { rerender } = render(
+                    <TitleTagRulesEditor value={rowWith({ manualPhotosOnly: true })} onChange={jest.fn()} />,
+                );
+                const hint = screen.getByText('app.manualPhotosOnlyRuleHint');
+                const select = screen.getByLabelText('app.manualPhotosOnly');
+                // The hint (in its live region) shares the select's own cell, after it: not under Chosen Photos at the foot of the editor.
+                expect(hint.closest('[role="status"]')!.parentElement).toBe(select.parentElement);
+                expect(select.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+                expect(screen.getByRole('group', { name: 'app.chosenPhotos' }).contains(hint)).toBe(false);
+                // A rule has no single challenge: the challenge settings modal's alert is not used.
+                expect(screen.queryByText('app.manualOnlyAlert')).toBeNull();
+                rerender(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+                expect(screen.queryByText('app.manualPhotosOnlyRuleHint')).toBeNull();
+            });
+
+            test('Submit Only on a rule warns that it reaches every matching challenge', () => {
+                const { rerender } = render(
+                    <TitleTagRulesEditor value={rowWith({ chosenPhotosOnly: true })} onChange={jest.fn()} />,
+                );
+                expect(screen.getByText('app.chosenPhotosOnlyReachHint')).toBeTruthy();
+                rerender(<TitleTagRulesEditor value={rowWith({ chosenPhotosOnly: false })} onChange={jest.fn()} />);
+                expect(screen.queryByText('app.chosenPhotosOnlyReachHint')).toBeNull();
+            });
         });
 
         test('the join window emits a number', () => {
@@ -193,6 +313,284 @@ describe('TitleTagRulesEditor', () => {
         test('an explicit 0 window renders as 0, not as an empty (inherit) field', () => {
             render(<TitleTagRulesEditor value={rowWith({ autoJoinWithinHoursOfEnd: 0 })} onChange={jest.fn()} />);
             expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleJoinWindow').value).toBe('0');
+        });
+    });
+
+    describe('closes at', () => {
+        const rowWith = (over = {}) => [{ title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], ...over }];
+        const input = (n = 1) =>
+            screen.getByLabelText<HTMLInputElement>(new RegExp(`^app\\.titleRuleClosesAtRow ${n} app\\.of \\d+$`));
+        const addButton = () => screen.getByRole('button', { name: /app\.addCloseTime/ });
+
+        test('the time input patches closesAt, an empty value sends an empty string, and one row keeps no list', () => {
+            const onChange = jest.fn();
+            const { rerender } = render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            expect(input().value).toBe('');
+            fireEvent.change(input(), { target: { value: '17:10' } });
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.objectContaining({ closesAt: '17:10', closesAtTimes: undefined }),
+            ]);
+            rerender(<TitleTagRulesEditor value={rowWith({ closesAt: '17:10' })} onChange={onChange} />);
+            expect(input().value).toBe('17:10');
+            fireEvent.change(input(), { target: { value: '' } });
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ closesAt: '' })]);
+        });
+
+        test('Add time appends a blank row and starts the list; the first row stays in closesAt', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={rowWith({ closesAt: '17:10' })} onChange={onChange} />);
+            fireEvent.click(addButton());
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.objectContaining({ closesAt: '17:10', closesAtTimes: ['17:10', ''] }),
+            ]);
+        });
+
+        test('a stored list shows one row per time, editing one patches the list, and its first row mirrors into closesAt', () => {
+            const onChange = jest.fn();
+            render(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: '17:10', closesAtTimes: ['17:10', '18:10'] })}
+                    onChange={onChange}
+                />,
+            );
+            expect([input(1).value, input(2).value]).toEqual(['17:10', '18:10']);
+            fireEvent.change(input(2), { target: { value: '19:30' } });
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.objectContaining({ closesAt: '17:10', closesAtTimes: ['17:10', '19:30'] }),
+            ]);
+            fireEvent.change(input(1), { target: { value: '16:00' } });
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.objectContaining({ closesAt: '16:00', closesAtTimes: ['16:00', '18:10'] }),
+            ]);
+        });
+
+        test('Remove time drops that row, and cutting back to one leaves no stale list behind', () => {
+            const onChange = jest.fn();
+            const { rerender } = render(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: '17:10', closesAtTimes: ['17:10', '18:10', '19:10'] })}
+                    onChange={onChange}
+                />,
+            );
+            fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 1' }));
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.objectContaining({ closesAt: '18:10', closesAtTimes: ['18:10', '19:10'] }),
+            ]);
+            rerender(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: '18:10', closesAtTimes: ['18:10', '19:10'] })}
+                    onChange={onChange}
+                />,
+            );
+            fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 2' }));
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ closesAt: '18:10' })]);
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.not.objectContaining({ closesAtTimes: expect.anything() }),
+            ]);
+            rerender(<TitleTagRulesEditor value={rowWith({ closesAt: '18:10' })} onChange={onChange} />);
+            expect(screen.queryByRole('button', { name: /app\.removeCloseTime/ })).toBeNull();
+        });
+
+        test('each row is named by its place in the list: "Close time 1 of 2"', () => {
+            render(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: '17:10', closesAtTimes: ['17:10', '18:10'] })}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect(screen.getByLabelText('app.titleRuleClosesAtRow 1 app.of 2')).toBeTruthy();
+            expect(screen.getByLabelText('app.titleRuleClosesAtRow 2 app.of 2')).toBeTruthy();
+        });
+
+        test('Add time on a blank row keeps both blank rows on screen, and clearing the first of two blank-first rows keeps the list', () => {
+            const Harness = ({ start }: { start: TitleRule[] }) => {
+                const [rules, setRules] = useState<TitleRule[]>(start);
+                return <TitleTagRulesEditor value={rules} onChange={setRules} />;
+            };
+            render(<Harness start={rowWith()} />);
+            fireEvent.click(addButton());
+            expect([input(1).value, input(2).value]).toEqual(['', '']);
+            fireEvent.change(input(2), { target: { value: '10:00' } });
+            fireEvent.change(input(1), { target: { value: '09:00' } });
+            fireEvent.change(input(1), { target: { value: '' } });
+            expect([input(1).value, input(2).value]).toEqual(['', '10:00']);
+            fireEvent.change(input(2), { target: { value: '' } });
+            expect([input(1).value, input(2).value]).toEqual(['', '']);
+        });
+
+        test('removing a row moves focus to the row that took its place, else to Add time', () => {
+            const Harness = () => {
+                const [rules, setRules] = useState<TitleRule[]>(
+                    rowWith({ closesAt: '09:00', closesAtTimes: ['09:00', '10:00', '11:00'] }),
+                );
+                return <TitleTagRulesEditor value={rules} onChange={setRules} />;
+            };
+            render(<Harness />);
+            fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 2' }));
+            expect(document.activeElement).toBe(input(2));
+            expect(input(2).value).toBe('11:00');
+            fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 2' }));
+            // One row left: no Remove to land on, so focus goes to Add time.
+            expect(document.activeElement).toBe(addButton());
+        });
+
+        test('removing a lone invalid row (the row stays, blank) lands focus on its input', () => {
+            const Harness = () => {
+                const [rules, setRules] = useState<TitleRule[]>(rowWith({ closesAt: '7:10' }));
+                return <TitleTagRulesEditor value={rules} onChange={setRules} />;
+            };
+            render(<Harness />);
+            fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 1' }));
+            expect(document.activeElement).toBe(input(1));
+        });
+
+        test('Add time is held at 24 rows', () => {
+            const times = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
+            const { rerender } = render(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: times[0], closesAtTimes: times.slice(0, 23) })}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect(addButton().hasAttribute('disabled')).toBe(false);
+            rerender(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: times[0], closesAtTimes: times })}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect(addButton().hasAttribute('disabled')).toBe(true);
+        });
+
+        test('a new blank row shows no error', () => {
+            render(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: '17:10', closesAtTimes: ['17:10', ''] })}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect(input(2).classList.contains('input-error')).toBe(false);
+            expect(screen.queryByText('app.titleRuleClosesAtInvalid')).toBeNull();
+        });
+
+        test('a stored value that is not a strict HH:MM is marked invalid; a valid or empty one is not', () => {
+            const { rerender } = render(
+                <TitleTagRulesEditor value={rowWith({ closesAt: '7:10' })} onChange={jest.fn()} />,
+            );
+            expect(input().classList.contains('input-error')).toBe(true);
+            expect(input().getAttribute('aria-invalid')).toBe('true');
+            const message = screen.getByText('app.titleRuleClosesAtInvalid');
+            expect(message.id).not.toBe('');
+            expect(input().getAttribute('aria-describedby')).toBe(message.id);
+            for (const closesAt of ['17:10', '', undefined]) {
+                rerender(<TitleTagRulesEditor value={rowWith({ closesAt })} onChange={jest.fn()} />);
+                expect(input().classList.contains('input-error')).toBe(false);
+                expect(input().hasAttribute('aria-invalid')).toBe(false);
+                expect(input().hasAttribute('aria-describedby')).toBe(false);
+                expect(screen.queryByText('app.titleRuleClosesAtInvalid')).toBeNull();
+            }
+        });
+
+        test('only the invalid rows of a list say so: a bad time, a non-text entry, and a padded valid one is fine', () => {
+            render(
+                <TitleTagRulesEditor
+                    value={rowWith({
+                        closesAt: '17:10',
+                        closesAtTimes: ['17:10', 'x', invalid<string>(17), ' 18:10 '],
+                    })}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect([1, 2, 3, 4].map((n) => input(n).classList.contains('input-error'))).toEqual([
+                false,
+                true,
+                true,
+                false,
+            ]);
+            expect(screen.getAllByText('app.titleRuleClosesAtInvalid')).toHaveLength(2);
+        });
+
+        test('a lone invalid row can be removed, which clears both fields; a lone valid or blank row has no Remove', () => {
+            const onChange = jest.fn();
+            const { rerender } = render(
+                <TitleTagRulesEditor value={rowWith({ closesAt: '7:10' })} onChange={onChange} />,
+            );
+            fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 1' }));
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ closesAt: undefined })]);
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.not.objectContaining({ closesAtTimes: expect.anything() }),
+            ]);
+            for (const closesAt of ['17:10', '']) {
+                rerender(<TitleTagRulesEditor value={rowWith({ closesAt })} onChange={onChange} />);
+                expect(screen.queryByRole('button', { name: /app\.removeCloseTime/ })).toBeNull();
+            }
+        });
+
+        test.each([
+            [
+                'a list of blanks falls back to closesAt, as the matcher does',
+                { closesAt: '17:10', closesAtTimes: ['', ''] },
+                ['17:10'],
+                [false],
+            ],
+            ['an empty list falls back to closesAt', { closesAt: '17:10', closesAtTimes: [] }, ['17:10'], [false]],
+            ['blank rows with no closesAt at all stay as rows', { closesAtTimes: ['', ' '] }, ['', ''], [false, false]],
+            [
+                'an invalid closesAt behind a list of blanks is invalid',
+                { closesAt: 'x', closesAtTimes: [''] },
+                [''],
+                [true],
+            ],
+            ['a listed time is shown trimmed and is valid', { closesAtTimes: [' 18:10 '] }, ['18:10'], [false]],
+            [
+                'a list that is not a list marks the first row invalid, whatever closesAt says',
+                { closesAt: '17:10', closesAtTimes: '18:10' },
+                ['17:10'],
+                [true],
+            ],
+            [
+                'an object in place of the list marks the first row invalid',
+                { closesAtTimes: { 0: '18:10' } },
+                [''],
+                [true],
+            ],
+        ])('%s', (_name, over, values, invalids) => {
+            render(<TitleTagRulesEditor value={rowWith(over)} onChange={jest.fn()} />);
+            expect(values.map((_, i) => input(i + 1).value)).toEqual(values);
+            expect(values.map((_, i) => input(i + 1).classList.contains('input-error'))).toEqual(invalids);
+        });
+
+        test('only the first row of a malformed list is marked, and a null list is no list', () => {
+            const { rerender } = render(
+                <TitleTagRulesEditor value={rowWith({ closesAt: '17:10', closesAtTimes: 7 })} onChange={jest.fn()} />,
+            );
+            expect(screen.getAllByText('app.titleRuleClosesAtInvalid')).toHaveLength(1);
+            rerender(
+                <TitleTagRulesEditor
+                    value={rowWith({ closesAt: '17:10', closesAtTimes: null })}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect(screen.queryByText('app.titleRuleClosesAtInvalid')).toBeNull();
+            expect(input().value).toBe('17:10');
+        });
+
+        test('a rule that lists only several times (no closesAt) is a broad-spending rule when it auto-joins', () => {
+            render(
+                <TitleTagRulesEditor
+                    value={[
+                        {
+                            title: '',
+                            closesAtTimes: ['17:10', '18:10'],
+                            autoJoin: true,
+                            mustIncludeTags: [],
+                            shouldIncludeTags: [],
+                        },
+                    ]}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect(screen.getByText('app.titleRuleBroadWarning')).toBeTruthy();
         });
     });
 
@@ -421,7 +819,7 @@ describe('TitleTagRulesEditor', () => {
                 <TitleTagRulesEditor value={[row({ pics: 4, autoJoin: true })]} onChange={jest.fn()} />,
             );
             expect(screen.getByText('app.titleRuleBroadWarning')).toBeTruthy();
-            rerender(<TitleTagRulesEditor value={[row({ pics: 4, autoFill: true })]} onChange={jest.fn()} />);
+            rerender(<TitleTagRulesEditor value={[row({ pics: 4, autoSubmit: true })]} onChange={jest.fn()} />);
             expect(screen.getByText('app.titleRuleBroadWarning')).toBeTruthy();
         });
 

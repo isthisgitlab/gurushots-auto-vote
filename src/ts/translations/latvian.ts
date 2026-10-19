@@ -5,7 +5,7 @@ export const common = {
     global: 'Globāli:',
     languageEnglish: 'English',
     languageLatvian: 'Latviešu',
-    loading: 'Ielādē...',
+    loading: 'Ielādē…',
     closeModal: 'Aizvērt',
     logout: 'Iziet',
     mock: 'Testa režīms:',
@@ -26,11 +26,83 @@ export const common = {
 // Error / recovery UI
 export const errors = {
     boundaryTitle: 'Kaut kas nogāja greizi',
+    logoutNotSavedStopped: 'Automātiskā balsošana ir apturēta. Palaid to vēlreiz, lai turpinātu balsot.',
+    logoutFailedTitle: 'Izrakstīšanās nepabeidzās',
+    logoutFailedDetail:
+        'Izrakstoties kaut kas nogāja greizi, tāpēc tu, iespējams, joprojām esi pieteicies. Mēģini vēlreiz; sīkāka informācija ir žurnālos.',
+    logoutNotSavedTitle: 'Tu joprojām esi pieteicies',
+    logoutNotSavedDetail:
+        'Izrakstīšanos neizdevās saglabāt, jo saglabātie uzstādījumi šobrīd netiek izmantoti. Tava pieteikšanās netika mainīta. Mēģini vēlreiz pēc brīža; ja tas atkārtojas, izpildi paziņojumā par uzstādījumiem norādīto.',
     dismiss: 'Aizvērt',
     reload: 'Pārlādēt',
     fetchFailed: 'Neizdevās sazināties ar GuruShots — mēģinām vēlreiz automātiski.',
     actionInvalidArgs:
         'Darbību neizdevās izpildīt: izaicinājuma vai foto identifikators nav derīgs. Pārlādē lietotni un mēģini vēlreiz.',
+    actionFailed:
+        'Darbība netika pabeigta. Lietotne vai GuruShots to nevarēja pabeigt. Mēģini vēlreiz pēc brīža; ja tas atkārtojas, sīkāka informācija ir žurnālos.',
+    compactToggleFailed:
+        'Kartīšu izkārtojums netika mainīts. Uzstādījumu nevarēja saglabāt, tāpēc kartītes paliek, kā bija. Mēģini vēlreiz pēc brīža.',
+    loginFailed:
+        'Pieteikšanās neizdevās. GuruShots to nepieņēma vai nebija sasniedzams. Pārbaudi lietotājvārdu, paroli un savienojumu un mēģini vēlreiz.',
+    invalidCredentials:
+        'Pieteikšanās neizdevās. GuruShots nepieņēma lietotājvārdu vai paroli. Pārbaudi tos un mēģini vēlreiz.',
+    notLoggedIn: 'Tu neesi pieteicies. Sesija ir beigusies vai nav sākta. Piesakies vēlreiz, lai turpinātu.',
+    turboNotEarned: 'Turbo netika nopelnīts. Cīņas beidzās bez uzvaras. Mēģini vēlreiz vēlāk.',
+    turboNoBattles: 'Šobrīd nav cīņu, ko spēlēt. GuruShots nav sagatavojis nevienu. Mēģini vēlreiz pēc dažām minūtēm.',
+    turboRunInProgress: 'Šajā izaicinājumā Turbo spēle jau notiek. Pagaidi, kamēr tā beidzas, un mēģini vēlreiz.',
+    turboModeUnknown:
+        'Turbo veids vēl nav zināms. GuruShots nav paziņojis lietotnei, kāda ir šī Turbo spēle. Mēģini vēlreiz pēc brīža.',
+    snapNeedsModel:
+        'Snap netika spēlēts. Tam vajadzīgs vizuālais modelis, kura šajā versijā nav. Turbo uzstādījumos ieslēdz „Atbildēt Snap ar Jā bez vizuālā modeļa”, spēlē to GuruShots vai izmanto versiju ar modeli.',
+    snapNotOffered:
+        'Snap netika spēlēts. GuruShots to šim izaicinājumam vairs nepiedāvā. Atsvaidzini sarakstu, lai redzētu pašreizējo Turbo.',
+    snapUnanswerable:
+        'Snap netika pabeigts. Lietotne nevarēja atbildēt uz jautājumu par fotoattēlu. Mēģini vēlreiz vēlāk vai spēlē to GuruShots.',
+    snapInterrupted:
+        'Snap netika pabeigts. Spēle tika pārtraukta vai GuruShots neapstiprināja atbildi. Mēģini vēlreiz vēlāk; spēle turpināsies no pārtraukuma vietas.',
+    challengeNoLongerActive:
+        'Šis izaicinājums vairs nav atvērts, tāpēc darbība netika veikta. Atsvaidzini sarakstu, lai redzētu pašreizējos izaicinājumus.',
+    boostFailed: 'Boost netika piemērots. GuruShots to noraidīja vai neatbildēja. Mēģini vēlreiz pēc brīža.',
+    pinFailed: 'Piespraudi neizdevās saglabāt. Uzstādījumu failu neizdevās ierakstīt. Mēģini vēlreiz.',
+    pinCapReached:
+        'Piespraudi neizdevās saglabāt. Pārāk daudziem izaicinājumiem jau ir piespraudes, un tās tiek noņemtas, kad izaicinājums beidzas. Noņem piespraudi citā izaicinājumā un mēģini vēlreiz.',
+    pickNotEnoughSlots:
+        'Foto netika iesniegti. Izaicinājumā ir mazāk brīvo vietu nekā izvēlēto foto, jo tā iesniegumi ir mainījušies. Noņem foto, līdz skaits ietilpst brīvajās vietās, un iesniedz vēlreiz.',
+    pickAlreadyEntered:
+        'Foto netika iesniegti. Viens no tiem jau ir iesniegts šajā izaicinājumā. Foto saraksts tiek atsvaidzināts, un foto, ko tas atzīmē kā nederīgus, no izvēles tiek izņemti. Pārbaudi izvēli un iesniedz vēlreiz.',
+    pickRejected:
+        'Foto netika iesniegti. GuruShots tos noraidīja, tāpēc kāds foto šim izaicinājumam, iespējams, vairs neder. Izvēlies citus foto un mēģini vēlreiz.',
+    pickBusy:
+        'Foto netika iesniegti. Šajā izaicinājumā foto iesniegšana jau notiek. Pagaidi, kamēr tā beidzas, un pārbaudi kartīti.',
+    pickUnclear:
+        'Foto, iespējams, tika iesniegti. GuruShots neatbildēja skaidri, un kartīte tiek atsvaidzināta. Pārbaudi kartīti, pirms mēģini vēlreiz.',
+    suggestNoChosenEntered:
+        'Nav ko ieteikt. Ir ieslēgts uzstādījums „Iesniegt tikai izvēlētos foto”, un visi izvēlētie foto jau ir iesniegti. Poga „Izvēlēties foto…” šo uzstādījumu nepiemēro, tāpēc izvēlies jebkuru foto šeit vai atjauno izvēlētos foto.',
+    suggestNoChosenUnusable:
+        'Nav ko ieteikt. Ir ieslēgts uzstādījums „Iesniegt tikai izvēlētos foto”, un neviens izvēlētais foto šim izaicinājumam neder. Izvēlies jebkuru foto šeit vai atjauno izvēlētos foto.',
+    suggestNoMatch:
+        'Nav ko ieteikt. Neviens foto neatbilst taviem obligātajiem tagiem. Atbrīvo tagus vai izvēlies foto pats.',
+    suggestNoEligible:
+        'Nav ko ieteikt. Tavā bibliotēkā šobrīd nav foto, ko šis izaicinājums pieņem. Augšupielādē foto vai pamēģini meklēšanu.',
+    suggestBusy: 'Foto netika sarindoti. Cita rindošana vēl turpinās. Pagaidi, kamēr tā beidzas, un mēģini vēlreiz.',
+    suggestAccountChanged:
+        'Foto netika sarindoti. Rindošanas laikā tu nomainīji kontu. Aizver šo dialoglodziņu un atver to vēlreiz.',
+    suggestChallengeEnded:
+        'Foto netika sarindoti. Izaicinājums ir beidzies vai to nevarēja nolasīt. Aizver šo dialoglodziņu un atver kartīti vēlreiz.',
+    suggestFailed: 'Foto netika sarindoti. GuruShots neatbildēja vai rindošana nepabeidzās. Mēģini vēlreiz pēc brīža.',
+    fetchChallengesFailed: 'Izaicinājumus neizdevās ielādēt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
+    accountChanged: 'Saraksta ielādes laikā mainījās konts, tāpēc rezultāts tika atmests. Atver sarakstu vēlreiz.',
+    tokenNotSaved:
+        'Pieteikšanās tika pieņemta, bet to neizdevās saglabāt. Uzstādījumus neizdevās ierakstīt. Pārbaudi uzstādījumu faila atļaujas un brīvo vietu diskā (iemeslu var norādīt arī uzstādījumu paziņojums) un piesakies vēlreiz.',
+    tokenNotSavedAndroid:
+        'Pieteikšanās tika pieņemta, bet to neizdevās saglabāt. Ierīces uzstādījumu krātuve to nepieņēma. Restartē lietotni un piesakies vēlreiz.',
+    webShellToken:
+        'Šī lapa nevar sazināties ar tīmekļa serveri. Tā ir atvērta bez šīs palaišanas piekļuves tokena, vai serveris kopš tā laika ir restartēts. Atver adresi, ko izvadīja pnpm web.',
+    accountCheckFailed: 'Kontu neizdevās pārbaudīt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
+    boundaryBody:
+        'Daļa lietotnes pārstāja darboties. Informācija ir saglabāta žurnālos. Pārlādē lietotni, lai turpinātu; ja tas atkārtojas, žurnālos redzams, kas neizdevās.',
+    votingFailed:
+        'Pēdējais balsošanas cikls neizdevās. GuruShots neatbildēja vai noraidīja pieprasījumu. Automātiskā balsošana mēģinās vēlreiz nākamajā ciklā; sīkāka informācija ir žurnālos.',
 };
 // First-run onboarding
 export const onboarding = {
@@ -72,7 +144,7 @@ export const menu = {
     aboutNode: 'Node.js',
     aboutDescription:
         'GuruShots Auto Vote — Electron lietotne automātiskai balsošanai GuruShots izaicinājumos ar kopīgu grafisko un komandrindas saskarni (atbalsta gan īsto, gan testa režīmu)',
-    checkForUpdates: 'Pārbaudīt atjauninājumus...',
+    checkForUpdates: 'Pārbaudīt atjauninājumus…',
     noUpdates: 'Nav atjauninājumu',
     noUpdatesMessage: 'Tev jau ir jaunākā versija.',
     updateError: 'Atjaunināšanas kļūda',
@@ -89,8 +161,8 @@ export const quitGuard = {
 // Login screen specific
 export const login = {
     heading: 'Pieteikšanās',
-    loadingModeInfo: 'Ielādē informāciju par režīmu...',
-    loggingIn: 'Piesakās...',
+    loadingModeInfo: 'Ielādē informāciju par režīmu…',
+    loggingIn: 'Piesakās…',
     loginButton: 'Pieteikties',
     mockMode: 'Testa režīms',
     mockModeInfo: 'Testa režīms: lietotne izmanto simulētus datus. Der jebkāds lietotājvārds un parole.',
@@ -119,6 +191,9 @@ export const app = {
     autovoteRunning: 'Automātiskā balsošana darbojas',
     autovoteRunningDesc:
         'Iekšējs — atceras, vai automātiskā balsošana bija ieslēgta, lai pēc lietotnes restartēšanas tā atsāktos pati',
+    autovoteStartedLaunch: 'Palaišanas reize, kurā sākta automātiskā balsošana',
+    autovoteStartedLaunchDesc:
+        'Iekšējs — lietotnes palaišanas reize, kurā automātiskā balsošana pēdējo reizi tika sākta, lai lietotne atšķirtu šajā reizē sākto balsošanu no tādas, kas vēl gaida atsākšanu',
     skipUpdateVersion: 'Izlaistā atjauninājuma versija',
     skipUpdateVersionDesc:
         'Iekšējs — atjauninājuma versija, ko lietotājs izvēlējās izlaist; lietotne šo versiju nepiedāvās, kamēr šī vērtība nav notīrīta',
@@ -134,12 +209,31 @@ export const app = {
     deadlineTimelineApprox: 'aptuveni — var mainīties, pievienojot foto',
     deadlineNext: 'Nākamā',
     deadlineDue: 'jau tagad',
-    deadlineActionAutoFill: 'Automātiskā iesniegšana',
+    deadlineActionAutoSubmit: 'Automātiskā iesniegšana',
     deadlineActionBoost: 'Boost',
     deadlineActionTurbo: 'Turbo',
-    deadlineActionEmergencyFill: 'Ārkārtas iesniegšana',
-    boostConflictWarning:
-        'Boost nevar izmantot: tavam vienīgajam foto jau ir Turbo, bet abi nevar būt vienam foto. Pievieno otru foto, lai izmantotu abus.',
+    deadlineActionEmergencySubmit: 'Ārkārtas iesniegšana',
+    conflictFlag:
+        '{kind} nevar izmantot: vienīgajam foto jau ir {other} (abi nevar būt vienam foto). Pievieno vēl vienu foto, lai izmantotu abus.',
+    conflictPinReleases:
+        '{kind} gaida: foto ir piesprausts {other}. Ja {other} līdz {time} nebūs gatavs, {kind} tiks izmantots šim foto. Noņem piespraudi vai pievieno vēl vienu foto, lai {kind} izmantotu agrāk.',
+    conflictPinNever:
+        '{kind} netiks izmantots: foto ir piesprausts {other}, un piespraude neatkāpsies (Ārkārtas iesniegšana ir izslēgta vai {other} ir gatavs). Noņem piespraudi vai pievieno vēl vienu foto.',
+    pinForBoost: 'Piespraust Boost',
+    pinForTurbo: 'Piespraust Turbo',
+    pinnedForBoost: 'Piesprausts Boost',
+    pinnedForTurbo: 'Piesprausts Turbo',
+    pinClear: 'Noņemt piespraudi',
+    pinNotApplying: 'Piespraustais {kind} foto netiek piemērots. Atver kartīti, lai uzzinātu vairāk.',
+    pinNotApplyingBoth: 'Piespraustie {boost} un {turbo} foto netiek piemēroti. Atver kartīti, lai uzzinātu vairāk.',
+    pinNotApplyingShort: '{kind} piespraude netiek piemērota',
+    pinNotApplyingShortBoth: '{boost} un {turbo} piespraudes netiek piemērotas',
+    pinGoneNote:
+        'Piespraustā {kind} foto šajā izaicinājumā pašlaik nav, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus. Piespraud citu foto vai noņem piespraudi.',
+    pinConflictNote:
+        'Piespraustajam {kind} foto jau ir {other}, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus. Piespraud citu foto vai noņem piespraudi.',
+    pinSwapWarning:
+        'Šis foto ir piesprausts {kind}. Ja to apmainīsi, piespraudei nebūs foto, kam piemērot {kind}, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus.',
     statusHeaderActive: 'aktīvi',
     statusHeaderBoosts: 'Boost gatavi',
     statusHeaderTurbos: 'Turbo gatavi',
@@ -154,23 +248,29 @@ export const app = {
         'Balvas saņem pirmajā balsošanas ciklā pēc tam, kad beidzies stundu garais gaidīšanas periods.',
     statusHeaderNotRunning: 'automātiskā balsošana izslēgta',
     statusHeaderNextApprox: 'aptuveni — pārrēķina katrā ciklā',
+    statusHeaderResumesIn: 'Atsāksies pēc',
+    statusHeaderResumesInHint:
+        'Pēc palaišanas lietotne uzgaida, pirms atsāk automātisko balsošanu, lai vari vispirms pārbaudīt uzstādījumus.',
     settingHelpLabel: 'Ko tas nozīmē?',
     autoJoinBadge: 'automātiskā pievienošanās ieslēgta',
     autoJoinBadgeTitle:
         'Automātiskā pievienošanās darbojas katrā balsošanas ciklā, kamēr ieslēgta automātiskā balsošana. To var pielāgot sadaļā Uzstādījumi › Automātiskā pievienošanās.',
     boostTime: 'Boost laiks',
     boostTimeDesc:
-        'Izmanto Boost, kad Boost laika atskaitē ir atlicis šis laiks. Neattiecas uz Boost, kas atbloķēts ar atslēgu, — tam nav laika atskaites, un tam ir atsevišķs uzstādījums „Boost laiks (atbloķēts ar atslēgu)”.',
+        'Izmanto Boost, kad Boost laika atskaitē ir atlicis šis laiks. Neattiecas uz Boost, kas atbloķēts ar atslēgu, — tam nav laika atskaites, un tam ir atsevišķs uzstādījums „Boost laiks (atbloķēts ar atslēgu)”. Darbvirsmas lietotnē: ja dators pāriet miega režīmā, kamēr darbojas automātiskā balsošana, Boost, kuru būtu jāizmanto tuvāko 30 minūšu laikā, tiek izmantots uzreiz, ja vien „Boost pirms miega” nav izslēgts.',
     boostTimeHelp:
         'Šis ir laiks, kas atlicis līdz Boost loga beigām. Uzstādi 0, lai izslēgtu Boost izmantošanu pēc laika, — tad lietotne Boost ar laika atskaiti automātiski neizmantos vispār. Ņem vērā: šeit 0 nozīmē „izslēgts” atšķirībā no redzamības mērķa uzstādījumiem, kur 0 nozīmē „sekot slieksnim”. Attiecas tikai uz Boost ar savu laika atskaiti; Boost, kas atbloķēts ar atslēgu, izmanto uzstādījumu „Boost laiks (atbloķēts ar atslēgu)”.',
     keyUnlockedBoostTime: 'Boost laiks (atbloķēts ar atslēgu)',
     keyUnlockedBoostTimeDesc:
-        'Atsevišķs logs Boost, kas atbloķēts ar atslēgu, — tam nav savas laika atskaites. Tā kā tas nekad nebeidzas, lietotne to izmanto tikai tad, kad līdz izaicinājuma beigām atlicis šis laiks, lai tas nostrādātu pēc iespējas vēlāk. Uzstādījums „Boost laiks” uz tiem neattiecas. 0 = izslēgts.',
+        'Atsevišķs logs Boost, kas atbloķēts ar atslēgu, — tam nav savas laika atskaites. Tā kā tas nekad nebeidzas, lietotne to izmanto tikai tad, kad līdz izaicinājuma beigām atlicis šis laiks, lai tas nostrādātu pēc iespējas vēlāk. Uzstādījums „Boost laiks” uz tiem neattiecas. 0 = izslēgts. Darbvirsmas lietotnē: ja dators pāriet miega režīmā, kamēr darbojas automātiskā balsošana, Boost, kuru būtu jāizmanto tuvāko 30 minūšu laikā, tiek izmantots uzreiz, ja vien „Boost pirms miega” nav izslēgts.',
     keyUnlockedBoostTimeHelp:
         'Attiecas tikai uz Boost, kas atbloķēts ar atslēgu (bez savas laika atskaites). Uzstādi 0, lai lietotne to nekad neizmantotu automātiski. Šis laiks nav saistīts ar „Boost laiks” — viens otru tie neaizstāj. Tāpat kā citos laika uzstādījumos, 0 nozīmē „izslēgts”.',
     boostFreshEntryWait: 'Gaidīt pirms Boost jaunam foto',
     boostFreshEntryWaitDesc:
-        'Lietotne aiztur Boost, līdz foto, kuram tas paredzēts, ir izaicinājumā vismaz šo laiku, jo Boost uzreiz pēc foto iesniegšanas lielākoties aiziet zudumā. Ja ieslēgts „Boost jaunam iesniegtam foto”, lietotne vispirms iesniedz foto un izmanto Boost, kad šis laiks pagājis. Boost nekad netiek aizturēts ilgāk par tā termiņu. 0 = Boost uzreiz.',
+        'Lietotne aiztur Boost, līdz foto, kuram tas paredzēts, ir izaicinājumā vismaz šo laiku, jo Boost uzreiz pēc foto iesniegšanas lielākoties aiziet zudumā. Ja ieslēgts „Boost jaunam iesniegtam foto”, lietotne vispirms iesniedz foto un izmanto Boost, kad šis laiks pagājis. Boost nekad netiek aizturēts ilgāk par tā termiņu. 0 = Boost uzreiz. Darbvirsmas lietotnē: ja vien „Boost pirms miega” nav izslēgts, gaidīšana tiek izlaista, ja dators pāriet miega režīmā, kamēr Boost ir jāizmanto, lai Boost neaizietu zudumā.',
+    boostOnSleep: 'Boost pirms miega',
+    boostOnSleepDesc:
+        'Darbvirsmas lietotnē: ja dators pāriet miega režīmā, kamēr darbojas automātiskā balsošana, Boost, kuru būtu jāizmanto tuvāko 30 minūšu laikā, tiek izmantots uzreiz, lai tas neaizietu zudumā, kamēr dators guļ. Tas arī saīsina „Gaidīt pirms Boost jaunam foto”. Izslēdz, lai Boost paliktu savā laikā, pat ja tas var aiziet zudumā.',
     voteBeforeBoost: 'Uzpildīt redzamību pirms Boost',
     voteBeforeBoostDesc:
         'Īsi pirms automātiskās Boost izmantošanas nobalso šajā izaicinājumā līdz 100 % redzamībai, lai Boost nostrādātu uz pilnībā redzama foto, nevis uz tāda, kura redzamība jau sarukusi.',
@@ -189,12 +289,15 @@ export const app = {
         'Cik ilgi pirms Boost izmantošanas sākas uzpilde. Atvēli pietiekami laika vairākiem balsošanas cikliem — redzamība nesasniedz 100 % vienā piegājienā.',
     autoBoost: 'Automātiski izmantot Boost',
     autoBoostDesc: 'Automātiski izmanto Boost šajā izaicinājumā, kad tā Boost logs drīz aizvērsies.',
-    protectUncertainAutoFills: 'Saudzēt automātiski iesniegtos foto bez skaidras atbilstības',
-    protectUncertainAutoFillsDesc:
+    protectUncertainAutoSubmits: 'Saudzēt automātiski iesniegtos foto bez skaidras atbilstības',
+    protectUncertainAutoSubmitsDesc:
         'Neizmantot Boost un Turbo automātiski iesniegtiem foto bez atbilstības tēmai. Izņēmumi: ārkārtas darbības, Boost termiņa beigas un atvērtas tēmas.',
     turbo: 'Turbo',
     autoTurbo: 'Automātiski iegūt Turbo',
     autoTurboDesc: 'Automātiski spēlē Turbo minispēli, lai iegūtu bonusu',
+    snapYesWithoutModel: 'Atbildēt Snap ar „Jā” bez vizuālā modeļa',
+    snapYesWithoutModelDesc:
+        'Versijā bez vizuālā modeļa Snap Turbo spēlē, uz katru fotoattēlu atbildot „Jā”; Turbo iegūst ar jebkuru atbildi. Ja modelis ir, atbild modelis. Pēc noklusējuma izslēgts.',
     useTurbo: 'Automātiski izmantot Turbo',
     useTurboDesc: 'Automātiski izmanto iegūto Turbo vienam no taviem foto',
     turboTime: 'Turbo izmantošanas laiks',
@@ -203,44 +306,46 @@ export const app = {
         'Laiks līdz beigām, kad lietotne izmanto iegūto Turbo. Uzstādi 0, lai izslēgtu Turbo izmantošanu pēc laika. Tāpat kā citos laika uzstādījumos, 0 šeit nozīmē „izslēgts”, nevis „sekot slieksnim”.',
     turboImageIndex: 'Turbo foto',
     turboImageIndexDesc:
-        'Kuram foto izmantot Turbo: 1 = pirmajam, 2 = otrajam utt. 0 = pēdējam foto. Ja šim foto jau ir Boost, Turbo pāriet uz iepriekšējo foto (no 1. pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusējuma vērtība ir 1, tāpēc, ja abi automātiskie režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto.',
+        'Kuram foto izmantot Turbo: 1 = pirmajam, 2 = otrajam utt. 0 = pēdējam foto. Ja šim foto jau ir Boost vai tas ir piesprausts Boost, Turbo pāriet uz iepriekšējo foto (no 1. pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusējuma vērtība ir 1, tāpēc, ja abi automātiskie režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto. Foto, kas izaicinājuma kartītē piesprausts Turbo, ir svarīgāks par šo uzstādījumu. Foto, kas piesprausts Boost, Turbo nesaņem, kamēr piespraude bloķē: ja Boost vēl nav gatavs, tas ilgst, līdz Turbo nonāk ārkārtas iesniegšanas laikā (ja tā izslēgta, nekad nebeidzas).',
     boostImageIndex: 'Boost foto',
     boostImageIndexDesc:
-        'Kuram foto izmantot Boost: 1 = pirmajam, 2 = otrajam utt. 0 = pēdējam foto. Ja šim foto jau ir Turbo, Boost pāriet uz iepriekšējo foto (no 1. pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusējuma vērtība ir 1, tāpēc, ja abi automātiskie režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto.',
-    boostFillNew: 'Boost jaunam iesniegtam foto',
-    boostFillNewDesc:
+        'Kuram foto izmantot Boost: 1 = pirmajam, 2 = otrajam utt. 0 = pēdējam foto. Ja šim foto jau ir Turbo vai tas ir piesprausts Turbo, Boost pāriet uz iepriekšējo foto (no 1. pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusējuma vērtība ir 1, tāpēc, ja abi automātiskie režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto. Foto, kas izaicinājuma kartītē piesprausts Boost, ir svarīgāks par šo uzstādījumu. Foto, kas piesprausts Turbo, Boost nesaņem, kamēr piespraude bloķē: ja Turbo vēl nav iegūts, tas ilgst, līdz Boost nonāk ārkārtas iesniegšanas laikā (ja tā izslēgta, nekad nebeidzas).',
+    boostNewSubmit: 'Boost jaunam iesniegtam foto',
+    boostNewSubmitDesc:
         'Ja ieslēgts, lietotne tieši pirms Boost iesniedz jaunu foto (pēc taviem automātiskās iesniegšanas tagu noteikumiem) un izmanto Boost šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai piemērota foto, Boost saņem tavs norādītais Boost foto.',
-    boostFillNewOnConflict: 'Boost jaunam iesniegtam foto tikai konflikta gadījumā',
-    boostFillNewOnConflictDesc:
-        'Ja ieslēgts, lietotne iesniedz jaunu foto un izmanto tam Boost tikai tad, ja tavam vienīgajam esošajam foto jau ir Turbo (tāpēc Boost tam nevar piešķirt). Parasti Boost joprojām saņem tavs esošais foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Boost šajā ciklā izlaiž — rezerves varianta nav, jo tavam vienīgajam foto jau ir Turbo. Ja ieslēgta iepriekšējā opcija, šo neņem vērā, jo tā vienmēr iesniedz jaunu foto.',
-    turboFillNew: 'Turbo jaunam iesniegtam foto',
-    turboFillNewDesc:
+    boostNewSubmitOnConflict: 'Boost jaunam iesniegtam foto tikai konflikta gadījumā',
+    boostNewSubmitOnConflictDesc:
+        'Ja ieslēgts, lietotne iesniedz jaunu foto un izmanto tam Boost tikai tad, ja Boost nevar piešķirt nevienam esošajam foto — katram ir Turbo vai tas ir piesprausts Turbo (otrai darbībai piesprausts foto ir konflikts). Parasti Boost joprojām saņem tavs esošais foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Boost šajā ciklā izlaiž. Vienīgais izņēmums: kad Turbo piesprausts foto ārkārtas iesniegšanas laikā atkāpjas, jo Turbo vēl nav gatavs, Boost tiek piešķirts šim foto. Ja ieslēgta iepriekšējā opcija, šo neņem vērā, jo tā vienmēr iesniedz jaunu foto.',
+    turboNewSubmit: 'Turbo jaunam iesniegtam foto',
+    turboNewSubmitDesc:
         'Ja ieslēgts, lietotne tieši pirms Turbo iesniedz jaunu foto (pēc taviem automātiskās iesniegšanas tagu noteikumiem) un izmanto Turbo šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai piemērota foto, Turbo saņem tavs norādītais Turbo foto; ja vēl nav neviena foto, Turbo šajā ciklā izlaiž.',
-    turboFillNewOnConflict: 'Turbo jaunam iesniegtam foto tikai konflikta gadījumā',
-    turboFillNewOnConflictDesc:
-        'Ja ieslēgts, lietotne iesniedz jaunu foto un izmanto tam Turbo tikai tad, ja tavam vienīgajam esošajam foto jau ir Boost (tāpēc Turbo tam nevar piešķirt). Parasti Turbo joprojām saņem tavs esošais foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Turbo šajā ciklā izlaiž — rezerves varianta nav, jo tavam vienīgajam foto jau ir Boost. Ja ieslēgta iepriekšējā opcija, šo neņem vērā, jo tā vienmēr iesniedz jaunu foto.',
+    turboNewSubmitOnConflict: 'Turbo jaunam iesniegtam foto tikai konflikta gadījumā',
+    turboNewSubmitOnConflictDesc:
+        'Ja ieslēgts, lietotne iesniedz jaunu foto un izmanto tam Turbo tikai tad, ja Turbo nevar piešķirt nevienam esošajam foto — katram ir Boost vai tas ir piesprausts Boost (otrai darbībai piesprausts foto ir konflikts). Parasti Turbo joprojām saņem tavs esošais foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Turbo šajā ciklā izlaiž. Vienīgais izņēmums: kad Boost piesprausts foto ārkārtas iesniegšanas laikā atkāpjas, jo Boost vēl nav gatavs, Turbo tiek piešķirts šim foto. Ja ieslēgta iepriekšējā opcija, šo neņem vērā, jo tā vienmēr iesniedz jaunu foto.',
     playAutoTurbo: 'Spēlēt Turbo minispēli, lai iegūtu Turbo',
     autoTurboRunsWithAutovote: 'Automātiskā balsošana jau spēlē Turbo minispēli katrā ciklā',
     earnTurbo: 'Iegūt Turbo',
     applyTurboToThisEntry: 'Izmantot savu Turbo šim foto',
     applyBoostToThisEntry: 'Izmantot savu Boost šim foto',
-    autoFill: 'Automātiski iesniegt trūkstošos foto',
-    autoFillDesc:
+    autoSubmit: 'Automātiski iesniegt trūkstošos foto',
+    autoSubmitDesc:
         'Iesniegt papildu foto, kad tuvojas izaicinājuma termiņš, pēc zemāk norādītā grafika. Katrā pārbaudes ciklā iesniedz vienu foto.',
-    autoFillSchedule: 'Automātiskās iesniegšanas grafiks',
-    autoFillScheduleDesc:
-        'Uzstādi laiku 0h 0m, lai izslēgtu attiecīgo foto. Katra rinda nozīmē: kad līdz beigām atlicis šis laiks, jābūt iesniegtiem vismaz tik foto — „Foto 2 ≤ 48h” iesniedz tavu 2. foto, kad atlikušas 48 stundas. Ja esi atpalicis no grafika (lietotne palaista vēlu vai laiks ir garāks par visu izaicinājumu), lietotne grafiku panāk, jau no sākuma iesniedzot vienu foto katrā ciklā. Ja izaicinājums atļauj mazāk foto, nekā aptver grafiks, viss grafiks nobīdās uz beigām, lai pēdējā foto laiks attiektos uz izaicinājuma pēdējo foto: piemēram, izaicinājumā ar 2 foto 2. foto izmanto Foto 4 laiku, bet izaicinājumā ar 3 foto 2. foto izmanto Foto 3 laiku un 3. foto — Foto 4 laiku.',
-    autoFillScheduleShiftHint:
+    autoSubmitSchedule: 'Automātiskās iesniegšanas grafiks',
+    autoSubmitScheduleDesc:
+        'Uzstādi laiku 0h 0min, lai izslēgtu attiecīgo foto. Katra rinda nozīmē: kad līdz beigām atlicis šis laiks, jābūt iesniegtiem vismaz tik foto — „Foto 2 ≤ 48h” iesniedz tavu 2. foto, kad atlikušas 48 stundas. Ja esi atpalicis no grafika (lietotne palaista vēlu vai laiks ir garāks par visu izaicinājumu), lietotne grafiku panāk, jau no sākuma iesniedzot vienu foto katrā ciklā. Ja izaicinājums atļauj mazāk foto, nekā aptver grafiks, viss grafiks nobīdās uz beigām, lai pēdējā foto laiks attiektos uz izaicinājuma pēdējo foto: piemēram, izaicinājumā ar 2 foto 2. foto izmanto Foto 4 laiku, bet izaicinājumā ar 3 foto 2. foto izmanto Foto 3 laiku un 3. foto — Foto 4 laiku.',
+    autoSubmitScheduleShiftHint:
         'Šis izaicinājums atļauj {0} foto — mazāk, nekā aptver grafiks, tāpēc laiki nobīdās uz beigām: pēdējais foto izmanto Foto {1} laiku.',
-    autoFillScheduleImage: 'Foto',
-    autoFillScheduleOff: 'laiks nav uzstādīts — foto var iesniegt, panākot kādu vēlāku foto',
-    autoFillScheduleEmpty: 'Visi foto ir izslēgti — automātiskā iesniegšana neko neiesniegs.',
-    autoFillScheduleDominated: 'nekad nenostrādās (vēlākam foto jau ir tāds pats vai garāks laiks)',
-    autoFillScheduleOutOfRange: 'laiks nedrīkst pārsniegt 30 dienas',
+    autoSubmitScheduleImage: 'Foto',
+    autoSubmitScheduleOff: 'laiks nav uzstādīts — foto var iesniegt, panākot kādu vēlāku foto',
+    autoSubmitScheduleEmpty: 'Visi foto ir izslēgti — automātiskā iesniegšana neko neiesniegs.',
+    autoSubmitScheduleDominated: 'nekad nenostrādās (vēlākam foto jau ir tāds pats vai garāks laiks)',
+    autoSubmitScheduleOutOfRange: 'laiks nedrīkst pārsniegt 30 dienas',
     settingsSaveError: 'Dažus uzstādījumus neizdevās saglabāt — pārbaudi izceltās vērtības un mēģini vēlreiz.',
     unitPercent: '%',
     unitMinutes: 'min',
     unitHours: 'h',
+    unitSeconds: 's',
+    unitMilliseconds: 'ms',
     unitCoins: 'monētas',
     unitVotes: 'balsis',
     unitKeys: 'atslēgas',
@@ -263,8 +368,11 @@ export const app = {
     currencySwapTitle: 'Apmainīt šo foto?',
     currencySwapBody:
         'Pašreizējo foto aizstās foto, ko lietotne izvēlējās šim izaicinājumam. Aizstāto foto nevar apmainīt atpakaļ.',
+    currencySwapChoose: 'Izvēlēties citu foto…',
     currencySwapCurrent: 'Pašreizējais foto',
     currencySwapReplacement: 'Jaunais foto',
+    currencySwapYourPick: 'Tavs izvēlētais foto',
+    currencySwapChosenBody: 'Pašreizējo foto aizstās tavs izvēlētais foto. Aizstāto foto nevar apmainīt atpakaļ.',
     currencySwapBoostedWarning:
         'Šim foto ir Boost vai Turbo. Tas paliek pie šī foto — jaunajam foto tā nebūs, un šajā izaicinājumā to vairs nevarēs izmantot, ja vien šo foto neapmainīsi atpakaļ.',
     currencySwapBack: 'Apmainīt atpakaļ',
@@ -286,8 +394,12 @@ export const app = {
         'Neizdevās pārbaudīt atlikumu, tāpēc nekas netika iztērēts. Pēc brīža mēģini vēlreiz.',
     currencyOutcomeNoAlternative: 'Nav cita foto, ar ko apmainīt, — visi derīgie foto šeit jau izmantoti.',
     currencyOutcomeStaleCandidate:
-        'Ieteiktais foto vairs nav aktuāls. Vēlreiz nospied „Apmainīt”, lai saņemtu jaunu ieteikumu.',
+        'Apmaiņas piedāvājums vairs nav aktuāls vai ir mainījies, tāpēc nekas netika iztērēts. Sāc apmaiņu no jauna.',
+    currencyOutcomeAlreadyEntered:
+        'Šis foto jau ir iesniegts šajā izaicinājumā, tāpēc nekas netika iztērēts. Sāc apmaiņu no jauna ar citu foto.',
     currencyOutcomeBusy: 'Vēl notiek cita valūtas darbība — pēc brīža mēģini vēlreiz.',
+    currencyOutcomeUnclear:
+        'Uz pieprasījumu netika saņemta atbilde, tāpēc nav zināms, vai tas izdevās. Atsvaidzini izaicinājumu un pārbaudi to, pirms mēģini vēlreiz.',
     currencyOutcomeFailed: 'GuruShots noraidīja pieprasījumu. Mēģini vēlāk; ja tas atkārtojas, pārbaudi žurnālus.',
     scenario: 'Scenārijs',
     scenarioDesc:
@@ -331,12 +443,78 @@ export const app = {
     scenarioTemplateFailed: 'Šablona kopija netika saglabāta.',
     scenarioStatusMissing:
         'Scenārijs „{name}” vairs nepastāv — nekas netiek izpildīts. Izvēlies citu izaicinājuma uzstādījumos.',
+    scenarioStatusUnloaded:
+        'Scenārijs „{name}”: saglabāto progresu vēl nav izdevies ielādēt, tāpēc tā plāns ir apturēts. Lietotne mēģina vēlreiz; ja progress joprojām netiek ielādēts, atver lietotni no jauna. Nekas netiek atiestatīts.',
+    scenarioStatusUnloadedShort:
+        'Scenārijs „{name}” ir apturēts: saglabāto progresu vēl nav izdevies ielādēt. Lietotne mēģina vēlreiz.',
+    scenarioStatusUnloadedService:
+        'Scenārijs „{name}”: šim logam vēl nav izdevies ielādēt scenāriju progresu. Ja fona pakalpojums darbojas, plānus izpilda pakalpojums no savas kopijas. Ja progress joprojām netiek ielādēts, atver lietotni no jauna. Nekas netiek atiestatīts.',
+    scenarioStatusUnloadedServiceShort:
+        'Scenārijs „{name}”: šim logam vēl nav izdevies ielādēt scenāriju progresu. Ja fona pakalpojums darbojas, plānus izpilda pakalpojums no savas kopijas.',
     scenarioStatusCorrupt:
-        'Scenārija „{name}” progresu nevar nolasīt, tāpēc tas ir apturēts. Atiestati to (scenario-reset), lai sāktu plānu no jauna.',
+        'Scenārijs „{name}”: scenāriju saglabāto progresu nevar nolasīt, tāpēc visu izaicinājumu plāni ir apturēti. Ja atiestatīsi visu izaicinājumu progresu, plāni sāksies no jauna.',
+    scenarioStatusCorruptShort:
+        'Spied „{details}”, tad „{reset}” — scenārijs „{name}” ir apturēts: saglabāto progresu nevar nolasīt.',
+    scenarioStatusCorruptRecord:
+        'Scenārijs „{name}”: šī izaicinājuma saglabāto progresu nevar nolasīt, tāpēc tā plāns ir apturēts. Ja to atiestatīsi, plāns sāksies no jauna.',
+    scenarioStatusCorruptRecordShort:
+        'Spied „{details}”, tad „{reset}” — scenārijs „{name}” ir apturēts: šī izaicinājuma saglabāto progresu nevar nolasīt.',
     scenarioStatusPhase: 'fāze {phase}',
     scenarioStatusNotStarted: 'nākamajā palaišanā sāksies fāzē {phase}',
+    scenarioStatusNotStartedManual: 'sāksies fāzē {phase}, kad „Tikai manuāli” būs izslēgts',
     scenarioStatusNext: 'nākamā pārbaude pēc {time}',
+    scenarioStatusPausedManual: 'apturēts: ir ieslēgts „Tikai manuāli”, tāpēc neviens solis netiek izpildīts',
+    scenarioStatusPausedManualShort: 'apturēts („Tikai manuāli”)',
     scenarioStatusProblem: 'Pēdējais solis izlaists: {message}',
+    scenarioStatusSpendUnclear:
+        'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts. Tas netiks tērēts atkārtoti: nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
+    scenarioStatusSpendUnclearManual:
+        'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts. Tas netiks tērēts atkārtoti: kad „Tikai manuāli” būs izslēgts, nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
+    scenarioStatusSpendUnclearPendingManual:
+        'Lietotne nesaglabāja, vai „{action}” tika nosūtīts, tāpēc tas, iespējams, tika izpildīts. Tas netiks tērēts atkārtoti: kad „Tikai manuāli” būs izslēgts, nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
+    scenarioStatusSpendUnclearPending:
+        'Lietotne nesaglabāja, vai „{action}” tika nosūtīts, tāpēc tas, iespējams, tika izpildīts. Tas netiks tērēts atkārtoti: nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
+    scenarioStatusSpendStopped:
+        'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts, un tā noteikums tika apturēts, lai to netērētu atkārtoti. Pārbaudi izaicinājumu. {hint}',
+    scenarioStatusResetHint:
+        '{again} Lai scenāriju sāktu no jauna, izmanto pogu „Atiestatīt scenāriju” zemāk vai komandrindā (CLI) palaid scenario-reset --challenge={id}: tas var vēlreiz iztērēt darbību un atsāk scenārija tēriņu skaitīšanu.',
+    scenarioStatusSpendStoppedShort:
+        'Spied „{details}”, lai redzētu sīkāk — GuruShots neatbildēja uz „{action}”: tā noteikums tika apturēts, lai to netērētu atkārtoti.',
+    scenarioStatusSpendStoppedPending:
+        'Lietotne nesaglabāja, vai „{action}” tika nosūtīts un kas no tā iznāca (tā apstājās vai nevarēja saglabāt rezultātu), tāpēc tas, iespējams, tika izpildīts, un tā noteikums tika apturēts, lai to netērētu atkārtoti. Pārbaudi izaicinājumu. {hint}',
+    scenarioStatusSpendStoppedPendingShort:
+        'Spied „{details}”, lai redzētu sīkāk — lietotne nesaglabāja, vai „{action}” tika nosūtīts: tā noteikums tika apturēts, lai to netērētu atkārtoti.',
+    scenarioReset: 'Atiestatīt scenāriju…',
+    scenarioResetAll: 'Atiestatīt visu izaicinājumu progresu…',
+    scenarioResetTitle: 'Scenārija progresa atiestatīšana',
+    scenarioResetBody:
+        'Tas aizmirst, kurā scenārija vietā ir „{title}”: nākamajā balsošanas reizē plāns sāksies no pirmās fāzes, un noteikumi, kas jau darbojās, var darboties (un tērēt) vēlreiz. Tas var vēlreiz iztērēt darbību, kuras iznākums nav zināms (GuruShots neatbildēja vai lietotne to nevarēja saglabāt), un atsāk scenārija tēriņu skaitīšanu.',
+    scenarioResetAllBody:
+        'Saglabāto scenāriju progresu nevar nolasīt, tāpēc to var atiestatīt tikai visiem izaicinājumiem uzreiz. Pazūd katra izaicinājuma progress: kurā vietā ir katrs plāns, kuri noteikumi jau darbojās (tie var darboties un tērēt vēlreiz) un tēriņu skaitītāji. Darbība, kuras iznākums nav zināms (nebija atbildes vai lietotne to nevarēja saglabāt), var tikt iztērēta vēlreiz.',
+    scenarioResetConfirm: 'Atiestatīt',
+    scenarioResetWorking: 'Notiek atiestatīšana…',
+    scenarioResetBusy:
+        'Šī izaicinājuma scenārijs pašlaik tiek izpildīts vai saglabātais progress tiek atjaunināts (lietotnē vai citā procesā). Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
+    scenarioResetAllBusy:
+        'Saglabāto scenāriju progresu pašlaik atjaunina lietotne vai cits process. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
+    scenarioResetUnloaded:
+        'Saglabāto progresu vēl nav izdevies ielādēt, tāpēc nekas netika atiestatīts. Lietotne mēģina vēlreiz; ja progress joprojām netiek ielādēts, atver lietotni no jauna.',
+    scenarioResetReadable:
+        'Saglabāto progresu atkal var nolasīt, tāpēc nekas netika atiestatīts. Aizver šo dialoglodziņu, lai redzētu, kur ir plāni.',
+    scenarioResetUnreadable:
+        'Saglabāto progresu nevar nolasīt, tāpēc šo izaicinājumu nevar atiestatīt atsevišķi. Aizver šo dialoglodziņu un atver to vēlreiz, lai atiestatītu visus izaicinājumus.',
+    locksUnavailable:
+        'Lietotne nevar izveidot savus bloķēšanas failus savā datu mapē, tāpēc šo darbību nevar droši veikt. Nekas netika mainīts. Pārbaudi mapes atļaujas un brīvo vietu diskā (sīkāk žurnālā) un mēģini vēlreiz.',
+    scenarioResetFailed: 'Pašlaik neizdevās atiestatīt scenāriju. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
+    scenarioResetAllFailed:
+        'Pašlaik neizdevās atiestatīt visu izaicinājumu progresu. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
+    scenarioResetNotSaved:
+        'Ierīce nevarēja saglabāt atiestatīšanu, tāpēc nekas netika mainīts. Atbrīvo vietu krātuvē un mēģini vēlreiz.',
+    scenarioResetAllNotSaved:
+        'Ierīce nevarēja saglabāt visu izaicinājumu atiestatīšanu, tāpēc nekas netika mainīts. Atbrīvo vietu krātuvē un mēģini vēlreiz.',
+    scenarioStatusAgainPhase: 'Noteikums var darboties vēlreiz, kad fāze tiek sākta no jauna.',
+    scenarioStatusAgainReset: 'Noteikums var darboties vēlreiz tikai pēc atiestatīšanas.',
+    scenarioStatusAgainDay: 'Noteikums var darboties vēlreiz nākamajā dienā.',
     notifyOnScenario: 'Paziņojumi no scenārijiem',
     notifyOnScenarioDesc:
         'Rādīt ziņas, ko sūta tavu scenāriju paziņojumu soļi, un brīdinājumu, kad scenārijs apstājas, jo vajadzīga tava rīcība.',
@@ -471,6 +649,7 @@ export const app = {
     sbSimulateOn: 'Simulēt izaicinājumam',
     sbSimulatePick: 'Izvēlies izaicinājumu…',
     sbSimulateAssume: 'Pieņem, ka katrs solis izdodas un izaicinājuma dati paliek tādi kā tagad.',
+    sbSimulatePausedManual: 'Apturēts („Tikai manuāli”) — šādi notiktu, ja „Tikai manuāli” tagad būtu izslēgts.',
     sbSimulateNothing: 'Nekas netiktu izpildīts.',
     sbSimulateFailed: 'Simulāciju neizdevās palaist.',
     sbStop_closed: 'Beidzas: izaicinājums noslēdzas.',
@@ -518,7 +697,14 @@ export const app = {
         'Cik monētu kopā automātiskā pievienošanās drīkst iztērēt vienā ciklā. 0 = neko netērēt (maksas pievienošanās izslēgta). Lai pievienotos maksas izaicinājumiem, gan šim, gan limitam par izaicinājumu jābūt lielākam par 0.',
     // Atklāšana (nepievienotie izaicinājumi)
     discoverTitle: 'Atrast izaicinājumus',
-    discoverCountLabel: 'atvērti izaicinājumi',
+    discoverCountLabel: 'Atvērtie izaicinājumi: {count}',
+    discoverCountSplit: 'Atvērti: {open} · gaidāmi: {upcoming}',
+    discoverStartsIn: 'Sākas pēc {time} — tad varēs pievienoties',
+    discoverStartingNow: 'Sākas tagad — drīz parādīsies atvērto sarakstā',
+    discoverUpcomingChosenHint:
+        'Izvēlētos foto automātiski izmanto tikai tad, ja šim izaicinājumam ir ieslēgta automātiskā pievienošanās; citādi pievienojies pats, kad tas sāksies.',
+    discoverJoinOpeningLabel: 'Pievienoties izaicinājumam „{title}” — pievienošanās atvērsies pēc brīža',
+    discoverJoinNotStartedLabel: 'Pievienoties izaicinājumam „{title}” — iespējams tikai pēc tā sākuma',
     discoverRefresh: 'Atsvaidzināt',
     discoverEmpty: 'Šobrīd nav atvērtu izaicinājumu, kuriem pievienoties.',
     discoverUnavailableList: 'Neizdevās ielādēt atvērtos izaicinājumus. Pārbaudi savienojumu un mēģini vēlreiz.',
@@ -527,14 +713,55 @@ export const app = {
     discoverCostPaid: 'monētas: {coins}',
     discoverJoin: 'Pievienoties',
     discoverJoinPaid: 'Pievienoties (maksas)',
+    discoverJoinLabel: 'Pievienoties izaicinājumam „{title}”',
+    discoverJoinPaidLabel: 'Pievienoties (maksas) izaicinājumam „{title}”, monētas: {coins}',
     discoverJoining: 'Pievienojas…',
+    discoverChecking: 'Pārbauda…',
+    discoverPendingNoPhoto:
+        'Monētas jau ir iztērētas, bet šim izaicinājumam neder neviens foto. Pievieno derīgu foto un nospied „Mēģināt iesniegt vēlreiz”: monētas netiks ieturētas atkārtoti. Ja izmanto „Obligātie tagi” vai ir izslēgts „Iesniegt arī bez tagu sakritības”, arī tie var neļaut izvēlēties foto.',
+    discoverUnconfirmed:
+        'Par šī izaicinājuma maksājumu netika saņemta atbilde, tāpēc nav zināms, vai tas izdevās. Atkārtojot tiek iesniegts tikai tavs foto, tāpēc monētas netiks ieturētas divreiz. Ja GuruShots vietnē redzams, ka monētas netika ieturētas, nospied „Monētas netika ieturētas”, tad pievienojies vēlreiz.',
+    discoverEarlierPayment:
+        'Šim izaicinājumam ir maksājuma ieraksts no vecākas lietotnes versijas, kurā konti vēl netika šķirti, tāpēc nav zināms, vai monētas tika ieturētas un kuram šajā ierīcē lietotajam GuruShots kontam tās tika ieturētas. „Mēģināt iesniegt vēlreiz” ir paredzēts kontam, kas maksāja: tas iesniedz tikai foto, tāpēc nevienam monētas netiek ieturētas divreiz. Šeit ierakstu aizmirst nevar, jo tas var piederēt citam kontam: tas vairs neattieksies uz citiem kontiem, kad konts, kas maksāja, pievienosies izaicinājumam, izmantojot šo lietotni, citādi tas pazudīs pats nākamajā pārbaudē pēc 30 dienām. Ja šis nav konts, kas maksāja, tu pa to laiku vari pievienoties izaicinājumam GuruShots vietnē.',
+    discoverForgetPayment: 'Monētas netika ieturētas',
+    discoverForgetPaymentLabel: 'Monētas netika ieturētas: {title}',
+    discoverForgetTitle: 'Aizmirst šo maksājumu?',
+    discoverForgetBody:
+        'Vispirms pārbaudi monētu vēsturi GuruShots vietnē. Turpini tikai tad, ja monētas par „{title}” netika ieturētas: ja tās tika ieturētas, atkārtota pievienošanās tās ieturēs otrreiz. Pēc aizmiršanas automātiskā pievienošanās var tam pievienoties atkārtoti un par to samaksāt sava monētu budžeta ietvaros.',
+    discoverForgetBalances:
+        'Monētas pirms šī maksājuma: {before}. GuruShots tagad rāda: {now}. Citas monētu darbības kopš tā laika (balvas, citas pievienošanās) maina starpību, tāpēc lietotne nevar noteikt, vai maksājums izdevās: izšķiroša ir monētu vēsture GuruShots vietnē.',
+    discoverForgetBalanceBefore:
+        'Monētas pirms šī maksājuma: {before}. Salīdzini ar atlikumu GuruShots vietnē: lietotne nevar noteikt, vai maksājums izdevās, un citas monētu darbības kopš tā laika maina starpību.',
+    discoverForgetConfirm: 'Monētas netika ieturētas — aizmirst',
+    discoverForgetWorking: 'Notiek aizmiršana…',
+    discoverForgetNothing:
+        'Nebija ko aizmirst: maksājums jau ir apstiprināts vai pievienošanās ir pabeigta. Atsvaidzini sarakstu.',
+    discoverForgetAccountUnknown:
+        'Neizdevās noskaidrot, kurā kontā esi pieteicies, tāpēc nekas netika mainīts. Mēģini vēlreiz pēc brīža vai piesakies vēlreiz.',
+    discoverForgetLegacyRecord:
+        'Šis ieraksts ir no vecākas lietotnes versijas un var piederēt citam šajā ierīcē lietotam GuruShots kontam, tāpēc to šeit aizmirst nevar. Tas vairs neattieksies uz citiem kontiem, kad konts, kas maksāja, pievienosies izaicinājumam, izmantojot šo lietotni, citādi tas pazudīs pats nākamajā pārbaudē pēc 30 dienām. Nekas netika mainīts.',
+    discoverForgetBusy:
+        'Pašlaik notiek pievienošanās šim izaicinājumam vai saglabātos maksājumu ierakstus izmanto cita lietotnes daļa. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
+    discoverForgetNotAuthenticated:
+        'Neesi pieteicies, tāpēc nekas netika mainīts. Piesakies no jauna un mēģini vēlreiz.',
+    discoverForgetUnreadable:
+        'Saglabātos maksājumu ierakstus neizdevās nolasīt, tāpēc nekas netika mainīts. Restartē lietotni un mēģini vēlreiz. Ja tas atkārtojas, pievienošanās stāvokļa fails (joinState.json lietotnes datu mapē) nav nolasāms: vispirms pārbaudi monētu vēsturi GuruShots vietnē, tad pārvieto šo failu malā un restartē lietotni.',
+    discoverForgetUnreadableAndroid:
+        'Saglabātos maksājumu ierakstus neizdevās nolasīt, tāpēc nekas netika mainīts. Restartē lietotni un mēģini vēlreiz. Ja tas atkārtojas, lietotnes saglabātais pievienošanās stāvoklis nav nolasāms: vispirms pārbaudi monētu vēsturi GuruShots vietnē, tad šajā lietotnē atver Uzstādījumi → Par lietotni un datiem un izvēlies „Dzēst visus vietējos datus…” (pēc tam tu būsi izrakstījies, un lietotnes uzstādījumi būs atiestatīti).',
+    discoverForgetFailed: 'Pašlaik neizdevās aizmirst maksājumu. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
+    discoverAccountUnknown:
+        'Neizdevās noskaidrot, kurā kontā esi pieteicies, tāpēc šis mēģinājums neko nedarīja un monētas netērēja. Mēģini vēlreiz pēc brīža vai piesakies vēlreiz.',
+    discoverAlreadyJoined:
+        'Šis konts jau ir pievienojies šim izaicinājumam, tāpēc nekas netika iztērēts. Saraksts atjaunosies nākamajā pārbaudē.',
+    discoverConfirmDialogFirst: 'Vispirms apstiprini vai aizver atvērto logu, tad pievienojies vēlreiz.',
     discoverRetrySubmit: 'Mēģināt iesniegt vēlreiz',
+    discoverRetrySubmitLabel: 'Mēģināt vēlreiz iesniegt izaicinājumam „{title}”',
     discoverConfirmTitle: 'Pievienoties maksas izaicinājumam?',
     discoverConfirmBody: 'Pievienošanās izaicinājumam „{title}” maksā monētas: {coins}.',
     discoverConfirmBalance: 'Monētu atlikums: {current}; maksa: {cost}; paliks: {resulting}.',
     discoverConfirmBalanceUnknown: 'Neizdevās nolasīt tavu pašreizējo monētu atlikumu.',
     discoverConfirmInsufficient:
-        'Monētu atlikums: {current}, bet šis izaicinājums maksā {cost} — ar to nepietiek, lai pievienotos.',
+        'Monētu atlikums: {current}, bet šis izaicinājums maksā {cost} — ar to nepietiek, lai pievienotos. Nopelni vairāk monētu un mēģini vēlreiz.',
     discoverConfirmSpend: 'Tērēt monētas: {coins}',
     // Atklāšanas pievienošanās rezultāti
     discoverJoined: 'Pievienojies.',
@@ -546,10 +773,19 @@ export const app = {
     discoverFailedNoCharge: 'Neizdevās pievienoties. Monētas netika norakstītas.',
     discoverNoPhoto: 'Nav piemērota foto, ko iesniegt. Monētas netika norakstītas.',
     discoverUnavailable: 'Šim izaicinājumam vairs nevar pievienoties.',
-    discoverBusy: 'Pievienošanās jau notiek.',
+    discoverNotStarted: 'Šis izaicinājums vēl nav sācies. Pievienoties varēs, kad tas sāksies.',
+    discoverPriceChanged:
+        'Cena mainījusies — tagad monētas: {coins}. Nekas netika iztērēts; nospied „Pievienoties”, lai apstiprinātu jauno cenu.',
+    discoverBusy: 'Pievienošanās jau notiek. Mēģini vēlreiz pēc brīža.',
     validationOutOfRange: 'Ievadi vērtību no {min} līdz {max}.',
     validationAtLeast: 'Ievadi vērtību, kas nav mazāka par {min}.',
-    autoFillBadge: 'automātiskā iesniegšana',
+    autoSubmitBadge: 'automātiskā iesniegšana',
+    manualPhotosBadge: 'tikai manuāli',
+    teamMatchVs: 'Komandu mačs pret {opponent}',
+    teamMatchVotes: 'Mūsējie {us} · Pretinieki {them}',
+    teamMatchAhead: 'vadībā',
+    teamMatchBehind: 'atpaliek',
+    teamMatchTied: 'neizšķirts',
     customBadge: 'pielāgots',
     customSettingsHint: 'Ir pielāgoti uzstādījumi',
     mustIncludeTags: 'Obligātie tagi',
@@ -558,23 +794,221 @@ export const app = {
     shouldIncludeTags: 'Vēlamie tagi',
     shouldIncludeTagsDesc:
         'Vēlamais kritērijs gan automātiskajai iesniegšanai, gan manuālajām foto pogām. Dot priekšroku foto, kuru tagi sakrīt ar šiem; tie tiek vērtēti augstāk nekā pēc automātiski noteiktajiem izaicinājuma atslēgvārdiem, bet pārējie foto netiek izslēgti. Ja neviens nesakrīt, foto izvēlas kā parasti. Salīdzināšanai ir tie paši veselo vārdu noteikumi kā obligātajiem tagiem.',
+    chosenPhotos: 'Izvēlētie foto',
+    chosenPhotosDesc:
+        'Foto, ko automātiskā pievienošanās un automātiskā iesniegšana mēģina izmantot pirmos. Tiem joprojām jāatbilst taviem tagu uzstādījumiem (ja vien nav ieslēgts „Iesniegt arī bez tagu sakritības” un neviens foto tiem neatbilst), un lietotne tos kārto tāpat, kā kārto savas automātiskās izvēles (ja vien nav ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos”). Foto var būt tikai vienā izaicinājumā, tāpēc ar kopīgu sarakstu to paņem izaicinājums, kas tiek aizpildīts pirmais. Saraksts pieder kontam, kas to saglabāja, un citā kontā tiek ignorēts; ja citā kontā saglabā sarakstu, pirmajā kontā saglabātie saraksti sāk attiekties arī uz to, ja vien tos iepriekš neizņem. Scenārija saraksts tiek izmantots tikai pēc pievienošanās. Apmaiņa sarakstu neņem vērā.',
+    chosenPhotosInOrder: 'Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos',
+    chosenPhotosInOrderDesc:
+        'Kad ir uzstādīti izvēlētie foto, iesniedz tos tādā secībā, kādā tos izvēlējies (numuri izvēles logā), nevis kārto tā, kā lietotne kārto savas automātiskās izvēles. Foto, kas neiztur tavus obligātos tagus, jau ir iesniegts vai šim izaicinājumam nav pieejams, izlaiž un izmanto nākamo sarakstā; atlikušās vietas aizpilda pēc kārtojuma kā parasti. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” un neviens no izvēlētajiem foto neatbilst taviem obligātajiem tagiem, tos tomēr var iesniegt. Pēc noklusējuma izslēgts.',
+    chosenPhotosOnly: 'Iesniegt tikai izvēlētos foto',
+    chosenPhotosOnlyDesc:
+        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski (ar pogu „Izvēlēties foto…” izaicinājuma kartītē vienreiz iesniedz tevis izvēlētos foto), ārkārtas iesniegšana šo uzstādījumu neņem vērā (uzstādi izaicinājumam ārkārtas iesniegšanu uz 0, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā (ja vien nav ieslēgts „Tikai manuāli”: tad sadaļā „Atrast izaicinājumus” izvēlies šī izaicinājuma foto un nospied „Pievienoties” vai „Mēģināt iesniegt vēlreiz”, ja monētas jau iztērētas). Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem obligātajiem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
+    chosenPhotosMemberId: 'Izvēlēto foto konts',
+    chosenPhotosClearedAt: 'Izvēlēto foto notīrīšanas laiks',
+    chosenPhotosClearedAtDesc:
+        'Iekšējs — kad pēdējo reizi izņemti visi saglabātie izvēlēto foto saraksti; atvērtie redaktori pēc tā noņem savu sarakstu kopiju',
+    chosenPhotosMemberIdDesc:
+        'Iekšējs — dalībnieks, kas pēdējais saglabāja izvēlēto foto sarakstu; ja piesakās cits dalībnieks, saraksts tiek ignorēts',
+    chosenPhotosCount: 'Izvēlēto foto: {count}',
+    choosePhotos: 'Izvēlēties foto',
+    photosClear: 'Notīrīt',
+    photosUseNone: 'Neizmantot nevienu',
+    photosUseNoneHint:
+        'Šajā izaicinājumā netiek izmantoti izvēlētie foto, pat ja globālajos noklusējumos vai kādā noteikumā ir saraksts. Atiestatīšanas poga blakus šim laukam atgriež mantoto sarakstu.',
+    chosenPhotoThumbAlt: 'Izvēlētais foto {n}: {id}',
+    chosenPhotosScenarioHint:
+        'Scenārija izvēlētie foto tiek izmantoti tikai pēc pievienošanās izaicinājumam; pievienojoties tie netiek ņemti vērā.',
+    chosenPhotosOnlyReachHint:
+        'Tas attiecas uz katru izaicinājumu, ko aptver: automātiskā pievienošanās un iesniegšana izlaiž katru izaicinājumu, kuram nav derīga izvēlētā foto.',
+    photoChooserTitle: 'Izvēlēties foto',
+    photoChooserHelp:
+        'Lietotne šos foto izmanto pirmos, un tiem joprojām jāiztur tavi tagu filtri. Tos kārto tāpat, kā kārto savas automātiskās izvēles, vai arī izmanto tos šeit redzamo numuru secībā, ja ir ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos” (uzstādījumi „Automātiskā iesniegšana”: globālie noklusējumi, izaicinājuma noteikums vai paša izaicinājuma uzstādījumi pēc pievienošanās).',
+    photoChooserSearchLabel: 'Meklēt savus foto pēc taga',
+    photoChooserSearchPlaceholder: 'piem., saulriets…',
+    photoChooserSearch: 'Meklēt',
+    photoChooserCount: 'Izvēlēto foto: {count} no {max}',
+    photoChooserLoading: 'Ielādē tavus foto…',
+    photoChooserLoadError: 'Tavus foto neizdevās ielādēt (sīkāka informācija ir zemāk). Mēģini vēlreiz.',
+    photoChooserLoadErrorNoDetail: 'Tavus foto neizdevās ielādēt — pieprasījums tika pārtraukts. Mēģini vēlreiz.',
+    photoChooserRetry: 'Mēģināt vēlreiz',
+    photoChooserNoContext:
+        'Tavus foto vēl nevar parādīt: bibliotēku nolasa caur izaicinājumu, bet tev šobrīd nav neviena aktīva vai pievienojama izaicinājuma. Pievienojies kādam vai uzgaidi, līdz tāds atveras, un mēģini vēlreiz.',
+    photoChooserEligibilityLater:
+        'Šeit netiek pārbaudīts, vai foto der kādam izaicinājumam; to pārbauda iesniegšanas brīdī.',
+    photoChooserTruncated: 'Rāda tikai pirmos {count} foto. Meklē pēc taga, lai atrastu citus.',
+    photoChooserWonHidden:
+        'Paslēpti foto, kas uzvarējuši izaicinājumā: {count}. Uzvarējušo foto nevar iesniegt vēlreiz.',
+    photoChooserWonHiddenTruncated:
+        'Paslēpti foto, kas uzvarējuši izaicinājumā: vismaz {count}. Uzvarējušo foto nevar iesniegt vēlreiz.',
+    photoChooserRefusedHidden: 'Paslēpti foto, ko GuruShots šajā izaicinājumā nepieņem: {count}.',
+    photoChooserRefusedHiddenTruncated: 'Paslēpti foto, ko GuruShots šajā izaicinājumā nepieņem: vismaz {count}.',
+    photoChooserNoneAccepted:
+        'GuruShots šajā izaicinājumā nepieņem nevienu no uzskaitītajiem foto. Meklē pēc taga, lai atrastu citus, vai augšupielādē jaunus foto un spied „Atsvaidzināt”.',
+    photoChooserWonInList:
+        'Uzvarējis izaicinājumā, tāpēc to nevar iesniegt vēlreiz. Noklikšķini uz tā, lai to noņemtu no saraksta.',
+    photoChooserEmpty:
+        'Foto nav atrasti. Pamēģini citu tagu vai augšupielādē foto savā GuruShots bibliotēkā un spied „Atsvaidzināt”.',
+    photoChooserEmptyAllWon:
+        'Nav atrasts neviens foto, ko var iesniegt: visi atrastie foto ir uzvarējuši izaicinājumā. Pamēģini citu tagu vai augšupielādē jaunus foto savā GuruShots bibliotēkā un spied „Atsvaidzināt”.',
+    photoChooserAsOf: 'Foto ielādēti plkst. {time}',
+    photoChooserAsOfDate: 'Foto ielādēti {date} plkst. {time}',
+    photoChooserRefresh: 'Atsvaidzināt',
+    photoChooserRefreshLabel: 'Atsvaidzināt foto',
+    photoChooserPreview:
+        'Rāda tavus foto, kā tie ielādēti iepriekš, kamēr lietotne pārbauda, kuri no tiem der šim izaicinājumam…',
+    photoChooserPreviewNoChallenge:
+        'Rāda tavus foto, kā tie ielādēti iepriekš, kamēr lietotne pārbauda, vai nav kas jauns…',
+    photoChooserPreviewSubmit:
+        'Rāda tavus foto, kā tie ielādēti iepriekš. Izvēlēties varēs, kad lietotne būs pārbaudījusi, kuri no tiem der šim izaicinājumam…',
+    photoChooserRecheckFailed:
+        'Neizdevās pārbaudīt, kuri no šiem foto der šim izaicinājumam, tāpēc tie rādīti, kā ielādēti iepriekš. Spied „Atsvaidzināt”.',
+    photoChooserRecheckFailedNoChallenge:
+        'Neizdevās pārbaudīt, vai tavos foto nav izmaiņu, tāpēc tie rādīti, kā ielādēti iepriekš. Spied „Atsvaidzināt”.',
+    photoChooserRecheckFailedSubmit:
+        'Neizdevās pārbaudīt, kuri no šiem foto der šim izaicinājumam, tāpēc izvēle ir aizturēta. Spied „Atsvaidzināt”.',
+    photoChooserNotAsLoaded: 'Nav starp taviem foto, kā tie ielādēti iepriekš. Pārbauda vēlreiz…',
+    photoChooserNotAsLoadedFailed:
+        'Nav starp taviem foto, kā tie ielādēti iepriekš. Lai pārbaudītu vēlreiz, spied „Atsvaidzināt”.',
+    photoChooserMissing: 'Nav pieejams šim izaicinājumam (atrodas citā izaicinājumā vai ir dzēsts)',
+    photoChooserMissingTruncated:
+        'Nav pieejams šim izaicinājumam (atrodas citā izaicinājumā, ir dzēsts vai ir tālāk par pirmajiem {count} foto)',
+    photoChooserMissingNoChallenge: 'Tavā bibliotēkā nav atrasts (iespējams, tas ir dzēsts)',
+    photoChooserMissingNoChallengeTruncated:
+        'Rādīto foto vidū nav atrasts (iespējams, tas ir dzēsts vai ir tālāk par pirmajiem {count} foto)',
+    photoChooserMissingTileLabel: 'Izvēlētais foto {id}: {reason}',
+    photoChooserListFull: 'Saraksts ir pilns',
+    photoChooserLimitReached: 'Sasniegts ierobežojums — noņem kādu, lai pievienotu citu.',
+    photoChooserNotEligible: 'Neder šim izaicinājumam',
+    photoChooserAllowed: 'Var iesniegt',
+    photoChooserTileLabel: 'Foto {id}: {labels}. {reason}',
+    photoChooserPosition: 'Numurs {n} tavā sarakstā.',
+    photoChooserNoTags: 'Bez tagiem',
+    photoChooserOtherAccount:
+        'Šie saraksti tika saglabāti citā kontā, tāpēc lietotne tos ignorē. Ja šeit saglabāsi sarakstu, tie sāks attiekties arī uz šo kontu, ja vien tos iepriekš neizņemsi.',
+    photoChooserOtherAccountClear: 'Izņemt šos sarakstus',
+    photoChooserOtherAccountConfirm:
+        'Vai izņemt izvēlēto foto sarakstus, kas saglabāti citā kontā, visos uzstādījumos, profilos, noteikumos un scenārijos? To nevar atsaukt. Uzstādījums „Iesniegt tikai izvēlētos foto” paliek.',
+    photoChooserOtherAccountClearError:
+        'Sarakstus neizdevās izņemt, jo uzstādījumus nevarēja ierakstīt. Mēģini vēlreiz.',
+    chosenPhotosOtherAccountCount: 'Citā kontā saglabātie foto: {count}',
+    photoChooserInheritNote:
+        'Ja saglabāsi, neko neizvēloties, šim izaicinājumam paredzētais saraksts tiks izņemts, un izaicinājums atkal izmantos sarakstu no taviem uzstādījumiem vai noteikumiem.',
+    photoChooserSaveWaits:
+        'Saglabāšana gaida, līdz tavi foto ir ielādēti, lai lietotne varētu pārbaudīt, kuram kontam saraksts pieder.',
+    photoChooserSaveWaitsError:
+        'Saglabāšana tiek aizturēta, līdz tavi foto ir ielādēti, lai lietotne varētu pārbaudīt, kuram kontam saraksts pieder. Spied „Mēģināt vēlreiz” augstāk.',
+    photoChooserSaveChecking: 'Pārbauda, kuram kontam šis saraksts pieder…',
+    photoChooserSaveCheckFailed:
+        'Konta pārbaude neizdevās, tāpēc saglabāšana ir aizturēta, lai pasargātu tavu sarakstu. Pēc brīža vēlreiz spied „Mēģināt vēlreiz”.',
+    photoChooserTileLocked: 'Aizslēgts, līdz tavs saglabātais saraksts ir nolasīts',
+    photoChooserSaveConfirmed: 'Konts apstiprināts — tavs saglabātais saraksts ir ielādēts.',
+    photoChooserSaveReadFailed:
+        'Neizdevās nolasīt tavu saglabāto sarakstu šim izaicinājumam, tāpēc saglabāšana ir aizturēta, lai to pasargātu. Spied „Mēģināt vēlreiz”.',
+    photoChooserSaveReadFailedAgain:
+        'Saglabātā saraksta nolasīšana atkal neizdevās, tāpēc saglabāšana joprojām ir aizturēta, lai to pasargātu. Pēc brīža vēlreiz spied „Mēģināt vēlreiz”.',
+    photoChooserSaveNotLoggedIn:
+        'Tu esi izrakstījies, tāpēc kontu nevar pārbaudīt. Piesakies vēlreiz, aizver logu „Izvēlēties foto” un atver to vēlreiz.',
+    photoChooserSaveNoContextHeld:
+        'Saglabāšana ir aizturēta: bez aktīva vai atvērta izaicinājuma lietotne nevar pārbaudīt, kuram kontam šis saraksts pieder. Aizver logu „Izvēlēties foto” un vispirms pievienojies izaicinājumam.',
+    photoChooserClearHeld:
+        'Notīrīšana nav pieejama, kamēr tavs saglabātais saraksts nav nolasīts, lai vēlāka nolasīšana neatceltu notīrīšanu.',
+    photoChooserSaveUnconfirmed:
+        'Neizdevās pārliecināties, kuram kontam šis saraksts pieder, tāpēc saglabāšana ir aizturēta, lai to pasargātu. Spied „Mēģināt vēlreiz” vai aizver logu „Izvēlēties foto” un atver to vēlreiz.',
+    photoChooserSaveNoContext:
+        'Saglabāšana ir bloķēta: bez aktīva vai atvērta izaicinājuma lietotne nevar pārbaudīt, kuram kontam šis saraksts pieder. Notīri sarakstu, lai saglabātu, vai vispirms pievienojies izaicinājumam.',
+    photoChooserSaveError: 'Izvēlētos foto neizdevās saglabāt, jo uzstādījumu nevarēja ierakstīt. Mēģini vēlreiz.',
+    photoChooserDiscardTitle: 'Atmest izmaiņas?',
+    photoChooserDiscardText:
+        'Izvēlētie foto ir mainīti, bet nav saglabāti. Ja aizvērsi tagad, šīs izmaiņas pazudīs. Izvēlies „Atcelt”, lai turpinātu izvēli, un tad spied „Izmantot šos foto”.',
+    photoChooserDiscard: 'Atmest izmaiņas',
+    settingsDiscardTitle: 'Atmest izmaiņas?',
+    settingsDiscardText:
+        'Šajos uzstādījumos ir izmaiņas, kas nav saglabātas. Ja aizvērsi tagad, tās pazudīs. Izvēlies „Turpināt rediģēt”, lai atgrieztos, un tad spied „Saglabāt”.',
+    settingsDiscard: 'Atmest izmaiņas',
+    settingsKeepEditing: 'Turpināt rediģēt',
+    settingsDropTitle: 'Saglabāt bez daļas darba?',
+    settingsDropText:
+        'Saglabāšana ieraksta uzstādījumus, bet ne tālāk minētos elementus. Tie pazudīs, kad logs aizvērsies. Izvēlies „Turpināt rediģēt”, lai vispirms tos sakārtotu.',
+    settingsSaveWithout: 'Saglabāt bez tiem',
+    settingsDropTimezone: 'Pielāgota laika josla, ko ievadīji, bet nepievienoji',
+    settingsDropScenario: 'Scenārijs, ko rediģē un neesi saglabājis',
+    settingsFilterPlaceholder: 'Filtrēt uzstādījumus…',
+    settingsFilterClear: 'Notīrīt',
+    settingsJumpLabel: 'Pāriet uz sadaļu',
+    settingsNoMatch: 'Nav atbilstošu uzstādījumu',
+    hide: 'Paslēpt',
+    photoChooserUse: 'Izmantot šos foto',
+    fillPick: 'Izvēlēties foto…',
+    fillPickLabel: 'Izvēlēties, kurus foto iesniegt tagad',
+    pickTitle: 'Izvēlēties iesniedzamos foto',
+    pickHelp:
+        'Izvēlētie foto šim izaicinājumam tiek iesniegti uzreiz un tieši tādi, kādus izvēlējies: tavi tagu filtri un uzstādījums „Izvēlētie foto” netiek piemēroti, un nekas netiek saglabāts.',
+    pickCount: 'Izvēlēti: {count}, brīvās vietas: {max}',
+    pickOverCap: 'Izvēlēti: {count}, brīvās vietas: {max}. Noņem dažus, lai iesniegtu.',
+    pickFull: 'Visām brīvajām vietām foto izvēlēti',
+    pickTileLocked: 'Aizslēgts, kamēr lietotne pārbauda, vai tas der šim izaicinājumam.',
+    pickTileSubmitting: 'Aizslēgts, kamēr tava izvēle tiek iesniegta.',
+    pickNoSlots: 'Brīvu vietu vairs nav: katrā vietā jau ir foto. Aizver šo dialoglodziņu.',
+    pickSubmit: 'Iesniegt',
+    pickSubmitCount: 'Iesniegt {count} foto',
+    pickAuto: 'Automātiski',
+    pickAutoHelp:
+        'Šī poga sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem un, ja tava versija to atbalsta, arī ar vietējo attēlu pārbaudi. Nekas netiek iesniegts.',
+    pickLoadAll: 'Ielādēt visus foto',
+    pickIdle: 'Foto vēl nav ielādēti. Ielādē visus, meklē vai izmanto pogu „Automātiski”.',
+    pickIdleWithPicks:
+        'Izvēlētos foto var iesniegt jau tagad. Ielādē visus foto vai meklē, lai redzētu pārējo bibliotēku.',
+    pickAutoRunning: 'Foto tiek sarindoti… tas var aizņemt minūti. Nekas netiek iesniegts.',
+    pickSuggestedTitle: 'Ieteikumi',
+    pickSuggestedCount: 'Ieteikumi: {count}',
+    pickSuggestedStatsLimited:
+        'Popularitātes statistiku neizdevās nolasīt pilnībā (pieprasījumi turpināja neizdoties), tāpēc rindojums balstās uz tagiem un attēlu pārbaudi.',
+    pickSuggestionRank: 'Ieteikums Nr. {n}',
+    pickAddSuggestions: 'Pievienot ieteikumus',
+    pickAddSuggestionsFull: 'Nav brīvu vietu',
+    swapPick: 'Nomainīt ar…',
+    swapPickLabel: 'Izvēlēties foto no bibliotēkas, ar ko apmainīt',
+    swapPickTitle: 'Izvēlies foto, ar ko apmainīt',
+    swapPickHelp:
+        'Izvēlētais foto aizstās pašreizējo. Foto, ko šis izaicinājums apmaiņā nepieņem, ir paslēpti. Pogas „Automātiski” rindojums balstās uz taviem tagu noteikumiem un uzstādījumu „Izvēlētie foto”; pašam izvēlētam foto tie netiek piemēroti. Nekas netiek tērēts, kamēr neapstiprini.',
+    swapPickAutoHelp:
+        'Šī poga sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem un, ja tava versija to atbalsta, arī ar vietējo attēlu pārbaudi. Nekas netiek apmainīts.',
+    swapPickAutoRunning: 'Foto tiek sarindoti… tas var aizņemt minūti. Nekas netiek tērēts.',
+    swapPickIdleWithPicks:
+        'Izvēlēto foto var izmantot jau tagad. Ielādē visus foto vai meklē, lai redzētu pārējo bibliotēku.',
+    swapPickCount: 'Izvēlēts: {count}/1',
+    swapPickSubmit: 'Izmantot šo foto',
+    swapPickBlocked: 'Jau iesniegts šajā izaicinājumā',
+    swapPickNoSuggestion: 'Lietotne neatrada foto, ko ieteikt šai apmaiņai. Izvēlies foto no savas bibliotēkas.',
+    discoverChosenChip: 'Izvēlētie foto',
+    discoverChosenChipHint: 'Šim izaicinājumam ir izvēlēti foto. Spied, lai tos mainītu.',
+    discoverChosenChipLabel: 'Izvēlētie foto izaicinājumam „{title}”: mainīt',
+    discoverChosenForeignChip: 'Citā kontā: {count} foto',
+    discoverChosenForeignLabel: 'Citā kontā: {count} foto izaicinājumam „{title}”, pārskatīt',
+    discoverChosenForeignHint: 'Šie foto ir saglabāti citā kontā un šeit netiek izmantoti. Spied, lai tos pārskatītu.',
+    discoverChoosePhotosLabel: 'Izvēlēties foto izaicinājumam „{title}”',
+    discoverChosenInherited: 'Mantotie izvēlētie foto: {count} (no taviem uzstādījumiem vai noteikumiem)',
+    discoverConfirmChosen: 'Tavs izvēlētais foto, ja tas der, citādi automātiski izvēlēts foto.',
+    scenarioFlagged:
+        'Pārskati pirms importa: {settings}. Izvēlētie foto pieder vienam kontam, un citā kontā tie tiek ignorēti; „Iesniegt tikai izvēlētos foto” liek izlaist izaicinājumu, kuram nav derīga izvēlētā foto.',
+    scenarioExportOmitted: 'Eksportā nav iekļauts, jo pieder tavam kontam: {settings}.',
     ignoreTitleWords: 'Ignorēt šos vārdus izaicinājumu nosaukumos',
     ignoreTitleWordsDesc:
         'Vārdi, ko izņemt no izaicinājuma nosaukuma, pirms pēc tā meklēt piemērotus foto. Izaicinājumu nosaukumos tēmai parasti pieliek kādu papildu vārdu — „Epic Lighthouses” ir par bākām, nevis par „epic”, — un šie liekie vārdi gan aizmiglo tēmu, gan tērē tās nedaudzās meklēšanas reizes, kas pieejamas vienam izaicinājumam. Saraksts jau ir aizpildīts ar biežākajiem vārdiem; to var brīvi labot. Izņem vārdu no saraksta, ja izaicinājums tiešām ir par to. Sēriju sākumus, piemēram, „Color Hunt:”, lietotne atmet automātiski, tie šeit nav jāraksta.',
-    fillWithoutTagMatch: 'Iesniegt arī bez tagu sakritības',
-    fillWithoutTagMatchDesc:
+    submitWithoutTagMatch: 'Iesniegt arī bez tagu sakritības',
+    submitWithoutTagMatchDesc:
         'Attiecas tikai tad, ja ir uzstādīti obligātie tagi. Tā kā foto jāsakrīt ar visiem tagiem, tas notiek biežāk, ja prasīti vairāki tagi. Kad ieslēgts (noklusējums) un neviens no taviem foto nesakrīt ar visiem šiem tagiem, lietotne tik un tā pievieno labāko pieejamo foto, lai vieta nepaliktu tukša. Kad izslēgts, vieta paliek tukša, līdz parādās foto, kas sakrīt ar visiem tagiem.',
-    emergencyFill: 'Ārkārtas iesniegšana',
-    emergencyFillDesc:
-        'Drošības tīkls izaicinājuma pēdējām minūtēm, ja automātiskā iesniegšana citādi atstātu foto vietas tukšas — vai nu tāpēc, ka automātiskā iesniegšana ir izslēgta, vai tāpēc, ka obligātie tagi nesakrīt ne ar vienu foto un „Iesniegt arī bez tagu sakritības” ir izslēgts. Kad līdz izaicinājuma beigām atlicis tik daudz laika, lietotne atlikušajās vietās iesniedz labākos pieejamos foto, pat ja tie nesakrīt ar taviem tagiem. Tā apzināti neņem vērā šos uzstādījumus, lai izaicinājums nebeigtos ar neizmantotām vietām. Šajā pašā logā tā izmanto arī jebkuru pieejamo Boost un jebkuru iegūto Turbo — pat ja „Automātiski izmantot Boost” vai „Automātiski izmantot Turbo” šim izaicinājumam ir izslēgts —, lai tie neaizietu zudumā, kad izaicinājums beidzas. Grafiskajā lietotnē laiku ievada stundās un minūtēs. Noklusējums ir 5 minūtes; uzstādi 0, lai izslēgtu (tas izslēdz arī šo pēdējās minūtes Boost/Turbo izmantošanu). Padoms: šis logs nedrīkst būt garāks par pēdējās minūtes slieksni (noklusējums ir 10 minūtes), lai lietotne visu šo laiku pārbaudītu bieži.',
-    emergencyFillHelp:
+    emergencySubmit: 'Ārkārtas iesniegšana',
+    emergencySubmitDesc:
+        'Drošības tīkls izaicinājuma pēdējām minūtēm, ja automātiskā iesniegšana citādi atstātu foto vietas tukšas — vai nu tāpēc, ka automātiskā iesniegšana ir izslēgta, vai tāpēc, ka obligātie tagi nesakrīt ne ar vienu foto un „Iesniegt arī bez tagu sakritības” ir izslēgts. Kad līdz izaicinājuma beigām atlicis tik daudz laika, lietotne atlikušajās vietās iesniedz labākos pieejamos foto, pat ja tie nesakrīt ar taviem tagiem. Tā apzināti neņem vērā šos uzstādījumus (arī „Iesniegt tikai izvēlētos foto”), lai izaicinājums nebeigtos ar neizmantotām vietām. Šajā pašā logā tā izmanto arī jebkuru pieejamo Boost un jebkuru iegūto Turbo — pat ja „Automātiski izmantot Boost” vai „Automātiski izmantot Turbo” šim izaicinājumam ir izslēgts —, lai tie neaizietu zudumā, kad izaicinājums beidzas. Grafiskajā lietotnē laiku ievada stundās un minūtēs. Noklusējums ir 5 minūtes; uzstādi 0, lai izslēgtu (tas izslēdz arī šo pēdējās minūtes Boost/Turbo izmantošanu). Padoms: šis logs nedrīkst būt garāks par pēdējās minūtes slieksni (noklusējums ir 10 minūtes), lai lietotne visu šo laiku pārbaudītu bieži.',
+    emergencySubmitHelp:
         'Pēdējo minūšu drošības tīkls; laiku mēra līdz beigām. Uzstādi 0, lai to pilnībā izslēgtu (tas izslēdz arī pēdējās minūtes Boost/Turbo glābšanu). Šeit 0 nozīmē „izslēgts” atšķirībā no redzamības mērķa uzstādījumiem, kur 0 nozīmē „sekot slieksnim”.',
     tagsPlaceholder: 'piem., saulriets, pludmale, okeāns',
     titleTagRules: 'Izaicinājumu noteikumi',
     titleTagRulesDesc:
         'Piešķir izaicinājumiem profilu, savu pievienošanās laiku un foto tagus pēc pazīmēm, kas atkārtojumos nemainās: nosaukuma, taga, veida, foto skaita vai ilguma. Noteikumi darbojas arī tad, ja izaicinājums atgriežas ar jaunu id; manuāliem viena izaicinājuma uzstādījumiem ir priekšroka. Tagus apvieno.',
     titleTagRulesSaveError:
-        'Neizdevās saglabāt noteikumus. Pārbaudi profilus, nosaukumu un tagu garumu, vai visas vērtības ir pieļaujamajā diapazonā („Ilgst vismaz” nedrīkst pārsniegt „Ilgst ne vairāk kā”) un vai nav pretrunu ar atvērta izaicinājuma manuālajiem uzstādījumiem. Pārējie uzstādījumi ir saglabāti.',
+        'Neizdevās saglabāt noteikumus. Pārbaudi profilus, nosaukumu un tagu garumu, vai visas vērtības ir pieļaujamajā diapazonā („Ilgst vismaz” nedrīkst pārsniegt „Ilgst ne vairāk kā”), vai beigu laiks ir derīgs (HH:MM) un vai nav pretrunu ar atvērta izaicinājuma manuālajiem uzstādījumiem. Pārējie uzstādījumi ir saglabāti.',
     titleTagRulesLoadError:
         'Neizdevās ielādēt izaicinājumu noteikumus, tāpēc tie ir paslēpti, lai tos nepārrakstītu. Pārējos uzstādījumus joprojām var saglabāt; lai mēģinātu vēlreiz, aizver uzstādījumus un atver tos no jauna.',
     titleTagRuleTitle: 'Izaicinājuma nosaukums',
@@ -588,7 +1022,7 @@ export const app = {
     titleRuleMatchContains: 'Satur',
     titleRuleConditionsLabel: 'Atbilst, ja',
     titleRuleConditionsHint:
-        'Jāatbilst katram aizpildītajam laukam; tukšus laukus neņem vērā. Izaicinājuma tags ir paša izaicinājuma tags (Exhibition, Comm, …), nevis foto tags. Ilgums ir izaicinājuma garums no sākuma līdz beigām: 24 h = 1 diena, 168 h = 7 dienas.',
+        'Jāatbilst katram aizpildītajam laukam; tukšus laukus neņem vērā. Izaicinājuma tags ir paša izaicinājuma tags (Exhibition, Comm, …), nevis foto tags. Ilgums ir izaicinājuma garums no sākuma līdz beigām: 24 h = 1 diena, 168 h = 7 dienas. Beigu laiks ir laiks, kāds redzams izaicinājuma kartītē (lietotnes laika joslā), neatkarīgi no datuma; ja norādīti vairāki laiki, pietiek ar vienu.',
     titleRuleChallengeTag: 'Izaicinājuma tags',
     titleRuleChallengeTagPlaceholder: 'piem., Exhibition',
     titleRuleType: 'Izaicinājuma veids',
@@ -597,13 +1031,19 @@ export const app = {
     titleRuleAnyPics: 'Jebkāds skaits',
     titleRuleMinHours: 'Ilgst vismaz',
     titleRuleMaxHours: 'Ilgst ne vairāk kā',
+    titleRuleClosesAt: 'Beigu laiki (pietiek ar vienu)',
+    titleRuleClosesAtRow: 'Beigu laiks',
+    addCloseTime: 'Pievienot laiku',
+    removeCloseTime: 'Noņemt laiku',
+    titleRuleClosesAtInvalid:
+        'Šis saglabātais laiks nav derīgs (jāizmanto HH:MM), tāpēc noteikums neatbilst nevienam izaicinājumam. Izvēlies citu laiku vai noņem šo.',
     titleRuleAnyLength: 'jebkāds',
     titleRuleProfile: 'Automātiskais profils',
     titleRuleInherit: 'Noklusējums',
     titleRuleOn: 'Ieslēgts',
     titleRuleOff: 'Izslēgts',
     titleRuleAutoJoin: 'Automātiski pievienoties',
-    titleRuleAutoFill: 'Automātiskā iesniegšana',
+    titleRuleAutoSubmit: 'Automātiskā iesniegšana',
     titleRulePercentElapsed: 'Pievienoties pēc',
     titleRuleJoinWindow: 'Vai stundas pirms beigām',
     titleRuleJoinWindowPlaceholder: 'noklusējums',
@@ -611,15 +1051,18 @@ export const app = {
     titleRuleBroadWarning:
         'Šim noteikumam nav nosaukuma, tāpēc tas ieslēdz šo iespēju katram atbilstošajam izaicinājumam — tas var tērēt monētas vai foto veselai izaicinājumu grupai.',
     titleRuleOrderHint:
-        'Noteikumus pārbauda no augšas uz leju: katram uzstādījumam uzvar pirmais atbilstošais noteikums, kas to uzstāda, bet to, ko tas atstāj tukšu, ņem no nākamā atbilstošā noteikuma un pēc tam no globālā noklusējuma.',
+        'Noteikumus pārbauda no augšas uz leju: katram uzstādījumam uzvar pirmais atbilstošais noteikums, kas to uzstāda, bet to, ko tas atstāj tukšu, ņem no nākamā atbilstošā noteikuma un pēc tam no globālā noklusējuma. Kārtojot noklusējuma secībā, pirms noteikuma, kuram ir tikai beigu laika nosacījums, nonāk noteikumi, kuriem ir nosaukums, vairāk nosacījumu, foto skaits vai ilgums, tāpēc šāds noteikums, kam jāņem virsroka pār tiem, atkal jāpārvieto uz augšu.',
     titleRuleSortDefault: 'Kārtot noklusējuma secībā',
     titleRuleMoveUp: 'Pārvietot noteikumu augstāk',
     titleRuleMoveDown: 'Pārvietot noteikumu zemāk',
     addTitleTagRule: 'Pievienot noteikumu',
     removeTitleTagRule: 'Noņemt noteikumu',
     noTitleTagRules:
-        'Vēl nav noteikumu. Pievieno kādu, lai atlasītu izaicinājumus pēc nosaukuma, taga, veida, foto skaita vai ilguma.',
+        'Vēl nav noteikumu. Pievieno kādu, lai atlasītu izaicinājumus pēc nosaukuma, taga, veida, foto skaita, ilguma vai beigu laika.',
     usingProfile: 'Izmanto profilu',
+    fromRule: 'No noteikuma: {title}',
+    ruleNumber: 'Nr. {n}',
+    ruleSettingsHint: 'Uzstādījumus nosaka izaicinājumu noteikums',
     none: '(nav)',
     addOnePhoto: 'Iesniegt vienu foto tukšā vietā',
     fillAllPhotos: 'Iesniegt foto visās tukšajās vietās tagad (bez intervāla)',
@@ -695,7 +1138,7 @@ export const app = {
     groupLastMinute: 'Pēdējā minūte',
     groupScheduledFill: 'Plānotā balsošana',
     groupVotingPause: 'Balsošanas pauze',
-    groupAutoFill: 'Automātiskā iesniegšana',
+    groupAutoSubmit: 'Automātiskā iesniegšana',
     groupRewards: 'Balvas',
     groupMissions: 'Misijas',
     groupNotifications: 'Paziņojumi',
@@ -712,13 +1155,16 @@ export const app = {
         'Automātiski saņem balvas par noslēgtajiem izaicinājumiem un izpildītajām misijām (automātiskajai balsošanai jādarbojas). Pārbauda ne biežāk kā reizi stundā. Pēc noklusējuma izslēgts.',
     missionSaveTurbos: 'Taupīt Turbo misijām',
     missionSaveTurbosDesc:
-        'Neiegūst katra izaicinājuma Turbo uzreiz, lai misijai „Win Turbo” paliktu, ko iegūt. Pietaupīto Turbo lietotne iegūst, kad šī misija ir aktīva, vai stundu pirms tā automātiskās izmantošanas laika, tāpēc to joprojām iegūst un izmanto kā parasti. Pēc noklusējuma izslēgts.',
+        'Neiegūst katra izaicinājuma Turbo uzreiz, lai misijai „Win Turbo” paliktu, ko iegūt. Pietaupīto Turbo lietotne iegūst, kad šī misija ir aktīva, vai stundu pirms tā automātiskās izmantošanas laika, tāpēc to joprojām iegūst un izmanto kā parasti. Jau iesāktu Turbo spēli lietotne pabeidz uzreiz. Pēc noklusējuma izslēgts.',
     missionJoinEarly: 'Pievienoties nekavējoties misiju laikā',
     missionJoinEarlyDesc:
         'Kamēr aktīva misija „Join challenges” vai „Win Turbo”, lietotne pievienojas izaicinājumiem, negaidot automātiskās pievienošanās laiku (stundas pirms beigām / % no izaicinājuma), līdz misija izpildīta, — katrs jauns izaicinājums dod vēl vienu Turbo, ko iegūt. Tipu, tagu un monētu filtri joprojām darbojas. Pēc noklusējuma izslēgts.',
     missionUseFills: 'Izmantot uzpildes misijām',
     missionUseFillsDesc:
         'Kamēr aktīva misija „Use Fill”, lietotne izmanto uzpildes izaicinājumos, kuros redzamība ir zem 100 %, līdz misija izpildīta. Uzpilžu rezerve paliek neskarta. Pēc noklusējuma izslēgts.',
+    missionUseBoosts: 'Izmantot Boost misijām',
+    missionUseBoostsDesc:
+        'Kamēr aktīva misija „Use a boost”, lietotne izmanto jau pieejamu Boost, negaidot tā automātiskās izmantošanas laiku, līdz misija izpildīta. Atslēgas netiek tērētas. Jābūt ieslēgtam uzstādījumam „Automātiski izmantot Boost”; Boost, kuram uzstādījums „Boost laiks” vai „Boost laiks (atbloķēts ar atslēgu)” ir 0 (izslēgts), netiek izmantots. Pēc noklusējuma izslēgts.',
     missionVote: 'Balsot misijām',
     missionVoteDesc:
         'Kamēr aktīva misija „Vote on photos”, lietotne balso katrā ciklā, negaidot jūsu redzamības slieksni — vēl nepieciešamās balsis tiek sadalītas pa jūsu izaicinājumiem, un katrā balso līdz 100 % redzamībai (arī beigu loga redzamības laikā); atlikums gaida nākamo ciklu. Flash izaicinājumi tiek izlaisti; „Tikai Boost režīms”, „Balsot tikai pēdējās minūtes laikā”, balsošanas pauze un „Tikai plānotā balsošana” joprojām darbojas. Pēc noklusējuma izslēgts.',
@@ -726,11 +1172,11 @@ export const app = {
     notifyOnBoostDesc: 'Brīdina pirms Boost izmantošanas, lai paspētu atstāt lietotni ieslēgtu.',
     notifyOnTurbo: 'Paziņot pirms Turbo',
     notifyOnTurboDesc: 'Brīdina pirms Turbo spēles, lai paspētu atstāt lietotni ieslēgtu.',
-    notifyOnAutoFill: 'Paziņot pirms automātiskās iesniegšanas',
-    notifyOnAutoFillDesc:
+    notifyOnAutoSubmit: 'Paziņot pirms automātiskās iesniegšanas',
+    notifyOnAutoSubmitDesc:
         'Brīdina, pirms lietotne tuvu beigām automātiski iesniedz foto, lai paspētu atstāt lietotni ieslēgtu.',
-    notifyOnEmergencyFill: 'Paziņot pirms ārkārtas iesniegšanas',
-    notifyOnEmergencyFillDesc:
+    notifyOnEmergencySubmit: 'Paziņot pirms ārkārtas iesniegšanas',
+    notifyOnEmergencySubmitDesc:
         'Brīdina pirms pēdējā brīža ārkārtas iesniegšanas, lai paspētu atstāt lietotni ieslēgtu.',
     notifyLeadTime: 'Cik laicīgi brīdināt',
     notifyLeadTimeDesc: 'Cik minūtes pirms darbības parādīt brīdinājumu.',
@@ -766,6 +1212,10 @@ export const app = {
     entries: 'Foto',
     entryDetails: 'Informācija par foto',
     entryPhoto: 'Iesniegtais foto',
+    entrySubmitted: 'Iesniegts {time}',
+    entrySubmittedOrEarlier: 'Iesniegts {time} vai agrāk',
+    entrySubmittedOrEarlierLong:
+        'Lietotne nepierakstīja, kad šis foto tika iesniegts. Norādītais laiks ir brīdis, kad lietotne to pirmoreiz ieraudzīja, tātad tas iesniegts šajā brīdī vai agrāk.',
     viewEntryPhoto: 'Skatīt iesniegto foto',
     error: 'Kļūda',
     errorCheckingUpdates: 'Kļūda, pārbaudot atjauninājumus',
@@ -804,11 +1254,25 @@ export const app = {
     normal: 'NORMĀLS',
     of: 'no',
     onePhoto: '1 foto',
+    manualPhotosOnly: 'Tikai manuāli',
+    manualPhotosOnlyDesc:
+        'Lietotne šajā izaicinājumā pati neko nedara: nepievienojas, neiesniedz un neapmaina foto, nebalso, neizmanto Boost, nepiemēro un nepelna Turbo, neatbloķē ar atslēgām, netērē uzpildi un nepalaiž scenāriju soļus. Visas kartītes pogas joprojām darbojas (poga „Palaist” ir paslēpta, jo tā palaiž automātiskos noteikumus), bet „Balsot visur” šo izaicinājumu izlaiž. Lai foto izvēlētos pats un automātiskā balsošana turpinātos, atstāj šo uzstādījumu izslēgtu un ierobežo automātisko pievienošanos un iesniegšanu ar saviem foto, izmantojot „Izvēlētie foto” un „Iesniegt tikai izvēlētos foto” (jau samaksāta pievienošanās tik un tā iesniedz automātiski izvēlētu foto), vai izslēdz automātisko pievienošanos (visiem izaicinājumiem vai noteikumā, kas to ieslēdz) un šim izaicinājumam izslēdz automātisko iesniegšanu, tad izslēdz ārkārtas iesniegšanu, automātisko foto apmaiņu un Boost un Turbo jauniem foto, kā arī noņem scenāriju soļus, kas iesniedz vai apmaina foto. Kad šo uzstādījumu izslēdz, scenāriju soļi un tēriņi, kuru laiks jau pienācis, tiek izpildīti nākamajā ciklā. Ja izaicinājumam vēl neesi pievienojies vai tas atgriežas ar jaunu ID, izmanto izaicinājumu noteikumu.',
+    manualOnlyLabel: '„Tikai manuāli” ir ieslēgts — nekas nenotiek automātiski',
+    manualOnlyAlert:
+        '„Tikai manuāli” ir ieslēgts: lietotne šajā izaicinājumā pati neko nedara. Tā nekad nepievienojas un neiesniedz foto, neapmaina tos, nebalso, neizmanto Boost, nepiemēro un nepelna Turbo, neatbloķē ar atslēgām, netērē uzpildi un nepalaiž scenāriju soļus. Visas kartītes pogas joprojām darbojas; poga „Palaist” ir paslēpta, jo tā palaiž automātiskos noteikumus. „Balsot visur” šo izaicinājumu izlaiž.',
+    manualPhotosOnlyRuleHint:
+        'Kad ir ieslēgts „Tikai manuāli”, izaicinājumos, kurus šis noteikums aptver, lietotne vispār nebalso, neizmanto Boost un Turbo, nepievienojas izaicinājumiem un neiesniedz foto, ja vien paša izaicinājuma uzstādījums šo slēdzi neizslēdz.',
     onlyBoost: 'Tikai Boost režīms',
     onlyBoostDesc: 'Šajā izaicinājumā pilnībā izlaist parasto balsošanu un tikai izmantot Boost.',
     voteOnNewEntry: 'Balsot par jaunu foto',
     voteOnNewEntryDesc:
         'Kad šajā izaicinājumā parādās jauns foto — pievienots pašā GuruShots vai ar automātisko iesniegšanu, ārkārtas iesniegšanu vai kā jauns Boost/Turbo foto —, nobalsot vienu reizi arī tad, ja redzamība jau sasniegusi slieksni vai to pārsniegusi. Lietotne balso līdz tai robežai, ko izaicinājums izmantotu parasti: redzamības mērķim (vai redzamībai, ja mērķis ir 0) vai beigu loga laikā — beigu loga redzamības mērķim, ja ieslēgts „Izmantot beigu loga redzamību”. Tas neapiet uzstādījumus „Tikai Boost režīms”, „Balsot tikai pēdējās minūtes laikā” un „Tikai plānotā balsošana”: ja kāds no tiem to aizliedz, balsošana nenotiek.',
+    discoverUpcomingHours: 'Cik stundas uz priekšu rādīt gaidāmos izaicinājumus',
+    discoverUpcomingHoursDesc:
+        'Cik tālu uz priekšu „Atrast izaicinājumus” rāda izaicinājumus, kas vēl nav sākušies, lai foto tiem varētu izvēlēties jau iepriekš. Tiem nevar pievienoties, kamēr tie nav sākušies, un izvēlētos foto lietotne izmanto automātiski tikai tad, ja šim izaicinājumam ir ieslēgta automātiskā pievienošanās. 0 = izslēgts: rāda tikai atvērtos izaicinājumus.',
+    autovoteStartupDelay: 'Gaidīt pēc palaišanas, pirms atsākt automātisko balsošanu',
+    autovoteStartupDelayDesc:
+        'Ja lietotne tika aizvērta, kamēr automātiskā balsošana bija ieslēgta, cik sekundes pēc palaišanas tā uzgaida, pirms atsāk balsošanu pati, lai vari vispirms pārbaudīt uzstādījumus. Kamēr tā gaida, galvenajā ekrānā ir pogas „Sākt tūlīt” un „Neatsākt”. Attiecas tikai uz lietotnes automātisko atsākšanu, nevis uz sākšanu no komandrindas. 0 = izslēgts: balsošana atsākas uzreiz. Android ierīcē, ja gaidīšanas laikā no lietotnes iziet vai to aizver, balsošana atsāksies nākamreiz, kad to atver.',
     override: 'Pielāgots',
     overrideForChallenge: 'Pielāgot uzstādījumus izaicinājumam',
     photo: 'foto',
@@ -838,6 +1302,12 @@ export const app = {
     skipThisVersion: 'Izlaist šo versiju',
     speed: 'Ātrums',
     startAutoVote: 'Sākt automātisko balsošanu',
+    statusWaiting: 'Gaida',
+    resumeHold: 'Automātiskā balsošana atsāksies pēc {time}.',
+    resumeHoldNote:
+        'Līdz tam turi lietotni atvērtu — pēc palaišanas tā uzgaida, lai vari vispirms pārbaudīt uzstādījumus.',
+    resumeStartNow: 'Sākt tūlīt',
+    resumeCancel: 'Neatsākt',
     stayLoggedIn: 'Saglabāt pieteikšanos',
     stayLoggedInDesc: 'Saglabāt sesiju, lai pēc lietotnes aizvēršanas tu paliktu pieteicies.',
     stopAutoVote: 'Apturēt automātisko balsošanu',
@@ -847,10 +1317,11 @@ export const app = {
     timezone: 'Laika josla',
     timezoneDesc: 'Laika josla, kurā rādīt izaicinājumu sākuma un beigu laikus tavā vietējā laikā.',
     timezonePlaceholder: 'Ievadi laika joslu',
+    timezoneInvalid: 'Nederīga laika josla. Izmanto nosaukumu, piemēram, Europe/Riga.',
     uiSetting: 'Saskarnes uzstādījums',
     updateAvailable: 'Pieejams atjauninājums!',
     run: 'Palaist',
-    running: 'Darbojas...',
+    running: 'Darbojas…',
     vote: 'Balsot',
     voteTitle:
         'Tagad nobalsot šajā izaicinājumā līdz 100 % (apiet automātiku; automātiskā balsošana turpina darboties)',
@@ -860,8 +1331,8 @@ export const app = {
     votedAll: 'Visur nobalsots!',
     votes: 'Balsis',
     votesNeeded: 'balsis nepieciešamas',
-    voting: 'Balso...',
-    votingAll: 'Balso...',
+    voting: 'Balso…',
+    votingAll: 'Balso…',
     checkFrequency: 'Pārbaudes biežums',
     checkFrequencyDesc:
         'Katrs cikls izmanto nejauša garuma pauzi šajā diapazonā. Vienāds min un max nozīmē fiksētu biežumu.',
@@ -887,12 +1358,12 @@ export const app = {
     scheduledFillTimeOff: 'laiki nav uzstādīti — izslēgts',
     scheduledFillBeforeEnd: 'Balsošana pirms beigām',
     scheduledFillBeforeEndDesc:
-        'Atvērt vienreizējus balsošanas logus tik ilgi pirms izaicinājuma beigām: piem., 10h 0m un 4h 0m, lai noslēguma dienā balsotu divreiz. Ievada stundās un minūtēs; noņem visas rindas, lai šos intervālus izslēgtu. Tos skaita no katra izaicinājuma beigām, tāpēc pārbaudi tos vēlreiz, ja izmanto saglabātu profilu izaicinājumam ar citu garumu.',
+        'Atvērt vienreizējus balsošanas logus tik ilgi pirms izaicinājuma beigām: piem., 10h 0min un 4h 0min, lai noslēguma dienā balsotu divreiz. Ievada stundās un minūtēs; noņem visas rindas, lai šos intervālus izslēgtu. Tos skaita no katra izaicinājuma beigām, tāpēc pārbaudi tos vēlreiz, ja izmanto saglabātu profilu izaicinājumam ar citu garumu.',
     scheduledFillBeforeEndOff: 'intervāli nav uzstādīti — izslēgts',
     scheduledFillAddTime: 'Pievienot laiku',
     scheduledFillAddBeforeEnd: 'Pievienot intervālu',
     scheduledFillRemoveEntry: 'Noņemt rindu',
-    scheduledFillEntryDraft: 'uzstādi laiku — rindas ar 0h 0m netiek saglabātas',
+    scheduledFillEntryDraft: 'uzstādi laiku — rindas ar 0h 0min netiek saglabātas',
     scheduledFillDuplicateEntry: 'atkārtojas — šo rindu neņem vērā',
     scheduledFillMaxEntries: 'Sasniegts rindu maksimums: {0}.',
     scheduledFillSourceBeforeEnd: '{0} pirms beigām',
@@ -965,12 +1436,13 @@ export const app = {
     refresh: 'Atsvaidzināt',
     challengeOverrideInfo: 'Šeit norādītie uzstādījumi aizstās globālos noklusējumus tikai šim izaicinājumam.',
     challengeOverridesLoadError:
-        'Neizdevās ielādēt šī izaicinājuma saglabātos uzstādījumus, tāpēc tos tagad nevar labot — saglabāšana tos pārrakstītu. Aizver šo logu un atver to vēlreiz; ja kļūda atkārtojas, pārbaudi kļūdu žurnālu.',
+        'Neizdevās ielādēt šī izaicinājuma saglabātos uzstādījumus, tāpēc tos tagad nevar labot — saglabāšana tos pārrakstītu. Aizver šo dialoglodziņu un atver to vēlreiz; ja kļūda atkārtojas, pārbaudi kļūdu žurnālu.',
     mockMode: 'Testa režīms',
     logout: 'Iziet',
     status: 'Statuss',
     title: 'GuruShots Auto Vote',
-    downloadingUpdate: 'Lejupielādē atjauninājumu...',
+    mainContent: 'Automātiskā balsošana un izaicinājumi',
+    downloadingUpdate: 'Lejupielādē atjauninājumu…',
     updateReady: 'Atjauninājums gatavs',
     updateError: 'Atjaunināšanas kļūda',
     releaseNotes: 'Laidiena piezīmes',
@@ -979,6 +1451,10 @@ export const app = {
         'Atjauninājumu neizdevās pabeigt: nevarēja sazināties ar atjauninājumu serveri, vai lejupielāde tika pārtraukta. Mēģini vēlreiz vēlāk vai lejupielādē to pārlūkā.',
     updateInstallFailed:
         'Atjauninājumu neizdevās instalēt: lejupielādēto atjauninājumu nevarēja uzstādīt. Restartē lietotni un mēģini vēlreiz.',
+    updateUnverified:
+        'Lejupielādi neizdevās pārbaudīt, tāpēc tā netika instalēta. Laidiena lapa ir atvērta tavā pārlūkā.',
+    updateReleasePageOpened:
+        'Atjauninājumu neizdevās instalēt lietotnē. Laidiena lapa ir atvērta tavā pārlūkā, kur vari to lejupielādēt.',
     skipVersion: 'Izlaist versiju',
     remindLater: 'Atgādināt vēlāk',
     download: 'Lejupielādēt',
@@ -1030,6 +1506,70 @@ export const app = {
     intentMaxExposure: 'Maksimāla redzamība',
     intentMaxExposureDesc:
         'Visu laiku ar pilnu jaudu: balso līdz pilnai redzamībai, iesniedz foto visās foto vietās un izmanto Boost un Turbo.',
+    ended: 'Beidzies',
+    stateUnknown: 'Nezināms',
+    stateAvailableMinutes: 'Pieejams (atlikušas {minutes} min)',
+    stateLocked: 'Slēgts',
+    stateFree: 'Bezmaksas',
+    stateTimer: 'Gaidīšana',
+    stateInProgress: 'Notiek',
+    stateWon: 'Laimēts',
+    statusError: 'Kļūda',
+    autovoteNotificationPreparing: 'Automātiskā balsošana darbojas — sagatavo pirmo ciklu',
+    autovoteNotificationLastCycle: 'Pēdējais cikls: {time}',
+    actionOnItem: '{action}: {item}',
+    sbRuleN: '{n}. likums',
+    scenarioPathPhase: 'Fāze {name}',
+    scenarioPathCondition: '{n}. nosacījums',
+    scenarioPathAction: '{n}. darbība',
+    scenarioPathSettings: 'Uzstādījumi',
+    scenarioPathLimits: 'Limiti',
+    sbDurationHint: 'Sekundes vai laika posms, piemēram, „90m”, „6h” vai „1d 6h” (līdz 60 dienām).',
+    timeLeft: 'atlicis {time}',
+    noReleaseNotes: 'Laidiena piezīmju nav',
+    scenarioIssueNoJson: 'Scenārijs nav ievadīts. Ielīmē scenārija failu.',
+    scenarioIssueTooLarge: 'Fails ir lielāks par {kb} KB.',
+    scenarioIssueNotJson: 'Šis nav derīgs JSON.',
+    scenarioIssuePhaseScenario: 'Fāze nevar mainīt, kurš scenārijs ir piešķirts.',
+    scenarioIssuePhaseManualPhotos: 'Fāze nevar mainīt uzstādījumu „Tikai manuāli”.',
+    scenarioIssueNotPerChallenge: 'Šo uzstādījumu nevar iestatīt vienam izaicinājumam.',
+    scenarioIssueSetTogether: 'Uzstādi {fields} kopā.',
+    scenarioIssueConflictDefaults:
+        'Šīs vērtības ir pretrunā ar globālajiem noklusējumiem, ar kuriem tās darbojas kopā.',
+    scenarioIssueNoPhase: 'Nav fāzes ar nosaukumu „{name}”.',
+    scenarioIssueDuplicateRuleId: 'Likuma identifikators „{id}” ir izmantots divreiz.',
+    scenarioIssueConditionDepth: 'Nosacījumi ir ieklāti dziļāk par {depth} līmeņiem.',
+    scenarioIssueMemoryNeverSet: 'Atmiņas vieta „{slot}” netiek aizpildīta ne ar vienu darbību.',
+    scenarioIssueControlChars: 'Noņem rindu pārtraukumus un citas vadības rakstzīmes.',
+    scenarioIssueIdentifier: 'Lieto burtus, ciparus, „-” vai „_”, sākot ar burtu (ne vairāk kā 32 rakstzīmes).',
+    scenarioIssueReserved: 'Šis nosaukums ir rezervēts.',
+    scenarioIssueNameRequired: 'Nosaukums ir obligāts.',
+    scenarioIssueNameTooLong: 'Nosaukums ir garāks par {max} rakstzīmēm.',
+    scenarioIssueNameChars: "Lieto burtus, ciparus, atstarpes un . _ - ' ( ).",
+    scenarioIssueTimeOfDay: 'Lieto 24 stundu laiku formātā HH:MM.',
+    scenarioIssueStateName: 'Lieto stāvokļa nosaukumu ar lielajiem burtiem, piemēram, AVAILABLE.',
+    scenarioIssueSetMinMax: 'Norādi minimumu, maksimumu vai abus.',
+    scenarioIssueMinMax: 'Minimums ir lielāks par maksimumu.',
+    scenarioIssueWindowOnly: 'Logs attiecas tikai uz {fields}.',
+    scenarioIssueCompareBool: 'Lauku {field} salīdzina ar true vai false.',
+    scenarioIssueOpEquals: 'Lauks {field} atbalsta tikai = un !=.',
+    scenarioIssueCompareNumber: 'Lauku {field} salīdzina ar skaitli.',
+    scenarioIssueSameTime: 'Sākuma un beigu laiks ir vienāds.',
+    scenarioIssueWriteMessage: 'Uzraksti ziņojumu.',
+    scenarioIssueIdChars: 'Lieto burtus, ciparus, „-” vai „_” (ne vairāk kā 40 rakstzīmes).',
+    scenarioIssueNeedsAction: 'Likumam ir vajadzīga vismaz viena darbība.',
+    scenarioIssuePhaseNeeded: 'Scenārijam ir vajadzīga vismaz viena fāze.',
+    scenarioIssueTooManyPhases: 'Scenārijā var būt ne vairāk kā {max} fāzes.',
+    scenarioIssueMissing: 'Šī vērtība ir obligāta.',
+    scenarioIssueWrongType: 'Šīs vērtības veids nav pareizs.',
+    scenarioIssueUnknownKey: 'Šī atslēga nav daļa no scenārija formāta.',
+    scenarioIssueRange: 'Šī vērtība ir ārpus atļautā diapazona vai garuma.',
+    scenarioIssueInvalidOption: 'Šī nav neviena no atļautajām vērtībām.',
+    scenarioIssueInvalidFormat: 'Šīs vērtības formāts nav pareizs.',
+    scenarioIssueGeneric: 'Šī scenārija daļa nav derīga.',
+    noticeAcknowledgedVersion: 'Apstiprinātā paziņojuma versija',
+    noticeAcknowledgedVersionDesc:
+        'Iekšējs — tā paziņojuma versija, ko apstiprināji (lietotne nav saistīta ar GuruShots); paziņojums tiek rādīts vēlreiz, ja tā teksts būtiski mainās',
 };
 // Logs page specific
 export const logs = {
@@ -1042,7 +1582,7 @@ export const logs = {
     categories: {
         api: 'API',
         authentication: 'Pieteikšanās',
-        autoFill: 'Automātiskā iesniegšana',
+        autoSubmit: 'Automātiskā iesniegšana',
         boost: 'Boost',
         challenges: 'Izaicinājumi',
         claim: 'Balvu saņemšana',
@@ -1099,4 +1639,202 @@ export const themes = {
     caramellatte: 'Karameļu latte',
     abyss: 'Bezdibenis',
     silk: 'Zīds',
+};
+// notice
+export const notice = {
+    title: 'Pirms lieto lietotni',
+    unofficial:
+        'Šī nav oficiāla GuruShots lietotne. GuruShots Auto Vote ir citu izstrādāts rīks, kas nav saistīts ar GuruShots, un GuruShots to nav apstiprinājis vai atbalstījis.',
+    trademark:
+        'GuruShots ir tā īpašnieka preču zīme. Tā šeit lietota tikai tāpēc, lai norādītu, ar kuru pakalpojumu šī lietotne strādā.',
+    terms: 'Automātiska balsošana var pārkāpt GuruShots lietošanas noteikumus un var novest pie tava konta apturēšanas. Lietotni lieto uz savu atbildību.',
+    updates: 'Lai pārbaudītu atjauninājumus, lietotne sazinās ar GitHub.',
+    acknowledge: 'Sapratu',
+    recoveryRegion: 'Paziņojumi par uzstādījumiem',
+    recoveryCorruptWhat:
+        'Tavs uzstādījumu fails config.json bija bojāts, tāpēc lietotne sāka darbu ar noklusētajiem uzstādījumiem.',
+    recoveryCorruptWhy:
+        'Failu config.json neizdevās nolasīt kā derīgus uzstādījumus. Bojātā kopija ir saglabāta šeit: {path}.',
+    recoveryCorruptNext:
+        'Nav atrasts derīgs settings.json, no kura tos varētu atjaunot. Jaunus uzstādījumus vari saglabāt kā parasti. Lai atgūtu tā vērtības, salabo settings.json un izvēlies „Importēt failu vēlreiz”. Ja to nevar importēt, pirmā saglabāšana patur to kā kopiju blakus un tikai tad raksta jaunu settings.json; šis paziņojums tad norāda, kuru kopiju labot. Vari arī salabot bojāto kopiju un nolasīt vecās vērtības no tās.',
+    recoveryCorruptNextAside:
+        'Nav atrasts derīgs settings.json, no kura tos varētu atjaunot. Jaunus uzstādījumus vari saglabāt kā parasti. Nelietojamais settings.json ir paturēts šeit: {path}, un jauns settings.json ir uzrakstīts no taviem uzstādījumiem. Lai atgūtu tā vērtības, salabo failu {path} un izvēlies „Importēt failu vēlreiz”. Vari arī salabot bojāto kopiju un nolasīt vecās vērtības no tās.',
+    recoveryCorruptNextAsideAndroid:
+        'Uzstādījumi ir atiestatīti uz noklusētajiem, jo netika atrasta derīga kopija, ko lietotne uztur aktuālu un no kuras tos varētu atjaunot. Iestati tos vēlreiz; jaunus uzstādījumus vari saglabāt kā parasti. Nelietojamo kopiju lietotne paturēja savā krātuvē, kur tu to nevari atvērt.',
+    recoveryCorruptWhatAndroid:
+        'Tavi saglabātie uzstādījumi bija bojāti, tāpēc lietotne sāka darbu ar noklusētajiem uzstādījumiem.',
+    recoveryCorruptWhyAndroid:
+        'Saglabātos uzstādījumus neizdevās nolasīt kā derīgus. Lietotne bojāto kopiju paturēja savā krātuvē, kur tu to nevari atvērt.',
+    recoveryCorruptNextAndroid:
+        'Uzstādījumi ir atiestatīti uz noklusētajiem, jo netika atrasta derīga kopija, ko lietotne uztur aktuālu un no kuras tos varētu atjaunot. Iestati tos vēlreiz; jaunus uzstādījumus vari saglabāt kā parasti.',
+    recoveryRestoredWhat:
+        'Tavs uzstādījumu fails config.json bija bojāts, tāpēc lietotne atjaunoja tavus uzstādījumus no settings.json.',
+    recoveryRestoredWhy:
+        'Failu config.json neizdevās nolasīt kā derīgus uzstādījumus. Bojātā kopija ir saglabāta šeit: {path}.',
+    recoveryRestoredNext:
+        'Tavi uzstādījumi un pieteikšanās ir tādi, kādi bija pēdējās saglabāšanas brīdī. Lietotni vari turpināt lietot kā parasti, bet bojāto kopiju izdzēst, kad tā vairs nav vajadzīga.',
+    recoveryRestoredWhatAndroid:
+        'Tavi saglabātie uzstādījumi bija bojāti, tāpēc lietotne tos atjaunoja no kopijas, ko uztur aktuālu.',
+    recoveryRestoredWhyAndroid:
+        'Saglabātos uzstādījumus neizdevās nolasīt kā derīgus. Lietotne bojāto kopiju paturēja savā krātuvē, kur tu to nevari atvērt.',
+    recoveryRestoredNextAndroid:
+        'Tavi uzstādījumi un pieteikšanās ir atjaunoti no kopijas, ko lietotne uztur aktuālu. Lietotni vari turpināt lietot kā parasti.',
+    recoveryUnreadableWhat: 'Tavu uzstādījumu failu neizdevās nolasīt, tāpēc uzstādījumu saglabāšana ir izslēgta.',
+    recoveryUnreadableWhy:
+        'Lietotne nevarēja atvērt failu {path}. Iespējams, to bloķē cita programma vai piekļuvi liedz atļaujas.',
+    recoveryUnreadableNext:
+        'Aizver citas programmas, kas to izmanto, vai salabo atļaujas un pēc tam restartē lietotni. Nekas netika pārrakstīts.',
+    recoveryUnreadableWhyAndroid:
+        'Lietotne nevarēja nolasīt saglabātos uzstādījumus. Iespējams, ierīces krātuve ir aizņemta vai pilna.',
+    recoveryUnreadableNextAndroid:
+        'Restartē lietotni. Nekas netika pārrakstīts, un uzstādījumu saglabāšana paliek izslēgta, kamēr tos nevar nolasīt. Ja tas atkārtojas, sadaļā „Par lietotni un datiem” izmanto „Dzēst visus vietējos datus”, lai sāktu ar noklusētajiem uzstādījumiem.',
+    recoveryImportWhat:
+        'Tavus uzstādījumus no settings.json neizdevās importēt, tāpēc uzstādījumu saglabāšana ir izslēgta un lietotne izmanto noklusētos uzstādījumus.',
+    recoveryImportWhatAndroid:
+        'Tavus saglabātos uzstādījumus neizdevās importēt, tāpēc uzstādījumu saglabāšana ir izslēgta un lietotne izmanto noklusētos uzstādījumus.',
+    recoveryImportWhy: 'Failu settings.json (šeit: {path}) neizdevās nolasīt vai pārveidot.',
+    recoveryImportNext:
+        'Salabo šo failu un izvēlies „Mēģināt vēlreiz” vai izvēlies „Sākt no jauna”, lai sāktu ar noklusētajiem uzstādījumiem. Nekas netika pārrakstīts, un „Sākt no jauna” paturēs settings.json kopiju blakus kā settings.json.original vai, ja šis nosaukums ir aizņemts, kā settings.json.unimportable- ar datumu un laiku beigās.',
+    recoveryImportWhyAndroid: 'Kopiju, ko lietotne uztur aktuālu, neizdevās nolasīt vai pārveidot.',
+    recoveryImportNextAndroid:
+        'Izvēlies „Mēģināt vēlreiz” vai „Sākt no jauna”, lai sāktu ar noklusētajiem uzstādījumiem. Nekas netika pārrakstīts, un uzstādījumu saglabāšana paliek izslēgta, kamēr nav izdarīta kāda no šīm darbībām. „Sākt no jauna” paturēs saglabāto uzstādījumu kopiju.',
+    recoverySignInKept:
+        'Bojātajā kopijā joprojām var būt pieteikšanās dati, arī pēc izrakstīšanās. Izdzēs to, kad tā vairs nav vajadzīga.',
+    recoverySignInKeptAndroid: 'Bojātajā kopijā joprojām var būt pieteikšanās dati, arī pēc izrakstīšanās.',
+    recoveryRetryingWhat: 'Tavus uzstādījumus šobrīd neizdevās ielādēt, tāpēc uzstādījumu saglabāšana ir apturēta.',
+    recoveryRetryingWhy:
+        'Fails config.json bija bojāts un ir pārvietots uz {path}, bet failu settings.json, no kura atjaunot tavus uzstādījumus, šobrīd neizdevās nolasīt (iespējams, to izmanto cita programma). Nekas netika pārrakstīts.',
+    recoveryRetryingWhyNoCopy:
+        'Failu settings.json šobrīd neizdevās nolasīt (iespējams, to izmanto cita programma). Nekas netika pārrakstīts.',
+    recoveryRetryingWhyNoCopyAndroid: 'Saglabātos uzstādījumus šobrīd neizdevās nolasīt. Nekas netika pārrakstīts.',
+    recoveryRetryingWhyAndroid:
+        'Saglabātie uzstādījumi bija bojāti un ir paturēti lietotnes krātuvē, kur tu tos nevari atvērt, bet kopiju, no kuras tos atjaunot, šobrīd neizdevās nolasīt. Nekas netika pārrakstīts.',
+    recoveryRetryingNext:
+        'Lietotne mēģina vēlreiz pati un ielādē tavus uzstādījumus, tiklīdz failu var nolasīt. Vari arī izvēlēties „Mēģināt vēlreiz”.',
+    recoveryRetry: 'Mēģināt vēlreiz',
+    recoveryStartFresh: 'Sākt no jauna',
+    recoveryReimport: 'Importēt failu vēlreiz',
+    recoveryWorking: 'Notiek darbība…',
+    recoveryStartFreshTitle: 'Sākt ar noklusētajiem uzstādījumiem?',
+    recoveryStartFreshBody:
+        'Lietotne sāks darbu ar noklusētajiem uzstādījumiem. Fails settings.json netiek importēts; tā kopija tiek paturēta blakus kā settings.json.original vai, ja šis nosaukums ir aizņemts, kā settings.json.unimportable- ar datumu un laiku beigās.',
+    recoveryStartFreshBodyAndroid:
+        'Lietotne sāks darbu ar noklusētajiem uzstādījumiem. Saglabātā kopija netiek importēta; lietotne paturēs tās kopiju savā krātuvē.',
+    recoveryReimportTitle: 'Vēlreiz importēt failu?',
+    recoveryReimportBody:
+        'Tavi pašreizējie uzstādījumi un pieteikšanās tiek novietoti malā, un to vietā tiek importēti uzstādījumi un pieteikšanās no {path}. Ja šis fails ir vecs, iespējams, būs jāpiesakās vēlreiz.',
+    recoveryReimportConfirm: 'Importēt vēlreiz',
+    recoveryRetryDone: 'Tavi uzstādījumi no settings.json ir importēti. Uzstādījumu saglabāšana atkal darbojas.',
+    recoveryRetryDoneAndroid:
+        'Tavi uzstādījumi ir atjaunoti no saglabātās kopijas. Uzstādījumu saglabāšana atkal darbojas.',
+    recoveryRetryDoneAdopted:
+        'Nekas netika importēts. Tavi uzstādījumi jau bija savā vietā (atjaunoti vai importēti, kamēr tu izvēlējies šo darbību), un lietotne tos izmanto. Uzstādījumu saglabāšana darbojas.',
+    recoveryRetryFailed:
+        'Importēšana neizdevās. Failu settings.json neizdevās nolasīt vai pārveidot, vai arī uzstādījumus neizdevās saglabāt. Nekas netika mainīts. Salabo settings.json un mēģini vēlreiz vai izvēlies „Sākt no jauna”. Sīkāka informācija ir žurnālā.',
+    recoveryRetryFailedAndroid:
+        'Importēšana neizdevās. Saglabāto kopiju neizdevās nolasīt vai pārveidot, vai arī uzstādījumus neizdevās saglabāt. Nekas netika mainīts. Izvēlies „Mēģināt vēlreiz” vai „Sākt no jauna”. Sīkāka informācija ir žurnālā.',
+    recoveryStartFreshDone:
+        'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Faila settings.json kopija ir paturēta šeit: {path}.',
+    recoveryStartFreshDoneNone:
+        'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Faila settings.json nebija, tāpēc kopija netika paturēta.',
+    recoveryStartFreshDoneNoneAndroid:
+        'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Saglabātu uzstādījumu nebija, tāpēc kopija netika paturēta.',
+    recoveryStartFreshDonePendingAndroid:
+        'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Saglabāto uzstādījumu kopiju vēl neizdevās ierakstīt; tā tiks izveidota nākamajā saglabāšanā vai palaišanā, un līdz tam nekas netiek pārrakstīts pāri saglabātajiem uzstādījumiem.',
+    recoveryStartFreshDoneAdopted:
+        'Nekas netika atiestatīts. Saglabātie uzstādījumi tika atjaunoti vai importēti, kamēr tu izvēlējies šo darbību, un lietotne tos izmanto. Saglabāšana darbojas.',
+    recoveryStartFreshDoneUnreadable:
+        'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Saglabātos uzstādījumus neizdevās nolasīt, tāpēc tie palika, kādi bija, un kopija netika paturēta.',
+    recoveryStartFreshDoneAndroid:
+        'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Lietotne paturēja saglabāto uzstādījumu kopiju savā krātuvē.',
+    recoveryStartFreshFailed:
+        'Sākt ar noklusētajiem uzstādījumiem neizdevās. Jaunos uzstādījumus neizdevās saglabāt. Nekas netika mainīts. Mēģini vēlreiz, un, ja tas atkārtojas, pārbaudi, vai lietotne var rakstīt savā krātuvē. Sīkāka informācija ir žurnālā.',
+    recoveryReimportDone:
+        'Fails {path} ir importēts vēlreiz. Tavi iepriekšējie uzstādījumi un pieteikšanās ir novietoti malā, un tiek izmantoti tie, kas ir šajā failā.',
+    recoveryReimportDoneNothingAside:
+        'Fails {path} ir importēts vēlreiz. Iepriekšējo uzstādījumu, ko novietot malā, nebija, un tiek izmantoti tie, kas ir šajā failā.',
+    recoveryReimportFailed:
+        'Importēšana neizdevās. Faila {path} trūkst, to neizdevās nolasīt vai pārveidot, vai arī uzstādījumus neizdevās saglabāt. Salabo to un mēģini vēlreiz. Ja parādās jauns paziņojums, rīkojies pēc tā. Sīkāka informācija ir žurnālā.',
+    importReportTitle: 'Uzstādījumi importēti',
+    importReportIntro:
+        'Tavi uzstādījumi no settings.json ir importēti. Šīs atsauces uz profiliem un scenārijiem ir paturētas, un tās joprojām netiek piemērotas, tāpat kā iepriekš. Izveido vai salabo profilu vai scenāriju, ko katra no tām nosauc.',
+    importReportIntroAndroid:
+        'Tavi saglabātie uzstādījumi ir importēti. Šīs atsauces uz profiliem un scenārijiem ir paturētas, un tās joprojām netiek piemērotas, tāpat kā iepriekš. Izveido vai salabo profilu vai scenāriju, ko katra no tām nosauc.',
+    importReportFailed:
+        'Lietotne nevarēja saglabāt, ka šis paziņojums ir redzēts. Tas parādīsies vēlreiz nākamajā startā. Pārbaudi, vai lietotne var rakstīt savā krātuvē.',
+    importRefLine: '{where}: {problem}',
+    importRefRule: 'Noteikums {number}',
+    importRefRuleTitled: 'Noteikums {number} ({title})',
+    importRefProfile: 'Profils „{name}”',
+    importRefChallenge: 'Izaicinājums {id}',
+    importRefChallengeTitled: 'Izaicinājums „{title}” ({id})',
+    importRefProfileMissing: 'profils „{name}” nepastāv',
+    importRefProfileInvalid: 'profilu „{name}” nevar izmantot',
+    importRefScenarioMissing: 'scenārijs „{name}” nepastāv',
+    importRefScenarioInvalid: 'scenāriju „{name}” nevar izmantot',
+    recoveryDroppedWhat: 'Vienu no tavām izmaiņām uzstādījumos neizdevās saglabāt.',
+    recoveryDroppedWhyConflict: 'Fona pakalpojums tajā pašā laikā mainīja uzstādījumus.',
+    recoveryDroppedWhyTooLarge: 'Uzstādījumi ir pārāk lieli, lai tos varētu saglabāt.',
+    recoveryDroppedWhyStorage: 'Ierīces uzstādījumu krātuve izmaiņu nepieņēma.',
+    recoveryDroppedWhyUnknown: 'Uzstādījumus šobrīd neizdevās ierakstīt.',
+    recoveryDroppedNext: 'Uzstādījums atkal rāda saglabāto vērtību. Ja vajag, nomaini to vēlreiz.',
+    recoveryDroppedNextTooLarge:
+        'Uzstādījums atkal rāda saglabāto vērtību. Noņem izaicinājumu atsevišķos uzstādījumus un scenārijus, kas vairs nav vajadzīgi, un nomaini to vēlreiz.',
+    recoveryLogoutLostWhat: 'Tava izrakstīšanās netika ierakstīta.',
+    recoveryLogoutLostWhy:
+        'Saglabātie uzstādījumi to nepieņēma, tāpēc tā spēkā ir tikai, kamēr lietotne paliek atvērta.',
+    recoveryLogoutLostNext:
+        'Ja lietotne tiek aizvērta, kamēr uzstādījumi vēl nav ielādēti, kopā ar tiem atgriežas arī tava pieteikšanās. Tad izraksties vēlreiz.',
+};
+// about
+export const about = {
+    title: 'Par lietotni un datiem',
+    licensesDesc: 'Atvērtā koda programmatūra un dati, kas iekļauti šajā lietotnē, ar to licencēm.',
+    licensesButton: 'Trešo pušu licences',
+    licensesTitle: 'Trešo pušu licences',
+    licensesTextLabel: 'Trešo pušu licenču teksti',
+    licensesLoadError:
+        'Licenču tekstus neizdevās ielādēt. Fails ar tiem trūkst šajā instalācijā vai nav nolasāms. Mēģini vēlreiz; ja tas atkārtojas, pārinstalē lietotni.',
+    licensesRetry: 'Mēģināt vēlreiz',
+    dangerTitle: 'Bīstamā zona',
+    deleteDesc: 'Dzēst visu, ko lietotne glabā šajā ierīcē. To nevar atsaukt.',
+    deleteButton: 'Dzēst visus vietējos datus…',
+    deleteTitle: 'Dzēst visus vietējos datus?',
+    deleteIntro: 'Tiks neatgriezeniski dzēsts šajā ierīcē:',
+    deleteLogin: 'saglabātā pieteikšanās',
+    deleteSettings: 'uzstādījumi',
+    deleteProfiles: 'saglabātie profili',
+    deleteScenarios: 'scenāriji un to norise',
+    deleteStats: 'statistika',
+    deleteLogs: 'žurnāli',
+    deleteBackground: 'fona pakalpojuma stāvoklis',
+    deleteAfter:
+        'Pēc tam lietotne tiek palaista no jauna un lūdz pieteikties vēlreiz. Tavs GuruShots konts netiek skarts.',
+    deleteAfterWeb:
+        'Pēc tam tīmekļa serveris apstājas. Palaid pnpm web vēlreiz, atver adresi, ko tas izvada, un piesakies no jauna. Tavs GuruShots konts netiek skarts.',
+    deleteConfirm: 'Dzēst visu',
+    deleteChecking: 'Pārbauda, vai neviens cits neizmanto datus, un pēc tam dzēš…',
+    deleteBusyPass:
+        'Notiek balsošanas cikls, tāpēc nekas netika dzēsts. Aptur automātisko balsošanu, pagaidi, kamēr cikls beidzas, un mēģini vēlreiz.',
+    deleteBusyCli:
+        'Darbojas cita komandrindas komanda vai sesija, tāpēc nekas netika dzēsts. Pagaidi, kamēr tā beidzas, vai aptur to terminālī, kurā tā darbojas (Ctrl+C), un mēģini vēlreiz.',
+    deleteBusyApp:
+        'Darbvirsmas lietotne ir atvērta, tāpēc nekas netika dzēsts. Aizver darbvirsmas lietotni un mēģini vēlreiz.',
+    deleteBusyWeb:
+        'Darbojas tīmekļa serveris (pnpm web), tāpēc nekas netika dzēsts. Aptur to terminālī, kurā tas darbojas (Ctrl+C), un mēģini vēlreiz.',
+    deleteFailed:
+        'Ne viss tika izdzēsts. Kādu failu vai krātuvi neizdevās noņemt. Aizver citas programmas, kas izmanto lietotnes failus, un mēģini vēlreiz.',
+    deleteFailedAndroid:
+        'Ne viss tika izdzēsts. Daļu saglabāto datu vai fona pakalpojuma datu neizdevās noņemt. Mēģini vēlreiz tūlīt.',
+    deleteRestartsOnClose: 'Kad aizvērsi šo dialoglodziņu, lietotne tiks palaista no jauna.',
+    deleteDone:
+        'Visi vietējie dati ir dzēsti. Lietotne tūlīt tiks palaista no jauna. Ja tas nenotiek, aizver to un atver vēlreiz.',
+    deleteDoneWeb:
+        'Visi vietējie dati ir dzēsti. Tīmekļa serveris ir apstājies. Palaid pnpm web vēlreiz un atver adresi, ko tas izvada.',
+    importTitle: 'Uzstādījumu imports',
+    importAt: 'Tavi uzstādījumi no settings.json tika importēti {date}',
+    importAtAndroid: 'Tavi saglabātie uzstādījumi tika importēti {date}',
+    importNone: 'Nekas nebija jālabo.',
+    importSome:
+        'Šīs atsauces uz profiliem un scenārijiem ir paturētas, un tās joprojām netiek piemērotas, tāpat kā pirms importa. Izveido vai salabo profilu vai scenāriju, ko katra no tām nosauc:',
 };

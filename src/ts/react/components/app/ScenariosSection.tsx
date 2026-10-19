@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { useScenarios } from '@/api/useScenarios';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
 import { ScenarioError, issuesOf } from './ScenarioError';
 import { ScenarioBuilder } from './scenarioBuilder/ScenarioBuilder';
+import { SettingsSectionPanel } from './SettingsSectionPanel';
 import { newScenario } from '../../../scenarios/builderModel';
 
 import type { WindowApi } from '../../../types/ipc';
@@ -38,20 +40,36 @@ function ImportPreview({ preview }: { preview: ImportPreviewResult['preview'] })
                 {preview.phases.map((phase) => (
                     <li key={phase.name}>
                         {interp(t('app.scenarioPhaseSummary'), { phase: phase.name, rules: phase.rules })}
-                        {phase.settings.length > 0 && ` (${phase.settings.join(', ')})`}
+                        {phase.settings.length > 0 && ` (${phase.settings.map((key) => t(`app.${key}`)).join(', ')})`}
                     </li>
                 ))}
             </ul>
             <div>
                 {preview.spending.length > 0
                     ? interp(t('app.scenarioSpends'), {
-                          actions: preview.spending.map((spend) => `${spend.action} (${spend.rule})`).join(', '),
+                          actions: preview.spending
+                              .map((spend) => `${t(`app.sbAct_${spend.action}`)} (${spend.rule})`)
+                              .join(', '),
                       })
                     : t('app.scenarioSpendsNothing')}
             </div>
+            {preview.flagged.length > 0 && (
+                <ToneNote tone="warning" as="div">
+                    {interp(t('app.scenarioFlagged'), {
+                        settings: preview.flagged
+                            .map(
+                                (item) =>
+                                    `${t(`app.${item.key}`)} (${interp(t('app.scenarioStatusPhase'), { phase: item.phase })})`,
+                            )
+                            .join(', '),
+                    })}
+                </ToneNote>
+            )}
             <div>
                 {limits.length > 0
-                    ? interp(t('app.scenarioLimits'), { limits: limits.map(([key, n]) => `${n} ${key}`).join(', ') })
+                    ? interp(t('app.scenarioLimits'), {
+                          limits: limits.map(([key, n]) => `${n} ${t(`app.sbCurrency_${key}`)}`).join(', '),
+                      })
                     : t('app.scenarioNoLimits')}
             </div>
         </div>
@@ -99,8 +117,10 @@ function ImportPanel({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
             </label>
             <textarea
                 id="scenario-import-text"
-                className="textarea textarea-bordered w-full font-mono text-xs"
+                className="textarea w-full font-mono text-xs"
                 rows={6}
+                spellcheck={false}
+                autoCapitalize="off"
                 value={text}
                 onChange={(e) => {
                     setText(e.currentTarget.value);
@@ -126,7 +146,7 @@ function ImportPanel({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
                 </button>
                 <button
                     type="button"
-                    className="btn btn-sm btn-primary"
+                    className="btn btn-sm btn-neutral"
                     onClick={() => void runImport()}
                     disabled={!preview || (preview.exists && !overwrite)}
                 >
@@ -136,6 +156,43 @@ function ImportPanel({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
                     {t('app.cancel')}
                 </button>
             </div>
+        </div>
+    );
+}
+
+/**
+ * An exported scenario's JSON, and the settings the export left out (they belong to this account).
+ */
+type ExportedText = { json: string; omitted: string[] };
+
+/**
+ * The export panel of a scenario row: the JSON to copy and what was left out of it.
+ */
+function ExportedScenario({ name, exported, onHide }: { name: string; exported: ExportedText; onHide: () => void }) {
+    const { t } = useTranslation();
+    return (
+        <div className="space-y-1">
+            <p className="text-xs text-base-content/70">{t('app.scenarioExportHint')}</p>
+            {exported.omitted.length > 0 && (
+                <ToneNote tone="warning" className="text-xs">
+                    {interp(t('app.scenarioExportOmitted'), {
+                        settings: exported.omitted.map((key) => t(`app.${key}`)).join(', '),
+                    })}
+                </ToneNote>
+            )}
+            <textarea
+                className="textarea w-full font-mono text-xs"
+                rows={6}
+                spellcheck={false}
+                autoCapitalize="off"
+                readOnly
+                aria-label={interp(t('app.scenarioExportLabel'), { name })}
+                value={exported.json}
+                onFocus={(e) => e.currentTarget.select()}
+            />
+            <button type="button" className="btn btn-sm btn-ghost" onClick={onHide}>
+                {t('app.scenarioExportClose')}
+            </button>
         </div>
     );
 }
@@ -157,9 +214,11 @@ function ScenarioRow({
     onEdit: () => void;
 }) {
     const { t } = useTranslation();
-    const [exported, setExported] = useState<string | null>(null);
+    const [exported, setExported] = useState<ExportedText | null>(null);
     const [renaming, setRenaming] = useState<string | null>(null);
     const [armed, setArmed] = useState(false);
+    // Each row repeats the same four buttons: the scenario's name makes each one's accessible name unique.
+    const rowLabel = (actionKey: string) => interp(t('app.actionOnItem'), { action: t(actionKey), item: name });
 
     useEffect(() => {
         if (!armed) return undefined;
@@ -169,7 +228,7 @@ function ScenarioRow({
 
     const runExport = async () => {
         const result = await ipc.callOrNull(() => ipc.exportScenario(name));
-        if (result?.success) setExported(result.json);
+        if (result?.success) setExported({ json: result.json, omitted: result.omitted });
         else onError({ what: 'app.scenarioExportFailed' });
     };
 
@@ -203,27 +262,38 @@ function ScenarioRow({
                 <span className="font-medium flex-1 min-w-0 truncate" title={name}>
                     {name}
                 </span>
-                <span className="text-xs text-base-content/60">
+                <span className="text-xs text-base-content/70">
                     {interp(t('app.scenarioPhaseCount'), { count: Object.keys(scenario.phases).length })}
                 </span>
-                <button type="button" className="btn btn-xs" onClick={onEdit}>
+                <button type="button" className="btn btn-sm" aria-label={rowLabel('app.sbEdit')} onClick={onEdit}>
                     {t('app.sbEdit')}
                 </button>
-                <button type="button" className="btn btn-xs" onClick={() => void runExport()}>
+                <button
+                    type="button"
+                    className="btn btn-sm"
+                    aria-label={rowLabel('app.scenarioExport')}
+                    onClick={() => void runExport()}
+                >
                     {t('app.scenarioExport')}
                 </button>
-                <button type="button" className="btn btn-xs" onClick={() => setRenaming(name)}>
+                <button
+                    type="button"
+                    className="btn btn-sm"
+                    aria-label={rowLabel('app.scenarioRename')}
+                    onClick={() => setRenaming(name)}
+                >
                     {t('app.scenarioRename')}
                 </button>
                 <button
                     type="button"
-                    className={`btn btn-xs ${armed ? 'btn-error' : ''}`}
+                    className={`btn btn-sm ${armed ? 'btn-error' : ''}`}
+                    aria-label={rowLabel(armed ? 'app.scenarioDeleteConfirm' : 'app.scenarioDelete')}
                     onClick={() => void runDelete()}
                 >
                     {armed ? t('app.scenarioDeleteConfirm') : t('app.scenarioDelete')}
                 </button>
             </div>
-            {scenario.description && <p className="text-xs text-base-content/60">{scenario.description}</p>}
+            {scenario.description && <p className="text-xs text-base-content/70">{scenario.description}</p>}
             {renaming !== null && (
                 <div className="flex gap-2">
                     <input
@@ -233,7 +303,7 @@ function ScenarioRow({
                         value={renaming}
                         onChange={(e) => setRenaming(e.currentTarget.value)}
                     />
-                    <button type="button" className="btn btn-sm btn-primary" onClick={() => void runRename(renaming)}>
+                    <button type="button" className="btn btn-sm btn-neutral" onClick={() => void runRename(renaming)}>
                         {t('app.scenarioRenameSave')}
                     </button>
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => setRenaming(null)}>
@@ -241,22 +311,7 @@ function ScenarioRow({
                     </button>
                 </div>
             )}
-            {exported !== null && (
-                <div className="space-y-1">
-                    <p className="text-xs text-base-content/60">{t('app.scenarioExportHint')}</p>
-                    <textarea
-                        className="textarea textarea-bordered w-full font-mono text-xs"
-                        rows={6}
-                        readOnly
-                        aria-label={interp(t('app.scenarioExportLabel'), { name })}
-                        value={exported}
-                        onFocus={(e) => e.currentTarget.select()}
-                    />
-                    <button type="button" className="btn btn-xs btn-ghost" onClick={() => setExported(null)}>
-                        {t('app.scenarioExportClose')}
-                    </button>
-                </div>
-            )}
+            {exported !== null && <ExportedScenario name={name} exported={exported} onHide={() => setExported(null)} />}
         </li>
     );
 }
@@ -276,8 +331,16 @@ const freeName = (base: string, taken: string[]) => {
  * export / rename / delete, a copy from an example template, and import of a
  * shared file. Changes here are saved immediately (not with the modal's Save),
  * like the scenario files they are.
+ *
+ * @param props.onDirtyChange - told whether the builder holds a draft that was not saved (false once it closes)
  */
-export function ScenariosSection({ isOpen }: { isOpen: boolean }) {
+export function ScenariosSection({
+    isOpen,
+    onDirtyChange,
+}: {
+    isOpen: boolean;
+    onDirtyChange: (dirty: boolean) => void;
+}) {
     const { t } = useTranslation();
     const { scenarios, templates, loading, error: loadError, refetch } = useScenarios(isOpen);
     const [importing, setImporting] = useState(false);
@@ -308,9 +371,8 @@ export function ScenariosSection({ isOpen }: { isOpen: boolean }) {
 
     const names = Object.keys(scenarios);
     return (
-        <div>
-            <h4 className="font-semibold text-base mb-1 border-b border-base-300 pb-2">{t('app.scenarios')}</h4>
-            <p className="text-xs text-base-content/60 mb-3">{t('app.scenariosDesc')}</p>
+        <SettingsSectionPanel id="scenarios">
+            <p className="text-xs text-base-content/70 mb-3">{t('app.scenariosDesc')}</p>
             {loading ? (
                 <InlineLoader text={t('common.loading')} />
             ) : loadError ? (
@@ -326,12 +388,13 @@ export function ScenariosSection({ isOpen }: { isOpen: boolean }) {
                         changed();
                     }}
                     onCancel={() => setEditing(null)}
+                    onDirtyChange={onDirtyChange}
                 />
             ) : (
                 <div className="space-y-3">
                     <ScenarioError error={error} />
                     {names.length === 0 ? (
-                        <p className="text-sm text-base-content/60">{t('app.scenariosEmpty')}</p>
+                        <p className="text-sm text-base-content/70">{t('app.scenariosEmpty')}</p>
                     ) : (
                         <ul className="space-y-2">
                             {names.map((name) => (
@@ -349,7 +412,7 @@ export function ScenariosSection({ isOpen }: { isOpen: boolean }) {
                     <div className="flex flex-wrap gap-2 items-center">
                         <button
                             type="button"
-                            className="btn btn-sm btn-primary"
+                            className="btn btn-sm btn-neutral"
                             onClick={() =>
                                 setEditing({
                                     initial: newScenario(freeName(t('app.sbNew'), names)),
@@ -397,6 +460,6 @@ export function ScenariosSection({ isOpen }: { isOpen: boolean }) {
                     )}
                 </div>
             )}
-        </div>
+        </SettingsSectionPanel>
     );
 }

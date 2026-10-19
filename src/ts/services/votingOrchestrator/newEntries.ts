@@ -74,7 +74,19 @@ export const recordEntrySnapshot = (
 ) => {
     if (!entry.tracking || (decision.forcedByNewEntry && voteThrew)) return;
     if (decision.preservesNewEntryTrigger && entry.hasNewEntry) return;
-    if (!newEntryTracker.shouldRecordSnapshot(entry.previousIds, entry.tracking)) return;
+    rebaselineEntrySnapshot(entryTracker, entry);
+};
+
+/**
+ * Store the tracked ids as the baseline, through the empty-read guard (a degraded empty entries
+ * read never replaces a non-empty baseline). Also what a Manual Only challenge does each pass: no
+ * vote decision exists to disarm, but photos entered by hand must not read as new afterwards.
+ */
+export const rebaselineEntrySnapshot = (
+    entryTracker: EntryTracker | null,
+    entry: ReturnType<typeof detectNewEntry>,
+) => {
+    if (!entry.tracking || !newEntryTracker.shouldRecordSnapshot(entry.previousIds, entry.tracking)) return;
     // `entry.tracking` is only set when entryTracker is.
     (entryTracker as EntryTracker).set(entry.challengeId, entry.tracking);
 };

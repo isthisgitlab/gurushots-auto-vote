@@ -26,7 +26,7 @@ const getVoteImages = async (challenge: Challenge, token: string): Promise<VoteI
         .startOperation(operationId, `Fetching vote images for ${logger.challengeTag(challenge)}`, 'DEBUG');
 
     // Request up to 100 images for voting
-    const data = `limit=100&url=${challenge.url}`;
+    const data = `limit=100&url=${encodeURIComponent(String(challenge.url))}`;
     const headers = {
         ...createCommonHeaders(token),
         'content-type': FORM_CONTENT_TYPE,
@@ -181,7 +181,7 @@ const submitVotes = async (
     }
 
     // Prepare final request data
-    const data = `c_id=${challenge.id}${votedImages}&layout=scroll${viewedImages}`;
+    const data = `c_id=${encodeURIComponent(String(challenge.id))}${votedImages}&layout=scroll${viewedImages}`;
     const headers = {
         ...createCommonHeaders(token),
         'content-type': FORM_CONTENT_TYPE,

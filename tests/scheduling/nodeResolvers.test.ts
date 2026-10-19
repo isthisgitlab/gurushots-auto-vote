@@ -48,11 +48,6 @@ describe('resolveFinalWindowTopUp', () => {
         });
         expect(resolveFinalWindowTopUp('c1')).toEqual({ enabled, leadSec: 900, durationSec: 3600 });
     });
-
-    test('a missing lead yields NaN for thresholdWindow to re-guard', () => {
-        withSettings({ voteBeforeFinalWindow: true, useFinalWindowExposure: true });
-        expect(resolveFinalWindowTopUp('c1').leadSec).toBeNaN();
-    });
 });
 
 describe('resolveBoostPrefill', () => {
@@ -90,5 +85,25 @@ describe('resolveCurrencyAuto', () => {
             swap: null,
             fill: { afterStartSec: 0, beforeEndSec: 25200, afterPercent: 50 },
         });
+    });
+
+    test('Manual Only leaves the swap with no wake, and the other two rules alone', () => {
+        const timing = { afterStartSec: 60, beforeEndSec: 0, afterPercent: 0 };
+        const rule = (enableKey: string, prefix: string) => ({
+            [enableKey]: true,
+            [`${prefix}AfterStart`]: 60,
+            [`${prefix}BeforeEnd`]: 0,
+            [`${prefix}AfterPercent`]: 0,
+        });
+        const values = {
+            ...rule('autoKeyUnlock', 'autoKey'),
+            ...rule('autoSwap', 'autoSwap'),
+            ...rule('autoExposureFill', 'autoExposureFill'),
+        };
+        withSettings({ ...values, manualPhotosOnly: true });
+        expect(resolveCurrencyAuto('c1')).toEqual({ key: timing, swap: null, fill: timing });
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('manualPhotosOnly', 'c1');
+        withSettings({ ...values, manualPhotosOnly: false });
+        expect(resolveCurrencyAuto('c1')).toEqual({ key: timing, swap: timing, fill: timing });
     });
 });

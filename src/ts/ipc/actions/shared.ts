@@ -4,6 +4,7 @@ import { invalidArgs } from '../isIdArg';
 
 import type { ApiStrategy } from '../../apiFactory';
 import type { ActiveChallengesResponse, Challenge } from '../../types/gurushots';
+import type { LibraryUsage } from '../../types/photoPicker';
 
 const sanitizeForLog = logger.sanitizeLogString;
 
@@ -17,6 +18,9 @@ const refuseInvalidArgs = (category: string, channel: string) => {
     return invalidArgs;
 };
 
+/** Whether a received value names a library usage; a compromised window can send anything. */
+const isUsageArg = (value: unknown): value is LibraryUsage => value === 'submit' || value === 'swap';
+
 /**
  * Re-fetch the active list and resolve one challenge from it (null when it is gone).
  */
@@ -29,4 +33,4 @@ const fetchLiveChallenge = async (
     return findActiveChallenge(challengesResponse?.challenges, challengeId);
 };
 
-export { sanitizeForLog, refuseInvalidArgs, fetchLiveChallenge };
+export { sanitizeForLog, refuseInvalidArgs, isUsageArg, fetchLiveChallenge };

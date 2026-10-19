@@ -15,6 +15,10 @@ const API_BASE = 'https://api.gurushots.com';
 const ENDPOINTS = {
     signup: `${API_BASE}/rest_mobile/signup`,
     activeChallenges: `${API_BASE}/rest_mobile/get_my_active_challenges`,
+    // The WEB-profile twin of activeChallenges: only it reports the snap-aware
+    // member.turbo (state + `mode`); the mobile read has no `mode` and a wrong
+    // turbo state for a snap challenge. See api/challenges.ts fetchWebActiveTurbos.
+    webActiveChallenges: `${API_BASE}/rest/get_my_active_challenges`,
     voteImages: `${API_BASE}/rest_mobile/get_vote_images`,
     submitVote: `${API_BASE}/rest_mobile/submit_vote`,
     boostPhoto: `${API_BASE}/rest_mobile/boost_photo`,
@@ -22,6 +26,8 @@ const ENDPOINTS = {
     challengeTurbo: `${API_BASE}/rest/get_challenge_turbo`,
     submitTurboSelection: `${API_BASE}/rest/submit_challenge_turbo_selection`,
     setTurbo: `${API_BASE}/rest/set_challenge_turbo`,
+    startTurboSession: `${API_BASE}/rest/start_turbo_session`,
+    submitSnapVote: `${API_BASE}/rest/submit_snap_vote`,
     photosPrivate: `${API_BASE}/rest/get_photos_private`,
     imageData: `${API_BASE}/rest/get_image_data`,
     submitToChallenge: `${API_BASE}/rest/submit_to_challenge`,
@@ -56,6 +62,11 @@ const ENDPOINTS = {
     claimResources: `${API_BASE}/rest/claim_resources`,
     getMyMissions: `${API_BASE}/rest/get_my_missions`,
     claimMissionPrizes: `${API_BASE}/rest/claim_mission_prizes`,
+
+    // Team match (WEB profile): getTeams reports the member's team, getMatch
+    // that team's current match with both sides' vote totals. See api/teams.ts.
+    getTeams: `${API_BASE}/rest/get_teams`,
+    getMatch: `${API_BASE}/rest/get_match`,
 };
 
 const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';

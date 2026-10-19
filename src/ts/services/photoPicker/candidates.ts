@@ -20,6 +20,7 @@ import {
 
 import type {
     ChallengeText,
+    ChosenCandidates,
     PickerPhoto,
     PickFallbackInfo,
     PickOptions,
@@ -60,7 +61,7 @@ const notifyFallback = (opts: PickOptions, info: PickFallbackInfo) => {
  *   filter.
  *   shouldIncludeTags: soft boost — photos with more matching tags rank
  *   above photos with fewer, before the existing keyword/quality tiers.
- *   fillWithoutTagMatch: when a HARD filter matches NOTHING, fall back to the
+ *   submitWithoutTagMatch: when a HARD filter matches NOTHING, fall back to the
  *   unfiltered set rather than returning [] (so a slot isn't left empty). A hard
  *   filter is the must-include tags (no photo carries every required tag) and/or
  *   the letter-challenge filter derived from the title (no photo has a label
@@ -85,8 +86,12 @@ const notifyFallback = (opts: PickOptions, info: PickFallbackInfo) => {
  *   labels showed the negated subject). Injected
  *   side-channel so this function stays pure — callers use it to log the
  *   fallback where a user can see it. Exceptions it throws are swallowed;
- *   omitting it changes nothing. Not called when fillWithoutTagMatch is false
+ *   omitting it changes nothing. Not called when submitWithoutTagMatch is false
  *   (the picker returns [] instead of relaxing).
+ *   chosen: the user's chosen photos (see ChosenPick): they come first, ordered
+ *   by the same tiers as everything else — or, with `inOrder`, in the order they
+ *   were picked — and the rest tops up the remaining slots — or, with `only`,
+ *   nothing does. Omit it and nothing changes.
  * @returns ordered list of photo ids; length <= slotsToFill
  */
 const pickPhotosForChallenge = (
@@ -96,8 +101,8 @@ const pickPhotosForChallenge = (
     opts: PickOptions = {},
 ): Array<string> => {
     if (!Number.isInteger(slotsToFill) || slotsToFill <= 0) return [];
-    const scored = buildScoredCandidates(challenge, eligiblePhotos, opts);
-    return finalizePick(scored, slotsToFill);
+    const { scored, chosenIds, orderedIds } = buildChosenCandidates(challenge, eligiblePhotos, opts);
+    return finalizePick(scored, slotsToFill, chosenIds, opts.chosen?.inOrder ? orderedIds : null);
 };
 
 /**
@@ -105,7 +110,7 @@ const pickPhotosForChallenge = (
  *
  * When they eliminate everything, relax to the unfiltered set so the slot still
  * gets filled (off-theme best performer) — unless the caller opted out with
- * fillWithoutTagMatch:false, or no hard filter was set at all.
+ * submitWithoutTagMatch:false, or no hard filter was set at all.
  *
  * @returns the surviving stemmed photos, or null for "pick nothing"
  */
@@ -126,7 +131,7 @@ const applyHardFilters = (
     }
     if (filtered.length > 0) return filtered;
     const hadHardFilter = mustStems.length > 0 || Boolean(letterPrefix);
-    if (!hadHardFilter || opts.fillWithoutTagMatch === false) return null;
+    if (!hadHardFilter || opts.submitWithoutTagMatch === false) return null;
     notifyFallback(opts, { letterPrefix, mustStems, excludedStems: [] });
     return withStems;
 };
@@ -135,7 +140,7 @@ const applyHardFilters = (
  * A negated title ("No Humans") excludes photos whose labels show the negated
  * subject. Same all-or-nothing fallback as the hard filters: only when EVERY
  * remaining photo shows it does the picker relax (or return null under
- * fillWithoutTagMatch:false). A photo with no labels cannot be judged and is kept.
+ * submitWithoutTagMatch:false). A photo with no labels cannot be judged and is kept.
  *
  * @returns the surviving stemmed photos, or null for "pick nothing"
  */
@@ -148,7 +153,7 @@ const applyExcludedSubjectFilter = (
     if (!excluded) return filtered;
     const kept = filtered.filter(({ wordStems }) => !photoShowsExcluded(wordStems, excluded));
     if (kept.length > 0) return kept;
-    if (opts.fillWithoutTagMatch === false) return null;
+    if (opts.submitWithoutTagMatch === false) return null;
     notifyFallback(opts, { letterPrefix: null, mustStems: [], excludedStems: excluded.stems });
     return filtered;
 };
@@ -227,4 +232,46 @@ const buildScoredCandidates = (
     });
 };
 
-export { pickPhotosForChallenge, buildScoredCandidates };
+/**
+ * buildScoredCandidates with the user's chosen photos split out as a block.
+ *
+ * The hard filters, the negated-subject filter and the submitWithoutTagMatch
+ * relaxation still apply to chosen photos like to every photo: they are about
+ * the challenge, not the photo's owner. Ids already entered are removed from
+ * the pool as a set. Without `only` the whole pool is scored once and the
+ * result is split afterwards, so a relaxation is judged on the whole pool the
+ * way it always was. With `only` just the chosen photos are scored, so the
+ * relaxation is judged on them alone — whether a chosen photo is used must
+ * never depend on unrelated photos in the library.
+ *
+ * @returns the scored pool; `chosenIds` names the chosen block inside it, or is
+ *   null when none was asked for or none is in the pool (then nothing differs
+ *   from buildScoredCandidates); `orderedIds` is that block in the list's order
+ */
+const buildChosenCandidates = (
+    challenge: ChallengeText | null | undefined,
+    eligiblePhotos: PickerPhoto[],
+    opts: PickOptions,
+): ChosenCandidates => {
+    const { chosen } = opts;
+    if (!chosen || chosen.ids.length === 0) {
+        return { scored: buildScoredCandidates(challenge, eligiblePhotos, opts), chosenIds: null, orderedIds: [] };
+    }
+    const wanted = new Set(chosen.ids.map(String));
+    const { excludeIds } = chosen;
+    const pool = (Array.isArray(eligiblePhotos) ? eligiblePhotos : []).filter(
+        (photo) => !(photo && excludeIds?.has(String(photo.id))),
+    );
+    const scored = buildScoredCandidates(
+        challenge,
+        chosen.only ? pool.filter((photo) => photo && wanted.has(String(photo.id))) : pool,
+        opts,
+    );
+    const inPool = new Set(scored.map((entry) => String(entry.id)));
+    // List order, each id once: the set keeps the order it was filled in.
+    const orderedIds = Array.from(wanted).filter((id) => inPool.has(id));
+    // No chosen photo made it into the pool: that reads exactly like no list.
+    return { scored, chosenIds: orderedIds.length > 0 ? new Set(orderedIds) : null, orderedIds };
+};
+
+export { pickPhotosForChallenge, buildScoredCandidates, buildChosenCandidates };

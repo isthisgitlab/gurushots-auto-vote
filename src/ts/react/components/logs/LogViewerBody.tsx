@@ -11,7 +11,7 @@ export function LogViewerBody({ entries, heightClass }: { entries: LogLine[]; he
     const { t } = useTranslation();
 
     return (
-        <div className={`${heightClass} overflow-y-auto bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-lg`}>
+        <div className={`${heightClass} overflow-y-auto bg-base-300 text-base-content font-mono text-sm p-4 rounded-lg`}>
             <div className="space-y-1">
                 {entries.length === 0 ? (
                     <LogsEmptyState text={t('logs.empty')} />

@@ -41,3 +41,22 @@ describe('writeLog CR/LF collapse', () => {
         expect(lastEntry().data).toEqual({ note: 'multi\nline' });
     });
 });
+
+describe('writeLog terminal-control strip', () => {
+    test('removes ANSI escape sequences from the message', () => {
+        info('plain \u001b[31mred\u001b[0m and \u001b]0;title\u0007text', null, 'general');
+        const { message } = lastEntry();
+        expect(message).not.toContain('\u001b');
+        expect(message).toContain('Plain red and text');
+    });
+
+    test('removes other C0/C1 control characters from the message', () => {
+        info('a\u0000b\u0007c\u008dd\u009be', null, 'general');
+        expect(lastEntry().message).toBe('ℹ️ Abcde');
+    });
+
+    test('removes control characters from a bare-string data value', () => {
+        info('op done', 'x\u001b[2Jy', 'general');
+        expect(lastEntry().data).toBe('xy');
+    });
+});

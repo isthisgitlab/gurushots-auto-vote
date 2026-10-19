@@ -80,6 +80,33 @@ describe('StatusHeader', () => {
         expect(screen.getByTestId('status-header').textContent).toContain('~1m 54s');
     });
 
+    test('a held resume counts down to its start, with its own label and hint', () => {
+        wrap(
+            <StatusHeader
+                challenges={oneChallenge}
+                running={false}
+                nextRunAt={null}
+                pendingStartAt={BASE_MS + 45_000}
+                autoClaimStatus={{ enabled: true, nextClaimAt: BASE_MS + 3_600_000 }}
+            />,
+        );
+        expect(screen.getByText('app.statusHeaderResumesIn:')).toBeTruthy();
+        expect(screen.queryByText('app.statusHeaderNext:')).toBeNull();
+        const resumes = screen.getByTitle('app.statusHeaderResumesInHint');
+        expect(resumes.textContent).toBe('45s');
+        act(() => jest.advanceTimersByTime(1000));
+        expect(resumes.textContent).toBe('44s');
+        // The claim countdown stays as it was (autovote is not running yet).
+        expect(screen.getByText('app.statusHeaderNextClaim:').parentElement!.textContent).toContain(
+            'app.statusHeaderNotRunning',
+        );
+    });
+
+    test('the bar stays visible while a resume is pending, even with nothing else to show', () => {
+        wrap(<StatusHeader challenges={[]} running={false} pendingStartAt={BASE_MS + 45_000} />);
+        expect(screen.getByTestId('status-header')).toBeTruthy();
+    });
+
     test('claim countdown is independent and its tick does not re-render the header', () => {
         wrap(
             <StatusHeader
@@ -209,7 +236,7 @@ describe('StatusHeader', () => {
 
     test('counts active challenges and available boosts/turbos', () => {
         const challenges = invalid<Challenge[]>([
-            { id: 'a', member: { boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' } } },
+            { id: 'a', member: { boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON', mode: 'classic' } } },
             { id: 'b', member: { boost: { state: 'USED' }, turbo: { state: 'NONE' } } },
             { id: 'c', member: { boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'FREE' } } },
         ]);
@@ -222,15 +249,32 @@ describe('StatusHeader', () => {
     test('a TIMER turbo counts once its cooldown has elapsed, not before or without a time', () => {
         const nowSec = BASE_MS / 1000;
         const challenges = invalid<Challenge[]>([
-            { id: 'a', member: { turbo: { state: 'TIMER', time_to_open: nowSec - 1 } } },
-            { id: 'b', member: { turbo: { state: 'TIMER', time_to_open: nowSec + 60 } } },
-            { id: 'c', member: { turbo: { state: 'TIMER' } } },
+            { id: 'a', member: { turbo: { state: 'TIMER', mode: 'classic', time_to_open: nowSec - 1 } } },
+            { id: 'b', member: { turbo: { state: 'TIMER', mode: 'classic', time_to_open: nowSec + 60 } } },
+            { id: 'c', member: { turbo: { state: 'TIMER', mode: 'classic' } } },
             { id: 'd', member: {} },
         ]);
         const { container } = wrap(<StatusHeader challenges={challenges} nextRunAt={null} running={true} />);
         const stats = Array.from(container.querySelectorAll('.font-semibold')).map((n) => n.textContent);
         // active, boosts, turbos
         expect(stats.slice(0, 3)).toEqual(['4', '0', '1']);
+    });
+
+    test('a turbo counts only in a known mode (classic or Snap), earnable or won', () => {
+        const nowSec = BASE_MS / 1000;
+        const challenges = invalid<Challenge[]>([
+            { id: 'a', member: { turbo: { state: 'FREE', mode: 'snap' } } },
+            { id: 'b', member: { turbo: { state: 'IN_PROGRESS', mode: 'snap' } } },
+            { id: 'c', member: { turbo: { state: 'TIMER', mode: 'snap', time_to_open: nowSec - 1 } } },
+            { id: 'd', member: { turbo: { state: 'WON', mode: 'snap' } } },
+            { id: 'e', member: { turbo: { state: 'FREE', mode: 'classic' } } },
+            { id: 'f', member: { turbo: { state: 'FREE' } } },
+            { id: 'g', member: { turbo: { state: 'WON' } } },
+            { id: 'h', member: { turbo: { state: 'WON', mode: 'classic' } } },
+        ]);
+        const { container } = wrap(<StatusHeader challenges={challenges} nextRunAt={null} running={true} />);
+        const stats = Array.from(container.querySelectorAll('.font-semibold')).map((n) => n.textContent);
+        expect(stats.slice(0, 3)).toEqual(['8', '0', '6']);
     });
 
     test('an overdue next run reads as due', () => {
@@ -309,6 +353,23 @@ describe('StatusHeader', () => {
             expect(trigger().hasAttribute('aria-haspopup')).toBe(false);
         });
 
+        // It is a disclosure button: a real <button>, expanded while focus is inside, controlling the list.
+        test('the trigger is a real button whose aria-expanded follows focus and controls the list', () => {
+            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
+            const button = trigger();
+            expect(button.tagName).toBe('BUTTON');
+            expect(button.getAttribute('aria-expanded')).toBe('false');
+            expect(document.getElementById(button.getAttribute('aria-controls')!)!.tagName).toBe('UL');
+
+            fireEvent.focusIn(button);
+            expect(button.getAttribute('aria-expanded')).toBe('true');
+            // Focus moving to an entry inside the list keeps it open; leaving the dropdown closes it.
+            fireEvent.focusOut(button, { relatedTarget: screen.getByText('Soon one') });
+            expect(button.getAttribute('aria-expanded')).toBe('true');
+            fireEvent.focusOut(button, { relatedTarget: document.body });
+            expect(button.getAttribute('aria-expanded')).toBe('false');
+        });
+
         describe.each([
             ['English', englishApp],
             ['Latvian', latvianApp],
@@ -360,17 +421,50 @@ describe('StatusHeader', () => {
             });
         });
 
-        test('Escape blurs the focused trigger and entry; other keys do not', () => {
+        test('Escape closes the menu and returns focus to the trigger; other keys do not', () => {
             wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
             const entry = screen.getByText('Soon one').closest('button')!;
-            for (const el of [trigger(), entry]) {
-                el.focus();
-                expect(document.activeElement).toBe(el);
-                fireEvent.keyDown(el, { key: 'ArrowDown' });
-                expect(document.activeElement).toBe(el);
-                fireEvent.keyDown(el, { key: 'Escape' });
-                expect(document.activeElement).not.toBe(el);
-            }
+            const wrapper = trigger().closest('.dropdown')!;
+
+            act(() => entry.focus());
+            expect(trigger().getAttribute('aria-expanded')).toBe('true');
+            fireEvent.keyDown(entry, { key: 'ArrowDown' });
+            expect(document.activeElement).toBe(entry);
+
+            fireEvent.keyDown(entry, { key: 'Escape' });
+            expect(document.activeElement).toBe(trigger());
+            expect(trigger().getAttribute('aria-expanded')).toBe('false');
+            expect(wrapper.classList.contains('dropdown-close')).toBe(true);
+
+            // Pressing the trigger opens it again; so does moving focus back in.
+            fireEvent.click(trigger());
+            expect(trigger().getAttribute('aria-expanded')).toBe('true');
+            expect(wrapper.classList.contains('dropdown-close')).toBe(false);
+        });
+
+        test('Escape on the trigger itself closes the menu and keeps focus there, and a later focus still opens it', () => {
+            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
+            const entry = screen.getByText('Soon one').closest('button')!;
+            act(() => trigger().focus());
+            fireEvent.keyDown(trigger(), { key: 'Escape' });
+            expect(document.activeElement).toBe(trigger());
+            expect(trigger().getAttribute('aria-expanded')).toBe('false');
+
+            // A real focus move into the menu is not swallowed by the Escape.
+            act(() => entry.focus());
+            expect(trigger().getAttribute('aria-expanded')).toBe('true');
+        });
+
+        test('focus leaving the menu closes it and clears an earlier Escape', () => {
+            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
+            const wrapper = trigger().closest('.dropdown')!;
+            act(() => trigger().focus());
+            fireEvent.keyDown(trigger(), { key: 'Escape' });
+            act(() => trigger().blur());
+            expect(trigger().getAttribute('aria-expanded')).toBe('false');
+            expect(wrapper.classList.contains('dropdown-close')).toBe(false);
+            act(() => trigger().focus());
+            expect(trigger().getAttribute('aria-expanded')).toBe('true');
         });
     });
 });

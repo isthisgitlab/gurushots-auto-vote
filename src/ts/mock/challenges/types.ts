@@ -2,6 +2,8 @@
  * Shape of one mock challenge as authored in the spec tables.
  */
 
+import type { TeamMatch } from '../../types/gurushots';
+
 /** Exposure drawn at generation time: min(cap, floor(random * spread) + base), i.e. base..base+spread-1 clamped to cap. */
 interface ExposureRange {
     cap: number;
@@ -43,7 +45,7 @@ interface ChallengeSpec {
     boostEnabled: boolean;
     timeLeft: { days: number; hours: number; minutes: number; seconds: number };
     boost: { state: 'AVAILABLE' | 'AVAILABLE_KEY' | 'LOCKED' | 'UNAVAILABLE' | 'USED'; timeout: BoostTimeout };
-    turbo: { state: string; opensIn: number | null };
+    turbo: { state: string; opensIn: number | null; mode?: 'classic' | 'snap' };
     total: {
         votes: number;
         rank: number;
@@ -60,6 +62,8 @@ interface ChallengeSpec {
     /** `factor` 0 = no exposure yet; otherwise a random value of at most `cap`, drawn at generation time. */
     exposure: { factor: ExposureRange | 0; voteFactor: number; voteRatio: number };
     myEntries: RankedEntrySpec[];
+    /** A team match running on this challenge; absent for most specs. */
+    teamMatch?: TeamMatch;
 }
 
 export type { ChallengeSpec, ExposureRange, RankedEntrySpec };

@@ -12,9 +12,15 @@ const challengeWith = (member: Record<string, unknown>, extra: Record<string, un
 
 describe('getGroupApplicability', () => {
     test('no challenge → every group applicable', () => {
-        for (const id of ['general', 'boost', 'turbo', 'finalWindow', 'lastMinute', 'autoFill']) {
+        for (const id of ['general', 'boost', 'turbo', 'finalWindow', 'lastMinute', 'autoSubmit']) {
             expect(getGroupApplicability(id, null)).toEqual({ applicable: true, reasonKey: null });
         }
+    });
+
+    test('the general group (Manual Only) stays applicable once every slot is full', () => {
+        const challenge = challengeWith({ ranking: { entries: [{ id: 'a' }, { id: 'b' }] } }, { max_photo_submits: 2 });
+        expect(getGroupApplicability('autoSubmit', challenge).applicable).toBe(false);
+        expect(getGroupApplicability('general', challenge)).toEqual({ applicable: true, reasonKey: null });
     });
 
     test('boost USED → boost group not applicable', () => {
@@ -168,35 +174,35 @@ describe('getGroupApplicability', () => {
         expect(getGroupApplicability('boost', challenge).applicable).toBe(true);
     });
 
-    test('autoFill: all slots full → not applicable', () => {
+    test('autoSubmit: all slots full → not applicable', () => {
         const challenge = challengeWith({ ranking: { entries: [{ id: '1' }, { id: '2' }] } }, { max_photo_submits: 2 });
-        expect(getGroupApplicability('autoFill', challenge)).toEqual({
+        expect(getGroupApplicability('autoSubmit', challenge)).toEqual({
             applicable: false,
             reasonKey: 'app.naSlotsFull',
         });
     });
 
-    test('autoFill: more entries than max (defensive) → not applicable', () => {
+    test('autoSubmit: more entries than max (defensive) → not applicable', () => {
         const challenge = challengeWith(
             { ranking: { entries: [{ id: '1' }, { id: '2' }, { id: '3' }] } },
             { max_photo_submits: 2 },
         );
-        expect(getGroupApplicability('autoFill', challenge).applicable).toBe(false);
+        expect(getGroupApplicability('autoSubmit', challenge).applicable).toBe(false);
     });
 
-    test('autoFill: slots remaining → applicable', () => {
+    test('autoSubmit: slots remaining → applicable', () => {
         const challenge = challengeWith({ ranking: { entries: [{ id: '1' }] } }, { max_photo_submits: 3 });
-        expect(getGroupApplicability('autoFill', challenge)).toEqual({ applicable: true, reasonKey: null });
+        expect(getGroupApplicability('autoSubmit', challenge)).toEqual({ applicable: true, reasonKey: null });
     });
 
-    test('autoFill: max_photo_submits unset (0) → applicable (cannot conclude full)', () => {
+    test('autoSubmit: max_photo_submits unset (0) → applicable (cannot conclude full)', () => {
         const challenge = challengeWith({ ranking: { entries: [{ id: '1' }] } });
-        expect(getGroupApplicability('autoFill', challenge).applicable).toBe(true);
+        expect(getGroupApplicability('autoSubmit', challenge).applicable).toBe(true);
     });
 
-    test('autoFill: missing ranking/entries → applicable', () => {
+    test('autoSubmit: missing ranking/entries → applicable', () => {
         const challenge = challengeWith({}, { max_photo_submits: 2 });
-        expect(getGroupApplicability('autoFill', challenge).applicable).toBe(true);
+        expect(getGroupApplicability('autoSubmit', challenge).applicable).toBe(true);
     });
 
     test('general / finalWindow / lastMinute always applicable, even when boost used', () => {

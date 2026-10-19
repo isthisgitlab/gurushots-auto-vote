@@ -198,7 +198,7 @@ describe('mock/index', () => {
 
                 expect(result).toEqual(auth.mockLoginSuccess);
                 expect(logger.__mockDebugFn).toHaveBeenCalledWith(
-                    'Mock authentication with: test@example.com, password: [hidden]',
+                    'Mock authentication: email given, password given',
                     null,
                 );
                 expect(logger.__mockSuccessFn).toHaveBeenCalledWith('Mock authentication successful', null, null);
@@ -239,9 +239,20 @@ describe('mock/index', () => {
                 await mockIndex.mockApiClient.authenticate('test@example.com', 'mypassword');
 
                 expect(logger.__mockDebugFn).toHaveBeenCalledWith(
-                    'Mock authentication with: test@example.com, password: [hidden]',
+                    'Mock authentication: email given, password given',
                     null,
                 );
+            });
+
+            test('should log no email when not provided, and never the address itself', async () => {
+                await expect(mockIndex.mockApiClient.authenticate('', 'pw')).rejects.toEqual(auth.mockLoginFailure);
+                await mockIndex.mockApiClient.authenticate('someone@example.com', 'pw');
+
+                expect(logger.__mockDebugFn).toHaveBeenCalledWith(
+                    'Mock authentication: no email, password given',
+                    null,
+                );
+                expect(JSON.stringify(logger.__mockDebugFn.mock.calls)).not.toContain('someone@example.com');
             });
 
             test('should log no password when not provided', async () => {
@@ -250,7 +261,7 @@ describe('mock/index', () => {
                 );
 
                 expect(logger.__mockDebugFn).toHaveBeenCalledWith(
-                    'Mock authentication with: test@example.com, password: no password',
+                    'Mock authentication: email given, no password',
                     null,
                 );
             });
@@ -387,13 +398,29 @@ describe('mock/index', () => {
             test('should apply boost successfully when available', async () => {
                 const challenge = invalid<Challenge>({
                     title: 'Test Challenge',
-                    member: { boost: { state: 'AVAILABLE' } },
+                    member: { boost: { state: 'AVAILABLE' }, ranking: { entries: [{ id: 'e1' }] } },
                 });
 
                 const result = await mockIndex.mockApiClient.applyBoost(challenge, 'test-token');
 
                 expect(result).toEqual(boost.mockBoostSuccess);
                 expect(logger.__mockApiFn).toHaveBeenCalledWith('Mock applyBoost', null);
+            });
+
+            test('fails without a boost when no entry can take it', async () => {
+                const challenge = invalid<Challenge>({
+                    title: 'Test Challenge',
+                    member: { boost: { state: 'AVAILABLE' }, ranking: { entries: [{ id: 'e1', turbo: true }] } },
+                });
+
+                logger.__mockErrorFn.mockClear();
+
+                await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).resolves.toBeNull();
+                // The same error the real surface logs, so the CLI user is told how to proceed in mock mode too.
+                expect(logger.__mockErrorFn).toHaveBeenCalledWith(
+                    "Couldn't apply Boost — every entry has Turbo or is pinned for Turbo (Boost and Turbo can't share an entry). Add another entry or unpin the photo",
+                    { challengeId: '' },
+                );
             });
 
             test('should return error when boost already used', async () => {
@@ -616,7 +643,7 @@ describe('mock/index', () => {
 
             test('boost fill-new submits a fresh photo and boosts that entry', async () => {
                 challenges.mockActiveChallenges = { challenges: [fillableChallenge()] };
-                stubToggles({ boostFillNew: true, useTurbo: false, turboFillNew: false });
+                stubToggles({ boostNewSubmit: true, useTurbo: false, turboNewSubmit: false });
                 const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
                 const boostEntrySpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoostToEntry');
                 const boostSpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoost');
@@ -634,7 +661,7 @@ describe('mock/index', () => {
                 challenges.mockActiveChallenges = {
                     challenges: [fillableChallenge({ max_photo_submits: 1 })], // 1 entry already → full
                 };
-                stubToggles({ boostFillNew: true, useTurbo: false, turboFillNew: false });
+                stubToggles({ boostNewSubmit: true, useTurbo: false, turboNewSubmit: false });
                 const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
                 const boostEntrySpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoostToEntry');
                 const boostSpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoost');
@@ -652,17 +679,17 @@ describe('mock/index', () => {
                         fillableChallenge({
                             member: {
                                 boost: { state: 'LOCKED', timeout: 0 }, // isolate from boost
-                                turbo: { state: 'WON' },
+                                turbo: { state: 'WON', mode: 'classic' },
                                 ranking: { entries: [{ id: 'e1' }], exposure: { exposure_factor: 100 } },
                             },
                         }),
                     ],
                 };
                 stubToggles({
-                    boostFillNew: false,
+                    boostNewSubmit: false,
                     useTurbo: true,
-                    turboFillNew: true,
-                    protectUncertainAutoFills: false,
+                    turboNewSubmit: true,
+                    protectUncertainAutoSubmits: false,
                 });
                 const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
                 const turboSpy = jest.spyOn(mockIndex.mockApiClient, 'applyTurbo');
@@ -686,17 +713,17 @@ describe('mock/index', () => {
                             max_photo_submits: 2, // 1 entry below → exactly one free slot
                             member: {
                                 boost: { state: 'AVAILABLE', timeout: now + 120 },
-                                turbo: { state: 'WON' },
+                                turbo: { state: 'WON', mode: 'classic' },
                                 ranking: { entries: [{ id: 'e1' }], exposure: { exposure_factor: 100 } },
                             },
                         },
                     ],
                 };
                 stubToggles({
-                    boostFillNew: true,
+                    boostNewSubmit: true,
                     useTurbo: true,
-                    turboFillNew: true,
-                    protectUncertainAutoFills: false,
+                    turboNewSubmit: true,
+                    protectUncertainAutoSubmits: false,
                 });
                 const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
                 const boostEntrySpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoostToEntry');

@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { scrollBehavior } from '@/utils/scrollBehavior';
 import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 
 // Main page is window-scrolled; show the button once past this many pixels.
 const SCROLL_THRESHOLD = 300;
 
 /**
- * Floating button that smooth-scrolls the window back to the top.
+ * Floating button that scrolls the window back to the top (smoothly, unless the user prefers reduced motion).
  * Hidden until the page is scrolled past the threshold.
  */
 export function ScrollToTopButton() {
@@ -21,7 +22,7 @@ export function ScrollToTopButton() {
     }, []);
 
     const handleClick = useCallback(() => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        window.scrollTo({ top: 0, behavior: scrollBehavior() });
     }, []);
 
     if (!visible) {
@@ -30,7 +31,7 @@ export function ScrollToTopButton() {
 
     return (
         <button
-            className="btn btn-sm btn-square btn-primary shadow-lg fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-40"
+            className="btn btn-sm btn-square btn-neutral shadow-lg fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-40"
             onClick={handleClick}
             title={t('app.scrollToTop')}
             aria-label={t('app.scrollToTop')}

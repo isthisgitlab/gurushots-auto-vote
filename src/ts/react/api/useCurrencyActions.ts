@@ -20,12 +20,14 @@ export const useFillExposure = () =>
     useAsyncIpcAction((challengeId: string | number) => window.api.fillExposure(challengeId, true), SPEND_LABELS);
 
 /**
- * Swap flow: `preview` (spends nothing) suggests the replacement for one
- * entry; `commit` spends a SWAP to put exactly that suggestion in place.
+ * Swap flow: `preview` (spends nothing) names the replacement for one entry —
+ * the app's suggestion, or with `chosenId` the library photo the user picked;
+ * `commit` spends a SWAP to put exactly that previewed photo in place.
  */
 export function useSwapPhoto() {
     const preview = useAsyncIpcAction(
-        (challengeId: string | number, imageId: string) => window.api.previewSwapPhoto(challengeId, imageId),
+        (challengeId: string | number, imageId: string, chosenId?: string) =>
+            window.api.previewSwapPhoto(challengeId, imageId, chosenId),
         SPEND_LABELS,
     );
     const commit = useAsyncIpcAction(

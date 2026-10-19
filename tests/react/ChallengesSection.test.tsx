@@ -180,7 +180,7 @@ describe('ChallengesProvider + ChallengesSection', () => {
         it('shows a spinner while the first load is pending', () => {
             setHook({ data: [], loading: true });
             renderSection();
-            expect(screen.getByLabelText('Loading')).toBeTruthy();
+            expect(screen.getByLabelText('common.loading')).toBeTruthy();
             expect(screen.queryByText('app.noActiveChallenges')).toBeNull();
         });
 
@@ -259,6 +259,27 @@ describe('ChallengesProvider + ChallengesSection', () => {
             expect(refetch).toHaveBeenCalledWith(true);
         });
 
+        it.each([
+            ['Vote all', 'app.voteAll', 'voteAllChallengesManual'],
+            ['Run', 'app.run', 'runVotingCycle'],
+        ] as const)(
+            'a failed %s shows a translated error below the button row until dismissed',
+            async (_name, label, method) => {
+                mockApi[method].mockResolvedValueOnce({ success: false, error: 'Failed to fetch challenges' });
+                renderSection();
+                await act(async () => {
+                    fireEvent.click(screen.getByText(label));
+                });
+                await settle();
+                const error = screen.getByText('errors.fetchChallengesFailed');
+                expect(error.closest('[role="alert"]')).not.toBeNull();
+                expect(refetch).not.toHaveBeenCalledWith(true);
+
+                fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
+                expect(screen.queryByText('errors.fetchChallengesFailed')).toBeNull();
+            },
+        );
+
         it('passVersion counts autovote cycles plus manual passes', async () => {
             renderSection({ autovoteCycles: 3 });
             const pass = () => screen.getAllByTestId('card')[0].dataset.passVersion;
@@ -310,6 +331,28 @@ describe('ChallengesProvider + ChallengesSection', () => {
             expect(screen.getByText('app.compact')).toBeTruthy();
         });
 
+        it('a refused write (false) leaves the toggle and cards unchanged and says so', async () => {
+            mockApi.setGlobalDefault.mockResolvedValue(false);
+            renderSection();
+            await settle();
+            const before = screen.getAllByTestId('card')[0].dataset.settingsVersion;
+            await act(async () => {
+                fireEvent.click(screen.getByText('app.compact'));
+            });
+            expect(screen.getByText('app.compact')).toBeTruthy();
+            expect(screen.getAllByTestId('card')[0].dataset.compact).toBe('false');
+            expect(screen.getAllByTestId('card')[0].dataset.settingsVersion).toBe(before);
+            expect(screen.getByText('errors.compactToggleFailed').closest('[role="alert"]')).not.toBeNull();
+
+            // A press that lands clears it.
+            mockApi.setGlobalDefault.mockResolvedValue(true);
+            await act(async () => {
+                fireEvent.click(screen.getByText('app.compact'));
+            });
+            expect(screen.queryByText('errors.compactToggleFailed')).toBeNull();
+            expect(screen.getByText('app.details')).toBeTruthy();
+        });
+
         it('leaves the toggle unchanged when persisting the default fails', async () => {
             mockApi.setGlobalDefault.mockRejectedValue(new Error('io'));
             renderSection();
@@ -318,6 +361,7 @@ describe('ChallengesProvider + ChallengesSection', () => {
                 fireEvent.click(screen.getByText('app.compact'));
             });
             expect(screen.getByText('app.compact')).toBeTruthy();
+            expect(screen.getByText('errors.compactToggleFailed').closest('[role="alert"]')).not.toBeNull();
         });
 
         it('starts compact when the stored default is on, and resyncs on settings-changed', async () => {

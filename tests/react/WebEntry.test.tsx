@@ -85,5 +85,15 @@ describe('Web entry', () => {
         await flush();
         expect(m.logRendererError).toHaveBeenCalledWith('Web UI could not read the session state: fetch failed');
         expect(m.mountLogin).toHaveBeenCalledTimes(1);
+        expect(m.mountLogin).toHaveBeenCalledWith(undefined);
+    });
+
+    test("a page opened without this run's access token mounts Login with that failure to show", async () => {
+        const m = load(async () => {
+            throw new Error('web-shell-token');
+        });
+        await flush();
+        expect(m.mountLogin).toHaveBeenCalledTimes(1);
+        expect(m.mountLogin).toHaveBeenCalledWith('web-shell-token');
     });
 });

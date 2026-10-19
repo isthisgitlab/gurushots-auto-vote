@@ -43,7 +43,10 @@ jest.mock('../../src/ts/services/UpdateChecker', () => ({
     checkForUpdates: jest.fn(),
     getReleasesUrl: () => 'https://example.com/releases',
 }));
-jest.mock('../../src/ts/services/auth', () => ({ clearAuthToken: jest.fn() }));
+jest.mock('../../src/ts/services/auth', () => {
+    class LogoutNotSavedError extends Error {}
+    return { clearAuthToken: jest.fn(), LogoutNotSavedError };
+});
 jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
@@ -84,7 +87,8 @@ describe('Capacitor bridge', () => {
     describe('installation', () => {
         test('exposes the api on globalThis and adapts (event, ...args) handlers to (...args)', async () => {
             expect(g.api).toBe(api);
-            expect(settings.seedIntentProfiles).toHaveBeenCalledTimes(1);
+            // Installing reads and writes no setting: the stored ones are not hydrated yet (see seedBridgeProfiles).
+            expect(settings.seedIntentProfiles).not.toHaveBeenCalled();
             await expect(api.getSettings()).resolves.toEqual({ theme: 'dark' });
             await expect(api.guiVote()).resolves.toEqual({ success: true, via: 'gui-vote' });
         });
@@ -97,14 +101,19 @@ describe('Capacitor bridge', () => {
             });
         });
 
-        test('a failing intent-profile seed is logged but does not block installation', () => {
+        test('the intent profiles are seeded by seedBridgeProfiles, not by the installation', () => {
+            bridge.seedBridgeProfiles();
+
+            expect(settings.seedIntentProfiles).toHaveBeenCalledTimes(1);
+        });
+
+        test('a failing intent-profile seed is logged and does not throw', () => {
             settings.seedIntentProfiles.mockImplementationOnce(() => {
                 throw new Error('prefs unavailable');
             });
 
-            const second = bridge.installBridge();
+            expect(() => bridge.seedBridgeProfiles()).not.toThrow();
 
-            expect(typeof second.checkForUpdates).toBe('function');
             expect(log.warning).toHaveBeenCalledWith('Intent profile seeding failed (non-fatal):', expect.any(Error));
         });
     });
@@ -281,6 +290,24 @@ describe('Capacitor bridge', () => {
             expect(res).toEqual({ success: false, error: 'No mechanism', fallbackUrl: 'https://example.com/releases' });
         });
 
+        test('a download the native updater refused carries its code in update-error', async () => {
+            updateChecker.checkForUpdates.mockResolvedValue(available);
+            await api.checkForUpdates();
+            installer.downloadAndInstall.mockResolvedValue({ success: false, error: 'Refused', code: 'digest' });
+            const onError = jest.fn();
+            api.onUpdateError(onError);
+
+            const res = await api.downloadUpdate();
+
+            expect(onError).toHaveBeenCalledWith({ message: 'Refused', code: 'digest' });
+            expect(res).toEqual({
+                success: false,
+                error: 'Refused',
+                code: 'digest',
+                fallbackUrl: 'https://example.com/releases',
+            });
+        });
+
         test('install-update, get-releases-url and can-auto-update return their fixed answers', async () => {
             await expect(api.installUpdate()).resolves.toMatchObject({ success: true, info: expect.any(String) });
             await expect(api.getReleasesUrl()).resolves.toEqual({
@@ -324,6 +351,19 @@ describe('Capacitor bridge', () => {
         });
     });
 
+    describe('a logout the settings refused', () => {
+        test('does not log anyone out: nothing is emitted, and the caller is told', async () => {
+            const onLogout = jest.fn();
+            bridge.subscribe('logout', onLogout);
+            auth.clearAuthToken.mockRejectedValue(new auth.LogoutNotSavedError());
+
+            await expect(api.logout()).rejects.toBeInstanceOf(auth.LogoutNotSavedError);
+
+            expect(log.error).toHaveBeenCalledWith('Logout failed to clear token', expect.any(Error));
+            expect(onLogout).not.toHaveBeenCalled();
+        });
+    });
+
     describe('window controls', () => {
         let originalLocation: Location;
         let originalOpen: typeof globalThis.open;
@@ -349,6 +389,15 @@ describe('Capacitor bridge', () => {
 
             globalThis.location = invalid(undefined);
             await expect(api.reloadWindow()).resolves.toEqual({ success: true });
+        });
+
+        test('once all local data is deleted the WebView reloads into the login screen', () => {
+            const reload = jest.fn();
+            globalThis.location = invalid({ reload });
+
+            mockSettingsDeps!.afterWipe!();
+
+            expect(reload).toHaveBeenCalledTimes(1);
         });
 
         test('refreshMenu is a successful no-op on mobile', async () => {

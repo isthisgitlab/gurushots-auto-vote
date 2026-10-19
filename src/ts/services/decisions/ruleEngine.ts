@@ -104,7 +104,7 @@ const _runVotingRules = (
     const onlyBoost = mode === 'auto' && settings.getEffectiveSetting('onlyBoost', challengeId);
     const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challengeId);
     const effectiveThreshold = getEffectiveExposureThreshold(challengeId);
-    // Same clamped value the gate uses, so a message can never quote a
+    // Same value the gate uses, so a message can never quote a
     // threshold the rule didn't actually apply.
     const effectiveLastMinuteThreshold = getEffectiveLastMinuteThreshold(challengeId);
     const effectiveFinalWindowExposure = getEffectiveFinalWindowExposureThreshold(challengeId);
@@ -112,23 +112,12 @@ const _runVotingRules = (
     const effectiveExposureTarget = getEffectiveExposureTarget(challengeId);
     const effectiveFinalWindowExposureTarget = getEffectiveFinalWindowExposureTarget(challengeId);
     const voteBeforeFinalWindow = settings.getEffectiveSetting('voteBeforeFinalWindow', challengeId) === true;
-    // Configurable final-window duration (seconds before close). Under-mocked
-    // callers / hand-edited files can yield a non-number; the schema guarantees a
-    // valid integer >= 60 otherwise. Fall back to a fixed one hour (3600)
-    // rather than propagate NaN into the window math below.
-    const rawFinalWindowSec = settings.getEffectiveSetting('finalWindowDuration', challengeId);
-    const finalWindowSec = Number.isFinite(rawFinalWindowSec) && rawFinalWindowSec >= 60 ? rawFinalWindowSec : 3600;
-    // Under-mocked callers / hand-edited files can yield a non-number here; the
-    // schema guarantees 1..59 otherwise. Fall back to the schema default (15)
-    // rather than propagate NaN into the window math below.
-    const rawLeadMin = settings.getEffectiveSetting('voteBeforeFinalWindowLeadMin', challengeId);
-    // Clamp to the schema's valid range (1..59). Anything outside — a hand-edited
-    // sub-minute value, an over-59 value, or a non-number — falls back to the
-    // default (15). The lower bound MUST match soonestFinalWindowTopUpStart's guard
-    // in thresholdWindow/leadWindows.ts (>= 60s) so the vote-rule window and the scheduler's
-    // cadence cap can't disagree for the same corrupt input.
-    const voteBeforeFinalWindowLeadMin =
-        Number.isFinite(rawLeadMin) && rawLeadMin >= 1 && rawLeadMin <= 59 ? rawLeadMin : 15;
+    // Configurable final-window duration (seconds before close, validated >= 60) and the
+    // top-up lead (minutes, validated 1..59), the same range soonestFinalWindowTopUpStart
+    // clamps to in thresholdWindow/leadWindows.ts, so the vote-rule window and the
+    // scheduler's cadence cap agree.
+    const finalWindowSec = settings.getEffectiveSetting('finalWindowDuration', challengeId);
+    const voteBeforeFinalWindowLeadMin = settings.getEffectiveSetting('voteBeforeFinalWindowLeadMin', challengeId);
 
     const isWithinLastMinute = isWithinLastMinuteThreshold(challenge.close_time, now, challengeId);
     const withinFinalWindow = isWithinFinalWindow(challenge.close_time, now, finalWindowSec);

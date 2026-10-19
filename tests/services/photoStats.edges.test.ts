@@ -23,10 +23,11 @@ jest.mock('../../src/ts/logger', () => {
 
 import photoStats = require('../../src/ts/services/photoStats');
 import type { PickerPhoto } from '../../src/ts/types/photoPicker';
-import type { PhotoStatsFile } from '../../src/ts/services/photoStats';
 import type { CategoryLogger } from '../../src/ts/logger';
 import type * as submissionsModule from '../../src/ts/api/submissions';
 import { invalid } from '../helpers/invalid';
+import { isPhotoStatsFile } from '../helpers/storedShapes';
+import { parseJsonAs } from '../helpers/parseJson';
 const { enrichCandidates, resetPassState, MAX_ENRICH_PER_FILL, MAX_ENRICH_PER_PASS, STATS_TTL_MS } = photoStats;
 const { __level: log } = invalid<{ __level: LevelMock }>(require('../../src/ts/logger'));
 
@@ -109,7 +110,7 @@ describe('loading the persisted cache', () => {
         expect(out[0]).toEqual(expect.objectContaining({ id: 'good', votes: 7, statsKnown: true }));
 
         // The persisted file no longer carries the dropped keys.
-        const persisted = (JSON.parse(written!) as PhotoStatsFile).photos;
+        const persisted = parseJsonAs(written!, isPhotoStatsFile).photos;
         expect(Object.keys(persisted).sort()).toEqual(['good', 'scalar', 'undated']);
         expect(persisted.undated.votes).toBe(2);
     });

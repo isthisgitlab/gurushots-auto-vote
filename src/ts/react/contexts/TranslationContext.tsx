@@ -25,11 +25,17 @@ const TranslationContext = createContext<TranslationContextValue | null>(null);
 
 const fetchLanguage = () => ipc.getSetting('language');
 
-// Hand the saved language to the page translator before publishing it, so
-// hook-less consumers (ErrorBoundary, Modal) render in the same language.
+// Hand a language to the page translator and mark the document with it (screen readers pick their voice and
+// hyphenation from `lang`), so hook-less consumers (ErrorBoundary, Modal) render in the same language.
+const adoptLanguage = (language: string) => {
+    rendererTranslator.setCurrentLanguage(language);
+    document.documentElement.lang = language;
+};
+
+// Adopt the saved language before publishing it.
 const applyLanguage = (saved: unknown, { setData }: Pick<IpcQueryTools<string, Error>, 'setData'>) => {
     const language = resolveLanguage(saved);
-    rendererTranslator.setCurrentLanguage(language);
+    adoptLanguage(language);
     setData(language);
 };
 
@@ -55,14 +61,14 @@ export function TranslationProvider({ children }: { children?: ComponentChildren
     // Every successful settings write broadcasts settings-changed, so a
     // language saved in another window (or edited through the CLI) lands here
     // without a reload, straight from the payload: no refetch, so `ready`
-    // never flips back. A payload without `language` (a partial save-settings)
+    // never flips back. A payload without `app.language`
     // did not change it. This window's own setLanguage is echoed back too;
     // applying the same language again is a no-op.
     useLayoutEffect(
         () =>
-            ipc.onSettingsChanged((changed: { language?: unknown } | null | undefined) => {
-                if (changed?.language === undefined) return;
-                applyLanguage(changed.language, { setData });
+            ipc.onSettingsChanged((changed: { app?: { language?: unknown } } | null | undefined) => {
+                if (changed?.app?.language === undefined) return;
+                applyLanguage(changed.app.language, { setData });
             }),
         [setData],
     );
@@ -91,7 +97,7 @@ export function TranslationProvider({ children }: { children?: ComponentChildren
                 logLanguageSaveFailure('the settings store rejected the write');
                 return false;
             }
-            rendererTranslator.setCurrentLanguage(lang);
+            adoptLanguage(lang);
             setData(lang);
             Promise.resolve(ipc.refreshMenu()).catch(() => {});
             return true;

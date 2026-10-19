@@ -5,8 +5,10 @@ import * as logger from '../logger';
 import { watchSettingsFile } from '../windows/settingsWatcher';
 import { syncBackgroundActivity } from '../windows/backgroundActivity';
 import { holdQuitForOpenBoosts, bypassQuitGuard, resetQuitGuard } from '../windows/quitGuard';
+import { autovoteSessionLive } from '../windows/suspendBoost';
 import { translationManager } from '../translations/index';
 import { appState } from './state';
+import { APP_PARTITION } from './session';
 
 import type { WebPreferences } from 'electron';
 
@@ -14,12 +16,34 @@ import type { WebPreferences } from 'electron';
 // and ask first; `proceed` re-issues it once confirmed. See windows/quitGuard.ts.
 function holdForOpenBoosts(event: { preventDefault: () => void }, proceed: () => void) {
     return holdQuitForOpenBoosts(event, {
-        autovoteRunning: settings.getSetting('autovoteRunning') === true,
+        autovoteRunning: autovoteSessionLive(),
         dialog,
         parent: appState.mainWindow,
         t: (key) => translationManager.t(key),
+        locale: translationManager.getCurrentLanguage(),
         proceed,
     });
+}
+
+/**
+ * Tells the user that a logout was not saved (the stored settings are not in use, so the sign-in is still stored and was not
+ * changed): the main window stays, so the user is not left to believe they are logged out. Auto-vote is stopped by then (the
+ * window stops it before it logs out), which the dialog says when no session is live.
+ */
+function reportLogoutRefused() {
+    const stopped = !autovoteSessionLive();
+    const options = {
+        type: 'error' as const,
+        message: translationManager.t('errors.logoutNotSavedTitle'),
+        detail: [
+            translationManager.t('errors.logoutNotSavedDetail'),
+            ...(stopped ? [translationManager.t('errors.logoutNotSavedStopped')] : []),
+        ].join(' '),
+    };
+    // The caller opens the main window first when it is gone, so the dialog has one to belong to; without it (a window that
+    // could not be created) the dialog stands alone.
+    const parent = appState.mainWindow;
+    void (parent && !parent.isDestroyed() ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options));
 }
 
 /**
@@ -49,8 +73,8 @@ function createAppWindow(
             // require() the relative channel manifest, so it ships pre-bundled.
             preload: appPath('dist', 'preload-bundle.js'),
             webSecurity: true,
-            // Use a custom session partition to isolate storage
-            partition: 'persist:gurushots',
+            // The app's own in-memory session partition (index/session.ts), isolated from the default session
+            partition: APP_PARTITION,
         },
     });
 
@@ -89,9 +113,6 @@ function createLoginWindow() {
 }
 
 function createMainWindow() {
-    // Track when main window is created to prevent reload during login
-    appState.mainWindowCreatedTime = Date.now();
-
     appState.mainWindow = createAppWindow('main', 'app.html', {
         // The auto-vote cadence chain is a recursive setTimeout living in
         // THIS renderer, and Chromium throttles then freezes timers on a
@@ -131,24 +152,21 @@ function createMainWindow() {
         syncBackgroundActivity(false);
     });
 
-    // Watch settings file for changes and auto-reload with debouncing.
-    // The watcher lives in windows/settingsWatcher.ts; accessors keep it
-    // reading the current window state held in index/state.ts.
+    // Watch settings file for changes and broadcast them to the renderers with debouncing.
+    // The watcher lives in windows/settingsWatcher.ts.
     appState.settingsWatcher = watchSettingsFile({
-        getMainWindow: () => appState.mainWindow,
-        getMainWindowCreatedTime: () => appState.mainWindowCreatedTime,
         // The renderer persists `autovoteRunning` on every start/stop, so the
         // settings file IS the signal — no extra IPC channel is needed to keep
         // the power-save blocker in step with the running session.
         onSettingsChanged: (newSettings) => {
-            // Liveness check, matching what the watcher's own reload and
-            // broadcast paths do. Its debounce handle is module-level and
+            // Liveness check, matching what the watcher's own broadcast
+            // path does. Its debounce handle is module-level and
             // survives `close()`, so a callback armed by a routine write (a
             // window move alone triggers one) can land AFTER 'closed' already
             // released the blocker — re-arming an assertion for a session with
             // no window and no cadence chain, which nothing would then release.
             if (!appState.mainWindow || appState.mainWindow.isDestroyed()) return;
-            syncBackgroundActivity(newSettings.autovoteRunning === true);
+            syncBackgroundActivity(newSettings.app.autovoteRunning === true);
         },
     });
 
@@ -158,7 +176,7 @@ function createMainWindow() {
     // watcher above would never fire for it.
     //
     // This is also the ONLY sync if watchSettingsFile returned null (no
-    // settings.json yet), so say so rather than leaving a silent pin — the
+    // config.json yet), so say so rather than leaving a silent pin — the
     // login flow writes settings before this window exists, which is why that
     // path is not expected in practice.
     syncBackgroundActivity(settings.getSetting('autovoteRunning') === true);
@@ -176,7 +194,7 @@ function checkAutoLogin() {
     const userSettings = settings.loadSettings();
 
     // If we have a token and stay logged in is enabled, auto-login
-    if (userSettings.token && userSettings.stayLoggedIn) {
+    if (userSettings.auth.token && userSettings.app.stayLoggedIn) {
         createMainWindow();
         return true;
     }
@@ -186,4 +204,4 @@ function checkAutoLogin() {
     return false;
 }
 
-export { holdForOpenBoosts, createLoginWindow, createMainWindow, checkAutoLogin };
+export { holdForOpenBoosts, createLoginWindow, createMainWindow, checkAutoLogin, reportLogoutRefused };

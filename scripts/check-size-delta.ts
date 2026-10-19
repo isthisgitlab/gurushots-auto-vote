@@ -31,6 +31,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 
+import { isPlainObject } from '../src/ts/plainObject';
+import { runIfMain } from './lib/run-if-main';
+
 const ROOT = path.join(__dirname, '..');
 const BASELINE_PATH = path.join(ROOT, '.size-baseline.json');
 
@@ -43,6 +46,7 @@ const BUNDLES = [
     { name: 'web', path: 'dist/web-bundle.js', label: 'web (browser tab, pnpm web)' },
     { name: 'headless', path: 'dist/headless-bundle.js', label: 'headless (Android background service)' },
     { name: 'preload', path: 'dist/preload-bundle.js', label: 'preload (Electron sandboxed preload)' },
+    { name: 'preloadLogs', path: 'dist/preloadLogs-bundle.js', label: 'preloadLogs (Logs window preload)' },
 ];
 
 const THRESHOLD_KB = Number.parseFloat(process.env.SIZE_DELTA_KB || '5');
@@ -66,7 +70,7 @@ const readBaseline = (): Record<string, unknown> => {
     try {
         const raw = fs.readFileSync(BASELINE_PATH, 'utf8');
         const parsed: unknown = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+        return isPlainObject(parsed) ? parsed : {};
     } catch {
         return {};
     }
@@ -145,4 +149,6 @@ const main = () => {
     process.exit(0);
 };
 
-main();
+runIfMain(require.main, module, main);
+
+export { main };

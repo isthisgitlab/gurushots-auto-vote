@@ -3,7 +3,7 @@
 import * as logger from '../../../logger';
 import * as settings from '../../../settings';
 import { getDefaultSettings } from '../../../settings';
-import { logUnknownSchemaKey, requirePerChallenge, schemaEntry } from './shared';
+import { formatSettingForLog, logUnknownSchemaKey, requirePerChallenge, schemaEntry } from './shared';
 
 export const resetSetting = (key: string, challengeId: string | null = null) => {
     try {
@@ -22,7 +22,7 @@ export const resetSetting = (key: string, challengeId: string | null = null) => 
                 .success(`Reset ${key} for challenge ${challengeId} (now inherits its profile/global baseline)`);
             return true;
         }
-        const defaultSettings = getDefaultSettings();
+        const defaultSettings = getDefaultSettings().app;
         const defaultValue = defaultSettings[key];
 
         if (defaultValue === undefined) {
@@ -30,8 +30,11 @@ export const resetSetting = (key: string, challengeId: string | null = null) => 
             return false;
         }
 
-        settings.setSetting(key, defaultValue);
-        logger.withCategory('settings').success(`Reset ${key} to default: ${JSON.stringify(defaultValue)}`);
+        if (!settings.setSetting(key, defaultValue)) {
+            logger.withCategory('settings').error(`Could not reset ${key} to its default`);
+            return false;
+        }
+        logger.withCategory('settings').success(`Reset ${key} to default: ${formatSettingForLog(key, defaultValue)}`);
         return true;
     } catch (error) {
         logger.withCategory('settings').error(`Error resetting setting '${key}'`, error);
@@ -51,7 +54,9 @@ export const resetGlobalDefault = (key: string) => {
             return false;
         }
         const defaultValue = entry.default;
-        logger.withCategory('settings').success(`Reset global default ${key} to: ${JSON.stringify(defaultValue)}`);
+        logger
+            .withCategory('settings')
+            .success(`Reset global default ${key} to: ${formatSettingForLog(key, defaultValue)}`);
         return true;
     } catch (error) {
         logger.withCategory('settings').error(`Error resetting global default '${key}'`, error);
@@ -84,7 +89,7 @@ export const resetWindows = () => {
     try {
         const userSettings = settings.loadSettings();
         const defaultSettings = settings.getDefaultSettings();
-        userSettings.windowBounds = defaultSettings.windowBounds;
+        userSettings.app.windowBounds = defaultSettings.app.windowBounds;
         settings.saveSettings(userSettings);
         logger.withCategory('settings').success('Window positions reset to default');
     } catch (error) {

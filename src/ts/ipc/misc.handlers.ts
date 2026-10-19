@@ -24,7 +24,7 @@ const buildHandlers = (deps: MiscHandlerDeps) => {
     const { getMainWindow, getLoginWindow } = deps;
 
     return {
-        'open-external-url': async (event: unknown, url: unknown) => {
+        'open-external-url': async (event: unknown, url: string) => {
             try {
                 // Scheme allow-list (shared with the Capacitor bridge via
                 // format/urlSafe): every legitimate call site opens an https
@@ -35,8 +35,7 @@ const buildHandlers = (deps: MiscHandlerDeps) => {
                     logger.withCategory('api').warning(`Refused open-external-url for non-https URL: ${url}`, null);
                     return { success: false as const, error: 'Only https:// URLs can be opened' };
                 }
-                // isSafeExternalUrl only passes a string.
-                await shell.openExternal(url as string);
+                await shell.openExternal(url);
                 return { success: true as const };
             } catch (error) {
                 logger.withCategory('ui').error('Error opening external URL:', error);

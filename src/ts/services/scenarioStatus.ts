@@ -6,8 +6,8 @@
  */
 
 import * as settings from '../settings';
-import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
-import { scenarioStateLedger, mockScenarioStateLedger } from '../scenarioStateStore';
+import { effectiveTimezone } from '../settings/uiDefaults';
+import { scenarioStateLedger, mockScenarioStateLedger, scenarioStepLock } from '../scenarioStateStore';
 
 import type { ScenarioState } from '../types/stores';
 import type { ScenarioDocument } from '../settings/scenarioSchema';
@@ -20,10 +20,17 @@ import type { ScenarioStateLedger } from '../types/votingPass';
 const ledgerForMode = () => (settings.getSetting('mock') === true ? mockScenarioStateLedger : scenarioStateLedger);
 
 /**
+ * The lock a reset of one challenge's progress takes, so it never runs in the middle of that challenge's rule steps
+ * in another process. Mock mode has no other process, and no lock.
+ */
+const stepLockForMode = (challengeId: string | number) =>
+    settings.getSetting('mock') === true ? { ok: true, release: () => {} } : scenarioStepLock(challengeId);
+
+/**
  * @param ledger - defaults to the ledger for the current mode
  *   `assigned` is the challenge's `scenario` setting ('' = none); `scenario`
  *   is null when that name is unknown; `state` is null until the plan starts
- *   (or when it belongs to another scenario); `corrupt` means unreadable state.
+ *   (or when it belongs to another scenario); `corrupt` means unreadable state (`unloaded`: not read in yet).
  */
 const getScenarioStatus = (
     challengeId: string | number,
@@ -32,11 +39,11 @@ const getScenarioStatus = (
     assigned: string;
     scenario: ScenarioDocument | null;
     state: ScenarioState | null;
-    corrupt: boolean;
+    corrupt: false | 'file' | 'record' | 'unloaded';
     timezone: string;
 } => {
     const id = String(challengeId);
-    const timezone = settings.getSetting('timezone') || DEFAULT_TIMEZONE;
+    const timezone = effectiveTimezone(settings.getSetting('timezone'));
     const assigned = settings.getEffectiveSetting('scenario', id) || '';
     const scenario = assigned ? settings.getScenario(assigned) : null;
     if (!scenario) return { assigned, scenario: null, state: null, corrupt: false, timezone };
@@ -57,8 +64,8 @@ const scenarioWakeInput = ({
 }: {
     scenario: ScenarioDocument | null;
     state: ScenarioState | null;
-    corrupt: boolean;
+    corrupt: false | 'file' | 'record' | 'unloaded';
     timezone: string;
 }) => (scenario && !corrupt ? { scenario, state, timezone } : null);
 
-export { getScenarioStatus, scenarioWakeInput, ledgerForMode };
+export { getScenarioStatus, scenarioWakeInput, ledgerForMode, stepLockForMode };

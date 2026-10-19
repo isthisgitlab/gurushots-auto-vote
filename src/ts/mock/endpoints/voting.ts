@@ -1,6 +1,7 @@
 /**
  * Mock counterpart to api/voting.ts: session-stable vote images and a vote
- * submit that records the pre-vote exposure in metadata like the real one.
+ * submit. Nothing in mock mode reads vote metadata, so the submit writes none
+ * (and never touches the real metadata.json).
  */
 
 import * as voting from '../voting';
@@ -8,11 +9,9 @@ import * as settings from '../../settings';
 import * as logger from '../../logger';
 import { simulateApiResponse, simulateApiError, mockMethod } from '../simulate';
 import { getSessionCache } from '../sessionCache';
-import * as metadata from '../../metadata';
 
 import type { Challenge } from '../../types/gurushots';
 import type * as votingModule from '../../api/voting';
-import { errorMessage } from '../../errorMessage';
 
 /**
  * Simulate getting vote images. The generated set carries only the
@@ -82,55 +81,6 @@ const submitVotes: typeof votingModule.submitVotes = mockMethod(
     async (voteImages) => {
         if (voteImages.images && voteImages.images.length > 0) {
             logger.withCategory('voting').info('Submitting mock votes successfully', null);
-
-            // Update metadata after successful mock vote submission
-            try {
-                if (voteImages.challenge && voteImages.challenge.id) {
-                    // Use the ORIGINAL exposure factor from before voting (the "from what" value)
-                    const originalExposure = voteImages.voting?.exposure?.exposure_factor || 50;
-
-                    logger
-                        .withCategory('voting')
-                        .debug(
-                            `About to update mock metadata for challenge ${voteImages.challenge.id}, original exposure: ${Math.round(originalExposure)}%`,
-                            null,
-                        );
-                    const success = metadata.updateChallengeVoteMetadata(
-                        voteImages.challenge.id.toString(),
-                        Math.round(originalExposure),
-                    );
-                    if (success) {
-                        logger
-                            .withCategory('voting')
-                            .debug(
-                                `Successfully updated mock metadata for challenge ${voteImages.challenge.id}: original exposure ${Math.round(originalExposure)}%`,
-                                null,
-                            );
-                        logger
-                            .withCategory('voting')
-                            .success(
-                                `Mock metadata updated for challenge ${voteImages.challenge.id}: original exposure ${Math.round(originalExposure)}%`,
-                                null,
-                                null,
-                            );
-                    } else {
-                        logger
-                            .withCategory('voting')
-                            .debug(`Failed to update mock metadata for challenge ${voteImages.challenge.id}`, null);
-                        logger
-                            .withCategory('voting')
-                            .warning(`Failed to update mock metadata for challenge ${voteImages.challenge.id}`, null);
-                    }
-                }
-            } catch (error) {
-                logger
-                    .withCategory('voting')
-                    .debug(
-                        `Error updating mock metadata for challenge ${voteImages.challenge.id}: ${errorMessage(error)}`,
-                        null,
-                    );
-                logger.withCategory('voting').error(`Error updating mock metadata: ${errorMessage(error)}`, null);
-            }
 
             return simulateApiResponse(voting.mockVoteSubmissionSuccess, 2000);
         } else {

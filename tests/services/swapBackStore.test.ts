@@ -6,6 +6,7 @@
 import type * as swapBackStoreModule from '../../src/ts/swapBackStore';
 import type * as loggerModule from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
+import { parseJsonObject } from '../helpers/parseJson';
 
 const { createLedger, createMemoryLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
 
@@ -116,7 +117,7 @@ describe('defensive reads and writes', () => {
         });
         expect(ledger.list(7)).toEqual([]);
         ledger.onSwapped(9, plain, 'B');
-        expect(Object.keys(JSON.parse(raw) as Record<string, unknown>)).toEqual(['8']);
+        expect(Object.keys(parseJsonObject(raw))).toEqual(['8']);
     });
 
     test('only the record on the swapped slot moves; others are untouched', () => {

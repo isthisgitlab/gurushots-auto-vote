@@ -9,16 +9,12 @@
 import { matchingRules } from './challengeRules';
 import { challengeTargetForId } from './challengeFacts';
 import { globalChallengeValues, challengeValueSetIsValid } from './defaults';
-import {
-    RESERVED_PROFILE_NAMES,
-    normalizeProfileName,
-    readProfilesMap,
-    findProfileKey,
-    sanitizeProfileValues,
-} from './profileStore';
+import { RESERVED_PROFILE_NAMES, normalizeProfileName, findProfileKey, sanitizeProfileValues } from './profileStore';
 import { sanitizeTitleRuleInline } from './titleRuleSanitize';
+import { effectiveTimezone } from './uiDefaults';
 
-import type { AppSettings, ChallengeValues, RuleMatchChallenge, TitleRule } from '../types/settings';
+import type { ConfigV2 } from '../types/config';
+import type { ChallengeValues, RuleMatchChallenge, RuleSource, TitleRule } from '../types/settings';
 
 /**
  * The one profile a challenge's matching rules apply, and the rule naming it.
@@ -34,19 +30,25 @@ type RuleProfile = { name: string; values: ChallengeValues; rule: TitleRule };
  * fails closed as a whole: automation never executes a partially sanitized
  * profile.
  */
-const profileFromMatches = (settings: AppSettings, matches: TitleRule[]): RuleProfile | null => {
+const profileFromMatches = (settings: ConfigV2, matches: TitleRule[]): RuleProfile | null => {
     const rule = matches.find((candidate) => normalizeProfileName(candidate?.profile));
     if (!rule) return null;
     const normalizedProfile = normalizeProfileName(rule.profile);
     if (RESERVED_PROFILE_NAMES.has(normalizedProfile)) return null;
 
-    const stored = readProfilesMap(settings);
+    const stored = settings.profiles;
     const storedKey = findProfileKey(stored, normalizedProfile);
     if (storedKey === null) return null;
     const values = sanitizeProfileValues(stored[storedKey], true, globalChallengeValues(settings), false);
     if (values === null) return null;
     return { name: storedKey, values, rule };
 };
+
+/**
+ * The zone close-time conditions are read in: the app's timezone setting, the
+ * same one the challenge cards show their end time in.
+ */
+const ruleTimeZone = (settings: ConfigV2): string => effectiveTimezone(settings.app.timezone);
 
 /**
  * The settings the rules matching a challenge contribute, as one sparse map.
@@ -57,42 +59,45 @@ const profileFromMatches = (settings: AppSettings, matches: TitleRule[]): RulePr
  * global default (the caller's job).
  *
  * `suppressProfile` drops the profile layer (a challenge whose rule profile was
- * replaced by a manually applied one).
+ * replaced by a manually applied one). `sources` names, per key, the rule whose value won: the rule
+ * itself for an inline value, the rule owning the profile for a profile's value (`viaProfile`).
  */
 const ruleValuesFor = (
-    settings: AppSettings,
+    settings: ConfigV2,
     target: RuleMatchChallenge | string | null | undefined,
     suppressProfile: boolean = false,
-): { values: ChallengeValues; profile: RuleProfile | null } => {
-    const matches = matchingRules(settings.challengeSettings?.titleRules, target);
+): { values: ChallengeValues; profile: RuleProfile | null; sources: Record<string, RuleSource> } => {
+    const matches = matchingRules(settings.rules, target, ruleTimeZone(settings));
     const profile = suppressProfile ? null : profileFromMatches(settings, matches);
     const values: ChallengeValues = {};
-    /** @param source */
-    const take = (source: ChallengeValues) => {
+    const sources: Record<string, RuleSource> = {};
+    const sourceOf = (rule: TitleRule, viaProfile: boolean): RuleSource => ({
+        ...(typeof rule.title === 'string' && rule.title.trim() !== '' ? { title: rule.title } : {}),
+        // Only called for a matching rule, so the rule list exists.
+        index: settings.rules.indexOf(rule) + 1,
+        ...(viaProfile ? { viaProfile } : {}),
+    });
+    const take = (source: ChallengeValues, from: RuleSource) => {
         for (const [key, value] of Object.entries(source)) {
-            if (!Object.prototype.hasOwnProperty.call(values, key)) values[key] = value;
+            if (Object.prototype.hasOwnProperty.call(values, key)) continue;
+            values[key] = value;
+            sources[key] = from;
         }
     };
     for (const rule of matches) {
         // Re-validated on read: a hand-edited settings file can hold anything,
         // and a rule with an invalid inline value contributes no inline values.
         const inline = sanitizeTitleRuleInline(rule);
-        if (inline) take(inline);
-        if (profile && profile.rule === rule) take(profile.values);
+        if (inline) take(inline, sourceOf(rule, false));
+        if (profile && profile.rule === rule) take(profile.values, sourceOf(rule, true));
     }
-    return { values, profile };
+    return { values, profile, sources };
 };
 
-const isTitleProfileSuppressed = (settings: AppSettings, challengeId: string | number | null | undefined): boolean => {
+const isTitleProfileSuppressed = (settings: ConfigV2, challengeId: string | number | null | undefined): boolean => {
     const id = challengeId === null || challengeId === undefined ? '' : String(challengeId);
-    const suppressions = settings.challengeSettings?.titleProfileSuppressions;
     return Boolean(
-        id &&
-        suppressions &&
-        typeof suppressions === 'object' &&
-        !Array.isArray(suppressions) &&
-        Object.prototype.hasOwnProperty.call(suppressions, id) &&
-        suppressions[id] === true,
+        id && Object.hasOwn(settings.challenges, id) && settings.challenges[id].suppressRuleProfile === true,
     );
 };
 
@@ -100,13 +105,13 @@ const isTitleProfileSuppressed = (settings: AppSettings, challengeId: string | n
  * `ruleValuesFor` for an id-only caller, honouring its profile suppression.
  */
 const ruleValuesForChallengeId = (
-    settings: AppSettings,
+    settings: ConfigV2,
     challengeId: string | number | null | undefined,
     suppressProfile: boolean = isTitleProfileSuppressed(settings, challengeId),
-): ChallengeValues => ruleValuesFor(settings, challengeTargetForId(settings, challengeId), suppressProfile).values;
+): ChallengeValues => ruleValuesFor(settings, challengeTargetForId(challengeId), suppressProfile).values;
 
 const titleProfileComposesWithKnownOverrides = (
-    settings: AppSettings,
+    settings: ConfigV2,
     rule: TitleRule,
     rawProfileValues: unknown,
 ): boolean => {
@@ -114,19 +119,21 @@ const titleProfileComposesWithKnownOverrides = (
     const profileValues = sanitizeProfileValues(rawProfileValues, true, globalValues);
     if (profileValues === null) return false;
 
-    return Object.entries(settings.challengeSettings.perChallenge).every(([challengeId, overrides]) => {
-        if (isTitleProfileSuppressed(settings, challengeId)) return true;
+    return Object.entries(settings.challenges).every(([challengeId, { values: overrides }]) => {
+        // Only a challenge with values of its own has a combination to check.
+        if (!overrides || isTitleProfileSuppressed(settings, challengeId)) return true;
         // Applicability must use the REAL matcher, not an exact title compare:
         // a contains/starts or class-keyed rule reaches challenges whose title
         // is not the rule's own, and skipping those would let a conflicting
         // profile+override combination save unvalidated.
-        if (matchingRules([rule], challengeTargetForId(settings, challengeId)).length === 0) return true;
+        if (matchingRules([rule], challengeTargetForId(challengeId), ruleTimeZone(settings)).length === 0) return true;
         const effective = { ...globalValues, ...profileValues, ...overrides };
         return challengeValueSetIsValid(effective, { ...profileValues, ...overrides }, challengeId);
     });
 };
 
 export {
+    ruleTimeZone,
     profileFromMatches,
     ruleValuesFor,
     ruleValuesForChallengeId,

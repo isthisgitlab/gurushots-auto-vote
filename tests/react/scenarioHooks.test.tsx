@@ -3,12 +3,12 @@
  * card-sized summary of where a challenge is in its scenario).
  */
 
-import { render, screen, waitFor } from './helpers/test-utils';
+import { act, render, screen, waitFor } from './helpers/test-utils';
 import { useScenarios } from '@/api/useScenarios';
-import { useScenarioStatus } from '@/api/useScenarioStatus';
-import type { ScenarioSummary } from '@/api/useScenarioStatus';
+import { refreshScenarioStatuses, useScenarioStatus } from '@/api/useScenarioStatus';
 import { invalid } from '../helpers/invalid';
 import type { Challenge } from '../../src/ts/types/gurushots';
+import { parseJsonObject } from '../helpers/parseJson';
 
 function ScenariosProbe({ enabled }: { enabled?: boolean }) {
     const { scenarios, templates, error, loading } = useScenarios(enabled);
@@ -89,14 +89,45 @@ describe('useScenarioStatus', () => {
                 success: true,
                 assigned: 'Plan',
                 scenario,
-                corrupt: true,
+                corrupt: 'file',
             }),
         );
         render(<StatusProbe challenge={challenge()} />);
-        await waitFor(() => expect(JSON.parse(out())).toEqual({ name: 'Plan', corrupt: true }));
+        await waitFor(() => expect(JSON.parse(out())).toEqual({ name: 'Plan', corrupt: 'file' }));
     });
 
-    test('a plan not started yet is summarised from its start phase', async () => {
+    test('progress that is bad for this challenge alone is told from progress that is unreadable altogether', async () => {
+        jest.mocked(window.api.getScenarioStatus).mockResolvedValueOnce(
+            invalid({ success: true, assigned: 'Plan', scenario, corrupt: 'record' }),
+        );
+        render(<StatusProbe challenge={challenge()} />);
+        await waitFor(() => expect(JSON.parse(out())).toEqual({ name: 'Plan', corrupt: 'record' }));
+    });
+
+    test('progress this window could not load says whether the background service keeps running the plans', async () => {
+        jest.mocked(window.api.getScenarioStatus).mockResolvedValueOnce(
+            invalid({ success: true, assigned: 'Plan', scenario, corrupt: 'unloaded', serviceRuns: true }),
+        );
+        render(<StatusProbe challenge={challenge()} />);
+        await waitFor(() =>
+            expect(JSON.parse(out())).toEqual({ name: 'Plan', corrupt: 'unloaded', serviceRuns: true }),
+        );
+    });
+
+    test('a reset anywhere makes every card read its status again', async () => {
+        render(
+            <>
+                <StatusProbe challenge={challenge()} />
+                <StatusProbe challenge={invalid<Challenge>({ id: 8, close_time: NOW + 86400 })} />
+            </>,
+        );
+        await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalledTimes(2));
+        act(() => refreshScenarioStatuses());
+        await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalledTimes(4));
+        expect(window.api.getScenarioStatus).toHaveBeenCalledWith(8);
+    });
+
+    test('a plan not started yet is summarised from its start phase, with no phase clock to wake for', async () => {
         jest.mocked(window.api.getScenarioStatus).mockResolvedValueOnce(
             invalid({
                 success: true,
@@ -109,11 +140,69 @@ describe('useScenarioStatus', () => {
         );
         render(<StatusProbe challenge={challenge()} />);
         await waitFor(() => expect(out()).not.toBe('none'));
-        const summary = JSON.parse(out()) as ScenarioSummary;
+        const summary = parseJsonObject(out());
         expect(summary).toEqual(
             expect.objectContaining({ name: 'Plan', phase: 'main', started: false, lastError: null }),
         );
-        expect(summary.nextWakeAt).toBeGreaterThan(NOW);
+        expect(summary.nextWakeAt).toBeNull();
+    });
+
+    test('a plan not started yet still shows its other bounds, the same wake the scheduler reads', async () => {
+        const bounded = {
+            name: 'Plan',
+            start: 'main',
+            phases: {
+                main: {
+                    rules: [
+                        {
+                            id: 'r',
+                            if: [
+                                {
+                                    type: 'all',
+                                    of: [
+                                        { type: 'inPhaseFor', min: '10m' },
+                                        { type: 'beforeEnd', max: '2h' },
+                                    ],
+                                },
+                            ],
+                            do: [],
+                        },
+                    ],
+                },
+            },
+        };
+        jest.mocked(window.api.getScenarioStatus).mockResolvedValueOnce(
+            invalid({
+                success: true,
+                assigned: 'Plan',
+                scenario: bounded,
+                state: null,
+                corrupt: false,
+                timezone: 'UTC',
+            }),
+        );
+        render(<StatusProbe challenge={challenge()} />);
+        await waitFor(() => expect(out()).not.toBe('none'));
+        expect(parseJsonObject(out()).nextWakeAt).toBe(NOW + 86400 - 7200);
+    });
+
+    test('Manual Only pauses the plan: it is flagged and shows no next check', async () => {
+        jest.mocked(window.api.getScenarioStatus).mockResolvedValueOnce(
+            invalid({
+                success: true,
+                assigned: 'Plan',
+                scenario,
+                state: { phase: 'main', phaseEnteredAt: NOW, fired: {}, memory: {} },
+                corrupt: false,
+                timezone: 'UTC',
+                manualOnly: true,
+            }),
+        );
+        render(<StatusProbe challenge={challenge()} />);
+        await waitFor(() => expect(out()).not.toBe('none'));
+        expect(parseJsonObject(out())).toEqual(
+            expect.objectContaining({ started: true, manualOnly: true, nextWakeAt: null }),
+        );
     });
 
     test('a running plan carries its phase and last problem', async () => {
@@ -138,6 +227,158 @@ describe('useScenarioStatus', () => {
         // A finished pass refetches even when the challenge payload is unchanged.
         rerender(<StatusProbe challenge={challenge([{ id: 'a', votes: 9, rank: 2 }])} version={1} pass={1} />);
         await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalledTimes(4));
+    });
+
+    describe('a spend that got no answer', () => {
+        const withRepeat = (repeat?: string) => ({
+            ...scenario,
+            phases: {
+                idle: {},
+                main: { rules: [{ id: 'r', ...(repeat ? { repeat } : {}), if: [], do: [] }] },
+            },
+        });
+        const note = (over: object) => ({
+            challengeId: 7,
+            again: 'phase',
+            newerProblem: false,
+            origin: 'unclear',
+            ...over,
+        });
+        const halted = { r: { at: NOW, phaseEnteredAt: NOW, unclearHalt: 'swap' } };
+
+        test.each([
+            [
+                'a step being checked on, carried by the rule in flight',
+                { inFlight: { ruleId: 'r', actionIndex: 1, unclear: ['unlockBoost'] } },
+                undefined,
+                note({ action: 'unlockBoost', stopped: false }),
+            ],
+            [
+                'a step being checked on, with a later problem (the scenario was edited and halted)',
+                {
+                    inFlight: { ruleId: 'r', actionIndex: 1, unclear: ['unlockBoost'], unclearAt: NOW },
+                    lastError: { at: NOW + 5, message: 'halted' },
+                },
+                undefined,
+                note({ action: 'unlockBoost', stopped: false, newerProblem: true }),
+            ],
+            [
+                'a step being checked on, with no problem recorded',
+                {
+                    inFlight: { ruleId: 'r', actionIndex: 1, unclear: ['unlockBoost'], unclearAt: NOW },
+                    lastError: null,
+                },
+                undefined,
+                note({ action: 'unlockBoost', stopped: false }),
+            ],
+            [
+                'a step being checked on, whose own message is the last problem',
+                {
+                    inFlight: { ruleId: 'r', actionIndex: 1, unclear: ['unlockBoost'], unclearAt: NOW },
+                    lastError: { at: NOW, message: 'its own' },
+                },
+                undefined,
+                note({ action: 'unlockBoost', stopped: false }),
+            ],
+            [
+                'a rule stopped after one, in the phase it is in now',
+                { fired: halted },
+                undefined,
+                note({ action: 'swap', stopped: true }),
+            ],
+            [
+                'a rule stopped in an earlier entry of the phase',
+                { fired: { r: { at: NOW, phaseEnteredAt: NOW - 100, unclearHalt: 'swap' } } },
+                undefined,
+                null,
+            ],
+            ['a rule that finished normally', { fired: { r: { at: NOW, phaseEnteredAt: NOW } } }, undefined, null],
+            ['a rule in flight with no marker', { inFlight: { ruleId: 'r', actionIndex: 1 } }, undefined, null],
+            [
+                'a once rule, which can run again only after a reset',
+                { fired: halted },
+                'once',
+                note({ action: 'swap', stopped: true, again: 'reset' }),
+            ],
+            [
+                'a once-a-day rule, which can run again the next day',
+                { fired: halted },
+                'oncePerDay',
+                note({ action: 'swap', stopped: true, again: 'day' }),
+            ],
+            [
+                'a once-per-phase rule, which can run again when the phase is entered again',
+                { fired: halted },
+                'oncePerPhase',
+                note({ action: 'swap', stopped: true }),
+            ],
+            [
+                'a stopped rule the scenario no longer has',
+                { fired: { gone: { at: NOW, phaseEnteredAt: NOW, unclearHalt: 'swap' } } },
+                'once',
+                note({ action: 'swap', stopped: true }),
+            ],
+            [
+                'a rule stopped from a marker written before the spend (the app stopped before it knew)',
+                { fired: { r: { at: NOW, phaseEnteredAt: NOW, unclearHalt: 'swap', haltOrigin: 'pending' } } },
+                undefined,
+                note({ action: 'swap', stopped: true, origin: 'pending' }),
+            ],
+            [
+                'a step being checked on whose marker the app, not GuruShots, left in doubt',
+                {
+                    inFlight: {
+                        ruleId: 'r',
+                        actionIndex: 1,
+                        unclear: ['swap', 'unlockBoost'],
+                        lost: ['swap'],
+                        unclearAt: NOW,
+                    },
+                },
+                undefined,
+                note({ action: 'swap', stopped: false, origin: 'pending' }),
+            ],
+            [
+                'a step that more than one spend of is being checked on: the first is what the card names',
+                { inFlight: { ruleId: 'r', actionIndex: 1, unclear: ['fillExposure', 'swap'], unclearAt: NOW } },
+                undefined,
+                note({ action: 'fillExposure', stopped: false }),
+            ],
+            [
+                'a stop followed by a later problem',
+                { fired: halted, lastError: { at: NOW + 5, message: 'later' } },
+                undefined,
+                note({ action: 'swap', stopped: true, newerProblem: true }),
+            ],
+            [
+                'a stop with no problem after it',
+                { fired: halted, lastError: null },
+                undefined,
+                note({ action: 'swap', stopped: true }),
+            ],
+        ])('%s reads as the spend %p on the card', async (_name, extra, repeat, spend) => {
+            jest.mocked(window.api.getScenarioStatus).mockResolvedValue(
+                invalid({
+                    success: true,
+                    assigned: 'Plan',
+                    scenario: withRepeat(repeat),
+                    corrupt: false,
+                    timezone: 'UTC',
+                    state: {
+                        phase: 'main',
+                        phaseEnteredAt: NOW,
+                        fired: {},
+                        memory: {},
+                        lastError: { at: NOW, message: 'x' },
+                        inFlight: null,
+                        ...extra,
+                    },
+                }),
+            );
+            render(<StatusProbe challenge={challenge()} />);
+            await waitFor(() => expect(out()).not.toBe('none'));
+            expect(parseJsonObject(out()).spendUnclear ?? null).toEqual(spend);
+        });
     });
 
     test('a challenge without entries, and a result that lands after unmount, are handled', async () => {

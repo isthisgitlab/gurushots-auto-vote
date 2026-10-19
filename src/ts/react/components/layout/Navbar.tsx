@@ -1,11 +1,6 @@
-import type { RendererGlobals } from '../../../types/capacitor';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
-
-// Detect a real native (Android) platform without importing the node-flavored
-// runtime into the browser bundle. The in-app Logs button is only shown on
-// Capacitor — Electron opens the Logs window from the application menu instead.
-const isCapacitorPlatform = () => (globalThis as RendererGlobals).Capacitor?.isNativePlatform?.() === true;
 
 /**
  * Main app navbar with title, mock status, logs (Android), settings, and logout
@@ -22,7 +17,8 @@ export function Navbar({
     onLogout: () => void | Promise<void>;
 }) {
     const { t } = useTranslation();
-    const showLogs = isCapacitorPlatform();
+    // The in-app Logs button is only for platforms without a menu to open the Logs window from (Android).
+    const { inAppLogs: showLogs } = usePlatformCapabilities();
 
     return (
         <div className="navbar bg-base-100 shadow-md mb-4">
@@ -52,7 +48,7 @@ export function Navbar({
                     <StrokeIcon className="w-4 h-4" d={ICON_PATHS.cog} />
                 </button>
                 <button
-                    className="btn btn-outline btn-error btn-sm"
+                    className="btn btn-outline btn-sm"
                     onClick={() => void onLogout()}
                     title={t('app.logout')}
                     aria-label={t('app.logout')}

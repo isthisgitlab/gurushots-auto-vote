@@ -2,7 +2,8 @@
  * The window.api channel manifest — single source of truth for the surface
  * both platform shells expose to the renderer:
  *
- *   - Electron: preload.ts generates contextBridge methods from this list.
+ *   - Electron: preload.ts generates contextBridge methods from this list; the Logs
+ *     window's preloadLogs.ts generates only the logsWindow* subset.
  *   - Capacitor: bridge/capacitor.ts derives its in-process bridge from the
  *     same names (it implements a subset of channels plus its own update
  *     stubs, but aliases/sends/events come from here).
@@ -29,6 +30,14 @@ const invokeChannels = [
     'set-setting',
     'save-settings',
     'get-environment-info',
+    'get-settings-recovery',
+    'retry-settings-import',
+    'start-fresh-settings',
+    'reimport-settings-from-v1',
+    'get-import-report',
+    'acknowledge-import-report',
+    'get-third-party-notices',
+    'wipe-local-data',
     // Voting / strategy
     'gui-vote',
     'get-active-challenges',
@@ -49,10 +58,6 @@ const invokeChannels = [
     'get-error-log-file',
     'get-api-log-file',
     'get-log-backlog',
-    // Boost thresholds
-    'get-boost-threshold',
-    'set-boost-threshold',
-    'set-default-boost-threshold',
     // Schema-based settings
     'get-global-default',
     'set-global-default',
@@ -64,6 +69,8 @@ const invokeChannels = [
     'get-title-rules',
     'set-title-rules',
     'get-title-profile',
+    'get-entry-pins',
+    'set-entry-pin',
     'get-challenge-overrides',
     'replace-challenge-overrides',
     'get-challenge-profiles',
@@ -72,9 +79,9 @@ const invokeChannels = [
     'apply-challenge-profile',
     'cleanup-stale-challenge-setting',
     'cleanup-stale-metadata',
-    'cleanup-obsolete-settings',
     'get-settings-schema',
     'get-validation-error',
+    'clear-chosen-photos',
     // Resets
     'reset-setting',
     'reset-global-default',
@@ -89,9 +96,15 @@ const invokeChannels = [
     'apply-boost-to-entry',
     'play-auto-turbo',
     'fill-challenge-now',
+    'submit-picked-photos',
+    'suggest-photos',
     'get-bankroll',
     'get-member-challenges',
+    'get-open-chosen-annotations',
+    'confirm-account',
     'join-challenge',
+    'forget-unconfirmed-payment',
+    'get-library-photos',
     'get-auto-join-active',
     'get-auto-claim-status',
     // Bankroll-currency spends (key / swap / exposure fill)
@@ -112,6 +125,7 @@ const invokeChannels = [
     'export-scenario',
     'get-scenario-status',
     'reset-scenario-state',
+    'reset-all-scenario-state',
     'dry-run-scenario',
     'simulate-scenario',
     'reload-window',
@@ -158,6 +172,29 @@ const eventMethods = {
     onSettingsChanged: 'settings-changed',
 } as const;
 
+// What the Logs window may use: the log feed, its own diagnostics line, and the
+// settings reads it makes (the UI language and the theme). Its preload (preloadLogs.ts)
+// exposes only this subset and the main process refuses every other channel from that window
+// (registerHandlers.ts), so a compromised Logs renderer reaches no spend, no settings
+// write and no other log channel. Every name must exist in the full manifest above
+// (tests/ipc/manifest.test.ts).
+const logsWindowInvokeChannels = [
+    'get-setting',
+    'log-error',
+    'get-log-backlog',
+    'start-log-stream',
+    'stop-log-stream',
+] as const satisfies readonly (typeof invokeChannels)[number][];
+
+// The settings the Logs window may read or be told about: its get-setting answers only these keys, and the
+// settings-changed event it receives carries only these (registerHandlers.ts).
+const logsWindowSettingKeys = ['language', 'theme'] as const;
+
+const logsWindowEventMethods = {
+    onLogMessage: eventMethods.onLogMessage,
+    onSettingsChanged: eventMethods.onSettingsChanged,
+} as const satisfies Partial<typeof eventMethods>;
+
 // Shared kebab-case → camelCase (both shells must agree on this mapping).
 const kebabToCamel = (channel: string): string =>
     channel.replace(/-([a-z0-9])/g, (_: string, c: string) => c.toUpperCase());
@@ -166,4 +203,14 @@ const kebabToCamel = (channel: string): string =>
 // process must actually register handlers for.
 const allInvokeChannels = () => [...new Set([...invokeChannels, ...Object.values(aliases)])];
 
-export { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel, allInvokeChannels };
+export {
+    invokeChannels,
+    aliases,
+    sendMethods,
+    eventMethods,
+    logsWindowInvokeChannels,
+    logsWindowEventMethods,
+    logsWindowSettingKeys,
+    kebabToCamel,
+    allInvokeChannels,
+};

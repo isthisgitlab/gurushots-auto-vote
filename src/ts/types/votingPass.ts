@@ -12,12 +12,13 @@
 import type { Challenge } from './gurushots';
 import type { getActiveChallenges as GetActiveChallenges } from '../strategies/real/activeChallenges';
 import type { applyBoost as ApplyBoost } from '../strategies/real/applyBoost';
-import type { runTurboMiniGame as RunTurboMiniGame } from '../strategies/real';
+import type { runTurboGame as RunTurboGame } from '../strategies/real';
 import type { getVoteImages as GetVoteImages, submitVotes as SubmitVotes } from '../api/voting';
 import type { applyBoostToEntry as ApplyBoostToEntry } from '../api/boost';
 import type { applyTurbo as ApplyTurbo } from '../api/turbo';
 import type {
     getEligiblePhotos as GetEligiblePhotos,
+    getEligiblePhotosWalk as GetEligiblePhotosWalk,
     getImageData as GetImageData,
     submitToChallenge as SubmitToChallenge,
 } from '../api/submissions';
@@ -40,9 +41,11 @@ export interface VotingPassApi {
     applyBoostToEntry(...args: Parameters<typeof ApplyBoostToEntry>): ReturnType<typeof ApplyBoostToEntry>;
     applyTurbo(...args: Parameters<typeof ApplyTurbo>): ReturnType<typeof ApplyTurbo>;
     getEligiblePhotos(...args: Parameters<typeof GetEligiblePhotos>): ReturnType<typeof GetEligiblePhotos>;
+    /** Optional: without it a chosen photo missing from the themed fetch is not looked for. */
+    getEligiblePhotosWalk?(...args: Parameters<typeof GetEligiblePhotosWalk>): ReturnType<typeof GetEligiblePhotosWalk>;
     getImageData(...args: Parameters<typeof GetImageData>): ReturnType<typeof GetImageData>;
     submitToChallenge(...args: Parameters<typeof SubmitToChallenge>): ReturnType<typeof SubmitToChallenge>;
-    runTurboMiniGame(...args: Parameters<typeof RunTurboMiniGame>): ReturnType<typeof RunTurboMiniGame>;
+    runTurboGame(...args: Parameters<typeof RunTurboGame>): ReturnType<typeof RunTurboGame>;
     /** Optional: without the pair the themed photo search skips tag resolution. */
     getCurrentMemberProfile?(
         ...args: Parameters<typeof GetCurrentMemberProfile>
@@ -57,6 +60,8 @@ export interface ScenarioDeps {
     ledger: ScenarioStateLedger;
     /** False while another loop (the Android background service) owns scenarios. */
     enabled?: () => boolean;
+    /** The cross-process lock of one challenge's rule steps; absent where one process runs them (mock mode). */
+    lock?: (challengeId: string) => { ok: boolean; release: () => void; unavailable?: true };
 }
 
 /** runVotingPass's injected, strategy-specific behavior. */

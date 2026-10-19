@@ -8,10 +8,16 @@
  * boost flows.
  */
 
+import { LOGOUT_NOT_SAVED } from '../ipc/logoutCode';
 import * as settings from '../settings';
 import * as logger from '../logger';
+import { clearOpenChallenges } from './openChallengeCache';
+import { clearUpcomingCache } from './discoverChallenges';
+import { clearLibraryCache } from './libraryCache';
+import { bumpAccountGeneration } from './accountScope';
+import { forgetChosenPhotosMemory } from './autoFill/chosenPhotos';
 
-import type { AppSettings } from '../types/settings';
+import type { ConfigV2 } from '../types/config';
 
 /**
  * A raw authentication response: every token key and error field GuruShots
@@ -36,16 +42,16 @@ interface RawAuthResponse {
  */
 const requireAuthToken = (
     actionLabel: string,
-): { ok: true; token: string; settings: AppSettings } | { ok: false; response: { success: false; error: string } } => {
+): { ok: true; token: string; settings: ConfigV2 } | { ok: false; response: { success: false; error: string } } => {
     const userSettings = settings.loadSettings();
-    if (!userSettings.token) {
+    if (!userSettings.auth.token) {
         logger.withCategory('authentication').warning(`❌ No token found for ${actionLabel}`, null);
         return {
             ok: false,
             response: { success: false, error: 'No authentication token found' },
         };
     }
-    return { ok: true, token: userSettings.token, settings: userSettings };
+    return { ok: true, token: userSettings.auth.token, settings: userSettings };
 };
 
 /**
@@ -83,6 +89,30 @@ const extractAuthResult = (
 };
 
 /**
+ * What the process remembered about the account that left must not carry over to the next: its
+ * listed challenges and the cached upcoming list, its photo-library listings, the open- and
+ * upcoming-id lists cleanup spares chosen lists for, and the chosen-photo walk memos and explained
+ * skips. The account generation moves once, so every read that began under the account that left
+ * writes nothing.
+ */
+const forgetAccountMemory = (): void => {
+    bumpAccountGeneration();
+    clearOpenChallenges();
+    clearUpcomingCache();
+    clearLibraryCache();
+    settings.forgetOpenChallengeIds();
+    forgetChosenPhotosMemory();
+};
+
+/** A logout the settings refused: the sign-out was not saved, so the user is still logged in. */
+class LogoutNotSavedError extends Error {
+    constructor() {
+        super(LOGOUT_NOT_SAVED);
+        this.name = 'LogoutNotSavedError';
+    }
+}
+
+/**
  * Core logout shared by every shell (Electron main, CLI, Capacitor bridge,
  * BaseMiddleware): clear the token and make sure the cleared value is
  * DURABLY persisted before resolving. The flush await is the load-bearing
@@ -95,12 +125,33 @@ const extractAuthResult = (
  * logging wording) stays with each caller.
  *
  * @returns true when a token was actually cleared.
+ * @throws when the sign-out could not be saved (the settings refuse the write): a logout that did not hold is reported,
+ *   never taken for one. (A sign-out made while a restore of the settings is on its way is saved: it holds when the
+ *   restored settings come through.)
  */
 const clearAuthToken = async (): Promise<boolean> => {
     const hadToken = !!settings.getSetting('token');
-    settings.setSetting('token', '');
+    const saved = settings.setSetting('token', '');
+    // A refused sign-out leaves the user logged in: what is remembered about the account stays.
+    if (saved) forgetAccountMemory();
     await settings.flushPendingWrites();
+    if (!saved) throw new LogoutNotSavedError();
     return hadToken;
+};
+
+/**
+ * Store the token a login just obtained. When it differs from the one stored, the account may have
+ * changed without a logout in between (a login on top of another session), so what was remembered
+ * about the previous one is dropped exactly as a logout would.
+ *
+ * @returns false when the token was not saved (the settings refused the write): the session then does not outlive
+ *   this run, and the stored account is unchanged
+ */
+const switchAccountToken = (token: string): boolean => {
+    const previous = settings.getSetting('token');
+    if (!settings.setSetting('token', token)) return false;
+    if (previous !== token) forgetAccountMemory();
+    return true;
 };
 
 /**
@@ -121,4 +172,11 @@ const clearTokenUnlessStayingLoggedIn = async (): Promise<boolean> => {
     return clearAuthToken();
 };
 
-export { requireAuthToken, extractAuthResult, clearAuthToken, clearTokenUnlessStayingLoggedIn };
+export {
+    requireAuthToken,
+    extractAuthResult,
+    clearAuthToken,
+    switchAccountToken,
+    clearTokenUnlessStayingLoggedIn,
+    LogoutNotSavedError,
+};

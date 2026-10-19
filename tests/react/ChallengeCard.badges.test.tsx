@@ -9,7 +9,7 @@
  * are filled.
  *
  * useChallengeSettings, useTurbo and useFillChallenge are stubbed so the test
- * can drive hasCustomSettings / autoFillEnabled directly; the child buttons
+ * can drive hasCustomSettings / autoSubmitEnabled directly; the child buttons
  * and EntryBadge are mocked to null so `span.badge` resolves to the top row
  * only. `t(key)` returns the key (see tests/react setup), so labels assert as
  * 'app.*' strings. Mock state object names start with "mock" for jest hoisting.
@@ -19,11 +19,14 @@ import { render } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { ChallengeBadgeRow } from '@/components/app/ChallengeBadgeRow';
 import { buildChallenge } from '../helpers/challengeFixtures';
+import { invalid } from '../helpers/invalid';
+import { isKindBadgeText } from '../helpers/kindBadges';
 import type { Challenge } from '../../src/ts/types/gurushots';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
-    autoFillEnabled: false,
+    autoSubmitEnabled: false,
+    manualPhotosOnly: false,
     isCompact: false,
     hasCompactOverride: false,
     toggleCompact: jest.fn(),
@@ -94,7 +97,8 @@ const badgeByText = (container: Element, text: string) =>
 beforeEach(() => {
     Object.assign(mockChallengeSettings, {
         hasCustomSettings: false,
-        autoFillEnabled: false,
+        autoSubmitEnabled: false,
+        manualPhotosOnly: false,
         isCompact: false,
         hasCompactOverride: false,
         toggleCompact: jest.fn(),
@@ -102,21 +106,21 @@ beforeEach(() => {
 });
 
 describe('ChallengeCard badge row — logical/state badges', () => {
-    test('type, photo-count and auto-fill all render icon + text with solid colors', () => {
-        mockChallengeSettings.autoFillEnabled = true;
+    test('type, photo-count and auto-fill all render icon + text, the kind badges ghost like any category', () => {
+        mockChallengeSettings.autoSubmitEnabled = true;
         const { container } = renderCard(makeChallenge());
 
         const type = badgeByText(container, '🏁 FLASH');
         expect(type).toBeTruthy();
-        expect(type!.className).toMatch(/badge-warning/);
+        expect(type!.className).toMatch(/badge-ghost/);
 
         const photos = badgeByText(container, '🖼 4 app.photos');
         expect(photos).toBeTruthy();
-        expect(photos!.className).toMatch(/badge-warning/);
+        expect(photos!.className).toMatch(/badge-ghost/);
 
-        const autoFill = badgeByText(container, '📥 app.autoFillBadge');
-        expect(autoFill).toBeTruthy();
-        expect(autoFill!.className).toMatch(/badge-success/);
+        const autoSubmit = badgeByText(container, '📥 app.autoSubmitBadge');
+        expect(autoSubmit).toBeTruthy();
+        expect(autoSubmit!.className).toMatch(/badge-success/);
     });
 
     test('alert, state and configuration badges share the same size', () => {
@@ -127,7 +131,8 @@ describe('ChallengeCard badge row — logical/state badges', () => {
                 boostTimeLeft="23m"
                 lowExposure
                 exposureFactor={0}
-                showAutoFillBadge
+                showAutoSubmitBadge
+                showManualPhotosBadge={false}
                 hasCustomSettings
             />,
         );
@@ -137,17 +142,32 @@ describe('ChallengeCard badge row — logical/state badges', () => {
         expect([...badges].every((badge) => badge.classList.contains('badge-sm'))).toBe(true);
     });
 
-    test('badge fallback (no type) also gets the icon and the info variant', () => {
+    test('badge fallback (no type) also gets the icon and the ghost variant', () => {
         const { container } = renderCard(makeChallenge({ type: null, badge: 'Special' }));
         const fallback = badgeByText(container, '🏁 Special');
         expect(fallback).toBeTruthy();
-        expect(fallback!.className).toMatch(/badge-info/);
+        expect(fallback!.className).toMatch(/badge-ghost/);
     });
 
     test('auto-fill badge is hidden once all slots are filled', () => {
-        mockChallengeSettings.autoFillEnabled = true;
+        mockChallengeSettings.autoSubmitEnabled = true;
         const { container } = renderCard(makeChallenge({ maxPhotos: 4, entriesCount: 4 }));
-        expect(badgeByText(container, '📥 app.autoFillBadge')).toBeFalsy();
+        expect(badgeByText(container, '📥 app.autoSubmitBadge')).toBeFalsy();
+    });
+
+    test('Manual Only shows its own badge in place of the auto-submit one', () => {
+        mockChallengeSettings.autoSubmitEnabled = true;
+        mockChallengeSettings.manualPhotosOnly = true;
+        const { container } = renderCard(makeChallenge());
+        const manual = badgeByText(container, '✋ app.manualPhotosBadge');
+        expect(manual).toBeTruthy();
+        expect(manual!.className).toMatch(/badge-ghost/);
+        expect(badgeByText(container, '📥 app.autoSubmitBadge')).toBeFalsy();
+    });
+
+    test('the manual-only badge is absent while the switch is off', () => {
+        const { container } = renderCard(makeChallenge());
+        expect(badgeByText(container, '✋ app.manualPhotosBadge')).toBeFalsy();
     });
 
     test('photo-count badge is hidden for single-submission challenges', () => {
@@ -156,10 +176,136 @@ describe('ChallengeCard badge row — logical/state badges', () => {
     });
 });
 
+// Kind badges (🏁 type, 🖼 photo count) are ghost like the tags; the tags are the ghost badges without their icon.
+const tagTexts = (container: Element) =>
+    [...container.querySelectorAll('span.badge-ghost')]
+        .map((el) => el.textContent)
+        .filter((text) => !isKindBadgeText(text ?? ''));
+
+describe('ChallengeCard badge row — shared with the Discover rows', () => {
+    test('the detail card lists every tag as given, repeats of the type and photo-count tags included', () => {
+        const challenge = { ...makeChallenge(), tags: ['FLASH', '4 photos', 'Comm'] };
+        const { container } = renderCard(challenge);
+        expect(tagTexts(container)).toEqual(['FLASH', '4 photos', 'Comm']);
+    });
+
+    test('the compact tile leaves the photo count out, where the entries cell already reads N/max', () => {
+        const { container } = render(
+            <ChallengeBadgeRow
+                challenge={makeChallenge()}
+                boostOpen={false}
+                boostTimeLeft={null}
+                lowExposure={false}
+                exposureFactor={0}
+                showAutoSubmitBadge={false}
+                showManualPhotosBadge={false}
+                hasCustomSettings={false}
+                showPhotoCount={false}
+            />,
+        );
+        expect(badgeByText(container, '🏁 FLASH')).toBeTruthy();
+        expect(badgeByText(container, '🖼 4 app.photos')).toBeFalsy();
+    });
+
+    test.each([
+        ['a string', 'Exhibition', []],
+        ['an object', { 0: 'Exhibition' }, []],
+        [
+            'a list with text, blanks and objects among it',
+            ['Comm', '', '  ', { a: 1 }, 7, null, 'No comm'],
+            ['Comm', 'No comm'],
+        ],
+    ])(
+        'the detail card draws only the text tags of a tags value that is %s, and does not crash',
+        (_name, tags, shown) => {
+            const { container } = renderCard({ ...makeChallenge(), tags: invalid<string[]>(tags) });
+            expect(tagTexts(container)).toEqual(shown);
+        },
+    );
+
+    test.each([
+        ['a blank type', '  '],
+        ['a numeric type', invalid<string>(7)],
+    ])('%s with custom settings draws neither an orphan divider nor an empty row', (_name, type) => {
+        mockChallengeSettings.hasCustomSettings = true;
+        const challenge = { ...makeChallenge({ maxPhotos: 1 }), type: invalid<string>(type), badge: undefined };
+        const { container } = render(
+            <ChallengeBadgeRow
+                challenge={challenge}
+                boostOpen={false}
+                boostTimeLeft={null}
+                lowExposure={false}
+                exposureFactor={0}
+                showAutoSubmitBadge={false}
+                showManualPhotosBadge={false}
+                hasCustomSettings
+            />,
+        );
+        expect(container.querySelector('[data-testid="badge-divider"]')).toBeNull();
+        // Only the custom-settings badge is there.
+        expect([...container.querySelectorAll('span.badge')].map((el) => el.textContent)).toEqual([
+            '⚙️ app.customBadge',
+        ]);
+    });
+
+    test.each([
+        ['a blank type, no badge, no custom settings', '  '],
+        ['a numeric type, no badge, no custom settings', invalid<string>(7)],
+    ])('%s draws no row at all', (_name, type) => {
+        const challenge = { ...makeChallenge({ maxPhotos: 1 }), type: invalid<string>(type), badge: undefined };
+        const { container } = render(
+            <ChallengeBadgeRow
+                challenge={challenge}
+                boostOpen={false}
+                boostTimeLeft={null}
+                lowExposure={false}
+                exposureFactor={0}
+                showAutoSubmitBadge={false}
+                showManualPhotosBadge={false}
+                hasCustomSettings={false}
+            />,
+        );
+        expect(container.innerHTML).toBe('');
+    });
+
+    test('a photo count that is not a whole number above one is not shown, nor counted for the divider', () => {
+        mockChallengeSettings.hasCustomSettings = true;
+        for (const count of [2.5, Infinity]) {
+            const challenge = { ...makeChallenge({ type: null }), max_photo_submits: count };
+            const { container, unmount } = render(
+                <ChallengeBadgeRow
+                    challenge={challenge}
+                    boostOpen={false}
+                    boostTimeLeft={null}
+                    lowExposure={false}
+                    exposureFactor={0}
+                    showAutoSubmitBadge={false}
+                    showManualPhotosBadge={false}
+                    hasCustomSettings
+                />,
+            );
+            expect(container.querySelector('[data-testid="badge-divider"]')).toBeNull();
+            expect([...container.querySelectorAll('span.badge')].some((el) => el.textContent?.startsWith('🖼'))).toBe(
+                false,
+            );
+            unmount();
+        }
+    });
+
+    test('a type, badge or photo count of the wrong kind draws no kind badge and does not crash', () => {
+        const odd = { ...makeChallenge(), type: invalid<string>(7), badge: invalid<string>({ a: 1 }) };
+        const { container } = renderCard({ ...odd, max_photo_submits: invalid<number>('many') });
+        expect(badgeByText(container, '🏁 FLASH')).toBeFalsy();
+        expect([...container.querySelectorAll('span.badge')].some((el) => el.textContent?.startsWith('🏁'))).toBe(
+            false,
+        );
+    });
+});
+
 describe('ChallengeCard badge row — override/config badge', () => {
     test('renders icon + translated label in the muted ghost style, distinct from state badges', () => {
         mockChallengeSettings.hasCustomSettings = true;
-        mockChallengeSettings.autoFillEnabled = true;
+        mockChallengeSettings.autoSubmitEnabled = true;
         const { container } = renderCard(makeChallenge());
 
         const custom = badgeByText(container, '⚙️ app.customBadge');
@@ -169,8 +315,8 @@ describe('ChallengeCard badge row — override/config badge', () => {
         // share the auto-fill (success) styling.
         expect(custom!.className).not.toMatch(/badge-success/);
 
-        const autoFill = badgeByText(container, '📥 app.autoFillBadge');
-        expect(autoFill!.className).not.toMatch(/badge-ghost/);
+        const autoSubmit = badgeByText(container, '📥 app.autoSubmitBadge');
+        expect(autoSubmit!.className).not.toMatch(/badge-ghost/);
     });
 
     test('the override badge meaning is visible text, not hidden in a tooltip', () => {

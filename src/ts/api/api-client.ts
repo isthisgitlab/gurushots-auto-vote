@@ -11,25 +11,25 @@ import { generateRandomHeaders } from './randomizer';
 import { sleep } from '../timing';
 import * as settings from '../settings';
 import * as runtime from '../runtime';
-import { FORM_CONTENT_TYPE } from './constants';
+import { ENDPOINTS, FORM_CONTENT_TYPE } from './constants';
 import { isPlainObject } from '../plainObject';
 
 import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios';
+import {
+    describeFailure,
+    failureVerdict,
+    getRetryAfterMs,
+    isRetryableError,
+    isSafeToRepeat,
+    redirectOf,
+} from './postOutcome';
+import type { PostOutcome } from './postOutcome';
 
 /**
  * Request headers as the api/ modules build them. A value may be undefined
  * (login sends no token); axios drops it.
  */
 type RequestHeaders = Record<string, string | undefined>;
-
-/**
- * What a failed axios call rejects with, as far as the retry layer reads it.
- */
-interface RequestFailure {
-    message?: string;
-    code?: string;
-    response?: { status?: number; data?: { retry_after?: unknown }; headers?: Record<string, unknown> };
-}
 
 /**
  * The native bridge globals of the Android headless-service WebView.
@@ -109,6 +109,31 @@ const ensureHeadlessResolver = () => {
     };
 };
 
+type HeadlessResult = { error?: string; status: number; body: string; headers: Record<string, string> };
+
+/**
+ * The native bridge's result JSON as a HeadlessResult. It is parsed as `unknown` and checked: a result with no
+ * numeric status (and no `error`), or a body that is not a string, is rejected as malformed.
+ */
+const parseHeadlessResult = (resultJson: string): HeadlessResult => {
+    const parsed: unknown = JSON.parse(resultJson);
+    if (!isPlainObject(parsed)) throw new Error('Malformed native HTTP result');
+    if (parsed.error) {
+        if (typeof parsed.error !== 'string') throw new Error('Malformed native HTTP result');
+        return { error: parsed.error, status: 0, body: '', headers: {} };
+    }
+    if (typeof parsed.status !== 'number' || !Number.isFinite(parsed.status) || typeof parsed.body !== 'string') {
+        throw new Error('Malformed native HTTP result');
+    }
+    const headers: Record<string, string> = {};
+    if (isPlainObject(parsed.headers)) {
+        for (const [name, value] of Object.entries(parsed.headers)) {
+            if (typeof value === 'string') headers[name] = value;
+        }
+    }
+    return { status: parsed.status, body: parsed.body, headers };
+};
+
 let headlessAdapter: AxiosAdapter | null = null;
 const getHeadlessHttpAdapter = (): AxiosAdapter => {
     if (headlessAdapter) return headlessAdapter;
@@ -119,12 +144,7 @@ const getHeadlessHttpAdapter = (): AxiosAdapter => {
             headlessPending.set(id, (resultJson) => {
                 try {
                     // The AndroidHeadlessHttp result contract (see the adapter note above).
-                    const parsed = JSON.parse(resultJson) as {
-                        error?: string;
-                        status: number;
-                        body: string;
-                        headers?: Record<string, string>;
-                    };
+                    const parsed = parseHeadlessResult(resultJson);
                     // A transport/network failure on the native side — reject so
                     // the retry layer treats it as a (retryable) no-response error.
                     if (parsed.error) {
@@ -143,7 +163,7 @@ const getHeadlessHttpAdapter = (): AxiosAdapter => {
                         data,
                         status: parsed.status,
                         statusText: '',
-                        headers: parsed.headers || {},
+                        headers: parsed.headers,
                         config,
                     };
                     // finalizeAdapterResponse throws on non-2xx (with the
@@ -168,6 +188,15 @@ const getHeadlessHttpAdapter = (): AxiosAdapter => {
     return headlessAdapter;
 };
 
+// Endpoints whose response bodies carry account data (the login token and the member profile) or other
+// members' rosters (the team reads): the api log records the status and timing of these calls, never the body.
+const BODY_UNLOGGED_URLS = new Set<string>([
+    ENDPOINTS.signup,
+    ENDPOINTS.currentMemberProfile,
+    ENDPOINTS.getTeams,
+    ENDPOINTS.getMatch,
+]);
+
 // Upper bound on how long a single request will block while retrying.
 // A server-sent cooldown longer than this (e.g. a multi-minute 429
 // Retry-After) is left for the scheduler's next cycle rather than
@@ -177,53 +206,6 @@ const MAX_RETRY_DELAY_MS = 30_000;
 // Smallest delay we'll wait before a retry, even if the server asks for
 // less (or 0) — guards against a misbehaving server spinning the loop.
 const MIN_RETRY_DELAY_MS = 100;
-
-// Coerce a user/CLI-supplied setting to a non-negative integer, falling
-// back to the default for missing / negative / non-numeric values. The
-// retry knobs aren't in the schema, so this is the only guard against a
-// bad `set-setting apiMaxRetries -1` turning the loop into a no-op (or a
-// NaN bound that never terminates).
-const coerceNonNegInt = (value: unknown, fallback: number): number => {
-    if (value == null) return fallback; // undefined/null → default, not Number(null)===0
-    const n = Number(value);
-    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
-};
-
-/**
- * Whether a failed request is worth retrying. Transient conditions —
- * no response (network drop), a client timeout, a 429, or any 5xx —
- * are retryable; every other 4xx (bad request, invalid token, …) is
- * a definitive answer and is not retried.
- */
-const isRetryableError = (error: RequestFailure | null | undefined): boolean => {
-    // A TypeError (or similar) means an adapter/programmer bug, not a
-    // transient network failure — retrying it just wastes the backoff. So
-    // does a rejection with no error object at all (a custom adapter
-    // rejecting with null/undefined).
-    if (error == null || error instanceof TypeError) return false;
-    if (!error.response) return true; // network error / no response
-    if (error.code === 'ECONNABORTED') return true; // client timeout
-    const status = error.response.status;
-    return status === 429 || (typeof status === 'number' && status >= 500);
-};
-
-/**
- * Server-requested cooldown in ms, read from a `retry_after` body field
- * or a `Retry-After` header (both expressed in seconds), or null when
- * the server didn't ask for one.
- */
-const getRetryAfterMs = (error: RequestFailure): number | null => {
-    const fromBody = error.response?.data?.retry_after;
-    if (typeof fromBody === 'number' && Number.isFinite(fromBody) && fromBody >= 0) {
-        return fromBody * 1000;
-    }
-    const fromHeader = error.response?.headers?.['retry-after'];
-    if (fromHeader != null) {
-        const seconds = Number(fromHeader);
-        if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
-    }
-    return null;
-};
 
 /**
  * The one place a 2xx body becomes a response type. Anything that is not a
@@ -243,17 +225,116 @@ const responseObject = <T extends object>(url: string, body: unknown): T | null 
 };
 
 /**
- * Names a 3xx answer (status and Location only, never the headers object) —
- * requests are sent with redirects disabled, so it surfaces as a failure.
+ * The axios request of one POST attempt, on the adapter of the platform it runs on.
  */
-const warnIfRedirect = (url: string, response: RequestFailure['response']): void => {
-    const status = response?.status;
-    if (typeof status !== 'number' || status < 300 || status >= 400) return;
-    logger.withCategory('api').warning('API request answered with a redirect, not followed', {
+const postConfig = (url: string, headers: RequestHeaders, data: string): AxiosRequestConfig => {
+    const requestConfig: AxiosRequestConfig = {
+        method: 'post',
         url,
-        status,
-        location: response?.headers?.location ?? response?.headers?.Location,
-    });
+        headers,
+        data,
+        timeout: settings.getSetting('apiTimeout') * 1000, // Convert seconds to milliseconds
+        // The API never redirects; following one would replay the x-token header at the target.
+        maxRedirects: 0,
+    };
+    if (runtime.isHeadlessService()) {
+        requestConfig.adapter = getHeadlessHttpAdapter();
+    } else if (runtime.isCapacitor()) {
+        requestConfig.adapter = getCapacitorHttpAdapter();
+    }
+    return requestConfig;
+};
+
+/**
+ * How long to wait before the next attempt: an explicit server cooldown when present, else exponential
+ * backoff with jitter. Null when the cooldown is longer than the in-call cap, which defers the request to the
+ * next scheduled cycle.
+ */
+const retryDelayMs = (caught: unknown, attempt: number, baseDelayMs: number): number | null => {
+    const cooldownMs = getRetryAfterMs(caught);
+    if (cooldownMs == null) {
+        return Math.min(baseDelayMs * 2 ** attempt + Math.random() * baseDelayMs, MAX_RETRY_DELAY_MS);
+    }
+    return cooldownMs > MAX_RETRY_DELAY_MS ? null : Math.max(cooldownMs, MIN_RETRY_DELAY_MS);
+};
+
+/**
+ * The retry loop behind both POST entry points.
+ *
+ * @param repeatable - true: transient failures (network drop, timeout, 429, 5xx) are retried with exponential
+ *   backoff + jitter up to `apiMaxRetries` times. false: only a 429 and a request that never left are retried;
+ *   any other failure ends the call, as refused or unclear.
+ */
+const sendPost = async <T extends object>(
+    url: string,
+    headers: RequestHeaders,
+    data: string,
+    repeatable: boolean,
+): Promise<PostOutcome<T>> => {
+    const maxRetries = settings.getSetting('apiMaxRetries');
+    const baseDelayMs = settings.getSetting('apiRetryBaseDelayMs');
+
+    for (let attempt = 0; ; attempt++) {
+        const startTime = Date.now();
+
+        // Log the request with enhanced context
+        logger.withCategory('api').apiRequest('POST', url);
+
+        try {
+            const response = await axios(postConfig(url, headers, data));
+
+            const duration = Date.now() - startTime;
+
+            // Log successful response with full data (but for the account endpoints)
+            logger.withCategory('api').api('API Response', {
+                method: 'POST',
+                url: url,
+                status: response.status,
+                duration: duration,
+                ...(BODY_UNLOGGED_URLS.has(url) ? {} : { responseData: response.data as unknown }),
+            });
+
+            const body = responseObject<T>(url, response.data);
+            return body ? { kind: 'body', body } : { kind: 'unclear' };
+        } catch (caught) {
+            const { responseData, ...failure } = describeFailure(caught);
+
+            // Log failed response with full error details (but for the account endpoints)
+            logger.withCategory('api').api('API Error Response', {
+                method: 'POST',
+                url: url,
+                ...failure,
+                ...(BODY_UNLOGGED_URLS.has(url) ? {} : { responseData }),
+                duration: Date.now() - startTime,
+            });
+
+            const redirect = redirectOf(caught);
+            if (redirect) {
+                logger.withCategory('api').warning('API request answered with a redirect, not followed', {
+                    url,
+                    ...redirect,
+                });
+            }
+
+            const mayRepeat = repeatable ? isRetryableError(caught) : isSafeToRepeat(caught);
+            if (!mayRepeat || attempt >= maxRetries) {
+                return { kind: failureVerdict(caught) }; // An outcome instead of a throw, to prevent crashing
+            }
+
+            const delayMs = retryDelayMs(caught, attempt, baseDelayMs);
+            if (delayMs === null) return { kind: failureVerdict(caught) };
+
+            logger.withCategory('api').warning('Retrying API request after transient failure', {
+                url,
+                status: failure.status,
+                attempt: attempt + 1,
+                maxRetries,
+                delayMs: Math.round(delayMs),
+            });
+
+            await sleep(delayMs);
+        }
+    }
 };
 
 /**
@@ -277,91 +358,21 @@ const makePostRequest = async <T extends object>(
     headers: RequestHeaders,
     data: string = '',
 ): Promise<T | null> => {
-    const maxRetries = coerceNonNegInt(settings.getSetting('apiMaxRetries'), 3);
-    const baseDelayMs = coerceNonNegInt(settings.getSetting('apiRetryBaseDelayMs'), 1000);
-
-    for (let attempt = 0; ; attempt++) {
-        const startTime = Date.now();
-
-        // Log the request with enhanced context
-        logger.withCategory('api').apiRequest('POST', url);
-
-        try {
-            const requestConfig: AxiosRequestConfig = {
-                method: 'post',
-                url,
-                headers,
-                data,
-                timeout: settings.getSetting('apiTimeout') * 1000, // Convert seconds to milliseconds
-                // The API never redirects; following one would replay the x-token header at the target.
-                maxRedirects: 0,
-            };
-            if (runtime.isHeadlessService()) {
-                requestConfig.adapter = getHeadlessHttpAdapter();
-            } else if (runtime.isCapacitor()) {
-                requestConfig.adapter = getCapacitorHttpAdapter();
-            }
-            const response = await axios(requestConfig);
-
-            const duration = Date.now() - startTime;
-
-            // Log successful response with full data
-            logger.withCategory('api').api('API Response', {
-                method: 'POST',
-                url: url,
-                status: response.status,
-                duration: duration,
-                responseData: response.data as unknown,
-            });
-
-            return responseObject<T>(url, response.data);
-        } catch (caught) {
-            const error = caught as RequestFailure | null | undefined;
-            const duration = Date.now() - startTime;
-            const status = error?.response?.status || 'NO_RESPONSE';
-
-            // Log failed response with full error details
-            logger.withCategory('api').api('API Error Response', {
-                method: 'POST',
-                url: url,
-                status: status,
-                duration: duration,
-                error: error?.message,
-                responseData: error?.response?.data || null,
-                timeout: error?.code === 'ECONNABORTED',
-            });
-
-            warnIfRedirect(url, error?.response);
-
-            if (!isRetryableError(error) || attempt >= maxRetries) {
-                return null; // Return null instead of throwing to prevent crashing
-            }
-
-            // Honor an explicit server cooldown when present, else use
-            // exponential backoff with jitter. A cooldown longer than the
-            // in-call cap is deferred to the next scheduled cycle.
-            // isRetryableError already rejected a null/undefined failure.
-            const cooldownMs = getRetryAfterMs(error as RequestFailure);
-            let delayMs;
-            if (cooldownMs != null) {
-                if (cooldownMs > MAX_RETRY_DELAY_MS) return null;
-                delayMs = Math.max(cooldownMs, MIN_RETRY_DELAY_MS);
-            } else {
-                delayMs = Math.min(baseDelayMs * 2 ** attempt + Math.random() * baseDelayMs, MAX_RETRY_DELAY_MS);
-            }
-
-            logger.withCategory('api').warning('Retrying API request after transient failure', {
-                url,
-                status,
-                attempt: attempt + 1,
-                maxRetries,
-                delayMs: Math.round(delayMs),
-            });
-
-            await sleep(delayMs);
-        }
-    }
+    const outcome = await sendPost<T>(url, headers, data, true);
+    return outcome.kind === 'body' ? outcome.body : null;
 };
+
+/**
+ * Makes a POST request that spends something and is not known to be idempotent: a retry after a timeout could
+ * spend twice. A 429 (honouring its Retry-After, as makePostRequest does) and a request that never left
+ * (ECONNREFUSED, ENOTFOUND, EAI_AGAIN) are retried; any other failure is one attempt and says which kind it was.
+ *
+ * @returns `body` with the response; `refused` when the server did not process it (3xx, 4xx, a 429 that ran out of
+ *   retries, a request that never left); `unclear` when it was sent and no usable answer came (a timeout, a reset,
+ *   a 5xx, a 2xx whose body is not a JSON object), so it may or may not have been processed.
+ */
+const postOnce = <T extends object>(url: string, headers: RequestHeaders, data: string = ''): Promise<PostOutcome<T>> =>
+    sendPost<T>(url, headers, data, false);
 
 /**
  * Creates common headers for all API requests to GuruShots
@@ -376,4 +387,4 @@ const createCommonHeaders = (token: string | undefined): RequestHeaders => {
     return generateRandomHeaders(token);
 };
 
-export { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE };
+export { makePostRequest, postOnce, createCommonHeaders, FORM_CONTENT_TYPE };

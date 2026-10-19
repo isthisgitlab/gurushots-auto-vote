@@ -20,7 +20,7 @@ const runAutoFill = async (ctx: ActionContext) => {
         logger
             .withCategory('voting')
             .info(
-                `${logger.challengeTag(challenge)} autoFill: entry submitted (available to later actions this cycle)`,
+                `${logger.challengeTag(challenge)} autoSubmit: entry submitted (available to later actions this cycle)`,
                 null,
             );
     }
@@ -35,15 +35,15 @@ const runEmergencyFill = async (ctx: ActionContext) => {
     if (emergencyResult === 'submitted') {
         logger
             .withCategory('voting')
-            .info(`${logger.challengeTag(challenge)} emergencyFill: entries submitted near deadline`, null);
+            .info(`${logger.challengeTag(challenge)} emergencySubmit: entries submitted near deadline`, null);
     }
 };
 
 const actionRunners: Record<string, ((ctx: ActionContext) => Promise<void>) | undefined> = {
     boost: runBoost,
     turbo: runTurboApply,
-    autoFill: runAutoFill,
-    emergencyFill: runEmergencyFill,
+    autoSubmit: runAutoFill,
+    emergencySubmit: runEmergencyFill,
 };
 
 /**
@@ -69,6 +69,7 @@ export const runDeadlineActions = async (
         api: pass.api,
         fillDeps: pass.fillDeps,
         entryAges: pass.entryAges,
+        missions: pass.missions,
     };
     for (const { action } of votingLogic.orderDeadlineActions(challenge)) {
         // Honor cancellation between actions, same as the per-challenge guard.

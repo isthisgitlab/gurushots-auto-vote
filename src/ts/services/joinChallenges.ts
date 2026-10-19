@@ -17,11 +17,12 @@
  */
 
 export type { JoinDeps } from './joinChallenges/shared';
-export { isAutoJoinActive } from './joinChallenges/settingsResolution';
+export { isAutoJoinActive, resolveJoinSetting } from './joinChallenges/settingsResolution';
 export { runJoinPass } from './joinChallenges/joinPass';
 export { joinChallengeSingle } from './joinChallenges/manualJoin';
+export { forgetUnconfirmedPayment } from './joinChallenges/forgetPayment';
+export type { ForgetOutcome } from './joinChallenges/forgetPayment';
 
 // exported for tests
 export { performJoin } from './joinChallenges/performJoin';
-export { resolveJoinSetting } from './joinChallenges/settingsResolution';
 export { inFlight } from './joinChallenges/shared';

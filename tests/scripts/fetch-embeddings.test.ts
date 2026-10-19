@@ -31,6 +31,12 @@ import type * as stored_zipModule from './helpers/stored-zip';
 import { invalid } from '../helpers/invalid';
 import type { MainOptions } from '../../scripts/fetch-embeddings';
 import type { Intermediate } from '../../scripts/build-lexicon';
+import { isRecordOf, isShape, isString, optional, parseJsonAs } from '../helpers/parseJson';
+
+const isWrittenIntermediate = isShape<Pick<Intermediate, 'packed' | 'surfaces'>>({
+    packed: optional(isRecordOf(isString)),
+    surfaces: optional(isRecordOf(isString)),
+});
 
 /** The intermediate main() writes to outPath (fetch-embeddings' `output`). */
 
@@ -368,6 +374,16 @@ describe('fetch-embeddings', () => {
             expect(errors()).toContain('1 authored stem collision(s) across clusters');
         });
 
+        test.each([[[]], [{}], [{ concepts: 'cat' }]])(
+            'fails on a concepts file without a concepts list (%j) instead of treating it as empty',
+            async (concepts) => {
+                setup({ concepts, expectedZipSha256: 'f'.repeat(64) });
+                await expect(main(opts)).rejects.toThrow('exit 1');
+                expect(errors()).toContain('lexicon-concepts.json must be a JSON object with a `concepts` list');
+                expect(errors()).not.toContain('SHA-256 mismatch for the archive');
+            },
+        );
+
         test('fails on an archive whose SHA-256 does not match the pin', async () => {
             setup({ expectedZipSha256: 'f'.repeat(64) });
             await expect(main(opts)).rejects.toThrow('exit 1');
@@ -419,7 +435,7 @@ describe('fetch-embeddings', () => {
             setup();
             await main(opts);
             expect(exitSpy).not.toHaveBeenCalled();
-            const out = JSON.parse(fs.readFileSync(opts.outPath, 'utf8')) as Intermediate;
+            const out = parseJsonAs(fs.readFileSync(opts.outPath, 'utf8'), isWrittenIntermediate);
             expect(out).toMatchObject({
                 version: 1,
                 dims: DIMS,
@@ -439,23 +455,23 @@ describe('fetch-embeddings', () => {
         test('keeps the source spelling for a stemmed search word', async () => {
             setup({ concepts: { concepts: [] }, lines: [gloveLine('cats', 1)] });
             await main(opts);
-            const out = JSON.parse(fs.readFileSync(opts.outPath, 'utf8')) as Intermediate;
+            const out = parseJsonAs(fs.readFileSync(opts.outPath, 'utf8'), isWrittenIntermediate);
             expect(out.surfaces).toEqual({ cat: 'cats' });
         });
 
         test('handles an empty scan and skips centering when disabled', async () => {
-            setup({ concepts: {}, lines: ["o'neil 1 2"] });
+            setup({ concepts: { concepts: [] }, lines: ["o'neil 1 2"] });
             await main({ ...opts, meanCenter: false });
-            const out = JSON.parse(fs.readFileSync(opts.outPath, 'utf8')) as Intermediate;
+            const out = parseJsonAs(fs.readFileSync(opts.outPath, 'utf8'), isWrittenIntermediate);
             expect(out).toMatchObject({ meanCentered: false, packed: {}, scale: 1 / 127 });
             expect(logs()).not.toContain('Mean-centering');
             expect(logs()).not.toContain('Retrofit');
         });
 
         test('mean-centering copes with an empty scan', async () => {
-            setup({ concepts: {}, lines: [] });
+            setup({ concepts: { concepts: [] }, lines: [] });
             await main(opts);
-            expect((JSON.parse(fs.readFileSync(opts.outPath, 'utf8')) as Intermediate).packed).toEqual({});
+            expect(parseJsonAs(fs.readFileSync(opts.outPath, 'utf8'), isWrittenIntermediate).packed).toEqual({});
             expect(logs()).toContain('0 stems stored');
         });
     });
@@ -467,7 +483,7 @@ describe('fetch-embeddings', () => {
             const zipPath = path.join(cacheDir, 'glove.zip');
             fs.mkdirSync(zipPath, { recursive: true });
             const conceptsPath = path.join(tmp, 'concepts.json');
-            fs.writeFileSync(conceptsPath, '{}');
+            fs.writeFileSync(conceptsPath, '{"concepts":[]}');
             await expect(run({ conceptsPath, cacheDir, zipPath })).rejects.toThrow('exit 1');
             expect(errors()).toContain('❌ Error: EISDIR');
         });

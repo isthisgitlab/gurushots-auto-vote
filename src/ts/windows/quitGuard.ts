@@ -42,20 +42,39 @@ type DescribeDeadlineActions = (
 ) => { actions?: Array<{ action: string; dueAt: number | null }> } | null | undefined;
 
 const QUIT_WARN_HORIZON_SEC = 60 * 60;
+// Narrower than the quit prompt's: a sleep (even a 2-minute lid close) spends a
+// boost this much earlier than Boost Time, so only boosts due within 30 min go.
+const SUSPEND_BOOST_HORIZON_SEC = 30 * 60;
 // A bypass is for the quit already under way; if that quit never lands (a
 // cancelled OS shutdown, a failed update install) the guard comes back.
 const BYPASS_TTL_MS = 30_000;
 
-// Last successful challenge list from get-active-challenges.
+// Last successful challenge list from get-active-challenges, and the mock flag
+// it was fetched under (null until one has been).
 let lastChallenges: readonly Challenge[] = [];
+let lastChallengesMock: boolean | null = null;
 let bypassed = false;
 let bypassTimer: NodeJS.Timeout | null = null;
 // A second Cmd+Q while the dialog is up must not stack another dialog.
 let prompting = false;
 
-/** @param challenges - the get-active-challenges list (ignored unless an array) */
-const rememberChallenges = (challenges: readonly Challenge[] | null | undefined) => {
-    if (Array.isArray(challenges)) lastChallenges = challenges;
+/**
+ * @param challenges - the get-active-challenges list (ignored unless an array)
+ * @param mock - the `mock` setting the list was fetched under
+ */
+const rememberChallenges = (challenges: readonly Challenge[] | null | undefined, mock: boolean) => {
+    if (!Array.isArray(challenges)) return;
+    lastChallenges = challenges;
+    lastChallengesMock = mock;
+};
+
+/** The `mock` setting the remembered list was fetched under; null when there is none. */
+const rememberedChallengesMock = (): boolean | null => lastChallengesMock;
+
+/** Mark the remembered challenge's boost as used, so it no longer counts as pending; a fresh `rememberChallenges` list replaces the mark. */
+const markBoostApplied = (id: Challenge['id']) => {
+    const boost = lastChallenges.find((c) => c.id === id)?.member?.boost;
+    if (boost) boost.state = 'USED';
 };
 
 const clearBypass = () => {
@@ -76,6 +95,7 @@ const bypassQuitGuard = () => {
 
 const resetQuitGuard = () => {
     lastChallenges = [];
+    lastChallengesMock = null;
     prompting = false;
     clearBypass();
 };
@@ -85,25 +105,47 @@ const resetQuitGuard = () => {
  * soonest first.
  *
  * @param now - Unix seconds
+ * @param horizonSec - only boosts due within this many seconds
  */
-const imminentBoosts = (now: number, describe: DescribeDeadlineActions): Array<{ title: string; dueIn: number }> => {
+const imminentBoostChallenges = (
+    now: number,
+    describe: DescribeDeadlineActions,
+    horizonSec: number,
+): Array<{ challenge: Challenge; dueAt: number }> => {
     const open = new Set(openBoostWindows(lastChallenges, now).map((w) => w.id));
     return lastChallenges
         .filter((c) => open.has(c.id))
-        .map((c) => ({
-            title: c.title,
-            dueAt: describe(c, now)?.actions?.find((a) => a.action === 'boost')?.dueAt,
+        .map((challenge) => ({
+            challenge,
+            dueAt: describe(challenge, now)?.actions?.find((a) => a.action === 'boost')?.dueAt,
         }))
-        .flatMap((b) =>
-            typeof b.dueAt === 'number' && b.dueAt - now <= QUIT_WARN_HORIZON_SEC
-                ? [{ title: b.title, dueIn: b.dueAt - now }]
-                : [],
+        .flatMap(({ challenge, dueAt }) =>
+            typeof dueAt === 'number' && dueAt - now <= horizonSec ? [{ challenge, dueAt }] : [],
         )
-        .sort((a, b) => a.dueIn - b.dueIn);
+        .sort((a, b) => a.dueAt - b.dueAt);
 };
 
-const describeBoost = (b: { title: string; dueIn: number }, t: (key: string) => string) =>
-    `• ${b.title} — ${b.dueIn <= 0 ? t('quitGuard.dueNow') : t('quitGuard.dueIn').replace('{time}', formatDuration(b.dueIn))}`;
+const imminentBoosts = (now: number, describe: DescribeDeadlineActions): Array<{ title: string; dueIn: number }> =>
+    imminentBoostChallenges(now, describe, QUIT_WARN_HORIZON_SEC).map(({ challenge, dueAt }) => ({
+        title: challenge.title,
+        dueIn: dueAt - now,
+    }));
+
+const describeBoost = (b: { title: string; dueIn: number }, t: (key: string) => string, locale: string) =>
+    `• ${b.title} — ${b.dueIn <= 0 ? t('quitGuard.dueNow') : t('quitGuard.dueIn').replace('{time}', formatDuration(b.dueIn, { locale }))}`;
+
+const quitDialogOptions = (
+    boosts: Array<{ title: string; dueIn: number }>,
+    t: (key: string) => string,
+    locale: string,
+): MessageBoxOptions => ({
+    type: 'warning',
+    buttons: [t('quitGuard.keepRunning'), t('quitGuard.quitAnyway')],
+    defaultId: 0,
+    cancelId: 0,
+    message: t('quitGuard.title'),
+    detail: `${t('quitGuard.detail')}\n\n${boosts.map((b) => describeBoost(b, t, locale)).join('\n')}`,
+});
 
 /**
  * Hold a quit/close that would forfeit an imminent boost, and ask.
@@ -113,6 +155,7 @@ const describeBoost = (b: { title: string; dueIn: number }, t: (key: string) => 
  * @param deps.dialog - Electron dialog
  * @param deps.parent - window to attach the dialog to, if still alive
  * @param deps.t - translator
+ * @param deps.locale - the UI language the time is written in ("lv" writes minutes "min"); default English
  * @param deps.proceed - re-issues the quit/close once confirmed
  * @param deps.now - Unix seconds
  * @param deps.describeDeadlineActions - test seam
@@ -125,6 +168,7 @@ const holdQuitForOpenBoosts = (
         dialog,
         parent,
         t,
+        locale = 'en',
         proceed,
         now = Math.floor(Date.now() / 1000),
         describeDeadlineActions = votingLogic.describeDeadlineActions,
@@ -133,6 +177,7 @@ const holdQuitForOpenBoosts = (
         dialog: Pick<Dialog, 'showMessageBox'>;
         parent: BrowserWindow | null;
         t: (key: string) => string;
+        locale?: string;
         proceed: () => void;
         now?: number;
         describeDeadlineActions?: DescribeDeadlineActions;
@@ -153,45 +198,52 @@ const holdQuitForOpenBoosts = (
     if (prompting) return true;
     prompting = true;
 
-    const options: MessageBoxOptions = {
-        type: 'warning',
-        buttons: [t('quitGuard.keepRunning'), t('quitGuard.quitAnyway')],
-        defaultId: 0,
-        cancelId: 0,
-        message: t('quitGuard.title'),
-        detail: `${t('quitGuard.detail')}\n\n${boosts.map((b) => describeBoost(b, t)).join('\n')}`,
-    };
-    const shown =
-        parent && !parent.isDestroyed() ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options);
-
+    const options = quitDialogOptions(boosts, t, locale);
     const confirm = () => {
         bypassQuitGuard();
-        proceed();
+        try {
+            proceed();
+        } catch (error) {
+            // Runs from a promise nobody awaits: a throw here would be an unhandled rejection, and the quit would fail silently.
+            logger.withCategory('ui').error('Quit could not be completed:', error);
+        }
     };
+    // A broken dialog must never make the app unquittable.
+    const dialogFailed = (error: unknown) => {
+        prompting = false;
+        logger.withCategory('ui').error('Quit confirmation failed — quitting anyway:', error);
+        confirm();
+    };
+    let shown;
+    try {
+        shown =
+            parent && !parent.isDestroyed() ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options);
+    } catch (error) {
+        // Not inside the before-quit / close handler that just prevented the default: re-issuing the
+        // quit from there nests it in the event being cancelled.
+        setImmediate(() => dialogFailed(error));
+        return true;
+    }
     // Two-argument then: only a failed dialog lands in the error branch, so
     // `proceed` can never run twice.
-    void Promise.resolve(shown).then(
-        ({ response }) => {
-            prompting = false;
-            if (response !== 1) return;
-            logger.withCategory('ui').info(`Quit confirmed with ${boosts.length} boost(s) due`, null);
-            confirm();
-        },
-        (error) => {
-            // A broken dialog must never make the app unquittable.
-            prompting = false;
-            logger.withCategory('ui').error('Quit confirmation failed — quitting anyway:', error);
-            confirm();
-        },
-    );
+    void Promise.resolve(shown).then(({ response }) => {
+        prompting = false;
+        if (response !== 1) return;
+        logger.withCategory('ui').info(`Quit confirmed with ${boosts.length} boost(s) due`, null);
+        confirm();
+    }, dialogFailed);
     return true;
 };
 
 export {
     rememberChallenges,
+    rememberedChallengesMock,
+    markBoostApplied,
+    imminentBoostChallenges,
     bypassQuitGuard,
     resetQuitGuard,
     holdQuitForOpenBoosts,
     QUIT_WARN_HORIZON_SEC,
+    SUSPEND_BOOST_HORIZON_SEC,
     BYPASS_TTL_MS,
 };

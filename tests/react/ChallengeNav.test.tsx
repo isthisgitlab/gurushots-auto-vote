@@ -11,11 +11,23 @@
 
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { fireSettingsChanged } from './helpers/setup';
+import { titleRuleInfo } from './helpers/titleRules';
 import { ChallengeNav } from '@/components/app/ChallengeNav';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const challenge = (id: number, title: string) => invalid<Challenge>({ id, title });
+/** A running challenge at 5% exposure, which the jump list flags with a red dot. */
+const lowExposureChallenge = (id: number, title: string) => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    return invalid<Challenge>({
+        id,
+        title,
+        start_time: nowSec - 3600,
+        close_time: nowSec + 3600,
+        member: { ranking: { exposure: { exposure_factor: 5 } } },
+    });
+};
 
 describe('ChallengeNav', () => {
     beforeEach(() => {
@@ -50,8 +62,8 @@ describe('ChallengeNav', () => {
     test('clicking an entry scrolls the matching card into view', () => {
         render(<ChallengeNav challenges={[challenge(42, 'JumpTo')]} />);
 
-        const fakeCard = { scrollIntoView: jest.fn(), focus: jest.fn() };
-        const getById = jest.spyOn(document, 'getElementById').mockReturnValue(invalid(fakeCard));
+        const fakeCard = Object.assign(document.createElement('div'), { scrollIntoView: jest.fn(), focus: jest.fn() });
+        const getById = jest.spyOn(document, 'getElementById').mockReturnValue(fakeCard);
 
         fireEvent.click(screen.getByRole('button', { name: /JumpTo/ }));
 
@@ -70,13 +82,12 @@ describe('ChallengeNav', () => {
         const tuned = screen.getByRole('button', { name: /Tuned/ });
         const plain = screen.getByRole('button', { name: /Plain/ });
 
-        await waitFor(() => expect(tuned.className).toMatch(/btn-accent/));
-        expect(tuned.textContent).toMatch(/⚙️/);
-        expect(tuned.className).not.toMatch(/btn-info/);
+        await waitFor(() => expect(tuned.textContent).toMatch(/⚙️/));
+        expect(tuned.className).toContain('btn-accent');
         expect(tuned.querySelector('.truncate')!.getAttribute('title')).toMatch(/^Tuned — ./);
 
-        expect(plain.className).not.toMatch(/btn-accent/);
         expect(plain.textContent).not.toMatch(/⚙️/);
+        expect(plain.className).toBe('btn btn-sm max-w-full whitespace-nowrap');
         expect(plain.querySelector('.truncate')!.getAttribute('title')).toBe('Plain');
     });
 
@@ -86,9 +97,9 @@ describe('ChallengeNav', () => {
         );
         jest.mocked(window.api.getTitleProfile).mockImplementation(async (_title, id) =>
             id === '2' || id === '4'
-                ? { name: '4 pics', values: { exposureTarget: 90 }, suppressed: false }
+                ? titleRuleInfo({ profile: { name: '4 pics', values: { exposureTarget: 90 } } })
                 : id === '3'
-                  ? { name: '4 pics', values: {}, suppressed: true }
+                  ? titleRuleInfo({ profile: { name: '4 pics', values: {} }, suppressed: true })
                   : null,
         );
 
@@ -104,21 +115,104 @@ describe('ChallengeNav', () => {
         );
 
         const profiled = screen.getByRole('button', { name: /Profiled/ });
-        const plain = screen.getByRole('button', { name: /Plain/ });
         const suppressed = screen.getByRole('button', { name: /Suppressed/ });
         const mixed = screen.getByRole('button', { name: /Mixed/ });
-        await waitFor(() => expect(profiled.className).toMatch(/btn-info/));
-        expect(profiled.textContent).toMatch(/🔄/);
-        expect(profiled.className).not.toMatch(/btn-accent/);
+        await waitFor(() => expect(profiled.textContent).toMatch(/🔄/));
         expect(profiled.querySelector('.truncate')!.getAttribute('title')).toContain('app.titleRuleProfile');
-        expect(plain.className).not.toMatch(/btn-accent/);
-        expect(suppressed.className).not.toMatch(/btn-info/);
         expect(suppressed.textContent).not.toMatch(/🔄/);
-        expect(mixed.className).toMatch(/btn-info/);
+        expect(profiled.className).toContain('btn-info');
+        expect(suppressed.className).not.toMatch(/btn-(info|accent|secondary)/);
         expect(mixed.textContent).toMatch(/⚙️.*🔄/);
+        expect(mixed.className).toContain('btn-info');
+        expect(mixed.className).not.toContain('btn-accent');
         expect(mixed.querySelector('.truncate')!.getAttribute('title')).toContain(
             'app.customSettingsHint · app.titleRuleProfile',
         );
+    });
+
+    test('marks a challenge a rule customizes on its own with its own marker and text, not the profile one', async () => {
+        jest.mocked(window.api.getTitleProfile).mockImplementation(async (_title, id) =>
+            id === '8'
+                ? titleRuleInfo({
+                      inlineValues: { scenario: 'Plan' },
+                      ruleSources: { scenario: { title: 'Seaside', index: 1 } },
+                  })
+                : // Join-only values change nothing once joined.
+                  titleRuleInfo({ inlineValues: { autoJoin: true } }),
+        );
+        render(<ChallengeNav challenges={[challenge(8, 'Ruled'), challenge(9, 'Join only')]} />);
+
+        const ruled = screen.getByRole('button', { name: /Ruled/ });
+        const joinOnly = screen.getByRole('button', { name: /Join only/ });
+        await waitFor(() => expect(ruled.textContent).toMatch(/📏/));
+        expect(ruled.querySelector('.truncate')!.getAttribute('title')).toContain('app.ruleSettingsHint');
+        expect(ruled.textContent).toContain('app.ruleSettingsHint');
+        expect(ruled.textContent).not.toContain('app.titleRuleProfile');
+        expect(joinOnly.textContent).not.toMatch(/📏/);
+        expect(ruled.className).toContain('btn-secondary');
+        expect(joinOnly.className).not.toMatch(/btn-(info|accent|secondary)/);
+    });
+
+    test('rings the low-exposure dot on a coloured chip, not on a plain one', async () => {
+        jest.mocked(window.api.getChallengeOverrides).mockImplementation(async (id) =>
+            id === '1' ? { exposureTarget: 90 } : {},
+        );
+        jest.mocked(window.api.getTitleProfile).mockImplementation(async (_title, id) =>
+            id === '2'
+                ? titleRuleInfo({ inlineValues: { scenario: 'Plan' } })
+                : id === '4'
+                  ? titleRuleInfo({ profile: { name: '4 pics', values: { exposureTarget: 90 } } })
+                  : null,
+        );
+
+        render(
+            <ChallengeNav
+                challenges={[
+                    lowExposureChallenge(1, 'Manual low'),
+                    lowExposureChallenge(2, 'Rule low'),
+                    lowExposureChallenge(3, 'Plain low'),
+                    lowExposureChallenge(4, 'Profiled low'),
+                ]}
+            />,
+        );
+
+        const manual = screen.getByRole('button', { name: /Manual low/ });
+        const rule = screen.getByRole('button', { name: /Rule low/ });
+        const plain = screen.getByRole('button', { name: /Plain low/ });
+        const profiled = screen.getByRole('button', { name: /Profiled low/ });
+        await waitFor(() => expect(manual.className).toContain('btn-accent'));
+        await waitFor(() => expect(rule.className).toContain('btn-secondary'));
+        await waitFor(() => expect(profiled.className).toContain('btn-info'));
+        const dotParent = (chip: HTMLElement) =>
+            chip.querySelector<HTMLElement>('[data-testid="pulse-dot-error"]')!.parentElement!;
+        for (const chip of [manual, rule, profiled]) {
+            expect(dotParent(chip).className).toContain('ring-base-100');
+            expect(dotParent(chip).className).toContain('rounded-selector');
+        }
+        // No wrapper on a plain chip: the dot sits directly in the chip button.
+        expect(dotParent(plain)).toBe(plain);
+    });
+
+    test("draws the boost dot in the chip's own content colour on a profiled chip, and plain on others", async () => {
+        jest.mocked(window.api.getTitleProfile).mockImplementation(async (_title, id) =>
+            id === '1' ? titleRuleInfo({ profile: { name: '4 pics', values: { exposureTarget: 90 } } }) : null,
+        );
+        const boosted = (id: number, title: string) =>
+            invalid<Challenge>({ id, title, member: { boost: { state: 'AVAILABLE_KEY' } } });
+
+        render(<ChallengeNav challenges={[boosted(1, 'Profiled boost'), boosted(2, 'Plain boost')]} />);
+
+        const profiled = screen.getByRole('button', { name: /Profiled boost/ });
+        const plain = screen.getByRole('button', { name: /Plain boost/ });
+        await waitFor(() => expect(profiled.className).toContain('btn-info'));
+        expect(profiled.querySelector('.bg-info-content')).not.toBeNull();
+        expect(profiled.querySelector('.status-info')).toBeNull();
+        expect(plain.querySelector('.status-info')).not.toBeNull();
+        expect(plain.querySelector('.bg-info-content')).toBeNull();
+        const dotParent = (chip: HTMLElement) =>
+            chip.querySelector<HTMLElement>('[data-testid="pulse-dot-info"]')!.parentElement!;
+        expect(dotParent(profiled).className).toContain('ring-base-100');
+        expect(dotParent(plain)).toBe(plain);
     });
 
     test('marks nothing when a per-challenge override read fails', async () => {
@@ -129,7 +223,7 @@ describe('ChallengeNav', () => {
         render(<ChallengeNav challenges={[challenge(7, 'Solo')]} />);
 
         await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalledWith('7'));
-        expect(screen.getByRole('button', { name: /Solo/ }).className).not.toMatch(/btn-accent/);
+        expect(screen.getByRole('button', { name: /Solo/ }).textContent).not.toMatch(/⚙️/);
     });
 
     test('picks up an override saved after mount, via settings-changed', async () => {
@@ -139,15 +233,14 @@ describe('ChallengeNav', () => {
 
         const chip = screen.getByRole('button', { name: /Later/ });
         await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalledWith('5'));
-        expect(chip.className).not.toMatch(/btn-accent/);
+        expect(chip.textContent).not.toMatch(/⚙️/);
 
         jest.mocked(window.api.getChallengeOverrides).mockResolvedValue({ exposureTarget: 80 });
         await act(async () => {
             fireSettingsChanged();
         });
 
-        await waitFor(() => expect(chip.className).toMatch(/btn-accent/));
-        expect(chip.textContent).toMatch(/⚙️/);
+        await waitFor(() => expect(chip.textContent).toMatch(/⚙️/));
     });
 
     test('picks up a newly assigned automatic profile via settings-changed', async () => {
@@ -155,14 +248,16 @@ describe('ChallengeNav', () => {
 
         const chip = screen.getByRole('button', { name: /Later Profile/ });
         await waitFor(() => expect(window.api.getTitleProfile).toHaveBeenCalledWith('Later Profile', '6'));
-        expect(chip.className).not.toMatch(/btn-accent/);
+        expect(chip.textContent).not.toMatch(/🔄/);
 
-        jest.mocked(window.api.getTitleProfile).mockResolvedValue({ name: '4 pics', values: {}, suppressed: false });
+        jest.mocked(window.api.getTitleProfile).mockResolvedValue(
+            titleRuleInfo({ profile: { name: '4 pics', values: {} } }),
+        );
         await act(async () => {
             fireSettingsChanged();
         });
 
-        await waitFor(() => expect(chip.className).toMatch(/btn-info/));
+        await waitFor(() => expect(chip.textContent).toMatch(/🔄/));
     });
 
     test('reads each id once when the list repeats one', async () => {

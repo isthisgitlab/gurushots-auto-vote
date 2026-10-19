@@ -8,16 +8,25 @@
 
 jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
+    getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
 }));
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({
+    resolvePin: jest.fn(() => ({ state: 'none' })),
+    pinFallbackOf: jest.fn(() => null),
+    describePinFallback: jest.fn(() => ''),
     shouldPlayAutoTurbo: jest.fn(() => false),
     isTurboEarnSaved: jest.fn(() => false),
     orderDeadlineActions: jest.fn(() => []),
     shouldApplyBoost: jest.fn(() => false),
     isWithinEmergencyWindow: jest.fn(() => false),
+    isBoostDueForMission: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
-    pickBoostEntry: jest.fn(() => null),
+    pinReleaseAt: jest.fn<
+        ReturnType<typeof votingLogicModule.pinReleaseAt>,
+        Parameters<typeof votingLogicModule.pinReleaseAt>
+    >(() => null),
+    pickBoostEntry: jest.fn(() => ({ id: 'e1' })),
     getBoostHoldUntil: jest.fn(() => null),
     shouldApplyTurbo: jest.fn(() => ({ apply: false })),
     getEffectiveBoostTime: jest.fn(() => 600),
@@ -91,7 +100,14 @@ const makeApi = (challenges: Challenge[]) => ({
     applyBoost: jest.fn(async () => ({ success: true })),
     applyBoostToEntry: jest.fn(async () => ({ success: true })),
     applyTurbo: jest.fn(async () => ({ ok: true })),
-    runTurboMiniGame: jest.fn(async () => ({ played: 1 })),
+    runTurboGame: jest.fn(async () => ({
+        kind: 'classic',
+        played: 1,
+        correct: 0,
+        flipped: 0,
+        doubleFailed: 0,
+        won: false,
+    })),
 });
 
 const run = (api: ReturnType<typeof makeApi>, over: Partial<VotingPassDeps> = {}) =>
@@ -108,9 +124,14 @@ beforeEach(() => {
     votingLogic.orderDeadlineActions.mockReturnValue([]);
     votingLogic.shouldApplyBoost.mockReturnValue(false);
     votingLogic.isWithinEmergencyWindow.mockReturnValue(false);
+    votingLogic.isBoostDueForMission.mockReturnValue(false);
     votingLogic.resolveBoostFillNewMode.mockReturnValue('no');
-    votingLogic.pickBoostEntry.mockReturnValue(null);
+    votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1' }));
+    votingLogic.resolvePin.mockReturnValue({ state: 'none' });
+    votingLogic.pinFallbackOf.mockReturnValue(null);
+    votingLogic.describePinFallback.mockReturnValue('');
     votingLogic.getBoostHoldUntil.mockReturnValue(null);
+    votingLogic.pinReleaseAt.mockReturnValue(null);
     votingLogic.shouldApplyTurbo.mockReturnValue(invalid({ apply: false }));
     votingLogic.shouldPlayAutoTurbo.mockReturnValue(false);
     votingLogic.evaluateVotingDecision.mockReturnValue(
@@ -156,10 +177,10 @@ describe('runBoost — availability and readiness', () => {
         const api = makeApi([withBoost({ state: 'AVAILABLE_KEY' })]);
         await run(api);
         expect(api.applyBoost).toHaveBeenCalledTimes(1);
-        expect(messages('info').some((m) => m.includes('Emergency Fill window'))).toBe(false);
+        expect(messages('info').some((m) => m.includes('Emergency Submit window'))).toBe(false);
         expect(messages('startOperation')).toEqual(
             expect.arrayContaining([
-                expect.stringContaining('Applying boost to challenge Orchestrated (key-unlocked)'),
+                expect.stringContaining('Applying boost to challenge [Challenge 101: Orchestrated] (key-unlocked)'),
             ]),
         );
         expect(messages('endOperation')).toEqual(
@@ -173,6 +194,69 @@ describe('runBoost — availability and readiness', () => {
         api.applyBoost.mockResolvedValue(invalid(null));
         await run(api);
         expect(messages('endOperation').some((m) => m.includes('Boost applied successfully'))).toBe(false);
+    });
+
+    describe('boost mission', () => {
+        const needs = (boost: number) => ({ join: 0, fill: 0, turbo: 0, boost, vote: 0 });
+        const notDue = () => makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 7200 })]);
+
+        test('a not-yet-due boost is applied early while the mission needs one, and counts it down', async () => {
+            votingLogic.isBoostDueForMission.mockReturnValue(true);
+            const missions = needs(2);
+            const api = notDue();
+            await run(api, { missions });
+            expect(votingLogic.isBoostDueForMission).toHaveBeenCalledWith(expect.anything(), expect.any(Number), 2);
+            expect(api.applyBoost).toHaveBeenCalledTimes(1);
+            expect(missions.boost).toBe(1);
+            expect(messages('info')).toContain(
+                '[Challenge 101: Orchestrated] Boost due early for the boost mission (2 to go)',
+            );
+            expect(messages('info').some((m) => m.includes('Boost not ready'))).toBe(false);
+        });
+
+        test('with no need (or no mission) the boost stays "not ready"', async () => {
+            const missions = needs(0);
+            const withMissions = notDue();
+            await run(withMissions, { missions });
+            expect(votingLogic.isBoostDueForMission).toHaveBeenCalledWith(expect.anything(), expect.any(Number), 0);
+            const withoutMissions = notDue();
+            await run(withoutMissions);
+            expect(withMissions.applyBoost).not.toHaveBeenCalled();
+            expect(withoutMissions.applyBoost).not.toHaveBeenCalled();
+            expect(missions.boost).toBe(0);
+            expect(messages('info').filter((m) => m.includes('Boost not ready'))).toHaveLength(2);
+        });
+
+        test('a not-yet-due boost stays held when the mission cannot take it (autoBoost off)', async () => {
+            votingLogic.isBoostDueForMission.mockReturnValue(false);
+            const missions = needs(1);
+            const api = notDue();
+            await run(api, { missions });
+            expect(api.applyBoost).not.toHaveBeenCalled();
+            expect(missions.boost).toBe(1);
+            expect(messages('info').some((m) => m.includes('Boost not ready'))).toBe(true);
+        });
+
+        test('a normally due boost counts the mission down without the early log', async () => {
+            votingLogic.shouldApplyBoost.mockReturnValue(true);
+            const missions = needs(1);
+            const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]);
+            await run(api, { missions });
+            expect(votingLogic.isBoostDueForMission).not.toHaveBeenCalled();
+            expect(api.applyBoost).toHaveBeenCalledTimes(1);
+            expect(missions.boost).toBe(0);
+            expect(messages('info').some((m) => m.includes('due early'))).toBe(false);
+        });
+
+        test('a failed apply does not count', async () => {
+            votingLogic.isBoostDueForMission.mockReturnValue(true);
+            const missions = needs(1);
+            const api = notDue();
+            api.applyBoost.mockResolvedValue(invalid(null));
+            await run(api, { missions });
+            expect(api.applyBoost).toHaveBeenCalledTimes(1);
+            expect(missions.boost).toBe(1);
+        });
     });
 
     test('a non-Error throw is surfaced verbatim on the boost operation', async () => {
@@ -192,7 +276,7 @@ describe('uncertain auto-fill action protection', () => {
     };
 
     test('skips key-unlocked Boost on an uncertain entry', async () => {
-        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoFills');
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoSubmits');
         votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'boost' }]));
         votingLogic.shouldApplyBoost.mockReturnValue(true);
         votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1' }));
@@ -207,7 +291,7 @@ describe('uncertain auto-fill action protection', () => {
     });
 
     test('allows expiring Boost and emergency Boost on an uncertain entry', async () => {
-        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoFills');
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoSubmits');
         votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'boost' }]));
         votingLogic.shouldApplyBoost.mockReturnValue(true);
         votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1' }));
@@ -232,7 +316,7 @@ describe('uncertain auto-fill action protection', () => {
     });
 
     test('skips Turbo on an uncertain entry unless in the emergency window', async () => {
-        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoFills');
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoSubmits');
         votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'turbo' }]));
         votingLogic.shouldApplyTurbo.mockReturnValue(invalid({ apply: true, fillNew: false, imageId: 'e1' }));
         const challenge = withBoost({ state: 'LOCKED' }, { member: { ranking: { entries: [{ id: 'e1' }] } } });
@@ -260,7 +344,7 @@ describe('runBoost — fill-new fallbacks', () => {
         expect(autoFill.reflectNewEntry).toHaveBeenCalledWith(expect.anything(), 'new1');
         expect(autoFill.reflectEntryFlag).not.toHaveBeenCalled();
         expect(api.applyBoost).not.toHaveBeenCalled();
-        expect(log.endOperation).toHaveBeenCalledWith('boost-101', null, 'boost apply to fresh entry failed');
+        expect(log.endOperation).toHaveBeenCalledWith('boost-101', null, 'boost apply to entry failed');
     });
 
     test('fresh entry boosted → flag reflected on it', async () => {
@@ -274,6 +358,7 @@ describe('runBoost — fill-new fallbacks', () => {
 
     test('conflict mode with no fresh photo skips the boost entirely', async () => {
         votingLogic.resolveBoostFillNewMode.mockReturnValue('conflict');
+        votingLogic.pickBoostEntry.mockReturnValue(null);
         autoFill.submitNewEntryForAction.mockResolvedValue(invalid({ ok: false, reason: 'no-eligible' }));
         const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]);
         await run(api);
@@ -282,7 +367,86 @@ describe('runBoost — fill-new fallbacks', () => {
         expect(messages('info')).toEqual(
             expect.arrayContaining([
                 expect.stringContaining(
-                    'boost fill-new unavailable (no-eligible); only entry already has Turbo — boost skipped',
+                    'boost fill-new unavailable (no-eligible); no entry can take the boost — boost skipped',
+                ),
+            ]),
+        );
+    });
+
+    test('no entry can take the boost (every entry has Turbo or is pinned for Turbo): skipped, applyBoost never called', async () => {
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        const api = makeApi([
+            withBoost(
+                { state: 'AVAILABLE', timeout: NOW + 60 },
+                { member: { boost: { state: 'AVAILABLE', timeout: NOW + 60 }, ranking: { entries: [{ id: 'e1' }] } } },
+            ),
+        ]);
+        await run(api);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(log.startOperation).not.toHaveBeenCalledWith('boost-101', expect.anything());
+        expect(messages('info')).toEqual(
+            expect.arrayContaining([
+                expect.stringContaining(
+                    'no entry can take the boost (every entry has Turbo or is pinned for Turbo) — boost skipped',
+                ),
+            ]),
+        );
+    });
+
+    test('a boost blocked by a Turbo pin that gives way later wakes the scheduler at the release', async () => {
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        votingLogic.pinReleaseAt.mockReturnValue(NOW + 1200);
+        // (The clock is held at NOW: the test runs seconds after NOW was read, and a second boundary between them is a flake.)
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+        let result: Awaited<ReturnType<typeof run>>;
+        let api: ReturnType<typeof makeApi>;
+        try {
+            api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]);
+            result = await run(api);
+        } finally {
+            clock.mockRestore();
+        }
+        expect(votingLogic.pinReleaseAt).toHaveBeenCalledWith(expect.anything(), '101', 'turbo', NOW);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(result.challenges![0].boostHoldUntil).toBe(NOW + 1200);
+    });
+
+    test('the same wake is set when conflict mode finds no fresh photo either', async () => {
+        votingLogic.resolveBoostFillNewMode.mockReturnValue('conflict');
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        votingLogic.pinReleaseAt.mockReturnValue(NOW + 1200);
+        autoFill.submitNewEntryForAction.mockResolvedValue(invalid({ ok: false, reason: 'no-slots' }));
+        const result = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]));
+        expect(result.challenges![0].boostHoldUntil).toBe(NOW + 1200);
+    });
+
+    test('a block that never gives way sets no wake', async () => {
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        const result = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]));
+        expect(result.challenges![0].boostHoldUntil).toBeUndefined();
+    });
+
+    test('no entry at all: skipped as "no entry to boost yet"', async () => {
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]);
+        await run(api);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(messages('info')).toEqual(
+            expect.arrayContaining([expect.stringContaining('no entry to boost yet — boost skipped')]),
+        );
+    });
+
+    test('always mode with no fresh photo and no entry that can take the boost skips it', async () => {
+        votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        autoFill.submitNewEntryForAction.mockResolvedValue(invalid({ ok: false, reason: 'no-slots' }));
+        const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]);
+        await run(api);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(messages('info')).toEqual(
+            expect.arrayContaining([
+                expect.stringContaining(
+                    'boost fill-new unavailable (no-slots); no entry can take the boost — boost skipped',
                 ),
             ]),
         );
@@ -374,13 +538,12 @@ describe('runBoost — fresh-entry hold', () => {
         expect(entryAges.pending('101')).toBeNull();
     });
 
-    test('no target entry, or no ledger, never holds', async () => {
+    test('no ledger never holds', async () => {
         votingLogic.getBoostHoldUntil.mockReturnValue(NOW + 150);
         const api = makeApi([withEntries(['e1'])]);
-        await run(api, { entryAges: createMemoryEntryAgeLedger() });
         await run(api);
         expect(votingLogic.getBoostHoldUntil).not.toHaveBeenCalled();
-        expect(api.applyBoost).toHaveBeenCalledTimes(2);
+        expect(api.applyBoost).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -397,7 +560,7 @@ describe('runTurboApply fallbacks', () => {
         await run(api);
         expect(api.applyTurbo).toHaveBeenCalledWith(101, 'e1', 'tok');
         expect(autoFill.submitNewEntryForAction).not.toHaveBeenCalled();
-        expect(messages('info').some((m) => m.includes('Emergency Fill window'))).toBe(false);
+        expect(messages('info').some((m) => m.includes('Emergency Submit window'))).toBe(false);
         expect(autoFill.reflectEntryFlag).toHaveBeenCalledWith(expect.anything(), 'e1', 'turbo');
     });
 
@@ -444,18 +607,18 @@ describe('runTurboApply fallbacks', () => {
 
 describe('emergency fill and turbo mini-game', () => {
     test('a submitted emergency fill is logged', async () => {
-        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'emergencyFill' }]));
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'emergencySubmit' }]));
         autoFill.maybeEmergencyFillChallenge.mockResolvedValueOnce('submitted');
         await run(makeApi([withBoost({ state: 'LOCKED', timeout: 0 })]));
         expect(messages('info')).toEqual(
-            expect.arrayContaining([expect.stringContaining('emergencyFill: entries submitted near deadline')]),
+            expect.arrayContaining([expect.stringContaining('emergencySubmit: entries submitted near deadline')]),
         );
     });
 
     test('a turbo mini-game Error is reported by message and the pass continues', async () => {
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         const api = makeApi([withBoost({ state: 'LOCKED', timeout: 0 })]);
-        api.runTurboMiniGame.mockRejectedValue(new Error('game crashed'));
+        api.runTurboGame.mockRejectedValue(new Error('game crashed'));
         const result = await run(api);
         expect(result.success).toBe(true);
         expect(log.endOperation).toHaveBeenCalledWith('turbo-earn-101', null, 'game crashed');
@@ -464,7 +627,7 @@ describe('emergency fill and turbo mini-game', () => {
     test('a turbo mini-game non-Error throw is reported verbatim', async () => {
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         const api = makeApi([withBoost({ state: 'LOCKED', timeout: 0 })]);
-        api.runTurboMiniGame.mockRejectedValue('nope');
+        api.runTurboGame.mockRejectedValue('nope');
         await run(api);
         expect(log.endOperation).toHaveBeenCalledWith('turbo-earn-101', null, 'nope');
     });
@@ -531,7 +694,7 @@ describe('vote mission', () => {
             ...extra,
         });
     const waiting = { shouldVote: false, voteReason: 'below threshold', targetExposure: 100 };
-    const withVotes = (vote: number) => ({ missions: { join: 0, fill: 0, turbo: 0, vote } });
+    const withVotes = (vote: number) => ({ missions: { join: 0, fill: 0, turbo: 0, boost: 0, vote } });
     const decide = (byId: (id: number) => Record<string, unknown>) =>
         votingLogic.evaluateVotingDecision.mockImplementation((challenge) => invalid(byId(Number(challenge?.id))));
     const quotaLine = (left: number) =>
@@ -755,6 +918,103 @@ describe('vote mission', () => {
             const { tracker, challenge } = withNewEntry();
             await run(makeApi([challenge]), { entryTracker: tracker });
             expect(messages('info')).toContain('[Challenge 1: Mission 1] New entry detected — not voting this cycle');
+        });
+    });
+});
+
+describe('pinned photo', () => {
+    const keyedWith = (ids: string[]) =>
+        withBoost(
+            { state: 'AVAILABLE_KEY' },
+            { member: { boost: { state: 'AVAILABLE_KEY' }, ranking: { entries: ids.map((id) => ({ id })) } } },
+        );
+    const uncertainLedger = () => {
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.markUncertain(keyedWith(['e1']), 'e1', NOW);
+        return ledger;
+    };
+
+    describe('Boost', () => {
+        beforeEach(() => {
+            votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'boost' }]));
+            votingLogic.shouldApplyBoost.mockReturnValue(true);
+        });
+
+        test('the pin beats a pending fill-new photo and boosts the existing entry', async () => {
+            const entryAges = createMemoryEntryAgeLedger();
+            entryAges.markPending(keyedWith(['e1']), 'new1', NOW);
+            votingLogic.resolvePin.mockReturnValue(invalid({ state: 'hit', entry: { id: 'e1' } }));
+            const api = makeApi([keyedWith(['e1', 'new1'])]);
+            await run(api, { entryAges });
+            expect(api.applyBoost).toHaveBeenCalledTimes(1);
+            expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+            expect(autoFill.submitNewEntryForAction).not.toHaveBeenCalled();
+        });
+
+        test('a pinned photo is not skipped as uncertain: the pin is the confirmation', async () => {
+            settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoSubmits');
+            votingLogic.resolvePin.mockReturnValue(invalid({ state: 'hit', entry: { id: 'e1' } }));
+            const api = makeApi([keyedWith(['e1'])]);
+            await run(api, { entryAges: uncertainLedger() });
+            expect(api.applyBoost).toHaveBeenCalledTimes(1);
+        });
+
+        test('the fresh-entry hold still applies to a pinned photo', async () => {
+            votingLogic.resolvePin.mockReturnValue(invalid({ state: 'hit', entry: { id: 'e1' } }));
+            votingLogic.getBoostHoldUntil.mockReturnValue(NOW + 150);
+            const api = makeApi([keyedWith(['e1'])]);
+            const result = await run(api, { entryAges: createMemoryEntryAgeLedger() });
+            expect(api.applyBoost).not.toHaveBeenCalled();
+            expect(result.challenges![0].boostHoldUntil).toBe(NOW + 150);
+        });
+
+        test('an unusable pin names its reason on the apply line, once, on the pass that spends', async () => {
+            votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1' }));
+            votingLogic.pinFallbackOf.mockReturnValue('gone');
+            votingLogic.describePinFallback.mockReturnValue('PIN-REASON');
+            // Held first: no apply line, so no reason.
+            votingLogic.getBoostHoldUntil.mockReturnValue(NOW + 150);
+            const held = makeApi([keyedWith(['e1'])]);
+            await run(held, { entryAges: createMemoryEntryAgeLedger() });
+            expect(messages('startOperation').join()).not.toContain('PIN-REASON');
+
+            votingLogic.getBoostHoldUntil.mockReturnValue(null);
+            await run(makeApi([keyedWith(['e1'])]));
+            expect(votingLogic.describePinFallback).toHaveBeenCalledWith('boost', 'gone');
+            expect(messages('startOperation').filter((m) => m.includes('PIN-REASON'))).toHaveLength(1);
+        });
+
+        test('a pinned target carries no fallback note', async () => {
+            votingLogic.resolvePin.mockReturnValue(invalid({ state: 'hit', entry: { id: 'e1' } }));
+            votingLogic.pinFallbackOf.mockReturnValue('gone');
+            await run(makeApi([keyedWith(['e1'])]));
+            expect(votingLogic.pinFallbackOf).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Turbo', () => {
+        beforeEach(() => votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'turbo' }])));
+        const turboChallenge = () =>
+            withBoost({ state: 'LOCKED' }, { member: { ranking: { entries: [{ id: 'e1' }] } } });
+
+        test('a pinned photo is not skipped as uncertain', async () => {
+            settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoSubmits');
+            votingLogic.shouldApplyTurbo.mockReturnValue(
+                invalid({ apply: true, fillNew: false, imageId: 'e1', pinned: true }),
+            );
+            const api = makeApi([turboChallenge()]);
+            await run(api, { entryAges: uncertainLedger() });
+            expect(api.applyTurbo).toHaveBeenCalledWith(101, 'e1', 'tok');
+        });
+
+        test('the apply line carries the fallback reason', async () => {
+            votingLogic.shouldApplyTurbo.mockReturnValue(
+                invalid({ apply: true, fillNew: false, imageId: 'e1', pinFallback: 'conflict' }),
+            );
+            votingLogic.describePinFallback.mockReturnValue('PIN-REASON');
+            await run(makeApi([turboChallenge()]));
+            expect(votingLogic.describePinFallback).toHaveBeenCalledWith('turbo', 'conflict');
+            expect(messages('startOperation').join()).toContain('PIN-REASON');
         });
     });
 });

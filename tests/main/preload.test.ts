@@ -106,3 +106,66 @@ describe('window.api surface', () => {
         expect(electron.ipcRenderer.removeListener).toHaveBeenCalledWith(channel, handler);
     });
 });
+
+describe('Logs window preload (src/ts/preloadLogs.ts)', () => {
+    function loadLogsPreload(): Record<string, ApiMethod> {
+        jest.resetModules();
+        electron = jest.mocked(require('electron') as typeof electronModule);
+        require('../../src/ts/preloadLogs');
+        const [name, api] = electron.contextBridge.exposeInMainWorld.mock.calls[0] as [
+            string,
+            Record<string, ApiMethod>,
+        ];
+        expect(name).toBe('api');
+        return api;
+    }
+
+    it('exposes exactly the manifest Logs subset and nothing else', () => {
+        const api = loadLogsPreload();
+
+        const expected = [
+            ...manifest.logsWindowInvokeChannels.map(manifest.kebabToCamel),
+            ...Object.keys(manifest.logsWindowEventMethods),
+        ];
+        expect(Object.keys(api).sort()).toEqual(expected.sort());
+        for (const method of [
+            'setSetting',
+            'getSettings',
+            'guiVote',
+            'applyBoost',
+            'keyUnlockBoost',
+            'login',
+            'logout',
+        ]) {
+            expect(api[method]).toBeUndefined();
+        }
+    });
+
+    it('invokes its channels and subscribes to its events like the full preload', () => {
+        const api = loadLogsPreload();
+
+        electron.ipcRenderer.invoke.mockReturnValueOnce(invalid('backlog'));
+        expect(api.getLogBacklog()).toBe('backlog');
+        expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith('get-log-backlog');
+
+        const callback = jest.fn();
+        const unsubscribe = invalid<() => void>(api.onLogMessage(callback));
+        const [channel, handler] = electron.ipcRenderer.on.mock.calls[0];
+        expect(channel).toBe(manifest.eventMethods.onLogMessage);
+        handler(invalid({ sender: 'evt' }), { seq: 1 });
+        expect(callback).toHaveBeenCalledWith({ seq: 1 });
+        unsubscribe();
+        expect(electron.ipcRenderer.removeListener).toHaveBeenCalledWith(channel, handler);
+    });
+
+    it('blocks service worker registration too', async () => {
+        globalThis.ServiceWorkerContainer = invalid(class {});
+        globalThis.ServiceWorkerContainer.prototype.register = jest.fn();
+
+        loadLogsPreload();
+
+        await expect(globalThis.ServiceWorkerContainer.prototype.register('/sw.js')).rejects.toMatchObject({
+            name: 'NotAllowedError',
+        });
+    });
+});

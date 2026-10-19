@@ -1,11 +1,12 @@
 import { deriveWindowHints } from '@/utils/windowHints';
 import { formatSecondsAsHoursMinutes } from '@/utils/timeFieldUnits';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { MAX_VOTING_PAUSE_MINUTES } from '../../../settings/limits';
-import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
+import { effectiveTimezone } from '../../../settings/uiDefaults';
 
 import type { WindowHintPolicy, WindowHintState } from '@/utils/windowHints';
 import type { Challenge } from '../../../types/gurushots';
-import type { RendererSettings } from '../../../types/settings';
+import type { ConfigApp } from '../../../types/config';
 import type { HintsFor, RendererSchema, SettingHint, Translate } from '../../../types/settingsEditor';
 
 export type EffectiveOf = (key: string) => unknown;
@@ -41,8 +42,8 @@ interface ChallengeHintContext {
 
 /**
  * Conditional inline hints shown under a setting in the global and
- * per-challenge settings modals. A hint is `{ tone, text }`: `tone` is the
- * DaisyUI text-colour class list, `text` the translated sentence. Each modal
+ * per-challenge settings modals. A hint is `{ tone, text }`: `tone` picks the
+ * icon it reads with (ToneNote), `text` is the translated sentence. Each modal
  * builds a `hintsFor(key)` resolver once per render (the window state is
  * derived from the live form values) and renders it with SettingHintList.
  *
@@ -145,25 +146,44 @@ function boostPrefillHints({ effectiveOf, t }: { effectiveOf: EffectiveOf; t: Tr
     const hints: SettingHint[] = [];
     if (effectiveOf('voteBeforeBoost') !== true) return hints;
     if (effectiveOf('onlyBoost') === true) {
-        hints.push({ tone: 'text-warning font-medium', text: t('app.voteBeforeBoostOnlyBoostHint') });
+        hints.push({ tone: 'warning', strong: true, text: t('app.voteBeforeBoostOnlyBoostHint') });
     }
     if (effectiveOf('autoBoost') !== true) {
-        hints.push({ tone: 'text-warning', text: t('app.voteBeforeBoostNoAutoBoostHint') });
+        hints.push({ tone: 'warning', text: t('app.voteBeforeBoostNoAutoBoostHint') });
     }
     if (effectiveOf('voteOnlyInLastMinute') === true) {
-        hints.push({ tone: 'text-warning', text: t('app.voteBeforeBoostLastMinuteOnlyHint') });
+        hints.push({ tone: 'warning', text: t('app.voteBeforeBoostLastMinuteOnlyHint') });
     }
     // Both boost clocks off (0 = off on each) means no boost is ever
     // auto-applied, so there is no instant to fill ahead of.
     if (Number(effectiveOf('boostTime')) === 0 && Number(effectiveOf('keyUnlockedBoostTime')) === 0) {
-        hints.push({ tone: 'text-warning', text: t('app.voteBeforeBoostNoBoostTimeHint') });
+        hints.push({ tone: 'warning', text: t('app.voteBeforeBoostNoBoostTimeHint') });
     }
     return hints;
 }
 
 const allDayPauseHint = (t: Translate): SettingHint => ({
-    tone: 'text-warning font-medium',
+    tone: 'warning',
+    strong: true,
     text: t('app.votingPauseAllDayHint'),
+});
+
+/**
+ * Submit Only Chosen Photos where it reaches every matching challenge (the
+ * global defaults, a profile, a rule) rather than the one being edited.
+ */
+export const chosenPhotosOnlyReachHint = (t: Translate): SettingHint => ({
+    tone: 'warning',
+    text: t('app.chosenPhotosOnlyReachHint'),
+});
+
+/**
+ * The rule editor's Manual Only hint: a rule matches many challenges, so there is no single challenge for the
+ * challenge settings modal's alert to speak for; the hint says what the app does on the challenges the rule matches.
+ */
+export const manualPhotosOnlyHint = (t: Translate, textKey: 'app.manualPhotosOnlyRuleHint'): SettingHint => ({
+    tone: 'warning',
+    text: t(textKey),
 });
 
 const GLOBAL_HINTS: Map<string, (ctx: GlobalHintContext) => SettingHint[]> = new Map([
@@ -176,13 +196,18 @@ const GLOBAL_HINTS: Map<string, (ctx: GlobalHintContext) => SettingHint[]> = new
                 ((formValues.votingPauseTime ?? []) as unknown[]).length === 0 &&
                 ((formValues.votingPauseBeforeEnd ?? []) as unknown[]).length === 0;
             if (formValues.useVotingPause === true && noTriggers) {
-                hints.push({ tone: 'text-warning', text: t('app.votingPauseNoTimesHint') });
+                hints.push({ tone: 'warning', text: t('app.votingPauseNoTimesHint') });
             }
             if (votingPause.coversWholeDay) hints.push(allDayPauseHint(t));
             return hints;
         },
     ],
     ['voteBeforeBoost', boostPrefillHints],
+    [
+        'chosenPhotosOnly',
+        ({ formValues, t }: GlobalHintContext) =>
+            formValues.chosenPhotosOnly === true ? [chosenPhotosOnlyReachHint(t)] : [],
+    ],
 ]);
 
 /**
@@ -245,7 +270,7 @@ const shortWindowHints = (
     { checkFrequencyMax, t }: { checkFrequencyMax: number; t: Translate },
 ): SettingHint[] =>
     win.active && checkFrequencyMax > 0 && win.durationMin < checkFrequencyMax
-        ? [{ tone: 'text-warning', text: t(templateKey).replace('{0}', String(checkFrequencyMax)) }]
+        ? [{ tone: 'warning', text: t(templateKey).replace('{0}', String(checkFrequencyMax)) }]
         : [];
 
 /**
@@ -258,11 +283,11 @@ function scheduledFillStatusHints(ctx: ChallengeHintContext): SettingHint[] {
     const { fill, t } = ctx;
     const hints: SettingHint[] = [];
     if (fill.enabled && !fill.timeSet && fill.beforeEnds.length === 0) {
-        hints.push({ tone: 'text-warning', text: t('app.scheduledFillNoTimesHint') });
+        hints.push({ tone: 'warning', text: t('app.scheduledFillNoTimesHint') });
     }
     if (fill.enabled && fill.next) {
         hints.push({
-            tone: 'text-info',
+            tone: 'info',
             text: nextWindowText(t('app.scheduledFillNextHint'), fill as PendingWindow, ctx),
         });
     }
@@ -277,7 +302,7 @@ function wastedFillWindowHints({ fill, t }: { fill: WindowHintState; t: Translat
     const wasted = fill.beforeEnds.filter((sec) => sec < fill.durationSec);
     if (wasted.length === 0) return [];
     const offsets = wasted.map((sec) => formatOffset(sec, t)).join(', ');
-    return [{ tone: 'text-warning', text: t('app.scheduledFillWastedWindowHint').replace('{0}', offsets) }];
+    return [{ tone: 'warning', text: t('app.scheduledFillWastedWindowHint').replace('{0}', offsets) }];
 }
 
 function fillReplacesHints({
@@ -291,9 +316,9 @@ function fillReplacesHints({
 }): SettingHint[] {
     const hints: SettingHint[] = [];
     if (profileReplacesWarning) {
-        hints.push({ tone: 'text-warning font-medium', text: t('app.scheduledFillProfileReplacesWarning') });
+        hints.push({ tone: 'warning', strong: true, text: t('app.scheduledFillProfileReplacesWarning') });
     }
-    if (fillUnreachable) hints.push({ tone: 'text-warning', text: t('app.scheduledFillUnreachableHint') });
+    if (fillUnreachable) hints.push({ tone: 'warning', text: t('app.scheduledFillUnreachableHint') });
     return hints;
 }
 
@@ -306,7 +331,7 @@ function votingPauseStatusHints(ctx: ChallengeHintContext): SettingHint[] {
     const { pause, timezone, t } = ctx;
     const hints: SettingHint[] = [];
     if (pause.enabled && !pause.timeSet && pause.beforeEnds.length === 0) {
-        hints.push({ tone: 'text-warning', text: t('app.votingPauseNoTimesHint') });
+        hints.push({ tone: 'warning', text: t('app.votingPauseNoTimesHint') });
     }
     // A pause open RIGHT NOW is reported as an END time — "voting
     // resumes at …" is what the user actually wants to know.
@@ -314,12 +339,12 @@ function votingPauseStatusHints(ctx: ChallengeHintContext): SettingHint[] {
         // openNow implies a set `next`.
         const until = formatClockInTz((pause as PendingWindow).next.start + pause.durationSec, timezone);
         hints.push({
-            tone: 'text-warning',
+            tone: 'warning',
             text: t('app.votingPauseActiveHint').replace('{0}', until).replace('{1}', timezone),
         });
     } else if (pause.active && pause.next) {
         hints.push({
-            tone: 'text-info',
+            tone: 'info',
             text: nextWindowText(t('app.votingPauseNextHint'), pause as PendingWindow, ctx),
         });
     }
@@ -360,12 +385,12 @@ export function challengeSettingHints({
     t,
 }: {
     effectiveOf: EffectiveOf;
-    appSettings: Pick<Partial<RendererSettings>, 'timezone' | 'checkFrequencyMax'> | null | undefined;
+    appSettings: Pick<Partial<ConfigApp>, 'timezone' | 'checkFrequencyMax'> | null | undefined;
     challenge: Challenge | null | undefined;
     profileReplacesWarning: boolean;
     t: Translate;
 }): HintsFor {
-    const timezone = appSettings?.timezone || DEFAULT_TIMEZONE;
+    const timezone = effectiveTimezone(appSettings?.timezone);
     const nowSec = Math.floor(Date.now() / 1000);
     const closeTime = Number(challenge?.close_time) || 0;
     const derive = (keys: typeof SCHEDULED_FILL_KEYS, policy: WindowHintPolicy) =>
@@ -391,12 +416,23 @@ export function challengeSettingHints({
 }
 
 /**
- * Renders a `hintsFor(key)` result under a setting.
+ * Renders a `hintsFor(key)` result under a setting. The list is one persistent polite live region, rendered even
+ * when it holds no hint: a hint that appears later is added to a region the screen reader already watches, which
+ * announces it reliably, where a region mounted together with its text is often skipped. `aria-atomic` is off so
+ * only the hint that arrived is read, not the whole list again.
  */
 export function SettingHintList({ hints }: { hints: SettingHint[] }) {
-    return hints.map((hint) => (
-        <p key={hint.text} className={`text-xs mt-1 ${hint.tone}`}>
-            {hint.text}
-        </p>
-    ));
+    return (
+        <div role="status" aria-atomic="false">
+            {hints.map((hint) => (
+                <ToneNote
+                    key={hint.text}
+                    tone={hint.tone}
+                    className={`text-xs mt-1 ${hint.strong ? 'font-medium' : ''}`}
+                >
+                    {hint.text}
+                </ToneNote>
+            ))}
+        </div>
+    );
 }

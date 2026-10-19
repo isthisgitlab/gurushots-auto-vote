@@ -1,5 +1,7 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, useMemo, useRef } from 'react';
 import { createCadenceChain, DECISION_ERROR_MESSAGE, formatOversleptMessage } from '../../scheduling/cadenceChain';
+import { startupResumeAt } from '../../scheduling/startupDelay';
+import { finiteOr } from '../../numbers';
 import * as foregroundService from '../../services/ForegroundServiceController';
 import * as nativeAutovote from '../../services/NativeAutovoteBridge';
 import { ACTIONS, initialState, autovoteReducer } from './autovoteReducer';
@@ -15,12 +17,14 @@ import { createDeadlineNotifier, resolveRendererDelivery } from '../notification
 import { createRendererScenarioNotifier } from '../notifications/scenarioNotifier';
 import { useLatestRef } from '../hooks/useLatestRef';
 import { rendererTranslator } from '../../translations/renderer';
+import { interp } from '../utils/interp';
 import * as ipc from '../api/ipc';
+import { isNativePlatform } from '../api/usePlatformCapabilities';
+import { dateLocale } from '../utils/formatters';
 
 import type { ComponentChildren } from 'preact';
 import type { Dispatch } from 'react';
 import type { Challenge } from '../../types/gurushots';
-import type { RendererGlobals } from '../../types/capacitor';
 import type { TimerHandle } from '../../scheduling/cadenceChain';
 import type { AutovoteAction, AutovoteState } from './autovoteReducer';
 import { errorMessage } from '../../errorMessage';
@@ -74,6 +78,26 @@ async function persistRunningFlag(running: boolean) {
 }
 
 /**
+ * Record which app launch started this session: the launch time itself, which
+ * the main process compares for equality with its own to tell a session started
+ * in this launch from one still held at launch. Written BEFORE the running
+ * flag. 0 when the launch time can't be read, which matches no launch, so the
+ * main process then treats the session as not live (no spend) rather than live.
+ */
+async function persistStartedLaunch() {
+    try {
+        const env = await ipc.callOrNull(() => ipc.getEnvironmentInfo());
+        await ipc.setSetting('autovoteStartedLaunch', finiteOr(env?.launchedAt, 0));
+    } catch (err) {
+        void ipc.logRendererWarning(`Could not record the auto-vote launch marker: ${errorMessage(err) || err}`);
+    }
+}
+
+// The hold timer re-arms in chunks this long: a renderer timer is monotonic and
+// fires late after a system sleep, so the wall clock is re-read between chunks.
+const HOLD_CHUNK_MS = 5000;
+
+/**
  * Hand scheduling to the Android background host. On Capacitor the native
  * AutoVote plugin owns the foreground notification, AlarmManager schedule and
  * per-cycle HTTP work — voting continues even when the WebView is destroyed
@@ -84,7 +108,7 @@ async function persistRunningFlag(running: boolean) {
 async function startBackgroundHost() {
     const native = await nativeAutovote.start();
     if (!native.available) {
-        await foregroundService.start({ body: 'Auto-vote running — preparing first cycle' });
+        await foregroundService.start({ body: rendererTranslator.t('app.autovoteNotificationPreparing') });
     }
 }
 
@@ -108,9 +132,11 @@ async function stopBackgroundHost() {
  */
 function recordCycleSuccess(dispatch: Dispatch<AutovoteAction>) {
     dispatch({ type: ACTIONS.INCREMENT_CYCLE });
-    const lastRunStr = new Date().toLocaleTimeString('lv-LV');
+    const lastRunStr = new Date().toLocaleTimeString(dateLocale());
     dispatch({ type: ACTIONS.UPDATE_LAST_RUN, payload: lastRunStr });
-    void foregroundService.update({ body: `Last cycle: ${lastRunStr}` });
+    void foregroundService.update({
+        body: interp(rendererTranslator.t('app.autovoteNotificationLastCycle'), { time: lastRunStr }),
+    });
 }
 
 /**
@@ -139,7 +165,7 @@ async function runRendererVotingCycle({
     try {
         const settings = await ipc.getSettings();
         if (!settings.hasToken) {
-            dispatch({ type: ACTIONS.SET_ERROR, payload: 'Not logged in' });
+            dispatch({ type: ACTIONS.SET_ERROR, payload: 'not-logged-in' });
             return false;
         }
 
@@ -150,7 +176,8 @@ async function runRendererVotingCycle({
         }
 
         if (!result?.success) {
-            dispatch({ type: ACTIONS.SET_ERROR, payload: result?.error || 'Voting failed' });
+            void ipc.logRendererWarning(`Voting cycle failed: ${result?.error || 'no reason given'}`);
+            dispatch({ type: ACTIONS.SET_ERROR, payload: result?.error || 'voting-failed' });
             return false;
         }
 
@@ -164,10 +191,8 @@ async function runRendererVotingCycle({
         // list is present so callers fetch fresh.
         return result.challenges ?? true;
     } catch (err) {
-        dispatch({
-            type: ACTIONS.SET_ERROR,
-            payload: errorMessage(err) || 'Voting error',
-        });
+        void ipc.logRendererWarning(`Voting cycle threw: ${errorMessage(err) || err}`);
+        dispatch({ type: ACTIONS.SET_ERROR, payload: 'voting-error' });
         return false;
     }
 }
@@ -180,8 +205,7 @@ async function runRendererVotingCycle({
  * would only be discarded). See deadlineNotifier.ts header.
  */
 function createRendererDeadlineNotifier(): CycleNotifier | null {
-    const isNativePlatform = (globalThis as RendererGlobals).Capacitor?.isNativePlatform?.() === true;
-    const deliver = resolveRendererDelivery(isNativePlatform);
+    const deliver = resolveRendererDelivery(isNativePlatform());
     if (!deliver) return null;
     const shared = {
         getSetting: (key: string) => ipc.getGlobalDefault(key),
@@ -230,7 +254,7 @@ function createRendererCadenceChain({
         setTimer: (handle) => {
             cycleTimerRef.current = handle;
         },
-        loadSettings: () => ipc.getSettings(),
+        loadSettings: async () => (await ipc.getSettings()).app,
         fetchChallenges: () => ipc.getActiveChallenges(),
         // The key-agnostic channel is typed `unknown`; the main process resolves
         // the schema-validated (numeric) effective value.
@@ -282,31 +306,98 @@ function createRendererCadenceChain({
 }
 
 /**
+ * Cancel the hold timer of a pending auto-resume and empty its slot.
+ */
+function clearResumeTimer(timerRef: { current: TimerHandle | null }) {
+    if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+    }
+}
+
+/**
  * Auto-resume on mount if a previous session left autovoteRunning persisted
  * as true (user toggled Start, then closed the app or restarted the device).
  * Skips when there is no token, otherwise the loop would error every cycle
- * until the user logs in. The only dependency is a stable ref, so this runs
- * once per mount — no extra ran-once guard. `start` is read through that ref:
- * its identity changes with its own deps (runVotingCycle / threshold
+ * until the user logs in. The deps are stable refs and a stable dispatch, so
+ * this runs once per mount — no extra ran-once guard. `start` is read through
+ * a ref: its identity changes with its own deps (runVotingCycle / threshold
  * scheduling), and this must stay a single mount-time check, not re-trigger
  * on each change; start()'s own running guard prevents double-starts.
+ *
+ * The resume is held until `autovoteStartupDelay` seconds after the app
+ * LAUNCHED (not after this mount), so a window reload continues the same hold
+ * and one after it has passed resumes at once. A native service that is
+ * already running is adopted at once: voting never stopped. While held,
+ * `pendingStartAt` is set and a chunked timer in `resumeTimerRef` calls start()
+ * once the wall clock reaches the resume time (see HOLD_CHUNK_MS). An unmount,
+ * or any start/stop by the user during the awaits, leaves nothing armed.
  */
-function useResumeOnMount(start: () => Promise<void>) {
+function useResumeOnMount({
+    start,
+    dispatch,
+    runningRef,
+    userActedRef,
+    resumeTimerRef,
+}: {
+    start: () => Promise<void>;
+    dispatch: Dispatch<AutovoteAction>;
+    runningRef: { current: boolean };
+    userActedRef: { current: boolean };
+    resumeTimerRef: { current: TimerHandle | null };
+}) {
     const startRef = useLatestRef(start);
     useEffect(() => {
+        let cancelled = false;
         const maybeResume = async () => {
             try {
                 const wasRunning = await ipc.getSetting('autovoteRunning');
                 if (!wasRunning) return;
                 const settings = await ipc.getSettings();
                 if (!settings?.hasToken) return;
-                await startRef.current();
+                const native = await nativeAutovote.getStatus();
+                if (native.running) {
+                    if (!cancelled) await startRef.current();
+                    return;
+                }
+                // An unreadable delay or launch time still holds the session back
+                // (default delay; the mount as launch), never starts it at once.
+                const [delay, env] = await Promise.all([
+                    ipc.callOrNull(() => ipc.getGlobalDefault('autovoteStartupDelay')),
+                    ipc.callOrNull(() => ipc.getEnvironmentInfo()),
+                ]);
+                if (cancelled || runningRef.current || userActedRef.current) return;
+                const resumeAt = startupResumeAt(finiteOr(env?.launchedAt, Date.now()), delay);
+                const waitMs = resumeAt - Date.now();
+                if (waitMs <= 0) {
+                    await startRef.current();
+                    return;
+                }
+                dispatch({ type: ACTIONS.SET_PENDING_START, payload: resumeAt });
+                void ipc.logRendererDebug(`Auto-resume held for ${Math.ceil(waitMs / 1000)}s after launch`);
+                const tick = () => {
+                    resumeTimerRef.current = null;
+                    const left = resumeAt - Date.now();
+                    if (left > 0) {
+                        resumeTimerRef.current = setTimeout(tick, Math.min(left, HOLD_CHUNK_MS));
+                        return;
+                    }
+                    void ipc.logRendererDebug('Auto-resume hold over — starting');
+                    startRef
+                        .current()
+                        .catch((err) => ipc.logRendererError(`Auto-resume failed: ${errorMessage(err) || err}`));
+                };
+                resumeTimerRef.current = setTimeout(tick, Math.min(waitMs, HOLD_CHUNK_MS));
             } catch {
                 /* ignore — leave UI in stopped state on failure */
             }
         };
         void maybeResume();
-    }, [startRef]);
+        return () => {
+            cancelled = true;
+            clearResumeTimer(resumeTimerRef);
+        };
+    }, [startRef, dispatch, runningRef, userActedRef, resumeTimerRef]);
 }
 
 /**
@@ -328,12 +419,19 @@ export function AutovoteProvider({
     // via the shared computeNextCycleDelayMs, so there is no separate fast-mode
     // interval or boundary-switch timer to keep in sync.
     const cycleTimerRef = useRef<TimerHandle | null>(null);
+    // One-shot timer of a pending auto-resume (see useResumeOnMount). Deliberately
+    // separate from cycleTimerRef: it is not part of the cadence chain, so the
+    // scheduleNext generation guard neither sees nor cancels it. Armed means pending.
+    const resumeTimerRef = useRef<TimerHandle | null>(null);
+    // Set by start() and stop(): the user (or the hold itself) has acted, so a
+    // mount-time resume still waiting on its awaits must not arm the hold.
+    const userActedRef = useRef(false);
 
     // Per-cycle OS deadline-notifier. Created ONCE (a fresh instance each render
     // would never dedupe): it holds the fired-key Set + re-entrancy guard across
     // cycles. `undefined` = not yet initialized; the stored value is the notifier
     // on Electron or `null` on native Android.
-    const notifierRef = useRef(undefined as CycleNotifier | null | undefined);
+    const notifierRef = useRef<CycleNotifier | null | undefined>(undefined);
     if (notifierRef.current === undefined) {
         notifierRef.current = createRendererDeadlineNotifier();
     }
@@ -390,8 +488,11 @@ export function AutovoteProvider({
      * Start autovote
      */
     const start = useCallback(async () => {
+        userActedRef.current = true;
         if (runningRef.current) return;
 
+        // A start during the hold (manual, or the hold's own timer) ends it.
+        clearResumeTimer(resumeTimerRef);
         dispatch({ type: ACTIONS.START });
         // Mark running synchronously: the dispatch-driven useEffect that syncs
         // runningRef only flushes after the current async turn, so without this
@@ -401,7 +502,8 @@ export function AutovoteProvider({
         await ipc.setCancelVoting(false);
 
         // Persist the running flag so a remount can resume voting without
-        // the user tapping Start again.
+        // the user tapping Start again, after the launch marker (see above).
+        await persistStartedLaunch();
         await persistRunningFlag(true);
 
         // The JS-side cycle below still runs while the app is open so the
@@ -425,7 +527,20 @@ export function AutovoteProvider({
      * Stop autovote
      */
     const stop = useCallback(async () => {
-        if (!runningRef.current) return;
+        userActedRef.current = true;
+        if (!runningRef.current) {
+            // Not running: only a pending auto-resume has anything to cancel.
+            if (!resumeTimerRef.current) return;
+            clearResumeTimer(resumeTimerRef);
+            dispatch({ type: ACTIONS.SET_PENDING_START, payload: null });
+            void ipc.logRendererDebug('Auto-resume cancelled');
+            // Same as a stop: a relaunch must not resume it, and the host has
+            // nothing to run (a native service that outlived the app is adopted
+            // on mount, never held, so none is running here).
+            await persistRunningFlag(false);
+            await stopBackgroundHost();
+            return;
+        }
 
         dispatch({ type: ACTIONS.STOP });
         // Mark stopped synchronously so an in-flight scheduleNext / timer
@@ -448,7 +563,7 @@ export function AutovoteProvider({
         }
     }, [onChallengesRefresh]);
 
-    useResumeOnMount(start);
+    useResumeOnMount({ start, dispatch, runningRef, userActedRef, resumeTimerRef });
 
     /**
      * Toggle autovote

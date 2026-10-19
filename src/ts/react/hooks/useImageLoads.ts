@@ -1,40 +1,46 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 /**
  * Reports whether a remote image URL actually loads, so a caller can render
  * nothing instead of the browser's broken-image glyph.
  *
- * Probes with a detached `Image` rather than an `onError` prop on the rendered
- * `<img>`: jsx-a11y counts `onError` among "interactions" on a non-interactive
- * element, and the renderer is linted with jsx-a11y's rules (.oxlintrc.json),
- * so the handler would be flagged. The
- * probe shares the browser HTTP cache with the `<img>` that renders the same
- * URL, so it costs no extra network round trip.
+ * Listens for `error` on the rendered `<img>` itself, through the returned
+ * callback ref and `addEventListener`: an `onError` prop is flagged by jsx-a11y
+ * (it counts as an "interaction" on a non-interactive element, and the renderer
+ * is linted with its rules, .oxlintrc.json), and a detached probe `Image` would
+ * defeat `loading="lazy"` by fetching every image up front. The ref attaches in
+ * the commit phase, before the browser dispatches `error` as a later task, so
+ * no `complete` check is needed.
  *
- * Starts optimistic — `true` until a failure is observed — so the image is not
- * withheld for a round trip on the happy path, and so a test environment that
- * never fires either callback keeps rendering normally.
+ * Starts optimistic: a URL counts as loading until an error is seen for it, so
+ * the image is not withheld on the happy path, and a test environment that
+ * never fires `error` keeps rendering normally. The failed URL is stored, not a
+ * flag: an error that arrives for a URL the `<img>` has since moved off cannot
+ * condemn the current one.
  *
  * @param url - falsy short-circuits to `false`
- * @returns false once the URL is known to have failed
+ * @returns `[loads, imageRef]`: false once the URL is known to have failed, and
+ *   the ref to put on the `<img>` that renders it
  */
-export function useImageLoads(url: string | null | undefined): boolean {
-    const [failed, setFailed] = useState(false);
+export function useImageLoads(
+    url: string | null | undefined,
+): readonly [boolean, (img: HTMLImageElement | null) => void] {
+    const [failedUrl, setFailedUrl] = useState<string | null>(null);
+    const detach = useRef<(() => void) | null>(null);
 
-    useEffect(() => {
-        if (!url) return undefined;
-        // A previous url's failure must not condemn this one.
-        setFailed(false);
-        let cancelled = false;
-        const probe = new Image();
-        probe.onerror = () => {
-            if (!cancelled) setFailed(true);
-        };
-        probe.src = url;
-        return () => {
-            cancelled = true;
-        };
-    }, [url]);
+    // A new URL gives a new ref, which React calls with null (detaching the old listener) and then
+    // with the element again; an unmounted <img> calls it with null.
+    const imageRef = useCallback(
+        (img: HTMLImageElement | null) => {
+            detach.current?.();
+            detach.current = null;
+            if (!img || !url) return;
+            const onError = () => setFailedUrl(url);
+            img.addEventListener('error', onError);
+            detach.current = () => img.removeEventListener('error', onError);
+        },
+        [url],
+    );
 
-    return !!url && !failed;
+    return [!!url && failedUrl !== url, imageRef];
 }

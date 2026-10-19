@@ -96,12 +96,14 @@ const currencyTimingOf = async (enableKey: string, prefix: string, challengeId: 
 };
 
 export const resolveCurrencyAuto: ResolveCurrencyAuto = async (challengeId) => {
-    const [key, swap, fill] = await Promise.all([
+    const [key, swap, fill, manualPhotosOnly] = await Promise.all([
         currencyTimingOf('autoKeyUnlock', 'autoKey', challengeId),
         currencyTimingOf('autoSwap', 'autoSwap', challengeId),
         currencyTimingOf('autoExposureFill', 'autoExposureFill', challengeId),
+        ipc.getEffectiveSetting('manualPhotosOnly', challengeId),
     ]);
-    return { key, swap, fill };
+    // Manual Only: no swap ever fires on its own, so there is no wake to hold for it.
+    return { key, swap: manualPhotosOnly === true ? null : swap, fill };
 };
 
 // WebView resolver for the scenario boundary — the async-IPC twin of

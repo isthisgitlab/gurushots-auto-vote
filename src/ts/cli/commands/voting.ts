@@ -8,11 +8,14 @@
 
 import * as logger from '../../logger';
 import { ensureAuthenticated } from '../guards';
+import { formatSettingForLog } from './settings/shared';
 import * as settings from '../../settings';
+import { effectiveTimezone } from '../../settings/uiDefaults';
 import { getMiddleware } from '../../apiFactory';
 import { createScheduler } from '../../scheduling/runScheduler';
 import { formatDateTime } from '../../dateFormat';
 import { formatDuration } from '../../format/duration';
+import { printableChallengeId } from './pin';
 import { openBoostWindows } from '../../voting/boostWindow';
 import { findActiveChallenge } from '../../services/findActiveChallenge';
 import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
@@ -51,14 +54,16 @@ const runVotingCycle = async (
     const opId = isManual ? `manual-vote-cycle-${cycleNumber}` : `vote-cycle-${cycleNumber}`;
     try {
         const userSettings = settings.loadSettings();
-        const isMockMode = userSettings.mock;
+        const isMockMode = userSettings.app.mock;
 
         logger
             .withCategory('voting')
             .info(`--- ${label} Cycle ${cycleNumber}${scopeSuffix} (${isMockMode ? 'MOCK' : 'REAL'} MODE) ---`);
         logger.withCategory('voting').info(`Time: ${formatDateTime()}`);
         if (isManual) {
-            logger.withCategory('voting').info('Mode: Manual (votes to 100% regardless of threshold settings)');
+            logger
+                .withCategory('voting')
+                .info('Mode: Manual (votes to 100% regardless of threshold settings; skips Manual Only challenges)');
         }
 
         if (!ensureAuthenticated()) {
@@ -168,7 +173,7 @@ const parseChallengeFlag = (argv: string[]): string | null => {
  */
 const startContinuousVoting = async () => {
     const userSettings = settings.loadSettings();
-    const isMockMode = userSettings.mock;
+    const isMockMode = userSettings.app.mock;
 
     logger
         .withCategory('voting')
@@ -213,9 +218,29 @@ const startContinuousVoting = async () => {
     process.stdin.resume();
 };
 
+/**
+ * The photos pinned for Boost / Turbo, not a challenge's settings: labelled on their own. Only ids that hold a
+ * valid pin are listed, and an id is printed as text: a raw settings write or a hand edit can put anything in a key.
+ */
+const logPinnedEntries = (userSettings: ReturnType<typeof settings.loadSettings>) => {
+    const pinned = Object.keys(userSettings.challenges).flatMap((challengeId) => {
+        const { boost, turbo } = settings.getEntryPins(challengeId);
+        return boost === null && turbo === null ? [] : [{ challengeId, boost, turbo }];
+    });
+    if (pinned.length === 0) return;
+    logger.withCategory('settings').info('\nPinned entries:');
+    for (const { challengeId, boost, turbo } of pinned) {
+        logger
+            .withCategory('settings')
+            .info(
+                `  Challenge ${printableChallengeId(challengeId)}: Boost ${boost ?? 'none'}, Turbo ${turbo ?? 'none'}`,
+            );
+    }
+};
+
 const showStatus = async () => {
     const userSettings = settings.loadSettings();
-    const isMockMode = userSettings.mock;
+    const isMockMode = userSettings.app.mock;
     const isAuthenticated = getMiddleware().isAuthenticated();
 
     logger.withCategory('ui').info('=== GuruShots Auto Voter - Status ===');
@@ -226,37 +251,40 @@ const showStatus = async () => {
         .info(`Authentication: ${isAuthenticated ? '✅ Authenticated' : '❌ Not authenticated'}`);
 
     if (isAuthenticated) {
-        logger.withCategory('authentication').info(`Token: ${userSettings.token ? '✅ Present' : '❌ Missing'}`);
+        logger.withCategory('authentication').info(`Token: ${userSettings.auth.token ? '✅ Present' : '❌ Missing'}`);
     }
 
     logger.withCategory('settings').info('\nSettings:');
-    logger.withCategory('settings').info(`  Theme: ${userSettings.theme}`);
-    logger.withCategory('settings').info(`  Language: ${userSettings.language}`);
-    logger.withCategory('settings').info(`  Timezone: ${userSettings.timezone}`);
-    logger.withCategory('settings').info(`  API Timeout: ${userSettings.apiTimeout}s`);
+    logger.withCategory('settings').info(`  Theme: ${userSettings.app.theme}`);
+    logger.withCategory('settings').info(`  Language: ${userSettings.app.language}`);
+    logger.withCategory('settings').info(`  Timezone: ${effectiveTimezone(userSettings.app.timezone)}`);
+    logger.withCategory('settings').info(`  API Timeout: ${userSettings.app.apiTimeout}s`);
     {
-        const min = userSettings.checkFrequencyMin;
-        const max = userSettings.checkFrequencyMax;
+        const min = userSettings.app.checkFrequencyMin;
+        const max = userSettings.app.checkFrequencyMax;
         const label = min === max ? `${min}min` : `${min}–${max}min (random per cycle)`;
         logger.withCategory('settings').info(`  Check Frequency: ${label}`);
     }
     logger
         .withCategory('settings')
         .info(
-            `  Last Minute Check Frequency: ${settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global') || 1}min`,
+            `  Last Minute Check Frequency: ${settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global')}min`,
         );
 
-    if (userSettings.challengeSettings && Object.keys(userSettings.challengeSettings).length > 0) {
+    const withValues = Object.entries(userSettings.challenges).flatMap(([challengeId, { values }]) =>
+        values === undefined ? [] : [{ challengeId, values }],
+    );
+    if (withValues.length > 0) {
         logger.withCategory('settings').info('\nChallenge Settings:');
-        Object.entries(userSettings.challengeSettings).forEach(
-            ([challengeId, challengeSettings]: [string, unknown]) => {
-                logger.withCategory('settings').info(`  Challenge ${challengeId}:`);
-                Object.entries(challengeSettings as object).forEach(([key, value]: [string, unknown]) => {
-                    logger.withCategory('settings').info(`    ${key}: ${value}`);
-                });
-            },
-        );
+        withValues.forEach(({ challengeId, values }) => {
+            logger.withCategory('settings').info(`  Challenge ${printableChallengeId(challengeId)}:`);
+            Object.entries(values).forEach(([key, value]) => {
+                logger.withCategory('settings').info(`    ${key}: ${formatSettingForLog(key, value)}`);
+            });
+        });
     }
+
+    logPinnedEntries(userSettings);
 
     // Boost-window status: the CLI parity of the GUI banner (no anchors —
     // just the informational list). Best-effort fetch: a failed/offline call

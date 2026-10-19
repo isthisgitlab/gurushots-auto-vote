@@ -18,9 +18,13 @@ jest.mock('../src/ts/services/BaseMiddleware', () => ({
 jest.mock('../src/ts/api/login', () => ({ authenticate: jest.fn() }));
 jest.mock('../src/ts/strategies/real', () => ({
     fetchChallengesAndVote: jest.fn(),
+    applyBoostsOnSuspend: jest.fn(),
     getActiveChallenges: jest.fn(),
     applyBoost: jest.fn(),
     joinChallenge: jest.fn(),
+    forgetUnconfirmedPayment: jest.fn(),
+    submitToChallenge: jest.fn(),
+    swapPhoto: jest.fn(),
 }));
 jest.mock('../src/ts/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
 jest.mock('../src/ts/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
@@ -28,18 +32,17 @@ jest.mock('../src/ts/api/turbo', () => ({ applyTurbo: jest.fn() }));
 jest.mock('../src/ts/api/submissions', () => ({
     getEligiblePhotos: jest.fn(),
     getImageData: jest.fn(),
-    submitToChallenge: jest.fn(),
 }));
 jest.mock('../src/ts/api/currency', () => ({
     keyUnlock: jest.fn(),
-    swapPhoto: jest.fn(),
     exposureAutofill: jest.fn(),
 }));
 jest.mock('../src/ts/mock', () => ({
     mockApiClient: {
         authenticate: jest.fn(),
         fetchChallengesAndVote: jest.fn(),
-        runTurboMiniGame: jest.fn(),
+        applyBoostsOnSuspend: jest.fn(),
+        runTurboGame: jest.fn(),
         getActiveChallenges: jest.fn(),
         getVoteImages: jest.fn(),
         submitVotes: jest.fn(),
@@ -54,6 +57,7 @@ jest.mock('../src/ts/mock', () => ({
         getCurrentMemberProfile: jest.fn(),
         searchTagAutocomplete: jest.fn(),
         joinChallenge: jest.fn(),
+        forgetUnconfirmedPayment: jest.fn(),
         keyUnlock: jest.fn(),
         swapPhoto: jest.fn(),
         exposureAutofill: jest.fn(),
@@ -103,6 +107,7 @@ import type * as apiFactoryModule from '../src/ts/apiFactory';
 import type { CategoryLogger } from '../src/ts/logger';
 import type * as BaseMiddlewareModule from '../src/ts/services/BaseMiddleware';
 import type * as mockModule from '../src/ts/mock';
+import type * as realStrategyModule from '../src/ts/strategies/real';
 import { invalid } from './helpers/invalid';
 
 describe('apiFactory', () => {
@@ -113,19 +118,19 @@ describe('apiFactory', () => {
 
     describe('getApiStrategy', () => {
         test('returns the mock surface when mock setting is true', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             expect(getApiStrategy()).toBe(mockApi);
             expect(mockLogger.info).toHaveBeenCalledWith('✅ Using MOCK API strategy for development/testing', null);
         });
 
         test('returns the real surface when mock setting is false', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: false, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: false }, auth: { token: 'tok' } }));
             expect(getApiStrategy()).toBe(realApi);
             expect(mockLogger.info).toHaveBeenCalledWith('🌐 Using REAL API strategy for production', null);
         });
 
         test('logs debug context on (re)selection', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             getApiStrategy();
             expect(mockLogger.debug).toHaveBeenCalledWith('=== API Factory Debug ===', null);
             expect(mockLogger.debug).toHaveBeenCalledWith('Mock setting: true');
@@ -133,13 +138,13 @@ describe('apiFactory', () => {
         });
 
         test('reports missing token as not present', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: false, token: null }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: false }, auth: { token: null } }));
             getApiStrategy();
             expect(mockLogger.debug).toHaveBeenCalledWith('Token exists: false');
         });
 
         test('caches the strategy across calls when the setting does not change', () => {
-            settings.loadSettings.mockReturnValue(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValue(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             const a = getApiStrategy();
             const b = getApiStrategy();
             expect(a).toBe(b);
@@ -147,12 +152,18 @@ describe('apiFactory', () => {
         });
 
         test('switches surface when the mock setting flips', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             const first = getApiStrategy();
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: false, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: false }, auth: { token: 'tok' } }));
             const second = getApiStrategy();
             expect(first).toBe(mockApi);
             expect(second).toBe(realApi);
+        });
+
+        test('the real surface submits and swaps through the strategy, which records the time the photo went in', () => {
+            const real = jest.mocked(require('../src/ts/strategies/real') as typeof realStrategyModule);
+            expect(realApi.submitToChallenge).toBe(real.submitToChallenge);
+            expect(realApi.swapPhoto).toBe(real.swapPhoto);
         });
 
         test('exposes a getStrategyType label on each surface', () => {
@@ -163,7 +174,7 @@ describe('apiFactory', () => {
 
     describe('getMiddleware', () => {
         test('wraps the mock surface in a fresh middleware', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             const mw = getMiddleware();
             expect(BaseMiddleware).toHaveBeenCalledWith(mockApi);
             expect(invalid<{ mockMiddlewareInstance: boolean }>(mw).mockMiddlewareInstance).toBe(true);
@@ -171,7 +182,7 @@ describe('apiFactory', () => {
         });
 
         test('wraps the real surface in a fresh middleware', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: false, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: false }, auth: { token: 'tok' } }));
             const mw = getMiddleware();
             expect(BaseMiddleware).toHaveBeenCalledWith(realApi);
             expect(invalid<{ mockMiddlewareInstance: boolean }>(mw).mockMiddlewareInstance).toBe(true);
@@ -179,7 +190,7 @@ describe('apiFactory', () => {
         });
 
         test('returns the cached middleware on subsequent calls', () => {
-            settings.loadSettings.mockReturnValue(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValue(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             const a = getMiddleware();
             const b = getMiddleware();
             expect(a).toBe(b);
@@ -187,10 +198,10 @@ describe('apiFactory', () => {
         });
 
         test('rebuilds when the underlying strategy changes', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             const first = getMiddleware();
             refreshApi();
-            settings.loadSettings.mockReturnValueOnce(invalid({ mock: false, token: 'tok' }));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: false }, auth: { token: 'tok' } }));
             const second = getMiddleware();
             expect(first).not.toBe(second);
             expect(BaseMiddleware).toHaveBeenCalledTimes(2);
@@ -199,7 +210,7 @@ describe('apiFactory', () => {
 
     describe('refreshApi', () => {
         test('clears strategy and middleware caches', () => {
-            settings.loadSettings.mockReturnValue(invalid({ mock: true, token: 'tok' }));
+            settings.loadSettings.mockReturnValue(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             const s1 = getApiStrategy();
             const m1 = getMiddleware();
             refreshApi();
@@ -218,7 +229,7 @@ describe('apiFactory', () => {
 
     describe('integration scenarios', () => {
         test('treats an empty settings object as real mode', () => {
-            settings.loadSettings.mockReturnValueOnce(invalid({}));
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: {}, auth: {} }));
             expect(getApiStrategy()).toBe(realApi);
             expect(mockLogger.debug).toHaveBeenCalledWith('Mock setting: undefined');
             expect(mockLogger.info).toHaveBeenCalledWith('🌐 Using REAL API strategy for production', null);
@@ -233,7 +244,7 @@ describe('apiFactory', () => {
         });
 
         test('does not disturb the cached settings-driven selection', () => {
-            settings.loadSettings.mockReturnValue(invalid({ mock: false, token: 'tok' }));
+            settings.loadSettings.mockReturnValue(invalid({ app: { mock: false }, auth: { token: 'tok' } }));
             expect(getApiStrategy()).toBe(realApi);
             expect(getApiStrategy({ mock: true })).toBe(mockApi);
             // The settings-driven path still returns the cached real surface.

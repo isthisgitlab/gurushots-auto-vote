@@ -91,6 +91,18 @@ export const getEffectiveSetting = forward('getEffectiveSetting');
 export const getGlobalDefault = forward('getGlobalDefault');
 export const setGlobalDefault = forward('setGlobalDefault');
 export const getSettingsSchema = forward('getSettingsSchema');
+export const getEnvironmentInfo = forward('getEnvironmentInfo');
+export const getSettingsRecovery = forward('getSettingsRecovery');
+export const retrySettingsImport = forward('retrySettingsImport');
+export const startFreshSettings = forward('startFreshSettings');
+export const reimportSettingsFromV1 = forward('reimportSettingsFromV1');
+export const getImportReport = forward('getImportReport');
+export const acknowledgeImportReport = forward('acknowledgeImportReport');
+
+// This device's data and bundled notices
+export const getThirdPartyNotices = forward('getThirdPartyNotices');
+export const wipeLocalData = forward('wipeLocalData');
+export const reloadWindow = forward('reloadWindow');
 
 // Per-challenge overrides, profiles and title rules
 export const getChallengeOverride = forward('getChallengeOverride');
@@ -99,11 +111,14 @@ export const setChallengeOverride = forward('setChallengeOverride');
 export const removeChallengeOverride = forward('removeChallengeOverride');
 export const replaceChallengeOverrides = forward('replaceChallengeOverrides');
 export const getTitleProfile = forward('getTitleProfile');
+export const getEntryPins = forward('getEntryPins');
+export const setEntryPin = forward('setEntryPin');
 export const getChallengeProfiles = forward('getChallengeProfiles');
 export const saveChallengeProfile = forward('saveChallengeProfile');
 export const deleteChallengeProfile = forward('deleteChallengeProfile');
 export const getTitleRules = forward('getTitleRules');
 export const setTitleRules = forward('setTitleRules');
+export const clearChosenPhotos = forward('clearChosenPhotos');
 
 // User-defined scenarios
 export const getScenarios = forward('getScenarios');
@@ -116,6 +131,7 @@ export const importScenario = forward('importScenario');
 export const exportScenario = forward('exportScenario');
 export const getScenarioStatus = forward('getScenarioStatus');
 export const resetScenarioState = forward('resetScenarioState');
+export const resetAllScenarioState = forward('resetAllScenarioState');
 export const dryRunScenario = forward('dryRunScenario');
 export const simulateScenario = forward('simulateScenario');
 
@@ -123,6 +139,10 @@ export const simulateScenario = forward('simulateScenario');
 export const getActiveChallenges = forward('getActiveChallenges');
 export const getDeadlineActions = forward('getDeadlineActions');
 export const joinChallenge = forward('joinChallenge');
+export const forgetUnconfirmedPayment = forward('forgetUnconfirmedPayment');
+export const getOpenChosenAnnotations = forward('getOpenChosenAnnotations');
+export const confirmAccount = forward('confirmAccount');
+export const getLibraryPhotos = forward('getLibraryPhotos');
 export const runVotingCycle = forward('runVotingCycle');
 export const runVotingCycleForChallenge = forward('runVotingCycleForChallenge');
 export const voteOnChallengeManual = forward('voteOnChallengeManual');

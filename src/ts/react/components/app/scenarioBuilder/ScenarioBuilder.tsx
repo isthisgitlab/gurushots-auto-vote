@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
+import { useLatestRef } from '@/hooks/useLatestRef';
+import { valuesEqual } from '@/utils/valuesEqual';
+import { useOnChosenPhotosCleared, scenarioWithoutChosenPhotos } from '@/api/chosenPhotosCleared';
 import { SettingInput } from '../SettingInput';
 import { ScenarioError, issuesOf } from '../ScenarioError';
 import { ConditionList, ActionList } from './ItemEditors';
@@ -18,7 +22,7 @@ import {
     isEditableDraft,
 } from '../../../../scenarios/builderModel';
 
-import type { ComponentChildren } from 'preact';
+import type { ComponentChildren, TargetedKeyboardEvent } from 'preact';
 import type { WindowApi } from '../../../../types/ipc';
 import type { ScenarioDraft, ScenarioDraftPhase, ScenarioDraftRule } from '../../../../types/scenarioBuilder';
 import type { RendererSchema } from '../../../../types/settingsEditor';
@@ -38,7 +42,16 @@ type SimulationResult = Extract<Awaited<ReturnType<WindowApi['simulateScenario']
  * problems come back by path.
  */
 
-const CONTROL = 'input input-sm input-bordered w-full';
+const CONTROL = 'input input-sm w-full';
+const TABS = ['builder', 'json'] as const;
+
+/** The tab a key moves to from `index` (the arrows wrap, Home / End jump to the ends), or null for any other key. */
+function tabAfterKey(key: string, index: number): number | null {
+    if (key === 'ArrowRight') return (index + 1) % TABS.length;
+    if (key === 'ArrowLeft') return (index + TABS.length - 1) % TABS.length;
+    if (key === 'Home') return 0;
+    return key === 'End' ? TABS.length - 1 : null;
+}
 
 /**
  * A phase's settings overlay: per-challenge setting keys and their values.
@@ -61,11 +74,11 @@ function PhaseSettings({
     return (
         <div className="space-y-2">
             <div className="text-xs font-medium">{t('app.sbPhaseSettings')}</div>
-            {keys.length === 0 && <p className="text-xs text-base-content/60">{t('app.sbNoSettings')}</p>}
+            {keys.length === 0 && <p className="text-xs text-base-content/70">{t('app.sbNoSettings')}</p>}
             {keys.map((key) => {
                 const config = schema?.[key];
                 return (
-                    <div key={key} className="flex items-center gap-2">
+                    <div key={key} className="flex flex-wrap items-center gap-2">
                         <span className="text-xs w-40 shrink-0">{config ? t(config.label) : key}</span>
                         {config && (
                             <SettingInput
@@ -79,16 +92,26 @@ function PhaseSettings({
                         )}
                         <button
                             type="button"
-                            className="btn btn-xs btn-ghost text-error"
+                            className="btn btn-sm btn-ghost text-error"
+                            aria-label={interp(t('app.actionOnItem'), {
+                                action: t('app.sbRemove'),
+                                item: config ? t(config.label) : key,
+                            })}
                             onClick={() => onChange(setIn(current, [key], undefined))}
                         >
                             {t('app.sbRemove')}
                         </button>
+                        {/* A scenario has no state until its challenge is joined, so a join never sees this list. */}
+                        {key === 'chosenPhotos' && (
+                            <ToneNote tone="info" className="w-full text-xs">
+                                {t('app.chosenPhotosScenarioHint')}
+                            </ToneNote>
+                        )}
                     </div>
                 );
             })}
             <select
-                className="select select-xs select-bordered"
+                className="select select-sm"
                 aria-label={t('app.sbAddSetting')}
                 value=""
                 onChange={(e) => {
@@ -141,7 +164,7 @@ function RuleEditor({
                 <label className="flex flex-col text-xs gap-1">
                     <span className="opacity-70">{t('app.sbRepeat')}</span>
                     <select
-                        className="select select-sm select-bordered"
+                        className="select select-sm"
                         value={rule.repeat ?? 'always'}
                         onChange={(e) => onChange({ ...rule, repeat: e.currentTarget.value })}
                     >
@@ -156,7 +179,7 @@ function RuleEditor({
             </div>
             <div className="text-xs font-medium">{t('app.sbConditions')}</div>
             {(rule.if ?? []).length === 0 && (
-                <p className="text-xs text-base-content/60">{t('app.sbConditionsEmpty')}</p>
+                <p className="text-xs text-base-content/70">{t('app.sbConditionsEmpty')}</p>
             )}
             <ConditionList value={rule.if} onChange={(next) => onChange({ ...rule, if: next })} phases={phases} />
             <div className="text-xs font-medium">{t('app.sbActions')}</div>
@@ -185,6 +208,9 @@ function PhaseEditor({
     const [editingName, setEditingName] = useState(name);
     const rules = phase.rules ?? [];
     const setRules = (next: ScenarioDraftRule[]) => onDraft(setIn(draft, ['phases', name, 'rules'], next));
+    // Every rule repeats the same three buttons: the rule's position makes each one's accessible name unique.
+    const ruleActionLabel = (actionKey: string, index: number) =>
+        interp(t('app.actionOnItem'), { action: t(actionKey), item: interp(t('app.sbRuleN'), { n: index + 1 }) });
     return (
         <section className="rounded-lg border border-base-300 p-3 space-y-3">
             <div className="flex gap-2 items-end">
@@ -206,6 +232,7 @@ function PhaseEditor({
                     type="button"
                     className="btn btn-sm btn-ghost text-error"
                     disabled={phases.length <= 1}
+                    aria-label={interp(t('app.actionOnItem'), { action: t('app.sbRemovePhase'), item: name })}
                     onClick={() => onDraft(removePhase(draft, name))}
                 >
                     {t('app.sbRemovePhase')}
@@ -226,23 +253,26 @@ function PhaseEditor({
                         <div className="flex gap-1">
                             <button
                                 type="button"
-                                className="btn btn-xs btn-ghost"
+                                className="btn btn-sm btn-ghost"
                                 disabled={index === 0}
+                                aria-label={ruleActionLabel('app.sbMoveUp', index)}
                                 onClick={() => setRules(moveItem(rules, index, -1))}
                             >
                                 {t('app.sbMoveUp')}
                             </button>
                             <button
                                 type="button"
-                                className="btn btn-xs btn-ghost"
+                                className="btn btn-sm btn-ghost"
                                 disabled={index === rules.length - 1}
+                                aria-label={ruleActionLabel('app.sbMoveDown', index)}
                                 onClick={() => setRules(moveItem(rules, index, 1))}
                             >
                                 {t('app.sbMoveDown')}
                             </button>
                             <button
                                 type="button"
-                                className="btn btn-xs btn-ghost text-error"
+                                className="btn btn-sm btn-ghost text-error"
+                                aria-label={ruleActionLabel('app.sbRemove', index)}
                                 onClick={() => setRules(rules.filter((_, i) => i !== index))}
                             >
                                 {t('app.sbRemove')}
@@ -285,7 +315,7 @@ function ScenarioHeader({
             <label className="flex flex-col text-xs gap-1">
                 <span className="opacity-70">{t('app.sbStart')}</span>
                 <select
-                    className="select select-sm select-bordered"
+                    className="select select-sm"
                     value={draft.start}
                     onChange={(e) => onDraft({ ...draft, start: e.currentTarget.value })}
                 >
@@ -307,14 +337,14 @@ function ScenarioHeader({
             </label>
             <fieldset className="sm:col-span-2 text-xs">
                 <legend className="opacity-70 mb-1">{t('app.sbLimits')}</legend>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     {LIMIT_KEYS.map((key) => (
                         <label key={key} className="flex flex-col gap-1">
                             <span>{t(`app.sbCurrency_${key}`)}</span>
                             <input
                                 type="number"
                                 min={0}
-                                className="input input-sm input-bordered w-24"
+                                className="input input-sm w-24"
                                 value={draft.limits?.[key] ?? ''}
                                 onChange={(e) => {
                                     const input = e.currentTarget;
@@ -336,18 +366,32 @@ function ScenarioHeader({
 }
 
 /**
- * The draft as editable JSON text.
+ * The draft as editable JSON text. Text that is not a document the forms can render never reaches the draft, so
+ * `onTextDirty` reports whether the text differs from the draft's own JSON (false once the tab closes).
  */
-function JsonTab({ draft, onDraft }: { draft: ScenarioDraft; onDraft: (next: ScenarioDraft) => void }) {
+function JsonTab({
+    draft,
+    onDraft,
+    onTextDirty,
+}: {
+    draft: ScenarioDraft;
+    onDraft: (next: ScenarioDraft) => void;
+    onTextDirty: (dirty: boolean) => void;
+}) {
     const { t } = useTranslation();
     const [text, setText] = useState(() => JSON.stringify(draft, null, 2));
     const [invalid, setInvalid] = useState(false);
+    const textDirty = text !== JSON.stringify(draft, null, 2);
+    useEffect(() => onTextDirty(textDirty), [textDirty, onTextDirty]);
+    useEffect(() => () => onTextDirty(false), [onTextDirty]);
     return (
         <div className="space-y-2">
-            <p className="text-xs text-base-content/60">{t('app.sbJsonHint')}</p>
+            <p className="text-xs text-base-content/70">{t('app.sbJsonHint')}</p>
             <textarea
-                className="textarea textarea-bordered w-full font-mono text-xs"
+                className="textarea w-full font-mono text-xs"
                 rows={16}
+                spellcheck={false}
+                autoCapitalize="off"
                 aria-label={t('app.sbTabJson')}
                 value={text}
                 onChange={(e) => {
@@ -366,9 +410,9 @@ function JsonTab({ draft, onDraft }: { draft: ScenarioDraft; onDraft: (next: Sce
                 }}
             />
             {invalid && (
-                <p className="text-xs text-warning" role="status">
+                <ToneNote tone="warning" role="status" className="text-xs">
                     {t('app.sbJsonInvalid')}
-                </p>
+                </ToneNote>
             )}
         </div>
     );
@@ -402,7 +446,7 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
         <div className="space-y-2">
             <div className="flex gap-2 items-center">
                 <select
-                    className="select select-sm select-bordered"
+                    className="select select-sm"
                     aria-label={t('app.sbSimulateOn')}
                     value={challengeId}
                     onChange={(e) => setChallengeId(e.currentTarget.value)}
@@ -421,7 +465,8 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
             <ScenarioError error={error} />
             {result && (
                 <div className="text-xs bg-base-200 rounded p-2 space-y-1">
-                    <p className="text-base-content/60">{t('app.sbSimulateAssume')}</p>
+                    <p className="text-base-content/70">{t('app.sbSimulateAssume')}</p>
+                    {result.manualOnly && <ToneNote tone="warning">{t('app.sbSimulatePausedManual')}</ToneNote>}
                     {result.events.length === 0 ? (
                         <p>{t('app.sbSimulateNothing')}</p>
                     ) : (
@@ -436,7 +481,7 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
                         </ol>
                     )}
                     <p>{t(`app.sbStop_${result.stoppedBecause}`)}</p>
-                    {result.halted && <p className="text-warning">{result.halted}</p>}
+                    {result.halted && <ToneNote tone="warning">{result.halted}</ToneNote>}
                 </div>
             )}
         </div>
@@ -446,24 +491,53 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
 /**
  * @param props
  *   originalName: the stored name being edited, or null for a new scenario
+ *   onDirtyChange: told whether the draft (or the JSON tab's text) differs from what was opened; false when it closes
  */
 export function ScenarioBuilder({
     initial,
     originalName,
     onSaved,
     onCancel,
+    onDirtyChange,
 }: {
     initial: ScenarioDraft;
     originalName: string | null;
     onSaved: () => void;
     onCancel: () => void;
+    onDirtyChange: (dirty: boolean) => void;
 }) {
     const { t } = useTranslation();
     const [draft, setDraft] = useState(initial);
+    const [baseline, setBaseline] = useState(initial);
+    const [jsonDirty, setJsonDirty] = useState(false);
+    // Bumped when the lists are removed, so a JSON tab that is open starts again from the stripped draft.
+    const [textResync, setTextResync] = useState(0);
+    // Saving writes the whole scenario: lists removed meanwhile must not come back with it. The removal is what is
+    // stored now, so it is not an unsaved edit either.
+    useOnChosenPhotosCleared(() => {
+        setDraft(scenarioWithoutChosenPhotos);
+        setBaseline(scenarioWithoutChosenPhotos);
+        setTextResync((n) => n + 1);
+    });
+    const dirty = jsonDirty || !valuesEqual(draft, baseline);
+    const report = useLatestRef(onDirtyChange);
+    useEffect(() => report.current(dirty), [dirty, report]);
+    useEffect(() => () => report.current(false), [report]);
     // The name the scenario is stored under right now: a rename that went
     // through before a refused save must not be attempted again on retry.
     const [storedName, setStoredName] = useState(originalName);
-    const [tab, setTab] = useState('builder');
+    const [tab, setTab] = useState<(typeof TABS)[number]>('builder');
+    const idBase = useId();
+    const tabId = (name: string) => `${idBase}-tab-${name}`;
+    const panelId = `${idBase}-panel`;
+    // WAI-ARIA tabs: the tab that takes focus is the selected one.
+    const onTabKeyDown = (event: TargetedKeyboardEvent<HTMLButtonElement>, index: number) => {
+        const next = tabAfterKey(event.key, index);
+        if (next === null) return;
+        event.preventDefault();
+        setTab(TABS[next]);
+        document.getElementById(tabId(TABS[next]))?.focus();
+    };
     const [error, setError] = useState<ScenarioErrorInfo | null>(null);
     const phases = Object.keys(draft.phases);
 
@@ -502,45 +576,51 @@ export function ScenarioBuilder({
     return (
         <div className="border border-base-300 rounded-lg p-3 space-y-3">
             <h5 className="font-semibold">{t(originalName === null ? 'app.sbTitleNew' : 'app.sbTitleEdit')}</h5>
-            <div role="tablist" className="tabs tabs-bordered">
-                {['builder', 'json'].map((name) => (
+            <div role="tablist" className="tabs tabs-border">
+                {TABS.map((name, index) => (
                     <button
                         key={name}
+                        id={tabId(name)}
                         type="button"
                         role="tab"
                         aria-selected={tab === name}
+                        aria-controls={tab === name ? panelId : undefined}
+                        tabIndex={tab === name ? 0 : -1}
                         className={`tab ${tab === name ? 'tab-active' : ''}`}
                         onClick={() => setTab(name)}
+                        onKeyDown={(event) => onTabKeyDown(event, index)}
                     >
                         {t(name === 'builder' ? 'app.sbTabBuilder' : 'app.sbTabJson')}
                     </button>
                 ))}
             </div>
-            {tab === 'json' ? (
-                <JsonTab draft={draft} onDraft={setDraft} />
-            ) : (
-                <div className="space-y-3">
-                    <ScenarioHeader draft={draft} onDraft={setDraft} phases={phases} />
-                    <div className="text-sm font-medium">{t('app.sbPhases')}</div>
-                    {phases.map((name) => (
-                        <PhaseEditor
-                            key={name}
-                            name={name}
-                            phase={draft.phases[name]}
-                            draft={draft}
-                            onDraft={setDraft}
-                            phases={phases}
-                        />
-                    ))}
-                    <button type="button" className="btn btn-sm" onClick={() => setDraft(addPhase(draft))}>
-                        {t('app.sbAddPhase')}
-                    </button>
-                </div>
-            )}
+            <div role="tabpanel" id={panelId} aria-labelledby={tabId(tab)}>
+                {tab === 'json' ? (
+                    <JsonTab key={textResync} draft={draft} onDraft={setDraft} onTextDirty={setJsonDirty} />
+                ) : (
+                    <div className="space-y-3">
+                        <ScenarioHeader draft={draft} onDraft={setDraft} phases={phases} />
+                        <div className="text-sm font-medium">{t('app.sbPhases')}</div>
+                        {phases.map((name) => (
+                            <PhaseEditor
+                                key={name}
+                                name={name}
+                                phase={draft.phases[name]}
+                                draft={draft}
+                                onDraft={setDraft}
+                                phases={phases}
+                            />
+                        ))}
+                        <button type="button" className="btn btn-sm" onClick={() => setDraft(addPhase(draft))}>
+                            {t('app.sbAddPhase')}
+                        </button>
+                    </div>
+                )}
+            </div>
             <SimulatePanel draft={draft} />
             <ScenarioError error={error} />
             <div className="flex gap-2">
-                <button type="button" className="btn btn-sm btn-primary" onClick={() => void save()}>
+                <button type="button" className="btn btn-sm btn-neutral" onClick={() => void save()}>
                     {t('app.sbSave')}
                 </button>
                 <button type="button" className="btn btn-sm btn-ghost" onClick={onCancel}>

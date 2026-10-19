@@ -22,6 +22,29 @@ describe('LoginForm', () => {
         expect(document.getElementById('password')!.className).toContain('input-error');
     });
 
+    test('an invalid field is marked and points at its error; focus lands on the first one', () => {
+        render(<LoginForm onSubmit={jest.fn()} />);
+        const username = document.getElementById('username')!;
+        const password = document.getElementById('password')!;
+        expect(username.hasAttribute('aria-invalid')).toBe(false);
+        expect(username.hasAttribute('aria-describedby')).toBe(false);
+        fireEvent.submit(document.querySelector('form')!);
+        expect(username.getAttribute('aria-invalid')).toBe('true');
+        expect(username.getAttribute('aria-describedby')).toBe('username-error');
+        expect(document.getElementById('username-error')!.textContent).toContain('login.usernameRequired');
+        expect(password.getAttribute('aria-invalid')).toBe('true');
+        expect(password.getAttribute('aria-describedby')).toBe('password-error');
+        expect(document.getElementById('password-error')!.textContent).toContain('login.passwordRequired');
+        expect(document.activeElement).toBe(username);
+    });
+
+    test('with only the password missing, focus lands on the password', () => {
+        render(<LoginForm onSubmit={jest.fn()} initialUsername="alice" />);
+        fireEvent.submit(document.querySelector('form')!);
+        expect(document.activeElement).toBe(document.getElementById('password'));
+        expect(document.getElementById('username')!.hasAttribute('aria-invalid')).toBe(false);
+    });
+
     test('typing clears the matching field error only', () => {
         render(<LoginForm onSubmit={jest.fn()} />);
         fireEvent.submit(document.querySelector('form')!);
@@ -33,6 +56,13 @@ describe('LoginForm', () => {
         // With no error showing, further typing leaves errors alone.
         fireEvent.input(document.getElementById('password')!, { target: { value: 'pw' } });
         expect(document.getElementById('password')!.className).not.toContain('input-error');
+    });
+
+    test('the username field is not auto-capitalised, and keeps its autocomplete hint', () => {
+        render(<LoginForm onSubmit={jest.fn()} />);
+        const username = document.getElementById('username')!;
+        expect(username.getAttribute('autocapitalize')).toBe('none');
+        expect(username.getAttribute('autocomplete')).toBe('username');
     });
 
     test('submits the trimmed username and raw password', () => {
@@ -59,30 +89,38 @@ describe('LoginForm', () => {
         expect((document.getElementById('username') as HTMLInputElement).disabled).toBe(true);
         expect((document.getElementById('password') as HTMLInputElement).disabled).toBe(true);
     });
+
+    test('the spinner is decorative: the button already says it is logging in', () => {
+        render(<LoginForm onSubmit={jest.fn()} loading />);
+        expect(screen.queryByRole('status')).toBeNull();
+        expect(document.querySelector('button .loading')!.getAttribute('aria-hidden')).toBe('true');
+    });
 });
 
 describe('LanguageSwitcher', () => {
     test('shows English, switches to Latvian and refreshes the menu', async () => {
         render(<LanguageSwitcher />);
-        expect(screen.getByText('English')).toBeTruthy();
-        expect(screen.getByText('common.languageEnglish').className).toBe('active');
-        expect(screen.getByText('common.languageLatvian').className).toBe('');
+        // The trigger names the current language in itself, marked with its own lang; the items do the same.
+        const triggerName = () => document.querySelector('button[aria-expanded] span[lang]')!;
+        expect(triggerName().textContent).toBe('common.languageEnglish');
+        expect(triggerName().getAttribute('lang')).toBe('en');
+        expect(screen.getByRole('button', { name: 'common.languageEnglish', pressed: true }).className).toBe('active');
+        // The trigger is a disclosure button, not a menu.
+        expect(document.querySelector('button[aria-expanded]')!.getAttribute('aria-expanded')).toBe('false');
+        expect(screen.getByRole('button', { name: 'common.languageLatvian' }).className).toBe('');
+        expect(screen.getByRole('button', { name: 'common.languageLatvian' }).getAttribute('lang')).toBe('lv');
         // Real buttons, with the current language exposed as pressed.
-        expect(screen.getByRole('button', { name: 'common.languageEnglish' }).getAttribute('aria-pressed')).toBe(
-            'true',
-        );
-        expect(screen.getByRole('button', { name: 'common.languageLatvian' }).getAttribute('aria-pressed')).toBe(
-            'false',
-        );
+        expect(screen.getByRole('button', { name: 'common.languageLatvian', pressed: false })).toBeTruthy();
 
-        fireEvent.click(screen.getByText('common.languageLatvian'));
-        await waitFor(() => expect(screen.getByText('Latviešu')).toBeTruthy());
+        fireEvent.click(screen.getByRole('button', { name: 'common.languageLatvian' }));
+        await waitFor(() => expect(triggerName().getAttribute('lang')).toBe('lv'));
         expect(window.api.setSetting).toHaveBeenCalledWith('language', 'lv');
         expect(window.api.refreshMenu).toHaveBeenCalledTimes(1);
-        expect(screen.getByText('common.languageLatvian').className).toBe('active');
+        expect(screen.getAllByRole('button', { name: 'common.languageLatvian' }).at(-1)!.className).toBe('active');
+        expect(document.documentElement.lang).toBe('lv');
 
-        fireEvent.click(screen.getByText('common.languageEnglish'));
-        await waitFor(() => expect(screen.getByText('English')).toBeTruthy());
+        fireEvent.click(screen.getByRole('button', { name: 'common.languageEnglish', pressed: false }));
+        await waitFor(() => expect(triggerName().getAttribute('lang')).toBe('en'));
         expect(window.api.setSetting).toHaveBeenLastCalledWith('language', 'en');
     });
 });

@@ -13,14 +13,11 @@ const appState: {
     // Created per main window by watchSettingsFile; the debounce timeout lives in windows/settingsWatcher.ts
     settingsWatcher: FSWatcher | null;
     autoUpdater: AutoUpdater | null;
-    // Main window creation time, to prevent reload during login
-    mainWindowCreatedTime: number | null;
 } = {
     loginWindow: null,
     mainWindow: null,
     settingsWatcher: null,
     autoUpdater: null,
-    mainWindowCreatedTime: null,
 };
 
 export { appState };

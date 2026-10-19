@@ -8,6 +8,7 @@
  */
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { ChallengeProfilesBar } from '@/components/app/ChallengeProfilesBar';
+import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 
@@ -41,9 +42,17 @@ const deleteButton = () =>
 const nameInput = () => screen.getByPlaceholderText('app.profileNamePlaceholder');
 
 describe('ChallengeProfilesBar', () => {
+    test('the delete button is a filled destructive one', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue({ tactic: {} });
+        renderBar();
+        await act(async () => {});
+        expect(deleteButton().className).toContain('btn-error');
+        expect(deleteButton().className).not.toContain('btn-outline');
+    });
+
     test('lists profiles with their override counts', async () => {
         mockApi.getChallengeProfiles.mockResolvedValue({
-            '2-pic tactic': { exposure: 80, autoFill: true },
+            '2-pic tactic': { exposure: 80, autoSubmit: true },
             empty: {},
         });
         renderBar();
@@ -52,6 +61,36 @@ describe('ChallengeProfilesBar', () => {
             expect(document.body.textContent).toContain('2-pic tactic (2)');
         });
         expect(document.body.textContent).toContain('empty (0)');
+    });
+
+    test('profiles loaded before the lists were removed no longer carry them: Apply cannot bring a list back', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue({ Mine: { chosenPhotos: ['secret-id'], exposure: 80 } });
+        const onApply = jest.fn();
+        renderBar({ onApply });
+        await waitFor(() => expect(document.body.textContent).toContain('Mine (2)'));
+        // The stored profile has lost its list by the time it is read again — but Apply must not
+        // depend on that read having landed.
+        const reread = mockApi.getChallengeProfiles.mockReturnValueOnce(new Promise(() => undefined));
+        act(() => announceChosenPhotosCleared());
+        expect(reread).toHaveBeenCalledTimes(2);
+        await waitFor(() => expect(document.body.textContent).toContain('Mine (1)'));
+        await act(async () => {
+            changeSelect(selectEl(), 'Mine');
+        });
+        await act(async () => {
+            fireEvent.click(applyButton());
+        });
+        expect(onApply).toHaveBeenCalledWith({ exposure: 80 });
+    });
+
+    test('after the lists were removed the profiles are read again, showing what is stored now', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue({ Mine: { chosenPhotos: ['secret-id'], exposure: 80 } });
+        renderBar();
+        await waitFor(() => expect(document.body.textContent).toContain('Mine (2)'));
+        mockApi.getChallengeProfiles.mockResolvedValue({ Mine: { exposure: 80 }, Other: {} });
+        act(() => announceChosenPhotosCleared());
+        await waitFor(() => expect(document.body.textContent).toContain('Other (0)'));
+        expect(document.body.textContent).toContain('Mine (1)');
     });
 
     test('Apply hands the profile values to onApply and shows the applied hint', async () => {
@@ -77,7 +116,7 @@ describe('ChallengeProfilesBar', () => {
     });
 
     test('Save passes the current sparse overrides under the typed name', async () => {
-        const overrides = { exposure: 70, autoFill: true };
+        const overrides = { exposure: 70, autoSubmit: true };
         renderBar({ overrides });
 
         fireEvent.change(nameInput(), { target: { value: '  3-pic tactic  ' } });
@@ -192,6 +231,40 @@ describe('ChallengeProfilesBar', () => {
         expect(selectEl().value).toBe('tactic');
         expect(document.body.textContent).toContain('app.profileSaveError');
         expect(onProfilesChanged).not.toHaveBeenCalled();
+    });
+
+    test('a Delete that throws shows the error and logs it', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue({ tactic: { exposure: 80 } });
+        mockApi.deleteChallengeProfile.mockRejectedValue(new Error('ipc down'));
+        renderBar();
+        await waitFor(() => expect(document.body.textContent).toContain('tactic (1)'));
+        await act(async () => changeSelect(selectEl(), 'tactic'));
+
+        await act(async () => invalid<void>(fireEvent.click(deleteButton())));
+        await act(async () => invalid<void>(fireEvent.click(deleteButton())));
+
+        expect(document.body.textContent).toContain('app.profileSaveError');
+        expect(mockApi.logError).toHaveBeenCalledWith('Error deleting challenge profile: ipc down');
+    });
+
+    test('a throw after the Delete landed is logged but not shown as a failed delete', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue({ tactic: { exposure: 80 } });
+        // refreshProfiles settles its own errors, so the parent's callback is where a throw can come from.
+        const onProfilesChanged = jest.fn(() => {
+            throw new Error('parent blew up');
+        });
+        renderBar({ onProfilesChanged });
+        await waitFor(() => expect(document.body.textContent).toContain('tactic (1)'));
+        await act(async () => changeSelect(selectEl(), 'tactic'));
+
+        await act(async () => invalid<void>(fireEvent.click(deleteButton())));
+        await act(async () => invalid<void>(fireEvent.click(deleteButton())));
+
+        await waitFor(() =>
+            expect(mockApi.logError).toHaveBeenCalledWith('Error deleting challenge profile: parent blew up'),
+        );
+        expect(mockApi.deleteChallengeProfile).toHaveBeenCalledWith('tactic');
+        expect(document.body.textContent).not.toContain('app.profileSaveError');
     });
 
     test('notifies the parent after a saved profile mutation', async () => {
@@ -346,7 +419,7 @@ describe('ChallengeProfilesBar', () => {
             autoBoost: false,
             useTurbo: false,
             autoTurbo: false,
-            autoFill: true,
+            autoSubmit: true,
         };
 
         test('are starred, translated and marked built-in while unedited', async () => {
@@ -355,12 +428,12 @@ describe('ChallengeProfilesBar', () => {
             await waitFor(() => expect(document.body.textContent).toContain('★ app.intentJustParticipate (6)'));
             await act(async () => changeSelect(selectEl(), 'Just Participate'));
             const badge = screen.getByText('app.intentBuiltIn');
-            expect(badge.className).toContain('badge-info');
+            expect(badge.className).toContain('badge-ghost');
             expect(document.body.textContent).toContain('app.intentJustParticipateDesc');
         });
 
         test('are marked modified once their values differ', async () => {
-            mockApi.getChallengeProfiles.mockResolvedValue({ 'Just Participate': { ...JUST, autoFill: false } });
+            mockApi.getChallengeProfiles.mockResolvedValue({ 'Just Participate': { ...JUST, autoSubmit: false } });
             renderBar();
             await waitFor(() => expect(document.body.textContent).toContain('★'));
             await act(async () => changeSelect(selectEl(), 'Just Participate'));

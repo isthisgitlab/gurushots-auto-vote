@@ -23,15 +23,17 @@ jest.mock('../../src/ts/logger', () => {
 
 jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(() => ({
-        mock: true,
-        token: 'tok',
-        theme: 'latvian',
-        language: 'english',
-        timezone: 'Europe/Riga',
-        apiTimeout: 30,
-        checkFrequencyMin: 1,
-        checkFrequencyMax: 1,
-        challengeSettings: {},
+        app: {
+            mock: true,
+            theme: 'latvian',
+            language: 'english',
+            timezone: 'Europe/Riga',
+            apiTimeout: 30,
+            checkFrequencyMin: 1,
+            checkFrequencyMax: 1,
+        },
+        auth: { token: 'tok' },
+        challenges: {},
     })),
     getEffectiveSetting: jest.fn(() => 1),
 }));

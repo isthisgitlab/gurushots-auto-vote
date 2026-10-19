@@ -46,6 +46,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "TIMER",
                     "time_to_open": 1768480200
@@ -146,6 +147,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "snap",
                     "required_selections": 6,
                     "state": "FREE",
                     "time_to_open": null
@@ -233,6 +235,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "LOCKED",
                     "time_to_open": null
@@ -306,6 +309,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "FREE",
                     "time_to_open": null
@@ -344,6 +348,16 @@
                             "boosted": false
                         }
                     ]
+                }
+            },
+            "teamMatch": {
+                "us": {
+                    "name": "Mock Lens Collective",
+                    "votes": 7514
+                },
+                "them": {
+                    "name": "Fictional Aperture Wanderers Of Supercalifragilisticexpialidocious Valley",
+                    "votes": 8258
                 }
             }
         },
@@ -393,6 +407,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "FREE",
                     "time_to_open": null
@@ -480,6 +495,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "IN_PROGRESS",
                     "time_to_open": null
@@ -567,6 +583,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "WON",
                     "time_to_open": null
@@ -667,6 +684,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "USED",
                     "time_to_open": null
@@ -754,6 +772,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "LOCKED",
                     "time_to_open": null
@@ -841,6 +860,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "FREE",
                     "time_to_open": null
@@ -941,6 +961,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "TIMER",
                     "time_to_open": 1768479300
@@ -1028,6 +1049,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "LOCKED",
                     "time_to_open": null
@@ -1101,6 +1123,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "IN_PROGRESS",
                     "time_to_open": null
@@ -1188,6 +1211,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "WON",
                     "time_to_open": null
@@ -1288,6 +1312,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "FREE",
                     "time_to_open": null
@@ -1375,6 +1400,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "USED",
                     "time_to_open": null
@@ -1475,6 +1501,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "LOCKED",
                     "time_to_open": null
@@ -1562,6 +1589,7 @@
                     "max_selections": 10,
                     "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
+                    "mode": "classic",
                     "required_selections": 6,
                     "state": "LOCKED",
                     "time_to_open": null

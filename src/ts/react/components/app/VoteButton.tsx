@@ -11,19 +11,22 @@ export function VoteButton({
     challengeId,
     challengeTitle,
     onVoteComplete,
+    onError,
 }: {
     challengeId: Challenge['id'];
     challengeTitle: string;
     onVoteComplete: () => void;
+    onError: (message: string | null) => void;
 }) {
     const { t } = useTranslation();
 
     return (
         <IconActionButton
-            className="btn btn-latvian btn-sm"
+            className="btn btn-neutral btn-sm"
             title={t('app.voteTitle')}
             action={() => ipc.voteOnChallengeManual(challengeId, challengeTitle)}
             onSuccess={onVoteComplete}
+            onError={onError}
             failureLogPrefix="Voting failed"
             errorLogPrefix="Error voting on challenge"
             loadingLabel={t('app.voting')}

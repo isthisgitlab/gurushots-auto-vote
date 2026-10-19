@@ -51,8 +51,8 @@ const claimChallengeResources: typeof rewardsModule.claimChallengeResources = mo
 
 /**
  * Simulate /rest/get_my_missions: one completed mission (claim_state CLAIM)
- * and two still in progress (DISABLED) — one a "Win Turbo" mission, so mock
- * mode exercises the mission-aware turbo earn.
+ * and three still in progress (DISABLED) — a "Win Turbo" and a "Use a boost"
+ * mission, so mock mode exercises the mission-aware turbo earn and boost.
  */
 const getMyMissions: typeof rewardsModule.getMyMissions = mockMethod(
     {
@@ -82,6 +82,13 @@ const getMyMissions: typeof rewardsModule.getMyMissions = mockMethod(
                 name: 'Win Turbo 4 times',
                 progress: { current: 1, required: 4 },
                 prizes: [{ type: 'COINS', amount: 30 }],
+                claim_state: 'DISABLED',
+            },
+            {
+                id: 900204,
+                name: 'Use a boost',
+                progress: { current: 0, required: 1 },
+                prizes: [{ type: 'COINS', amount: 10 }],
                 claim_state: 'DISABLED',
             },
         ];

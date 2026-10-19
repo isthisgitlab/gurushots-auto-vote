@@ -27,13 +27,15 @@ describe('number settings advertise bounds', () => {
 
     // The entry-slot indexes are deliberately unitless — "slot 2" needs no suffix. Every
     // other number setting is a percentage or a duration and is unreadable without one.
-    const UNITLESS = new Set(['boostImageIndex', 'turboImageIndex', 'autoSwapImageIndex']);
+    const SLOT_INDEXES = new Set(['boostImageIndex', 'turboImageIndex', 'autoSwapImageIndex']);
+    // The notice version is a counter, not shown in a settings section at all.
+    const UNITLESS = new Set([...SLOT_INDEXES, 'noticeAcknowledgedVersion']);
 
     test.each(numberSettings.filter(([key]) => !UNITLESS.has(key)))('%s declares a unit', (_key, config) => {
         expect(typeof config.unit).toBe('string');
     });
 
-    test.each(numberSettings.filter(([key]) => UNITLESS.has(key)))(
+    test.each(numberSettings.filter(([key]) => SLOT_INDEXES.has(key)))(
         '%s stays unitless and bounded to the four real entry slots',
         (_key, config) => {
             expect(config.unit).toBeUndefined();

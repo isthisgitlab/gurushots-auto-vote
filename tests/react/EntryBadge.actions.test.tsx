@@ -17,6 +17,7 @@ const renderBadge = () => {
     const onTurboApplied = jest.fn();
     render(
         <EntryBadge
+            timezone="local"
             entry={entry}
             challengeId={7}
             boostAvailable
@@ -24,6 +25,7 @@ const renderBadge = () => {
             onBoostApplied={onBoostApplied}
             onTurboApplied={onTurboApplied}
             onSwapped={() => {}}
+            onChooseSwap={() => {}}
         />,
     );
     return { onBoostApplied, onTurboApplied };
@@ -53,20 +55,22 @@ test('turbo applies to this entry and notifies the parent', async () => {
 test('a failed boost shows the error and does not notify', async () => {
     (window.api as { applyBoost: WindowApi['applyBoost'] }).applyBoost = jest
         .fn()
-        .mockResolvedValue({ success: false, error: 'boost gone' });
+        .mockResolvedValue({ success: false, error: 'Failed to apply boost' });
     const { onBoostApplied } = renderBadge();
     fireEvent.click(screen.getByText(/app\.boost/));
-    await waitFor(() => expect(screen.getByText('boost gone')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('errors.boostFailed')).toBeTruthy());
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(window.api.logWarning).toHaveBeenCalledWith('IPC action failed: Failed to apply boost');
     expect(onBoostApplied).not.toHaveBeenCalled();
 });
 
 test('a failed turbo shows the error and does not notify', async () => {
     (window.api as { applyTurbo: WindowApi['applyTurbo'] }).applyTurbo = jest
         .fn()
-        .mockResolvedValue({ success: false, error: 'turbo gone' });
+        .mockResolvedValue({ success: false, error: 'Turbo not earned — try again later' });
     const { onTurboApplied } = renderBadge();
     fireEvent.click(screen.getByText(/app\.turbo/));
-    await waitFor(() => expect(screen.getByText('turbo gone')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('errors.turboNotEarned')).toBeTruthy());
     expect(onTurboApplied).not.toHaveBeenCalled();
 });
 
@@ -74,6 +78,7 @@ describe('swap controls', () => {
     const renderSwap = (swapBack: SwapBackOffer | null) =>
         render(
             <EntryBadge
+                timezone="local"
                 entry={entry}
                 challengeId={7}
                 boostAvailable={false}
@@ -83,6 +88,7 @@ describe('swap controls', () => {
                 swapAvailable
                 bankroll={invalid({ swaps: 2 })}
                 onSwapped={jest.fn()}
+                onChooseSwap={() => {}}
                 swapBack={swapBack}
             />,
         );

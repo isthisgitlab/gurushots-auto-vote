@@ -1,428 +1,13 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
-import { TagsField } from './SettingInput';
-import { useScenarios } from '@/api/useScenarios';
-import { interp } from '@/utils/interp';
-import {
-    hasRuleCondition,
-    rulePatterns,
-    ruleTitleModes,
-    sortRulesByDefaultOrder,
-} from '../../../settings/challengeRules';
+import { RuleProfileSelect, RuleScenarioSelect, RuleTagsField, TAG_FIELDS } from './RuleFields';
+import { RuleTitleList } from './RuleTitleList';
+import { RuleClassConditions } from './RuleConditions';
+import { RuleBehaviour } from './RuleBehaviour';
+import { hasRuleCondition, rulePatterns, sortRulesByDefaultOrder } from '../../../settings/challengeRules';
 
 import type { LooseRecord, TitleRule } from '../../../types/settings';
-
-/**
- * A rule edit merged over the rule. A cleared field is '' (inherit / any)
- * until the settings sanitizer drops it on save, so a patch is loose.
- */
-type RulePatchHandler = (patch: LooseRecord) => void;
-
-/**
- * The props of one rule-bound field.
- */
-type RuleFieldProps = { rule: TitleRule; settingKey: string; labelKey: string; onPatch: RulePatchHandler };
-
-// Tri-state boolean override. '' = inherit (the key is omitted from the saved
-// rule entirely, so the rule never freezes today's default into storage);
-// 'on'/'off' are explicit. Kept as strings because a <select> value is a string
-// and `false` would otherwise round-trip through '' and read as "inherit".
-const TRISTATE = { true: 'on', false: 'off' };
-
-const triValue = (value: unknown): string => (value === true || value === false ? TRISTATE[`${value}`] : '');
-
-const triPatch = (key: string, raw: string): LooseRecord => ({
-    [key]: raw === 'on' ? true : raw === 'off' ? false : '',
-});
-
-/**
- * Photo counts a rule may be keyed on. GuruShots challenges carry at most four
- * submissions, and the settings sanitizer bounds the stored value independently
- * — this list only decides what the dropdown offers.
- */
-const PICS_CHOICES = [1, 2, 3, 4];
-
-// Mirrors MAX_RULE_RUNTIME_HOURS in settings/challengeRules.ts; the sanitizer is
-// the real gate.
-const MAX_RUNTIME_HOURS = 2000;
-
-function TristateSelect({ rule, settingKey, labelKey, onPatch }: RuleFieldProps) {
-    const { t } = useTranslation();
-    return (
-        <div className="flex flex-col gap-1">
-            <span className="text-sm">{t(labelKey)}</span>
-            <select
-                aria-label={t(labelKey)}
-                className="select select-sm w-full"
-                value={triValue(rule[settingKey])}
-                onChange={(event) => onPatch(triPatch(settingKey, event.currentTarget.value))}
-            >
-                <option value="">{t('app.titleRuleInherit')}</option>
-                <option value="on">{t('app.titleRuleOn')}</option>
-                <option value="off">{t('app.titleRuleOff')}</option>
-            </select>
-        </div>
-    );
-}
-
-/**
- * A number field that distinguishes "empty" from an explicit 0.
- *
- * An empty field is saved as '' — for a behaviour override that means inherit,
- * for a runtime condition "any length" — and the settings sanitizer drops it.
- * 0 is the explicit "off" value for an override, so this cannot just coerce
- * with Number().
- */
-function RuleNumberField({
-    rule,
-    settingKey,
-    labelKey,
-    unitKey,
-    placeholderKey,
-    min,
-    max,
-    onPatch,
-}: RuleFieldProps & { unitKey: string; placeholderKey: string; min: number; max: number }) {
-    const { t } = useTranslation();
-    const raw = rule[settingKey];
-    return (
-        <div className="flex flex-col gap-1">
-            <span className="text-sm">{t(labelKey)}</span>
-            {/* A div, not a <label>: the input carries its own aria-label, and a
-                wrapping label without a matching id trips jsx-a11y/label-has-for. */}
-            <div className="input input-sm flex items-center gap-2">
-                <input
-                    type="number"
-                    min={min}
-                    max={max}
-                    step="1"
-                    className="grow"
-                    aria-label={t(labelKey)}
-                    placeholder={t(placeholderKey)}
-                    // A stored number or a draft ''; the DOM coerces either.
-                    value={raw === null || raw === undefined ? '' : (raw as number | string)}
-                    onChange={(event) => {
-                        const next = event.currentTarget.value;
-                        onPatch({ [settingKey]: next === '' ? '' : Number(next) });
-                    }}
-                />
-                <span className="text-xs opacity-60">{t(unitKey)}</span>
-            </div>
-        </div>
-    );
-}
-
-// Runtime-range conditions: any-length when blank.
-const RUNTIME_FIELDS = [
-    { settingKey: 'minHours', labelKey: 'app.titleRuleMinHours' },
-    { settingKey: 'maxHours', labelKey: 'app.titleRuleMaxHours' },
-].map((field) => ({
-    ...field,
-    unitKey: 'app.unitHours',
-    placeholderKey: 'app.titleRuleAnyLength',
-    min: 1,
-    max: MAX_RUNTIME_HOURS,
-}));
-
-// Inline behaviour overrides: inherit when blank.
-const TRISTATE_OVERRIDES = [
-    { settingKey: 'autoJoin', labelKey: 'app.titleRuleAutoJoin' },
-    { settingKey: 'autoFill', labelKey: 'app.titleRuleAutoFill' },
-];
-const JOIN_TIMING_FIELDS = [
-    {
-        settingKey: 'autoJoinAfterPercentElapsed',
-        labelKey: 'app.titleRulePercentElapsed',
-        unitKey: 'app.unitPercent',
-        placeholderKey: 'app.titleRuleJoinWindowPlaceholder',
-        min: 0,
-        max: 99,
-    },
-    {
-        settingKey: 'autoJoinWithinHoursOfEnd',
-        labelKey: 'app.titleRuleJoinWindow',
-        unitKey: 'app.unitHours',
-        placeholderKey: 'app.titleRuleJoinWindowPlaceholder',
-        min: 0,
-        max: 720,
-    },
-];
-
-// Must/Should Include PHOTO tags merged in at fill time.
-const TAG_FIELDS = [
-    { settingKey: 'mustIncludeTags', labelKey: 'app.mustIncludeTags' },
-    { settingKey: 'shouldIncludeTags', labelKey: 'app.shouldIncludeTags' },
-];
-
-function RuleProfileSelect({
-    rule,
-    profiles,
-    onPatch,
-}: {
-    rule: TitleRule;
-    profiles: Record<string, unknown>;
-    onPatch: RulePatchHandler;
-}) {
-    const { t } = useTranslation();
-    const names = Object.keys(profiles).sort();
-    return (
-        <div className="flex flex-col gap-1">
-            <span className="text-sm">{t('app.titleRuleProfile')}</span>
-            <select
-                aria-label={t('app.titleRuleProfile')}
-                className="select select-sm w-full"
-                value={rule.profile ?? ''}
-                onChange={(event) => onPatch({ profile: event.currentTarget.value })}
-            >
-                <option value="">{t('app.none')}</option>
-                {names.map((name) => (
-                    <option key={name} value={name}>
-                        {name}
-                    </option>
-                ))}
-            </select>
-        </div>
-    );
-}
-
-// The scenario the rule assigns inline ('' = inherit). A name that no longer
-// exists stays listed, marked missing, like the per-challenge picker.
-function RuleScenarioSelect({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchHandler }) {
-    const { t } = useTranslation();
-    const { scenarios } = useScenarios();
-    const names = Object.keys(scenarios);
-    // The sanitizer stores `scenario` as a name string.
-    const current = (rule.scenario ?? '') as string;
-    return (
-        <div className="flex flex-col gap-1">
-            <span className="text-sm">{t('app.scenario')}</span>
-            <select
-                aria-label={t('app.scenario')}
-                className="select select-sm w-full"
-                value={current}
-                onChange={(event) => onPatch({ scenario: event.currentTarget.value })}
-            >
-                <option value="">{t('app.titleRuleInherit')}</option>
-                {names.map((name) => (
-                    <option key={name} value={name}>
-                        {name}
-                    </option>
-                ))}
-                {current !== '' && !names.includes(current) && (
-                    <option value={current}>{interp(t('app.scenarioMissingOption'), { name: current })}</option>
-                )}
-            </select>
-        </div>
-    );
-}
-
-// Mirrors MAX_TITLES_PER_RULE in settings/titleRuleSanitize.ts; the sanitizer is the real gate.
-const MAX_TITLES_PER_RULE = 50;
-
-// The editable title list of a rule. Stored rules carry `titles` only when they
-// list more than one (with `title` mirroring the first). Always at least one row
-// so a fresh rule shows an input.
-const ruleTitleRows = (rule: TitleRule): string[] => {
-    if (Array.isArray(rule.titles) && rule.titles.length > 0) return rule.titles;
-    return [rule.title ?? ''];
-};
-
-// Patch for a new title list. `title` follows the first row so the saved shape
-// stays readable by single-title code; the sanitizer drops empty rows.
-const titlesPatch = (titles: string[]): LooseRecord => ({ titles, title: titles[0] ?? '' });
-
-function RuleTitleRow({
-    title,
-    mode,
-    index,
-    count,
-    onTitleChange,
-    onModeChange,
-    onRemove,
-}: {
-    title: string;
-    mode: string;
-    index: number;
-    count: number;
-    onTitleChange: (title: string) => void;
-    onModeChange: (mode: string) => void;
-    onRemove: () => void;
-}) {
-    const { t } = useTranslation();
-    return (
-        <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
-            <input
-                type="text"
-                className="input input-sm min-w-32 flex-1"
-                placeholder={t('app.titleTagRuleTitlePlaceholder')}
-                aria-label={`${t('app.titleTagRuleTitle')} ${index + 1}`}
-                value={title}
-                onChange={(e) => onTitleChange(e.currentTarget.value)}
-            />
-            <select
-                aria-label={`${t('app.titleRuleMatch')} ${index + 1}`}
-                className="select select-sm w-32"
-                disabled={typeof title !== 'string' || !title.trim()}
-                value={typeof title === 'string' && title.trim() ? mode : 'exact'}
-                onChange={(e) => onModeChange(e.currentTarget.value)}
-            >
-                <option value="exact">{t('app.titleRuleMatchExact')}</option>
-                <option value="starts">{t('app.titleRuleMatchStarts')}</option>
-                <option value="contains">{t('app.titleRuleMatchContains')}</option>
-            </select>
-            {count > 1 && (
-                <button
-                    type="button"
-                    className="btn btn-outline btn-sm"
-                    title={t('app.removeTitleRuleTitle')}
-                    aria-label={`${t('app.removeTitleRuleTitle')} ${index + 1}`}
-                    onClick={onRemove}
-                >
-                    ×
-                </button>
-            )}
-        </div>
-    );
-}
-
-function RuleTitleList({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchHandler }) {
-    const { t } = useTranslation();
-    const titles = ruleTitleRows(rule);
-    const modes = ruleTitleModes(rule);
-    const setTitles = (next: string[], nextModes: string[]) =>
-        onPatch({ ...titlesPatch(next), ...(rule.titleMatchModes ? { titleMatchModes: nextModes } : {}) });
-    return (
-        <div className="space-y-2">
-            {titles.map((title, titleIndex) => (
-                // Index key: rows are only appended or removed, and the input is controlled.
-                <RuleTitleRow
-                    key={titleIndex}
-                    title={title}
-                    mode={modes[titleIndex] ?? 'exact'}
-                    index={titleIndex}
-                    count={titles.length}
-                    onTitleChange={(next) =>
-                        setTitles(
-                            titles.map((v, i) => (i === titleIndex ? next : v)),
-                            modes,
-                        )
-                    }
-                    onModeChange={(next) =>
-                        onPatch({
-                            ...(titles.length === 1 ? { match: next } : {}),
-                            titleMatchModes: modes.map((mode, i) => (i === titleIndex ? next : mode)),
-                        })
-                    }
-                    onRemove={() =>
-                        setTitles(
-                            titles.filter((_, i) => i !== titleIndex),
-                            modes.filter((_, i) => i !== titleIndex),
-                        )
-                    }
-                />
-            ))}
-            <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                disabled={titles.length >= MAX_TITLES_PER_RULE}
-                onClick={() => setTitles([...titles, ''], [...modes, rule.match ?? 'exact'])}
-            >
-                + {t('app.addTitleRuleTitle')}
-            </button>
-        </div>
-    );
-}
-
-function RuleClassConditions({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchHandler }) {
-    const { t } = useTranslation();
-    return (
-        <div className="grid gap-2 sm:grid-cols-2">
-            <div className="flex flex-col gap-1">
-                <span className="text-sm">{t('app.titleRuleChallengeTag')}</span>
-                <input
-                    type="text"
-                    className="input input-sm w-full"
-                    placeholder={t('app.titleRuleChallengeTagPlaceholder')}
-                    aria-label={t('app.titleRuleChallengeTag')}
-                    value={rule.challengeTag ?? ''}
-                    onChange={(e) => onPatch({ challengeTag: e.currentTarget.value })}
-                />
-            </div>
-            <div className="flex flex-col gap-1">
-                <span className="text-sm">{t('app.titleRuleType')}</span>
-                <input
-                    type="text"
-                    list="gs-rule-types"
-                    className="input input-sm w-full"
-                    placeholder={t('app.titleRuleTypePlaceholder')}
-                    aria-label={t('app.titleRuleType')}
-                    value={rule.type ?? ''}
-                    onChange={(e) => onPatch({ type: e.currentTarget.value })}
-                />
-            </div>
-            <div className="flex flex-col gap-1">
-                <span className="text-sm">{t('app.titleRulePics')}</span>
-                <select
-                    aria-label={t('app.titleRulePics')}
-                    className="select select-sm w-full"
-                    value={String(rule.pics ?? '')}
-                    onChange={(event) => {
-                        const next = event.currentTarget.value;
-                        onPatch({ pics: next === '' ? '' : Number(next) });
-                    }}
-                >
-                    <option value="">{t('app.titleRuleAnyPics')}</option>
-                    {PICS_CHOICES.map((count) => (
-                        <option key={count} value={count}>
-                            {count}
-                        </option>
-                    ))}
-                </select>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-                {RUNTIME_FIELDS.map((field) => (
-                    <RuleNumberField key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
-                ))}
-            </div>
-        </div>
-    );
-}
-
-function RuleBehaviour({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchHandler }) {
-    const { t } = useTranslation();
-    return (
-        <div className="space-y-2">
-            <span className="text-sm font-medium">{t('app.titleRuleOverridesLabel')}</span>
-            <div className="grid gap-2 sm:grid-cols-2">
-                {TRISTATE_OVERRIDES.map((field) => (
-                    <TristateSelect key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
-                ))}
-                {JOIN_TIMING_FIELDS.map((field) => (
-                    <RuleNumberField key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
-                ))}
-            </div>
-        </div>
-    );
-}
-
-function RuleTagsField({ index, rule, settingKey, labelKey, onPatch }: RuleFieldProps & { index: number }) {
-    const { t } = useTranslation();
-    const id = `title-rule-${index}-${settingKey}`;
-    return (
-        <div className="flex flex-col">
-            <label className="label py-1" htmlFor={id}>
-                <span className="text-sm">{t(labelKey)}</span>
-            </label>
-            <TagsField
-                id={id}
-                settingKey={settingKey}
-                value={rule[settingKey]}
-                onChange={(_key, tags) => onPatch({ [settingKey]: tags })}
-                placeholder={t('app.tagsPlaceholder')}
-            />
-        </div>
-    );
-}
+import type { RulePatchHandler } from './RuleFields';
 
 /**
  * Position badge plus the reorder / remove controls of one rule card.
@@ -442,7 +27,7 @@ function RuleHeader({
     return (
         <div className="flex items-center gap-2">
             <span className="badge badge-ghost badge-sm">{index + 1}</span>
-            <span className="text-sm font-medium flex-1">{t('app.titleRuleConditionsLabel')}</span>
+            <span className="text-sm font-medium">{t('app.titleRuleConditionsLabel')}</span>
             <button
                 type="button"
                 className="btn btn-outline btn-sm"
@@ -464,9 +49,9 @@ function RuleHeader({
                 ↓
             </button>
             <button
-                className="btn btn-outline btn-error btn-sm"
+                className="btn btn-error btn-sm ml-auto"
                 title={t('app.removeTitleTagRule')}
-                aria-label={t('app.removeTitleTagRule')}
+                aria-label={`${t('app.removeTitleTagRule')} ${index + 1}`}
                 onClick={onRemove}
             >
                 ×
@@ -478,7 +63,7 @@ function RuleHeader({
 // A rule with conditions but no title reaches a whole class of challenges, so
 // switching joining or auto-submit ON there spends coins / photos broadly.
 const isBroadSpendingRule = (rule: TitleRule): boolean =>
-    rulePatterns(rule).length === 0 && hasRuleCondition(rule) && (rule.autoJoin === true || rule.autoFill === true);
+    rulePatterns(rule).length === 0 && hasRuleCondition(rule) && (rule.autoJoin === true || rule.autoSubmit === true);
 
 /**
  * One rule: conditions, then the behaviour it applies to matching challenges.
@@ -509,7 +94,7 @@ function RuleCard({
             </div>
             <RuleTitleList rule={rule} onPatch={onPatch} />
             <RuleClassConditions rule={rule} onPatch={onPatch} />
-            <p className="text-xs opacity-60">{t('app.titleRuleConditionsHint')}</p>
+            <p className="text-xs text-base-content/70">{t('app.titleRuleConditionsHint')}</p>
             <RuleProfileSelect rule={rule} profiles={profiles} onPatch={onPatch} />
             <RuleScenarioSelect rule={rule} onPatch={onPatch} />
             <RuleBehaviour rule={rule} onPatch={onPatch} />
@@ -533,27 +118,34 @@ function RuleCard({
  * MATCHING: a rule matches on any mix of titles (any one is enough; each title's
  * mode is is-exactly, starts-with or contains), the
  * challenge's OWN tag (Exhibition, Comm, …, not a photo tag), its type, its
- * photo count and its runtime range in hours. Every filled condition must hold.
+ * photo count, its runtime range in hours and its close time of day (the end time
+ * on the card, app timezone, any date). Every filled condition must hold.
  *
  * ORDER: the list order is the precedence — for each setting the first matching
  * rule that sets it wins (see `ruleValuesFor` in settings/ruleResolution.ts). The user reorders
  * with the arrows or resets to the default order (settings/challengeRules.ts
  * `sortRulesByDefaultOrder`: title rules, then photos + runtime, photos,
- * runtime).
+ * runtime, close time). Sorting puts rules with a title, more conditions, a photo
+ * count or a length ahead of a rule keyed only on its close time, so such a rule
+ * that must override them has to be moved back up.
  *
  * BEHAVIOUR: a rule inherits an optional named profile, merges optional
  * Must/Should Include PHOTO tags at fill time, and may override auto-join,
- * auto-submit and the join timing INLINE. Inline wins over the profile. An
- * omitted key means "inherit"; the editor spells that as '' and the settings
- * sanitizer drops it.
+ * auto-submit, the join timing, Submit Only Chosen Photos and the Chosen
+ * Photos list INLINE. Inline wins over the profile. An omitted key means
+ * "inherit"; the editor spells that as '' and the settings sanitizer drops it.
+ * The chosen-photos list is the one array-valued inline key: '' inherits, an
+ * explicit [] means "no chosen photos".
  *
  * Controlled: `value` is the rules array and `onChange(nextRules)` is called
  * with a new array on every edit. Each rule is
  * `{ title: string, titles?: string[], match?: 'exact'|'starts'|'contains', challengeTag?: string,
  *    type?: string, pics?: number, minHours?: number, maxHours?: number,
+ *    closesAt?: string, closesAtTimes?: string[],
  *    profile?: string, mustIncludeTags: string[], shouldIncludeTags: string[],
- *    autoJoin?: boolean, autoFill?: boolean, autoJoinWithinHoursOfEnd?: number,
- *    autoJoinAfterPercentElapsed?: number }`.
+ *    autoJoin?: boolean, autoSubmit?: boolean, autoJoinWithinHoursOfEnd?: number,
+ *    autoJoinAfterPercentElapsed?: number, chosenPhotos?: string[],
+ *    chosenPhotosOnly?: boolean }`.
  * `types` feeds the challenge-type suggestions; the field stays free text.
  */
 export function TitleTagRulesEditor({
@@ -586,11 +178,11 @@ export function TitleTagRulesEditor({
 
     return (
         <div className="space-y-3">
-            {rules.length === 0 && <p className="text-sm text-base-content/60">{t('app.noTitleTagRules')}</p>}
+            {rules.length === 0 && <p className="text-sm text-base-content/70">{t('app.noTitleTagRules')}</p>}
 
             {rules.length > 1 && (
                 <div className="flex items-center gap-2">
-                    <p className="text-xs opacity-60 flex-1">{t('app.titleRuleOrderHint')}</p>
+                    <p className="text-xs text-base-content/70 flex-1">{t('app.titleRuleOrderHint')}</p>
                     <button
                         type="button"
                         className="btn btn-outline btn-sm"

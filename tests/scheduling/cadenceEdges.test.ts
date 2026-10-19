@@ -123,18 +123,22 @@ describe('createCadenceChain transport fallbacks', () => {
         expect(deps.onScheduled).toHaveBeenCalledWith(3 * MS_PER_MINUTE);
     });
 
-    test('an unreadable last-minute cadence falls back to 1 minute', async () => {
-        const deps = makeDeps({ resolveLastMinuteCheckMinutes: jest.fn(() => 'often') });
-        const inWindow = {
-            id: 2,
-            title: 'In Window',
-            type: 'regular',
-            close_time: Math.floor(Date.now() / 1000) + 120,
-        };
-        await createCadenceChain(invalid(deps)).scheduleNext(invalid([inWindow]));
-        expect(deps.log.decisionError).not.toHaveBeenCalled();
-        expect(deps.onScheduled).toHaveBeenCalledWith(MS_PER_MINUTE);
-    });
+    // The resolver is a dependency boundary (over IPC in the GUI), so a NaN here would spin the scheduler.
+    test.each(['often', Number.NaN, undefined, null, 0])(
+        'an unreadable last-minute cadence (%p) falls back to 1 minute',
+        async (unreadable) => {
+            const deps = makeDeps({ resolveLastMinuteCheckMinutes: jest.fn(() => invalid<number>(unreadable)) });
+            const inWindow = {
+                id: 2,
+                title: 'In Window',
+                type: 'regular',
+                close_time: Math.floor(Date.now() / 1000) + 120,
+            };
+            await createCadenceChain(invalid(deps)).scheduleNext(invalid([inWindow]));
+            expect(deps.log.decisionError).not.toHaveBeenCalled();
+            expect(deps.onScheduled).toHaveBeenCalledWith(MS_PER_MINUTE);
+        },
+    );
 });
 
 describe('overslept hook rejection', () => {

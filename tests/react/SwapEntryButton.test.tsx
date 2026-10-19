@@ -4,8 +4,9 @@
  * previewed photo. A swap that can't happen is reported inline with no modal.
  */
 
-import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
+import { act, render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { SwapEntryButton, SwapBackButton } from '@/components/app/SwapEntryButton';
+import type { OpenSwapPick } from '@/components/app/SwapEntryButton';
 import type { SwapBackOffer } from '@/api/useSwapBacks';
 import { mockTranslator } from './helpers/setup';
 
@@ -14,6 +15,7 @@ const CANDIDATE = { id: 'cccccccccccccccccccccccccccccccc', member_id: 'bbbbbbbb
 
 const renderButton = (props = {}) => {
     const onSpent = jest.fn();
+    const onChoose = jest.fn<void, Parameters<OpenSwapPick>>();
     render(
         <SwapEntryButton
             entry={ENTRY}
@@ -21,10 +23,11 @@ const renderButton = (props = {}) => {
             bankroll={{ keys: 0, swaps: 4, fills: 0, coins: 0 }}
             warnActioned={false}
             onSpent={onSpent}
+            onChoose={onChoose}
             {...props}
         />,
     );
-    return { onSpent };
+    return { onSpent, onChoose };
 };
 
 const swapButton = () => screen.getByText(/app\.currencySwap$/).closest('button')!;
@@ -38,10 +41,18 @@ test('preview spends nothing and shows the labelled current / replacement photos
     renderButton();
     fireEvent.click(swapButton());
     expect(await screen.findByText('app.currencySwapTitle')).toBeTruthy();
-    expect(window.api.previewSwapPhoto).toHaveBeenCalledWith(7, ENTRY.id);
+    expect(window.api.previewSwapPhoto).toHaveBeenCalledWith(7, ENTRY.id, undefined);
     expect(window.api.swapEntryPhoto).not.toHaveBeenCalled();
     expect(screen.getByAltText('app.currencySwapCurrent')).toBeTruthy();
     expect(screen.getByAltText('app.currencySwapReplacement')).toBeTruthy();
+});
+
+test("the Swap button and its confirm modal's Spend are carmine", async () => {
+    renderButton();
+    expect(swapButton().className).toContain('btn-latvian');
+    fireEvent.click(swapButton());
+    await screen.findByText('app.currencySwapTitle');
+    expect(screen.getByText('app.currencySpend').closest('button')!.className).toContain('btn-latvian');
 });
 
 test('the button spins while the preview is in flight', async () => {
@@ -63,14 +74,106 @@ test('Spend swaps exactly the previewed photo with confirmed=true', async () => 
     expect(window.api.swapEntryPhoto).toHaveBeenCalledWith(7, ENTRY.id, CANDIDATE.id, true);
 });
 
-test('no alternative: inline message, no modal', async () => {
+test('no alternative: the card swap picker opens with the reason; no modal, no inline error', async () => {
     window.api.previewSwapPhoto = jest
         .fn()
         .mockResolvedValue({ success: false, outcome: 'no-alternative', error: 'no-alternative' });
-    renderButton();
+    const { onChoose } = renderButton({ warnActioned: true, warnPinned: 'turbo' });
     fireEvent.click(swapButton());
-    expect(await screen.findByText('app.currencyOutcomeNoAlternative')).toBeTruthy();
+    await waitFor(() => expect(onChoose).toHaveBeenCalledTimes(1));
+    expect(onChoose).toHaveBeenCalledWith(
+        ENTRY,
+        { actioned: true, pinned: 'turbo' },
+        swapButton(),
+        'app.swapPickNoSuggestion',
+    );
     expect(screen.queryByText('app.currencySwapTitle')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(swapButton().className).not.toContain('btn-error');
+});
+
+const pickButton = () => screen.getByText(/app\.swapPick$/).closest('button')!;
+
+test('Pick… opens the card picker straight away with the entry, the warnings and the Pick button', () => {
+    const { onChoose } = renderButton({ warnActioned: true, warnPinned: 'boost' });
+    expect(pickButton().getAttribute('title')).toBe('app.swapPickLabel');
+    expect(screen.getByText('app.swapPickLabel').id).toBe(pickButton().getAttribute('aria-describedby'));
+    fireEvent.click(pickButton());
+    expect(onChoose).toHaveBeenCalledTimes(1);
+    expect(onChoose).toHaveBeenCalledWith(ENTRY, { actioned: true, pinned: 'boost' }, pickButton());
+    expect(window.api.previewSwapPhoto).not.toHaveBeenCalled();
+    expect(screen.queryByText('app.currencySwapTitle')).toBeNull();
+});
+
+test('Pick… clears a failure shown under the Swap button', async () => {
+    window.api.previewSwapPhoto = jest
+        .fn()
+        .mockResolvedValue({ success: false, outcome: 'api-failed', error: 'api-failed' });
+    const { onChoose } = renderButton();
+    fireEvent.click(swapButton());
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    fireEvent.click(pickButton());
+    expect(onChoose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).toBeNull();
+});
+
+test('Pick… is disabled while the preview is in flight', async () => {
+    let resolve: ((value: Awaited<ReturnType<Window['api']['previewSwapPhoto']>>) => void) | undefined;
+    window.api.previewSwapPhoto = jest.fn(() => new Promise((r) => (resolve = r)));
+    renderButton();
+    expect(pickButton().disabled).toBe(false);
+    fireEvent.click(swapButton());
+    await waitFor(() => expect(pickButton().disabled).toBe(true));
+    resolve!({ success: false, outcome: 'api-failed', error: 'api-failed' });
+    await waitFor(() => expect(pickButton().disabled).toBe(false));
+});
+
+test('Choose another photo… closes the suggestion and hands over to the card picker', async () => {
+    const { onChoose, onSpent } = renderButton({ warnPinned: 'boost' });
+    fireEvent.click(swapButton());
+    fireEvent.click(await screen.findByText('app.currencySwapChoose'));
+    await waitFor(() => expect(screen.queryByText('app.currencySwapTitle')).toBeNull());
+    expect(onChoose).toHaveBeenCalledWith(ENTRY, { actioned: false, pinned: 'boost' }, swapButton());
+    expect(window.api.swapEntryPhoto).not.toHaveBeenCalled();
+    expect(onSpent).not.toHaveBeenCalled();
+});
+
+test('Choose another photo… clears an earlier failure under the button', async () => {
+    window.api.swapEntryPhoto = jest
+        .fn()
+        .mockResolvedValue({ success: false, outcome: 'stale-candidate', error: 'stale-candidate' });
+    const { onChoose } = renderButton();
+    fireEvent.click(swapButton());
+    fireEvent.click(await screen.findByText('app.currencySpend'));
+    expect(await screen.findByText('app.currencyOutcomeStaleCandidate')).toBeTruthy();
+    fireEvent.click(swapButton());
+    fireEvent.click(await screen.findByText('app.currencySwapChoose'));
+    expect(onChoose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('app.currencyOutcomeStaleCandidate')).toBeNull();
+});
+
+test('a failed swap stays until dismissed — no timer clears it — and a new attempt starts clean', async () => {
+    jest.useFakeTimers();
+    try {
+        window.api.previewSwapPhoto = jest
+            .fn()
+            .mockResolvedValueOnce({ success: false, outcome: 'api-failed', error: 'api-failed' })
+            .mockResolvedValueOnce({ success: true, outcome: 'ok', candidate: CANDIDATE });
+        renderButton();
+        fireEvent.click(swapButton());
+        await act(async () => {
+            await Promise.resolve();
+        });
+        expect(screen.getByRole('alert').textContent).toContain('app.currencyOutcomeFailed');
+
+        act(() => jest.advanceTimersByTime(60_000));
+        expect(screen.getByRole('alert')).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
+        expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+        jest.useRealTimers();
+    }
 });
 
 test('stale candidate on commit: modal closes and the reason is shown', async () => {
@@ -95,6 +198,16 @@ test('a not-available commit still refreshes (the state moved under us)', async 
     window.api.swapEntryPhoto = jest
         .fn()
         .mockResolvedValue({ success: false, outcome: 'not-available', error: 'not-available' });
+    const { onSpent } = renderButton();
+    fireEvent.click(swapButton());
+    fireEvent.click(await screen.findByText('app.currencySpend'));
+    await waitFor(() => expect(onSpent).toHaveBeenCalledTimes(1));
+});
+
+test('an already-entered commit refreshes too: the card still offered that photo', async () => {
+    window.api.swapEntryPhoto = jest
+        .fn()
+        .mockResolvedValue({ success: false, outcome: 'already-entered', error: 'already-entered' });
     const { onSpent } = renderButton();
     fireEvent.click(swapButton());
     fireEvent.click(await screen.findByText('app.currencySpend'));
@@ -145,6 +258,18 @@ describe('SwapBackButton', () => {
         expect(window.api.swapBackEntryPhoto).toHaveBeenCalledWith(7, ENTRY.id, true);
     });
 
+    test('the Swap back button is carmine until a failure turns it red', async () => {
+        window.api.swapBackEntryPhoto = jest.fn().mockResolvedValue({ success: false, outcome: 'failed' });
+        renderSwapBack();
+        const button = screen.getByText(/app\.currencySwapBack$/).closest('button')!;
+        expect(button.className).toContain('btn-latvian');
+        fireEvent.click(button);
+        fireEvent.click(screen.getByText('app.currencySpend'));
+        await screen.findByRole('alert');
+        expect(button.className).toContain('btn-error');
+        expect(button.className).not.toContain('btn-latvian');
+    });
+
     test('Cancel spends nothing', () => {
         renderSwapBack();
         fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
@@ -174,6 +299,16 @@ describe('SwapBackButton', () => {
         await waitFor(() => expect(onSpent).toHaveBeenCalledTimes(1));
         expect(screen.getByRole('alert')).toBeTruthy();
         expect(screen.getByText(/app\.currencySwapBack$/).closest('button')!.className).toContain('btn-error');
+    });
+
+    test('Dismiss clears a swap-back failure', async () => {
+        window.api.swapBackEntryPhoto = jest.fn().mockResolvedValue({ success: false, outcome: 'failed' });
+        renderSwapBack();
+        fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
+        fireEvent.click(screen.getByText('app.currencySpend'));
+        await screen.findByRole('alert');
+        fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
+        expect(screen.queryByRole('alert')).toBeNull();
     });
 
     test('a plain failure shows the reason without refreshing', async () => {

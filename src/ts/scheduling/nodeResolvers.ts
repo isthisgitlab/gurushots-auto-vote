@@ -9,6 +9,7 @@
 
 import * as settings from '../settings';
 import { getScenarioStatus, scenarioWakeInput } from '../services/scenarioStatus';
+import { isManualPhotosOnly } from '../services/manualPhotosOnly';
 
 import type {
     ResolveThreshold,
@@ -39,14 +40,14 @@ const resolveScheduledFill = ((challengeId: string) => ({
 // Per-challenge pre-final-window top-up config for the cadence cap (./thresholdWindow/leadWindows.ts).
 // Enabled only when BOTH the final-window feature and this opt-in are on — matching the
 // rule engine's gate in _runVotingRules (services/decisions/ruleEngine.ts). leadSec is minutes → seconds and
-// durationSec is the configurable final-window length; thresholdWindow/leadWindows.ts re-guards a
-// non-positive/NaN value for both.
+// durationSec is the configurable final-window length. Both are validated settings; thresholdWindow/leadWindows.ts
+// also guards them because the GUI's async resolvers hand it values over IPC.
 const resolveFinalWindowTopUp = ((challengeId: string) => ({
     enabled:
         settings.getEffectiveSetting('voteBeforeFinalWindow', challengeId) === true &&
         settings.getEffectiveSetting('useFinalWindowExposure', challengeId) === true,
-    leadSec: Number(settings.getEffectiveSetting('voteBeforeFinalWindowLeadMin', challengeId)) * 60,
-    durationSec: Number(settings.getEffectiveSetting('finalWindowDuration', challengeId)),
+    leadSec: settings.getEffectiveSetting('voteBeforeFinalWindowLeadMin', challengeId) * 60,
+    durationSec: settings.getEffectiveSetting('finalWindowDuration', challengeId),
 })) satisfies ResolveFinalWindowTopUp;
 
 // Per-challenge pre-boost fill config for the cadence cap (./thresholdWindow/leadWindows.ts).
@@ -55,16 +56,16 @@ const resolveFinalWindowTopUp = ((challengeId: string) => ({
 // is part of the gate because it blocks every vote ahead of the pre-boost branch in
 // _runVotingRules, which would otherwise make this cap wake a cycle that can only no-op.
 // Both boost windows are passed through as numbers because the apply instant depends on
-// the challenge's live boost state, which only thresholdWindow/leadWindows.ts sees; it re-guards the
-// `0 = off` sentinel and an out-of-range leadSec.
+// the challenge's live boost state, which only thresholdWindow/leadWindows.ts sees; it applies the
+// `0 = off` sentinel and also guards an out-of-range leadSec, because the GUI's async resolvers hand it values over IPC.
 const resolveBoostPrefill = ((challengeId: string) => ({
     enabled:
         settings.getEffectiveSetting('voteBeforeBoost', challengeId) === true &&
         settings.getEffectiveSetting('autoBoost', challengeId) === true &&
         settings.getEffectiveSetting('onlyBoost', challengeId) !== true,
-    leadSec: Number(settings.getEffectiveSetting('voteBeforeBoostLeadMin', challengeId)) * 60,
-    boostTimeSec: Number(settings.getEffectiveSetting('boostTime', challengeId)),
-    keyUnlockedBoostTimeSec: Number(settings.getEffectiveSetting('keyUnlockedBoostTime', challengeId)),
+    leadSec: settings.getEffectiveSetting('voteBeforeBoostLeadMin', challengeId) * 60,
+    boostTimeSec: settings.getEffectiveSetting('boostTime', challengeId),
+    keyUnlockedBoostTimeSec: settings.getEffectiveSetting('keyUnlockedBoostTime', challengeId),
 })) satisfies ResolveBoostPrefill;
 
 // Per-challenge currency-automation timing for the cadence cap (./thresholdWindow/ruleWakes.ts):
@@ -78,15 +79,16 @@ const currencyTimingOf = (
 ): RuleTiming | null =>
     settings.getEffectiveSetting(enableKey, challengeId) === true
         ? {
-              afterStartSec: Number(settings.getEffectiveSetting(`${prefix}AfterStart`, challengeId)),
-              beforeEndSec: Number(settings.getEffectiveSetting(`${prefix}BeforeEnd`, challengeId)),
-              afterPercent: Number(settings.getEffectiveSetting(`${prefix}AfterPercent`, challengeId)),
+              afterStartSec: settings.getEffectiveSetting(`${prefix}AfterStart`, challengeId),
+              beforeEndSec: settings.getEffectiveSetting(`${prefix}BeforeEnd`, challengeId),
+              afterPercent: settings.getEffectiveSetting(`${prefix}AfterPercent`, challengeId),
           }
         : null;
 
 const resolveCurrencyAuto = ((challengeId: string) => ({
     key: currencyTimingOf('autoKeyUnlock', 'autoKey', challengeId),
-    swap: currencyTimingOf('autoSwap', 'autoSwap', challengeId),
+    // Manual Only: no swap ever fires on its own, so the scheduler has no wake to hold for it.
+    swap: isManualPhotosOnly(settings, challengeId) ? null : currencyTimingOf('autoSwap', 'autoSwap', challengeId),
     fill: currencyTimingOf('autoExposureFill', 'autoExposureFill', challengeId),
 })) satisfies ResolveCurrencyAuto;
 

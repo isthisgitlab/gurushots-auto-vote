@@ -8,6 +8,7 @@
 
 import { renderHook, act, waitFor } from '@testing-library/preact';
 import { useSettingsForm, DEFAULT_UI_VALUES } from '@/hooks/useSettingsForm';
+import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { invalid } from '../helpers/invalid';
 
 type FormProps = Parameters<typeof useSettingsForm>[0];
@@ -22,7 +23,7 @@ const baseProps = (over: Partial<Record<keyof FormProps, unknown>> = {}) =>
         isOpen: true,
         schema,
         defaults: { exposure: 70, autoBoost: true },
-        settings: { ...DEFAULT_UI_VALUES, theme: 'dark', language: 'lv' },
+        settings: { app: { ...DEFAULT_UI_VALUES, theme: 'dark', language: 'lv' } },
         refetchSettings: jest.fn(),
         refetchSchema: jest.fn(),
         updateSetting: jest.fn().mockResolvedValue(undefined),
@@ -46,9 +47,8 @@ describe('useSettingsForm — open lifecycle', () => {
         expect(props.refetchSettings).toHaveBeenCalledTimes(1);
         expect(props.refetchSchema).toHaveBeenCalledTimes(1);
         expect(result.current.formValues).toEqual({ exposure: 70, autoBoost: true });
-        expect(result.current.originalFormValues).toEqual({ exposure: 70, autoBoost: true });
         expect(result.current.uiValues.theme).toBe('dark');
-        expect(result.current.originalUiValues!.language).toBe('lv');
+        expect(result.current.uiValues.language).toBe('lv');
     });
 
     test('a closed form neither refetches nor hydrates', () => {
@@ -58,16 +58,15 @@ describe('useSettingsForm — open lifecycle', () => {
         expect(props.refetchSettings).not.toHaveBeenCalled();
         expect(result.current.formValues).toEqual({});
         expect(result.current.uiValues).toEqual(DEFAULT_UI_VALUES);
-        expect(result.current.originalUiValues).toBeNull();
     });
 
     test('waits for defaults and settings to arrive before hydrating', () => {
         const props = baseProps({ defaults: null, settings: null });
         const { result, rerender } = renderForm(props);
-        expect(result.current.originalFormValues).toBeNull();
-        expect(result.current.originalUiValues).toBeNull();
+        expect(result.current.formValues).toEqual({});
+        expect(result.current.uiValues).toEqual(DEFAULT_UI_VALUES);
 
-        rerender({ ...props, defaults: { exposure: 5 }, settings: invalid({ theme: 'dark' }) });
+        rerender({ ...props, defaults: { exposure: 5 }, settings: invalid({ app: { theme: 'dark' } }) });
         expect(result.current.formValues).toEqual({ exposure: 5 });
         expect(result.current.uiValues.theme).toBe('dark');
     });
@@ -77,7 +76,11 @@ describe('useSettingsForm — open lifecycle', () => {
         const { result, rerender } = renderForm(props);
 
         act(() => result.current.handleFormChange('exposure', 42));
-        rerender({ ...props, defaults: { exposure: 1, autoBoost: false }, settings: invalid({ theme: 'light' }) });
+        rerender({
+            ...props,
+            defaults: { exposure: 1, autoBoost: false },
+            settings: invalid({ app: { theme: 'light' } }),
+        });
 
         expect(result.current.formValues.exposure).toBe(42);
         expect(result.current.uiValues.theme).toBe('dark');
@@ -99,12 +102,14 @@ describe('useSettingsForm — per-key fallback on hydrate', () => {
     test('arrays, strings and scalars each fall back with their own rule', () => {
         const props = baseProps({
             settings: {
-                customTimezones: 'not-an-array',
-                timezone: '',
-                language: 'lv',
-                stayLoggedIn: false,
-                apiMaxRetries: 0,
-                apiTimeout: null,
+                app: {
+                    customTimezones: 'not-an-array',
+                    timezone: '',
+                    language: 'lv',
+                    stayLoggedIn: false,
+                    apiMaxRetries: 0,
+                    apiTimeout: null,
+                },
             },
         });
         const { result } = renderForm(props);
@@ -112,8 +117,8 @@ describe('useSettingsForm — per-key fallback on hydrate', () => {
 
         // Array default: a non-array stored value is replaced.
         expect(ui.customTimezones).toEqual(DEFAULT_UI_VALUES.customTimezones);
-        // String default: '' counts as unset, a real string is kept.
-        expect(ui.timezone).toBe(DEFAULT_UI_VALUES.timezone);
+        // String default: '' counts as unset, a real string is kept; a timezone of '' is UTC, not unset.
+        expect(ui.timezone).toBe('UTC');
         expect(ui.language).toBe('lv');
         // Scalars: an explicit false / 0 is preserved; null falls back.
         expect(ui.stayLoggedIn).toBe(false);
@@ -121,8 +126,35 @@ describe('useSettingsForm — per-key fallback on hydrate', () => {
         expect(ui.apiTimeout).toBe(DEFAULT_UI_VALUES.apiTimeout);
     });
 
+    test('a missing timezone hydrates as the default zone; an empty one as UTC, with nothing to save', async () => {
+        const missing = renderForm(baseProps({ settings: { app: { language: 'lv' } } }));
+        expect(missing.result.current.uiValues.timezone).toBe(DEFAULT_UI_VALUES.timezone);
+
+        const props = baseProps({ settings: { app: { ...DEFAULT_UI_VALUES, timezone: '' } } });
+        const { result } = renderForm(props);
+        expect(result.current.uiValues.timezone).toBe('UTC');
+        expect(result.current.isDirty()).toBe(false);
+
+        await act(async () => {
+            await result.current.commit();
+        });
+        expect(props.updateSetting).not.toHaveBeenCalled();
+    });
+
+    test('a stored timezone no clock knows hydrates as UTC, with nothing to save', async () => {
+        const props = baseProps({ settings: { app: { ...DEFAULT_UI_VALUES, timezone: 'Europe/Rgia' } } });
+        const { result } = renderForm(props);
+        expect(result.current.uiValues.timezone).toBe('UTC');
+        expect(result.current.isDirty()).toBe(false);
+
+        await act(async () => {
+            await result.current.commit();
+        });
+        expect(props.updateSetting).not.toHaveBeenCalled();
+    });
+
     test('a stored array is kept as-is', () => {
-        const props = baseProps({ settings: { customTimezones: ['Asia/Tokyo'] } });
+        const props = baseProps({ settings: { app: { customTimezones: ['Asia/Tokyo'] } } });
         const { result } = renderForm(props);
         expect(result.current.uiValues.customTimezones).toEqual(['Asia/Tokyo']);
     });
@@ -320,5 +352,135 @@ describe('useSettingsForm — commit and revert', () => {
         act(() => result.current.revert());
         expect(result.current.formValues).toEqual({ exposure: 1 });
         expect(result.current.uiValues).toEqual(DEFAULT_UI_VALUES);
+    });
+});
+
+describe('useSettingsForm — every chosen-photos list removed while the modal is open', () => {
+    const photosSchema = { ...schema, chosenPhotos: { type: 'photos', default: [] } };
+
+    test('the field reads empty, and neither commit nor revert writes the old list back', async () => {
+        const props = baseProps({ schema: photosSchema, defaults: { exposure: 70, chosenPhotos: ['a', 'b'] } });
+        const { result } = renderForm(props);
+        jest.mocked(window.api.setGlobalDefault).mockClear().mockResolvedValue(true);
+
+        act(() => announceChosenPhotosCleared());
+        expect(result.current.formValues).toEqual({ exposure: 70, chosenPhotos: [] });
+
+        await act(async () => {
+            await result.current.commit();
+        });
+        // Nothing differs from what is on disk now, so nothing is written, the list least of all.
+        expect(window.api.setGlobalDefault).not.toHaveBeenCalled();
+        act(() => result.current.revert());
+        expect(result.current.formValues.chosenPhotos).toEqual([]);
+    });
+
+    test('a form that holds no list, or none loaded yet, is left alone', () => {
+        const { result } = renderForm(baseProps());
+        act(() => announceChosenPhotosCleared());
+        expect(result.current.formValues).toEqual({ exposure: 70, autoBoost: true });
+        const closed = renderForm(baseProps({ isOpen: false }));
+        act(() => announceChosenPhotosCleared());
+        expect(closed.result.current.formValues).toEqual({});
+    });
+});
+
+describe('useSettingsForm — a UI write the handler refuses', () => {
+    test('joins the rejected keys, stays unpersisted, and the later keys are still written', async () => {
+        // The set-setting handler answers false instead of throwing.
+        const updateSetting = jest.fn().mockImplementation(async (key: string) => key !== 'theme');
+        const props = baseProps({ updateSetting });
+        const { result } = renderForm(props);
+        act(() => {
+            result.current.handleUiChange('theme', 'light');
+            result.current.handleUiChange('apiMaxRetries', 7);
+            result.current.handleFormChange('exposure', 80);
+        });
+        jest.mocked(window.api.setGlobalDefault).mockResolvedValue(true);
+
+        let rejected;
+        await act(async () => {
+            rejected = await result.current.commit();
+        });
+
+        expect(rejected).toEqual(['theme']);
+        expect(updateSetting).toHaveBeenCalledWith('apiMaxRetries', 7);
+        expect(window.api.setGlobalDefault).toHaveBeenCalledWith('exposure', 80);
+        // The refused theme is still an unsaved edit and the persisted theme is the open-time one.
+        expect(result.current.isDirty()).toBe(true);
+        expect(result.current.getPersistedTheme()).toBe('dark');
+
+        // A retry writes the theme again; the keys that landed are not written twice.
+        updateSetting.mockClear().mockResolvedValue(true);
+        await act(async () => {
+            await result.current.commit();
+        });
+        expect(updateSetting.mock.calls).toEqual([['theme', 'light']]);
+        expect(result.current.getPersistedTheme()).toBe('light');
+        expect(result.current.isDirty()).toBe(false);
+    });
+
+    test('an updateSetting that resolves undefined counts as landed', async () => {
+        const props = baseProps({ updateSetting: jest.fn().mockResolvedValue(undefined) });
+        const { result } = renderForm(props);
+        act(() => result.current.handleUiChange('theme', 'light'));
+        let rejected;
+        await act(async () => {
+            rejected = await result.current.commit();
+        });
+        expect(rejected).toEqual([]);
+        expect(result.current.getPersistedTheme()).toBe('light');
+    });
+});
+
+describe('useSettingsForm — isDirty', () => {
+    test('is false right after hydrating, and before there is anything to compare with', () => {
+        expect(renderForm(baseProps()).result.current.isDirty()).toBe(false);
+        const closed = renderForm(baseProps({ isOpen: false }));
+        act(() => closed.result.current.handleFormChange('exposure', 5));
+        expect(closed.result.current.isDirty()).toBe(false);
+        expect(closed.result.current.getPersistedTheme()).toBeUndefined();
+    });
+
+    test('is true for an edited UI value (the language too) or form value, and false again after an undo', () => {
+        const { result } = renderForm(baseProps());
+
+        act(() => result.current.handleFormChange('exposure', 80));
+        expect(result.current.isDirty()).toBe(true);
+        act(() => result.current.handleFormChange('exposure', 70));
+        expect(result.current.isDirty()).toBe(false);
+
+        act(() => result.current.handleUiChange('language', 'en'));
+        expect(result.current.isDirty()).toBe(true);
+        act(() => result.current.handleUiChange('language', 'lv'));
+        expect(result.current.isDirty()).toBe(false);
+    });
+
+    test('a write that landed is no longer an unsaved edit; one that was rejected still is', async () => {
+        // exposure is accepted, autoBoost rejected.
+        jest.mocked(window.api.setGlobalDefault).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+        const { result } = renderForm(baseProps());
+        act(() => {
+            result.current.handleFormChange('exposure', 80);
+            result.current.handleFormChange('autoBoost', false);
+        });
+        await act(async () => {
+            await result.current.commit();
+        });
+        expect(result.current.isDirty()).toBe(true);
+
+        act(() => result.current.handleFormChange('autoBoost', true));
+        expect(result.current.isDirty()).toBe(false);
+    });
+
+    test('a chosen-photos clear is not an unsaved edit', () => {
+        const { result } = renderForm(
+            baseProps({
+                schema: { ...schema, chosenPhotos: { type: 'photos', default: [] } },
+                defaults: { exposure: 70, chosenPhotos: ['a'] },
+            }),
+        );
+        act(() => announceChosenPhotosCleared());
+        expect(result.current.isDirty()).toBe(false);
     });
 });

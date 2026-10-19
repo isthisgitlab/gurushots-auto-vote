@@ -11,23 +11,37 @@ import { invalid } from '../helpers/invalid';
 const { keyUnlock, swapPhoto, exposureAutofill } = require('../../src/ts/api/currency') as typeof currencyModule;
 
 jest.mock('../../src/ts/api/api-client', () => ({
-    makePostRequest: jest.fn(),
+    postOnce: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
+const { postOnce } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
 const token = 'tok-123';
 
 beforeEach(() => jest.clearAllMocks());
 
 const lastCall = () => {
-    const [url, headers, body] = makePostRequest.mock.calls[0];
+    const [url, headers, body] = postOnce.mock.calls[0];
     return { url, headers, body };
 };
 
+describe('every spend goes out once and says whether it may have been processed', () => {
+    test.each([
+        ['keyUnlock', () => keyUnlock(1, token)],
+        ['swapPhoto', () => swapPhoto(1, 'old', 'new', token)],
+        ['exposureAutofill', () => exposureAutofill(1, 'member-id', token)],
+    ])('%s', async (_name, spend) => {
+        postOnce.mockResolvedValueOnce({ kind: 'refused' });
+        expect(await spend()).toEqual({ ok: false, raw: null });
+        postOnce.mockResolvedValueOnce({ kind: 'unclear' });
+        expect(await spend()).toEqual({ ok: false, raw: null, unclear: true });
+        expect(postOnce).toHaveBeenCalledTimes(2);
+    });
+});
+
 describe('keyUnlock', () => {
     test('posts c_id + EXPOSURE_BOOST usage with WEB headers', async () => {
-        makePostRequest.mockResolvedValueOnce({ success: true });
+        postOnce.mockResolvedValueOnce({ kind: 'body', body: { success: true } });
         const result = await keyUnlock(133849, token);
         const { url, headers, body } = lastCall();
         expect(url).toBe('https://api.gurushots.com/rest/key_unlock');
@@ -37,7 +51,7 @@ describe('keyUnlock', () => {
     });
 
     test('encodes the challenge id (no form-field injection)', async () => {
-        makePostRequest.mockResolvedValueOnce({ success: true });
+        postOnce.mockResolvedValueOnce({ kind: 'body', body: { success: true } });
         await keyUnlock('1&usage=OTHER', token);
         expect(lastCall().body).toBe('c_id=1%26usage%3DOTHER&usage=EXPOSURE_BOOST');
     });
@@ -45,13 +59,13 @@ describe('keyUnlock', () => {
     test('requires challengeId and token', async () => {
         await expect(keyUnlock('', token)).rejects.toThrow('currency: challengeId is required');
         await expect(keyUnlock(1, '')).rejects.toThrow('currency: token is required');
-        expect(makePostRequest).not.toHaveBeenCalled();
+        expect(postOnce).not.toHaveBeenCalled();
     });
 });
 
 describe('swapPhoto', () => {
     test('posts the recorded swap body', async () => {
-        makePostRequest.mockResolvedValueOnce({ first_time: true, success: true });
+        postOnce.mockResolvedValueOnce({ kind: 'body', body: { first_time: true, success: true } });
         const result = await swapPhoto(134775, 'old1', 'new2', token);
         const { url, body } = lastCall();
         expect(url).toBe('https://api.gurushots.com/rest/swap');
@@ -60,7 +74,7 @@ describe('swapPhoto', () => {
     });
 
     test('encodes image ids', async () => {
-        makePostRequest.mockResolvedValueOnce({ success: true });
+        postOnce.mockResolvedValueOnce({ kind: 'body', body: { success: true } });
         await swapPhoto(1, 'a&b', 'c=d', token);
         expect(lastCall().body).toBe('c_id=1&el=challenges&el_id=true&img_id=a%26b&new_img_id=c%3Dd');
     });
@@ -73,7 +87,7 @@ describe('swapPhoto', () => {
 
 describe('exposureAutofill', () => {
     test('posts challenge_ids[0] + member id', async () => {
-        makePostRequest.mockResolvedValueOnce({ success: true });
+        postOnce.mockResolvedValueOnce({ kind: 'body', body: { success: true } });
         await exposureAutofill(134808, 'member-abc', token);
         const { url, body } = lastCall();
         expect(url).toBe('https://api.gurushots.com/rest/exposure_autofill');
@@ -83,12 +97,12 @@ describe('exposureAutofill', () => {
 
 describe('result contract', () => {
     test('null transport result → ok:false, raw:null', async () => {
-        makePostRequest.mockResolvedValueOnce(null);
+        postOnce.mockResolvedValueOnce({ kind: 'refused' });
         expect(await keyUnlock(1, token)).toEqual({ ok: false, raw: null });
     });
 
     test('success:false → ok:false with the raw body', async () => {
-        makePostRequest.mockResolvedValueOnce({ success: false, message: 'nope' });
+        postOnce.mockResolvedValueOnce({ kind: 'body', body: { success: false, message: 'nope' } });
         expect(await exposureAutofill(1, 'm', token)).toEqual({ ok: false, raw: { success: false, message: 'nope' } });
     });
 });

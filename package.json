@@ -1,6 +1,6 @@
 {
     "name": "gurushots-auto-vote",
-    "version": "1.12.2",
+    "version": "1.13.0-beta.11",
     "description": "GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with unified GUI and CLI interfaces (supports both real and mock modes)",
     "main": "out/main/index.js",
     "scripts": {
@@ -17,6 +17,7 @@
         "build:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --minify",
         "build:lexicon": "node --import tsx scripts/build-lexicon.ts",
         "build:main": "node --import tsx scripts/build-main.ts",
+        "build:notices": "node --import tsx scripts/build-notices.ts",
         "fetch:embeddings": "node --import tsx scripts/fetch-embeddings.ts",
         "verify:lexicon": "node --import tsx scripts/validate-lexicon.ts",
         "web": "pnpm run build:css && pnpm run build:react && node --import tsx scripts/web-server.ts",
@@ -37,7 +38,7 @@
         "build:linux-arm:lite": "pnpm run build:prep:lite && cross-env NODE_ENV=production electron-builder -c scripts/electron-builder-lite.ts --linux --arm64",
         "build:mac:lite": "pnpm run build:prep:lite && cross-env NODE_ENV=production electron-builder -c scripts/electron-builder-lite.ts --mac",
         "build:win:lite": "pnpm run build:prep:lite && cross-env NODE_ENV=production electron-builder -c scripts/electron-builder-lite.ts --win",
-        "bump": "pnpm dlx npm-check-updates -u && pnpm install",
+        "bump": "ncu -u && pnpm install",
         "cleanup:logs": "node --import tsx scripts/cleanup-logs.ts",
         "cli:bankroll": "node --import tsx src/ts/cli/cli.ts bankroll",
         "cli:discover": "node --import tsx src/ts/cli/cli.ts discover",
@@ -92,7 +93,7 @@
         "name": "isthisgitlab",
         "email": "isthisgitlab@isthisgitlab.com"
     },
-    "license": "ISC",
+    "license": "Apache-2.0",
     "type": "commonjs",
     "bugs": {
         "url": "https://github.com/isthisgitlab/gurushots-auto-vote/issues"
@@ -101,24 +102,24 @@
     "engines": {
         "node": ">=26.0.0"
     },
-    "packageManager": "pnpm@12.9.1",
+    "packageManager": "pnpm@12.14.0",
     "dependencies": {
-        "@capacitor/android": "^8.5.2",
-        "@capacitor/core": "^8.5.2",
+        "@capacitor/android": "^8.5.3",
+        "@capacitor/core": "^8.5.3",
         "@capacitor/preferences": "^8.0.1",
         "@capawesome-team/capacitor-android-foreground-service": "^8.1.0",
-        "@huggingface/transformers": "^4.3.0",
+        "@huggingface/transformers": "^4.3.1",
         "@preact/signals": "^2.11.3",
         "axios": "^1.20.0",
         "electron-updater": "^6.8.9",
-        "preact": "^11.0.0",
+        "preact": "^11.0.1",
         "tar": "^7.5.22",
-        "zod": "^4.6.5"
+        "zod": "^4.6.7"
     },
     "devDependencies": {
-        "@capacitor/cli": "^8.5.2",
+        "@capacitor/cli": "^8.5.3",
         "@electron/fuses": "^2.1.3",
-        "@happy-dom/jest-environment": "^20.14.5",
+        "@happy-dom/jest-environment": "^21.0.3",
         "@jest/globals": "^30.5.2",
         "@swc/jest": "^0.2.39",
         "@tailwindcss/cli": "^4.3.3",
@@ -126,29 +127,30 @@
         "@testing-library/dom": "^10.4.2",
         "@testing-library/preact": "^3.2.4",
         "@types/jest": "^30.0.0",
-        "@types/node": "^26.6.4",
+        "@types/node": "^26.6.5",
         "@types/yauzl": "^3.4.0",
-        "concurrently": "^10.0.5",
+        "concurrently": "^10.0.6",
         "cross-env": "^10.1.0",
-        "daisyui": "^5.7.47",
-        "electron": "^44.5.1",
+        "daisyui": "^5.7.50",
+        "electron": "^44.9.0",
         "electron-builder": "^26.17.0",
         "electronmon": "^2.0.4",
         "esbuild": "^0.28.2",
         "jest": "^30.5.2",
         "jest-environment-node": "^30.5.2",
-        "knip": "^6.39.0",
-        "lefthook": "^2.1.16",
-        "marked": "^18.0.14",
+        "knip": "^6.42.0",
+        "lefthook": "^2.2.2",
+        "marked": "^18.1.1",
         "marked-gfm-heading-id": "^4.1.4",
-        "onnxruntime-web": "1.31.0-dev.20260918-bc8e7ed75",
-        "oxlint": "^1.86.0",
-        "oxlint-tsgolint": "^7.0.2003",
+        "npm-check-updates": "23.1.1",
+        "oxlint": "^1.88.0",
+        "oxlint-tsgolint": "^7.0.2004",
         "postject": "1.0.0-alpha.6",
         "prettier": "4.0.0-alpha.13",
         "tailwindcss": "^4.3.3",
         "tsx": "^4.23.15",
         "typescript": "^7.0.2",
+        "yaml": "2.9.1",
         "yauzl": "^3.4.0"
     },
     "electronmon": {
@@ -167,7 +169,7 @@
         ]
     },
     "build": {
-        "appId": "com.gurushots.autovote",
+        "appId": "com.isthisgitlab.gurushotsautovote",
         "productName": "GuruShotsAutoVote",
         "afterPack": "scripts/afterPack.mts",
         "compression": "maximum",
@@ -215,6 +217,7 @@
             "icon": "src/assets/logo.png",
             "gatekeeperAssess": false,
             "hardenedRuntime": false,
+            "identity": null,
             "artifactName": "GuruShotsAutoVote-v${version}-${arch}.${ext}"
         },
         "win": {

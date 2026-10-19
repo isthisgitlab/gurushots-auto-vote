@@ -1,4 +1,4 @@
-import { spentOrStale } from '@/utils/spentOrStale';
+import { alreadyEntered, spentOrStale } from '@/utils/spentOrStale';
 
 describe('spentOrStale', () => {
     test('a successful spend refreshes', () => {
@@ -16,5 +16,18 @@ describe('spentOrStale', () => {
     test('a missing result does not refresh', () => {
         expect(spentOrStale(null)).toBe(false);
         expect(spentOrStale(undefined)).toBe(false);
+    });
+});
+
+describe('alreadyEntered', () => {
+    test('a refusal for a photo that is entered already is one', () => {
+        expect(alreadyEntered({ success: false, outcome: 'already-entered' })).toBe(true);
+    });
+
+    test('anything else is not', () => {
+        expect(alreadyEntered({ success: true, outcome: 'already-entered' })).toBe(false);
+        expect(alreadyEntered({ success: false, outcome: 'not-available' })).toBe(false);
+        expect(alreadyEntered(null)).toBe(false);
+        expect(alreadyEntered(undefined)).toBe(false);
     });
 });

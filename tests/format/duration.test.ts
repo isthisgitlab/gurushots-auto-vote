@@ -58,3 +58,24 @@ describe('formatDuration (includeSeconds — live countdown)', () => {
         expect(formatDuration(2 * 86400 + 3 * 3600 + 5 * 60, { includeSeconds: true })).toBe('2d 3h 5m');
     });
 });
+
+describe('formatDuration (Latvian — "m" would read as metres)', () => {
+    const lv = (seconds: number, includeSeconds = false) => formatDuration(seconds, { locale: 'lv', includeSeconds });
+
+    test('minutes are written "min", in every shape', () => {
+        expect(lv(0)).toBe('<1min');
+        expect(lv(630)).toBe('10min');
+        expect(lv(3700)).toBe('1h 1min');
+        expect(lv(86400 + 5 * 3600 + 120)).toBe('1d 5h');
+        expect(lv(90, true)).toBe('1min 30s');
+        expect(lv(3 * 3600 + 5 * 60 + 12, true)).toBe('3h 5min');
+        expect(lv(2 * 86400 + 3 * 3600 + 5 * 60, true)).toBe('2d 3h 5min');
+        expect(lv(45, true)).toBe('45s');
+    });
+
+    test('any other language, and none, keep "m"', () => {
+        expect(formatDuration(3700, { locale: 'en' })).toBe('1h 1m');
+        expect(formatDuration(3700, { locale: 'de' })).toBe('1h 1m');
+        expect(formatDuration(3700)).toBe('1h 1m');
+    });
+});

@@ -8,6 +8,7 @@
 jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
 jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
+    setSetting: jest.fn(),
     loadSettings: jest.fn(() => ({ checkFrequencyMin: 2, checkFrequencyMax: 2 })),
     getEffectiveSetting: jest.fn(),
 }));
@@ -21,15 +22,23 @@ import type * as indexModule from '../../src/ts/headless/index';
 import type * as loggerModule from '../../src/ts/logger';
 import type { HeadlessGlobals } from '../../src/ts/types/capacitor';
 import { invalid } from '../helpers/invalid';
+import { isBoolean, isNumber, isShape, isString, optional, parseJsonAs } from '../helpers/parseJson';
 const { OFFLINE_RETRY_MS } = require('../../src/ts/scheduling/randomDelay') as typeof randomDelayModule;
 
 // Requiring the entry installs globalThis.GS.
 const { computeNextDelayMs } = require('../../src/ts/headless/index') as typeof indexModule;
 
 // What runOneCycle reports through AndroidHeadlessBridge.onCycleComplete (JSON).
-type CyclePayload = { ok: boolean; nextDelayMs: number; message?: string | null; error?: string; skipped?: string };
+type CyclePayload = { ok: boolean; nextDelayMs: number; error?: string; skipped?: string };
 
 // The headless WebView's globals (the native bridge and the GS entry point).
+const isCyclePayload = isShape<CyclePayload>({
+    ok: isBoolean,
+    nextDelayMs: isNumber,
+    error: optional(isString),
+    skipped: optional(isString),
+});
+
 const g = globalThis as HeadlessGlobals;
 
 describe('headless runOneCycle', () => {
@@ -49,7 +58,7 @@ describe('headless runOneCycle', () => {
         jest.spyOn(Date, 'now').mockReturnValue(FIXED_NOW_MS);
         onCycleComplete = jest.fn<void, [string]>();
         g.AndroidHeadlessBridge = { onCycleComplete };
-        settings.loadSettings.mockReturnValue(invalid({ checkFrequencyMin: 2, checkFrequencyMax: 2 }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { checkFrequencyMin: 2, checkFrequencyMax: 2 } }));
         settings.getEffectiveSetting.mockImplementation((key) => (key === 'lastMinuteThreshold' ? 10 : 1));
         settings.getSetting.mockImplementation((key) => (key === 'token' ? 'tok' : key === 'mock' ? false : undefined));
     });
@@ -62,7 +71,24 @@ describe('headless runOneCycle', () => {
         delete g.AndroidHeadlessBridge;
     });
 
-    const lastPayload = () => JSON.parse(onCycleComplete.mock.calls[0][0]) as CyclePayload;
+    const lastPayload = () => parseJsonAs(onCycleComplete.mock.calls[0][0], isCyclePayload);
+
+    test('a cycle never clears the saved login, whatever "Stay Logged In" says (only the desktop start does)', async () => {
+        settings.loadSettings.mockReturnValue(
+            invalid({
+                app: { checkFrequencyMin: 2, checkFrequencyMax: 2, stayLoggedIn: false },
+                auth: { token: 'tok' },
+            }),
+        );
+        const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true, message: 'done' });
+        const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+        apiFactory.getApiStrategy.mockReturnValue(invalid({ fetchChallengesAndVote, getActiveChallenges }));
+
+        await g.GS!.runOneCycle();
+
+        expect(settings.setSetting).not.toHaveBeenCalled();
+        expect(lastPayload().ok).toBe(true);
+    });
 
     test('runs the full cycle and reports ok with a numeric nextDelayMs', async () => {
         const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true, message: 'done' });
@@ -103,6 +129,29 @@ describe('headless runOneCycle', () => {
         expect(lastPayload().skipped).toBe('mock');
     });
 
+    test('reports a failed vote as the voting-failed code, the detail only in the log', async () => {
+        const fetchChallengesAndVote = jest
+            .fn()
+            .mockResolvedValue({ success: false, message: 'HTTP 503 for user 42', challenges: [] });
+        const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+        apiFactory.getApiStrategy.mockReturnValue(invalid({ fetchChallengesAndVote, getActiveChallenges }));
+
+        await g.GS!.runOneCycle();
+
+        expect(lastPayload()).toEqual({ ok: false, error: 'voting-failed', nextDelayMs: expect.any(Number) });
+        expect(onCycleComplete.mock.calls[0][0]).not.toContain('503');
+    });
+
+    test('a failed vote without a message still reports voting-failed', async () => {
+        const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: false, error: 'Unauthorized' });
+        const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+        apiFactory.getApiStrategy.mockReturnValue(invalid({ fetchChallengesAndVote, getActiveChallenges }));
+
+        await g.GS!.runOneCycle();
+
+        expect(lastPayload().error).toBe('voting-failed');
+    });
+
     test('reports ok:false when the cycle returns a falsy result', async () => {
         const fetchChallengesAndVote = jest.fn().mockResolvedValue(null);
         const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
@@ -112,6 +161,7 @@ describe('headless runOneCycle', () => {
 
         const payload = lastPayload();
         expect(payload.ok).toBe(false);
+        expect(payload.error).toBe('voting-failed');
         expect(typeof payload.nextDelayMs).toBe('number');
     });
 
@@ -180,7 +230,7 @@ describe('headless runOneCycle', () => {
 
         const payload = lastPayload();
         expect(payload.ok).toBe(false);
-        expect(payload.error).toBe('boom');
+        expect(payload.error).toBe('cycle-failed');
         expect(typeof payload.nextDelayMs).toBe('number');
     });
 
@@ -313,6 +363,34 @@ describe('headless runOneCycle', () => {
                 '[headless] next-delay computation failed; using normal cadence',
                 'offline',
             );
+        });
+
+        test('the detail of a failure goes to the log, never into the reported payload', async () => {
+            apiFactory.getApiStrategy.mockReturnValue(
+                invalid({
+                    fetchChallengesAndVote: jest
+                        .fn()
+                        .mockResolvedValueOnce({ success: false, message: 'HTTP 503 for user 42' })
+                        .mockResolvedValueOnce({ success: false, error: 'Unauthorized' })
+                        .mockRejectedValueOnce(new Error('boom')),
+                    getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }),
+                }),
+            );
+
+            await g.GS!.runOneCycle();
+            await g.GS!.runOneCycle();
+            await g.GS!.runOneCycle();
+
+            expect(info).toHaveBeenCalledWith('[headless] voting failed', 'HTTP 503 for user 42');
+            expect(info).toHaveBeenCalledWith('[headless] voting failed', 'Unauthorized');
+            expect(info).toHaveBeenCalledWith('[headless] cycle threw', 'boom');
+            const reported = onCycleComplete.mock.calls.map(([json]) => json).join('\n');
+            expect(reported).not.toMatch(/503|Unauthorized|boom|user 42/);
+            expect(onCycleComplete.mock.calls.map(([json]) => parseJsonAs(json, isCyclePayload).error)).toEqual([
+                'voting-failed',
+                'voting-failed',
+                'cycle-failed',
+            ]);
         });
 
         test('reports cycle-failed when the thrown value carries no message', async () => {

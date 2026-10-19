@@ -1,14 +1,15 @@
 /**
- * loadSettings drops stored values whose type a read would misreport: a
- * top-level value of the wrong type goes back to its default, and a schema
- * value its validation rejects is removed so the schema default applies.
- * Drives the in-memory headless-store seam so loadSettings round-trips
- * without fs.
+ * loadSettings drops stored values whose type a read would misreport: an app or auth value of the wrong type goes
+ * back to its default, a container of the wrong kind is replaced by an empty one, and a schema value its validation
+ * rejects is removed so the schema default applies. Drives the in-memory headless-store seam so loadSettings
+ * round-trips without fs.
  */
 
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import { parseJson } from '../helpers/parseJson';
 import settings = require('../../src/ts/settings');
 import type * as defaultsModule from '../../src/ts/settings/defaults';
+import type { MemoryStore } from '../helpers/headlessStore';
 const { getDefaultSettings } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
 
 const mockWarning = jest.fn<void, [message: string, data?: unknown]>();
@@ -29,121 +30,277 @@ jest.mock('../../src/ts/logger', () => ({
     })),
 }));
 
-const headlessGlobals = globalThis as typeof globalThis & {
-    __GS_HEADLESS__?: boolean;
-    AndroidHeadlessStore?: AndroidHeadlessStore;
-};
-let store: { value: string | null; read: jest.Mock<string | null, []>; write: jest.Mock<void, [string]> };
+let store: MemoryStore;
 const seed = (blob: unknown) => {
     store.value = JSON.stringify(blob);
 };
 const warnings = () => mockWarning.mock.calls.map(([message]) => message);
+const INVALID = 'Ignoring stored settings that are not valid (defaults apply): ';
 
 beforeEach(() => {
     mockWarning.mockClear();
-    headlessGlobals.__GS_HEADLESS__ = true;
-    store = {
-        value: null,
-        read: jest.fn(() => store.value),
-        write: jest.fn((data) => {
-            store.value = data;
-        }),
-    };
-    headlessGlobals.AndroidHeadlessStore = store;
+    store = installHeadlessStore();
 });
 
 afterEach(() => {
-    delete headlessGlobals.__GS_HEADLESS__;
-    delete headlessGlobals.AndroidHeadlessStore;
+    removeHeadlessStore();
 });
 
 describe('loadSettings validation', () => {
     test('a valid file loads as stored, with no warning, and an unchanged file is not re-checked', () => {
-        seed({ theme: 'dark', challengeSettings: { globalDefaults: { exposure: 80 }, perChallenge: { c1: {} } } });
-        expect(settings.loadSettings().challengeSettings.globalDefaults.exposure).toBe(80);
-        expect(settings.loadSettings().theme).toBe('dark');
+        seed({ version: 2, app: { theme: 'dark' }, defaults: { exposure: 80 }, challenges: { c1: { values: {} } } });
+        expect(settings.loadSettings().defaults.exposure).toBe(80);
+        expect(settings.loadSettings().app.theme).toBe('dark');
         expect(warnings()).toEqual([]);
     });
 
-    test('a top-level value of the wrong type goes back to its default', () => {
-        seed({ theme: 5, customTimezones: ['Europe/Riga', 3], mock: 'yes', apiTimeout: '30', language: 'lv' });
-        const loaded = settings.loadSettings();
-        const defaults = getDefaultSettings();
+    test('an app value of the wrong type goes back to its default', () => {
+        seed({ app: { theme: 5, customTimezones: ['Europe/Riga', 3], mock: 'yes', apiTimeout: '30', language: 'lv' } });
+        const loaded = settings.loadSettings().app;
+        const defaults = getDefaultSettings().app;
         expect(loaded.theme).toBe(defaults.theme);
         expect(loaded.customTimezones).toEqual(defaults.customTimezones);
         expect(loaded.mock).toBe(defaults.mock);
         expect(loaded.apiTimeout).toBe(defaults.apiTimeout);
         expect(loaded.language).toBe('lv');
-        expect(warnings()).toEqual([
-            'Ignoring stored settings that are not valid (defaults apply): theme, customTimezones, apiTimeout, mock',
-        ]);
+        expect(warnings()).toEqual([`${INVALID}app.theme, app.customTimezones, app.apiTimeout, app.mock`]);
     });
 
-    test('a challengeSettings block that is not an object is replaced by the defaults', () => {
-        seed({ challengeSettings: [1, 2] });
-        expect(settings.loadSettings().challengeSettings).toEqual(getDefaultSettings().challengeSettings);
-        expect(warnings()[0]).toMatch(/: challengeSettings$/);
+    test('an app number outside its range goes back to its default', () => {
+        seed({ app: { checkFrequencyMin: 0, checkFrequencyMax: 61, apiMaxRetries: 1.5 } });
+        const loaded = settings.loadSettings().app;
+        expect([loaded.checkFrequencyMin, loaded.checkFrequencyMax, loaded.apiMaxRetries]).toEqual([3, 3, 3]);
     });
 
-    test('a container of the wrong kind is replaced by its default; a missing one is added silently', () => {
-        const defaults = getDefaultSettings().challengeSettings;
-        seed({ challengeSettings: { globalDefaults: ['x'], titleRules: [] } });
-        const loaded = settings.loadSettings().challengeSettings;
-        expect(loaded.globalDefaults).toEqual(defaults.globalDefaults);
-        expect(loaded.perChallenge).toEqual({});
-        expect(loaded.titleProfileSuppressions).toEqual({});
-        expect(warnings()).toEqual([expect.stringMatching(/: challengeSettings\.globalDefaults$/)]);
-
-        seed({ challengeSettings: { globalDefaults: {}, perChallenge: 'x', titleProfileSuppressions: [] } });
-        const next = settings.loadSettings().challengeSettings;
-        expect(next.perChallenge).toEqual({});
-        expect(next.titleProfileSuppressions).toEqual({});
-        expect(warnings()[1]).toMatch(
-            /: challengeSettings\.perChallenge, challengeSettings\.titleProfileSuppressions$/,
+    test('an app-state flag its schema entry rejects is removed; a name that is a prototype member is dropped', () => {
+        const hostile = parseJson(
+            '{"__proto__":1,"constructor":2,"autovoteRunning":"yes","noticeAcknowledgedVersion":3}',
         );
+        seed({ app: hostile });
+        const loaded = settings.loadSettings().app;
+        expect(Object.hasOwn(loaded, 'autovoteRunning')).toBe(false);
+        expect(loaded.noticeAcknowledgedVersion).toBe(3);
+        expect(Object.hasOwn(loaded, '__proto__')).toBe(false);
+        expect(Object.hasOwn(loaded, 'constructor')).toBe(false);
+        expect(warnings()[0]).toMatch(/app\.__proto__, app\.constructor, app\.autovoteRunning$/);
+    });
+
+    test('an app block that is not an object is replaced by the defaults', () => {
+        seed({ app: [1, 2] });
+        expect(settings.loadSettings().app).toEqual(getDefaultSettings().app);
+        expect(warnings()).toEqual([`${INVALID}app`]);
+    });
+
+    test('a missing app value is filled with its default, silently', () => {
+        seed({ app: { language: 'lv' } });
+        expect(settings.loadSettings().app).toEqual({ ...getDefaultSettings().app, language: 'lv' });
+        expect(warnings()).toEqual([]);
+    });
+
+    describe('the sign-in state is strict', () => {
+        test('the token and the account strings must be strings, the API headers an object of strings', () => {
+            seed({
+                auth: {
+                    token: 7,
+                    apiHeaders: { 'x-a': 'b', 'x-c': 4 },
+                    lastUsername: null,
+                    chosenPhotosMemberId: 'm1',
+                },
+            });
+            const { auth } = settings.loadSettings();
+            expect(auth).toEqual({ token: '', apiHeaders: {}, lastUsername: '', chosenPhotosMemberId: 'm1' });
+            expect(warnings()).toEqual([`${INVALID}auth.token, auth.apiHeaders, auth.lastUsername`]);
+        });
+
+        test('headers that are not an object are replaced', () => {
+            seed({ auth: { token: 't', apiHeaders: ['x'] } });
+            expect(settings.loadSettings().auth).toEqual({ ...getDefaultSettings().auth, token: 't' });
+        });
+
+        test('an auth block that is not an object is replaced by the empty one', () => {
+            seed({ auth: 'token' });
+            expect(settings.loadSettings().auth).toEqual(getDefaultSettings().auth);
+            expect(warnings()).toEqual([`${INVALID}auth`]);
+        });
+
+        test('a valid auth block loads as stored', () => {
+            seed({ auth: { token: 't', apiHeaders: { a: 'b' }, lastUsername: 'u', chosenPhotosMemberId: 'm' } });
+            expect(settings.loadSettings().auth).toEqual({
+                token: 't',
+                apiHeaders: { a: 'b' },
+                lastUsername: 'u',
+                chosenPhotosMemberId: 'm',
+            });
+            expect(warnings()).toEqual([]);
+        });
+    });
+
+    test('a container of the wrong kind is replaced by its empty one; a missing one is added silently', () => {
+        seed({ defaults: ['x'], profiles: 3, scenarios: [], rules: {}, seededProfiles: 'a', challenges: null });
+        const loaded = settings.loadSettings();
+        expect(loaded.defaults).toEqual({});
+        expect(loaded.profiles).toEqual({});
+        expect(loaded.scenarios).toEqual({});
+        expect(loaded.rules).toEqual([]);
+        expect(loaded.seededProfiles).toEqual([]);
+        expect(loaded.challenges).toEqual({});
+        expect(warnings()).toEqual([`${INVALID}defaults, profiles, scenarios, challenges, seededProfiles, rules`]);
+
+        seed({ version: 2 });
+        const filled = settings.loadSettings();
+        expect(filled.defaults).toEqual({});
+        expect(filled.challenges).toEqual({});
+        expect(filled.rules).toEqual([]);
+        expect(warnings()).toHaveLength(1);
+    });
+
+    test('a version that is not 2 is read as a 2', () => {
+        seed({ version: 'one' });
+        expect(settings.loadSettings().version).toBe(2);
     });
 
     test('a missing container is added on every read of an unchanged file, not only the first', () => {
-        // A current blob (no migration rewrites it) that predates one container.
-        seed(getDefaultSettings());
-        settings.loadSettings();
-        const current = JSON.parse(store.value as string) as ReturnType<typeof getDefaultSettings>;
-        const challengeSettings = Object.fromEntries(
-            Object.entries(current.challengeSettings).filter(([key]) => key !== 'titleProfileSuppressions'),
-        );
-        seed({ ...current, challengeSettings });
-        expect(settings.loadSettings().challengeSettings.titleProfileSuppressions).toEqual({});
-        expect(settings.loadSettings().challengeSettings.titleProfileSuppressions).toEqual({});
+        seed({ version: 2, app: { language: 'lv' } });
+        expect(settings.loadSettings().challenges).toEqual({});
+        expect(settings.loadSettings().challenges).toEqual({});
         expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
     });
 
     test('schema values their validation rejects are removed; valid and unknown keys stay', () => {
         seed({
-            challengeSettings: {
-                globalDefaults: { exposure: 'high', autoFill: true, noSuchSetting: 1 },
-                perChallenge: { c1: { exposure: 150, autoFill: false }, c2: 7 },
+            defaults: { exposure: 'high', autoSubmit: true, noSuchSetting: 1 },
+            challenges: {
+                c1: { values: { exposure: 150, autoSubmit: false } },
+                c2: 7,
             },
         });
-        const { globalDefaults, perChallenge } = settings.loadSettings().challengeSettings;
-        expect(globalDefaults).toEqual({ autoFill: true, noSuchSetting: 1 });
-        expect(perChallenge).toEqual({ c1: { autoFill: false } });
-        expect(settings.getGlobalDefault('exposure')).toBe(
-            getDefaultSettings().challengeSettings.globalDefaults.exposure,
+        const { defaults, challenges } = settings.loadSettings();
+        expect(defaults).toEqual({ autoSubmit: true, noSuchSetting: 1 });
+        expect(challenges).toEqual({ c1: { values: { autoSubmit: false } } });
+        expect(settings.getGlobalDefault('exposure')).toBe(100);
+        expect(warnings()).toEqual([`${INVALID}defaults.exposure, challenges.c1.values.exposure, challenges.c2`]);
+    });
+
+    test('the parts of a challenge record that are of the wrong kind are dropped', () => {
+        seed({
+            challenges: {
+                a: { values: 'x', suppressRuleProfile: true, pins: { boost: 'e1' } },
+                b: { values: { exposure: 50 }, suppressRuleProfile: false, pins: ['e1'] },
+                constructor: { values: { exposure: 50 } },
+            },
+        });
+        const { challenges } = settings.loadSettings();
+        expect(challenges).toEqual({
+            a: { suppressRuleProfile: true, pins: { boost: 'e1' } },
+            b: { values: { exposure: 50 } },
+        });
+        expect(warnings()[0]).toMatch(
+            /challenges\.a\.values, challenges\.b\.suppressRuleProfile, challenges\.b\.pins, challenges\.constructor$/,
         );
-        expect(warnings()).toEqual([
-            'Ignoring stored settings that are not valid (defaults apply): challengeSettings.globalDefaults.exposure, challengeSettings.perChallenge.c1.exposure, challengeSettings.perChallenge.c2',
-        ]);
+    });
+
+    describe('the record of the import', () => {
+        const imported = {
+            at: '2026-10-15T10:00:00.000Z',
+            report: { refsBlocked: ['a'] },
+            acknowledged: false,
+        };
+
+        test('is kept when it has its shape', () => {
+            seed({ imported });
+            expect(settings.loadSettings().imported).toEqual(imported);
+            expect(warnings()).toEqual([]);
+        });
+
+        test('keeps the references it lists as the user knows them, and the text an earlier build stored', () => {
+            const withRefs = {
+                ...imported,
+                report: {
+                    refsBlocked: [
+                        'rules[0].profile: "Gone"',
+                        { holder: { kind: 'rule', number: 2, title: 'Macro' }, refers: 'profile', name: 'Night' },
+                        { holder: { kind: 'rule', number: 3 }, refers: 'scenario', name: 'Plan', invalid: true },
+                        { holder: { kind: 'profile', name: 'Day' }, refers: 'scenario', name: 'Plan' },
+                        { holder: { kind: 'challenge', id: '7', title: 'Sunset' }, refers: 'scenario', name: 'Plan' },
+                        { holder: { kind: 'challenge', id: '8' }, refers: 'scenario', name: 'Plan' },
+                    ],
+                },
+            };
+            seed({ imported: withRefs });
+            expect(settings.loadSettings().imported).toEqual(withRefs);
+            expect(warnings()).toEqual([]);
+        });
+
+        test.each([
+            ['a string', 'x'],
+            ['no report', { ...imported, report: undefined }],
+            ['report refs that are not strings or references', { ...imported, report: { refsBlocked: [1] } }],
+            [
+                'a reference with a holder of no known kind',
+                { ...imported, report: { refsBlocked: [{ holder: { kind: 'other' }, refers: 'profile', name: 'x' }] } },
+            ],
+            [
+                'a reference to something that is neither a profile nor a scenario',
+                {
+                    ...imported,
+                    report: { refsBlocked: [{ holder: { kind: 'rule', number: 1 }, refers: 'rule', name: 'x' }] },
+                },
+            ],
+            [
+                'a reference with a rule number that is not a whole number',
+                {
+                    ...imported,
+                    report: {
+                        refsBlocked: [{ holder: { kind: 'rule', number: 1.5 }, refers: 'profile', name: 'x' }],
+                    },
+                },
+            ],
+            [
+                'a reference whose invalid flag is not true',
+                {
+                    ...imported,
+                    report: {
+                        refsBlocked: [
+                            { holder: { kind: 'rule', number: 1 }, refers: 'profile', name: 'x', invalid: false },
+                        ],
+                    },
+                },
+            ],
+            [
+                'a challenge holder with a title that is not text',
+                {
+                    ...imported,
+                    report: {
+                        refsBlocked: [
+                            { holder: { kind: 'challenge', id: '1', title: 5 }, refers: 'scenario', name: 'x' },
+                        ],
+                    },
+                },
+            ],
+            [
+                'a holder that is not an object',
+                { ...imported, report: { refsBlocked: [{ holder: 'rule', refers: 'profile', name: 'x' }] } },
+            ],
+            ['an acknowledged that is not a boolean', { ...imported, acknowledged: 'no' }],
+            ['an at that is not a string', { ...imported, at: 4 }],
+        ])('is dropped with %s', (_what, value) => {
+            // The warning of an unchanged invalid file is said once, so another one comes between the cases.
+            seed({ defaults: { exposure: -1 } });
+            settings.loadSettings();
+            mockWarning.mockClear();
+            seed({ imported: value });
+            expect(settings.loadSettings().imported).toBeUndefined();
+            expect(warnings()).toEqual([`${INVALID}imported`]);
+        });
     });
 
     test('the same invalid file warns once; a different one warns again, on one line', () => {
-        seed({ challengeSettings: { globalDefaults: {}, perChallenge: { 'a\nb': 1 } } });
+        seed({ challenges: { 'a\nb': 1 } });
         settings.loadSettings();
         settings.loadSettings();
-        expect(warnings()).toEqual([
-            'Ignoring stored settings that are not valid (defaults apply): challengeSettings.perChallenge.a b',
-        ]);
+        expect(warnings()).toEqual([`${INVALID}challenges.a b`]);
 
-        seed({ challengeSettings: { globalDefaults: { exposure: -1 } } });
+        seed({ defaults: { exposure: -1 } });
         settings.loadSettings();
         expect(warnings()).toHaveLength(2);
     });

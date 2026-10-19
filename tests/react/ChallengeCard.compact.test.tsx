@@ -13,7 +13,7 @@
  * `t(key)` returns the key (see tests/react setup).
  */
 
-import { render, screen, fireEvent } from './helpers/test-utils';
+import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { getEntryStatus } from '@/utils/formatters';
 import { buildChallenge } from '../helpers/challengeFixtures';
@@ -23,7 +23,7 @@ import { invalid } from '../helpers/invalid';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
-    autoFillEnabled: false,
+    autoSubmitEnabled: false,
     isCompact: true,
     hasCompactOverride: false,
     toggleCompact: jest.fn(),
@@ -57,7 +57,7 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 // A running challenge where every action would be offered in detailed mode:
 // started, exposure < 100 (Vote), free turbo (Earn turbo), open slots (+1),
 // available boost + an un-actioned entry (per-entry Boost).
-const makeChallenge = () =>
+const makeChallenge = (overrides = {}) =>
     buildChallenge({
         id: 202,
         title: 'Harbour Lights',
@@ -74,7 +74,7 @@ const makeChallenge = () =>
         welcome_message: 'Show us the harbour at night',
         member: {
             boost: { state: 'AVAILABLE', timeout: nowSec() + 600 },
-            turbo: { state: 'FREE', time_to_open: null },
+            turbo: { state: 'FREE', mode: 'classic', time_to_open: null },
             ranking: {
                 entries: [
                     { id: 'e1', rank: 12, votes: 40, boosted: true },
@@ -85,11 +85,12 @@ const makeChallenge = () =>
                 total: { votes: 46, rank: 17, level: 1, level_name: 'POPULAR', percent: 30, next_message: '' },
             },
         },
+        ...overrides,
     });
 
 const renderCard = (
     challenge = makeChallenge(),
-    timeRemaining = '2h 30m',
+    timeRemaining: Parameters<typeof ChallengeCard>[0]['timeRemaining'] = '2h 30m',
     props: Partial<Parameters<typeof ChallengeCard>[0]> = {},
 ) =>
     render(
@@ -112,13 +113,18 @@ beforeEach(() => {
 });
 
 describe('compact ChallengeCard tile', () => {
-    test('the compact jump target accepts focus and shows a blue outline', () => {
+    test('the compact jump target accepts focus and shows an outline for keyboard focus and for a landed jump', () => {
         const { container } = renderCard(makeChallenge());
         const card = container.querySelector('#challenge-202')!;
         expect(card.getAttribute('tabindex')).toBe('-1');
-        expect(card.className).toContain('focus:outline-info');
-        expect(card.className).toContain('focus:outline-4');
-        expect(card.className).toContain('focus:outline-offset-4');
+        expect(card.className).toContain('focus-visible:outline-base-content');
+        expect(card.className).toContain('focus-visible:outline-4');
+        expect(card.className).toContain('focus-visible:outline-offset-4');
+        // a pointer jump sets data-landed (see scrollToChallenge), which draws the same outline
+        expect(card.className).toContain('data-[landed]:outline-base-content');
+        expect(card.className).toContain('data-[landed]:outline-4');
+        expect(card.className).toContain('data-[landed]:outline-offset-4');
+        expect(card.className).not.toMatch(/(^|\s)focus:/);
     });
 
     test('offers no actions — the density toggle is the only button', () => {
@@ -129,12 +135,104 @@ describe('compact ChallengeCard tile', () => {
         expect(buttons[0].textContent).toContain('app.details');
     });
 
-    test('an ended countdown is shown in red, a running one in green', () => {
-        const { unmount } = renderCard(makeChallenge(), 'Ended');
-        expect(screen.getByText('Ended').className).toContain('text-error');
+    test('an ended countdown is a red badge, a running one a green, yellow or red badge by time left', () => {
+        // null is the countdown of a challenge that has ended; the card words it in the UI's language.
+        const { unmount } = renderCard(makeChallenge(), null);
+        expect(screen.getByText('app.ended').className).toBe('badge badge-sm badge-error font-medium');
         unmount();
-        renderCard();
-        expect(screen.getByText('2h 30m').className).toContain('text-success');
+        const cases: Array<[number, string]> = [
+            [30_000, 'badge-success'],
+            [7_200, 'badge-warning'],
+            [600, 'badge-error'],
+        ];
+        for (const [secondsLeft, tone] of cases) {
+            const view = renderCard(makeChallenge({ close_time: nowSec() + secondsLeft }));
+            expect(screen.getByText('2h 30m').className).toBe(`badge badge-sm ${tone} font-medium`);
+            view.unmount();
+        }
+    });
+
+    test('boost and turbo statuses are badges in their tone, and a muted state stays plain text', () => {
+        const states = (boost: string, turbo: string) => ({
+            member: {
+                boost: { state: boost, timeout: 0 },
+                turbo: { state: turbo, mode: 'classic', time_to_open: null },
+                ranking: {
+                    entries: [],
+                    exposure: { exposure_factor: 55 },
+                    total: { votes: 0, rank: 0, level: 0, percent: 0, next_message: '' },
+                },
+            },
+        });
+        const cases: Array<[string, string, string, string, string, string]> = [
+            [
+                'AVAILABLE_KEY',
+                'app.available',
+                'IN_PROGRESS',
+                'app.stateInProgress',
+                'badge badge-sm badge-info',
+                'badge badge-sm badge-warning',
+            ],
+            ['USED', 'app.used', 'FREE', 'app.stateFree', 'badge badge-sm badge-success', 'badge badge-sm badge-info'],
+            [
+                'LOCKED',
+                'app.stateLocked',
+                'UNAVAILABLE',
+                'app.unavailable',
+                'text-base-content/70',
+                'text-base-content/70',
+            ],
+        ];
+        for (const [boost, boostText, turbo, turboText, boostClass, turboClass] of cases) {
+            const view = renderCard(makeChallenge(states(boost, turbo)));
+            expect(screen.getByText(boostText).parentElement!.className).toBe(`${boostClass} max-w-full`);
+            expect(screen.getByText(turboText).parentElement!.className).toBe(`${turboClass} max-w-full`);
+            view.unmount();
+        }
+    });
+
+    test('a long boost status shrinks inside its cell: the badge caps its width, the text truncates, the full text is the title', () => {
+        renderCard(
+            makeChallenge({
+                member: {
+                    boost: { state: 'AVAILABLE', timeout: nowSec() + 3_540 },
+                    turbo: { state: 'WON', mode: 'classic', time_to_open: null },
+                    ranking: {
+                        entries: [],
+                        exposure: { exposure_factor: 55 },
+                        total: { votes: 0, rank: 0, level: 0, percent: 0, next_message: '' },
+                    },
+                },
+            }),
+        );
+        const text = screen.getByText('app.stateAvailableMinutes');
+        expect(text.className).toBe('truncate');
+        expect(text.parentElement!.className).toBe('badge badge-sm badge-info max-w-full');
+        expect(text.parentElement!.getAttribute('title')).toBe('app.stateAvailableMinutes');
+        expect(screen.getByText('app.stateWon').parentElement!.className).toBe(
+            'badge badge-sm badge-success max-w-full',
+        );
+    });
+
+    test('the exposure figure is a badge by its band, and plain before the start or after the close', () => {
+        const exposureOf = (factor: number) => ({
+            member: { ranking: { entries: [], exposure: { exposure_factor: factor } } },
+        });
+        const cases: Array<[number, string]> = [
+            [5, 'badge badge-sm badge-error'],
+            [30, 'badge badge-sm badge-warning'],
+            [55, 'badge badge-sm badge-success'],
+        ];
+        for (const [factor, className] of cases) {
+            const view = renderCard(makeChallenge(exposureOf(factor)));
+            expect(screen.getByText(`${factor}%`).className).toBe(className);
+            view.unmount();
+        }
+        const notStarted = renderCard(makeChallenge({ ...exposureOf(55), start_time: nowSec() + 600 }));
+        expect(screen.getByText('55%').className).toBe('');
+        notStarted.unmount();
+        renderCard(makeChallenge({ ...exposureOf(55), close_time: nowSec() - 600 }));
+        expect(screen.getByText('55%').className).toBe('');
     });
 
     test('toggle calls toggleCompact', () => {
@@ -188,10 +286,97 @@ describe('compact ChallengeCard tile with compactActions', () => {
         renderWithActions();
         const texts = buttonTexts();
         expect(texts).toEqual(
-            expect.arrayContaining(['app.details', 'app.vote', 'app.run', '🎯 app.earnTurbo', '🖼 +1', 'app.settings']),
+            expect.arrayContaining([
+                'app.details',
+                'app.vote',
+                'app.run',
+                '🎯 app.earnTurbo',
+                '🖼 +1',
+                '🖼 app.fillPick',
+                'app.settings',
+            ]),
         );
         // One open slot → no "+N" button; no per-entry Boost / Turbo / swap.
-        expect(texts).toHaveLength(6);
+        expect(texts).toHaveLength(7);
+    });
+
+    test('a failed Vote shows its translated error under the action row', async () => {
+        window.api.voteOnChallengeManual = jest.fn().mockResolvedValue({ success: false, error: 'nope' });
+        renderWithActions();
+        fireEvent.click(screen.getByRole('button', { name: 'app.vote' }));
+        const error = await screen.findByText('errors.actionFailed');
+        expect(error.closest('[role="alert"]')).not.toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
+        expect(screen.queryByText('errors.actionFailed')).toBeNull();
+    });
+
+    test('"Pick…" carries the image prefix of +1 / +N, is described by what it does in text (not only a title), and opens the picker', async () => {
+        const challenge = makeChallenge();
+        challenge.member!.ranking!.entries = challenge.member!.ranking!.entries!.slice(0, 1);
+        renderWithActions(challenge);
+        const pick = screen.getByRole('button', { name: 'app.fillPick' });
+        expect(pick.textContent).toBe('🖼 app.fillPick');
+        expect(pick.querySelector('[aria-hidden="true"]')?.textContent).toBe('🖼 ');
+        expect(pick.hasAttribute('aria-label')).toBe(false);
+        expect(pick.getAttribute('title')).toBe('app.fillPickLabel');
+        const description = document.getElementById(pick.getAttribute('aria-describedby') as string);
+        expect(description?.textContent).toBe('app.fillPickLabel');
+        fireEvent.click(pick);
+        expect(await screen.findByText('app.pickTitle')).toBeTruthy();
+        // Opening reads nothing; Load all does.
+        expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
+        await waitFor(() =>
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(202, undefined, 'cached', 'submit'),
+        );
+    });
+
+    test('the picker stays open, with its listing, when the card switches layout', async () => {
+        const challenge = makeChallenge();
+        challenge.member!.ranking!.entries = challenge.member!.ranking!.entries!.slice(0, 1);
+        const props = {
+            challenge,
+            timeRemaining: '2h 30m',
+            timezone: 'local',
+            autovoteRunning: false,
+            compactActions: true,
+            onVoteComplete: jest.fn(),
+            onSettingsClick: jest.fn(),
+            onCurrencySpent: () => {},
+        };
+        jest.mocked(window.api.getLibraryPhotos).mockResolvedValue({
+            success: true,
+            photos: [{ id: 'a'.repeat(32), labels: ['harbour'], allowed: true, message: null, uploadDate: 1 }],
+            memberId: 'm',
+            truncated: false,
+            wonIds: [],
+            wonCount: 0,
+            preview: false,
+            readAtMs: 1_700_000_000_000,
+            allowedKnown: true,
+        });
+        const { rerender } = render(<ChallengeCard {...props} />);
+        fireEvent.click(screen.getByRole('button', { name: 'app.fillPick' }));
+        await screen.findByText('app.pickTitle');
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
+        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(2));
+        const dialog = screen.getByRole('dialog');
+        mockChallengeSettings.isCompact = false;
+        rerender(<ChallengeCard {...props} />);
+        expect(screen.getByRole('dialog')).toBe(dialog);
+        // A remounted body would start idle and read nothing, so the count alone cannot show there was none.
+        expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(2);
+        expect(screen.queryByText('app.pickIdle')).toBeNull();
+        expect(screen.getAllByRole('button', { name: /photoChooserTileLabel/ }).length).toBeGreaterThan(0);
+    });
+
+    test('a fill in flight disables Pick… along with +1 / +N', () => {
+        Object.assign(mockFill, { loading: true });
+        const challenge = makeChallenge();
+        challenge.member!.ranking!.entries = challenge.member!.ranking!.entries!.slice(0, 1);
+        renderWithActions(challenge);
+        expect(screen.getByRole('button', { name: 'app.fillPick' }).hasAttribute('disabled')).toBe(true);
+        expect(screen.getAllByRole('button', { name: /\+/ }).every((b) => b.hasAttribute('disabled'))).toBe(true);
     });
 
     test('offers "+N" when several slots are open', () => {
@@ -201,14 +386,14 @@ describe('compact ChallengeCard tile with compactActions', () => {
         expect(buttonTexts()).toEqual(expect.arrayContaining(['🖼 +1', '🖼 +3']));
     });
 
-    test('keeps Earn turbo while hiding Run and "+1" / "+N" during autovote', () => {
+    test('keeps Earn turbo and "+1" / "+N" while hiding Run during autovote', () => {
         const challenge = makeChallenge();
         challenge.member!.ranking!.entries = challenge.member!.ranking!.entries!.slice(0, 1);
         renderWithActions(challenge, { autovoteRunning: true });
         const texts = buttonTexts();
         expect(texts).not.toContain('app.run');
         expect(texts).toContain('🎯 app.earnTurbo');
-        expect(texts.some((text) => text.startsWith('🖼'))).toBe(false);
+        expect(texts).toEqual(expect.arrayContaining(['🖼 +1', '🖼 +3']));
         expect(texts).toContain('app.vote');
     });
 
@@ -220,9 +405,9 @@ describe('compact ChallengeCard tile with compactActions', () => {
 
         fireEvent.click(screen.getByText('🎯 app.earnTurbo'));
         expect(mockTurbo.playAutoTurbo).toHaveBeenCalledWith(202, 'Harbour Lights');
-        fireEvent.click(screen.getByText('🖼 +1'));
+        fireEvent.click(screen.getByRole('button', { name: '+1' }));
         expect(mockFill.fillNow).toHaveBeenCalledWith(202, 'one');
-        fireEvent.click(screen.getByText('🖼 +3'));
+        fireEvent.click(screen.getByRole('button', { name: '+3' }));
         expect(mockFill.fillNow).toHaveBeenCalledWith(202, 'all');
         fireEvent.click(screen.getByText('app.settings'));
         expect(onSettingsClick).toHaveBeenCalledWith(202, 'Harbour Lights');
@@ -241,12 +426,21 @@ describe('compact ChallengeCard tile with compactActions', () => {
         expect(screen.getByText(/app\.currencyFillExposure$/)).toBeTruthy();
     });
 
-    test('shows turbo and submit errors under the row', () => {
+    test('shows turbo and submit errors under the row, announced, translated and dismissable', () => {
         mockTurbo.error = 'turbo failed';
         mockFill.error = 'submit failed';
         renderWithActions();
-        expect(screen.getByText('turbo failed')).toBeTruthy();
-        expect(screen.getByText('submit failed')).toBeTruthy();
+        // Neither raw text reaches the user: unlisted failures read as the generic translated one.
+        expect(screen.queryByText('turbo failed')).toBeNull();
+        expect(screen.queryByText('submit failed')).toBeNull();
+        expect(screen.getAllByText('errors.actionFailed')).toHaveLength(2);
+        expect(screen.getAllByRole('alert')).toHaveLength(2);
+
+        const [dismissTurbo, dismissFill] = screen.getAllByRole('button', { name: 'errors.dismiss' });
+        fireEvent.click(dismissTurbo);
+        fireEvent.click(dismissFill);
+        expect(mockTurbo.clearError).toHaveBeenCalledTimes(1);
+        expect(mockFill.clearError).toHaveBeenCalledTimes(1);
     });
 
     test('shows the translated text for an invalid-args refusal, not the machine code', () => {

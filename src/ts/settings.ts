@@ -3,11 +3,11 @@
  * surface of the internal ./settings/* modules:
  *
  *   schema.ts             keys, defaults, validation, groups/tiers (entries in schema/)
- *   storage.ts            persistence transport + runtime/environment detection
- *   defaults.ts           default blob and shared challenge-value helpers
- *   persistence.ts        load (merge + migrations + obsolete cleanup) / save,
- *                         top-level keys, window bounds
- *   migrations.ts         load-time migrations and obsolete-key prune (steps in migrations/)
+ *   storage.ts            persistence transport (config.json, and settings.json) + runtime/environment detection
+ *   defaults.ts           default configuration and shared challenge-value helpers
+ *   persistence.ts        load (fill + validate, the import of settings.json) / save + mirror,
+ *                         app and auth keys, window bounds, recovery actions
+ *   legacyImport.ts       the import of settings.json (the conversion is importV1/)
  *   challengeOverrides.ts global defaults, per-challenge overrides, effective values
  *   challengeFacts.ts     process-local cache of the active challenges' titles/facts
  *   titleRuleSanitize.ts  write-side validation of challenge rules
@@ -15,7 +15,8 @@
  *   titleRules.ts         persisted challenge rules and rule-aware resolvers
  *   profileStore.ts       profile names and value sanitization
  *   profiles.ts           named challenge-settings profiles
- *   titlePins.ts          persisted first-seen challenge-title pins
+ *   titlePins.ts          first-seen challenge-title pins (a cache store beside the configuration)
+ *   entryPins.ts          the photo a challenge's Boost and Turbo are pinned to
  *   scenarioSchema.ts     validation of user-defined scenario documents (scenarioSchema/)
  *   scenarios.ts          stored scenarios, JSON import/export
  *   scenarioOverlay.ts    the active scenario phase's settings layer
@@ -31,7 +32,7 @@ import {
 } from './settings/schema';
 import { titleRuleTitles } from './settings/challengeRules';
 import {
-    initializeAsync,
+    initializeAsync as initializeStorageAsync,
     flushPendingWrites,
     getUserDataPath,
     getSettingsPath,
@@ -40,19 +41,54 @@ import {
 import { getDefaultSettings } from './settings/defaults';
 import * as persistence from './settings/persistence';
 import * as challengeOverrides from './settings/challengeOverrides';
+import * as staleChallengeCleanup from './settings/staleChallengeCleanup';
+import * as openChallenges from './settings/openChallenges';
+import * as chosenPhotosClear from './settings/chosenPhotosClear';
 import { rememberChallengeTitles } from './settings/challengeFacts';
+import { importMarkerStore } from './settings/importMarker';
+import { originalStore } from './settings/formatOneMirror';
 import { TITLE_RULE_INLINE_KEYS, MAX_TITLE_LENGTH } from './settings/titleRuleSanitize';
 import * as titleRules from './settings/titleRules';
 import * as profiles from './settings/profiles';
 import * as titlePins from './settings/titlePins';
+import * as entryPins from './settings/entryPins';
 import * as scenarios from './settings/scenarios';
 import * as reset from './settings/reset';
 
+/**
+ * Hydrates every store the settings read on Capacitor (the configuration, `settings.json` and the copy kept of it, the
+ * import marker and the title pins) before the window mounts. No-op elsewhere.
+ */
+const initializeAsync = async (): Promise<void> => {
+    await Promise.all([
+        initializeStorageAsync(),
+        importMarkerStore.initializeAsync(),
+        originalStore.initializeAsync(),
+        titlePins.titlePinStore.initializeAsync(),
+    ]);
+};
+
 export const loadSettings = persistence.loadSettings;
 export const saveSettings = persistence.saveSettings;
+export const saveAppSettings = persistence.saveAppSettings;
 export const getSetting = persistence.getSetting;
 export const setSetting = persistence.setSetting;
-export const isReloadRequired = persistence.isReloadRequired;
+export const getSettingsRecovery = persistence.getSettingsRecovery;
+export const isSignOutOwed = persistence.isSignOutOwed;
+// Recovery of a configuration that could not be imported or read (see persistence.ts)
+export const retryImport = persistence.retryImport;
+export const retryImportDetailed = persistence.retryImportDetailed;
+export const startFresh = persistence.startFresh;
+export const startFreshDetailed = persistence.startFreshDetailed;
+export const reimportFromV1 = persistence.reimportFromV1;
+export const reimportFromV1Detailed = persistence.reimportFromV1Detailed;
+// What the import left unresolved
+export const getImportReport = persistence.getImportReport;
+export const acknowledgeImportReport = persistence.acknowledgeImportReport;
+export type SettingsRecovery = persistence.SettingsRecovery;
+export const getSettingsSaveDropped = persistence.getSettingsSaveDropped;
+export const onSettingsSaveDroppedChange = persistence.onSettingsSaveDroppedChange;
+export const onSettingsRecoveryChange = persistence.onSettingsRecoveryChange;
 export const saveWindowBounds = persistence.saveWindowBounds;
 export const getWindowBounds = persistence.getWindowBounds;
 // Challenge-specific settings
@@ -95,15 +131,28 @@ export const checkScenario = scenarios.checkScenario;
 export const previewScenarioImport = scenarios.previewScenarioImport;
 export const importScenario = scenarios.importScenario;
 export const exportScenario = scenarios.exportScenario;
+export const exportScenarioWithNotes = scenarios.exportScenarioWithNotes;
 export const MAX_SCENARIOS = scenarios.MAX_SCENARIOS;
 // First-seen challenge-title pins (internal cache — no IPC wiring).
 // MAX_TITLE_LENGTH is exported so challengeTitlePin.ts bounds incoming
 // titles with the same cap mergeTitlePins accepts.
 export const getTitlePins = titlePins.getTitlePins;
 export const mergeTitlePins = titlePins.mergeTitlePins;
+// The photo a challenge's Boost and Turbo are pinned to (IPC: get-entry-pins / set-entry-pin).
+export const getEntryPins = entryPins.getEntryPins;
+export const setEntryPin = entryPins.setEntryPin;
+export const isPinnableImageId = entryPins.isPinnableImageId;
 // Cleanup functions
-export const cleanupStaleChallengeSetting = challengeOverrides.cleanupStaleChallengeSetting;
-export const cleanupObsoleteSettings = persistence.cleanupObsoleteSettings;
+export const cleanupStaleChallengeSetting = staleChallengeCleanup.cleanupStaleChallengeSetting;
+// The open (joinable) challenge ids cleanupStaleChallengeSetting spares chosen-photo entries for
+export const rememberOpenChallengeIds = openChallenges.rememberOpenChallengeIds;
+export const getOpenChallengeIds = openChallenges.getOpenChallengeIds;
+// The upcoming (not started) ids Discover listed: written by the Discover handler alone
+export const rememberUpcomingChallenges = openChallenges.rememberUpcomingChallenges;
+export const getUpcomingChallengeIds = openChallenges.getUpcomingChallengeIds;
+export const forgetOpenChallengeIds = openChallenges.forgetOpenChallengeIds;
+// Every saved Chosen Photos list removed in one go (the lists belong to one account)
+export const clearChosenPhotos = chosenPhotosClear.clearChosenPhotos;
 // Reset functions
 export const resetSetting = reset.resetSetting;
 export const resetGlobalDefault = reset.resetGlobalDefault;

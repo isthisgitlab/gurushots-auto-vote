@@ -211,14 +211,6 @@ describe('getBoostPrefillState — window boundaries', () => {
         });
     });
 
-    test('a corrupt lead falls back to the 15m schema default rather than disabling the window', () => {
-        mockSettings({ voteBeforeBoostLeadMin: 'nonsense' });
-        expect(VotingLogic.getBoostPrefillState(buildChallenge({ boostExpiresInSec: 4200 }), ID, NOW)).toEqual({
-            active: true,
-            inWindow: true,
-        });
-    });
-
     test('malformed data where the boost outlives the challenge never opens a window', () => {
         mockSettings({ boostTime: 60 });
         // timeout after close → apply instant lands at a negative seconds-before-close,

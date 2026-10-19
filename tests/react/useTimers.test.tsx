@@ -14,7 +14,7 @@ function TimerProbe({ challenges }: { challenges: Parameters<typeof useTimers>[0
     const first = challenges[0];
     return (
         <div>
-            <span data-testid="time">{first ? (times[first.id]?.value ?? 'none') : 'none'}</span>
+            <span data-testid="time">{first ? (times[first.id]?.value ?? 'ended') /* null = ended */ : 'none'}</span>
             <span data-testid="ids">{Object.keys(times).join(',')}</span>
         </div>
     );
@@ -48,7 +48,7 @@ describe('useTimers (signals-backed countdown)', () => {
         expect(screen.getByTestId('time').textContent).toBe('1m 54s');
     });
 
-    test('flips to "Ended" once the close time passes', () => {
+    test('flips to null (ended) once the close time passes', () => {
         const closeSec = Math.floor(BASE_MS / 1000) + 2;
         render(<TimerProbe challenges={[{ id: 'c1', close_time: closeSec }]} />);
         expect(screen.getByTestId('time').textContent).toBe('2s');
@@ -56,7 +56,7 @@ describe('useTimers (signals-backed countdown)', () => {
         act(() => {
             jest.advanceTimersByTime(3000);
         });
-        expect(screen.getByTestId('time').textContent).toBe('Ended');
+        expect(screen.getByTestId('time').textContent).toBe('ended');
     });
 
     test('prunes the signal map when a challenge leaves the list', () => {

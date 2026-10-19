@@ -53,7 +53,8 @@ describe('useAuth error channels', () => {
             await hook.authenticate('user', 'pw');
             await hook.login();
         });
-        expect(hook.error).toBe('window transition died');
+        expect(hook.error).toBe('login-transition-failed');
+        expect(window.api.logError).toHaveBeenCalledWith('Login transition failed: window transition died');
     });
 
     it('a flow error is not shadowed by a stale auth error (auth channel cleared first)', async () => {
@@ -68,7 +69,7 @@ describe('useAuth error channels', () => {
             await hook.logout();
         });
         // The transition clears the auth channel so the newer flow error wins.
-        expect(hook.error).toBe('logout died');
+        expect(hook.error).toBe('logout-failed');
     });
 
     it('a new authenticate clears a previous flow error', async () => {
@@ -76,7 +77,7 @@ describe('useAuth error channels', () => {
         await act(async () => {
             await hook.login();
         });
-        expect(hook.error).toBe('transition died');
+        expect(hook.error).toBe('login-transition-failed');
 
         jest.mocked(window.api.authenticate).mockResolvedValue({ success: true });
         await act(async () => {

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useCallback, useRef, useId } from 'react';
+import { useLayoutEffect, useCallback, useRef, useId, createPortal } from 'react';
 import { rendererTranslator } from '../../../translations/renderer';
 import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 import type { ComponentChildren } from 'preact';
@@ -6,6 +6,31 @@ import type { ComponentChildren } from 'preact';
 // The elements Tab can land on inside the dialog.
 const FOCUSABLE_SELECTOR =
     'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// The open modals, outermost first. A modal can open from inside another (the
+// photo chooser from a settings modal); only the topmost one answers Escape and
+// Tab, and the page scroll lock outlives all but the last to close.
+const openModalIds: string[] = [];
+
+const isTopmost = (id: string): boolean => openModalIds[openModalIds.length - 1] === id;
+
+/**
+ * Keep this modal on the stack while it is open. Its own effect, keyed on the
+ * open state alone, so the modal holds its place for as long as it stays open:
+ * registering again would move it above one opened from inside it.
+ */
+function useModalStack(isOpen: boolean, id: string) {
+    useLayoutEffect(() => {
+        if (!isOpen) return undefined;
+        openModalIds.push(id);
+        // Prevent body scroll when modal is open
+        document.body.style.overflow = 'hidden';
+        return () => {
+            openModalIds.splice(openModalIds.indexOf(id), 1);
+            document.body.style.overflow = openModalIds.length > 0 ? 'hidden' : '';
+        };
+    }, [isOpen, id]);
+}
 
 // Close-button label, read from the page translator rather than the
 // useTranslation hook so this generic UI primitive stays usable outside a
@@ -29,7 +54,8 @@ export interface ModalProps {
 /**
  * DaisyUI modal with accessibility features: role=dialog / aria-modal, Escape
  * to close, a focus trap that keeps Tab / Shift+Tab cycling within the dialog,
- * and focus restoration to the triggering element when the modal closes.
+ * and focus restoration to the triggering element when the modal closes. It is
+ * portalled to the document body, so it stacks and sizes the same wherever it opens.
  */
 export function Modal({
     isOpen,
@@ -57,6 +83,10 @@ export function Modal({
     // the wrong dialog title).
     const titleId = useId();
     const modalBoxRef = useRef<HTMLDivElement | null>(null);
+    // Read at Escape time, so a parent passing a new onClose each render does not
+    // re-run the open effect (which would pull focus back to the first control).
+    const onCloseRef = useRef(onClose);
+    onCloseRef.current = onClose;
     // The element focused before the modal opened, restored on close.
     const previouslyFocusedRef = useRef<(Element & Partial<HTMLOrSVGElement>) | null>(null);
 
@@ -69,8 +99,9 @@ export function Modal({
 
     const handleKeyDown = useCallback(
         (e: KeyboardEvent) => {
+            if (!isTopmost(titleId)) return;
             if (e.key === 'Escape') {
-                if (onClose) onClose();
+                onCloseRef.current?.();
                 return;
             }
             if (e.key !== 'Tab') return;
@@ -96,7 +127,7 @@ export function Modal({
                 first.focus();
             }
         },
-        [onClose, getFocusable],
+        [getFocusable, titleId],
     );
 
     useLayoutEffect(() => {
@@ -105,25 +136,27 @@ export function Modal({
         // Remember the trigger so focus can return to it on close.
         previouslyFocusedRef.current = document.activeElement;
         document.addEventListener('keydown', handleKeyDown);
-        // Prevent body scroll when modal is open
-        document.body.style.overflow = 'hidden';
         // Move focus into the dialog (first focusable element, else the box).
         const focusable = getFocusable();
         (focusable[0] || modalBoxRef.current)?.focus();
 
         return () => {
             document.removeEventListener('keydown', handleKeyDown);
-            document.body.style.overflow = '';
             const prev = previouslyFocusedRef.current;
             if (prev && typeof prev.focus === 'function') prev.focus();
         };
     }, [isOpen, handleKeyDown, getFocusable]);
 
+    useModalStack(isOpen, titleId);
+
     if (!isOpen) {
         return null;
     }
 
-    return (
+    // Rendered into the body: DaisyUI's open .modal-box carries translate/scale, which
+    // makes it the containing block of any position:fixed descendant, so a modal
+    // opened from inside another would be sized and clipped by the outer box.
+    return createPortal(
         <div
             className="modal modal-open z-50"
             role="dialog"
@@ -158,7 +191,8 @@ export function Modal({
                 {/* Content */}
                 {children}
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }
 
@@ -166,5 +200,5 @@ export function Modal({
  * Modal action buttons container
  */
 export function ModalActions({ children, className = '' }: { children?: ComponentChildren; className?: string }) {
-    return <div className={`modal-action ${className}`}>{children}</div>;
+    return <div className={`modal-action flex-wrap ${className}`}>{children}</div>;
 }

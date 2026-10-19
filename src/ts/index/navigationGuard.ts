@@ -7,8 +7,8 @@ import type { App, Event, Shell, WebContents } from 'electron';
 /**
  * Window-open and navigation policy for every web contents the app creates.
  *
- * A window has the preload's `window.api`, and the `persist:gurushots` session
- * is shared, so a window must never leave the app's own pages: API-sourced
+ * A window has the preload's `window.api`, and the app-window session
+ * (`APP_PARTITION`) is shared, so a window must never leave the app's own pages: API-sourced
  * content (a challenge's welcome message) carries links, and a local document
  * can be dropped onto a window. Nothing opens a new window; a link the user
  * follows goes to the system browser or mail client when it is a plain

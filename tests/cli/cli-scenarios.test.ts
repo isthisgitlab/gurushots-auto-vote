@@ -7,7 +7,13 @@ jest.mock('../../src/ts/logger', () => {
     const calls: { level: string; msg: string }[] = [];
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg: String(msg) });
     const cat = { info: rec('info'), error: rec('error'), success: rec('success'), warning: rec('warning') };
-    return { __calls: calls, withCategory: jest.fn(() => cat) };
+    return {
+        __calls: calls,
+        withCategory: jest.fn(() => cat),
+        printLine: rec('stdout'),
+        printDocument: rec('stdout'),
+        printStderr: rec('stderr'),
+    };
 });
 jest.mock('../../src/ts/ipc/scenarios.handlers', () => {
     const handlers = Object.fromEntries(
@@ -20,6 +26,7 @@ jest.mock('../../src/ts/ipc/scenarios.handlers', () => {
             'delete-scenario',
             'get-scenario-status',
             'reset-scenario-state',
+            'reset-all-scenario-state',
             'dry-run-scenario',
             'simulate-scenario',
         ].map((channel) => [channel, jest.fn()]),
@@ -76,6 +83,27 @@ describe('list-scenarios', () => {
         expect(text()).toContain('Templates: exhibitionDoubleDip');
     });
 
+    test('a stored name, description or start phase cannot drive the terminal or reorder what is shown', async () => {
+        const bidi = '\u202E';
+        const esc = String.fromCharCode(27);
+        h['get-scenarios'].mockResolvedValue(
+            invalid({
+                success: true,
+                scenarios: {
+                    [`Evil${bidi}name${esc}[31m`]: {
+                        start: `ma${bidi}in`,
+                        description: `desc${bidi}${esc}[2Jtext`,
+                        phases: { [`ma${bidi}in`]: {} },
+                    },
+                },
+            }),
+        );
+        await expect(cmd.listScenarios()).resolves.toBe(0);
+        expect(text()).toContain('Evilname — 1 phase(s), starts in "main"');
+        expect(text()).toContain('desctext');
+        expect(text()).not.toMatch(/(?!\n)[\p{Cc}\p{Cf}]/u);
+    });
+
     test('an empty list and a failure', async () => {
         h['get-scenarios'].mockResolvedValueOnce(invalid({ success: true, scenarios: {} }));
         await cmd.listScenarios();
@@ -90,7 +118,10 @@ describe('list-scenarios', () => {
 describe('scenario-template', () => {
     test('prints or writes a template; an unknown id fails', async () => {
         await expect(cmd.scenarioTemplate('eveningBoost')).resolves.toBe(0);
-        expect(text()).toContain('"name": "Evening boost before the last day"');
+        // The document goes to the console with its line breaks, never into the log as one line.
+        expect(text('info')).toBe('');
+        expect(text('stdout')).toContain('{\n  "name": "Evening boost before the last day"');
+        expect(text('stdout').endsWith('}')).toBe(true);
         await expect(cmd.scenarioTemplate('eveningBoost', 'out.json')).resolves.toBe(0);
         expect(fs.writeFileSync).toHaveBeenCalledWith('out.json', expect.stringContaining('Evening boost'), 'utf8');
         await expect(cmd.scenarioTemplate('nope')).resolves.toBe(1);
@@ -119,6 +150,7 @@ describe('import-scenario', () => {
                     { name: 'done', rules: 0, settings: [] },
                 ],
                 spending: [{ action: 'swap', phase: 'main', rule: 'Hold it' }],
+                flagged: [],
                 limits: { swaps: 3 },
                 ...overrides,
             },
@@ -134,6 +166,43 @@ describe('import-scenario', () => {
         expect(text()).toContain('Limits: 3 swaps');
         expect(text()).toContain('re-run: import-scenario plan.json --yes');
         expect(h['import-scenario']).not.toHaveBeenCalled();
+    });
+
+    test('the preview of an imported file cannot drive the terminal or reorder what is shown', async () => {
+        const bidi = '\u202E';
+        const esc = String.fromCharCode(27);
+        const hostile = preview({
+            name: `Pl${bidi}an${esc}[31m`,
+            start: `ma${bidi}in`,
+            description: `de${bidi}sc${esc}[2J`,
+            phases: [{ name: `ma${bidi}in`, rules: 1, settings: [] }],
+            spending: [{ action: 'swap', phase: `ma${bidi}in`, rule: `Ho${bidi}ld` }],
+            flagged: [{ phase: `ma${bidi}in`, key: 'chosenPhotos' }],
+        });
+        // `exists` too, so the overwrite warning that repeats the name is covered.
+        h['preview-scenario-import'].mockResolvedValue(invalid({ ...hostile, exists: true }));
+        await expect(cmd.importScenarioCmd('plan.json')).resolves.toBe(0);
+        const shown = text('info') + text('warning');
+        expect(shown).toContain('Scenario "Plan" — starts in phase "main"');
+        expect(shown).toContain('desc');
+        expect(shown).toContain('swap (main → Hold)');
+        expect(shown).toContain('Phase main sets chosenPhotos');
+        expect(shown).toContain('A scenario named "Plan" already exists');
+        expect(shown).not.toMatch(/(?!\n)[\p{Cc}\p{Cf}]/u);
+    });
+
+    test('the preview warns about chosen photos and Only by phase', async () => {
+        h['preview-scenario-import'].mockResolvedValue(
+            preview({
+                flagged: [
+                    { phase: 'main', key: 'chosenPhotos' },
+                    { phase: 'late', key: 'chosenPhotosOnly' },
+                ],
+            }),
+        );
+        await cmd.importScenarioCmd('plan.json');
+        expect(text('warning')).toContain('Phase main sets chosenPhotos');
+        expect(text('warning')).toContain('Phase late sets chosenPhotosOnly');
     });
 
     test('a scenario that spends nothing and replaces an existing one', async () => {
@@ -174,7 +243,7 @@ describe('import-scenario', () => {
 
 describe('export / rename / delete', () => {
     test('success paths', async () => {
-        h['export-scenario'].mockResolvedValue({ success: true, json: '{}\n' });
+        h['export-scenario'].mockResolvedValue({ success: true, json: '{}\n', omitted: [] });
         await expect(cmd.exportScenarioCmd('Plan', 'plan.json')).resolves.toBe(0);
         expect(fs.writeFileSync).toHaveBeenCalledWith('plan.json', '{}\n', 'utf8');
         h['rename-scenario'].mockResolvedValue({ success: true, name: 'New' });
@@ -182,6 +251,45 @@ describe('export / rename / delete', () => {
         h['delete-scenario'].mockResolvedValue({ success: true });
         await expect(cmd.deleteScenarioCmd('Plan')).resolves.toBe(0);
         expect(text('success')).toContain('Deleted "Plan"');
+    });
+
+    test('exported JSON on stdout parses even with a credential-looking description, and the note stays out of it', async () => {
+        const doc = JSON.stringify({ name: 'Plan', description: 'token: x password=y' }, null, 2);
+        h['export-scenario'].mockResolvedValue({ success: true, json: `${doc}\n`, omitted: ['chosenPhotos'] });
+        await expect(cmd.exportScenarioCmd('Plan')).resolves.toBe(0);
+        // stdout holds the document and nothing else: it round-trips (redaction would corrupt it).
+        expect(JSON.parse(text('stdout'))).toEqual({ name: 'Plan', description: 'token: x password=y' });
+        // The note about the omitted list went to stderr, not into the piped document or the log.
+        expect(text('stderr')).toBe('Left out of the export (they belong to your account): chosenPhotos');
+        expect(text('stdout')).not.toContain('Left out');
+        expect(text('warning')).toBe('');
+    });
+
+    test('the document keeps its meaning on stdout and in --file: unsafe characters are escaped, not removed, identically', async () => {
+        const name = `a${String.fromCharCode(27)}b\u2028c\u202Ed\u0085e\u200Df`;
+        const doc = `${JSON.stringify({ name, description: 'tag: \u{E0041}' }, null, 2)}\n`;
+        // JSON.stringify leaves U+2028, U+202E, U+0085 and the tag character raw.
+        expect(doc).toMatch(/[\u2028\u202E\u0085]/);
+        h['export-scenario'].mockResolvedValue({ success: true, json: doc, omitted: [] });
+
+        await expect(cmd.exportScenarioCmd('Plan')).resolves.toBe(0);
+        await expect(cmd.exportScenarioCmd('Plan', 'plan.json')).resolves.toBe(0);
+
+        const written = String(fs.writeFileSync.mock.calls[0][1]);
+        expect(`${text('stdout')}\n`).toBe(written);
+        expect(written).not.toMatch(/(?![\n\u200D])[\p{Cc}\p{Cf}\u2028\u2029]/u);
+        expect(written).toContain('\\u2028');
+        expect(written).toContain('\\udb40\\udc41');
+        // The joiner stays, and the document parses back to the original values.
+        expect(written).toContain('\u200D');
+        expect(JSON.parse(written)).toEqual(JSON.parse(doc));
+    });
+
+    test('an export says which account-bound settings it left out', async () => {
+        h['export-scenario'].mockResolvedValue({ success: true, json: '{}\n', omitted: ['chosenPhotos'] });
+        await expect(cmd.exportScenarioCmd('Plan', 'plan.json')).resolves.toBe(0);
+        expect(text('warning')).toContain('Left out of the export (they belong to your account): chosenPhotos');
+        expect(fs.writeFileSync).toHaveBeenCalledWith('plan.json', '{}\n', 'utf8');
     });
 
     test('failures exit 1', async () => {
@@ -214,8 +322,16 @@ describe('scenario-status', () => {
         h['get-scenario-status'].mockResolvedValueOnce(status({ assigned: 'Gone', scenario: null }));
         await cmd.scenarioStatusCmd('7');
         expect(text('warning')).toContain('"Gone", which does not exist');
-        h['get-scenario-status'].mockResolvedValueOnce(status({ corrupt: true }));
+        h['get-scenario-status'].mockResolvedValueOnce(status({ corrupt: 'file' }));
         await expect(cmd.scenarioStatusCmd('7')).resolves.toBe(1);
+        expect(text('error')).toContain('scenario-reset --all');
+        h['get-scenario-status'].mockResolvedValueOnce(status({ corrupt: 'record' }));
+        await expect(cmd.scenarioStatusCmd('7')).resolves.toBe(1);
+        expect(text('error')).toContain('This challenge’s saved scenario progress is unreadable');
+        expect(text('error')).toContain('scenario-reset --challenge=7');
+        h['get-scenario-status'].mockResolvedValueOnce(status({ corrupt: 'unloaded' }));
+        await expect(cmd.scenarioStatusCmd('7')).resolves.toBe(1);
+        expect(text('error')).toContain('could not be loaded yet; the app retries — reopen the app if it persists');
         h['get-scenario-status'].mockResolvedValueOnce(status());
         await cmd.scenarioStatusCmd('7');
         expect(text()).toContain('Not started yet');
@@ -233,7 +349,7 @@ describe('scenario-status', () => {
                     spent: { swaps: 1 },
                     inFlight: { ruleId: 'r1', actionIndex: 1 },
                     lastAction: { action: 'swap', ruleId: 'r1', at: 1_800_000_100 },
-                    lastError: { message: 'boost not available', at: 1_800_000_200 },
+                    lastError: { message: 'boost not avail\u202Eable', at: 1_800_000_200 },
                 },
             }),
         );
@@ -243,7 +359,37 @@ describe('scenario-status', () => {
         expect(text()).toContain('Spent: 1 swaps, 0 keys, 0 fills');
         expect(text()).toContain('resumes at action 2');
         expect(text()).toContain('Last action: swap (r1)');
+        // The stored message is stripped of bidi controls before it is printed.
         expect(text('warning')).toContain('Last problem: boost not available');
+        expect(text('warning')).not.toContain('\u202E');
+    });
+
+    test('Manual Only says a started plan is paused', async () => {
+        const started = {
+            phase: 'main',
+            phaseEnteredAt: 1,
+            memory: {},
+            spent: {},
+            inFlight: null,
+            lastAction: null,
+            lastError: null,
+        };
+        h['get-scenario-status'].mockResolvedValueOnce(status({ manualOnly: true, state: started }));
+        await expect(cmd.scenarioStatusCmd('7')).resolves.toBe(0);
+        expect(text()).toContain('Paused (Manual Only): no step runs and no check is due.');
+        logger.__calls.length = 0;
+        h['get-scenario-status'].mockResolvedValueOnce(status({ manualOnly: false }));
+        await cmd.scenarioStatusCmd('7');
+        expect(text()).not.toContain('Paused (Manual Only)');
+    });
+
+    test('a paused plan that has not started does not promise the next voting pass', async () => {
+        h['get-scenario-status'].mockResolvedValueOnce(status({ manualOnly: true }));
+        await cmd.scenarioStatusCmd('7');
+        expect(text()).toContain('Not started yet — it starts in phase "main" once Manual Only is off.');
+        // The card says no more for a plan that has not started, and neither does the CLI.
+        expect(text()).not.toContain('Paused (Manual Only)');
+        expect(text()).not.toContain('next voting pass');
     });
 
     test('a quiet plan prints only its phase', async () => {
@@ -272,6 +418,85 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         await expect(cmd.scenarioResetCmd('7')).resolves.toBe(1);
     });
 
+    test('the success line says what a reset costs, for one challenge and for all of them', async () => {
+        h['reset-scenario-state'].mockResolvedValueOnce({ success: true });
+        await cmd.scenarioResetCmd('7');
+        expect(text('success')).toContain(
+            'may spend again an action whose outcome is unknown (GuruShots gave no answer, or the app could not record it)',
+        );
+        expect(text('success')).toContain('restarts the scenario spend counter');
+        expect(text('success')).toContain('the rules that already ran can run (and spend) again');
+        h['reset-all-scenario-state'].mockResolvedValueOnce({ success: true });
+        await expect(cmd.scenarioResetAllCmd()).resolves.toBe(0);
+        expect(text('success')).toContain('every challenge');
+        expect(text('success').split('every challenge')[1]).toContain(
+            'rules that already ran can run (and spend) again',
+        );
+    });
+
+    test('a busy challenge or file is an error that changed nothing, never a success', async () => {
+        h['reset-scenario-state'].mockResolvedValueOnce({ success: false, error: 'busy' });
+        await expect(cmd.scenarioResetCmd('7')).resolves.toBe(1);
+        expect(text('error')).toContain('Nothing was changed. Try again in a moment.');
+        expect(text('success')).toBe('');
+        h['reset-all-scenario-state'].mockResolvedValueOnce({ success: false, error: 'busy' });
+        await expect(cmd.scenarioResetAllCmd()).resolves.toBe(1);
+    });
+
+    test('a lock the app cannot make is said so, with where to look, not "try again in a moment"', async () => {
+        h['reset-scenario-state'].mockResolvedValueOnce({ success: false, error: 'locks-unavailable' });
+        await expect(cmd.scenarioResetCmd('7')).resolves.toBe(1);
+        h['reset-all-scenario-state'].mockResolvedValueOnce({ success: false, error: 'locks-unavailable' });
+        await expect(cmd.scenarioResetAllCmd()).resolves.toBe(1);
+        expect(lines('error')).toHaveLength(2);
+        for (const line of lines('error')) {
+            expect(line).toContain('cannot create its lock files in its data folder');
+            expect(line).toContain('Check the folder’s permissions and the free disk space');
+        }
+        expect(text('error')).not.toContain('Try again in a moment');
+    });
+
+    test('a reset that could not be saved says nothing was changed and where to look, for both resets', async () => {
+        h['reset-scenario-state'].mockResolvedValueOnce({ success: false, error: 'not-saved' });
+        await expect(cmd.scenarioResetCmd('7')).resolves.toBe(1);
+        h['reset-all-scenario-state'].mockResolvedValueOnce({ success: false, error: 'not-saved' });
+        await expect(cmd.scenarioResetAllCmd()).resolves.toBe(1);
+        expect(lines('error')).toHaveLength(2);
+        for (const line of lines('error')) {
+            expect(line).toContain('nothing was changed');
+            expect(line).toContain('storage is full or not writable — logs --error has the details');
+        }
+    });
+
+    test('progress that was not loaded yet is not reset, and the line says the app retries', async () => {
+        h['reset-scenario-state'].mockResolvedValueOnce({ success: false, error: 'state-unloaded' });
+        await expect(cmd.scenarioResetCmd('7')).resolves.toBe(1);
+        h['reset-all-scenario-state'].mockResolvedValueOnce({ success: false, error: 'state-unloaded' });
+        await expect(cmd.scenarioResetAllCmd()).resolves.toBe(1);
+        expect(lines('error')).toHaveLength(2);
+        for (const line of lines('error')) {
+            expect(line).toContain('could not be loaded yet; the app retries — reopen the app if it persists');
+            expect(line).toContain('Nothing is reset.');
+        }
+        expect(text('success')).toBe('');
+    });
+
+    test('an unreadable progress file can only be reset for every challenge, and the line says what that costs', async () => {
+        h['reset-scenario-state'].mockResolvedValueOnce({ success: false, error: 'state-unreadable' });
+        await expect(cmd.scenarioResetCmd('7')).resolves.toBe(1);
+        expect(text('error')).toContain('scenario-reset --all');
+        expect(text('error')).toContain('forgets the progress of every challenge');
+        expect(text('error')).toContain(
+            'may spend again an action whose outcome is unknown (GuruShots gave no answer, or the app could not record it)',
+        );
+    });
+
+    test('any other failure of a reset of all is reported as it is', async () => {
+        h['reset-all-scenario-state'].mockResolvedValueOnce(invalid(failure));
+        await expect(cmd.scenarioResetAllCmd()).resolves.toBe(1);
+        expect(text('error')).toContain('Could not reset the scenarios');
+    });
+
     test('dry run explains every rule and what would run', async () => {
         h['dry-run-scenario'].mockResolvedValueOnce(
             invalid({
@@ -282,6 +507,7 @@ describe('scenario-reset / dry-run / vocabulary', () => {
                 halted: null,
                 explain: [
                     { status: 'waiting', label: 'Morning entry', reason: 'condition 1 (dailyWindow) does not hold' },
+                    { status: 'waiting', label: 'Ev\u202Eil', reason: 'x' },
                 ],
                 fire: { ruleId: 'r2', startIndex: 1, actions: ['swap', 'boost', 'goto'] },
                 nextWakeAt: 1_800_000_000,
@@ -290,7 +516,30 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         await expect(cmd.scenarioDryRunCmd('7')).resolves.toBe(0);
         expect(text()).toContain('phase main (not started yet)');
         expect(text()).toContain('[waiting] Morning entry');
+        // A rule label from the imported file is stripped of bidi controls.
+        expect(text()).toContain('[waiting] Evil: x');
+        expect(text()).not.toContain('\u202E');
         expect(text()).toContain('Would run now: r2 → boost, goto');
+    });
+
+    test('dry run on a Manual Only challenge says it is paused and lists no rule or check', async () => {
+        h['dry-run-scenario'].mockResolvedValueOnce(
+            invalid({
+                success: true,
+                scenario: 'Plan',
+                phase: 'main',
+                started: true,
+                halted: null,
+                manualOnly: true,
+                explain: [{ status: 'ready', label: 'Rule', reason: 'all conditions hold' }],
+                fire: null,
+                nextWakeAt: null,
+            }),
+        );
+        await expect(cmd.scenarioDryRunCmd('7')).resolves.toBe(0);
+        expect(text()).toContain('Paused (Manual Only): nothing would run now and no check is due.');
+        expect(text()).not.toContain('Next time-based check');
+        expect(text()).not.toContain('[ready]');
     });
 
     test('dry run: nothing ready, halted, or failed', async () => {
@@ -339,8 +588,8 @@ describe('scenario-reset / dry-run / vocabulary', () => {
                     },
                     {
                         at: 1_800_000_600,
-                        phase: 'main',
-                        label: 'Hold it',
+                        phase: 'ma\u202Ein',
+                        label: 'Ho\u202Eld it',
                         actions: ['swap', 'goto'],
                         toPhase: 'holding',
                     },
@@ -352,8 +601,27 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         );
         await expect(cmd.scenarioSimulateCmd('7')).resolves.toBe(0);
         expect(text()).toContain('[main] Morning entry: enterPhoto');
-        expect(text()).toContain('Hold it: swap, goto → phase holding');
+        expect(text()).toContain('[main] Hold it: swap, goto → phase holding');
+        expect(text()).not.toContain('\u202E');
         expect(text()).toContain('waits on live data');
+    });
+
+    test('simulate on a Manual Only challenge keeps the timeline and notes it is paused', async () => {
+        h['simulate-scenario'].mockResolvedValueOnce(
+            invalid({
+                success: true,
+                scenario: 'Plan',
+                startPhase: 'main',
+                manualOnly: true,
+                events: [],
+                stoppedBecause: 'idle',
+                stoppedAt: 1_800_000_000,
+                halted: null,
+            }),
+        );
+        await expect(cmd.scenarioSimulateCmd('7')).resolves.toBe(0);
+        expect(text()).toContain('Paused (Manual Only): this is what would run if the switch were off now.');
+        expect(text()).toContain('Nothing would run.');
     });
 
     test('simulate: an empty or halted timeline, and a failure', async () => {

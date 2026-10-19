@@ -12,7 +12,9 @@ const realApi = getApiStrategy({ mock: false });
 const mockApi = getApiStrategy({ mock: true });
 import settings = require('../../src/ts/settings');
 import type * as apiFactoryModule from '../../src/ts/apiFactory';
+import type * as authModule from '../../src/ts/services/auth';
 import type * as BaseMiddlewareModule from '../../src/ts/services/BaseMiddleware';
+const { LogoutNotSavedError } = require('../../src/ts/services/auth') as typeof authModule;
 const { BaseMiddleware } = require('../../src/ts/services/BaseMiddleware') as typeof BaseMiddlewareModule;
 
 // Mock the API client for testing
@@ -109,19 +111,25 @@ describe('CLI-GUI Parity Tests', () => {
             const allSettings = settings.loadSettings();
 
             // Verify all expected settings are present
-            expect(allSettings).toHaveProperty('theme');
-            expect(allSettings).toHaveProperty('stayLoggedIn');
-            expect(allSettings).toHaveProperty('mock');
-            expect(allSettings).toHaveProperty('token');
-            expect(allSettings).toHaveProperty('timezone');
-            expect(allSettings).toHaveProperty('customTimezones');
-            expect(allSettings).toHaveProperty('language');
-            expect(allSettings).toHaveProperty('apiTimeout');
-            expect(allSettings).toHaveProperty('checkFrequencyMin');
-            expect(allSettings).toHaveProperty('checkFrequencyMax');
-            expect(allSettings).toHaveProperty('windowBounds');
-            expect(allSettings).toHaveProperty('challengeSettings');
-            expect(allSettings).toHaveProperty('apiHeaders');
+            for (const key of [
+                'theme',
+                'stayLoggedIn',
+                'mock',
+                'timezone',
+                'customTimezones',
+                'language',
+                'apiTimeout',
+                'checkFrequencyMin',
+                'checkFrequencyMax',
+                'windowBounds',
+            ]) {
+                expect(allSettings.app).toHaveProperty(key);
+            }
+            expect(allSettings.auth).toHaveProperty('token');
+            expect(allSettings.auth).toHaveProperty('apiHeaders');
+            for (const container of ['defaults', 'profiles', 'scenarios', 'rules', 'challenges']) {
+                expect(allSettings).toHaveProperty(container);
+            }
         });
 
         test('CLI can handle settings schema', async () => {
@@ -193,14 +201,16 @@ describe('CLI-GUI Parity Tests', () => {
             expect(mockMiddleware.isAuthenticated()).toBe(false);
         });
 
-        test('CLI can logout', () => {
+        test('CLI can logout', async () => {
             // Test logout function exists and works
             expect(typeof realMiddleware.logout).toBe('function');
             expect(typeof mockMiddleware.logout).toBe('function');
 
-            // Test that logout doesn't throw errors
-            expect(() => realMiddleware.logout()).not.toThrow();
-            expect(() => mockMiddleware.logout()).not.toThrow();
+            // A logout does not throw: it is saved, or reported as refused by the settings (here they are not in use).
+            const results = await Promise.allSettled([realMiddleware.logout(), mockMiddleware.logout()]);
+            for (const result of results) {
+                if (result.status === 'rejected') expect(result.reason).toBeInstanceOf(LogoutNotSavedError);
+            }
         });
     });
 

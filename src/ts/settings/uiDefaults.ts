@@ -10,11 +10,48 @@
  */
 
 /**
- * Canonical default timezone. Every `settings.timezone || <fallback>`
- * site must use this constant — changing the default means changing
- * exactly one line.
+ * Canonical default timezone — what a missing `timezone` setting means.
+ * Every reader resolves the setting through `effectiveTimezone`, never
+ * `|| DEFAULT_TIMEZONE`, so an empty or unknown value means UTC and changing
+ * the default means changing exactly one line.
  */
 const DEFAULT_TIMEZONE = 'Europe/Riga';
+
+/** The zones the timezone picker always offers; they are never added to `customTimezones` or removed from the picker. */
+const BUILT_IN_TIMEZONES: readonly string[] = [DEFAULT_TIMEZONE, 'UTC'];
+
+// Accepted zones only, so rejected strings never accumulate.
+const acceptedTimezones: Set<string> = new Set();
+
+/**
+ * Whether the runtime's Intl knows `tz` as a zone name ('local' is not one; it is the device clock).
+ * Only accepted zones are cached, so a rejected string is probed again on each call.
+ */
+const isValidTimezone = (tz: string): boolean => {
+    if (acceptedTimezones.has(tz)) return true;
+    try {
+        new Intl.DateTimeFormat(undefined, { timeZone: tz });
+    } catch {
+        return false;
+    }
+    acceptedTimezones.add(tz);
+    return true;
+};
+
+/**
+ * The zone a `timezone` value means: missing → DEFAULT_TIMEZONE, empty/blank → 'UTC', 'local' → 'local' (the
+ * device clock), a zone the runtime knows → the value trimmed, any other value (a typo) → 'UTC'. Which zones
+ * are known depends on the runtime's ICU data (Electron, Node, the Android WebView), so a zone added recently
+ * can read as UTC on an older WebView; that is consistent per device. A stored typo re-runs the rejected
+ * probe on each call, because only accepted zones are cached.
+ */
+const effectiveTimezone = (value: string | null | undefined): string => {
+    if (value == null) return DEFAULT_TIMEZONE;
+    const trimmed = value.trim();
+    if (!trimmed) return 'UTC';
+    if (trimmed === 'local') return 'local';
+    return isValidTimezone(trimmed) ? trimmed : 'UTC';
+};
 
 /**
  * Every DaisyUI theme, in DaisyUI's own order — styles.css compiles them all
@@ -92,4 +129,4 @@ const getUiDefaultSettings = (): {
     apiRetryBaseDelayMs: 1000, // Base for exponential backoff between retries (ms).
 });
 
-export { getUiDefaultSettings, DEFAULT_TIMEZONE, THEMES };
+export { getUiDefaultSettings, DEFAULT_TIMEZONE, BUILT_IN_TIMEZONES, effectiveTimezone, isValidTimezone, THEMES };

@@ -9,6 +9,7 @@ import { LowExposureBanner } from './LowExposureBanner';
 import { ChallengeNav } from './ChallengeNav';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { IconActionButton } from '@/components/ui/IconActionButton';
+import { InlineError } from '@/components/ui/InlineError';
 import { ResetIcon } from '@/components/ui/ResetButton';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import * as ipc from '@/api/ipc';
@@ -20,7 +21,8 @@ import * as ipc from '@/api/ipc';
  * `settingsVersion`, so the card re-reads its effective settings and its
  * deadline-action preview in place (no remount).
  */
-function useGlobalCardDensity() {
+function useGlobalCardDensity(onError: (message: string | null) => void) {
+    const { t } = useTranslation();
     const [globalCompact, setGlobalCompact] = useState(false);
     const [compactActions, setCompactActions] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
@@ -57,14 +59,20 @@ function useGlobalCardDensity() {
 
     const toggleGlobalCompact = useCallback(async () => {
         const next = !globalCompact;
+        onError(null);
         try {
-            await ipc.setGlobalDefault('compactCards', next);
+            // A refused write answers false rather than throwing: the layout stays as it was.
+            if ((await ipc.setGlobalDefault('compactCards', next)) === false) {
+                onError(t('errors.compactToggleFailed'));
+                return;
+            }
             setGlobalCompact(next);
             setRefreshKey((k) => k + 1);
         } catch {
-            /* leave UI as-is on failure */
+            // Leave the layout as it was, and say so.
+            onError(t('errors.compactToggleFailed'));
         }
-    }, [globalCompact]);
+    }, [globalCompact, onError, t]);
 
     return { globalCompact, compactActions, refreshKey, toggleGlobalCompact };
 }
@@ -98,7 +106,9 @@ export function ChallengesSection({
     const { t } = useTranslation();
     const { challenges, loading, error, refetch } = useChallenges();
     const times = useTimers(challenges);
-    const { globalCompact, compactActions, refreshKey, toggleGlobalCompact } = useGlobalCardDensity();
+    // The message of the last failed Vote all / Run / layout toggle, shown below their row.
+    const [actionError, setActionError] = useState<string | null>(null);
+    const { globalCompact, compactActions, refreshKey, toggleGlobalCompact } = useGlobalCardDensity(setActionError);
 
     // Shared success path for the Vote All / Run buttons below (awaited, so
     // their spinner holds until the refreshed list lands).
@@ -145,7 +155,7 @@ export function ChallengesSection({
         return (
             <div>
                 {fetchErrorBanner}
-                <div className="text-center py-4 text-base-content/60">
+                <div className="text-center py-4 text-base-content/70">
                     {isLoggedIn ? t('app.noActiveChallenges') : t('app.pleaseLogin')}
                 </div>
                 {error && isLoggedIn && (
@@ -169,9 +179,10 @@ export function ChallengesSection({
                 {!autovoteRunning && (
                     <>
                         <IconActionButton
-                            className="btn btn-latvian btn-sm"
+                            className="btn btn-neutral btn-sm"
                             action={() => ipc.voteAllChallengesManual()}
                             onSuccess={refetchAfterAction}
+                            onError={setActionError}
                             failureLogPrefix="Vote All failed"
                             errorLogPrefix="Error during Vote All"
                             loadingLabel={t('app.votingAll')}
@@ -179,9 +190,10 @@ export function ChallengesSection({
                             label={t('app.voteAll')}
                         />
                         <IconActionButton
-                            className="btn btn-latvian btn-sm"
+                            className="btn btn-neutral btn-sm"
                             action={() => ipc.runVotingCycle()}
                             onSuccess={refetchAfterAction}
+                            onError={setActionError}
                             failureLogPrefix="Run failed"
                             errorLogPrefix="Error during Run"
                             loadingLabel={t('app.running')}
@@ -189,7 +201,7 @@ export function ChallengesSection({
                             label={t('app.run')}
                         />
                         <button className="btn btn-outline btn-sm" onClick={handleRefresh} disabled={loading}>
-                            {loading ? <span className="loading loading-spinner loading-xs" /> : <ResetIcon />}
+                            {loading ? <LoadingSpinner size="xs" decorative /> : <ResetIcon />}
                             {t('app.refresh')}
                         </button>
                     </>
@@ -211,6 +223,11 @@ export function ChallengesSection({
                     {globalCompact ? t('app.details') : t('app.compact')}
                 </button>
             </div>
+            {actionError && (
+                <InlineError className="-mt-2 mb-4" onDismiss={() => setActionError(null)}>
+                    {actionError}
+                </InlineError>
+            )}
 
             {/* Boost-window summary: anchors to the challenges whose boost
                 window is open right now. Self-hides when none are open. */}

@@ -7,9 +7,10 @@
  * assert what App does. Settings flow through the real useSettings hook over
  * the window.api mock.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/preact';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { DEFAULT_TIMEZONE } from '../../src/ts/settings/uiDefaults';
 import { invalid } from '../helpers/invalid';
+import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
 
 import type { ComponentChildren } from 'preact';
 import type { Challenge } from '../../src/ts/types/gurushots';
@@ -56,9 +57,12 @@ const mockAutovote = {
     running: false,
     status: 'idle',
     statusClass: 'x',
+    error: null as string | null,
     lastRun: null,
     cycles: 0,
-    nextRunAt: null,
+    nextRunAt: null as number | null,
+    pendingStartAt: null as number | null,
+    start: jest.fn(),
     stop: jest.fn(),
     toggle: jest.fn(),
 };
@@ -111,9 +115,12 @@ describe('App page', () => {
         for (const k of Object.keys(mockProps)) delete (mockProps as Record<string, unknown>)[k];
         mockChallenges.challenges = [];
         mockAutovote.running = false;
+        mockAutovote.pendingStartAt = null;
         mockAutovote.cycles = 0;
         originals = Object.fromEntries(API_METHODS.map((m) => [m, window.api[m]]));
-        window.api.getSettings = jest.fn().mockResolvedValue({ onboardingCompleted: true });
+        window.api.getSettings = jest.fn().mockResolvedValue({
+            app: { onboardingCompleted: true, noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION },
+        });
         window.api.setSetting = jest.fn().mockResolvedValue(undefined);
         (window.api as { logout: WindowApi['logout'] }).logout = jest.fn().mockResolvedValue(undefined);
         window.api.logError = jest.fn().mockResolvedValue(undefined);
@@ -133,6 +140,14 @@ describe('App page', () => {
         return utils;
     };
 
+    test('the navbar sits in the banner and the main landmark holds the page content, not the navbar', async () => {
+        await renderReady();
+        const banner = screen.getByRole('banner');
+        const main = screen.getByRole('main', { name: 'app.mainContent' });
+        expect(within(banner).getByText('app.title')).toBeTruthy();
+        expect(within(main).queryByText('app.title')).toBeNull();
+    });
+
     test('shows the loader until translations + settings are ready', async () => {
         render(<App />);
         expect(screen.getByText('common.loading')).toBeTruthy();
@@ -143,11 +158,14 @@ describe('App page', () => {
         mockChallenges.challenges = invalid([{ id: 1, close_time: 1 }]);
         jest.mocked(window.api.getSettings).mockResolvedValue(
             invalid({
-                theme: 'dark',
+                app: {
+                    theme: 'dark',
+                    mock: true,
+                    timezone: 'Europe/Riga',
+                    onboardingCompleted: true,
+                    noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION,
+                },
                 hasToken: true,
-                mock: true,
-                timezone: 'Europe/Riga',
-                onboardingCompleted: true,
             }),
         );
         await renderReady();
@@ -171,7 +189,9 @@ describe('App page', () => {
     });
 
     test('empty settings fall back to defaults and leave the theme untouched', async () => {
-        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ onboardingCompleted: true }));
+        jest.mocked(window.api.getSettings).mockResolvedValue(
+            invalid({ app: { onboardingCompleted: true, noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION } }),
+        );
         await renderReady();
         expect(document.documentElement.getAttribute('data-theme')).toBeNull();
         expect(screen.queryByText('app.mockMode')).toBeNull();
@@ -179,7 +199,9 @@ describe('App page', () => {
     });
 
     test('first run opens the welcome once; closing persists onboardingCompleted', async () => {
-        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({}));
+        jest.mocked(window.api.getSettings).mockResolvedValue(
+            invalid({ app: { noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION } }),
+        );
         await renderReady();
         await waitFor(() => expect(mockProps.WelcomeModal.isOpen).toBe(true));
 
@@ -191,11 +213,63 @@ describe('App page', () => {
         expect(window.api.logError).not.toHaveBeenCalled();
     });
 
+    test('the import report waits for the welcome, so that no two dialogs trap the focus, and shows once it is closed', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValue(
+            invalid({ app: { noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION } }),
+        );
+        const readReport = jest.mocked(window.api.getImportReport);
+        const original = readReport.getMockImplementation();
+        readReport.mockResolvedValue(
+            invalid({
+                success: true,
+                report: {
+                    at: '2026-10-16T09:00:00.000Z',
+                    refsBlocked: ['rules[0].profile: "Gone"'],
+                    acknowledged: false,
+                },
+            }),
+        );
+        await renderReady();
+        await waitFor(() => expect(mockProps.WelcomeModal.isOpen).toBe(true));
+        await waitFor(() => expect(window.api.getImportReport).toHaveBeenCalled());
+        expect(screen.queryByRole('dialog', { name: 'notice.importReportTitle' })).toBeNull();
+
+        await act(async () => {
+            await mockProps.WelcomeModal.onClose();
+        });
+
+        expect(await screen.findByRole('dialog', { name: 'notice.importReportTitle' })).toBeTruthy();
+        readReport.mockImplementation(original);
+    });
+
+    test("dismissing the outcome of a settings recovery, which took the notice away, moves focus to the page's main element", async () => {
+        jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(
+            invalid({ success: true, recovery: { code: 'settings-import-failed', path: '/data/settings.json' } }),
+        );
+        jest.mocked(window.api.retrySettingsImport).mockResolvedValue({ success: true });
+        await renderReady();
+        await screen.findByRole('alert');
+        jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(invalid({ success: true, recovery: null }));
+        fireEvent.click(screen.getByRole('button', { name: 'notice.recoveryRetry' }));
+        const done = await screen.findByText('notice.recoveryRetryDone');
+        await waitFor(() => expect(screen.queryByText('notice.recoveryImportWhat')).toBeNull());
+
+        fireEvent.click(within(done.closest('.alert') as HTMLElement).getByRole('button', { name: 'errors.dismiss' }));
+
+        // (The page made its main element focusable; the notice touched no markup of the page's.)
+        // (Named, so that a screen reader announces where focus came to.)
+        const main = screen.getByRole('main', { name: 'app.mainContent' });
+        expect(document.activeElement).toBe(main);
+        expect(main.getAttribute('tabindex')).toBe('-1');
+    });
+
     test.each([
         [new Error('disk full'), 'Failed to persist onboardingCompleted: disk full'],
         [undefined, 'Failed to persist onboardingCompleted: undefined'],
     ])('a failed welcome persist is logged and does not reopen (%p)', async (err, logged) => {
-        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({}));
+        jest.mocked(window.api.getSettings).mockResolvedValue(
+            invalid({ app: { noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION } }),
+        );
         await renderReady();
         await waitFor(() => expect(mockProps.WelcomeModal.isOpen).toBe(true));
         jest.mocked(window.api.setSetting).mockRejectedValue(err);
@@ -210,11 +284,136 @@ describe('App page', () => {
         expect(mockProps.WelcomeModal.isOpen).toBe(false);
     });
 
+    describe('the unofficial-app notice', () => {
+        const upgradedWithAutoLogin = (noticeAcknowledgedVersion?: number) =>
+            jest.mocked(window.api.getSettings).mockResolvedValue(
+                invalid({
+                    app: { stayLoggedIn: true, onboardingCompleted: true, noticeAcknowledgedVersion },
+                    hasToken: true,
+                }),
+            );
+
+        test('an upgrade with auto-login still shows it, once, and acknowledging persists the version', async () => {
+            upgradedWithAutoLogin(CURRENT_NOTICE_VERSION - 1);
+            const first = await renderReady();
+            expect(screen.getByRole('dialog', { name: 'notice.title' })).toBeTruthy();
+            expect(screen.getByText('notice.unofficial')).toBeTruthy();
+            expect(screen.getByText('notice.updates')).toBeTruthy();
+            // No close button, and Escape does not dismiss it: only the explicit button does.
+            expect(screen.queryByLabelText('common.closeModal')).toBeNull();
+            fireEvent.keyDown(document, { key: 'Escape' });
+            expect(screen.getByRole('dialog', { name: 'notice.title' })).toBeTruthy();
+
+            fireEvent.click(screen.getByRole('button', { name: 'notice.acknowledge' }));
+            await waitFor(() => expect(screen.queryByRole('dialog', { name: 'notice.title' })).toBeNull());
+            expect(window.api.setSetting).toHaveBeenCalledWith('noticeAcknowledgedVersion', CURRENT_NOTICE_VERSION);
+
+            // The next open reads the stored version and does not show it again.
+            first.unmount();
+            upgradedWithAutoLogin(CURRENT_NOTICE_VERSION);
+            await renderReady();
+            expect(screen.queryByRole('dialog', { name: 'notice.title' })).toBeNull();
+        });
+
+        test('a brand-new profile (no stored version) is shown it before the welcome', async () => {
+            jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: {} }));
+            await renderReady();
+            expect(screen.getByRole('dialog', { name: 'notice.title' })).toBeTruthy();
+            expect(mockProps.WelcomeModal.isOpen).toBe(false);
+
+            fireEvent.click(screen.getByRole('button', { name: 'notice.acknowledge' }));
+            await waitFor(() => expect(mockProps.WelcomeModal.isOpen).toBe(true));
+        });
+
+        test('unreadable settings count as not acknowledged', async () => {
+            jest.mocked(window.api.getSettings).mockRejectedValue(new Error('unreadable'));
+            await renderReady();
+            expect(screen.getByRole('dialog', { name: 'notice.title' })).toBeTruthy();
+        });
+
+        test('a failed save with no error message is logged as it came', async () => {
+            upgradedWithAutoLogin(0);
+            await renderReady();
+            jest.mocked(window.api.setSetting).mockRejectedValue(undefined);
+            fireEvent.click(screen.getByRole('button', { name: 'notice.acknowledge' }));
+            await waitFor(() =>
+                expect(window.api.logError).toHaveBeenCalledWith(
+                    'Failed to persist noticeAcknowledgedVersion: undefined',
+                ),
+            );
+        });
+
+        test('a failed save of the acknowledgement is logged and does not bring the notice back', async () => {
+            upgradedWithAutoLogin(0);
+            await renderReady();
+            jest.mocked(window.api.setSetting).mockRejectedValue(new Error('disk full'));
+            fireEvent.click(screen.getByRole('button', { name: 'notice.acknowledge' }));
+            await waitFor(() =>
+                expect(window.api.logError).toHaveBeenCalledWith(
+                    'Failed to persist noticeAcknowledgedVersion: disk full',
+                ),
+            );
+            await waitFor(() => expect(jest.mocked(window.api.getSettings).mock.calls.length).toBeGreaterThan(1));
+            expect(screen.queryByRole('dialog', { name: 'notice.title' })).toBeNull();
+        });
+    });
+
     test('logout when idle just logs out', async () => {
         await renderReady();
         fireEvent.click(screen.getByTitle('app.logout'));
         await waitFor(() => expect(window.api.logout).toHaveBeenCalledTimes(1));
         expect(mockAutovote.stop).not.toHaveBeenCalled();
+    });
+
+    test('a logout the settings refused keeps the screen and says the user is still logged in', async () => {
+        await renderReady();
+        jest.mocked(window.api.logout).mockRejectedValueOnce(new Error('logout-not-saved'));
+
+        fireEvent.click(screen.getByTitle('app.logout'));
+
+        const alert = await screen.findByText('errors.logoutNotSavedTitle');
+        expect(alert.closest('[role="alert"]')?.textContent).toContain('errors.logoutNotSavedDetail');
+        fireEvent.click(
+            within(alert.closest('[role="alert"]') as HTMLElement).getByRole('button', { name: 'errors.dismiss' }),
+        );
+        expect(screen.queryByText('errors.logoutNotSavedTitle')).toBeNull();
+    });
+
+    test('a logout the settings refused, after auto-vote was stopped, says so; it points at the settings only for that cause', async () => {
+        mockAutovote.running = true;
+        await renderReady();
+        jest.mocked(window.api.logout).mockRejectedValueOnce(new Error('logout-not-saved'));
+
+        fireEvent.click(screen.getByTitle('app.logout'));
+
+        const alert = (await screen.findByText('errors.logoutNotSavedTitle')).closest('[role="alert"]') as HTMLElement;
+        expect(alert.textContent).toContain('errors.logoutNotSavedDetail');
+        expect(alert.textContent).toContain('errors.logoutNotSavedStopped');
+    });
+
+    test('a logout that failed for another reason does not blame the settings, and still says auto-vote was stopped', async () => {
+        mockAutovote.running = true;
+        await renderReady();
+        jest.mocked(window.api.logout).mockRejectedValueOnce(new Error('boom'));
+
+        fireEvent.click(screen.getByTitle('app.logout'));
+
+        const alert = (await screen.findByText('errors.logoutFailedTitle')).closest('[role="alert"]') as HTMLElement;
+        expect(alert.textContent).toContain('errors.logoutFailedDetail');
+        expect(alert.textContent).toContain('errors.logoutNotSavedStopped');
+        expect(alert.textContent).not.toContain('errors.logoutNotSavedDetail');
+    });
+
+    test('a logout that failed before auto-vote could be stopped does not say it was', async () => {
+        mockAutovote.running = true;
+        mockAutovote.stop.mockRejectedValueOnce(new Error('stop failed'));
+        await renderReady();
+
+        fireEvent.click(screen.getByTitle('app.logout'));
+
+        const alert = (await screen.findByText('errors.logoutFailedTitle')).closest('[role="alert"]') as HTMLElement;
+        expect(alert.textContent).not.toContain('errors.logoutNotSavedStopped');
+        expect(window.api.logout).not.toHaveBeenCalled();
     });
 
     test('logout while autovote runs stops it first', async () => {
@@ -226,6 +425,14 @@ describe('App page', () => {
         expect(mockAutovote.stop.mock.invocationCallOrder[0]).toBeLessThan(
             jest.mocked(window.api.logout).mock.invocationCallOrder[0],
         );
+    });
+
+    test('logout while a resume is held stops it first', async () => {
+        mockAutovote.pendingStartAt = Date.now() + 30_000;
+        await renderReady();
+        fireEvent.click(screen.getByTitle('app.logout'));
+        await waitFor(() => expect(window.api.logout).toHaveBeenCalledTimes(1));
+        expect(mockAutovote.stop).toHaveBeenCalledTimes(1);
     });
 
     test.each([
@@ -305,6 +512,35 @@ describe('App page', () => {
         mockAutovote.toggle.mockRejectedValueOnce(thrown);
         await act(async () => {
             await mockProps.AutoVoteControls.onToggle();
+        });
+        expect(window.api.logError).toHaveBeenCalledWith(logged);
+    });
+
+    test("a held resume is passed down, and Start now / Don't resume start and stop it", async () => {
+        mockAutovote.pendingStartAt = 1_700_000_000_000;
+        await renderReady();
+        expect(mockProps.AutoVoteControls.pendingStartAt).toBe(1_700_000_000_000);
+        expect(mockProps.StatusHeader.pendingStartAt).toBe(1_700_000_000_000);
+        await act(async () => {
+            await mockProps.AutoVoteControls.onStartNow();
+        });
+        expect(mockAutovote.start).toHaveBeenCalledTimes(1);
+        await act(async () => {
+            await mockProps.AutoVoteControls.onCancelResume();
+        });
+        expect(mockAutovote.stop).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+        ['start', 'Start now', 'Autovote start failed: down'],
+        ['stop', "Don't resume", 'Autovote resume cancel failed: down'],
+    ] as const)('a rejected %s from %s is logged, not left unhandled', async (method, _label, logged) => {
+        await renderReady();
+        mockAutovote[method].mockRejectedValueOnce(new Error('down'));
+        await act(async () => {
+            await (method === 'start'
+                ? mockProps.AutoVoteControls.onStartNow()
+                : mockProps.AutoVoteControls.onCancelResume());
         });
         expect(window.api.logError).toHaveBeenCalledWith(logged);
     });

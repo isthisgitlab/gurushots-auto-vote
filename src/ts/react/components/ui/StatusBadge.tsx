@@ -1,4 +1,5 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import { LEVEL_BADGE_CLASS } from '@/utils/levelBadge';
 import type { ComponentChildren } from 'preact';
 
 export type StatusBadgeVariant =
@@ -8,9 +9,6 @@ export type StatusBadgeVariant =
     | 'warning'
     | 'info'
     | 'ghost'
-    | 'primary'
-    | 'secondary'
-    | 'accent'
     | 'popular'
     | 'skilled'
     | 'premier'
@@ -39,15 +37,12 @@ export function StatusBadge({
             warning: 'badge-warning',
             info: 'badge-info',
             ghost: 'badge-ghost',
-            primary: 'badge-primary',
-            secondary: 'badge-secondary',
-            accent: 'badge-accent',
             // Level badges
-            popular: 'badge-popular',
-            skilled: 'badge-skilled',
-            premier: 'badge-premier',
-            elite: 'badge-elite',
-            allstar: 'badge-allstar',
+            popular: LEVEL_BADGE_CLASS.popular,
+            skilled: LEVEL_BADGE_CLASS.skilled,
+            premier: LEVEL_BADGE_CLASS.premier,
+            elite: LEVEL_BADGE_CLASS.elite,
+            allstar: LEVEL_BADGE_CLASS.allstar,
         }[variant] || 'badge-neutral';
 
     const sizeClass =

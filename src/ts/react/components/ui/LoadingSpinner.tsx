@@ -1,9 +1,24 @@
+import { rendererTranslator } from '../../../translations/renderer';
+
+import type { ComponentChildren } from 'preact';
+
 export type SpinnerSize = 'xs' | 'sm' | 'md' | 'lg';
 
 /**
- * DaisyUI loading spinner component
+ * DaisyUI loading spinner. It is a status region named "Loading" by default. A spinner that sits beside text saying
+ * what is loading (or inside a button that says what it does) is `decorative`: hidden from assistive tech, so it is
+ * not announced twice. Translated through the page translator, not a hook: the page loaders render before any
+ * provider.
  */
-export function LoadingSpinner({ size = 'md', className = '' }: { size?: SpinnerSize; className?: string }) {
+export function LoadingSpinner({
+    size = 'md',
+    className = '',
+    decorative = false,
+}: {
+    size?: SpinnerSize;
+    className?: string;
+    decorative?: boolean;
+}) {
     const sizeClass =
         {
             xs: 'loading-xs',
@@ -12,7 +27,26 @@ export function LoadingSpinner({ size = 'md', className = '' }: { size?: Spinner
             lg: 'loading-lg',
         }[size] || 'loading-md';
 
-    return <span className={`loading loading-spinner ${sizeClass} ${className}`} aria-label="Loading" />;
+    const classes = `loading loading-spinner ${sizeClass} ${className}`;
+    if (decorative) return <span className={classes} aria-hidden="true" />;
+    return <span className={classes} role="status" aria-label={rendererTranslator.t('common.loading')} />;
+}
+
+/**
+ * The content of a button that swaps its label for a spinner while busy. The label stays in the accessibility tree
+ * (visually hidden) so the button keeps its name; put `aria-busy={busy}` on the button itself.
+ *
+ * @param props.label - the button's name, shown by the spinner as hidden text
+ * @param props.children - what the button shows when idle (defaults to the label)
+ */
+export function BusyContent({ busy, label, children }: { busy: boolean; label: string; children?: ComponentChildren }) {
+    if (!busy) return <>{children ?? label}</>;
+    return (
+        <>
+            <LoadingSpinner size="xs" decorative />
+            <span className="sr-only">{label}</span>
+        </>
+    );
 }
 
 /**
@@ -30,8 +64,9 @@ function CaptionedSpinner({
     text?: string;
 }) {
     return (
-        <div className={className}>
-            <LoadingSpinner size={size} />
+        // With a caption the caption is the status; the spinner beside it is decorative.
+        <div className={className} role={text ? 'status' : undefined}>
+            <LoadingSpinner size={size} decorative={!!text} />
             {text && <span className={textClassName}>{text}</span>}
         </div>
     );

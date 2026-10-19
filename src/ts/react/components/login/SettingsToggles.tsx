@@ -77,7 +77,7 @@ export function SettingsToggles({
         <>
             <div className="divider">{t('app.settings')}</div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {/* Theme Picker */}
                 <div className="flex flex-col items-center">
                     <label className="label mb-2" htmlFor="login-theme">

@@ -6,16 +6,11 @@ import { useAsyncIpcAction } from './useAsyncIpcAction';
  * Mirrors useBoost: { applyTurbo, loading, error, clearError }.
  */
 export function useTurbo() {
-    const apply = useAsyncIpcAction(
-        (challengeId: string | number, imageId: string) => window.api.applyTurbo(challengeId, imageId),
-        {
-            failureMessage: 'Turbo apply failed',
-            errorMessage: 'Turbo apply error',
-        },
+    const apply = useAsyncIpcAction((challengeId: string | number, imageId: string) =>
+        window.api.applyTurbo(challengeId, imageId),
     );
-    const auto = useAsyncIpcAction(
-        (challengeId: string | number, challengeTitle: string) => window.api.playAutoTurbo(challengeId, challengeTitle),
-        { failureMessage: 'Auto-turbo run failed', errorMessage: 'Auto-turbo error' },
+    const auto = useAsyncIpcAction((challengeId: string | number, challengeTitle: string) =>
+        window.api.playAutoTurbo(challengeId, challengeTitle),
     );
 
     const clearError = useCallback(() => {

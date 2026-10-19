@@ -9,6 +9,7 @@
 jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
 
 import type { IpcMain } from 'electron';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 import votingLogicModule = require('../../src/ts/services/VotingLogic');
@@ -32,7 +33,7 @@ describe('get-deadline-actions', () => {
         ['a number', 7],
         ['an array', [{ id: 1 }]],
     ])('rejects %s as the challenge', async (_label, challenge) => {
-        await expect(handler({}, challenge)).resolves.toEqual({ success: false, error: 'invalid challenge' });
+        await expect(handler({}, invalid(challenge))).resolves.toEqual({ success: false, error: 'invalid challenge' });
         expect(votingLogic.describeDeadlineActions).not.toHaveBeenCalled();
     });
 
@@ -42,7 +43,10 @@ describe('get-deadline-actions', () => {
         ['an array', { id: [1] }],
         ['a boolean', { id: true }],
     ])('rejects a challenge whose id is %s', async (_label, challenge) => {
-        await expect(handler({}, challenge)).resolves.toEqual({ success: false, error: 'invalid challenge id' });
+        await expect(handler({}, invalid(challenge))).resolves.toEqual({
+            success: false,
+            error: 'invalid challenge id',
+        });
         expect(votingLogic.describeDeadlineActions).not.toHaveBeenCalled();
     });
 
@@ -52,7 +56,7 @@ describe('get-deadline-actions', () => {
     ])('passes a challenge with a %s id and the current unix time to VotingLogic', async (_label, id) => {
         const actions = [{ kind: 'boost', at: 100 }];
         votingLogic.describeDeadlineActions.mockReturnValue(invalid({ actions, boostBlocked: true, extra: 'dropped' }));
-        const challenge = { id, close_time: 999 };
+        const challenge = invalid<Challenge>({ id, close_time: 999 });
         const before = Math.floor(Date.now() / 1000);
 
         const result = await handler({}, challenge);
@@ -70,7 +74,7 @@ describe('get-deadline-actions', () => {
         votingLogic.describeDeadlineActions.mockImplementation(() => {
             throw new Error('internal detail');
         });
-        await expect(handler({}, { id: 1 })).resolves.toEqual({
+        await expect(handler({}, invalid<Challenge>({ id: 1 }))).resolves.toEqual({
             success: false,
             error: 'Failed to compute deadline actions',
         });

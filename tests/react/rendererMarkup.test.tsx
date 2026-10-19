@@ -167,7 +167,8 @@ describe('renderer markup guard', () => {
     test('languageSwitcherLatvian renders the pinned markup', async () => {
         const { container } = render(<LanguageSwitcher />);
         fireEvent.click(screen.getByText('common.languageLatvian'));
-        await waitFor(() => expect(screen.getByText('Latviešu')).toBeTruthy());
+        // The trigger now names the current language in itself, marked with its own lang.
+        await waitFor(() => expect(container.querySelector('button[aria-expanded] span[lang="lv"]')).not.toBeNull());
         pin('languageSwitcherLatvian', container.innerHTML);
     });
 

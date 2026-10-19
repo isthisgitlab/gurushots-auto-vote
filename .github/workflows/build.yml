@@ -38,7 +38,8 @@ jobs:
     # ONLY thing standing between a red test suite and version-bump →
     # build → create-release. Do not remove it as "redundant".
     test:
-        runs-on: ubuntu-slim
+        # The suite runs Oxlint with its JS plugins, whose fixed-size allocator pool the slim runner cannot satisfy.
+        runs-on: ubuntu-latest
         timeout-minutes: 20
         steps:
             - name: Checkout code
@@ -78,13 +79,21 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+            # Rejects a tampered gradle-wrapper.jar before ./gradlew runs it.
+            - name: Validate Gradle wrapper
+              uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+            # A failed dependency check (android/gradle/verification-metadata.xml) says how to regenerate it.
+            - name: Explain Gradle dependency verification failures
+              uses: ./.github/actions/gradle-verification-hint
+
             - name: Setup build environment
               uses: ./.github/actions/setup-build
               with:
                   cache-vision-model: 'true'
 
             - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
-              uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+              uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
               with:
                   distribution: 'temurin'
                   java-version: '21'
@@ -176,16 +185,18 @@ jobs:
               id: version_bump_type
               # Pass the commit message through the environment instead of
               # ${{ ... }} interpolation so backticks, $(), and parens in the
-              # message can't be evaluated as shell.
+              # message can't be evaluated as shell. Only the subject line
+              # selects the bump: a [major]/[minor] token quoted in the body (a
+              # squashed or merged commit lists its parents' messages) must not
+              # promote the release.
               env:
                   COMMIT_MSG: ${{ github.event.head_commit.message }}
               run: |
-                  if [[ "$COMMIT_MSG" =~ \[major\] ]]; then
+                  SUBJECT=$(printf '%s' "$COMMIT_MSG" | head -n 1)
+                  if [[ "$SUBJECT" =~ \[major\] ]]; then
                     echo "BUMP_TYPE=major" >> "$GITHUB_OUTPUT"
-                  elif [[ "$COMMIT_MSG" =~ \[minor\] ]]; then
+                  elif [[ "$SUBJECT" =~ \[minor\] ]]; then
                     echo "BUMP_TYPE=minor" >> "$GITHUB_OUTPUT"
-                  elif [[ "$COMMIT_MSG" =~ \[patch\] ]]; then
-                    echo "BUMP_TYPE=patch" >> "$GITHUB_OUTPUT"
                   else
                     echo "BUMP_TYPE=patch" >> "$GITHUB_OUTPUT"
                   fi
@@ -216,7 +227,7 @@ jobs:
                   echo "NEW_VERSION=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
             - name: Upload bumped package.json
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
               with:
                   name: bumped-package
                   path: package.json
@@ -318,13 +329,15 @@ jobs:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   NODE_ENV: production
 
-            # Second setup-node ensures Node 26 is on PATH for the SEA injection step.
+            # Second setup-node ensures the exact Node the notices vendor the LICENSE of
+            # (NODE_LICENSE_VERSION in scripts/build-notices.ts) is on PATH for the SEA injection
+            # step: build-cli.ts embeds process.versions.node and refuses any other version.
             # No `cache:` here — the composite already restored the pnpm cache earlier in this job.
             - name: Setup Node.js 26 for CLI builds
               if: matrix.platform != 'win'
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
-                  node-version: '26'
+                  node-version: '26.10.0'
 
             # Cache the official nodejs.org tarball that build-cli.ts pulls into
             # .cache/node-binaries (see the build-cli-arm job for the rationale).
@@ -357,7 +370,7 @@ jobs:
               run: pnpm size:cli
 
             - name: Upload build artifacts
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
               with:
                   name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}${{ matrix.platform }}${{ matrix.variant == 'lite' && '-lite' || '' }}-builds
                   path: |
@@ -392,9 +405,9 @@ jobs:
 
             # No `cache:` — the composite already restored the pnpm cache for this job.
             - name: Setup Node.js 26 for CLI build
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
-                  node-version: '26'
+                  node-version: '26.10.0'
 
             # build-cli.ts downloads the official nodejs.org tarball for
             # TARGET_NODE_VERSION (= process.versions.node) into
@@ -427,7 +440,7 @@ jobs:
               run: pnpm size:cli
 
             - name: Upload Linux ARM CLI artifact
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
               with:
                   name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-linux-arm-builds' || 'linux-arm-builds' }}
                   path: build/cli/gurucli-v*-linux-arm*
@@ -442,6 +455,14 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+            # Rejects a tampered gradle-wrapper.jar before ./gradlew runs it.
+            - name: Validate Gradle wrapper
+              uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+            # A failed dependency check (android/gradle/verification-metadata.xml) says how to regenerate it.
+            - name: Explain Gradle dependency verification failures
+              uses: ./.github/actions/gradle-verification-hint
+
             - name: Setup build environment
               uses: ./.github/actions/setup-build
               with:
@@ -449,24 +470,13 @@ jobs:
                   cache-vision-model: 'true'
 
             - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
-              uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+              uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
               with:
                   distribution: 'temurin'
                   java-version: '21'
 
             - name: Setup Android SDK
               uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
-
-            - name: Decode keystore
-              env:
-                  KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-              shell: bash
-              run: |
-                  if [ -z "$KEYSTORE_B64" ]; then
-                    echo "::error::ANDROID_KEYSTORE_BASE64 secret not set. Generate a release keystore locally and add the four ANDROID_* secrets — see README's Android section."
-                    exit 1
-                  fi
-                  echo "$KEYSTORE_B64" | base64 -d > android/app/release.jks
 
             - name: Set Android version
               shell: bash
@@ -479,12 +489,12 @@ jobs:
 
             # Two APKs from one webDir, one after the other: the full build and
             # the lite one without the local vision model (build:prep:lite).
-            - name: Build signed APKs with version
+            # Built UNSIGNED and with no secret in the environment: this job runs
+            # repo and dependency code (pnpm, Gradle plugins), so the release key
+            # is only ever decoded in sign-android below.
+            - name: Build unsigned APKs with version
               env:
                   NODE_ENV: production
-                  KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-                  KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-                  KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
               shell: bash
               run: |
                   set -euo pipefail
@@ -493,24 +503,116 @@ jobs:
                   for VARIANT in full lite; do
                     if [ "$VARIANT" = lite ]; then pnpm build:prep:lite; SUFFIX=-lite; else pnpm build:prep; SUFFIX=; fi
                     pnpm exec cap sync android
-                    (cd android && ./gradlew assembleRelease \
-                      "-Pandroid.injected.signing.store.file=$(pwd)/app/release.jks" \
-                      "-Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD" \
-                      "-Pandroid.injected.signing.key.alias=$KEY_ALIAS" \
-                      "-Pandroid.injected.signing.key.password=$KEY_PASSWORD")
-                    mv android/app/build/outputs/apk/release/app-release.apk \
+                    (cd android && ./gradlew assembleRelease)
+                    mv android/app/build/outputs/apk/release/app-release-unsigned.apk \
                        "build/GuruShotsAutoVote-v${VERSION}${SUFFIX}.apk"
                   done
 
-            - name: Upload Android artifact
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+            - name: Upload unsigned Android artifact
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
               with:
-                  name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-android-builds' || 'android-builds' }}
+                  name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-android-unsigned' || 'android-unsigned' }}
                   path: build/GuruShotsAutoVote-v*.apk
                   retention-days: 1
 
+    # The only job that sees the release keystore. It runs after build-android
+    # (so the signed APK is what attest covers and create-release publishes)
+    # and executes no repo or dependency code: it downloads the unsigned APKs,
+    # aligns and signs them with the Android build-tools, and refuses to
+    # continue unless the signing certificate is the pinned one.
+    sign-android:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        needs: [build-android, version-bump]
+        if: github.event_name == 'push'
+        env:
+            # SHA-256 of the release signing certificate (CN=GuruShots Auto Vote,
+            # O=isthisgitlab, C=LV) — the "SHA-256 digest" line of
+            # `apksigner verify --print-certs` on a released APK, hex with or
+            # without colons. While empty the signing step fails.
+            ANDROID_CERT_SHA256: '1ce3884456c147e53571bf49c7dc6f11e3fffeddcf6ca4cb9330df9983c265c6'
+            BUILD_TOOLS_VERSION: '36.0.0'
+        steps:
+            - name: Setup Java (apksigner runs on the JVM)
+              uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+              with:
+                  distribution: 'temurin'
+                  java-version: '21'
+
+            - name: Setup Android SDK
+              uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+
+            - name: Install Android build-tools (zipalign, apksigner)
+              shell: bash
+              run: sdkmanager "build-tools;${BUILD_TOOLS_VERSION}"
+
+            - name: Download unsigned APKs
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+              with:
+                  name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-android-unsigned' || 'android-unsigned' }}
+                  path: unsigned
+
+            - name: Decode keystore
+              env:
+                  KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  if [ -z "$KEYSTORE_B64" ]; then
+                    echo "::error::ANDROID_KEYSTORE_BASE64 secret not set. Generate a release keystore locally and add the four ANDROID_* secrets — see README's Android section."
+                    exit 1
+                  fi
+                  umask 077
+                  echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+            - name: Align, sign and verify APKs
+              env:
+                  KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+                  KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+                  KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  if [ -z "$ANDROID_CERT_SHA256" ]; then
+                    echo "::error::ANDROID_CERT_SHA256 is not set in this workflow — pin the release signing certificate's SHA-256 digest before releasing."
+                    exit 1
+                  fi
+                  EXPECTED=$(printf '%s' "$ANDROID_CERT_SHA256" | tr -d ':' | tr 'A-F' 'a-f')
+                  BT="$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION"
+                  mkdir -p signed
+                  for APK in unsigned/GuruShotsAutoVote-v*.apk; do
+                    NAME=$(basename "$APK")
+                    "$BT/zipalign" -P 16 -f 4 "$APK" "$RUNNER_TEMP/aligned.apk"
+                    "$BT/apksigner" sign \
+                      --ks "$RUNNER_TEMP/release.jks" \
+                      --ks-key-alias "$KEY_ALIAS" \
+                      --ks-pass env:KEYSTORE_PASSWORD \
+                      --key-pass env:KEY_PASSWORD \
+                      --out "signed/$NAME" "$RUNNER_TEMP/aligned.apk"
+                    rm -f "$RUNNER_TEMP/aligned.apk"
+                    CERTS=$("$BT/apksigner" verify --print-certs "signed/$NAME")
+                    ACTUAL=$(printf '%s\n' "$CERTS" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr 'A-F' 'a-f')
+                    if [ "$ACTUAL" != "$EXPECTED" ]; then
+                      echo "::error::$NAME is signed by certificate '$ACTUAL', not the pinned $EXPECTED"
+                      exit 1
+                    fi
+                  done
+
+            # always(): the key must not outlive the job even when signing fails.
+            - name: Delete keystore
+              if: always()
+              shell: bash
+              run: rm -f "$RUNNER_TEMP/release.jks" "$RUNNER_TEMP/aligned.apk"
+
+            - name: Upload signed Android artifact
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+              with:
+                  name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-android-builds' || 'android-builds' }}
+                  path: signed/GuruShotsAutoVote-v*.apk
+                  retention-days: 1
+
     attest:
-        needs: [build, build-cli-arm, build-android, version-bump]
+        needs: [build, build-cli-arm, sign-android, version-bump]
         runs-on: ubuntu-latest
         timeout-minutes: 10
         if: github.event_name == 'push'
@@ -526,7 +628,7 @@ jobs:
 
         steps:
             - name: Download all build artifacts
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               with:
                   path: artifacts
 
@@ -553,7 +655,7 @@ jobs:
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}android-builds/GuruShotsAutoVote-v*.apk
 
     create-release:
-        needs: [build, build-cli-arm, build-android, version-bump, attest]
+        needs: [build, build-cli-arm, sign-android, version-bump, attest]
         runs-on: ubuntu-latest
         timeout-minutes: 15
         if: github.event_name == 'push'
@@ -573,7 +675,9 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
               with:
-                  ref: ${{ github.ref_name }}
+                  # The commit the binaries were built from, not the branch tip:
+                  # a push that landed since must not leak into this release.
+                  ref: ${{ github.sha }}
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
@@ -591,6 +695,45 @@ jobs:
             - name: Verify README version
               run: pnpm verify:readme
 
+            # Commit and push the bump BEFORE anything is published, so the tag
+            # the release creates points at a commit that exists on the branch.
+            # The push is a plain fast-forward: if the branch moved past the
+            # built commit meanwhile it is rejected and the job stops here,
+            # leaving nothing published. A re-run of this job after the bump
+            # was pushed finds it at the branch tip (a commit on top of the
+            # built one, carrying the new version) and reuses it instead of
+            # committing the same bump a second time, which would be rejected.
+            # The reuse only applies while the bump commit is still the branch tip.
+            - name: Commit and push version bump
+              id: bump_commit
+              env:
+                  REF_NAME: ${{ github.ref_name }}
+                  BUILT_SHA: ${{ github.sha }}
+                  NEW_VERSION: ${{ needs.version-bump.outputs.new-version }}
+                  BUMP_TYPE: ${{ needs.version-bump.outputs.bump-type }}
+              run: |
+                  set -euo pipefail
+                  git fetch --depth=2 origin "refs/heads/$REF_NAME"
+                  TIP_SHA=$(git rev-parse FETCH_HEAD)
+                  TIP_PARENT=$(git rev-parse --verify --quiet "$TIP_SHA^" || true)
+                  if [[ "$TIP_PARENT" == "$BUILT_SHA" ]]; then
+                    TIP_VERSION=$(git show "$TIP_SHA:package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+                    if [[ "$TIP_VERSION" == "$NEW_VERSION" ]]; then
+                      echo "The version bump to $NEW_VERSION is already on $REF_NAME ($TIP_SHA); reusing it."
+                      echo "sha=$TIP_SHA" >> "$GITHUB_OUTPUT"
+                      exit 0
+                    fi
+                  fi
+                  git config --local user.email "action@github.com"
+                  git config --local user.name "GitHub Action"
+                  git add package.json README.md README.lv.md docs/usage.md docs/usage.lv.md
+                  git commit -m "Bump version to $NEW_VERSION ($BUMP_TYPE) and update documentation [skip ci]"
+                  if ! git push origin "HEAD:refs/heads/$REF_NAME"; then
+                    echo "::error::Could not push the version bump to $REF_NAME (non-fast-forward: the branch moved past the built commit, or the push was refused). Nothing was published. A re-run succeeds only while the bump commit is still the branch tip; once the branch has moved on, push a new commit to release a new version."
+                    exit 1
+                  fi
+                  echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
             - name: Generate release name
               id: release_name
               run: |
@@ -598,7 +741,7 @@ jobs:
                   echo "RELEASE_NAME=v$VERSION" >> "$GITHUB_OUTPUT"
 
             - name: Download all build artifacts
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               with:
                   path: artifacts
 
@@ -630,7 +773,7 @@ jobs:
               uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
               with:
                   tag_name: ${{ steps.release_name.outputs.RELEASE_NAME }}
-                  target_commitish: ${{ github.ref_name }}
+                  target_commitish: ${{ steps.bump_commit.outputs.sha }}
                   name: ${{ steps.release_vars.outputs.TITLE_PREFIX }} ${{ steps.release_name.outputs.RELEASE_NAME }}
                   generate_release_notes: true
                   body: |
@@ -685,16 +828,9 @@ jobs:
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/gurucli-v*-linux-arm
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/gurucli-v*-linux-arm-lite
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}android-builds/GuruShotsAutoVote-v*.apk
+                      src/assets/THIRD_PARTY_NOTICES.txt
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-            - name: Commit and push version bump
-              run: |
-                  git config --local user.email "action@github.com"
-                  git config --local user.name "GitHub Action"
-                  git add package.json README.md README.lv.md docs/usage.md docs/usage.lv.md
-                  git commit -m "Bump version to ${{ needs.version-bump.outputs.new-version }} (${{ needs.version-bump.outputs.bump-type }}) and update documentation [skip ci]"
-                  git push origin ${{ github.ref_name }}
 
             # Pages has no push trigger of its own — it deploys ONLY from this
             # dispatch, so the site never goes live before a release succeeds.

@@ -51,14 +51,49 @@ describe('Latvian log messages', () => {
         expect(localizeLogMessage('ℹ️ Invalid timestamp provided')).toBe('ℹ️ Norādīts nederīgs laika zīmogs');
     });
 
+    test('translates the Manual Only lines', () => {
+        const tag = '[Challenge 42: Sunset]';
+        expect(localizeLogMessage(`ℹ️ ${tag} Manual Only is on — nothing runs automatically`)).toBe(
+            'ℹ️ [Izaicinājums 42: Sunset] „Tikai manuāli” ir ieslēgts — nekas nenotiek automātiski',
+        );
+        expect(localizeLogMessage(`ℹ️ ${tag} Manual Only is off — automatic rules resume`)).toBe(
+            'ℹ️ [Izaicinājums 42: Sunset] „Tikai manuāli” ir izslēgts — automātiskie noteikumi atsākas',
+        );
+        expect(
+            localizeLogMessage(
+                'ℹ️ Mode: Manual (votes to 100% regardless of threshold settings; skips Manual Only challenges)',
+            ),
+        ).toBe(
+            'ℹ️ Režīms: manuāls (balso līdz 100 % neatkarīgi no sliekšņu uzstādījumiem; izlaiž izaicinājumus ar „Tikai manuāli”)',
+        );
+    });
+
+    test('translates the unreadable-switch line and the paid-join warning', () => {
+        const tag = '[Challenge 42: Sunset]';
+        expect(
+            localizeLogMessage(
+                `⚠️ ${tag} Could not read the Manual Only setting — nothing runs automatically. Open the challenge settings, make sure Manual Only is set the way you want and save, then try again`,
+            ),
+        ).toBe(
+            '⚠️ [Izaicinājums 42: Sunset] Neizdevās nolasīt uzstādījumu „Tikai manuāli” — nekas nenotiek automātiski. Atver izaicinājuma uzstādījumus, pārliecinies, ka „Tikai manuāli” ir uzstādīts tā, kā vēlies, saglabā un mēģini vēlreiz',
+        );
+        expect(
+            localizeLogMessage(
+                `⚠️ Manual Only is on for ${tag}: the join was already paid for, but no photo is entered automatically — enter one from Discover: choose the photo for this challenge (Chosen Photos), then press Join`,
+            ),
+        ).toBe(
+            '⚠️ Izaicinājumam [Izaicinājums 42: Sunset] ir ieslēgts „Tikai manuāli”: pievienošanās jau ir apmaksāta, bet foto netiek iesniegts automātiski — iesniedz to sadaļā „Atrast izaicinājumus”: izvēlies šī izaicinājuma foto („Izvēlētie foto”) un nospied „Pievienoties”',
+        );
+    });
+
     test('translates logger progress and the generated plural suffix', () => {
         const progress = '[██████████░░░░░░░░░░] 50% (1/2)';
         expect(localizeLogMessage(`ℹ️ Processing challenge 1/2: Sunset ${progress}`)).toBe(
             `ℹ️ Apstrādā izaicinājumu 1/2: Sunset ${progress}`,
         );
-        expect(localizeLogMessage('ℹ️ emergencyFill: submitted 1 entry for [Challenge 42: Sunset] near deadline')).toBe(
-            'ℹ️ Ārkārtas iesniegšana: izaicinājumā [Izaicinājums 42: Sunset] īsi pirms termiņa iesniegti foto: 1',
-        );
+        expect(
+            localizeLogMessage('ℹ️ emergencySubmit: submitted 1 entry for [Challenge 42: Sunset] near deadline'),
+        ).toBe('ℹ️ Ārkārtas iesniegšana: izaicinājumā [Izaicinājums 42: Sunset] īsi pirms termiņa iesniegti foto: 1');
     });
 
     test('translates the join and challenge fetch lines before and after sentence casing', () => {
@@ -99,7 +134,7 @@ describe('Latvian log messages', () => {
         );
         expect(
             localizeLogMessage(
-                '⚠️ autoFill: nothing in [Challenge 42: Sunset] matched the challenge theme, so 2 entries were chosen on past performance — image1 (past performance not looked up yet — ranked below any photo that was) out of 3 equally off-theme candidates. Set a Per-Title Tag Rule for this challenge title in Settings to steer which photos qualify.',
+                '⚠️ autoSubmit: nothing in [Challenge 42: Sunset] matched the challenge theme, so 2 entries were chosen on past performance — image1 (past performance not looked up yet — ranked below any photo that was) out of 3 equally off-theme candidates. Set a Per-Title Tag Rule for this challenge title in Settings to steer which photos qualify.',
             ),
         ).toBe(
             '⚠️ Automātiskā iesniegšana: izaicinājumā [Izaicinājums 42: Sunset] nekas neatbilda tēmai. Pēc iepriekšējiem rezultātiem atlasīto foto skaits: 2 — image1 (iepriekšējie rezultāti vēl nav pārbaudīti — sarindots aiz visiem foto, kuru rezultāti ir pārbaudīti) no 3 vienlīdz neatbilstošiem kandidātiem. Uzstādījumos pievieno šī izaicinājuma nosaukumam tagu noteikumu, lai noteiktu, kuri foto ir piemēroti.',
@@ -119,6 +154,28 @@ describe('Latvian log messages', () => {
             '❌ CLI manuālais balsošanas process neizdevās: upstream-specific-error',
         );
         expect(localizeLogMessage(' Settings:')).toBe('\nUzstādījumi:');
+    });
+
+    test('translates the chosen-photos lines, including the fill label they start with', () => {
+        const tag = '[Challenge 42: Sunset]';
+        const text = `skipped ${tag} — every chosen photo is already entered there, and Submit Only Chosen Photos is on. Choose other photos or turn that setting off; Emergency Submit ignores it near the deadline, so turn Emergency Submit off for this challenge to keep the slot empty`;
+        for (const [label, lv] of [
+            ['autoSubmit', 'Automātiskā iesniegšana'],
+            ['fillNew', 'Jauna foto iesniegšana'],
+            ['emergencySubmit', 'Ārkārtas iesniegšana'],
+            ['manualFill', 'Manuālā iesniegšana'],
+            ['join', 'Pievienošanās'],
+        ]) {
+            const translated = localizeLogMessage(`⚠️ ${label}: ${text}`);
+            expect(translated.startsWith(`⚠️ ${lv}: izaicinājums [Izaicinājums 42: Sunset] izlaists`)).toBe(true);
+        }
+        expect(
+            localizeLogMessage(
+                'ℹ️ join: looked for your chosen photos outside the themed search for [Challenge 42: Sunset] — 1 found, 0 not allowed here, 2 not in your library, 0 not reached',
+            ),
+        ).toBe(
+            'ℹ️ Pievienošanās: izvēlētie foto meklēti arī ārpus tēmas meklēšanas izaicinājumam [Izaicinājums 42: Sunset] — atrasti 1, šeit nav atļauti 0, tavā bibliotēkā nav 2, nesasniegti 0',
+        );
     });
 
     test('leaves unknown technical text intact and handles unmatched icons', () => {

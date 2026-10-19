@@ -1,10 +1,12 @@
 /**
  * Auto-fill — the manual "Fill Now" path: one or all missing slots in a single
- * request, ignoring the autoFill toggle and the schedule.
+ * request, ignoring the autoSubmit toggle and the schedule.
  */
 
 import { resetPassState as resetPhotoStatsPassState } from '../photoStats';
 import { getSlotsRemaining } from './challengeState';
+import { enteredIds } from './chosenPhotos';
+import { describeSubmitFailure } from './fillLogging';
 import { runFillAttempt } from './pipeline';
 
 import type { Challenge } from '../../types/gurushots';
@@ -13,7 +15,7 @@ import { errorMessage } from '../../errorMessage';
 
 /**
  * Manual fill (GUI button). Submits one or all missing slots in a
- * single request. Ignores the autoFill toggle and the spacing math,
+ * single request. Ignores the autoSubmit toggle and the spacing math,
  * but still honors mustIncludeTags / shouldIncludeTags so the tag
  * rules mean the same thing whether triggered by the user or the
  * scheduler.
@@ -51,14 +53,14 @@ const fillChallengeNow = async (
     // caller forgot to wire deps; emit a debug line so it's observable.
     let mustIncludeTags = null;
     let shouldIncludeTags = null;
-    let fillWithoutTagMatch; // undefined → picker treats as default (true)
+    let submitWithoutTagMatch; // undefined → picker treats as default (true)
     if (settings) {
         mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
         shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
-        fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
+        submitWithoutTagMatch = settings.getEffectiveSetting('submitWithoutTagMatch', String(challengeId));
     } else {
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .debug(
                 `manualFill: settings module not provided to fillChallengeNow for ${logger.challengeTag(challenge)}; tag rules will not apply`,
                 null,
@@ -73,7 +75,7 @@ const fillChallengeNow = async (
         wantCount: mode === 'all' ? slotsRemaining : 1,
         mustIncludeTags,
         shouldIncludeTags,
-        fillWithoutTagMatch,
+        submitWithoutTagMatch,
         // No onRefreshed hook: manual fill is explicit user intent acting on
         // the state the user is looking at — it never ran the pre-submit live
         // re-check, and keeps not running it.
@@ -89,7 +91,7 @@ const fillChallengeNow = async (
                     ? 'No photos matched the Must Include Tags filter'
                     : 'No eligible photos found';
             logger
-                .withCategory('autoFill')
+                .withCategory('autoSubmit')
                 .info(`manualFill: ${error.toLowerCase()} for ${logger.challengeTag(challenge)}`, null);
             return error;
         },
@@ -128,7 +130,7 @@ const fillChallengeNow = async (
     // No reflectNewEntry here: manual fill has always left the local challenge
     // object untouched (the GUI re-fetches state after the IPC call returns).
     logger
-        .withCategory('autoFill')
+        .withCategory('autoSubmit')
         .success(`manualFill: submitted ${attempt.picked.length} entries for ${logger.challengeTag(challenge)}`, null);
     return {
         success: true,
@@ -137,4 +139,65 @@ const fillChallengeNow = async (
     };
 };
 
-export { fillChallengeNow };
+/** What submitPickedPhotos answers: how many photos went in, or why none were sent or none are known to have gone in. */
+type SubmitPickedResult =
+    | { success: true; submitted: number }
+    | {
+          success: false;
+          submitted: 0;
+          /** `submit-unclear`: the request may have landed (no answer, or it threw). */
+          error: 'not-enough-slots' | 'already-entered' | 'submit-rejected' | 'submit-unclear';
+      };
+
+/**
+ * Manual submit of photos the user picked (GUI "Pick…"). Sends exactly those
+ * ids in one request: no ranking, no tag rules, no Chosen Photos settings, and
+ * none of the Chosen Photos refusal memory is touched. It refuses a pick that
+ * no longer fits (fewer open slots than photos) or that holds a photo already
+ * entered, without sending anything.
+ *
+ * The request and outcome lines name only the count and the challenge, never the photo ids. A rejection
+ * logs the server's own reason, the way auto-fill does.
+ */
+const submitPickedPhotos = async (
+    challenge: Challenge,
+    token: string,
+    imageIds: string[],
+    deps: Pick<FillDeps, 'logger' | 'submitToChallenge'>,
+): Promise<SubmitPickedResult> => {
+    const { logger, submitToChallenge } = deps;
+    const log = logger.withCategory('autoSubmit');
+    const tag = logger.challengeTag(challenge);
+
+    const slotsRemaining = getSlotsRemaining(challenge);
+    if (slotsRemaining < imageIds.length) {
+        log.info(`manualFill: ${imageIds.length} picked photos but only ${slotsRemaining} open slots for ${tag}`, null);
+        return { success: false, submitted: 0, error: 'not-enough-slots' };
+    }
+    const entered = enteredIds(challenge);
+    if (imageIds.some((id) => entered.has(id))) {
+        log.info(`manualFill: a picked photo is already entered in ${tag}`, null);
+        return { success: false, submitted: 0, error: 'already-entered' };
+    }
+
+    try {
+        const result = await submitToChallenge(challenge.id, imageIds, token);
+        if (result && result.ok) {
+            log.success(`manualFill: submitted ${imageIds.length} picked entries for ${tag}`, null);
+            return { success: true, submitted: imageIds.length };
+        }
+        if (result?.raw) {
+            const reason = describeSubmitFailure(result.raw);
+            log.warning(`manualFill: submit rejected for ${tag}: ${reason}`, null);
+            return { success: false, submitted: 0, error: 'submit-rejected' };
+        }
+        // No body at all is "no answer", not a refusal: the request may have landed.
+        log.warning(`manualFill: submit got no answer for ${tag}`, null);
+        return { success: false, submitted: 0, error: 'submit-unclear' };
+    } catch (error) {
+        log.warning(`manualFill: submit threw for ${tag}: ${errorMessage(error) || error}`, null);
+        return { success: false, submitted: 0, error: 'submit-unclear' };
+    }
+};
+
+export { fillChallengeNow, submitPickedPhotos };

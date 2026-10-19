@@ -59,7 +59,7 @@ export function DeadlineTimeline({ actions, compact = false }: { actions: Deadli
         <div className="bg-base-200 rounded p-2">
             <div className="text-xs font-medium mb-1">
                 <span aria-hidden="true">⏳</span> {t('app.deadlineTimeline')}{' '}
-                <span className="font-normal text-base-content/60">({t('app.deadlineTimelineApprox')})</span>
+                <span className="font-normal text-base-content/70">({t('app.deadlineTimelineApprox')})</span>
             </div>
             <ul className="text-xs space-y-0.5">
                 {rows.map((r) => (

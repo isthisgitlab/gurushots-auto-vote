@@ -5,6 +5,7 @@
 
 import { act, render, screen, waitFor, fireEvent } from './helpers/test-utils';
 import { ScenariosSection } from '@/components/app/ScenariosSection';
+import { mockTranslator, defaultTranslate } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 
 const plan = { name: 'Plan', start: 'main', description: 'Mine', phases: { main: {}, done: {} } };
@@ -16,7 +17,7 @@ const withScenarios = (scenarios: Record<string, unknown> = { Plan: plan }) =>
         .mockResolvedValue(invalid({ success: true, scenarios, templates: [template] }));
 
 const renderSection = async () => {
-    render(<ScenariosSection isOpen={true} />);
+    render(<ScenariosSection isOpen={true} onDirtyChange={jest.fn()} />);
     await waitFor(() => expect(screen.queryByText('common.loading')).toBeNull());
 };
 
@@ -58,32 +59,58 @@ describe('listing', () => {
 
 describe('a scenario row', () => {
     test('export shows the JSON, and hides again', async () => {
-        jest.mocked(window.api.exportScenario).mockResolvedValue({ success: true, json: '{"name":"Plan"}' });
+        jest.mocked(window.api.exportScenario).mockResolvedValue({
+            success: true,
+            json: '{"name":"Plan"}',
+            omitted: [],
+        });
         await renderSection();
-        click('app.scenarioExport');
+        click('app.scenarioExport: Plan');
         const box = await screen.findByLabelText<HTMLTextAreaElement>('app.scenarioExportLabel');
         expect(box.value).toBe('{"name":"Plan"}');
+        expect(box.getAttribute('autocapitalize')).toBe('off');
         fireEvent.focus(box);
         click('app.scenarioExportClose');
         expect(screen.queryByLabelText('app.scenarioExportLabel')).toBeNull();
     });
 
+    test('export names the settings it left out', async () => {
+        jest.mocked(window.api.exportScenario).mockResolvedValue({
+            success: true,
+            json: '{"name":"Plan"}',
+            omitted: ['chosenPhotos'],
+        });
+        await renderSection();
+        click('app.scenarioExport: Plan');
+        await screen.findByLabelText('app.scenarioExportLabel');
+        // Translations echo their key in tests; the omitted setting's label key is the placeholder value.
+        expect(screen.getByText('app.scenarioExportOmitted')).toBeTruthy();
+    });
+
+    test('export without omissions shows no note', async () => {
+        jest.mocked(window.api.exportScenario).mockResolvedValue({ success: true, json: '{}', omitted: [] });
+        await renderSection();
+        click('app.scenarioExport: Plan');
+        await screen.findByLabelText('app.scenarioExportLabel');
+        expect(screen.queryByText('app.scenarioExportOmitted')).toBeNull();
+    });
+
     test('a failed export shows the error', async () => {
         jest.mocked(window.api.exportScenario).mockResolvedValue({ success: false, error: 'not-found' });
         await renderSection();
-        click('app.scenarioExport');
+        click('app.scenarioExport: Plan');
         expect((await screen.findByRole('alert')).textContent).toContain('app.scenarioExportFailed');
     });
 
     test('rename saves the new name; cancel leaves it', async () => {
         jest.mocked(window.api.renameScenario).mockResolvedValue({ success: true, name: 'New' });
         await renderSection();
-        click('app.scenarioRename');
+        click('app.scenarioRename: Plan');
         fireEvent.change(screen.getByLabelText('app.scenarioRenameLabel'), { target: { value: 'New' } });
         click('app.scenarioRenameSave');
         await waitFor(() => expect(window.api.renameScenario).toHaveBeenCalledWith('Plan', 'New'));
         await waitFor(() => expect(screen.queryByLabelText('app.scenarioRenameLabel')).toBeNull());
-        click('app.scenarioRename');
+        click('app.scenarioRename: Plan');
         click('app.cancel');
         expect(screen.queryByLabelText('app.scenarioRenameLabel')).toBeNull();
     });
@@ -99,20 +126,65 @@ describe('a scenario row', () => {
             }),
         );
         await renderSection();
-        click('app.scenarioRename');
+        click('app.scenarioRename: Plan');
         click('app.scenarioRenameSave');
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toContain('app.scenarioRenameFailed');
-        expect(alert.textContent).toContain('name taken');
-        expect(alert.textContent).toContain('root');
+        // The path stays; the validator's English wording is replaced by the UI language's (generic here).
+        expect(alert.textContent).toContain('name');
+        expect(alert.textContent).not.toContain('taken');
+        expect(alert.querySelectorAll('li')).toHaveLength(2);
+        expect(alert.textContent).toContain('app.scenarioIssueGeneric');
+    });
+
+    test('an issue names its place in words, not as a JSON path', async () => {
+        jest.mocked(window.api.renameScenario).mockResolvedValue(
+            invalid({
+                success: false,
+                issues: [{ path: 'phases.main.rules[0].if[0].window', message: 'Name is required' }],
+            }),
+        );
+        await renderSection();
+        click('app.scenarioRename: Plan');
+        click('app.scenarioRenameSave');
+        const alert = await screen.findByRole('alert');
+        // The test translator returns keys, so the segment words are keys and the raw segments stay as written.
+        expect(alert.querySelector('li')?.textContent).toBe(
+            'app.scenarioPathPhase › Rule 1 › app.scenarioPathCondition › window: app.scenarioIssueNameRequired',
+        );
+        expect(alert.textContent).not.toContain('phases.main');
+    });
+
+    test('only an issue with no wording is logged as missing; one with wording is shown translated', async () => {
+        jest.mocked(window.api.renameScenario).mockResolvedValue(
+            invalid({
+                success: false,
+                issues: [
+                    { path: 'name', message: 'Name is required' },
+                    { path: 'start', message: 'something new' },
+                ],
+            }),
+        );
+        await renderSection();
+        click('app.scenarioRename: Plan');
+        click('app.scenarioRenameSave');
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('app.scenarioIssueNameRequired');
+        // The logging effect runs after paint: wait for the unknown one, then see the known one was not reported.
+        await waitFor(() =>
+            expect(window.api.logDebug).toHaveBeenCalledWith(
+                'Scenario issue without wording at "start": something new',
+            ),
+        );
+        expect(window.api.logDebug).toHaveBeenCalledTimes(1);
     });
 
     test('delete needs a second click, which then deletes', async () => {
         jest.mocked(window.api.deleteScenario).mockResolvedValue({ success: true });
         await renderSection();
-        click('app.scenarioDelete');
+        click('app.scenarioDelete: Plan');
         expect(window.api.deleteScenario).not.toHaveBeenCalled();
-        click('app.scenarioDeleteConfirm');
+        click('app.scenarioDeleteConfirm: Plan');
         await waitFor(() => expect(window.api.deleteScenario).toHaveBeenCalledWith('Plan'));
     });
 
@@ -120,18 +192,18 @@ describe('a scenario row', () => {
         jest.useFakeTimers();
         try {
             jest.mocked(window.api.deleteScenario).mockResolvedValue(invalid({ success: false }));
-            render(<ScenariosSection isOpen={true} />);
+            render(<ScenariosSection isOpen={true} onDirtyChange={jest.fn()} />);
             await act(async () => {
                 await Promise.resolve();
             });
             await act(async () => {
                 await Promise.resolve();
             });
-            click('app.scenarioDelete');
+            click('app.scenarioDelete: Plan');
             act(() => jest.advanceTimersByTime(4000));
-            expect(screen.getByRole('button', { name: 'app.scenarioDelete' })).toBeTruthy();
-            click('app.scenarioDelete');
-            click('app.scenarioDeleteConfirm');
+            expect(screen.getByRole('button', { name: 'app.scenarioDelete: Plan' })).toBeTruthy();
+            click('app.scenarioDelete: Plan');
+            click('app.scenarioDeleteConfirm: Plan');
             await act(async () => {
                 await Promise.resolve();
             });
@@ -179,6 +251,7 @@ describe('import', () => {
                 { name: 'done', rules: 0, settings: [] },
             ],
             spending: [{ action: 'swap', rule: 'Hold' }],
+            flagged: [],
             limits: { swaps: 2 },
             ...overrides,
         },
@@ -189,6 +262,12 @@ describe('import', () => {
         click('app.scenarioImport');
         fireEvent.change(screen.getByLabelText('app.scenarioImportLabel'), { target: { value: '{"name":"Shared"}' } });
     };
+
+    test('the pasted JSON is not auto-capitalised', async () => {
+        await openImport();
+        const box = screen.getByLabelText('app.scenarioImportLabel');
+        expect(box.getAttribute('autocapitalize')).toBe('off');
+    });
 
     test('check shows what it does; import stores it and closes the panel', async () => {
         jest.mocked(window.api.previewScenarioImport).mockResolvedValue(invalid(preview()));
@@ -206,6 +285,45 @@ describe('import', () => {
             expect(window.api.importScenario).toHaveBeenCalledWith('{"name":"Shared"}', { overwrite: false }),
         );
         await waitFor(() => expect(screen.queryByLabelText('app.scenarioImportLabel')).toBeNull());
+    });
+
+    test('the preview calls out chosen-photo settings, and only when present', async () => {
+        jest.mocked(window.api.previewScenarioImport).mockResolvedValueOnce(
+            invalid(preview({ flagged: [{ phase: 'main', key: 'chosenPhotos' }] })),
+        );
+        await openImport();
+        click('app.scenarioPreview');
+        expect(await screen.findByText('app.scenarioFlagged')).toBeTruthy();
+    });
+
+    test('each flagged setting names its phase as "(phase N)"', async () => {
+        mockTranslator.t.mockImplementation((key) =>
+            key === 'app.scenarioFlagged'
+                ? 'Review: {settings}'
+                : key === 'app.scenarioStatusPhase'
+                  ? 'phase {phase}'
+                  : key === 'app.chosenPhotos'
+                    ? 'Chosen Photos'
+                    : key,
+        );
+        try {
+            jest.mocked(window.api.previewScenarioImport).mockResolvedValueOnce(
+                invalid(preview({ flagged: [{ phase: 'main', key: 'chosenPhotos' }] })),
+            );
+            await openImport();
+            click('app.scenarioPreview');
+            expect(await screen.findByText('Review: Chosen Photos (phase main)')).toBeTruthy();
+        } finally {
+            mockTranslator.t.mockImplementation(defaultTranslate);
+        }
+    });
+
+    test('a preview with nothing flagged has no review line', async () => {
+        jest.mocked(window.api.previewScenarioImport).mockResolvedValueOnce(invalid(preview()));
+        await openImport();
+        click('app.scenarioPreview');
+        await screen.findByText('From a friend');
+        expect(screen.queryByText('app.scenarioFlagged')).toBeNull();
     });
 
     test('a scenario that exists needs the overwrite box; editing the text drops the preview', async () => {
@@ -274,7 +392,7 @@ describe('builder', () => {
     test('Edit opens the scenario; saving returns to the refreshed list', async () => {
         jest.mocked(window.api.saveScenario).mockResolvedValue({ success: true, name: 'Plan' });
         await renderSection();
-        click('app.sbEdit');
+        click('app.sbEdit: Plan');
         expect(screen.getByText('app.sbTitleEdit')).toBeTruthy();
         expect(screen.getByLabelText<HTMLInputElement>('app.sbName').value).toBe('Plan');
         const loads = jest.mocked(window.api.getScenarios).mock.calls.length;

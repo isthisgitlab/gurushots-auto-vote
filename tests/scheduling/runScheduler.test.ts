@@ -48,10 +48,7 @@ describe('createScheduler — normal-mode cycle spacing', () => {
     beforeEach(() => {
         jest.useFakeTimers();
         settings.loadSettings.mockReturnValue(
-            invalid({
-                checkFrequencyMin: FIXED_DELAY_MIN,
-                checkFrequencyMax: FIXED_DELAY_MIN,
-            }),
+            invalid({ app: { checkFrequencyMin: FIXED_DELAY_MIN, checkFrequencyMax: FIXED_DELAY_MIN } }),
         );
         settings.getSetting.mockReturnValue(FIXED_DELAY_MIN);
         settings.getEffectiveSetting.mockReturnValue(1);
@@ -219,10 +216,7 @@ describe('createScheduler — threshold-aware cadence', () => {
         jest.useFakeTimers();
         lastMinuteCheckFrequencyValue = 1;
         settings.loadSettings.mockReturnValue(
-            invalid({
-                checkFrequencyMin: FIXED_DELAY_MIN,
-                checkFrequencyMax: FIXED_DELAY_MIN,
-            }),
+            invalid({ app: { checkFrequencyMin: FIXED_DELAY_MIN, checkFrequencyMax: FIXED_DELAY_MIN } }),
         );
         settings.getSetting.mockReturnValue(FIXED_DELAY_MIN);
         settings.getEffectiveSetting.mockImplementation((key) => {
@@ -384,7 +378,7 @@ describe('createScheduler — threshold-aware cadence', () => {
         // mid-run; the very next cycle must respect the new boundary instead
         // of riding out the already-armed random cadence. 1-min normal cadence
         // keeps the boundary arithmetic easy to follow.
-        settings.loadSettings.mockReturnValue(invalid({ checkFrequencyMin: 1, checkFrequencyMax: 1 }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { checkFrequencyMin: 1, checkFrequencyMax: 1 } }));
         let thresholdMin = 5;
         settings.getEffectiveSetting.mockImplementation((key) => {
             if (key === 'lastMinuteThreshold') return thresholdMin;

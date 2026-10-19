@@ -59,6 +59,18 @@ export const rewardsSettings = {
         label: 'app.missionUseFills',
         description: 'app.missionUseFillsDesc',
     },
+    // Use boosts: during a "Use a boost" mission, apply a boost that is already
+    // free now instead of waiting for its boost window (never spends a key).
+    missionUseBoosts: {
+        type: 'boolean',
+        default: false,
+        perChallenge: false,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'missions',
+        label: 'app.missionUseBoosts',
+        description: 'app.missionUseBoostsDesc',
+    },
     // Vote for missions: during a "Vote on N photos" mission, vote every cycle
     // without waiting for the exposure threshold (see services/missions.ts).
     missionVote: {

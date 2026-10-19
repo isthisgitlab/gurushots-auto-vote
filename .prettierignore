@@ -14,3 +14,4 @@ pnpm-lock.yaml
 # minified. Generated output must not be formatted.
 src/assets/semantic-vectors.json
 scripts/lexicon-embeddings.json
+tests/settings/v2/__golden__/oracle.json

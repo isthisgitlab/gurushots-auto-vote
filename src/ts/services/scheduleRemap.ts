@@ -1,5 +1,5 @@
 /**
- * End-alignment remap for the autoFillSchedule rows.
+ * End-alignment remap for the autoSubmitSchedule rows.
  *
  * Schedule rows are keyed by absolute image number ("Image 2 ≤ 30m before
  * close"), which assumes a challenge that allows the schedule's full span of
@@ -20,7 +20,7 @@
 
 import type { SettingValues } from '../settings/schema';
 
-export type FillSchedule = SettingValues['autoFillSchedule'];
+export type FillSchedule = SettingValues['autoSubmitSchedule'];
 
 /**
  * How far the schedule shifts toward the end for a given challenge: the

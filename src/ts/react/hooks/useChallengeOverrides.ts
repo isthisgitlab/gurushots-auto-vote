@@ -1,22 +1,39 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSessionLoad } from './useSessionLoad';
+import { useLatestRef } from './useLatestRef';
 import * as ipc from '@/api/ipc';
+import { useOnChosenPhotosCleared, withoutChosenPhotos } from '@/api/chosenPhotosCleared';
+import { valuesEqual } from '@/utils/valuesEqual';
 
 import type { Dispatch, SetStateAction } from 'react';
-import type { ChallengeValues } from '../../types/settings';
+import type { ChallengeValues, RuleSource, TitleRuleInfo } from '../../types/settings';
 import type { RendererSchema, SettingChangeHandler, SettingResetHandler } from '../../types/settingsEditor';
 import { errorMessage } from '../../errorMessage';
+import { ON_ONLY_KEYS } from '../../settings/ruleBehaviour';
 
 /**
- * The challenge's title-rule profile as the modal holds it: the matched
- * profile, `suppressed` once this challenge opts out of it. Falsy = none.
+ * What the challenge's matching rules contribute, as the modal holds it: the matched profile
+ * (`profile`, null when no rule names one), `suppressed` once this challenge opts out of it, and
+ * the value layers (`ruleValues` with the profile, `inlineValues` without) with the rule each
+ * inline key comes from. Null until loaded.
  */
-type TitleProfile = { name?: string; values?: ChallengeValues; suppressed?: boolean };
+type TitleRulesState = TitleRuleInfo | null;
 
-type TitleProfileState = TitleProfile | false | null | undefined;
+/** What the stored challenge held when the modal loaded it: the overrides and whether its profile is suppressed. */
+type OverridesBaseline = { overrides: ChallengeValues; suppressed: boolean };
 
 export type SetOverrides = Dispatch<SetStateAction<ChallengeValues>>;
-export type SetTitleProfile = Dispatch<SetStateAction<TitleProfileState>>;
+export type SetTitleRules = Dispatch<SetStateAction<TitleRulesState>>;
+
+/** What matching rules contribute when none match (or none has loaded): nothing. */
+const NO_RULES: TitleRuleInfo = {
+    profile: null,
+    suppressed: false,
+    ruleValues: {},
+    inlineValues: {},
+    ruleSources: {},
+    inlineSources: {},
+};
 
 const hasOwn = (obj: object, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
 
@@ -66,19 +83,24 @@ function useOverridesLoad({
     challengeTitle,
     schema,
     setOverrides,
-    setTitleProfile,
+    setTitleRules,
+    baselineRef,
 }: {
     isOpen: boolean;
     challengeId: string | number | null | undefined;
     challengeTitle: string;
     schema: RendererSchema | null | undefined;
     setOverrides: SetOverrides;
-    setTitleProfile: SetTitleProfile;
+    setTitleRules: SetTitleRules;
+    baselineRef: { current: OverridesBaseline | null };
 }) {
     const [loadedKey, setLoadedKey] = useState<string | null>(null);
     useEffect(() => {
-        if (!isOpen) setLoadedKey(null);
-    }, [isOpen]);
+        if (!isOpen) {
+            setLoadedKey(null);
+            baselineRef.current = null;
+        }
+    }, [isOpen, baselineRef]);
 
     const loadKey = `${challengeId}\0${challengeTitle}`;
     const load = useCallback(async () => {
@@ -87,12 +109,13 @@ function useOverridesLoad({
         return { values: perChallengeOnly(schema, stored), profile, key: loadKey };
     }, [challengeId, challengeTitle, schema, loadKey]);
     const onLoad = useCallback(
-        ({ values, profile, key }: { values: ChallengeValues; profile: TitleProfile | null; key: string }) => {
+        ({ values, profile, key }: { values: ChallengeValues; profile: TitleRulesState; key: string }) => {
             setOverrides(values);
-            setTitleProfile(profile);
+            setTitleRules(profile);
+            baselineRef.current = { overrides: values, suppressed: profile?.suppressed === true };
             setLoadedKey(key);
         },
-        [setOverrides, setTitleProfile],
+        [setOverrides, setTitleRules, baselineRef],
     );
 
     return useSessionLoad(load, {
@@ -167,26 +190,101 @@ function useOverridesSave({
     return { saving, saveError, save };
 }
 
+/** The rules' contribution without any chosen photos list: in the profile and in both value layers. */
+const rulesWithoutChosenPhotos = (rules: TitleRuleInfo): TitleRuleInfo => ({
+    ...rules,
+    profile: rules.profile && { ...rules.profile, values: withoutChosenPhotos(rules.profile.values) },
+    ruleValues: withoutChosenPhotos(rules.ruleValues),
+    inlineValues: withoutChosenPhotos(rules.inlineValues),
+});
+
 /**
- * The challenge's title-rule profile and the value resolution built on it:
- * override → profile value (unless suppressed) → global default → schema
- * default. `effectiveOf` / `inheritedOf` expose that chain with and without
- * the override layer.
+ * The rule behind a value the rules' active layer takes from a rule's own inline values, for the
+ * "From rule" badge. The layer that runs names its own sources, so a key a profile supplies is never
+ * credited to a later rule that merely sets it inline.
  */
-function useTitleProfile({
+const ruleSourceFor = (rules: TitleRuleInfo, ruleLayer: ChallengeValues, key: string): RuleSource | undefined => {
+    const source = (rules.suppressed ? rules.inlineSources : rules.ruleSources)[key];
+    return hasOwn(ruleLayer, key) && source && !source.viaProfile ? source : undefined;
+};
+
+/**
+ * Read the rules' contribution again from the settings (a failed read changes nothing). The
+ * suppression this dialog holds, saved or not, stays as it is. A reply that comes after the dialog
+ * has closed, or moved to another challenge (`isCurrent` says no), is dropped: it describes a
+ * challenge that is no longer on screen.
+ */
+const rereadTitleRules = async (
+    challengeTitle: string,
+    challengeId: string | number,
+    setTitleRules: SetTitleRules,
+    isCurrent: () => boolean,
+    isSuppressed: () => boolean,
+): Promise<void> => {
+    const fresh = await ipc.callOrNull(() => ipc.getTitleProfile(challengeTitle, challengeId.toString()));
+    if (fresh && isCurrent()) setTitleRules({ ...fresh, suppressed: isSuppressed() });
+};
+
+/**
+ * The handler for a profile that was edited or deleted: when it is the one the rules matched, or any
+ * profile while none matched (a rule may name one that is not stored yet), the rules are read again
+ * for the challenge on screen (see rereadTitleRules). A reply is dropped once
+ * the dialog closed or showed another challenge, and carries the suppression the dialog holds when
+ * the reply lands.
+ */
+function useProfileReread({
     isOpen,
+    challengeId,
+    challengeTitle,
+    rules,
+    setTitleRules,
+}: {
+    isOpen: boolean;
+    challengeId: string | number | null | undefined;
+    challengeTitle: string;
+    rules: TitleRuleInfo;
+    setTitleRules: SetTitleRules;
+}) {
+    const onScreen = useLatestRef(isOpen ? `${challengeId}\0${challengeTitle}` : null);
+    const suppressedNow = useLatestRef(rules.suppressed);
+    return ({ name }: { name: string; values?: ChallengeValues; deleted?: boolean }) => {
+        // A rule may name a profile that is not stored yet, and saving it here makes it apply: read again then too.
+        if (!challengeId || (rules.profile && name.toLowerCase() !== rules.profile.name.toLowerCase())) return;
+        const asked = onScreen.current;
+        void rereadTitleRules(
+            challengeTitle,
+            challengeId,
+            setTitleRules,
+            () => onScreen.current === asked,
+            () => suppressedNow.current,
+        );
+    };
+}
+
+/**
+ * What the challenge's rules contribute and the value resolution built on it:
+ * override → rule values (inline values and the matched profile's, or the inline
+ * values alone once the profile is suppressed) → global default → schema default.
+ * `effectiveOf` / `inheritedOf` expose that chain with and without the override layer.
+ */
+function useTitleRules({
+    isOpen,
+    challengeId,
+    challengeTitle,
     schema,
     defaults,
     overrides,
     setOverrides,
 }: {
     isOpen: boolean;
+    challengeId: string | number | null | undefined;
+    challengeTitle: string;
     schema: RendererSchema | null | undefined;
     defaults: Record<string, unknown> | null | undefined;
     overrides: ChallengeValues;
     setOverrides: SetOverrides;
 }) {
-    const [titleProfile, setTitleProfile] = useState<TitleProfileState>(null);
+    const [titleRules, setTitleRules] = useState<TitleRulesState>(null);
     // Set when a profile Apply flips scheduledFillReplaces on for a challenge
     // that didn't have it — that one field can silently cost a challenge its
     // fills, so it gets a highlighted warning the generic apply-hint lacks.
@@ -195,12 +293,15 @@ function useTitleProfile({
         if (isOpen) setProfileReplacesWarning(false);
     }, [isOpen]);
 
-    // `|| undefined` folds a `false` state into "no profile" for the optional chain.
-    const matched = titleProfile || undefined;
-    const profileValues: ChallengeValues = matched?.suppressed ? {} : (matched?.values ?? {});
+    const rules = titleRules ?? NO_RULES;
+    const onProfilesChanged = useProfileReread({ isOpen, challengeId, challengeTitle, rules, setTitleRules });
+    // A suppressed profile drops out, the rules' own inline values do not: a rule that sets a
+    // scenario or an auto-join directly keeps setting it.
+    const ruleLayer: ChallengeValues = rules.suppressed ? rules.inlineValues : rules.ruleValues;
     const inheritedOf = (key: string) =>
-        hasOwn(profileValues, key) ? profileValues[key] : (defaults?.[key] ?? schema?.[key]?.default);
+        hasOwn(ruleLayer, key) ? ruleLayer[key] : (defaults?.[key] ?? schema?.[key]?.default);
     const effectiveOf = (key: string) => (key in overrides ? overrides[key] : inheritedOf(key));
+    const ruleSourceOf = (key: string) => ruleSourceFor(rules, ruleLayer, key);
 
     /**
      * Load a saved profile's values into the form (schema-filtered,
@@ -212,28 +313,27 @@ function useTitleProfile({
         const next = perChallengeOnly(schema, values);
         const replacesWasOn = effectiveOf('scheduledFillReplaces') === true;
         setProfileReplacesWarning(next.scheduledFillReplaces === true && !replacesWasOn);
-        setOverrides(next);
-        setTitleProfile((profile) => ({ ...(profile || undefined), suppressed: true }));
+        // A profile never holds an on-only key's `false`; the challenge's own value stays unless the profile sets the key.
+        const kept = Object.fromEntries(
+            ON_ONLY_KEYS.filter((key) => hasOwn(overrides, key) && !hasOwn(next, key)).map((key) => [
+                key,
+                overrides[key],
+            ]),
+        );
+        setOverrides({ ...next, ...kept });
+        setTitleRules((current) => ({ ...(current ?? NO_RULES), suppressed: true }));
     };
 
-    /**
-     * Keep the title-rule profile in step when that named profile is edited or deleted.
-     */
-    const onProfilesChanged = ({ name, values }: { name: string; values?: ChallengeValues; deleted?: boolean }) => {
-        if (name.toLowerCase() !== (titleProfile || undefined)?.name?.toLowerCase()) return;
-        setTitleProfile((state) => {
-            // Reached only once the name matched, so the state is that profile.
-            const profile = state as TitleProfile;
-            return values ? { ...profile, name, values } : profile?.suppressed && { suppressed: true };
-        });
-    };
+    // The matched profile's own values, while it applies (the "Using profile" badge).
+    const profileValues: ChallengeValues = rules.suppressed ? {} : (rules.profile?.values ?? {});
 
     return {
-        titleProfile,
-        setTitleProfile,
+        titleRules,
+        setTitleRules,
         profileValues,
         inheritedOf,
         effectiveOf,
+        ruleSourceOf,
         profileReplacesWarning,
         applyProfile,
         onProfilesChanged,
@@ -261,9 +361,10 @@ function useOverrideEdits() {
 
 /**
  * Owns the form state behind the per-challenge settings modal: the sparse
- * override map, the challenge's title-rule profile (and whether this
- * challenge suppresses it), load-on-open, and save. The caller renders; it
- * drives Save / Clear all through `save()` / `clearAll()`.
+ * override map, what the challenge's rules contribute (and whether this
+ * challenge suppresses their profile), load-on-open, and save. The caller renders; it
+ * drives Save / Clear all through `save()` / `clearAll()`. `isDirty()` says whether the overrides or
+ * the suppression differ from what the load brought in (false until it has).
  */
 export function useChallengeOverrides({
     isOpen,
@@ -293,21 +394,40 @@ export function useChallengeOverrides({
         if (isOpen) void refetchSchema();
     }, [isOpen, refetchSchema]);
 
-    const { setTitleProfile, ...profile } = useTitleProfile({ isOpen, schema, defaults, overrides, setOverrides });
+    const { setTitleRules, ...profile } = useTitleRules({
+        isOpen,
+        challengeId,
+        challengeTitle,
+        schema,
+        defaults,
+        overrides,
+        setOverrides,
+    });
+    const baselineRef = useRef<OverridesBaseline | null>(null);
+    // Saving writes the whole override map: lists removed meanwhile must not come back with it.
+    useOnChosenPhotosCleared(() => {
+        setOverrides(withoutChosenPhotos);
+        // The removal is what is on disk now, so it is not an unsaved edit.
+        const baseline = baselineRef.current;
+        if (baseline) baselineRef.current = { ...baseline, overrides: withoutChosenPhotos(baseline.overrides) };
+        // From both rule layers and the matched profile, so none of them shows (or saves) a removed list.
+        setTitleRules((current) => current && rulesWithoutChosenPhotos(current));
+    });
     const { loading, loadFailed } = useOverridesLoad({
         isOpen,
         challengeId,
         challengeTitle,
         schema,
         setOverrides,
-        setTitleProfile,
+        setTitleRules,
+        baselineRef,
     });
     const { saving, saveError, save } = useOverridesSave({
         isOpen,
         challengeId,
         schema,
         overrides,
-        suppressed: (profile.titleProfile || undefined)?.suppressed === true,
+        suppressed: profile.titleRules?.suppressed === true,
         loadFailed,
         rearmSchedule,
         onClose,
@@ -315,12 +435,22 @@ export function useChallengeOverrides({
 
     const clearAll = useCallback(() => {
         setOverrides({});
-        setTitleProfile((current) => (current ? { ...current, suppressed: false } : null));
-    }, [setOverrides, setTitleProfile]);
+        setTitleRules((current) => (current ? { ...current, suppressed: false } : null));
+    }, [setOverrides, setTitleRules]);
+
+    const isDirty = () => {
+        const baseline = baselineRef.current;
+        return (
+            baseline !== null &&
+            (!valuesEqual(overrides, baseline.overrides) ||
+                (profile.titleRules?.suppressed === true) !== baseline.suppressed)
+        );
+    };
 
     return {
         overrides,
         ...profile,
+        isDirty,
         loading,
         loadFailed,
         saving,

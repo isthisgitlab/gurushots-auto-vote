@@ -31,6 +31,13 @@ describe('Navbar', () => {
         expect(onLogsClick).toHaveBeenCalledTimes(1);
     });
 
+    test('logout is reversible, so it is styled like the settings button, not as a destructive one', () => {
+        render(<Navbar isMock={false} onLogsClick={() => {}} onSettingsClick={() => {}} onLogout={() => {}} />);
+        const logout = screen.getByRole('button', { name: 'app.logout' });
+        expect(logout.className).toBe(screen.getByRole('button', { name: 'app.settings' }).className);
+        expect(logout.className).not.toContain('btn-error');
+    });
+
     test('the icon-only buttons carry accessible names', () => {
         g.Capacitor = { isNativePlatform: () => true };
         render(<Navbar isMock={false} onLogsClick={() => {}} onSettingsClick={() => {}} onLogout={() => {}} />);

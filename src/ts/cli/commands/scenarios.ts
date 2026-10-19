@@ -12,6 +12,7 @@ import { formatDateTime } from '../../dateFormat';
 import { SCENARIO_TEMPLATES } from '../../scenarios/templates';
 import { VOCABULARY_REFERENCE } from '../../scenarios/vocabulary';
 import { finiteOr } from '../../numbers';
+import { escapeTerminalUnsafe, stripTerminalControl } from '../../format/logSafe';
 
 // Built lazily so requiring this module (e.g. for `help`) does not construct
 // the handler set or pull in its transitive dependencies.
@@ -45,11 +46,17 @@ const reportFailure = (result: { success?: boolean; error?: unknown; issues?: Sc
 };
 
 /**
- * Write `text` to `file`, or print it when no file is given.
+ * Write the JSON document `json` to `file`, or print it when no file is given. Both get the same
+ * text: characters that could drive a terminal or hide what is shown are escaped, not removed, so
+ * the document stays valid and means the same either way.
  */
-const output = (text: string, file: string | null | undefined) => {
+const output = (json: string, file: string | null | undefined) => {
+    const text = escapeTerminalUnsafe(json);
     if (!file) {
-        ui().info(text);
+        // A document the user asked to see (or pipe): printed verbatim, with its line breaks, on the
+        // console only; the log file's one-line entries would flatten it. It holds no credentials,
+        // and redaction would corrupt the JSON. The console adds the final newline.
+        logger.printDocument(text.replace(/\n$/, ''));
         return 0;
     }
     try {
@@ -69,8 +76,12 @@ const listScenarios = async () => {
     ui().info(names.length ? `Scenarios (${names.length}):` : 'No scenarios yet.');
     for (const name of names) {
         const scenario = result.scenarios[name];
-        ui().info(`  • ${name} — ${Object.keys(scenario.phases).length} phase(s), starts in "${scenario.start}"`);
-        if (scenario.description) ui().info(`      ${scenario.description}`);
+        // Stored (and imported) text: a control or bidi character in it must not reach the terminal.
+        const shown = stripTerminalControl(name);
+        ui().info(
+            `  • ${shown} — ${Object.keys(scenario.phases).length} phase(s), starts in "${stripTerminalControl(scenario.start)}"`,
+        );
+        if (scenario.description) ui().info(`      ${stripTerminalControl(scenario.description)}`);
     }
     ui().info(`Templates: ${SCENARIO_TEMPLATES.map((t) => t.id).join(', ')} (scenario-template <id> [file])`);
     return 0;
@@ -92,21 +103,34 @@ const printPreview = ({
     preview: ReturnType<typeof settingsModule.describeScenario>;
     exists: boolean;
 }) => {
-    ui().info(`Scenario "${preview.name}" — starts in phase "${preview.start}"`);
-    if (preview.description) ui().info(`  ${preview.description}`);
+    // The scenario is a file the user imports: its names and text must not drive the terminal.
+    const name = stripTerminalControl(preview.name);
+    ui().info(`Scenario "${name}" — starts in phase "${stripTerminalControl(preview.start)}"`);
+    if (preview.description) ui().info(`  ${stripTerminalControl(preview.description)}`);
     for (const phase of preview.phases) {
         const overlay = phase.settings.length ? `, settings: ${phase.settings.join(', ')}` : '';
-        ui().info(`  • phase ${phase.name}: ${phase.rules} rule(s)${overlay}`);
+        ui().info(`  • phase ${stripTerminalControl(phase.name)}: ${phase.rules} rule(s)${overlay}`);
     }
     if (preview.spending.length) {
         ui().info('  Spends:');
-        for (const spend of preview.spending) ui().info(`    - ${spend.action} (${spend.phase} → ${spend.rule})`);
+        for (const spend of preview.spending) {
+            const where = `${stripTerminalControl(spend.phase)} → ${stripTerminalControl(spend.rule)}`;
+            ui().info(`    - ${spend.action} (${where})`);
+        }
     } else {
         ui().info('  Spends nothing.');
     }
     const limits = Object.entries(preview.limits);
     ui().info(limits.length ? `  Limits: ${limits.map(([k, v]) => `${v} ${k}`).join(', ')}` : '  No spending limits.');
-    if (exists) ui().warning(`  A scenario named "${preview.name}" already exists — importing needs --overwrite.`);
+    for (const { phase, key } of preview.flagged) {
+        const named = stripTerminalControl(phase);
+        ui().warning(
+            key === 'chosenPhotos'
+                ? `  Phase ${named} sets chosenPhotos — photo ids from another account will not match your photos.`
+                : `  Phase ${named} sets chosenPhotosOnly — a challenge with no usable chosen photo is skipped.`,
+        );
+    }
+    if (exists) ui().warning(`  A scenario named "${name}" already exists — importing needs --overwrite.`);
 };
 
 const importScenarioCmd = async (
@@ -138,6 +162,13 @@ const importScenarioCmd = async (
 const exportScenarioCmd = async (name: string, file?: string) => {
     const result = await handlers()['export-scenario'](null, name);
     if (!result.success) return reportFailure(result, `Could not export "${name}"`);
+    if (result.omitted?.length) {
+        const note = `Left out of the export (they belong to your account): ${result.omitted.join(', ')}`;
+        // With no file the JSON goes to stdout, where it is often piped: the note goes to stderr so
+        // the document stays valid.
+        if (file) ui().warning(note);
+        else logger.printStderr(note);
+    }
     // A successful export always carries its JSON text.
     return output(result.json as string, file);
 };
@@ -167,14 +198,26 @@ const scenarioStatusCmd = async (challengeId: string) => {
         ui().warning(`Challenge ${challengeId} is assigned "${status.assigned}", which does not exist — nothing runs.`);
         return 0;
     }
+    if (status.corrupt === 'unloaded') {
+        ui().error(UNLOADED);
+        return 1;
+    }
     if (status.corrupt) {
-        ui().error('Its scenario state is unreadable. Reset it (scenario-reset) to start the plan again.');
+        ui().error(
+            status.corrupt === 'file'
+                ? 'The saved scenario progress is unreadable. Reset the progress of every challenge (scenario-reset --all) to start the plans again.'
+                : `This challenge’s saved scenario progress is unreadable. Reset it (scenario-reset --challenge=${challengeId}) to start the plan again.`,
+        );
         return 1;
     }
     const { state } = status;
     ui().info(`Scenario "${status.scenario.name}" on challenge ${challengeId}`);
+    // A plan that has not started says it starts once Manual Only is off; the paused line is for a started one.
+    if (status.manualOnly && state) ui().info('  Paused (Manual Only): no step runs and no check is due.');
     if (!state) {
-        ui().info(`  Not started yet — it starts in phase "${status.scenario.start}" on the next voting pass.`);
+        ui().info(
+            `  Not started yet — it starts in phase "${status.scenario.start}" ${status.manualOnly ? 'once Manual Only is off' : 'on the next voting pass'}.`,
+        );
         return 0;
     }
     ui().info(`  Phase: ${state.phase} (since ${at(state.phaseEnteredAt)})`);
@@ -189,15 +232,73 @@ const scenarioStatusCmd = async (challengeId: string) => {
         ui().info(
             `  Last action: ${state.lastAction.action} (${state.lastAction.ruleId}) at ${at(state.lastAction.at)}`,
         );
-    if (state.lastError) ui().warning(`  Last problem: ${state.lastError.message} (${at(state.lastError.at)})`);
+    if (state.lastError)
+        ui().warning(`  Last problem: ${stripTerminalControl(state.lastError.message)} (${at(state.lastError.at)})`);
     return 0;
 };
 
+const RESET_COST =
+    'Resetting may spend again an action whose outcome is unknown (GuruShots gave no answer, or the app could not record it), and it restarts the scenario spend counter.';
+
+const RESET_BUSY =
+    'This challenge’s scenario is being run, or the saved scenario progress is being updated, right now (by the app or by another process). Nothing was changed. Try again in a moment.';
+
+const RESET_ALL_BUSY =
+    'The saved scenario progress is being updated right now (by the app or by another process). Nothing was changed. Try again in a moment.';
+
+const RESET_LOCKS_UNAVAILABLE =
+    'The app cannot create its lock files in its data folder, so it cannot do this safely. Nothing was changed. Check the folder’s permissions and the free disk space (logs --error has the details), then try again.';
+
+const RESET_NOT_SAVED =
+    'The reset could not be saved (the storage is full or not writable — logs --error has the details), so nothing was changed. Try again.';
+
+const UNLOADED =
+    'The saved scenario progress could not be loaded yet; the app retries — reopen the app if it persists. Nothing is reset.';
+
 const scenarioResetCmd = async (challengeId: string) => {
     const result = await handlers()['reset-scenario-state'](null, challengeId);
+    if (!result.success && result.error === 'busy') {
+        ui().error(RESET_BUSY);
+        return 1;
+    }
+    if (!result.success && result.error === 'locks-unavailable') {
+        ui().error(RESET_LOCKS_UNAVAILABLE);
+        return 1;
+    }
+    if (!result.success && (result.error === 'not-saved' || result.error === 'state-unloaded')) {
+        ui().error(result.error === 'not-saved' ? RESET_NOT_SAVED : UNLOADED);
+        return 1;
+    }
+    if (!result.success && result.error === 'state-unreadable') {
+        ui().error(
+            `The saved scenario progress cannot be read, so it can only be reset for every challenge at once: scenario-reset --all. That forgets the progress of every challenge, including which rules already ran and the spend counters. ${RESET_COST} Nothing was changed.`,
+        );
+        return 1;
+    }
     if (!result.success) return reportFailure(result, 'Could not reset the scenario');
     ui().success(
-        `Scenario progress reset for challenge ${challengeId} — the plan starts again on the next voting pass.`,
+        `Scenario progress reset for challenge ${challengeId} — the plan starts again on the next voting pass, and the rules that already ran can run (and spend) again. ${RESET_COST}`,
+    );
+    return 0;
+};
+
+const scenarioResetAllCmd = async () => {
+    const result = await handlers()['reset-all-scenario-state'](null);
+    if (!result.success && result.error === 'busy') {
+        ui().error(RESET_ALL_BUSY);
+        return 1;
+    }
+    if (!result.success && result.error === 'locks-unavailable') {
+        ui().error(RESET_LOCKS_UNAVAILABLE);
+        return 1;
+    }
+    if (!result.success && (result.error === 'not-saved' || result.error === 'state-unloaded')) {
+        ui().error(result.error === 'not-saved' ? RESET_NOT_SAVED : UNLOADED);
+        return 1;
+    }
+    if (!result.success) return reportFailure(result, 'Could not reset the scenarios');
+    ui().success(
+        `Scenario progress reset for every challenge — every plan starts again on the next voting pass, and the rules that already ran can run (and spend) again. ${RESET_COST}`,
     );
     return 0;
 };
@@ -210,7 +311,12 @@ const scenarioDryRunCmd = async (challengeId: string) => {
         ui().error(`  Halted: ${result.halted}`);
         return 1;
     }
-    for (const rule of result.explain) ui().info(`  [${rule.status}] ${rule.label}: ${rule.reason}`);
+    if (result.manualOnly) {
+        ui().info('  Paused (Manual Only): nothing would run now and no check is due.');
+        return 0;
+    }
+    for (const rule of result.explain)
+        ui().info(`  [${rule.status}] ${stripTerminalControl(rule.label)}: ${rule.reason}`);
     ui().info(
         result.fire
             ? `  Would run now: ${result.fire.ruleId} → ${result.fire.actions.slice(result.fire.startIndex).join(', ')}`
@@ -232,10 +338,13 @@ const scenarioSimulateCmd = async (challengeId: string) => {
     const result = await handlers()['simulate-scenario'](null, challengeId);
     if (!result.success) return reportFailure(result, 'Simulation failed');
     ui().info(`Scenario "${result.scenario}" from phase ${result.startPhase}, assuming every step succeeds:`);
+    if (result.manualOnly) ui().info('  Paused (Manual Only): this is what would run if the switch were off now.');
     if (result.events.length === 0) ui().info('  Nothing would run.');
     for (const event of result.events) {
         const move = event.toPhase ? ` → phase ${event.toPhase}` : '';
-        ui().info(`  ${at(event.at)}  [${event.phase}] ${event.label}: ${event.actions.join(', ')}${move}`);
+        ui().info(
+            `  ${at(event.at)}  [${stripTerminalControl(event.phase)}] ${stripTerminalControl(event.label)}: ${event.actions.join(', ')}${move}`,
+        );
     }
     ui().info(`  Stops at ${at(result.stoppedAt)}: ${STOP_REASONS[result.stoppedBecause]}.`);
     if (result.halted) ui().warning(`  ${result.halted}`);
@@ -257,6 +366,7 @@ export {
     deleteScenarioCmd,
     scenarioStatusCmd,
     scenarioResetCmd,
+    scenarioResetAllCmd,
     scenarioDryRunCmd,
     scenarioSimulateCmd,
     scenarioVocabulary,

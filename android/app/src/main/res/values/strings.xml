@@ -1,7 +1,21 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">GuruShots Auto Vote</string>
-    <string name="title_activity_main">GuruShots Auto Vote</string>
-    <string name="package_name">com.isthisgitlab.gurushotsautovote</string>
-    <string name="custom_url_scheme">com.isthisgitlab.gurushotsautovote</string>
+    <string name="app_name" translatable="false">GuruShots Auto Vote</string>
+    <string name="title_activity_main" translatable="false">GuruShots Auto Vote</string>
+    <string name="package_name" translatable="false">com.isthisgitlab.gurushotsautovote</string>
+    <string name="custom_url_scheme" translatable="false">com.isthisgitlab.gurushotsautovote</string>
+    <string name="notification_channel_name">Auto-vote</string>
+    <string name="notification_channel_description">Persistent notification while auto-vote is running in the background.</string>
+    <string name="notification_stop">Stop</string>
+    <string name="notification_starting">Auto-vote starting…</string>
+    <string name="notification_last_cycle">Last cycle at %1$s (#%2$d)</string>
+    <string name="notification_last_error">Last error at %1$s: %2$s</string>
+    <string name="notification_error_no_token">Not logged in — open the app and log in</string>
+    <string name="notification_error_cycle_timeout">Timed out — will retry</string>
+    <string name="notification_error_voting_failed">Voting did not finish — will retry</string>
+    <string name="notification_error_cycle_failed">The cycle failed — will retry</string>
+    <string name="notification_error_not_loaded">Background voting is not ready — will retry</string>
+    <string name="notification_error_fgs_timeout">Stopped by the system — will resume</string>
+    <string name="notification_error_fgs_not_allowed">The system did not allow background voting — will retry</string>
+    <string name="notification_error_generic">Something went wrong — will retry</string>
 </resources>

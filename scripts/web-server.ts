@@ -2,7 +2,8 @@
 
 // Serves the web UI (src/ts/web/server.ts) on http://localhost:<port>/ from
 // the built renderer in dist/. `pnpm web` builds the CSS and bundles first;
-// pass --port=<n> (default 4400, 0 = any free port).
+// pass --port=<n> (default 4400, 0 = any free port). The printed URL carries a
+// random per-run token (`#t=...`) the pages need for every /api/ request.
 import { startWebServer } from '../src/ts/web/server';
 import { appPath } from '../src/ts/appPaths';
 import { errorMessage } from '../src/ts/errorMessage';
@@ -29,8 +30,11 @@ const main = async (argv = process.argv.slice(2)) => {
         return;
     }
     try {
-        const { url } = await startWebServer({ port, distDir: appPath('dist') });
+        const { server, url } = await startWebServer({ port, distDir: appPath('dist') });
+        // The URL carries this run's access token in its fragment: stdout only, never the logger.
         console.log(`GuruShots Auto Vote web UI: ${url}`);
+        // The server stops itself after a local-data wipe; nothing is left to keep the process for.
+        server.once('close', () => process.exit(0));
     } catch (error) {
         const inUse = error instanceof Error && 'code' in error && error.code === 'EADDRINUSE';
         console.error(

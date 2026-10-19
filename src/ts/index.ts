@@ -1,7 +1,7 @@
 import { app, ipcMain, shell } from 'electron';
 import * as settings from './settings';
 import * as logger from './logger';
-import { clearAuthToken } from './services/auth';
+import { clearAuthToken, LogoutNotSavedError } from './services/auth';
 import * as logIpc from './ipc/log.handlers';
 import * as updateIpc from './ipc/update.handlers';
 import * as miscIpc from './ipc/misc.handlers';
@@ -11,13 +11,14 @@ import * as actionsIpc from './ipc/actions.handlers';
 import * as computationsIpc from './ipc/computations.handlers';
 import * as currencyIpc from './ipc/currency.handlers';
 import * as scenariosIpc from './ipc/scenarios.handlers';
-import { isTrustedSender } from './ipc/registerHandlers';
+import { isTrustedSender, isChannelAllowedForSender } from './ipc/registerHandlers';
 import { ensureExit, focusExistingWindow, clearTokenOnQuit } from './windows/lifecycle';
 import { bypassQuitGuard } from './windows/quitGuard';
 import { appState } from './index/state';
-import { holdForOpenBoosts, createLoginWindow, createMainWindow } from './index/windows';
+import { holdForOpenBoosts, createLoginWindow, createMainWindow, reportLogoutRefused } from './index/windows';
 import { onReady } from './index/startup';
 import { register as registerNavigationGuard } from './index/navigationGuard';
+import { removeStalePartitionData } from './index/session';
 
 import type { AutoUpdater } from './services/AutoUpdater';
 
@@ -27,11 +28,11 @@ import type { AutoUpdater } from './services/AutoUpdater';
 // effective service worker block.
 app.commandLine.appendSwitch('disable-features', 'ServiceWorker');
 
-// Chromium encrypts the persist:gurushots cookie store with a key it keeps in
-// the macOS Keychain, and re-prompts for it whenever the Electron binary
-// changes. Nothing here relies on those cookies (the auth token lives in the
-// settings store, API calls go through Node), so skip the real Keychain.
-// No-op on other platforms.
+// Chromium encrypts the cookie store of Electron's default on-disk session with a key it
+// keeps in the macOS Keychain, and re-prompts for it whenever the Electron binary changes.
+// The app windows' own partition is in memory (index/session.ts) and nothing here relies on
+// cookies (the auth token lives in the settings store, API calls go through Node), so skip
+// the real Keychain. No-op on other platforms.
 app.commandLine.appendSwitch('use-mock-keychain');
 
 // Applies to every web contents created from here on, so it is registered at
@@ -73,6 +74,9 @@ currencyIpc.register(ipcMain);
 scenariosIpc.register(ipcMain);
 
 if (gotSingleInstanceLock) {
+    // Only the instance holding the lock may touch the user-data directory.
+    removeStalePartitionData(settings.getUserDataPath);
+
     // Registered synchronously, not inside whenReady: second-instance can
     // fire while the primary is still booting, and an event emitted before
     // a listener exists is lost, not queued.
@@ -104,9 +108,9 @@ if (gotSingleInstanceLock) {
 
 // Clear token when app is about to quit if stay logged in is not enabled.
 // Gated on the lock inside the helper — a losing second instance must not
-// touch the shared settings.json and wipe the primary's session.
+// touch the shared config.json and wipe the primary's session.
 app.on('before-quit', (event) => {
-    // Lock first: a losing second instance must not read settings.json either.
+    // Lock first: a losing second instance must not read config.json either.
     if (gotSingleInstanceLock && holdForOpenBoosts(event, () => app.quit())) return;
 
     // A throw here must never skip ensureExit — the force-exit net below is
@@ -140,9 +144,22 @@ app.on('window-all-closed', () => {
 // are registered with ipcMain.on (a send, with no reply) and so bypassed it entirely — this
 // one swaps windows and the next clears the auth token. Nothing untrusted is loaded today,
 // so the exposure is theoretical, but there is no reason for these to be the exceptions.
+// The Logs window is held to its channel set here too (isChannelAllowedForSender).
 ipcMain.on('login-success', (event) => {
     if (!isTrustedSender(event)) {
         logger.withCategory('api').warning("Refused IPC 'login-success' from untrusted frame", null);
+        return;
+    }
+    if (!isChannelAllowedForSender(event, 'login-success')) {
+        logger.withCategory('api').warning("Refused IPC 'login-success' from the Logs window", null);
+        return;
+    }
+    // A login window is swapped for the main window only after a login has stored its token, and
+    // never twice: a page that fires this without a login (or with a main window up) changes nothing.
+    if (!settings.loadSettings().auth.token || appState.mainWindow) {
+        logger
+            .withCategory('api')
+            .warning("Ignored IPC 'login-success': no login token, or a main window is open", null);
         return;
     }
     // Close login window
@@ -153,23 +170,40 @@ ipcMain.on('login-success', (event) => {
 });
 
 // Handle logout. ipcMain.on expects a void listener, so the async flow runs
-// in a caught IIFE — a failed token flush is logged, and the window teardown
-// still proceeds so the user is never stuck on a dead main window.
+// in a caught IIFE. A logout the settings refused (the sign-in is still stored) is logged and told to the user, and the
+// main window stays; any other failure ends in the window teardown, so the user is never stuck on a dead main window.
 ipcMain.on('logout', (event) => {
     if (!isTrustedSender(event)) {
         logger.withCategory('api').warning("Refused IPC 'logout' from untrusted frame", null);
         return;
     }
+    if (!isChannelAllowedForSender(event, 'logout')) {
+        logger.withCategory('api').warning("Refused IPC 'logout' from the Logs window", null);
+        return;
+    }
     if (!appState.mainWindow) return;
 
+    let refused = false;
     void (async () => {
         // Always clear the token on logout (regardless of stay logged in setting)
         await clearAuthToken();
     })()
         .catch((err) => {
             logger.withCategory('authentication').error('Logout failed to clear token', err);
+            refused = err instanceof LogoutNotSavedError;
+            if (!refused) return;
+            // The main window stays, still logged in. If it went away during the flush, it is opened again first (the user is
+            // still logged in, so the login form would be wrong), so that the dialog has a window to belong to.
+            try {
+                if (!appState.mainWindow || appState.mainWindow.isDestroyed()) createMainWindow();
+            } catch (windowError) {
+                // The refusal is told whatever happens to the window: a dialog without a parent.
+                logger.withCategory('authentication').error('The main window could not be opened again', windowError);
+            }
+            reportLogoutRefused();
         })
         .finally(() => {
+            if (refused) return;
             // Reset mock value to environment default while preserving theme and remember me settings
             const envInfo = settings.getEnvironmentInfo();
             settings.setSetting('mock', envInfo.defaultMock);

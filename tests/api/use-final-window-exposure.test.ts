@@ -328,6 +328,7 @@ describe('voteBeforeFinalWindow pre-final-window top-up', () => {
             useFinalWindowExposure: true,
             voteBeforeFinalWindow: true,
             voteBeforeFinalWindowLeadMin: 15,
+            finalWindowDuration: 3600,
             ...over,
         };
         settings.getEffectiveSetting.mockImplementation((key) => (key in base ? base[key] : undefined));
@@ -404,16 +405,6 @@ describe('voteBeforeFinalWindow pre-final-window top-up', () => {
         expect(result.shouldVote).toBe(false);
         expect(result.voteReason).toContain('pre-final-window top-up');
         expect(result.voteReason).toContain('100% >= 100%');
-    });
-
-    test('a NaN lead minutes falls back to the 15-min default window', () => {
-        // 50 min out is inside a 15-min grace; leave the lead unset so it resolves
-        // to undefined → NaN → the fallback keeps the window at 15 min.
-        const now = Math.floor(Date.now() / 1000);
-        mockSettings({ voteBeforeFinalWindowLeadMin: undefined });
-        const result = VotingLogic.evaluateVotingDecision(challengeClosingIn(3000, 70), now);
-        expect(result.shouldVote).toBe(true);
-        expect(result.voteReason).toContain('pre-final-window top-up');
     });
 
     // Exact-boundary edges of the straddle window [close-3600-lead, close-3600+lead].

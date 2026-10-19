@@ -23,7 +23,7 @@ import * as scenariosHandlers from '../ipc/scenarios.handlers';
 import * as settings from '../settings';
 import * as logger from '../logger';
 import { isSafeExternalUrl } from '../format/urlSafe';
-import { clearAuthToken } from '../services/auth';
+import { clearAuthToken, LogoutNotSavedError } from '../services/auth';
 import * as updateChecker from '../services/UpdateChecker';
 import * as androidUpdateInstaller from '../services/AndroidUpdateInstaller';
 import { hasBundledModel } from '../services/visionVerifier';
@@ -77,6 +77,10 @@ const buildAllHandlers = () => {
     // onSettingsChanged subscribers fire.
     const settingsDeps = {
         broadcastSettingsChange: (newSettings: object) => emit('settings-changed', newSettings),
+        // Everything local is gone: the WebView reloads into the login screen.
+        afterWipe: () => {
+            void reloadWindow();
+        },
     };
 
     // Update channels: check / skip / releases URL are the shared
@@ -110,7 +114,7 @@ const buildAllHandlers = () => {
                 // settles to a "see system notification" state.
                 emit('update-downloaded', lastUpdateInfo);
             } else {
-                emit('update-error', { message: result.error });
+                emit('update-error', { message: result.error, code: result.code });
             }
             return { ...result, fallbackUrl: updateChecker.getReleasesUrl() };
         },
@@ -170,6 +174,8 @@ const addSendMethods = (api: BridgeApi) => {
             await clearAuthToken();
         } catch (err) {
             logger.withCategory('authentication').error('Logout failed to clear token', err);
+            // A logout the settings refused did not log anyone out: the screen stays, and the caller tells the user.
+            if (err instanceof LogoutNotSavedError) throw err;
         }
         emit(sendMethods.logout);
     };
@@ -223,14 +229,19 @@ const openExternalUrl = (url: unknown) => {
     return Promise.resolve({ success: true });
 };
 
-const installBridge = (): WindowApi => {
-    // Seed the curated intent presets once (idempotent; never fatal). Mobile
-    // has no main-process startup, so the bridge install is the boot hook.
+/**
+ * Seed the curated intent presets once (idempotent; never fatal). Mobile has no main-process startup, so the window's
+ * boot calls this once the stored settings are hydrated: before that a read finds defaults and a save is refused.
+ */
+const seedBridgeProfiles = (): void => {
     try {
         settings.seedIntentProfiles();
     } catch (err) {
         logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
     }
+};
+
+const installBridge = (): WindowApi => {
     const api: BridgeApi = {};
     addHandlerMethods(api);
     addSendMethods(api);
@@ -257,4 +268,4 @@ const installBridge = (): WindowApi => {
     return api as WindowApi;
 };
 
-export { installBridge, subscribe, emit };
+export { installBridge, seedBridgeProfiles, subscribe, emit };

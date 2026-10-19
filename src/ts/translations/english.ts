@@ -5,7 +5,7 @@ export const common = {
     global: 'Global:',
     languageEnglish: 'English',
     languageLatvian: 'Latviešu',
-    loading: 'Loading...',
+    loading: 'Loading…',
     closeModal: 'Close modal',
     logout: 'Logout',
     mock: 'Mock:',
@@ -26,11 +26,83 @@ export const common = {
 // Error / recovery UI
 export const errors = {
     boundaryTitle: 'Something went wrong',
+    logoutNotSavedStopped: 'Auto-vote is stopped. Start it again to keep voting.',
+    logoutFailedTitle: 'The logout did not finish',
+    logoutFailedDetail:
+        'Something went wrong while logging out, so you may still be logged in. Try again; the logs have the details.',
+    logoutNotSavedTitle: 'You are still logged in',
+    logoutNotSavedDetail:
+        'The logout could not be saved, because the stored settings are not in use right now. Your sign-in was not changed. Try again in a moment; if it keeps failing, follow the notice about the settings.',
     dismiss: 'Dismiss',
     reload: 'Reload',
     fetchFailed: "Couldn't reach GuruShots — retrying automatically.",
     actionInvalidArgs:
         'The action could not run: the challenge or photo id is not valid. Reload the app and try again.',
+    actionFailed:
+        'The action did not finish. The app or GuruShots could not complete it. Try again in a moment; if it keeps failing, the logs have the details.',
+    compactToggleFailed:
+        'The card layout was not changed. The setting could not be saved, so the cards stay as they were. Try again in a moment.',
+    loginFailed:
+        'Login did not work. GuruShots did not accept it or could not be reached. Check your username, password and connection, then try again.',
+    invalidCredentials: 'Login failed. GuruShots did not accept the username or password. Check them and try again.',
+    notLoggedIn: 'You are not logged in. The session has ended or was never started. Log in again to continue.',
+    turboNotEarned: 'Turbo was not earned. The battles ended without a win. Try again later.',
+    turboNoBattles:
+        'There are no battles to play right now. GuruShots has none ready for you. Try again in a few minutes.',
+    turboRunInProgress: 'A turbo run is already in progress for this challenge. Wait for it to finish, then try again.',
+    turboModeUnknown:
+        'Turbo mode is not known yet. GuruShots has not told the app which game this Turbo is. Try again in a moment.',
+    snapNeedsModel:
+        'Snap was not played. It needs the vision model, which this build does not include. Turn on "Answer Snap with Yes without the vision model" in the Turbo settings, play it on GuruShots, or use a build with the model.',
+    snapNotOffered:
+        'Snap was not played. GuruShots no longer offers it for this challenge. Refresh the list to see the current Turbo.',
+    snapUnanswerable:
+        'Snap was not finished. The app could not answer its question about the photo. Try again later, or play it on GuruShots.',
+    snapInterrupted:
+        'Snap was not finished. The game was interrupted, or GuruShots did not confirm an answer. Try again later; it continues where it stopped.',
+    challengeNoLongerActive:
+        'This challenge is no longer open, so the action was not made. Refresh the list to see the current challenges.',
+    boostFailed: 'The boost was not applied. GuruShots refused it or did not answer. Try again in a moment.',
+    pinFailed: "Couldn't save the pin. The settings file could not be written. Try again.",
+    pinCapReached:
+        "Couldn't save the pin. Too many challenges already have pins, and a challenge's pins are removed when it ends. Clear a pin on another challenge, then try again.",
+    pickNotEnoughSlots:
+        'The photos were not submitted. The challenge has fewer open slots than photos picked, because its entries changed. Remove photos until the count fits the open slots, then submit again.',
+    pickAlreadyEntered:
+        'The photos were not submitted. One of them is already entered in this challenge. The photo list is refreshing, and photos it marks as not allowed are taken out of your pick. Check the pick, then submit again.',
+    pickRejected:
+        'The photos were not submitted. GuruShots refused them, so a photo may no longer be allowed in this challenge. Pick other photos and try again.',
+    pickBusy:
+        'The photos were not submitted. A submit for this challenge is already running. Wait for it to finish, then check the card.',
+    pickUnclear:
+        'The photos may have been submitted. GuruShots did not answer clearly, and the card is refreshing. Check the card before you try again.',
+    suggestNoChosenEntered:
+        'Nothing to suggest. Submit Only Chosen Photos is on and every chosen photo is already entered. Pick photos… does not apply Submit Only, so pick any photo here, or update your Chosen Photos.',
+    suggestNoChosenUnusable:
+        'Nothing to suggest. Submit Only Chosen Photos is on and none of your chosen photos can go in this challenge. Pick any photo here, or update your Chosen Photos.',
+    suggestNoMatch: 'Nothing to suggest. No photo matches your Must Include Tags. Loosen the tags, or pick by hand.',
+    suggestNoEligible:
+        'Nothing to suggest. Your library has no photo this challenge accepts right now. Upload one, or try a search.',
+    suggestBusy: 'The photos were not ranked. Another ranking is still running. Wait for it to finish, then try again.',
+    suggestAccountChanged:
+        'The photos were not ranked. You switched accounts while it ran. Close this dialog and open it again.',
+    suggestChallengeEnded:
+        'The photos were not ranked. This challenge has ended or could not be read. Close this dialog and reopen the card.',
+    suggestFailed:
+        'The photos were not ranked. GuruShots did not answer, or the ranking did not finish. Try again in a moment.',
+    fetchChallengesFailed: 'The challenges could not be loaded. GuruShots did not answer. Try again in a moment.',
+    accountChanged: 'The account changed while the list was loading, so the result was dropped. Open the list again.',
+    accountCheckFailed: 'The account could not be checked. GuruShots did not answer. Try again in a moment.',
+    tokenNotSaved:
+        "Your login was accepted, but it could not be saved. The settings could not be written. Check the settings file's permissions and the free disk space (a settings notice may say more), then log in again.",
+    tokenNotSavedAndroid:
+        "Your login was accepted, but it could not be saved. The device's settings storage did not take it. Restart the app, then log in again.",
+    webShellToken:
+        "This page can't talk to the web server. It was opened without this run's access token, or the server was restarted since. Open the URL that pnpm web printed.",
+    boundaryBody:
+        'Part of the app stopped working. The details were saved to the logs. Reload the app to continue; if it keeps happening, the logs show what failed.',
+    votingFailed:
+        'The last voting cycle failed. GuruShots did not answer or refused a request. Auto-vote tries again on its next cycle; the logs have the details.',
 };
 // First-run onboarding
 export const onboarding = {
@@ -72,7 +144,7 @@ export const menu = {
     aboutNode: 'Node.js',
     aboutDescription:
         'GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with unified GUI and CLI interfaces (supports both real and mock modes)',
-    checkForUpdates: 'Check for Updates...',
+    checkForUpdates: 'Check for Updates…',
     noUpdates: 'No Updates',
     noUpdatesMessage: 'You are using the latest version.',
     updateError: 'Update Error',
@@ -89,8 +161,8 @@ export const quitGuard = {
 // Login screen specific
 export const login = {
     heading: 'Login',
-    loadingModeInfo: 'Loading mode information...',
-    loggingIn: 'Logging in...',
+    loadingModeInfo: 'Loading mode information…',
+    loggingIn: 'Logging in…',
     loginButton: 'Login',
     mockMode: 'Mock mode',
     mockModeInfo: 'Mock mode: Using simulated data for testing. Any credentials will work.',
@@ -118,6 +190,9 @@ export const app = {
     autovoteRunning: 'Auto-Vote Running',
     autovoteRunningDesc:
         'Internal flag — persists auto-vote state across app restarts so voting can resume automatically',
+    autovoteStartedLaunch: 'Auto-Vote Started In Launch',
+    autovoteStartedLaunchDesc:
+        'Internal — the launch of the app in which auto-vote was last started, so the app can tell a session started in this launch from one still waiting to resume',
     skipUpdateVersion: 'Skipped Update Version',
     skipUpdateVersionDesc:
         'Internal — the update version the user chose to skip; the app stops prompting for this version until cleared',
@@ -133,12 +208,31 @@ export const app = {
     deadlineTimelineApprox: 'approximate — may shift as photos are submitted',
     deadlineNext: 'Next',
     deadlineDue: 'due now',
-    deadlineActionAutoFill: 'Auto-submit',
+    deadlineActionAutoSubmit: 'Auto-submit',
     deadlineActionBoost: 'Boost',
     deadlineActionTurbo: 'Turbo',
-    deadlineActionEmergencyFill: 'Emergency submit',
-    boostConflictWarning:
-        "Boost can't apply: your only entry already has Turbo (they can't share an entry). Add a second entry to use both.",
+    deadlineActionEmergencySubmit: 'Emergency submit',
+    conflictFlag:
+        "{kind} can't apply: your only entry already has {other} (they can't share an entry). Add another entry to use both.",
+    conflictPinReleases:
+        "{kind} is waiting: the photo is pinned for {other}. If {other} isn't ready by {time}, {kind} goes on that photo. Unpin it or add another entry to use {kind} sooner.",
+    conflictPinNever:
+        "{kind} won't apply: the photo is pinned for {other}, and the pin won't give way (Emergency Submit is off or {other} is ready). Unpin it or add another entry.",
+    pinForBoost: 'Pin for Boost',
+    pinForTurbo: 'Pin for Turbo',
+    pinnedForBoost: 'Pinned for Boost',
+    pinnedForTurbo: 'Pinned for Turbo',
+    pinClear: 'Clear pin',
+    pinNotApplying: "The photo pinned for {kind} isn't applying. Open the card for details.",
+    pinNotApplyingBoth: "The photos pinned for {boost} and {turbo} aren't applying. Open the card for details.",
+    pinNotApplyingShort: '{kind} pin not applying',
+    pinNotApplyingShortBoth: '{boost} and {turbo} pins not applying',
+    pinGoneNote:
+        "The photo pinned for {kind} isn't in this challenge right now, so {kind} will use your usual {kind} settings. Pin another photo or clear the pin.",
+    pinConflictNote:
+        'The photo pinned for {kind} already has {other}, so {kind} will use your usual {kind} settings. Pin another photo or clear the pin.',
+    pinSwapWarning:
+        'This photo is pinned for {kind}. Swapping it out leaves the pin with nothing to apply {kind} to, so {kind} falls back to your usual {kind} settings.',
     statusHeaderActive: 'active',
     statusHeaderBoosts: 'Boosts ready',
     statusHeaderTurbos: 'Turbos ready',
@@ -152,22 +246,28 @@ export const app = {
     statusHeaderNextClaimHint: 'Claims run on the first voting cycle after the hourly cooldown ends.',
     statusHeaderNotRunning: 'autovote off',
     statusHeaderNextApprox: 'approximate — recomputed each cycle',
+    statusHeaderResumesIn: 'Resumes in',
+    statusHeaderResumesInHint:
+        'After launch the app waits before it resumes auto-vote, so you can check your settings first.',
     settingHelpLabel: 'What does this mean?',
     autoJoinBadge: 'auto-join on',
     autoJoinBadgeTitle: 'Auto-join runs each voting cycle while autovote is on. Configure it in Settings › Auto Join.',
     boostTime: 'Boost Time',
     boostTimeDesc:
-        'Apply Boost when this much time is left on the Boost’s own timer. Does not apply to a key-unlocked Boost, which has no timer — that one uses Key-Unlocked Boost Time.',
+        'Apply Boost when this much time is left on the Boost’s own timer. Does not apply to a key-unlocked Boost, which has no timer — that one uses Key-Unlocked Boost Time. Desktop app: if the computer goes to sleep while auto-vote is running, a boost due within 30 min is applied right away, unless Boost Before Sleep is off.',
     boostTimeHelp:
         'This is a timer measured as time-before-close. Set it to 0 to turn timed Boost off — the bot will not auto-apply a timer Boost at all. Note 0 means "off" here, unlike the Exposure Target settings where 0 means "follow the trigger". Only affects a Boost that has its own countdown; a key-unlocked Boost uses Key-Unlocked Boost Time instead.',
     keyUnlockedBoostTime: 'Key-Unlocked Boost Time',
     keyUnlockedBoostTimeDesc:
-        'Separate window for a key-unlocked Boost — one with no timer of its own. Because it never expires, it is applied only when this much time remains before the challenge closes, so it lands as late as possible. Boost Time does not apply to these. Set to 0 to never auto-apply it.',
+        'Separate window for a key-unlocked Boost — one with no timer of its own. Because it never expires, it is applied only when this much time remains before the challenge closes, so it lands as late as possible. Boost Time does not apply to these. Set to 0 to never auto-apply it. Desktop app: if the computer goes to sleep while auto-vote is running, a boost due within 30 min is applied right away, unless Boost Before Sleep is off.',
     keyUnlockedBoostTimeHelp:
         'Applies only to a key-unlocked Boost (one with no timer of its own). Set to 0 to never auto-apply it. This is a separate clock from Boost Time — the two never substitute for each other. As with the other time settings, 0 means "off".',
     boostFreshEntryWait: 'Wait Before Boosting a New Photo',
     boostFreshEntryWaitDesc:
-        'A Boost is held until the photo it will land on has been in the challenge this long, because boosting a photo the moment it is entered wastes most of the Boost. With "Boost a Freshly Submitted Photo" on, the photo is submitted first and boosted once this time has passed. Never holds a Boost past its own deadline. Set to 0 to boost straight away.',
+        'A Boost is held until the photo it will land on has been in the challenge this long, because boosting a photo the moment it is entered wastes most of the Boost. With "Boost a Freshly Submitted Photo" on, the photo is submitted first and boosted once this time has passed. Never holds a Boost past its own deadline. Set to 0 to boost straight away. Desktop app: unless Boost Before Sleep is off, the wait is cut short if the computer goes to sleep while a boost is due, so the boost is not lost.',
+    boostOnSleep: 'Boost Before Sleep',
+    boostOnSleepDesc:
+        'Desktop app: if the computer goes to sleep while auto-vote is running, a boost due within 30 min is applied right away, so it is not lost while the computer sleeps. This also cuts short Wait Before Boosting a New Photo. Turn off to keep the boost at its set time, even if that means losing it.',
     voteBeforeBoost: 'Fill Exposure Before Boost',
     voteBeforeBoostDesc:
         'Vote this challenge up to 100% exposure for a short window before Boost is auto-applied, so the Boost lands on a fully exposed entry instead of a decayed one.',
@@ -186,12 +286,15 @@ export const app = {
         'How long before the Boost is applied the fill starts. Allow enough time for several voting rounds — exposure does not reach 100% in one go.',
     autoBoost: 'Auto-Apply Boost',
     autoBoostDesc: 'Automatically apply Boost on this challenge as its Boost window is about to close.',
-    protectUncertainAutoFills: 'Protect uncertain auto-submitted photos',
-    protectUncertainAutoFillsDesc:
+    protectUncertainAutoSubmits: 'Protect uncertain auto-submitted photos',
+    protectUncertainAutoSubmitsDesc:
         'Skip automatic Boost and Turbo on auto-submitted photos without a confirmed subject match. Emergency actions and Boosts near their own expiry still apply. Open-theme challenges are exempt.',
     turbo: 'Turbo',
     autoTurbo: 'Auto-Earn Turbo',
     autoTurboDesc: 'Play the Turbo mini-game automatically to earn the bonus',
+    snapYesWithoutModel: 'Answer Snap with Yes without the vision model',
+    snapYesWithoutModelDesc:
+        'In a build without the vision model, play Snap Turbos by answering Yes to every photo; any answer wins the Turbo. With the model, the model answers. Off by default.',
     useTurbo: 'Auto-Apply Turbo',
     useTurboDesc: 'Automatically apply an earned Turbo to one of your entries',
     turboTime: 'Turbo Apply Time',
@@ -200,44 +303,46 @@ export const app = {
         'Time-before-close at which an earned Turbo is applied. Set to 0 to turn timed Turbo apply off. Like the other time settings, 0 here means "off" — not "follow a trigger".',
     turboImageIndex: 'Turbo Entry',
     turboImageIndexDesc:
-        'Which entry gets Turbo: 1 = first, 2 = second, etc. Use 0 for the last entry. If Boost is already on that entry, Turbo moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry.',
+        'Which entry gets Turbo: 1 = first, 2 = second, etc. Use 0 for the last entry. If Boost is already on that entry, or the photo is pinned for Boost, Turbo moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry. A photo pinned for Turbo on the challenge card takes precedence over this setting. A photo pinned for Boost never gets Turbo while its pin blocks: until Boost is ready, that holds until Turbo is inside the Emergency Submit window (never with Emergency Submit off).',
     boostImageIndex: 'Boost Entry',
     boostImageIndexDesc:
-        'Which entry gets Boost: 1 = first, 2 = second, etc. Use 0 for the last entry. If Turbo is already on that entry, Boost moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry.',
-    boostFillNew: 'Boost a Freshly Submitted Photo',
-    boostFillNewDesc:
+        'Which entry gets Boost: 1 = first, 2 = second, etc. Use 0 for the last entry. If Turbo is already on that entry, or the photo is pinned for Turbo, Boost moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry. A photo pinned for Boost on the challenge card takes precedence over this setting. A photo pinned for Turbo never gets Boost while its pin blocks: until Turbo is won, that holds until Boost is inside the Emergency Submit window (never with Emergency Submit off).',
+    boostNewSubmit: 'Boost a Freshly Submitted Photo',
+    boostNewSubmitDesc:
         'When on, this submits a new photo (using your Auto-Submit tag rules) just before boosting and boosts that new entry instead of an existing one. If there is no free slot or no eligible photo, it falls back to boosting your configured Boost Entry.',
-    boostFillNewOnConflict: 'Boost a Freshly Submitted Photo Only on Conflict',
-    boostFillNewOnConflictDesc:
-        'When on, a new photo is submitted and boosted only when your single existing entry already has Turbo on it (so Boost cannot go there). In the normal case Boost still goes to your existing entry. If there is no free slot or no eligible photo to submit, Boost is skipped this cycle — there is no fallback, since your only entry already has Turbo. Ignored when the option above is on, since that always submits a new photo.',
-    turboFillNew: 'Turbo a Freshly Submitted Photo',
-    turboFillNewDesc:
+    boostNewSubmitOnConflict: 'Boost a Freshly Submitted Photo Only on Conflict',
+    boostNewSubmitOnConflictDesc:
+        'When on, a new photo is submitted and boosted only when Boost cannot go on any existing entry — each has Turbo or is pinned for Turbo (a photo pinned for the other feature counts as a conflict). In the normal case Boost still goes to your existing entry. If there is no free slot or no eligible photo to submit, Boost is skipped this cycle. The one exception: once the photo pinned for Turbo gives way inside the Emergency Submit window because Turbo still is not ready, Boost goes on that photo. Ignored when the option above is on, since that always submits a new photo.',
+    turboNewSubmit: 'Turbo a Freshly Submitted Photo',
+    turboNewSubmitDesc:
         'When on, this submits a new photo (using your Auto-Submit tag rules) just before applying Turbo and applies Turbo to that new entry instead of an existing one. If there is no free slot or no eligible photo, it falls back to your configured Turbo Entry; if you have no entry yet, Turbo is skipped this cycle.',
-    turboFillNewOnConflict: 'Turbo a Freshly Submitted Photo Only on Conflict',
-    turboFillNewOnConflictDesc:
-        'When on, a new photo is submitted and given Turbo only when your single existing entry already has Boost on it (so Turbo cannot go there). In the normal case Turbo still goes to your existing entry. If there is no free slot or no eligible photo to submit, Turbo is skipped this cycle — there is no fallback, since your only entry already has Boost. Ignored when the option above is on, since that always submits a new photo.',
+    turboNewSubmitOnConflict: 'Turbo a Freshly Submitted Photo Only on Conflict',
+    turboNewSubmitOnConflictDesc:
+        'When on, a new photo is submitted and given Turbo only when Turbo cannot go on any existing entry — each has Boost or is pinned for Boost (a photo pinned for the other feature counts as a conflict). In the normal case Turbo still goes to your existing entry. If there is no free slot or no eligible photo to submit, Turbo is skipped this cycle. The one exception: once the photo pinned for Boost gives way inside the Emergency Submit window because Boost still is not ready, Turbo goes on that photo. Ignored when the option above is on, since that always submits a new photo.',
     playAutoTurbo: 'Play the Turbo mini-game now to earn Turbo',
     autoTurboRunsWithAutovote: 'Auto-vote already plays the Turbo mini-game on each cycle',
     earnTurbo: 'Earn Turbo',
     applyTurboToThisEntry: 'Apply your Turbo to this photo',
     applyBoostToThisEntry: 'Apply your Boost to this photo',
-    autoFill: 'Auto-Submit Missing Entries',
-    autoFillDesc:
+    autoSubmit: 'Auto-Submit Missing Entries',
+    autoSubmitDesc:
         'Submit additional photos as a challenge approaches its deadline, following the schedule below. Submits one photo per check cycle.',
-    autoFillSchedule: 'Auto-Submit Schedule',
-    autoFillScheduleDesc:
+    autoSubmitSchedule: 'Auto-Submit Schedule',
+    autoSubmitScheduleDesc:
         'Set a time to 0h 0m to turn that image off. Each row means: have at least this many entries once this much time remains before close — "Image 2 ≤ 48h" submits your 2nd photo when 48 hours remain. If you are behind schedule (the app started late, or a time is longer than the whole challenge), it catches up one photo per cycle from the start. If a challenge allows fewer images than the schedule covers, the whole schedule shifts toward the end so the last image\'s time applies to the challenge\'s final photo — e.g. in a 2-image challenge the 2nd photo uses the Image 4 time; in a 3-image challenge the 2nd photo uses the Image 3 time and the 3rd the Image 4 time.',
-    autoFillScheduleShiftHint:
+    autoSubmitScheduleShiftHint:
         'This challenge allows {0} photos, fewer than the schedule covers — times shift toward the end: the final photo uses the Image {1} time.',
-    autoFillScheduleImage: 'Image',
-    autoFillScheduleOff: 'no time set — may still be submitted while catching up to a later image',
-    autoFillScheduleEmpty: 'All images are off — auto-submit will never submit anything.',
-    autoFillScheduleDominated: 'never applies (a later image already has an equal or longer time)',
-    autoFillScheduleOutOfRange: 'time must be at most 30 days',
+    autoSubmitScheduleImage: 'Image',
+    autoSubmitScheduleOff: 'no time set — may still be submitted while catching up to a later image',
+    autoSubmitScheduleEmpty: 'All images are off — auto-submit will never submit anything.',
+    autoSubmitScheduleDominated: 'never applies (a later image already has an equal or longer time)',
+    autoSubmitScheduleOutOfRange: 'time must be at most 30 days',
     settingsSaveError: 'Some settings could not be saved — check the highlighted values and try again.',
     unitPercent: '%',
     unitMinutes: 'min',
     unitHours: 'h',
+    unitSeconds: 's',
+    unitMilliseconds: 'ms',
     unitCoins: 'coins',
     unitVotes: 'votes',
     unitKeys: 'keys',
@@ -260,8 +365,12 @@ export const app = {
     currencySwapTitle: 'Swap this photo?',
     currencySwapBody:
         'The current photo is replaced by the one the app picked for this challenge. The replaced photo cannot be swapped back in.',
+    currencySwapChoose: 'Choose another photo…',
     currencySwapCurrent: 'Current photo',
     currencySwapReplacement: 'Replacement photo',
+    currencySwapYourPick: 'Your pick',
+    currencySwapChosenBody:
+        'The current photo is replaced by the photo you picked. The replaced photo cannot be swapped back in.',
     currencySwapBoostedWarning:
         'This photo is boosted or turbo-charged. The boost/turbo stays with this photo — the replacement will not have it, and it cannot be used again in this challenge unless you swap this photo back in.',
     currencySwapBack: 'Swap back',
@@ -282,8 +391,12 @@ export const app = {
     currencyOutcomeBalanceUnknown: 'Your balance could not be checked, so nothing was spent. Try again in a moment.',
     currencyOutcomeNoAlternative:
         'No different photo is available to swap in — every eligible photo is already used here.',
-    currencyOutcomeStaleCandidate: 'The suggested replacement expired. Press Swap again for a fresh pick.',
+    currencyOutcomeStaleCandidate: 'The swap offer expired or changed, so nothing was spent. Start the swap again.',
+    currencyOutcomeAlreadyEntered:
+        'That photo is already entered in this challenge, so nothing was spent. Start the swap again with a different photo.',
     currencyOutcomeBusy: 'Another currency action is still running — try again in a moment.',
+    currencyOutcomeUnclear:
+        'The request got no answer, so it may or may not have gone through. Refresh the challenge and check it before trying again.',
     currencyOutcomeFailed: 'GuruShots rejected the request. Try again later; check the logs if it keeps happening.',
     scenario: 'Scenario',
     scenarioDesc:
@@ -326,12 +439,78 @@ export const app = {
     scenarioAddTemplate: 'Add copy',
     scenarioTemplateFailed: "The template copy wasn't saved.",
     scenarioStatusMissing: 'Scenario "{name}" no longer exists — nothing runs. Pick another in the challenge settings.',
+    scenarioStatusUnloaded:
+        'Scenario "{name}": the saved progress could not be loaded yet, so its plan is paused. The app retries; reopen the app if the progress still doesn’t load. Nothing is reset.',
+    scenarioStatusUnloadedShort:
+        'Scenario "{name}" is paused: the saved progress could not be loaded yet. The app retries.',
+    scenarioStatusUnloadedService:
+        'Scenario "{name}": this window could not load the scenario progress yet. If the background service is running, it runs the plans from its own copy. Reopen the app if the progress still doesn’t load. Nothing is reset.',
+    scenarioStatusUnloadedServiceShort:
+        'Scenario "{name}": this window could not load the scenario progress yet. If the background service is running, it runs the plans from its own copy.',
     scenarioStatusCorrupt:
-        'Scenario "{name}" progress is unreadable, so it is paused. Reset it (scenario-reset) to start the plan again.',
+        'Scenario "{name}": the saved progress of the scenarios cannot be read, so the plans of every challenge are paused. Resetting the progress of every challenge starts them again.',
+    scenarioStatusCorruptShort:
+        'Press “{details}”, then “{reset}” — scenario "{name}" is paused: the saved progress cannot be read.',
+    scenarioStatusCorruptRecord:
+        'Scenario "{name}": the saved progress of this challenge cannot be read, so its plan is paused. Resetting it starts the plan again.',
+    scenarioStatusCorruptRecordShort:
+        'Press “{details}”, then “{reset}” — scenario "{name}" is paused: this challenge’s saved progress cannot be read.',
     scenarioStatusPhase: 'phase {phase}',
     scenarioStatusNotStarted: 'starts in phase {phase} on the next run',
+    scenarioStatusNotStartedManual: 'starts in phase {phase} once Manual Only is off',
     scenarioStatusNext: 'next check in {time}',
+    scenarioStatusPausedManual: 'paused: Manual Only is on, so no step runs',
+    scenarioStatusPausedManualShort: 'paused (Manual Only)',
     scenarioStatusProblem: 'Last step skipped: {message}',
+    scenarioStatusSpendUnclear:
+        'GuruShots gave no answer to “{action}”, so it may have gone through. It will not be spent again: the next cycle only checks whether it took effect.',
+    scenarioStatusSpendUnclearManual:
+        'GuruShots gave no answer to “{action}”, so it may have gone through. It will not be spent again: once Manual Only is off, the next cycle only checks whether it took effect.',
+    scenarioStatusSpendUnclearPendingManual:
+        'The app did not record whether “{action}” was sent, so it may have gone through. It will not be spent again: once Manual Only is off, the next cycle only checks whether it took effect.',
+    scenarioStatusSpendUnclearPending:
+        'The app did not record whether “{action}” was sent, so it may have gone through. It will not be spent again: the next cycle only checks whether it took effect.',
+    scenarioStatusSpendStopped:
+        'GuruShots gave no answer to “{action}”, so it may have gone through, and its rule was stopped so that it is not spent again. Check the challenge. {hint}',
+    scenarioStatusResetHint:
+        '{again} To start the scenario over, use Reset scenario below or run scenario-reset --challenge={id} in the command line (CLI): that may spend the action again, and it restarts the scenario’s spend counter.',
+    scenarioStatusSpendStoppedShort:
+        'Press “{details}” for more — GuruShots gave no answer to “{action}”: its rule was stopped so that it is not spent again.',
+    scenarioStatusSpendStoppedPending:
+        'The app did not record whether “{action}” was sent or what came of it (it stopped, or could not save the result), so it may have gone through, and its rule was stopped so that it is not spent again. Check the challenge. {hint}',
+    scenarioStatusSpendStoppedPendingShort:
+        'Press “{details}” for more — the app did not record whether “{action}” was sent: its rule was stopped so that it is not spent again.',
+    scenarioReset: 'Reset scenario…',
+    scenarioResetAll: 'Reset every challenge’s progress…',
+    scenarioResetTitle: 'Reset scenario progress',
+    scenarioResetBody:
+        'This forgets where “{title}” is in its scenario: the plan starts again from its first phase on the next voting pass, and the rules that already ran can run (and spend) again. It may spend again an action whose outcome is unknown (GuruShots gave no answer, or the app could not record it), and it restarts the scenario’s spend counter.',
+    scenarioResetAllBody:
+        'The saved scenario progress cannot be read, so it can only be reset for every challenge at once. Every challenge’s progress goes: where each plan stands, which rules already ran (they can run, and spend, again) and the spend counters. An action whose outcome is unknown (no answer, or the app could not record it) can be spent again.',
+    scenarioResetConfirm: 'Reset',
+    scenarioResetWorking: 'Resetting…',
+    scenarioResetBusy:
+        'This challenge’s scenario is being run, or the saved progress is being updated, right now (by the app or by another process). Nothing was changed. Try again in a moment.',
+    scenarioResetAllBusy:
+        'The saved scenario progress is being updated right now (by the app or by another process). Nothing was changed. Try again in a moment.',
+    scenarioResetUnloaded:
+        'The saved progress could not be loaded yet, so nothing was reset. The app retries; reopen the app if the progress still doesn’t load.',
+    scenarioResetReadable:
+        'The saved progress can be read again, so nothing was reset. Close this dialog to see where the plans are.',
+    scenarioResetUnreadable:
+        'The saved progress cannot be read, so this challenge cannot be reset alone. Close this dialog and open it again to reset every challenge.',
+    locksUnavailable:
+        'The app cannot create its lock files in its data folder, so it cannot do this safely. Nothing was changed. Check the folder’s permissions and the free disk space (the log has the details), then try again.',
+    scenarioResetFailed: 'Could not reset the scenario right now. Nothing was changed. Try again in a moment.',
+    scenarioResetAllFailed:
+        'Could not reset every challenge’s progress right now. Nothing was changed. Try again in a moment.',
+    scenarioResetNotSaved:
+        'The device could not save the reset, so nothing was changed. Free up storage space and try again.',
+    scenarioResetAllNotSaved:
+        'The device could not save the reset of every challenge, so nothing was changed. Free up storage space and try again.',
+    scenarioStatusAgainPhase: 'The rule can run again the next time the phase is entered.',
+    scenarioStatusAgainReset: 'The rule can run again only after a reset.',
+    scenarioStatusAgainDay: 'The rule can run again the next day.',
     notifyOnScenario: 'Notify from scenarios',
     notifyOnScenarioDesc:
         "Show the messages your scenarios' notify steps send, and a warning when a scenario stops because it needs you.",
@@ -466,6 +645,7 @@ export const app = {
     sbSimulateOn: 'Simulate on challenge',
     sbSimulatePick: 'Pick a challenge…',
     sbSimulateAssume: 'Assumes every step succeeds and the challenge data stays as it is now.',
+    sbSimulatePausedManual: 'Paused (Manual Only) — this is what would run if Manual Only were off now.',
     sbSimulateNothing: 'Nothing would run.',
     sbSimulateFailed: 'The simulation could not run.',
     sbStop_closed: 'Stops: the challenge closes.',
@@ -513,7 +693,14 @@ export const app = {
         'Total coins auto-join may spend in one cycle. 0 = spend nothing (paid joins off). Both this and the per-challenge cap must be above 0 to join paid challenges.',
     // Discover (un-joined challenges)
     discoverTitle: 'Discover Challenges',
-    discoverCountLabel: 'open challenges',
+    discoverCountLabel: 'Open challenges: {count}',
+    discoverCountSplit: '{open} open · {upcoming} upcoming',
+    discoverStartsIn: 'Starts in {time} — opens for joining then',
+    discoverStartingNow: 'Starting now — it will appear in the open list shortly',
+    discoverUpcomingChosenHint:
+        'Chosen photos are used automatically only if auto-join is on for this challenge; otherwise join by hand once it starts.',
+    discoverJoinNotStartedLabel: 'Join {title} — not open until it starts',
+    discoverJoinOpeningLabel: 'Join {title} — opens for joining in a moment',
     discoverRefresh: 'Refresh',
     discoverEmpty: 'No open challenges to join right now.',
     discoverUnavailableList: 'Could not load open challenges. Check your connection and try again.',
@@ -522,13 +709,54 @@ export const app = {
     discoverCostPaid: '{coins} coins',
     discoverJoin: 'Join',
     discoverJoinPaid: 'Join (paid)',
+    discoverJoinLabel: 'Join {title}',
+    discoverJoinPaidLabel: 'Join (paid) {title}, {coins} coins',
     discoverJoining: 'Joining…',
+    discoverChecking: 'Checking…',
+    discoverPendingNoPhoto:
+        'Coins were already spent, but no photo qualifies for this challenge. Add an eligible photo, then press Retry submit: you will not be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.',
+    discoverUnconfirmed:
+        'The payment for this challenge got no answer, so it may or may not have gone through. Retrying only submits your photo, so you are never charged twice. If the GuruShots website shows the coins were not taken, press "I wasn\'t charged", then join again.',
+    discoverEarlierPayment:
+        'This challenge has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. Retry submit is for the account that paid: it only submits the photo, so nobody is charged twice. The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.',
+    discoverForgetPayment: "I wasn't charged",
+    discoverForgetPaymentLabel: "I wasn't charged for {title}",
+    discoverForgetTitle: 'Forget this payment?',
+    discoverForgetBody:
+        'First check your coin history on the GuruShots website. Only continue if the coins for {title} were not taken: if they were, joining again charges you a second time. Once forgotten, auto-join may join the challenge, and pay for it, again within its coin budget.',
+    discoverForgetBalances:
+        'Coins before this payment: {before}. GuruShots reports {now} now. Other coin activity since then (rewards, other joins) changes the difference, so the app cannot tell whether the payment went through: the coin history on the GuruShots website is what counts.',
+    discoverForgetBalanceBefore:
+        'Coins before this payment: {before}. Compare that with your balance on the GuruShots website: the app cannot tell whether the payment went through, and other coin activity since then changes the difference.',
+    discoverForgetConfirm: "I wasn't charged — forget it",
+    discoverForgetWorking: 'Forgetting…',
+    discoverForgetNothing:
+        'There was nothing to forget: the payment is already confirmed, or the join has finished. Refresh the list.',
+    discoverForgetAccountUnknown:
+        'Could not confirm which account is logged in, so nothing was changed. Try again shortly, or log in again.',
+    discoverForgetLegacyRecord:
+        'This record is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. Nothing was changed.',
+    discoverForgetBusy:
+        'A join of this challenge is in progress, or another part of the app is using the saved payment records. Nothing was changed. Try again in a moment.',
+    discoverForgetNotAuthenticated: 'You are not logged in, so nothing was changed. Log in again, then try once more.',
+    discoverForgetUnreadable:
+        "The saved payment records could not be read, so nothing was changed. Restart the app and try again. If it keeps happening, the join-state file (joinState.json in the app's data folder) is unreadable: check your coin history on the GuruShots website first, then move that file aside and restart the app.",
+    discoverForgetUnreadableAndroid:
+        'The saved payment records could not be read, so nothing was changed. Restart the app and try again. If it keeps happening, the app\'s saved join state is unreadable: check your coin history on the GuruShots website first, then open Settings → About and data in this app and choose "Delete all local data…" (this also logs you out and resets the app\'s settings).',
+    discoverForgetFailed: 'Could not forget the payment right now. Nothing was changed. Try again in a moment.',
+    discoverAccountUnknown:
+        'Could not confirm which account is logged in, so this attempt did nothing and spent no coins. Try again shortly, or log in again.',
+    discoverAlreadyJoined:
+        'This account has already joined this challenge, so nothing was spent. The list updates at the next check.',
+    discoverConfirmDialogFirst: 'Confirm or cancel the open dialog first, then join again.',
     discoverRetrySubmit: 'Retry submit',
+    discoverRetrySubmitLabel: 'Retry submit for {title}',
     discoverConfirmTitle: 'Join paid challenge?',
     discoverConfirmBody: 'Joining "{title}" costs {coins} coins.',
     discoverConfirmBalance: 'You have {current} coins; this costs {cost}, leaving {resulting}.',
     discoverConfirmBalanceUnknown: 'Your current coin balance could not be read.',
-    discoverConfirmInsufficient: 'You have {current} coins; this challenge costs {cost} — not enough to join.',
+    discoverConfirmInsufficient:
+        'You have {current} coins; this challenge costs {cost} — not enough to join. Earn more coins, then try again.',
     discoverConfirmSpend: 'Spend {coins} coins',
     // Discover join outcomes
     discoverJoined: 'Joined.',
@@ -540,10 +768,18 @@ export const app = {
     discoverFailedNoCharge: 'Could not join. No coins were charged.',
     discoverNoPhoto: 'No eligible photo to submit. No coins were charged.',
     discoverUnavailable: 'This challenge is no longer open to join.',
-    discoverBusy: 'A join is already in progress.',
+    discoverNotStarted: 'This challenge has not started yet. You can join once it starts.',
+    discoverPriceChanged: 'The cost changed to {coins} coins. Nothing was spent — press Join to confirm the new cost.',
+    discoverBusy: 'A join is already in progress. Try again in a moment.',
     validationOutOfRange: 'Enter a value between {min} and {max}.',
     validationAtLeast: 'Enter a value of {min} or more.',
-    autoFillBadge: 'auto-submit',
+    autoSubmitBadge: 'auto-submit',
+    manualPhotosBadge: 'manual only',
+    teamMatchVs: 'Team match vs {opponent}',
+    teamMatchVotes: 'Us {us} · Them {them}',
+    teamMatchAhead: 'ahead',
+    teamMatchBehind: 'behind',
+    teamMatchTied: 'tied',
     customBadge: 'custom',
     customSettingsHint: 'Has custom settings',
     mustIncludeTags: 'Must Include Tags',
@@ -552,23 +788,216 @@ export const app = {
     shouldIncludeTags: 'Should Include Tags',
     shouldIncludeTagsDesc:
         'Soft preference for both auto-submit and the manual photo buttons. Prefer photos whose labels match these tags; matches rank above the auto-detected challenge keyword score but do not exclude other photos. If nothing matches, photos are picked by the normal ranking. Matching follows the same whole-word rules as Must Include Tags.',
+    chosenPhotos: 'Chosen Photos',
+    chosenPhotosDesc:
+        "Photos that auto-join and auto-submit try first. They must still fit your tag settings (unless Submit Even Without a Tag Match is on and no photo fits them at all), and they are ranked the way the app ranks its own picks (unless “Use Chosen Photos in the order I picked them” is on). A photo can be in only one challenge, so with a shared list the challenge filled first takes it. The list belongs to the account that saved it and is ignored on another account; saving a list there makes the lists saved under the first account apply to it too, unless you remove them first. A scenario's list applies only after joining. Swap ignores the list.",
+    chosenPhotosInOrder: 'Use Chosen Photos in the order I picked them',
+    chosenPhotosInOrderDesc:
+        "With Chosen Photos set, enter them in the order you picked them (the numbers in the chooser) instead of ranking them the way the app ranks its own picks. A photo that fails your must-include tags, is already entered or isn't offered for the challenge is skipped, and the next one in the list is used; any slots left over are filled by ranking as usual. If Submit Even Without a Tag Match is on and none of the chosen photos fits your must-include tags, they can still be entered. Off by default.",
+    chosenPhotosOnly: 'Submit Only Chosen Photos',
+    chosenPhotosOnlyDesc:
+        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically (Pick photos… on a challenge card submits photos you choose, once), Emergency Submit ignores this setting (set Emergency Submit to 0 for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted (unless Manual Only is on: then, in Discover, choose the photo for that challenge and press Join, or Retry submit when its coins are already spent). Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your must-include tags, they can still be entered. With an empty list this does nothing.',
+    chosenPhotosMemberId: 'Chosen Photos Account',
+    chosenPhotosClearedAt: 'Chosen Photos Cleared At',
+    chosenPhotosClearedAtDesc:
+        'Internal — when every saved Chosen Photos list was last removed; open editors use it to drop their copy of the lists',
+    chosenPhotosMemberIdDesc:
+        'Internal — the member who last saved a Chosen Photos list; the list is ignored when a different member is logged in',
+    chosenPhotosCount: 'Chosen photos: {count}',
+    choosePhotos: 'Choose photos',
+    photosClear: 'Clear',
+    photosUseNone: 'Use none',
+    photosUseNoneHint:
+        'This challenge uses no chosen photos, even if your global defaults or a rule have a list. The reset button next to this field brings that inherited list back.',
+    chosenPhotoThumbAlt: 'Chosen photo {n}: {id}',
+    chosenPhotosScenarioHint:
+        "A scenario's chosen photos apply only after the challenge is joined; joining never uses them.",
+    chosenPhotosOnlyReachHint:
+        'This applies to every challenge it covers: auto-join and auto-submit skip each challenge that has no usable chosen photo.',
+    photoChooserTitle: 'Choose photos',
+    photoChooserHelp:
+        "The app uses these first, and they must still pass your tag filters. It ranks them the way it ranks its own picks, or goes by the numbers shown here when “Use Chosen Photos in the order I picked them” is on (Auto-Submit settings: the global defaults, a challenge rule, or the challenge's own settings once it is joined).",
+    photoChooserSearchLabel: 'Search your photos by tag',
+    photoChooserSearchPlaceholder: 'e.g. sunset…',
+    photoChooserSearch: 'Search',
+    photoChooserCount: '{count} of {max} chosen',
+    photoChooserLoading: 'Loading your photos…',
+    photoChooserLoadError: "Your photos couldn't be loaded (details below). Try again.",
+    photoChooserLoadErrorNoDetail: "Your photos couldn't be loaded — the request was interrupted. Try again.",
+    photoChooserRetry: 'Retry',
+    photoChooserNoContext:
+        "Your photos can't be listed yet: the library is read through a challenge, and you have no active or joinable challenge right now. Join one or wait until one opens, then try again.",
+    photoChooserEligibilityLater:
+        'Eligibility is not checked here for any challenge; it is checked when the app submits.',
+    photoChooserTruncated: 'Showing the first {count} photos. Search by tag to find others.',
+    photoChooserWonHidden:
+        "Hidden: {count} photo(s) that have won a challenge. A winning photo can't be entered again.",
+    photoChooserWonHiddenTruncated:
+        "Hidden: at least {count} photo(s) that have won a challenge. A winning photo can't be entered again.",
+    photoChooserRefusedHidden: "Hidden: {count} photo(s) GuruShots won't take in this challenge.",
+    photoChooserRefusedHiddenTruncated: "Hidden: at least {count} photo(s) GuruShots won't take in this challenge.",
+    photoChooserNoneAccepted:
+        "GuruShots won't take any of the listed photos in this challenge. Search by tag to find others, or upload new photos and press Refresh.",
+    photoChooserWonInList: "Has won a challenge, so it can't be entered again. Click it to remove it from your list.",
+    photoChooserEmpty:
+        'No photos found. Try another tag, or upload photos to your GuruShots library and press Refresh.',
+    photoChooserEmptyAllWon:
+        'No photos you can enter were found: every match has won a challenge. Try another tag, or upload new photos to your GuruShots library and press Refresh.',
+    photoChooserAsOf: 'Photos as of {time}',
+    photoChooserAsOfDate: 'Photos as of {date}, {time}',
+    photoChooserRefresh: 'Refresh',
+    photoChooserRefreshLabel: 'Refresh photos',
+    photoChooserPreview: 'Showing your photos as last loaded while the app checks which ones this challenge accepts…',
+    photoChooserPreviewNoChallenge: 'Showing your photos as last loaded while the app checks for anything new…',
+    photoChooserPreviewSubmit:
+        'Showing your photos as last loaded. You can pick once the app has checked which ones this challenge accepts…',
+    photoChooserRecheckFailed:
+        "Couldn't check which of these photos this challenge accepts, so they're shown as last loaded. Press Refresh.",
+    photoChooserRecheckFailedNoChallenge:
+        "Couldn't check your photos for changes, so they're shown as last loaded. Press Refresh.",
+    photoChooserRecheckFailedSubmit:
+        "Couldn't check which of these photos this challenge accepts, so picking is held. Press Refresh.",
+    photoChooserNotAsLoaded: 'Not among your photos as last loaded. Checking again…',
+    photoChooserNotAsLoadedFailed: 'Not among your photos as last loaded. Press Refresh to check again.',
+    photoChooserMissing: 'Not available for this challenge (in another challenge, or deleted)',
+    photoChooserMissingTruncated:
+        'Not available for this challenge (in another challenge, deleted, or beyond the first {count} photos)',
+    photoChooserMissingNoChallenge: 'Not found in your library (it may have been deleted)',
+    photoChooserMissingNoChallengeTruncated:
+        'Not found in the photos listed (it may have been deleted, or be beyond the first {count} photos)',
+    photoChooserMissingTileLabel: 'Chosen photo {id}: {reason}',
+    photoChooserListFull: 'List full',
+    photoChooserLimitReached: 'Limit reached — remove one to add another.',
+    photoChooserNotEligible: 'Not eligible for this challenge',
+    photoChooserAllowed: 'Can be entered',
+    photoChooserTileLabel: 'Photo {id}: {labels}. {reason}',
+    photoChooserPosition: 'Number {n} in your list.',
+    photoChooserNoTags: 'No tags',
+    photoChooserOtherAccount:
+        'These lists were saved under another account, so the app ignores them. Saving a list here makes them apply to this account too, unless you remove them first.',
+    photoChooserOtherAccountClear: 'Remove those lists',
+    photoChooserOtherAccountConfirm:
+        "Remove the chosen-photo lists saved under the other account, in every setting, profile, rule and scenario? This can't be undone. Submit Only Chosen Photos is kept.",
+    photoChooserOtherAccountClearError:
+        "The lists weren't removed because the settings couldn't be written. Try again.",
+    chosenPhotosOtherAccountCount: '{count} photo(s) saved under another account',
+    photoChooserInheritNote:
+        "Saving with nothing chosen removes this challenge's own list, so it uses the list from your settings or rules again.",
+    photoChooserSaveWaits:
+        'Saving waits until your photos have loaded, so the app can check which account the list belongs to.',
+    photoChooserSaveWaitsError:
+        'Saving is held until your photos load, so the app can check which account the list belongs to. Press Retry above.',
+    photoChooserSaveChecking: 'Checking which account this list belongs to…',
+    photoChooserSaveCheckFailed:
+        'The account check failed, so saving is held to protect your list. Press Retry again shortly.',
+    photoChooserTileLocked: 'Locked until your saved list is read',
+    photoChooserSaveConfirmed: 'Account confirmed — your saved list is loaded.',
+    photoChooserSaveReadFailed:
+        "Couldn't read your saved list for this challenge, so saving is held to protect it. Press Retry.",
+    photoChooserSaveReadFailedAgain:
+        'Reading your saved list failed again, so saving stays held to protect it. Press Retry again shortly.',
+    photoChooserSaveNotLoggedIn:
+        "You're signed out, so the account can't be checked. Log in again, then reopen the chooser.",
+    photoChooserSaveNoContextHeld:
+        "Saving is held: without an active or open challenge the app can't check which account this list belongs to. Close the chooser and join a challenge first.",
+    photoChooserClearHeld: "Clear is unavailable until your saved list has been read, so a late read can't undo it.",
+    photoChooserSaveUnconfirmed:
+        "Couldn't confirm which account this list belongs to, so saving is held to protect it. Press Retry, or close and reopen the chooser.",
+    photoChooserSaveNoContext:
+        "Saving is blocked: without an active or open challenge the app can't check which account this list belongs to. Clear the list to save, or join a challenge first.",
+    photoChooserSaveError: "The chosen photos weren't saved because the setting couldn't be written. Try again.",
+    photoChooserDiscardTitle: 'Discard your changes?',
+    photoChooserDiscardText:
+        "You've changed the chosen photos but haven't saved them. Closing now throws those changes away. Choose Cancel to keep choosing, then press Use these photos.",
+    photoChooserDiscard: 'Discard changes',
+    settingsDiscardTitle: 'Discard your changes?',
+    settingsDiscardText:
+        "You have changes in these settings that you haven't saved. Closing now throws them away. Choose Keep editing to go back, then press Save.",
+    settingsDiscard: 'Discard changes',
+    settingsKeepEditing: 'Keep editing',
+    settingsDropTitle: 'Save without part of your work?',
+    settingsDropText:
+        'Save writes your settings, but not the items below. They are lost when this window closes. Choose Keep editing to deal with them first.',
+    settingsSaveWithout: 'Save without them',
+    settingsDropTimezone: 'A custom timezone you typed but did not add',
+    settingsDropScenario: 'A scenario you are editing and have not saved',
+    settingsFilterPlaceholder: 'Filter settings…',
+    settingsFilterClear: 'Clear',
+    settingsJumpLabel: 'Jump to section',
+    settingsNoMatch: 'No settings match',
+    hide: 'Hide',
+    photoChooserUse: 'Use these photos',
+    fillPick: 'Pick photos…',
+    fillPickLabel: 'Choose which photos to submit now',
+    pickTitle: 'Choose photos to submit',
+    pickHelp:
+        'The photos you pick are submitted to this challenge right away, exactly as picked: your tag filters and Chosen Photos settings are not applied, and nothing is saved.',
+    pickCount: 'Picked: {count}/{max} open slots',
+    pickOverCap: 'Picked: {count}, open slots: {max}. Remove some to submit.',
+    pickFull: 'All open slots picked',
+    pickTileLocked: 'Locked while the app checks whether this challenge accepts it.',
+    pickTileSubmitting: 'Locked while your pick is being submitted.',
+    pickNoSlots: 'No open slots left: every slot already holds a photo. Close this dialog.',
+    pickSubmit: 'Submit',
+    pickSubmitCount: 'Submit {count}',
+    pickAuto: 'Auto',
+    pickAutoHelp:
+        'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is submitted.',
+    pickLoadAll: 'Load all photos',
+    pickIdle: 'Photos are not loaded yet. Load them all, search, or press Auto.',
+    pickIdleWithPicks:
+        'Your picks can be submitted as they are. Load all photos or search to see the rest of your library.',
+    pickAutoRunning: 'Ranking your photos… this can take a minute. Nothing is submitted.',
+    pickSuggestedTitle: 'Suggestions',
+    pickSuggestedCount: 'Suggestions: {count}',
+    pickSuggestedStatsLimited:
+        "Popularity stats couldn't all be read (the lookups kept failing), so this ranking leans on tags and the image check.",
+    pickSuggestionRank: 'Suggestion #{n}',
+    pickAddSuggestions: 'Add suggestions',
+    pickAddSuggestionsFull: 'No free slots',
+    swapPick: 'Swap with…',
+    swapPickLabel: 'Choose the photo to swap in from your library',
+    swapPickTitle: 'Choose the photo to swap in',
+    swapPickHelp:
+        "The photo you pick replaces the current one. Photos this challenge doesn't accept for a swap are hidden. Auto ranks your photos by your tag rules and Chosen Photos; a photo you pick yourself skips them. Nothing is spent until you confirm.",
+    swapPickAutoHelp:
+        'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is swapped.',
+    swapPickAutoRunning: 'Ranking your photos… this can take a minute. Nothing is spent.',
+    swapPickIdleWithPicks: 'Your pick can be used as it is. Load all photos or search to see the rest of your library.',
+    swapPickCount: 'Picked: {count}/1',
+    swapPickSubmit: 'Use this photo',
+    swapPickBlocked: 'Already in this challenge',
+    swapPickNoSuggestion: 'The app found no photo to suggest for this swap. Pick one from your library.',
+    discoverChosenChip: 'Chosen',
+    discoverChosenChipHint: 'This challenge has chosen photos. Click to change them.',
+    discoverChosenChipLabel: 'Chosen photos for {title}: change them',
+    discoverChosenForeignChip: 'Other account: {count} photo(s)',
+    discoverChosenForeignLabel: 'Other account: {count} photo(s) for {title}, review them',
+    discoverChosenForeignHint:
+        "These photos were saved under another account and aren't used here. Click to review them.",
+    discoverChoosePhotosLabel: 'Choose photos for {title}',
+    discoverChosenInherited: 'Inherited chosen photos: {count} (from your settings or rules)',
+    discoverConfirmChosen: "Your chosen photo if it's eligible, otherwise an automatic pick.",
+    scenarioFlagged:
+        'Review before importing: {settings}. Chosen photos belong to one account and are ignored on another; Submit Only Chosen Photos makes joins and fills skip a challenge with no usable chosen photo.',
+    scenarioExportOmitted: 'Left out of this export because it belongs to your account: {settings}.',
     ignoreTitleWords: 'Ignore These Words in Challenge Titles',
     ignoreTitleWordsDesc:
         'Words to strip from a challenge title before it is used to find matching photos. Challenge titles usually qualify their subject rather than just naming it — "Epic Lighthouses" is about lighthouses, not "epic" — and those extra words both blur the theme and use up the small number of searches per challenge. The list is pre-filled with common ones; edit it freely. Remove a word if a challenge really is about it. Series prefixes like "Color Hunt:" are handled automatically and do not need an entry.',
-    fillWithoutTagMatch: 'Submit Even Without a Tag Match',
-    fillWithoutTagMatchDesc:
+    submitWithoutTagMatch: 'Submit Even Without a Tag Match',
+    submitWithoutTagMatchDesc:
         'Only matters when Must Include Tags is set. Because a photo must match every tag, this triggers more often when several tags are required. When on (default), if none of your photos match all those tags the best available photo is added anyway so the slot is not left empty. When off, the slot stays empty until a fully matching photo exists.',
-    emergencyFill: 'Emergency Submit',
-    emergencyFillDesc:
-        'Safety net that runs in the last minutes of a challenge when auto-submit would otherwise leave entry slots empty — either because auto-submit is off, or because your Must Include Tags match no photo and Submit Even Without a Tag Match is off. When a challenge is within this much time of closing, it submits your best available photos to the remaining slots anyway, even if they do not match your tags. This overrides those settings on purpose, so the challenge does not end with unused slots. Within this same window it also applies any available Boost and any won Turbo — even if Auto-Apply Boost or Auto-Apply Turbo is off for the challenge — so they are not wasted when it closes. Entered as hours and minutes in the GUI. Default 5 minutes; set to 0 to disable it (which also turns off this last-minute Boost/Turbo override). Tip: keep this window no longer than the Last Minute Threshold (default 10 minutes) so the app is already checking frequently for the whole of it.',
-    emergencyFillHelp:
+    emergencySubmit: 'Emergency Submit',
+    emergencySubmitDesc:
+        'Safety net that runs in the last minutes of a challenge when auto-submit would otherwise leave entry slots empty — either because auto-submit is off, or because your Must Include Tags match no photo and Submit Even Without a Tag Match is off. When a challenge is within this much time of closing, it submits your best available photos to the remaining slots anyway, even if they do not match your tags. This overrides those settings on purpose (including Submit Only Chosen Photos), so the challenge does not end with unused slots. Within this same window it also applies any available Boost and any won Turbo — even if Auto-Apply Boost or Auto-Apply Turbo is off for the challenge — so they are not wasted when it closes. Entered as hours and minutes in the GUI. Default 5 minutes; set to 0 to disable it (which also turns off this last-minute Boost/Turbo override). Tip: keep this window no longer than the Last Minute Threshold (default 10 minutes) so the app is already checking frequently for the whole of it.',
+    emergencySubmitHelp:
         'A last-minutes safety net measured as time-before-close. Set to 0 to disable it entirely (which also drops its last-minute Boost/Turbo rescue). 0 means "off" here — unlike the Exposure Target settings where 0 means "follow the trigger".',
     tagsPlaceholder: 'e.g. sunset, beach, ocean',
     titleTagRules: 'Challenge Rules',
     titleTagRulesDesc:
         'Give challenges a profile, their own join timing and optional photo tags by what survives a rotation: title, tag, type, photo count or length. Rules reapply when a challenge returns with a new id; manual settings for one challenge still win. Tags combine with profile/global tags.',
     titleTagRulesSaveError:
-        'Could not save the rules. Check profile names, title/tag lengths, that every value is in range ("runs at least" must not exceed "runs at most"), and conflicts with manual settings for open challenges. Other settings were saved.',
+        'Could not save the rules. Check profile names, title/tag lengths, that every value is in range ("runs at least" must not exceed "runs at most"), that any close time is a valid HH:MM, and conflicts with manual settings for open challenges. Other settings were saved.',
     titleTagRulesLoadError:
         "Couldn't load your challenge rules, so they're hidden to keep them from being overwritten. Your other settings can still be saved; close and reopen Settings to try again.",
     titleTagRuleTitle: 'Challenge title',
@@ -582,7 +1011,7 @@ export const app = {
     titleRuleMatchContains: 'Contains',
     titleRuleConditionsLabel: 'Match when',
     titleRuleConditionsHint:
-        "Every filled field must match; leave a field empty to ignore it. The challenge tag is the challenge's own tag (Exhibition, Comm, …), not a photo tag. Length is how long the challenge runs from start to end: 24 h = 1 day, 168 h = 7 days.",
+        "Every filled field must match; leave a field empty to ignore it. The challenge tag is the challenge's own tag (Exhibition, Comm, …), not a photo tag. Length is how long the challenge runs from start to end: 24 h = 1 day, 168 h = 7 days. Closes at is the end time shown on the challenge card, in the Timezone from Settings, on any date; with several times, any one is enough.",
     titleRuleChallengeTag: 'Challenge tag',
     titleRuleChallengeTagPlaceholder: 'e.g. Exhibition',
     titleRuleType: 'Challenge type',
@@ -591,13 +1020,19 @@ export const app = {
     titleRuleAnyPics: 'Any',
     titleRuleMinHours: 'Runs at least',
     titleRuleMaxHours: 'Runs at most',
+    titleRuleClosesAt: 'Closes at (any one matches)',
+    titleRuleClosesAtRow: 'Close time',
+    addCloseTime: 'Add time',
+    removeCloseTime: 'Remove time',
+    titleRuleClosesAtInvalid:
+        "This saved time isn't valid (use HH:MM), so the rule matches nothing. Pick another time or remove this one.",
     titleRuleAnyLength: 'any',
     titleRuleProfile: 'Automatic profile',
     titleRuleInherit: 'Inherit',
     titleRuleOn: 'On',
     titleRuleOff: 'Off',
     titleRuleAutoJoin: 'Auto-join',
-    titleRuleAutoFill: 'Auto-submit',
+    titleRuleAutoSubmit: 'Auto-submit',
     titleRulePercentElapsed: 'Join after',
     titleRuleJoinWindow: 'Or hours before end',
     titleRuleJoinWindowPlaceholder: 'inherit',
@@ -605,14 +1040,18 @@ export const app = {
     titleRuleBroadWarning:
         'This rule has no title, so it turns this on for every challenge it matches — which can spend coins or photos across a whole group of challenges.',
     titleRuleOrderHint:
-        'Rules are checked top to bottom: for each setting, the first matching rule that sets it wins, and anything it leaves empty comes from the next matching rule, then the global default.',
+        'Rules are checked top to bottom: for each setting, the first matching rule that sets it wins, and anything it leaves empty comes from the next matching rule, then the global default. Sorting by default order puts rules with a title, more conditions, a photo count or a length ahead of a rule keyed only on Closes at, so such a rule that must override them has to be moved back up.',
     titleRuleSortDefault: 'Sort by default order',
     titleRuleMoveUp: 'Move rule up',
     titleRuleMoveDown: 'Move rule down',
     addTitleTagRule: 'Add rule',
     removeTitleTagRule: 'Remove rule',
-    noTitleTagRules: 'No rules yet. Add one to match challenges by title, tag, type, photo count or length.',
+    noTitleTagRules:
+        'No rules yet. Add one to match challenges by title, tag, type, photo count, length or close time.',
     usingProfile: 'Using profile',
+    fromRule: 'From rule: {title}',
+    ruleNumber: 'rule #{n}',
+    ruleSettingsHint: 'Set by a challenge rule',
     none: '(none)',
     addOnePhoto: 'Submit one photo to an empty slot',
     fillAllPhotos: 'Submit photos to all empty slots now (no spacing)',
@@ -682,7 +1121,7 @@ export const app = {
     groupLastMinute: 'Last Minute',
     groupScheduledFill: 'Scheduled Voting',
     groupVotingPause: 'Voting Pause',
-    groupAutoFill: 'Auto-Submit',
+    groupAutoSubmit: 'Auto-Submit',
     groupRewards: 'Rewards',
     groupMissions: 'Missions',
     groupNotifications: 'Notifications',
@@ -698,13 +1137,16 @@ export const app = {
         'Automatically claim rewards from finished challenges and prizes from completed missions (autovote must be running). Checks at most once an hour. Off by default.',
     missionSaveTurbos: 'Save Turbos for Missions',
     missionSaveTurbosDesc:
-        'Hold off earning each challenge\'s Turbo so a "Win Turbo" mission has some left to win. A saved Turbo is earned when that mission is active, or an hour before its Auto-Apply time, so it is still earned and applied as usual. Off by default.',
+        'Hold off earning each challenge\'s Turbo so a "Win Turbo" mission has some left to win. A saved Turbo is earned when that mission is active, or an hour before its Auto-Apply time, so it is still earned and applied as usual. A Turbo game already in progress is finished right away. Off by default.',
     missionJoinEarly: 'Join Early for Missions',
     missionJoinEarlyDesc:
         'While a "Join challenges" or "Win Turbo" mission is active, join challenges without waiting for the auto-join timing (hours before end / % of challenge), until the mission is done — each new challenge brings another Turbo to win. The type, tag and coin filters still apply. Off by default.',
     missionUseFills: 'Use Fills for Missions',
     missionUseFillsDesc:
         'While a "Use Fill" mission is active, spend fills on challenges below 100% exposure until the mission is done. Keeps your fill reserve. Off by default.',
+    missionUseBoosts: 'Use Boosts for Missions',
+    missionUseBoostsDesc:
+        'While a "Use a boost" mission is active, apply a boost that is already available instead of waiting for its Auto-Apply time, until the mission is done. Never spends a key. Needs Auto-Apply Boost on; a boost whose Boost Time or Key-Unlocked Boost Time is 0 (off) is not used. Off by default.',
     missionVote: 'Vote for Missions',
     missionVoteDesc:
         'While a "Vote on photos" mission is active, vote every cycle instead of waiting for your exposure threshold — the votes still needed are split across your challenges, each voted up to 100% exposure (also during the Final Window Exposure period); whatever is left waits for the next cycle. Flash challenges are skipped; Only Boost Mode, Vote Only in Last Minute, Voting Pause and Scheduled Voting Only still apply. Off by default.',
@@ -712,10 +1154,10 @@ export const app = {
     notifyOnBoostDesc: 'Warn before a boost is applied, so you can keep the app running.',
     notifyOnTurbo: 'Notify before turbo',
     notifyOnTurboDesc: 'Warn before a turbo is played, so you can keep the app running.',
-    notifyOnAutoFill: 'Notify before auto-submit',
-    notifyOnAutoFillDesc: 'Warn before a photo is auto-submitted near the deadline, so you can keep the app running.',
-    notifyOnEmergencyFill: 'Notify before emergency submit',
-    notifyOnEmergencyFillDesc: 'Warn before a last-second emergency submit, so you can keep the app running.',
+    notifyOnAutoSubmit: 'Notify before auto-submit',
+    notifyOnAutoSubmitDesc: 'Warn before a photo is auto-submitted near the deadline, so you can keep the app running.',
+    notifyOnEmergencySubmit: 'Notify before emergency submit',
+    notifyOnEmergencySubmitDesc: 'Warn before a last-second emergency submit, so you can keep the app running.',
     notifyLeadTime: 'Warn this far ahead',
     notifyLeadTimeDesc: 'How many minutes before an action a warning is shown.',
     notifyLeadTimeHelp:
@@ -751,6 +1193,10 @@ export const app = {
     entries: 'Entries',
     entryDetails: 'Entry Details',
     entryPhoto: 'Entry photo',
+    entrySubmitted: 'Submitted {time}',
+    entrySubmittedOrEarlier: 'Submitted {time} or earlier',
+    entrySubmittedOrEarlierLong:
+        "The app didn't record when this photo went in. The time shown is when the app first saw it, so it went in at or before then.",
     viewEntryPhoto: 'View entry photo',
     error: 'Error',
     errorCheckingUpdates: 'Error checking for updates',
@@ -764,7 +1210,7 @@ export const app = {
         '0 does NOT mean off. 0 means "vote up to the Exposure trigger value" — the rule stays active. Enter 1-100 only to keep voting past the trigger up to that exposure. Contrast the time settings like Boost Time, where 0 means the feature is off.',
     fast: 'FAST',
     global: 'Global',
-    globalDefault: 'Global Default',
+    globalDefault: 'Global default',
     globalSettings: 'Global Settings',
     hours: 'hours',
     language: 'Language',
@@ -788,11 +1234,25 @@ export const app = {
     normal: 'NORMAL',
     of: 'of',
     onePhoto: '1 photo',
+    manualPhotosOnly: 'Manual Only',
+    manualPhotosOnlyDesc:
+        "The app does nothing on this challenge by itself: it never joins or enters a photo, swaps, votes, boosts, applies or earns Turbo, unlocks with keys, spends a fill or runs scenario steps. Every button on the card still works (Run is hidden, because it runs the automatic rules), and Vote All skips this challenge. To choose photos yourself and keep auto-voting, leave this off and limit Auto-Join and Auto-Submit to your own picks with Chosen Photos + Submit Only Chosen Photos (a join you already paid for still submits an automatic pick), or turn Auto-Join off (globally, or in the title rule that enables it) and Auto-Submit off for the challenge, then turn off Emergency Submit, Auto-Swap and the fresh-photo Boost/Turbo options, and remove any scenario enter/swap steps. Turning this off lets any scenario steps and spends that came due run on the next pass. For a challenge you haven't joined yet, or one that comes back under a new id, use a Challenge Rule.",
+    manualOnlyLabel: 'Manual Only is on — nothing runs automatically',
+    manualOnlyAlert:
+        'Manual Only is on: the app does nothing on this challenge by itself. It never joins or enters a photo, swaps, votes, boosts, applies or earns Turbo, unlocks with keys, spends a fill or runs scenario steps. Every button on the card still works; Run is hidden because it runs the automatic rules. Vote All skips this challenge.',
+    manualPhotosOnlyRuleHint:
+        "With Manual Only on, the app does no voting, boosting, Turbo or photo entry at all on the challenges this rule matches, unless a challenge's own setting turns the switch off.",
     onlyBoost: 'Only Boost Mode',
     onlyBoostDesc: 'Skip regular voting for this challenge entirely and only apply Boost.',
     voteOnNewEntry: 'Vote on New Entry',
     voteOnNewEntryDesc:
         'When a new photo appears in this challenge — added by you on the website, or by Auto-Submit, Emergency Submit, or a fresh Boost/Turbo photo — vote once even if exposure already reads at or above your threshold. It votes up to whichever ceiling the challenge would normally use: Exposure Target (or Exposure, when Target is 0), or Final Window Exposure Target during the final window when Use Final Window Exposure is on. Does not override Only Boost Mode, Vote Only in Last Minute, or Scheduled Voting Only: if any of those is blocking, no vote happens.',
+    discoverUpcomingHours: 'Show upcoming challenges starting within',
+    discoverUpcomingHoursDesc:
+        'How far ahead Discover Challenges lists challenges that have not started yet, so you can choose photos for them early. They cannot be joined until they start, and chosen photos are used automatically only if auto-join is on for that challenge. 0 = off: Discover lists the open challenges alone.',
+    autovoteStartupDelay: 'Wait after launch before resuming auto-vote',
+    autovoteStartupDelayDesc:
+        "When the app was closed with auto-vote on, how long it waits after launching before it resumes by itself, so you can check your settings first. Start now or Don't resume are on the main screen while it waits. Applies to the app's automatic resume only, not to the command-line start. 0 = off: auto-vote resumes at once. On Android, leaving or closing the app during the wait means it resumes the next time you open it.",
     override: 'Override',
     overrideForChallenge: 'Override for Challenge',
     photo: 'photo',
@@ -809,7 +1269,7 @@ export const app = {
     resetToGlobal: 'Reset to Global',
     resetToDefault: 'Reset to default',
     resetToDefaultNotSaved: 'Reset to default (not saved until Save)',
-    resetAll: 'Reset All',
+    resetAll: 'Reset all',
     resetAllConfirmTitle: 'Reset All Settings',
     resetAllConfirmMessage: 'Are you sure you want to reset ALL settings to their default values?',
     resetAllConfirmDetails:
@@ -822,6 +1282,11 @@ export const app = {
     skipThisVersion: 'Skip This Version',
     speed: 'Speed',
     startAutoVote: 'Start Auto Vote',
+    statusWaiting: 'Waiting',
+    resumeHold: 'Auto-vote resumes in {time}.',
+    resumeHoldNote: 'Keep the app open until then — after launch it waits so you can check your settings first.',
+    resumeStartNow: 'Start now',
+    resumeCancel: "Don't resume",
     stayLoggedIn: 'Stay Logged In',
     stayLoggedInDesc: 'Keep your session so you stay signed in after closing the app.',
     stopAutoVote: 'Stop Auto Vote',
@@ -831,10 +1296,11 @@ export const app = {
     timezone: 'Timezone',
     timezoneDesc: 'The timezone used to show challenge start and end times in your local time.',
     timezonePlaceholder: 'Enter timezone',
-    uiSetting: 'UI Setting',
+    timezoneInvalid: 'Not a valid timezone. Use a name like Europe/Riga.',
+    uiSetting: 'UI setting',
     updateAvailable: 'Update available!',
     run: 'Run',
-    running: 'Running...',
+    running: 'Running…',
     vote: 'Vote',
     voteTitle: 'Vote this challenge to 100% now (overrides automation; the bot keeps running)',
     voteAll: 'Vote All',
@@ -843,8 +1309,8 @@ export const app = {
     votedAll: 'Voted All!',
     votes: 'Votes',
     votesNeeded: 'votes needed',
-    voting: 'Voting...',
-    votingAll: 'Voting All...',
+    voting: 'Voting…',
+    votingAll: 'Voting All…',
     checkFrequency: 'Check Frequency',
     checkFrequencyDesc: 'Each cycle uses a random delay in this range. Set min and max equal for a fixed cadence.',
     checkFrequencyMin: 'Min',
@@ -945,12 +1411,13 @@ export const app = {
     refresh: 'Refresh',
     challengeOverrideInfo: 'Settings configured here will override global defaults for this challenge only.',
     challengeOverridesLoadError:
-        "Couldn't load this challenge's saved settings, so they can't be edited now — saving would overwrite them. Close this window and open it again; if it keeps failing, check the error log.",
+        "Couldn't load this challenge's saved settings, so they can't be edited now — saving would overwrite them. Close this dialog and open it again; if it keeps failing, check the error log.",
     mockMode: 'Mock Mode',
     logout: 'Logout',
     status: 'Status',
     title: 'GuruShots Auto Vote',
-    downloadingUpdate: 'Downloading Update...',
+    mainContent: 'Auto-vote controls and challenges',
+    downloadingUpdate: 'Downloading Update…',
     updateReady: 'Update Ready',
     updateError: 'Update Error',
     releaseNotes: 'Release Notes',
@@ -959,6 +1426,10 @@ export const app = {
         "The update didn't finish: the update server couldn't be reached or the download was interrupted. Try again later, or download it in your browser.",
     updateInstallFailed:
         "The update couldn't be installed: the downloaded update could not be applied. Restart the app and try again.",
+    updateUnverified:
+        'The download could not be verified, so it was not installed. The release page is open in your browser.',
+    updateReleasePageOpened:
+        "The update couldn't be installed in the app. The release page is open in your browser, where you can download it.",
     skipVersion: 'Skip Version',
     remindLater: 'Remind Later',
     download: 'Download',
@@ -967,11 +1438,11 @@ export const app = {
     close: 'Close',
     downloadInBrowser: 'Download in Browser',
     overridden: 'Overridden',
-    usingGlobal: 'Using Global',
+    usingGlobal: 'Using global',
     overridesActiveSummary: '{0} manual override(s); other settings use the profile/global baseline.',
     overridesNoneSummary: 'No manual overrides; using the profile/global baseline.',
     enableOverride: 'Enable override for this challenge',
-    clearAll: 'Clear All',
+    clearAll: 'Clear all',
     notApplicable: 'Not applicable',
     notApplicableHint: 'Your saved values are kept.',
     naBoostUsed: "Boost already used for this challenge — these settings won't take effect.",
@@ -995,7 +1466,7 @@ export const app = {
     profileLimitReached: 'Profile limit reached ({0}) — delete one first.',
     profileAppliedHint: 'Applied — review the values below, then Save.',
     profileApplyHint:
-        'Applying a profile replaces the current form values (including unsaved edits); settings the profile does not include revert to "Using Global".',
+        'Applying a profile replaces the current form values (including unsaved edits); settings the profile does not include revert to "Using global".',
     profileOverwriteHint: 'Saving with an existing name overwrites that profile.',
     intentBuiltIn: 'Built-in preset',
     intentModified: 'Edited built-in',
@@ -1010,6 +1481,69 @@ export const app = {
         'Pushes everything the whole way: votes to full exposure throughout, submits photos to every slot, and spends Boost and Turbo.',
     naExhibitionNoTurbo: "Exhibition challenges don't support Turbo.",
     naBoostSinglePhoto: "Single-photo challenges never unlock Boost — these settings won't take effect.",
+    ended: 'Ended',
+    stateUnknown: 'Unknown',
+    stateAvailableMinutes: 'Available ({minutes} min left)',
+    stateLocked: 'Locked',
+    stateFree: 'Free',
+    stateTimer: 'Timer',
+    stateInProgress: 'In progress',
+    stateWon: 'Won',
+    statusError: 'Error',
+    autovoteNotificationPreparing: 'Auto-vote is running — preparing the first cycle',
+    autovoteNotificationLastCycle: 'Last cycle: {time}',
+    actionOnItem: '{action}: {item}',
+    sbRuleN: 'Rule {n}',
+    scenarioPathPhase: 'Phase {name}',
+    scenarioPathCondition: 'Condition {n}',
+    scenarioPathAction: 'Action {n}',
+    scenarioPathSettings: 'Settings',
+    scenarioPathLimits: 'Limits',
+    sbDurationHint: 'Seconds, or a length of time such as "90m", "6h" or "1d 6h" (up to 60 days).',
+    timeLeft: '{time} left',
+    noReleaseNotes: 'No release notes available',
+    scenarioIssueNoJson: 'No scenario was given. Paste the scenario file.',
+    scenarioIssueTooLarge: 'The file is larger than {kb} KB.',
+    scenarioIssueNotJson: 'This is not valid JSON.',
+    scenarioIssuePhaseScenario: 'A phase cannot change which scenario is assigned.',
+    scenarioIssuePhaseManualPhotos: 'A phase cannot change Manual Only.',
+    scenarioIssueNotPerChallenge: 'This setting cannot be set for a single challenge.',
+    scenarioIssueSetTogether: 'Set {fields} together.',
+    scenarioIssueConflictDefaults: 'These values conflict with the global defaults they work together with.',
+    scenarioIssueNoPhase: 'There is no phase named "{name}".',
+    scenarioIssueDuplicateRuleId: 'The rule id "{id}" is used twice.',
+    scenarioIssueConditionDepth: 'Conditions are nested more than {depth} levels deep.',
+    scenarioIssueMemoryNeverSet: 'The memory slot "{slot}" is never filled by any action.',
+    scenarioIssueControlChars: 'Remove line breaks and other control characters.',
+    scenarioIssueIdentifier: 'Use letters, digits, "-" or "_", starting with a letter (at most 32).',
+    scenarioIssueReserved: 'This name is reserved.',
+    scenarioIssueNameRequired: 'A name is required.',
+    scenarioIssueNameTooLong: 'The name is longer than {max} characters.',
+    scenarioIssueNameChars: "Use letters, digits, spaces and . _ - ' ( ).",
+    scenarioIssueTimeOfDay: 'Use a 24-hour time, HH:MM.',
+    scenarioIssueStateName: 'Use an upper-case state name such as AVAILABLE.',
+    scenarioIssueSetMinMax: 'Set a minimum, a maximum or both.',
+    scenarioIssueMinMax: 'The minimum is larger than the maximum.',
+    scenarioIssueWindowOnly: 'A window only applies to {fields}.',
+    scenarioIssueCompareBool: '{field} is compared with true or false.',
+    scenarioIssueOpEquals: '{field} only supports = and !=.',
+    scenarioIssueCompareNumber: '{field} is compared with a number.',
+    scenarioIssueSameTime: 'The start and the end are the same time.',
+    scenarioIssueWriteMessage: 'Write the message.',
+    scenarioIssueIdChars: 'Use letters, digits, "-" or "_" (at most 40).',
+    scenarioIssueNeedsAction: 'A rule needs at least one action.',
+    scenarioIssuePhaseNeeded: 'A scenario needs at least one phase.',
+    scenarioIssueTooManyPhases: 'A scenario has at most {max} phases.',
+    scenarioIssueMissing: 'This value is required.',
+    scenarioIssueWrongType: 'This value is of the wrong kind.',
+    scenarioIssueUnknownKey: 'This key is not part of the scenario format.',
+    scenarioIssueRange: 'This value is outside the allowed range or length.',
+    scenarioIssueInvalidOption: 'This is not one of the allowed values.',
+    scenarioIssueInvalidFormat: 'This value is not in the expected format.',
+    scenarioIssueGeneric: 'This part of the scenario is not valid.',
+    noticeAcknowledgedVersion: 'Acknowledged Notice Version',
+    noticeAcknowledgedVersionDesc:
+        'Internal — the version of the "unofficial app" notice you acknowledged; the notice is shown again when its text changes materially',
 };
 // Logs page specific
 export const logs = {
@@ -1022,7 +1556,7 @@ export const logs = {
     categories: {
         api: 'api',
         authentication: 'authentication',
-        autoFill: 'autoFill',
+        autoSubmit: 'autoSubmit',
         boost: 'boost',
         challenges: 'challenges',
         claim: 'claim',
@@ -1079,4 +1613,192 @@ export const themes = {
     caramellatte: 'Caramel Latte',
     abyss: 'Abyss',
     silk: 'Silk',
+};
+// notice
+export const notice = {
+    title: 'Before you use this app',
+    unofficial:
+        'GuruShots Auto Vote is an unofficial tool. It is not affiliated with, endorsed by or sponsored by GuruShots.',
+    trademark: 'GuruShots is a trademark of its owner. It is used here only to say which service this app works with.',
+    terms: 'Voting automatically may break the GuruShots terms of use and can lead to your account being suspended. You use this app at your own risk.',
+    updates: 'To check for updates, the app contacts GitHub.',
+    acknowledge: 'I understand',
+    recoveryRegion: 'Settings notices',
+    recoveryCorruptWhat: 'Your settings file config.json was damaged, so the app started with default settings.',
+    recoveryCorruptWhy: 'config.json could not be read as valid settings. The damaged copy was kept at {path}.',
+    recoveryCorruptNext:
+        'No usable settings.json was found to restore them from. You can save new settings as usual. To bring its values back, fix settings.json, then choose Re-import file. If it cannot be imported, your first save keeps it as a copy beside it before a new settings.json is written; this notice then names the copy to fix. Or repair the damaged copy and read the old values from it.',
+    recoveryCorruptNextAside:
+        'No usable settings.json was found to restore them from. You can save new settings as usual. The unusable settings.json was kept at {path}, and a new settings.json was written from your settings. To bring its values back, fix the file at {path}, then choose Re-import file. Or repair the damaged copy and read the old values from it.',
+    recoveryCorruptNextAsideAndroid:
+        "Your settings were reset to the defaults, because no usable copy the app keeps up to date was found to restore them from. Set them again; you can save new settings as usual. The unusable copy was kept in the app's own storage, where you cannot open it.",
+    recoveryCorruptWhatAndroid: 'Your stored settings were damaged, so the app started with default settings.',
+    recoveryCorruptWhyAndroid:
+        'The stored settings could not be read as valid settings. The app kept the damaged copy in its own storage, where you cannot open it.',
+    recoveryCorruptNextAndroid:
+        'Your settings were reset to the defaults, because no usable copy the app keeps up to date was found to restore them from. Set them again; you can save new settings as usual.',
+    recoveryRestoredWhat:
+        'Your settings file config.json was damaged, so the app restored your settings from settings.json.',
+    recoveryRestoredWhy: 'config.json could not be read as valid settings. The damaged copy was kept at {path}.',
+    recoveryRestoredNext:
+        'Your settings and login are as they were at the last save. You can keep using the app as usual, and delete the damaged copy when you no longer need it.',
+    recoveryRestoredWhatAndroid:
+        'Your stored settings were damaged, so the app restored them from the copy it keeps up to date.',
+    recoveryRestoredWhyAndroid:
+        'The stored settings could not be read as valid settings. The app kept the damaged copy in its own storage, where you cannot open it.',
+    recoveryRestoredNextAndroid:
+        'Your settings and login were restored from the copy the app keeps up to date. You can keep using the app as usual.',
+    recoveryUnreadableWhat: 'Your settings file could not be read, so saving settings is turned off.',
+    recoveryUnreadableWhy:
+        'The app could not open {path}. It may be locked by another program, or its permissions may block access.',
+    recoveryUnreadableNext:
+        'Close other programs that use it, or fix its permissions, then restart the app. Nothing was overwritten.',
+    recoveryUnreadableWhyAndroid:
+        "The app could not read its stored settings. The device's storage may be busy or full.",
+    recoveryUnreadableNextAndroid:
+        'Restart the app. Nothing was overwritten, and saving settings stays off until they can be read. If this keeps happening, use "Delete all local data" under About and data to start with default settings.',
+    recoveryImportWhat:
+        'Your settings in settings.json could not be imported, so saving settings is turned off and the app uses default settings.',
+    recoveryImportWhatAndroid:
+        'Your stored settings could not be imported, so saving settings is turned off and the app uses default settings.',
+    recoveryImportWhy: 'The file settings.json at {path} could not be read or converted.',
+    recoveryImportNext:
+        'Fix that file, then choose Retry, or choose Start fresh to begin with default settings. Nothing was overwritten, and Start fresh keeps a copy of settings.json beside it (settings.json.original, or, when that name is taken, settings.json.unimportable- followed by the date and time).',
+    recoveryImportWhyAndroid: 'The copy of your settings the app keeps up to date could not be read or converted.',
+    recoveryImportNextAndroid:
+        'Choose Retry to try again, or Start fresh to begin with default settings. Nothing was overwritten, and saving settings stays off until one of them is done. Start fresh keeps a copy of the stored settings.',
+    recoverySignInKept:
+        'The damaged copy may still hold the sign-in it had, even after you log out. Delete it once you no longer need it.',
+    recoverySignInKeptAndroid: 'The damaged copy may still hold the sign-in it had, even after you log out.',
+    recoveryRetryingWhat: 'Your settings could not be loaded just now, so saving settings is paused.',
+    recoveryRetryingWhy:
+        'config.json was damaged and moved to {path}, and settings.json, the copy to restore your settings from, could not be read just now (another program may be using it). Nothing was overwritten.',
+    recoveryRetryingWhyNoCopy:
+        'settings.json could not be read just now (another program may be using the file). Nothing was overwritten.',
+    recoveryRetryingWhyNoCopyAndroid: 'The stored settings could not be read just now. Nothing was overwritten.',
+    recoveryRetryingWhyAndroid:
+        "The stored settings were damaged and kept in the app's own storage, where you cannot open them, and the copy to restore them from could not be read just now. Nothing was overwritten.",
+    recoveryRetryingNext:
+        'The app tries again by itself and loads your settings as soon as the file can be read. You can also choose Retry now.',
+    recoveryRetry: 'Retry',
+    recoveryStartFresh: 'Start fresh',
+    recoveryReimport: 'Re-import file',
+    recoveryWorking: 'Working…',
+    recoveryStartFreshTitle: 'Start with default settings?',
+    recoveryStartFreshBody:
+        'The app begins with default settings. settings.json is not imported; a copy of it is kept beside it, as settings.json.original or, when that name is taken, as settings.json.unimportable- followed by the date and time.',
+    recoveryStartFreshBodyAndroid:
+        'The app begins with default settings. The stored copy is not imported; the app keeps a copy of it in its own storage.',
+    recoveryReimportTitle: 'Import the file again?',
+    recoveryReimportBody:
+        'Your current settings and login are set aside, and the settings and login in {path} are imported in their place. If that file is old, you may need to log in again.',
+    recoveryReimportConfirm: 'Import again',
+    recoveryRetryDone: 'Your settings were imported from settings.json. Saving settings works again.',
+    recoveryRetryDoneAndroid: 'Your settings were restored from the stored copy. Saving settings works again.',
+    recoveryRetryDoneAdopted:
+        'Nothing was imported. Your settings were already in place (restored or imported while you chose this), and the app is using them. Saving settings works.',
+    recoveryRetryFailed:
+        'The import did not work. settings.json could not be read or converted, or the settings could not be saved. Nothing was changed. Fix settings.json and choose Retry again, or choose Start fresh. The log has the details.',
+    recoveryRetryFailedAndroid:
+        'The import did not work. The stored copy could not be read or converted, or the settings could not be saved. Nothing was changed. Choose Retry again, or choose Start fresh. The log has the details.',
+    recoveryStartFreshDone:
+        'The app now uses default settings and saving works. A copy of settings.json was kept at {path}.',
+    recoveryStartFreshDoneNone:
+        'The app now uses default settings and saving works. There was no settings.json, so no copy was kept.',
+    recoveryStartFreshDoneNoneAndroid:
+        'The app now uses default settings and saving works. There were no stored settings, so no copy was kept.',
+    recoveryStartFreshDonePendingAndroid:
+        'The app now uses default settings and saving works. The copy of the stored settings could not be written yet; it is made with the next save or start, and nothing is written over the stored settings before then.',
+    recoveryStartFreshDoneAdopted:
+        'Nothing was reset. Stored settings were restored or imported while you chose this, and the app is using them. Saving works.',
+    recoveryStartFreshDoneUnreadable:
+        'The app now uses default settings and saving works. The stored settings could not be read, so they were left as they are and no copy was kept.',
+    recoveryStartFreshDoneAndroid:
+        'The app now uses default settings and saving works. The app keeps a copy of the stored settings in its own storage.',
+    recoveryStartFreshFailed:
+        'Starting with default settings did not work. The new settings could not be saved. Nothing was changed. Try again, and if it keeps failing, check that the app can write to its storage. The log has the details.',
+    recoveryReimportDone:
+        '{path} was imported again. Your earlier settings and login were set aside, and the ones in that file are in use.',
+    recoveryReimportDoneNothingAside:
+        '{path} was imported again. There were no earlier settings to set aside, and the ones in that file are in use.',
+    recoveryReimportFailed:
+        'The import did not work. {path} is missing, could not be read or converted, or the settings could not be saved. Fix it and try again. If a new notice appears, follow it. The log has the details.',
+    importReportTitle: 'Settings imported',
+    importReportIntro:
+        'Your settings were imported from settings.json. These references to profiles and scenarios were kept and still do not apply, as before; create or fix the profile or scenario each one names.',
+    importReportIntroAndroid:
+        'Your stored settings were imported. These references to profiles and scenarios were kept and still do not apply, as before; create or fix the profile or scenario each one names.',
+    importReportFailed:
+        'The app could not save that this was seen. It will show again at the next start. Check that the app can write to its storage.',
+    importRefLine: '{where}: {problem}',
+    importRefRule: 'Rule {number}',
+    importRefRuleTitled: 'Rule {number} ({title})',
+    importRefProfile: 'Profile "{name}"',
+    importRefChallenge: 'Challenge {id}',
+    importRefChallengeTitled: 'Challenge "{title}" ({id})',
+    importRefProfileMissing: 'the profile "{name}" doesn\'t exist',
+    importRefProfileInvalid: 'the profile "{name}" can\'t be used',
+    importRefScenarioMissing: 'the scenario "{name}" doesn\'t exist',
+    importRefScenarioInvalid: 'the scenario "{name}" can\'t be used',
+    recoveryDroppedWhat: 'A change to your settings could not be saved.',
+    recoveryDroppedWhyConflict: 'The background service changed the settings at the same time.',
+    recoveryDroppedWhyTooLarge: 'The settings are too large to save.',
+    recoveryDroppedWhyStorage: "The device's settings storage did not accept the change.",
+    recoveryDroppedWhyUnknown: 'The settings could not be written just now.',
+    recoveryDroppedNext: 'Your setting shows its saved value again. Change it again if needed.',
+    recoveryDroppedNextTooLarge:
+        'Your setting shows its saved value again. Remove per-challenge overrides and scenarios you no longer need, then change it again.',
+    recoveryLogoutLostWhat: 'Your logout was not recorded.',
+    recoveryLogoutLostWhy: 'The stored settings could not take it, so it holds only while the app stays open.',
+    recoveryLogoutLostNext:
+        'If the app is closed before the settings load, your sign-in comes back with them. Log out again then.',
+};
+// about
+export const about = {
+    title: 'About and data',
+    licensesDesc: 'The open-source software and data this app includes, with their licenses.',
+    licensesButton: 'Third-party licenses',
+    licensesTitle: 'Third-party licenses',
+    licensesTextLabel: 'Third-party license texts',
+    licensesLoadError:
+        'The license texts could not be loaded. The file with them is missing from this installation or could not be read. Try again; if it keeps failing, reinstall the app.',
+    licensesRetry: 'Try again',
+    dangerTitle: 'Danger zone',
+    deleteDesc: 'Delete everything this app stores on this device. This cannot be undone.',
+    deleteButton: 'Delete all local data…',
+    deleteTitle: 'Delete all local data?',
+    deleteIntro: 'This permanently removes from this device:',
+    deleteLogin: 'your saved login',
+    deleteSettings: 'your settings',
+    deleteProfiles: 'your saved profiles',
+    deleteScenarios: 'your scenarios and their progress',
+    deleteStats: 'your statistics',
+    deleteLogs: 'the logs',
+    deleteBackground: 'the state of the background service',
+    deleteAfter: 'The app restarts afterwards and asks you to log in again. Your GuruShots account is not touched.',
+    deleteAfterWeb:
+        'The web server stops afterwards. Start pnpm web again, open the URL it prints and log in again. Your GuruShots account is not touched.',
+    deleteConfirm: 'Delete everything',
+    deleteChecking: 'Checking that nothing else is using the data, then deleting…',
+    deleteBusyPass:
+        'A voting pass is running, so nothing was deleted. Stop auto-vote, wait for the pass to end, then try again.',
+    deleteBusyCli:
+        'Another command-line command or session is running, so nothing was deleted. Wait for it to finish or stop it in the terminal where it runs (Ctrl+C), then try again.',
+    deleteBusyApp: 'The desktop app is open, so nothing was deleted. Quit the desktop app, then try again.',
+    deleteBusyWeb:
+        'The web server (pnpm web) is running, so nothing was deleted. Stop it in the terminal where it runs (Ctrl+C), then try again.',
+    deleteFailed:
+        "Not everything could be deleted. A file or store could not be removed. Close other programs that use the app's files, then try again.",
+    deleteFailedAndroid:
+        "Not everything could be deleted. Some stored data or the background service's data could not be removed. Try again now.",
+    deleteRestartsOnClose: 'Closing this dialog restarts the app.',
+    deleteDone: 'All local data was deleted. The app restarts now; if it does not, close it and open it again.',
+    deleteDoneWeb:
+        'All local data was deleted. The web server has stopped. Start pnpm web again and open the URL it prints.',
+    importTitle: 'Settings import',
+    importAt: 'Your settings were imported from settings.json on {date}.',
+    importAtAndroid: 'Your stored settings were imported on {date}.',
+    importNone: 'Nothing needed attention.',
+    importSome:
+        'These references to profiles and scenarios were kept and still do not apply, as before the import. Create or fix the profile or scenario each one names:',
 };

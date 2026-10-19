@@ -22,13 +22,17 @@
 import * as logger from '../logger';
 import * as settings from '../settings';
 import * as currencyActions from './currencyActions';
-import { CURRENCY_FIELD, challengeAllows } from '../voting/currencyActions';
+import * as votingLogic from './VotingLogic';
+import { CURRENCY_FIELD, CURRENCY_OUTCOME, challengeAllows } from '../voting/currencyActions';
 import { isRuleOpen, pickSwapTarget, votePoolReach, fillBeatsVoting } from '../voting/currencyAuto';
 
 import type { Challenge, ChallengeMember, MemberRanking, VoteImagesResponse } from '../types/gurushots';
 import type { CurrencyAction, CurrencyStrategy, SwapBackLedger, SwapCandidate } from './currencyActions';
 import type * as currencyAutoStore from '../currencyAutoStore';
+import { neediestFillMission } from './missions';
+import type { FillMission, MissionNeeds } from './missions';
 import { errorMessage } from '../errorMessage';
+import { isManualPhotosOnly } from './manualPhotosOnly';
 
 type AutoSpendLedger = ReturnType<typeof currencyAutoStore.createAutoSpendLedger>;
 
@@ -44,6 +48,11 @@ export interface CurrencyPassDeps {
     strategy: CurrencyStrategy & { getVoteImages: (challenge: Challenge, token: string) => Promise<VotePool | null> };
     swapLedger?: SwapBackLedger | null;
     spendLedger?: AutoSpendLedger | null;
+    /**
+     * The fills (the exposure rule's and a mission's) are left to the Android background service: it counts them in
+     * the one stored ledger, and a second loop in the app window would count them down on its own. Set only there.
+     */
+    fillsLeftToService?: boolean;
 }
 
 /**
@@ -108,8 +117,7 @@ const reserveAllows = async (
         log().warning(`${label}: balance unreadable for ${logger.challengeTag(challenge)} — not spending`, null);
         return false;
     }
-    const reserve = Number(settings.getEffectiveSetting(RESERVE_KEY[action]));
-    const keep = Number.isFinite(reserve) && reserve > 0 ? reserve : 0;
+    const keep = settings.getEffectiveSetting(RESERVE_KEY[action]);
     if (balance > keep) return true;
     log().info(
         `${label}: ${logger.challengeTag(challenge)} skipped — balance ${balance} would go below the reserve of ${keep}`,
@@ -186,7 +194,8 @@ const runAutoKey = guarded('key', async (ctx) => {
  * challenge's swap history reaches autoSwapMax. The target follows
  * autoSwapImageIndex (0 = last, 1-4 = slot) or, with autoSwapLowestVotes, the
  * entry with the fewest votes; boosted/turbo'd entries are skipped unless
- * autoSwapAllowBoosted (the swap-back ledger then records them).
+ * autoSwapAllowBoosted (the swap-back ledger then records them). A photo pinned
+ * for a Boost or Turbo that can still fire is protected the same way.
  *
  * @returns true when a swap was spent
  */
@@ -194,17 +203,20 @@ const runAutoSwap = guarded('swap', async (ctx) => {
     const { challenge, token } = ctx;
     const id = String(challenge.id);
     if (settings.getEffectiveSetting('autoSwap', id) !== true) return false;
+    if (isManualPhotosOnly(settings, id)) return false;
     if (!baseGate('swap', 'autoSwap', ctx)) return false;
 
     const ranking = (challenge.member as ChallengeMember).ranking;
     const swapsDone = Array.isArray(ranking?.swaps) ? ranking.swaps.length : 0;
-    if (swapsDone >= Number(settings.getEffectiveSetting('autoSwapMax', id))) return false;
+    const maxSwaps = settings.getEffectiveSetting('autoSwapMax', id);
+    if (swapsDone >= maxSwaps) return false;
 
     const target = pickSwapTarget(entriesOf(challenge), {
         imageIndex: settings.getEffectiveSetting('autoSwapImageIndex', id),
         lowestVotes: settings.getEffectiveSetting('autoSwapLowestVotes', id) === true,
         allowProtected: settings.getEffectiveSetting('autoSwapAllowBoosted', id) === true,
         maxVotes: settings.getEffectiveSetting('autoSwapMaxVotes', id),
+        protectedIds: votingLogic.livePinnedIds(challenge, id),
     });
     if (!target) {
         log().debug(`${logger.challengeTag(challenge)} auto swap: no entry qualifies`, null);
@@ -222,9 +234,11 @@ const runAutoSwap = guarded('swap', async (ctx) => {
         });
         if (!preview?.ok) return preview;
         candidate = preview.candidate;
+        // The pass's own count of swaps may be old by now: the cap is checked again on the live challenge.
         return currencyActions.swapEntry(challenge.id, target.id, candidate.id, token, {
             ...deps,
             ledger: ctx.currency.swapLedger ?? null,
+            maxSwaps,
         });
     });
     if (!result?.ok || !candidate) return false;
@@ -269,8 +283,9 @@ const runAutoExposureFill: (ctx: CurrencyCtx, votePool: VotePool | null | undefi
         if (settings.getEffectiveSetting('autoExposureFill', id) !== true) return false;
         if (!baseGate('fill', 'autoExposureFill', ctx)) return false;
         const ledger = ctx.currency.spendLedger;
-        if (!ledger) return false;
-        if (ledger.fills(id) >= Number(settings.getEffectiveSetting('autoExposureFillMax', id))) return false;
+        if (!ledger || ctx.currency.fillsLeftToService) return false;
+        const maxFills = settings.getEffectiveSetting('autoExposureFillMax', id);
+        if (ledger.fills(id) >= maxFills) return false;
 
         const exposure = Number(challenge.member?.ranking?.exposure?.exposure_factor);
         const below = settings.getEffectiveSetting('autoExposureFillBelow', id);
@@ -293,29 +308,81 @@ const runAutoExposureFill: (ctx: CurrencyCtx, votePool: VotePool | null | undefi
             `${logger.challengeTag(challenge)} auto fill: exposure ${exposure}% < ${below}%, ${reachText}`,
             null,
         );
+        // The count is written down first: a fill that could not be counted is not made. The cap is held where it is
+        // written, so a count another context saved since the check above is not spent past.
+        if (!(await ledger.reserveFill(id, { max: maxFills }))) {
+            if (ledger.fills(id) >= maxFills) return false;
+            log().warning(
+                `${logger.challengeTag(challenge)} auto fill: the count of fills could not be saved — not spending; tries again next cycle`,
+                null,
+            );
+            return false;
+        }
         const result = await lockedSpend('fill', challenge, () =>
             currencyActions.fillExposure(challenge.id, token, { strategy: ctx.currency.strategy, logger }),
         );
-        if (!result?.ok) return false;
-        ledger.addFill(id);
+        // A fill that got no answer may have been made: it stays counted.
+        if (!result?.ok) {
+            if (result?.outcome !== CURRENCY_OUTCOME.unclear) await ledger.releaseFill(id);
+            return false;
+        }
         reflectFill(challenge);
         return true;
     },
 );
 
+// The ledger key of a mission's fills: a challenge id is numeric, so the two never meet.
+const missionKey = (mission: FillMission) => `mission:${mission.id}`;
+
+// The missions whose fills stopped, said once each until they move again.
+const stoppedMissions = new Set<string>();
+
+/**
+ * Whether the mission may be filled for. Its fills are counted in the auto-spend ledger, and they stop when they
+ * reach what the mission asks for in all (`required`), or when the fills of an earlier pass did not move its progress:
+ * a mission that a fill does not advance (one that was read as a fill mission and is not, or whose count the server
+ * keeps elsewhere) is not filled for on every pass.
+ */
+const missionFillable = (ledger: AutoSpendLedger, mission: FillMission): boolean => {
+    const key = missionKey(mission);
+    const spent = ledger.fills(key);
+    const last = ledger.lastProgress(key);
+    const stalled = mission.spentThisPass === 0 && spent > 0 && last !== null && mission.current <= last;
+    if (spent < mission.required && !stalled) {
+        stoppedMissions.delete(key);
+        return true;
+    }
+    if (!stoppedMissions.has(key)) {
+        stoppedMissions.add(key);
+        log().info(
+            stalled
+                ? `mission fill: mission ${mission.id} did not move after the fills spent on it (${mission.current}/${mission.required}) — no more fills for it`
+                : `mission fill: ${spent} fills already spent on mission ${mission.id}, which asks for ${mission.required} — no more fills for it`,
+            null,
+        );
+    }
+    return false;
+};
+
 /**
  * Spend a FILL toward an active "Use Fill" mission (missionUseFills — the
- * caller passes what the mission still needs, 0 when none is followed): on a
- * challenge that can take one (fill offered, exposure below 100%), at most one
- * per challenge per pass. Keeps the fill reserve and takes the spend lock, but
- * isn't counted against autoExposureFillMax, which caps only the exposure rule.
- * Resolves true when a fill was spent.
+ * caller passes the mission needs, whose `fill` is what the missions still need,
+ * 0 when none is followed): on a challenge that can take one (fill offered,
+ * exposure below 100%), at most one per challenge per pass. Keeps the fill
+ * reserve and takes the spend lock, but isn't counted against
+ * autoExposureFillMax, which caps only the exposure rule: a mission's fills are
+ * counted per mission in the auto-spend ledger (see missionFillable). Resolves
+ * true when a fill was spent.
  */
-const runMissionFill: (ctx: CurrencyCtx, missionNeed: number) => Promise<boolean> = guarded(
+const runMissionFill: (ctx: CurrencyCtx, missions: MissionNeeds | null | undefined) => Promise<boolean> = guarded(
     'fill',
-    async (ctx, missionNeed) => {
+    async (ctx, missions) => {
         const { challenge, token, now, currency } = ctx;
-        if (!(missionNeed > 0) || !currency?.strategy) return false;
+        const missionNeed = missions?.fill ?? 0;
+        const ledger = currency?.spendLedger;
+        if (!(missionNeed > 0) || !currency?.strategy || !ledger || currency.fillsLeftToService) return false;
+        const mission = neediestFillMission(missions);
+        if (!mission || !missionFillable(ledger, mission)) return false;
         if (!challengeAllows('fill', challenge, now)) return false;
         if (!(await reserveAllows('fill', { challenge, token, currency }, 'mission fill'))) return false;
 
@@ -323,13 +390,29 @@ const runMissionFill: (ctx: CurrencyCtx, missionNeed: number) => Promise<boolean
             `${logger.challengeTag(challenge)} mission fill: ${missionNeed} more fill(s) needed for the mission`,
             null,
         );
+        // The count is written down first, as for the exposure rule's fill, and held to what the mission asks for.
+        const key = missionKey(mission);
+        if (!(await ledger.reserveFill(key, { max: mission.required, progress: mission.current }))) {
+            log().warning(
+                `${logger.challengeTag(challenge)} mission fill: the count of fills could not be saved — not spending; tries again next cycle`,
+                null,
+            );
+            return false;
+        }
         const result = await lockedSpend(
             'fill',
             challenge,
             () => currencyActions.fillExposure(challenge.id, token, { strategy: currency.strategy, logger }),
             'mission fill',
         );
-        if (!result?.ok) return false;
+        // A fill that got no answer may have been made: it stays counted, and its progress is not recorded as one
+        // that did not move the mission, which the next pass would read as a stalled mission.
+        if (!result?.ok) {
+            if (result?.outcome === CURRENCY_OUTCOME.unclear) await ledger.restoreProgress(key);
+            else await ledger.releaseFill(key);
+            return false;
+        }
+        mission.spentThisPass += 1;
         reflectFill(challenge);
         return true;
     },

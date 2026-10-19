@@ -9,6 +9,9 @@
 
 import * as votingLogic from './VotingLogic';
 import * as logger from '../logger';
+import * as settings from '../settings';
+import { isManualPhotosOnly } from './manualPhotosOnly';
+import { manualOnlyOnLine } from './votingOrchestrator/manualOnly';
 
 import type { ApiStrategy } from '../apiFactory';
 import type { Challenge } from '../types/gurushots';
@@ -54,7 +57,10 @@ const submitVotesForChallenge = async (challenge: Challenge, strategy: ApiStrate
 /**
  * Run the manual mechanic over a whole challenge list: vote every eligible
  * challenge to 100%, spacing successful submissions by STAGGER_MS, logging
- * each outcome, and counting results. Shared by the CLI loop
+ * each outcome, and counting results. A Manual Only challenge is skipped (and
+ * counted in `skipped`): this bulk vote works on every challenge at once, so
+ * only the card's own vote button votes there. If reading the switch throws, the
+ * challenge counts as skipped through the error path. Shared by the CLI loop
  * (BaseMiddleware.cliVoteManual) and the IPC vote-all handler so the loop
  * semantics can never drift between shells.
  *
@@ -78,6 +84,11 @@ const voteAllChallengesManual = async (
         processed++;
         if (onProgress) onProgress(processed, challenges.length, challenge);
         try {
+            if (isManualPhotosOnly(settings, challenge.id)) {
+                skipped++;
+                logger.withCategory('voting').info(manualOnlyOnLine(challenge), null);
+                continue;
+            }
             const result = await submitVotesForChallenge(challenge, strategy, token, now);
             if (result.outcome === 'voted') {
                 voted++;

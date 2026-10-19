@@ -3,22 +3,51 @@
  * first-seen title pinning, with concurrent calls coalesced per token.
  */
 
-import { fetchActiveChallenges } from '../../api/challenges';
+import { fetchActiveChallenges, fetchWebActiveTurbos } from '../../api/challenges';
 import { pinChallengeTitles } from '../../services/challengeTitlePin';
+import { annotateEntryTimes } from '../../services/entryTimes';
+import { entryAgeLedger } from '../../entryAgeStore';
+import { refreshTeamMatch, settledTeamMatch } from './teamMatch';
 
 import type { ActiveChallengesResponse } from '../../types/gurushots';
 
+const TEAM_MATCH_WAIT_MS = 2000;
+
 /**
- * One fetch, then pin first-seen titles onto a successful response. A failed
- * fetch (flagged `fetchFailed`) must never reach the pin/prune logic — a
- * network blip would wipe pins. The server mutates `title` while an event
+ * Two reads, started together: the mobile active-challenges list and the web
+ * one (its turbo is the only one with a `mode`; the mobile one has none, and a
+ * wrong state for a Snap turbo). Each challenge's turbo is taken from the web
+ * read when it covers that challenge and the mobile read succeeded; otherwise
+ * the mobile turbo (no `mode`) stays. First-seen titles are pinned onto a
+ * successful response and the time each entry went in is put on it
+ * (services/entryTimes). A failed mobile fetch (flagged `fetchFailed`) must
+ * never reach the pin/prune logic — a network blip would wipe pins. The server mutates `title` while an event
  * (turbo) is active; pinning keeps display and title-rule matching stable
  * (see services/challengeTitlePin).
  */
 const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => {
-    const response = await fetchActiveChallenges(token);
+    // Both requests are in flight before either is awaited; fetchWebActiveTurbos never rejects.
+    const mobileRead = fetchActiveChallenges(token);
+    const webRead = fetchWebActiveTurbos(token);
+    // The team match refreshes alongside the reads; the marker is attached from the cache once both are in.
+    const startedRefresh = refreshTeamMatch(token);
+    const response = await mobileRead;
     if (!response.fetchFailed && Array.isArray(response.challenges)) {
+        const webTurbos = await webRead;
+        // Only the read that started a refresh waits for it, and for 2 s at most; every other read takes the
+        // cache as it is, so a slow team read delays one list read per refresh window, never the spend-critical re-reads.
+        const teamMatch = await settledTeamMatch(token, startedRefresh ? TEAM_MATCH_WAIT_MS : 0);
+        for (const challenge of response.challenges) {
+            const turbo = webTurbos?.get(String(challenge.id));
+            if (turbo && challenge.member) {
+                challenge.member.turbo = turbo;
+            }
+            if (teamMatch && String(challenge.id) === teamMatch.challengeId) {
+                challenge.teamMatch = teamMatch.teamMatch;
+            }
+        }
         pinChallengeTitles(response.challenges);
+        await annotateEntryTimes(response, entryAgeLedger);
     }
     return response;
 };

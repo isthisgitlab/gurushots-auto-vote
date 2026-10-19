@@ -14,9 +14,13 @@
 
 jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
+    getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
 }));
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({
+    resolvePin: jest.fn(() => ({ state: 'none' })),
+    pinFallbackOf: jest.fn(() => null),
+    describePinFallback: jest.fn(() => ''),
     isWithinEmergencyWindow: jest.fn(() => false),
     shouldPlayAutoTurbo: jest.fn(() => false),
     isTurboEarnSaved: jest.fn(() => false),
@@ -36,6 +40,8 @@ jest.mock('../../src/ts/services/autoFill', () => ({
     reflectEntryFlag: jest.fn(),
 }));
 
+jest.mock('../../src/ts/services/visionVerifier', () => ({ hasBundledModel: jest.fn(async () => true) }));
+
 jest.mock('../../src/ts/voting/cancellation', () => ({
     isCancelled: jest.fn(() => false),
     setCancelled: jest.fn(),
@@ -44,6 +50,10 @@ jest.mock('../../src/ts/voting/cancellation', () => ({
 
 import votingLogicModule = require('../../src/ts/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
+import visionModule = require('../../src/ts/services/visionVerifier');
+const vision = jest.mocked(visionModule);
+import settingsMockModule = require('../../src/ts/settings');
+const settingsMock = jest.mocked(settingsMockModule);
 import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
 import cancellationModule = require('../../src/ts/voting/cancellation');
@@ -51,12 +61,17 @@ const cancellation = jest.mocked(cancellationModule);
 import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type * as settingsModule from '../../src/ts/settings';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge, TurboGameResult } from '../../src/ts/types/gurushots';
+import type { TurboGameOptions } from '../../src/ts/strategies/real/snapGame';
+import type { CategoryLogger } from '../../src/ts/logger';
+import logger = require('../../src/ts/logger');
 import type { VotingPassDeps } from '../../src/ts/types/votingPass';
+import { __resetSnapModelHintForTests } from '../../src/ts/services/votingOrchestrator/turbo';
 import { claimTurboRun, releaseTurboRun } from '../../src/ts/services/turboRunLock';
 import { recordManualTurboWin } from '../../src/ts/services/missions';
 import { invalid } from '../helpers/invalid';
-const { runVotingPass } = require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule;
+const { runVotingPass, isVotingPassRunning } =
+    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const NOW = Math.floor(Date.now() / 1000);
@@ -82,7 +97,16 @@ const makeApi = (challenges: Challenge[]) => ({
     applyTurbo: jest.fn(async () => ({ ok: true })),
     getEligiblePhotos: jest.fn(async () => ({ images: [] })),
     submitToChallenge: jest.fn(async () => ({ success: true })),
-    runTurboMiniGame: jest.fn(async () => ({ played: 1, correct: 1, flipped: 0, doubleFailed: 0, won: true })),
+    runTurboGame: jest.fn(
+        async (_challenge: Challenge, _token: string, _options?: TurboGameOptions): Promise<TurboGameResult> => ({
+            kind: 'classic',
+            played: 1,
+            correct: 1,
+            flipped: 0,
+            doubleFailed: 0,
+            won: true,
+        }),
+    ),
 });
 
 const deps = (api: ReturnType<typeof makeApi>, over: Partial<VotingPassDeps> = {}) => ({
@@ -104,6 +128,39 @@ beforeEach(() => {
             targetExposure: 100,
         }),
     );
+});
+
+describe('pass activity (what the local-data wipe refuses to run beneath)', () => {
+    test('a pass is running while it works, and not once it has finished', async () => {
+        const api = makeApi([makeChallenge()]);
+        let during: boolean | null = null;
+        api.getActiveChallenges.mockImplementation(async () => {
+            during = isVotingPassRunning();
+            return { challenges: [makeChallenge()] };
+        });
+
+        expect(isVotingPassRunning()).toBe(false);
+        await runVotingPass('tok', null, deps(api));
+
+        expect(during).toBe(true);
+        expect(isVotingPassRunning()).toBe(false);
+    });
+
+    test('a pass that fails does not stay marked as running', async () => {
+        const api = makeApi([]);
+        api.getActiveChallenges.mockRejectedValue(new Error('network down'));
+
+        await runVotingPass('tok', null, deps(api));
+
+        expect(isVotingPassRunning()).toBe(false);
+    });
+
+    test('a pass that ends early (no active challenges, a filter miss) does not stay marked either', async () => {
+        await runVotingPass('tok', null, deps(makeApi([])));
+        await runVotingPass('tok', '999', deps(makeApi([makeChallenge({ id: 1 })])));
+
+        expect(isVotingPassRunning()).toBe(false);
+    });
 });
 
 describe('envelopes', () => {
@@ -163,14 +220,14 @@ describe('deadline-action dispatch', () => {
         const api = makeApi([makeChallenge()]);
         const order: string[] = [];
         votingLogic.orderDeadlineActions.mockReturnValue(
-            invalid([{ action: 'autoFill' }, { action: 'emergencyFill' }, { action: 'turbo' }]),
+            invalid([{ action: 'autoSubmit' }, { action: 'emergencySubmit' }, { action: 'turbo' }]),
         );
         autoFill.maybeAutoFillChallenge.mockImplementation(async () => {
-            order.push('autoFill');
+            order.push('autoSubmit');
             return 'skipped';
         });
         autoFill.maybeEmergencyFillChallenge.mockImplementation(async () => {
-            order.push('emergencyFill');
+            order.push('emergencySubmit');
             return 'skipped';
         });
         votingLogic.shouldApplyTurbo.mockImplementation(() => {
@@ -179,7 +236,7 @@ describe('deadline-action dispatch', () => {
         });
 
         await runVotingPass('tok', null, deps(api));
-        expect(order).toEqual(['autoFill', 'emergencyFill', 'turbo']);
+        expect(order).toEqual(['autoSubmit', 'emergencySubmit', 'turbo']);
     });
 
     test('an unknown action key degrades to a skip instead of throwing', async () => {
@@ -195,7 +252,258 @@ describe('mock-parity behaviors on the shared path', () => {
         const api = makeApi([makeChallenge()]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         await runVotingPass('tok', null, deps(api));
-        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+        expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+    });
+
+    describe('Snap games', () => {
+        const SNAP_MEMBER = { turbo: { state: 'FREE', mode: 'snap' } };
+        const snapChallenge = (id: number) => makeChallenge({ id, member: SNAP_MEMBER });
+        const snapWon = {
+            kind: 'snap',
+            answered: 10,
+            total: 10,
+            meanAgreement: 72.4,
+            won: true,
+            stopReason: 'completed',
+        } as const;
+        const earnSummaries = () =>
+            jest
+                .mocked(logger.withCategory)
+                .mock.results.flatMap((r) =>
+                    jest
+                        .mocked(r.value as CategoryLogger)
+                        .endOperation.mock.calls.filter(([id]) => String(id).startsWith('turbo-earn-')),
+                );
+
+        test('plays at most one Snap game per pass, and the next pass plays one again', async () => {
+            const api = makeApi([snapChallenge(1), snapChallenge(2)]);
+            api.runTurboGame.mockResolvedValue(snapWon);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+            await runVotingPass('tok', null, deps(api));
+            expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+            expect(api.runTurboGame).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), 'tok', {
+                isCancelled: expect.any(Function),
+            });
+
+            await runVotingPass('tok', null, deps(api));
+            expect(api.runTurboGame).toHaveBeenCalledTimes(2);
+        });
+
+        test('the automatic run hands the game the voting-cancel flag', async () => {
+            const api = makeApi([snapChallenge(1)]);
+            api.runTurboGame.mockResolvedValue(snapWon);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+            await runVotingPass('tok', null, deps(api));
+
+            const options = api.runTurboGame.mock.calls[0][2];
+            cancellation.isCancelled.mockReturnValue(true);
+            expect(options?.isCancelled?.()).toBe(true);
+            cancellation.isCancelled.mockReturnValue(false);
+            expect(options?.isCancelled?.()).toBe(false);
+        });
+
+        test('a classic turbo is still played after the pass played its Snap game', async () => {
+            const api = makeApi([snapChallenge(1), snapChallenge(2), makeChallenge({ id: 3 })]);
+            api.runTurboGame.mockResolvedValue(snapWon);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+            await runVotingPass('tok', null, deps(api));
+
+            expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([1, 3]);
+        });
+
+        test('a Snap win marks the turbo WON, counts the mission down and logs the Snap summary', async () => {
+            const challenge = snapChallenge(1);
+            const api = makeApi([challenge]);
+            api.runTurboGame.mockResolvedValue(snapWon);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+            const missions = { join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 };
+
+            await runVotingPass('tok', null, deps(api, { missions }));
+
+            expect(challenge.member?.turbo?.state).toBe('WON');
+            expect(missions.turbo).toBe(0);
+            expect(earnSummaries()).toEqual([
+                ['turbo-earn-1', 'answered=10/10 meanAgreement=72% stopReason=completed won=true'],
+            ]);
+        });
+
+        test('a Snap game that stopped early leaves the turbo as it was and says why', async () => {
+            const challenge = snapChallenge(1);
+            const api = makeApi([challenge]);
+            api.runTurboGame.mockResolvedValue({
+                kind: 'snap',
+                answered: 3,
+                total: 10,
+                meanAgreement: null,
+                won: false,
+                stopReason: 'judge-failed',
+            });
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+            await runVotingPass('tok', null, deps(api));
+
+            expect(challenge.member?.turbo?.state).toBe('FREE');
+            expect(earnSummaries()).toEqual([
+                ['turbo-earn-1', 'answered=3/10 meanAgreement=n/a stopReason=judge-failed won=false'],
+            ]);
+        });
+
+        test('a Snap game that answered nothing leaves the pass its Snap slot', async () => {
+            const api = makeApi([snapChallenge(1), snapChallenge(2)]);
+            api.runTurboGame.mockResolvedValueOnce({
+                kind: 'snap',
+                answered: 0,
+                total: 10,
+                meanAgreement: null,
+                won: false,
+                stopReason: 'request-failed',
+            });
+            api.runTurboGame.mockResolvedValue(snapWon);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+            await runVotingPass('tok', null, deps(api));
+
+            expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([1, 2]);
+        });
+
+        test('a Snap game that answered some photos but did not win takes the pass its Snap slot', async () => {
+            const api = makeApi([snapChallenge(1), snapChallenge(2)]);
+            api.runTurboGame.mockResolvedValueOnce({
+                kind: 'snap',
+                answered: 3,
+                total: 10,
+                meanAgreement: 60,
+                won: false,
+                stopReason: 'judge-failed',
+            });
+            api.runTurboGame.mockResolvedValue(snapWon);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+            await runVotingPass('tok', null, deps(api));
+
+            expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([1]);
+        });
+
+        test('an unclear Snap answer takes the Snap slot although none is known to have landed', async () => {
+            const api = makeApi([snapChallenge(1), snapChallenge(2)]);
+            api.runTurboGame.mockResolvedValueOnce({
+                kind: 'snap',
+                answered: 0,
+                total: 10,
+                meanAgreement: null,
+                won: false,
+                stopReason: 'vote-unclear',
+            });
+            api.runTurboGame.mockResolvedValue(snapWon);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+            await runVotingPass('tok', null, deps(api));
+
+            expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([1]);
+        });
+
+        test.each([
+            ['classic', undefined],
+            ['snap', SNAP_MEMBER],
+        ])('a turbo closing in 5 minutes is played (%s)', async (_mode, member) => {
+            const api = makeApi([makeChallenge({ id: 1, close_time: NOW + 300, member })]);
+            api.runTurboGame.mockResolvedValue(snapWon);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+            await runVotingPass('tok', null, deps(api));
+
+            expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+        });
+
+        test('a Snap game is not started in the Android headless service', async () => {
+            const api = makeApi([snapChallenge(1), makeChallenge({ id: 2 })]);
+            api.runTurboGame.mockResolvedValue(snapWon);
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+            const globals = globalThis as { __GS_HEADLESS__?: boolean };
+            globals.__GS_HEADLESS__ = true;
+            try {
+                await runVotingPass('tok', null, deps(api));
+            } finally {
+                delete globals.__GS_HEADLESS__;
+            }
+
+            expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([2]);
+        });
+
+        describe('in a build without the vision model', () => {
+            const infoLines = () =>
+                jest
+                    .mocked(logger.withCategory)
+                    .mock.results.flatMap((r) =>
+                        jest.mocked(r.value as CategoryLogger).info.mock.calls.map((call) => String(call[0])),
+                    );
+            const startedEarns = () =>
+                jest
+                    .mocked(logger.withCategory)
+                    .mock.results.flatMap((r) =>
+                        jest
+                            .mocked(r.value as CategoryLogger)
+                            .startOperation.mock.calls.filter(([id]) => String(id).startsWith('turbo-earn-')),
+                    );
+
+            beforeEach(() => {
+                __resetSnapModelHintForTests();
+                vision.hasBundledModel.mockResolvedValue(false);
+                votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+            });
+            afterEach(() => {
+                vision.hasBundledModel.mockResolvedValue(true);
+                settingsMock.getEffectiveSetting.mockReturnValue(false);
+            });
+
+            test('with snapYesWithoutModel off a Snap turbo is left alone, with one info hint per process', async () => {
+                const api = makeApi([snapChallenge(1), makeChallenge({ id: 2 })]);
+                api.runTurboGame.mockResolvedValue(snapWon);
+
+                await runVotingPass('tok', null, deps(api));
+                await runVotingPass('tok', null, deps(api));
+
+                // Only the classic turbo is played, once per pass.
+                expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([2, 2]);
+                expect(startedEarns().map(([id]) => id)).toEqual(['turbo-earn-2', 'turbo-earn-2']);
+                expect(infoLines().filter((line) => line.includes('Snap turbos need the vision model'))).toEqual([
+                    expect.stringContaining('(snapYesWithoutModel)'),
+                ]);
+            });
+
+            test('with snapYesWithoutModel on the Snap turbo is played', async () => {
+                settingsMock.getEffectiveSetting.mockImplementation((key) => key === 'snapYesWithoutModel');
+                const api = makeApi([snapChallenge(1)]);
+                api.runTurboGame.mockResolvedValue(snapWon);
+
+                await runVotingPass('tok', null, deps(api));
+
+                expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+                expect(infoLines().filter((line) => line.includes('Snap turbos need the vision model'))).toEqual([]);
+            });
+        });
+
+        test('a classic result keeps the classic summary', async () => {
+            const api = makeApi([makeChallenge()]);
+            api.runTurboGame.mockResolvedValue({
+                kind: 'classic',
+                played: 6,
+                correct: 6,
+                flipped: 1,
+                doubleFailed: 0,
+                won: true,
+            });
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+            await runVotingPass('tok', null, deps(api));
+
+            expect(earnSummaries()).toEqual([
+                ['turbo-earn-101', 'played=6 correct=6 flipped=1 doubleFailed=0 won=true'],
+            ]);
+        });
     });
 
     test('a Turbo won when application is due is applied in the same pass', async () => {
@@ -219,11 +527,9 @@ describe('mock-parity behaviors on the shared path', () => {
 
         await runVotingPass('tok', null, deps(api));
 
-        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+        expect(api.runTurboGame).toHaveBeenCalledTimes(1);
         expect(api.applyTurbo).toHaveBeenCalledWith(101, 'entry-1', 'tok');
-        expect(api.runTurboMiniGame.mock.invocationCallOrder[0]).toBeLessThan(
-            api.applyTurbo.mock.invocationCallOrder[0],
-        );
+        expect(api.runTurboGame.mock.invocationCallOrder[0]).toBeLessThan(api.applyTurbo.mock.invocationCallOrder[0]);
     });
 
     test('a Turbo that was not won is not applied when application is due', async () => {
@@ -231,7 +537,14 @@ describe('mock-parity behaviors on the shared path', () => {
             member: { turbo: { state: 'FREE' }, ranking: { entries: [{ id: 'entry-1' }] } },
         });
         const api = makeApi([challenge]);
-        api.runTurboMiniGame.mockResolvedValue({ played: 1, correct: 0, flipped: 1, doubleFailed: 0, won: false });
+        api.runTurboGame.mockResolvedValue({
+            kind: 'classic',
+            played: 1,
+            correct: 0,
+            flipped: 1,
+            doubleFailed: 0,
+            won: false,
+        });
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'turbo' }]));
         votingLogic.shouldApplyTurbo.mockImplementation((current) => ({
@@ -254,7 +567,7 @@ describe('mock-parity behaviors on the shared path', () => {
         const result = await runVotingPass('tok', null, deps(api));
 
         expect(result.success).toBe(true);
-        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+        expect(api.runTurboGame).toHaveBeenCalledTimes(1);
     });
 
     test('an autovote cycle skips a mini-game already claimed by a manual run', async () => {
@@ -263,12 +576,12 @@ describe('mock-parity behaviors on the shared path', () => {
         expect(claimTurboRun(101)).toBe(true);
         try {
             await runVotingPass('tok', null, deps(api));
-            expect(api.runTurboMiniGame).not.toHaveBeenCalled();
+            expect(api.runTurboGame).not.toHaveBeenCalled();
         } finally {
             releaseTurboRun(101, 'manual');
         }
         await runVotingPass('tok', null, deps(api));
-        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+        expect(api.runTurboGame).toHaveBeenCalledTimes(1);
     });
 
     test('manual play after the active-list fetch invalidates that challenge for this cycle', async () => {
@@ -280,32 +593,107 @@ describe('mock-parity behaviors on the shared path', () => {
             return true;
         });
         await runVotingPass('tok', null, deps(api, { cleanupStaleMetadata: cleanup }));
-        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
-        expect(api.runTurboMiniGame).toHaveBeenCalledWith(expect.objectContaining({ id: 102 }), 'tok');
+        expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+        expect(api.runTurboGame).toHaveBeenCalledWith(expect.objectContaining({ id: 102 }), 'tok', {
+            isCancelled: expect.any(Function),
+        });
 
         await runVotingPass('tok', null, deps(api));
-        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(3);
+        expect(api.runTurboGame).toHaveBeenCalledTimes(3);
     });
 
     test('a turbo saved for a mission is not earned while no turbo mission wants it', async () => {
         const api = makeApi([makeChallenge()]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         votingLogic.isTurboEarnSaved.mockReturnValueOnce(true);
-        const missions = { join: 0, fill: 0, turbo: 0, vote: 0 };
+        const missions = { join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 };
         await runVotingPass('tok', null, deps(api, { missions }));
-        expect(api.runTurboMiniGame).not.toHaveBeenCalled();
+        expect(api.runTurboGame).not.toHaveBeenCalled();
+    });
+
+    test('with Save Turbos for Missions on and no turbo mission, a game in progress is played and a free one is not', async () => {
+        const { isTurboEarnSaved } = jest.requireActual<typeof votingLogicModule>('../../src/ts/services/VotingLogic');
+        const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
+        const turboChallenge = (id: number, state: string) =>
+            makeChallenge({
+                id,
+                close_time: NOW + 100_000,
+                member: { boost: { state: 'LOCKED', timeout: 0 }, turbo: { state, mode: 'classic' } },
+            });
+        const api = makeApi([turboChallenge(1, 'FREE'), turboChallenge(2, 'IN_PROGRESS')]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockImplementation(isTurboEarnSaved);
+        settings.getEffectiveSetting.mockImplementation((key: string) =>
+            key === 'missionSaveTurbos' ? true : key === 'turboTime' ? 7200 : false,
+        );
+        const missions = { join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 };
+        try {
+            await runVotingPass('tok', null, deps(api, { missions }));
+            expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+            expect(api.runTurboGame).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }), 'tok', {
+                isCancelled: expect.any(Function),
+            });
+        } finally {
+            votingLogic.isTurboEarnSaved.mockReturnValue(false);
+            settings.getEffectiveSetting.mockImplementation(() => false);
+        }
+    });
+
+    test('an in-progress game refreshes the mission count before it is played and counts down on a win', async () => {
+        const api = makeApi([
+            makeChallenge({
+                id: 1,
+                close_time: NOW + 100_000,
+                member: { boost: { state: 'LOCKED', timeout: 0 }, turbo: { state: 'IN_PROGRESS', mode: 'classic' } },
+            }),
+        ]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        const missions = { join: 0, fill: 0, turbo: 3, boost: 0, vote: 0 };
+        const refreshMissionNeeds = jest.fn(async () => ({ join: 0, fill: 0, turbo: 2, boost: 0, vote: 0 }));
+        await runVotingPass('tok', null, deps(api, { missions, refreshMissionNeeds }));
+        expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+        expect(refreshMissionNeeds).toHaveBeenCalledTimes(1);
+        expect(missions.turbo).toBe(1);
+    });
+
+    test('an in-progress game is still played when the mission count cannot be refreshed', async () => {
+        const { isTurboEarnSaved } = jest.requireActual<typeof votingLogicModule>('../../src/ts/services/VotingLogic');
+        const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
+        const api = makeApi([
+            makeChallenge({
+                id: 1,
+                close_time: NOW + 100_000,
+                member: { boost: { state: 'LOCKED', timeout: 0 }, turbo: { state: 'IN_PROGRESS', mode: 'classic' } },
+            }),
+        ]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockImplementation(isTurboEarnSaved);
+        settings.getEffectiveSetting.mockImplementation((key: string) =>
+            key === 'missionSaveTurbos' ? true : key === 'turboTime' ? 7200 : false,
+        );
+        const missions = { join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 };
+        const refreshMissionNeeds = jest.fn(async () => null);
+        try {
+            await runVotingPass('tok', null, deps(api, { missions, refreshMissionNeeds }));
+            expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+            expect(refreshMissionNeeds).toHaveBeenCalledTimes(1);
+            expect(missions.turbo).toBe(0);
+        } finally {
+            votingLogic.isTurboEarnSaved.mockReturnValue(false);
+            settings.getEffectiveSetting.mockImplementation(() => false);
+        }
     });
 
     test('an active turbo mission earns a saved turbo and a win counts it down', async () => {
         const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         votingLogic.isTurboEarnSaved.mockReturnValue(true);
-        api.runTurboMiniGame
-            .mockResolvedValueOnce({ played: 6, correct: 5, flipped: 0, doubleFailed: 1, won: false })
-            .mockResolvedValueOnce({ played: 6, correct: 6, flipped: 0, doubleFailed: 0, won: true });
-        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
+        api.runTurboGame
+            .mockResolvedValueOnce({ kind: 'classic', played: 6, correct: 5, flipped: 0, doubleFailed: 1, won: false })
+            .mockResolvedValueOnce({ kind: 'classic', played: 6, correct: 6, flipped: 0, doubleFailed: 0, won: true });
+        const missions = { join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 };
         await runVotingPass('tok', null, deps(api, { missions }));
-        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(2);
+        expect(api.runTurboGame).toHaveBeenCalledTimes(2);
         expect(missions.turbo).toBe(0);
         votingLogic.isTurboEarnSaved.mockReturnValue(false);
     });
@@ -317,11 +705,11 @@ describe('mock-parity behaviors on the shared path', () => {
         const api = makeApi(list);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         votingLogic.isTurboEarnSaved.mockReturnValue(true);
-        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
+        const missions = { join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 };
         try {
             const result = await runVotingPass('tok', null, deps(api, { missions }));
-            expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
-            expect(api.runTurboMiniGame).toHaveBeenCalledWith(sooner, 'tok');
+            expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+            expect(api.runTurboGame).toHaveBeenCalledWith(sooner, 'tok', { isCancelled: expect.any(Function) });
             expect(missions.turbo).toBe(0);
             expect(result.challenges).toBe(list);
         } finally {
@@ -334,11 +722,11 @@ describe('mock-parity behaviors on the shared path', () => {
         const api = makeApi([invalid<Challenge>(null), sooner]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         votingLogic.isTurboEarnSaved.mockReturnValue(true);
-        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
+        const missions = { join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 };
         try {
             const result = await runVotingPass('tok', null, deps(api, { missions }));
             expect(result.success).toBe(true);
-            expect(api.runTurboMiniGame).toHaveBeenCalledWith(sooner, 'tok');
+            expect(api.runTurboGame).toHaveBeenCalledWith(sooner, 'tok', { isCancelled: expect.any(Function) });
         } finally {
             votingLogic.isTurboEarnSaved.mockReturnValue(false);
         }
@@ -348,15 +736,17 @@ describe('mock-parity behaviors on the shared path', () => {
         const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         votingLogic.isTurboEarnSaved.mockReturnValue(true);
-        api.runTurboMiniGame.mockImplementation(async () => {
+        api.runTurboGame.mockImplementation(async () => {
             recordManualTurboWin('tok');
-            return { played: 1, correct: 0, flipped: 1, doubleFailed: 0, won: false };
+            return { kind: 'classic' as const, played: 1, correct: 0, flipped: 1, doubleFailed: 0, won: false };
         });
-        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
+        const missions = { join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 };
         try {
             await runVotingPass('tok', null, deps(api, { missions }));
-            expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
-            expect(api.runTurboMiniGame).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), 'tok');
+            expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+            expect(api.runTurboGame).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), 'tok', {
+                isCancelled: expect.any(Function),
+            });
             expect(missions.turbo).toBe(0);
             missions.turbo = 1;
             recordManualTurboWin('tok');
@@ -370,17 +760,26 @@ describe('mock-parity behaviors on the shared path', () => {
         const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         votingLogic.isTurboEarnSaved.mockReturnValue(true);
-        api.runTurboMiniGame.mockResolvedValue({ played: 1, correct: 0, flipped: 1, doubleFailed: 0, won: false });
-        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
+        api.runTurboGame.mockResolvedValue({
+            kind: 'classic',
+            played: 1,
+            correct: 0,
+            flipped: 1,
+            doubleFailed: 0,
+            won: false,
+        });
+        const missions = { join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 };
         const refreshMissionNeeds = jest
             .fn()
-            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1, vote: 0 })
-            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0, vote: 0 });
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 })
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 });
         try {
             await runVotingPass('tok', null, deps(api, { missions, refreshMissionNeeds }));
             expect(refreshMissionNeeds).toHaveBeenCalledTimes(2);
-            expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
-            expect(api.runTurboMiniGame).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), 'tok');
+            expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+            expect(api.runTurboGame).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), 'tok', {
+                isCancelled: expect.any(Function),
+            });
             expect(missions.turbo).toBe(0);
         } finally {
             votingLogic.isTurboEarnSaved.mockReturnValue(false);
@@ -391,11 +790,11 @@ describe('mock-parity behaviors on the shared path', () => {
         const api = makeApi([makeChallenge()]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         votingLogic.isTurboEarnSaved.mockReturnValue(true);
-        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
+        const missions = { join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 };
         const refreshMissionNeeds = jest.fn(async () => null);
         try {
             await runVotingPass('tok', null, deps(api, { missions, refreshMissionNeeds }));
-            expect(api.runTurboMiniGame).not.toHaveBeenCalled();
+            expect(api.runTurboGame).not.toHaveBeenCalled();
             expect(missions.turbo).toBe(1);
         } finally {
             votingLogic.isTurboEarnSaved.mockReturnValue(false);
@@ -405,16 +804,16 @@ describe('mock-parity behaviors on the shared path', () => {
     test('a turbo won outside a mission still counts toward one', async () => {
         const api = makeApi([makeChallenge()]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
-        const missions = { join: 0, fill: 0, turbo: 0, vote: 0 };
+        const missions = { join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 };
         await runVotingPass('tok', null, deps(api, { missions }));
-        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+        expect(api.runTurboGame).toHaveBeenCalledTimes(1);
         expect(missions.turbo).toBe(0);
     });
 
     test('auto-fill executes with the injected endpoint pair', async () => {
         const challenge = makeChallenge();
         const api = makeApi([challenge]);
-        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'autoFill' }]));
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'autoSubmit' }]));
         await runVotingPass('tok', null, deps(api));
         expect(autoFill.maybeAutoFillChallenge).toHaveBeenCalledWith(
             challenge,
@@ -431,7 +830,7 @@ describe('mock-parity behaviors on the shared path', () => {
     test('emergency fill executes with the injected endpoint pair', async () => {
         const challenge = makeChallenge();
         const api = makeApi([challenge]);
-        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'emergencyFill' }]));
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'emergencySubmit' }]));
         await runVotingPass('tok', null, deps(api));
         expect(autoFill.maybeEmergencyFillChallenge).toHaveBeenCalledWith(
             challenge,
@@ -460,7 +859,7 @@ describe('mock-parity behaviors on the shared path', () => {
         votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'boost' }]));
         votingLogic.shouldApplyBoost.mockReturnValue(true);
         votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
-        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostNewSubmit');
         try {
             await runVotingPass('tok', null, deps(api));
             expect(autoFill.submitNewEntryForAction).toHaveBeenCalledWith(
@@ -510,7 +909,7 @@ describe('mock-parity behaviors on the shared path', () => {
         votingLogic.shouldApplyBoost.mockReturnValue(true);
         votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
         autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: false, imageId: null, reason: 'challenge-gone' });
-        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostNewSubmit');
         try {
             const result = await runVotingPass('tok', null, deps(api));
             expect(result.success).toBe(true);
@@ -552,7 +951,7 @@ describe('mock-parity behaviors on the shared path', () => {
         votingLogic.shouldApplyBoost.mockReturnValue(true);
         votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
         autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: true, imageId: 'fresh-1', reason: 'submitted' });
-        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostNewSubmit');
         try {
             await runVotingPass('tok', null, deps(api));
             expect(autoFill.reflectNewEntry).toHaveBeenCalledTimes(1);
@@ -616,7 +1015,7 @@ describe('cancellation checkpoints', () => {
 
     test('2: between deadline actions', async () => {
         const api = makeApi([makeChallenge()]);
-        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'autoFill' }]));
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'autoSubmit' }]));
         cancellation.isCancelled.mockReturnValueOnce(false).mockReturnValue(true);
         const result = await runVotingPass('tok', null, deps(api));
         expect(result).toMatchObject(CANCELLED);
@@ -779,7 +1178,7 @@ describe('voteOnNewEntry — gate, arm, record', () => {
         const challenge = withEntries(['a']);
         const api = makeApi([challenge]);
         const tracker = makeTracker({ 101: ['a'] });
-        votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'autoFill', thresholdSec: 900 }]);
+        votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'autoSubmit', thresholdSec: 900 }]);
         autoFill.maybeAutoFillChallenge.mockImplementation(async (c) => {
             c.member!.ranking!.entries!.push({ id: 'fresh' });
             return 'submitted';

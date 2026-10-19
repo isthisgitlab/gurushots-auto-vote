@@ -216,6 +216,7 @@ const normalizeJoinFacets = (
  * @param params.excludeTags normalized lowercase CHALLENGE tags from `autoJoinExcludeChallengeTags`; any match vetoes the join
  * @param params.joinWithinSec join only within this many seconds of `close_time` (0/absent = off)
  * @param params.nowSec current time in epoch SECONDS (matches `close_time`'s unit); required when `joinWithinSec` > 0
+ * @param params.alreadyPaid this account already spent the coins (an unlock marker): the cost checks are skipped, the join only submits
  * @param params.joinAfterPercentElapsed join only once this percent of the candidate's lifetime (`close_time` - `start_time`) has elapsed (0/absent = off); wins over `joinWithinSec` when both are set
  */
 const shouldJoinChallenge = ({
@@ -231,6 +232,7 @@ const shouldJoinChallenge = ({
     joinWithinSec = 0,
     nowSec = 0,
     joinAfterPercentElapsed = 0,
+    alreadyPaid = false,
 }: {
     challenge: {
         id?: string | number;
@@ -251,6 +253,7 @@ const shouldJoinChallenge = ({
     joinWithinSec?: number;
     nowSec?: number;
     joinAfterPercentElapsed?: number;
+    alreadyPaid?: boolean;
 }): { join: boolean; needsCoins: number; reason: string } => {
     const rawCost = Number(challenge?.join_coins);
     const needsCoins = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : 0;
@@ -275,6 +278,9 @@ const shouldJoinChallenge = ({
     if (needsCoins <= 0) {
         return { join: true, needsCoins: 0, reason: 'free' };
     }
+
+    // Coins already spent on it: the join only submits, so the cost, the cap and the budget have no say.
+    if (alreadyPaid) return { join: true, needsCoins, reason: 'already-paid' };
 
     const costRefusal = paidJoinRefusal(needsCoins, bankroll, maxCoins, remainingBudget);
     if (costRefusal) return { join: false, needsCoins, reason: costRefusal };

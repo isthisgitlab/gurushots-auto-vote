@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { getIntentByName, intentValuesMatch } from '../../../settings/intentProfiles';
 import * as ipc from '@/api/ipc';
+import { useOnChosenPhotosCleared, withoutChosenPhotos } from '@/api/chosenPhotosCleared';
+import { SettingHintList, chosenPhotosOnlyReachHint } from './SettingHints';
 import { errorMessage } from '../../../errorMessage';
 
 /**
@@ -92,6 +96,15 @@ export function ChallengeProfilesBar({
         void refreshProfiles();
     }, [refreshProfiles]);
 
+    // Profiles loaded before every chosen-photos list was removed still hold lists, and applying
+    // one would put it back into the form: drop them at once, then read what is stored now.
+    useOnChosenPhotosCleared(() => {
+        setProfiles((current) =>
+            Object.fromEntries(Object.entries(current).map(([name, values]) => [name, withoutChosenPhotos(values)])),
+        );
+        void refreshProfiles();
+    });
+
     const names = Object.keys(profiles).sort((a, b) => a.localeCompare(b));
     const selectedProfile = selectedName && profiles[selectedName] ? profiles[selectedName] : null;
     // Distinguish built-in intent presets from user profiles and edited copies.
@@ -124,17 +137,21 @@ export function ChallengeProfilesBar({
         }
         disarm();
         setBusy(true);
+        let landed = false;
         try {
             const deleted = await ipc.deleteChallengeProfile(selectedName);
             if (deleted !== true) {
                 setErrorText(t('app.profileSaveError'));
                 return;
             }
+            landed = true;
             setErrorText('');
             setSelectedName('');
             await refreshProfiles();
             onProfilesChanged({ name: selectedName, deleted: true });
         } catch (err) {
+            // A throw after the delete landed is not a failed delete: the profile is gone.
+            if (!landed) setErrorText(t('app.profileSaveError'));
             await ipc.logRendererError(`Error deleting challenge profile: ${errorMessage(err) || err}`);
         } finally {
             setBusy(false);
@@ -189,6 +206,13 @@ export function ChallengeProfilesBar({
         }
     };
 
+    const liveMessage =
+        errorText ||
+        (confirming === 'delete' && t('app.confirmDelete')) ||
+        (confirming === 'overwrite' && t('app.confirmOverwrite')) ||
+        (applied && t('app.profileAppliedHint')) ||
+        '';
+
     return (
         <div className="rounded-box border border-base-300 p-3 space-y-2">
             <h4 className="font-semibold text-sm">{t('app.challengeProfiles')}</h4>
@@ -211,7 +235,7 @@ export function ChallengeProfilesBar({
                     {t('app.applyProfile')}
                 </button>
                 <button
-                    className="btn btn-sm btn-outline btn-error"
+                    className="btn btn-sm btn-error"
                     onClick={() => void handleDelete()}
                     disabled={!selectedProfile || busy}
                 >
@@ -221,7 +245,7 @@ export function ChallengeProfilesBar({
 
             {selectedIntent && selectedProfile && (
                 <p className="text-xs">
-                    <span className={`badge badge-sm mr-1 ${selectedIntentModified ? 'badge-warning' : 'badge-info'}`}>
+                    <span className={`badge badge-sm mr-1 ${selectedIntentModified ? 'badge-warning' : 'badge-ghost'}`}>
                         {selectedIntentModified ? t('app.intentModified') : t('app.intentBuiltIn')}
                     </span>
                     {t(selectedIntent.descKey)}
@@ -241,22 +265,30 @@ export function ChallengeProfilesBar({
                         if (confirming === 'overwrite') disarm();
                     }}
                 />
-                <button className="btn btn-sm btn-latvian" onClick={() => void handleSave()} disabled={busy}>
-                    {busy && <span className="loading loading-spinner loading-xs" />}
+                <button
+                    className="btn btn-sm btn-neutral"
+                    onClick={() => void handleSave()}
+                    disabled={busy}
+                    aria-busy={busy}
+                >
+                    {busy && <LoadingSpinner size="xs" decorative />}
                     {confirming === 'overwrite' ? t('app.confirmOverwrite') : t('app.saveAsProfile')}
                 </button>
             </div>
 
+            {/* A profile applies wherever it is used, not only to this challenge. */}
+            <SettingHintList hints={overrides.chosenPhotosOnly === true ? [chosenPhotosOnlyReachHint(t)] : []} />
+
             {/* Single polite live region: confirm-arm prompts, errors and the
                 post-apply reminder are announced without stealing focus. */}
-            <p aria-live="polite" className={errorText ? 'text-xs text-error' : 'text-xs text-info'}>
-                {errorText ||
-                    (confirming === 'delete' && t('app.confirmDelete')) ||
-                    (confirming === 'overwrite' && t('app.confirmOverwrite')) ||
-                    (applied && t('app.profileAppliedHint')) ||
-                    ''}
+            <p aria-live="polite" className="text-xs">
+                {liveMessage && (
+                    <ToneNote tone={errorText ? 'error' : 'info'} as="span">
+                        {liveMessage}
+                    </ToneNote>
+                )}
             </p>
-            <p className="text-xs opacity-60">
+            <p className="text-xs text-base-content/70">
                 {t('app.profileApplyHint')} {t('app.profileOverwriteHint')}
             </p>
         </div>

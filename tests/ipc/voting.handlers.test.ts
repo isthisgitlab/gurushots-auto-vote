@@ -56,7 +56,7 @@ const buildChallenge = ({
 };
 
 const setToken = (token: string | null) => {
-    settings.loadSettings = jest.fn().mockReturnValue({ token });
+    settings.loadSettings = jest.fn().mockReturnValue({ auth: { token } });
 };
 
 const stubStrategy = (challenges: Challenge[] | null) => {
@@ -116,6 +116,13 @@ describe('run-voting-cycle and run-voting-cycle-for-challenge', () => {
 
         const nullId = await handlers['run-voting-cycle-for-challenge']({}, invalid(null));
         expect(nullId).toEqual({ success: false, error: 'challengeId is required' });
+
+        for (const bad of [invalid<string>({}), Infinity, '9'.repeat(65), '   ']) {
+            expect(await handlers['run-voting-cycle-for-challenge']({}, bad)).toEqual({
+                success: false,
+                error: 'challengeId is required',
+            });
+        }
     });
 
     test('run-voting-cycle-for-challenge passes challengeId to middleware', async () => {
@@ -134,10 +141,22 @@ describe('vote-on-challenge — voteOnSingleChallenge input validation', () => {
         ['null id', null, 'Title'],
         ['empty id', '', 'Title'],
         ['NaN id', 'abc', 'Title'],
+        ['infinite id', Infinity, 'Title'],
+        ['overlong id', '1'.repeat(65), 'Title'],
+        ['object id', {}, 'Title'],
     ])('rejects invalid challengeId (%s)', async (_label, id, title) => {
         const handlers = buildHandlers();
         const result = await handlers['vote-on-challenge']({}, invalid(id), title);
         expect(result).toEqual({ success: false, error: 'Invalid challenge ID' });
+    });
+
+    test('echoes the challenge title as one bounded line', async () => {
+        setToken('tok');
+        stubStrategy([buildChallenge({ id: 999 })]);
+        const handlers = buildHandlers();
+        const result = await handlers['vote-on-challenge']({}, '123', `a\nb${'z'.repeat(500)}`);
+        expect(result.success).toBe(false);
+        expect(result.error).toBe(`Challenge "a b${'z'.repeat(197)}" not found`);
     });
 
     test('rejects empty challenge title', async () => {

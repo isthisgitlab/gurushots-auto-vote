@@ -19,6 +19,25 @@ const allowed = (id: string, labels: string[]) => ({
     permission: { allowed: true, message: null },
 });
 
+describe('stripTags', () => {
+    const { stripTags, MAX_TOKENISE_CHARS } =
+        require('../../src/ts/services/photoPicker/stemming') as typeof import('../../src/ts/services/photoPicker/stemming');
+
+    test('blanks a tag, and a bracket that opens no tag stays', () => {
+        expect(stripTags('a<b>c<<d>e <i x="1">f</i>')).toBe('a c< e  f ');
+    });
+
+    test('cuts the text to the tokenising limit before it is read', () => {
+        expect(stripTags('x'.repeat(MAX_TOKENISE_CHARS + 50))).toHaveLength(MAX_TOKENISE_CHARS);
+    });
+
+    test('a long run of opening brackets is read in linear time', () => {
+        const started = Date.now();
+        stripTags('<'.repeat(100_000));
+        expect(Date.now() - started).toBeLessThan(1000);
+    });
+});
+
 describe('tokenise ignoreWords normalisation', () => {
     test('a non-empty Set is used as-is', () => {
         expect(tokenise('forest river', { ignoreWords: new Set(['river']) })).toEqual(tokenise('forest'));

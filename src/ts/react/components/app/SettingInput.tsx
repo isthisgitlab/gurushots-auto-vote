@@ -1,7 +1,10 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneNote } from '@/components/ui/ToneNote';
+import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 import { useListDraft, LIST_FINGERPRINT_SEP } from '@/hooks/useListDraft';
 import { SettingResetButton } from './SettingResetButton';
 import { TimeField, ScheduleField, TimeOfDayListField, TimeListField } from './TimeSettingFields';
+import { PhotosField } from './ChosenPhotosField';
 import { useScenarios } from '@/api/useScenarios';
 import { interp } from '@/utils/interp';
 
@@ -19,7 +22,7 @@ import type {
 // Setting types rendered as several controls (each with its own aria-label)
 // rather than one: their caption names a role="group" wrapper instead of
 // pointing a <label> at a single control.
-const GROUP_TYPES: Set<string | undefined> = new Set(['time', 'schedule', 'timeOfDayList', 'timeList']);
+const GROUP_TYPES: Set<string | undefined> = new Set(['time', 'schedule', 'timeOfDayList', 'timeList', 'photos']);
 
 /**
  * Caption for a setting control, shared by the global and per-challenge
@@ -41,13 +44,16 @@ export function SettingLabel({
 }) {
     if (group) {
         return (
-            <div className="label" id={`${inputId}-label`}>
+            <div
+                className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content"
+                id={`${inputId}-label`}
+            >
                 {children}
             </div>
         );
     }
     return (
-        <label className="label" htmlFor={inputId}>
+        <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content" htmlFor={inputId}>
             {children}
         </label>
     );
@@ -58,17 +64,19 @@ export function SettingLabel({
  */
 function ControlRow({
     settingKey,
+    labelKey,
     onReset,
     children,
 }: {
     settingKey: string;
+    labelKey: string;
     onReset?: SettingResetHandler | null;
     children?: ComponentChildren;
 }) {
     return (
         <div className="flex items-center gap-2">
             {children}
-            <SettingResetButton settingKey={settingKey} onReset={onReset} />
+            <SettingResetButton settingKey={settingKey} labelKey={labelKey} onReset={onReset} />
         </div>
     );
 }
@@ -91,19 +99,23 @@ const tagsDraftKey = (text: string): string => tagsTextToArray(text).join(LIST_F
 export function TagsField({
     id,
     settingKey,
+    labelKey,
     value,
     onChange,
     onReset,
     placeholder,
     disabled = false,
+    rejected = false,
 }: {
     id: string;
     settingKey: string;
+    labelKey: string;
     value: unknown;
     onChange: SettingChangeHandler;
     onReset?: SettingResetHandler | null;
     placeholder?: string;
     disabled?: boolean;
+    rejected?: boolean;
 }) {
     const arr = Array.isArray(value) ? value : [];
     const [draft, setDraft] = useListDraft(arr, tagsArrayToText, tagsDraftKey);
@@ -114,7 +126,7 @@ export function TagsField({
     };
 
     return (
-        <ControlRow settingKey={settingKey} onReset={onReset}>
+        <ControlRow settingKey={settingKey} labelKey={labelKey} onReset={onReset}>
             <input
                 id={id}
                 type="text"
@@ -123,6 +135,7 @@ export function TagsField({
                 value={draft}
                 onChange={handleChange}
                 disabled={disabled}
+                aria-invalid={rejected || undefined}
             />
         </ControlRow>
     );
@@ -131,24 +144,26 @@ export function TagsField({
 /**
  * A schema `tags` setting: TagsField with the shared placeholder.
  */
-function TagsSetting({ id, settingKey, value, onChange, onReset, disabled }: SettingFieldProps) {
+function TagsSetting({ id, settingKey, config, value, onChange, onReset, disabled, rejected }: SettingFieldProps) {
     const { t } = useTranslation();
     return (
         <TagsField
             id={id}
             settingKey={settingKey}
+            labelKey={config.label}
             value={value}
             onChange={onChange}
             onReset={onReset}
             placeholder={t('app.tagsPlaceholder')}
             disabled={disabled}
+            rejected={rejected}
         />
     );
 }
 
-function BooleanField({ id, settingKey, value, onChange, onReset, disabled }: SettingFieldProps) {
+function BooleanField({ id, settingKey, config, value, onChange, onReset, disabled, rejected }: SettingFieldProps) {
     return (
-        <ControlRow settingKey={settingKey} onReset={onReset}>
+        <ControlRow settingKey={settingKey} labelKey={config.label} onReset={onReset}>
             <input
                 id={id}
                 type="checkbox"
@@ -156,6 +171,7 @@ function BooleanField({ id, settingKey, value, onChange, onReset, disabled }: Se
                 checked={!!value}
                 onChange={(e) => onChange(settingKey, e.currentTarget.checked)}
                 disabled={disabled}
+                aria-invalid={rejected || undefined}
             />
         </ControlRow>
     );
@@ -180,7 +196,7 @@ function isNumberInvalid(value: unknown, { min, max }: Pick<SerializableSchemaEn
     );
 }
 
-function numberRangeMessage({ min, max }: Pick<SerializableSchemaEntry, 'min' | 'max'>, t: Translate): string {
+export function numberRangeMessage({ min, max }: Pick<SerializableSchemaEntry, 'min' | 'max'>, t: Translate): string {
     const hasMin = typeof min === 'number';
     if (hasMin && typeof max === 'number') {
         return t('app.validationOutOfRange').replace('{min}', String(min)).replace('{max}', String(max));
@@ -194,22 +210,25 @@ function numberRangeMessage({ min, max }: Pick<SerializableSchemaEntry, 'min' | 
  * range check then explains the blank instead of a save failure for a value
  * the user never typed.
  */
-function parseNumberInput(raw: string): number | '' {
+export function parseNumberInput(raw: string): number | '' {
     if (raw === '') return '';
     const parsed = parseInt(raw, 10);
     return Number.isNaN(parsed) ? '' : parsed;
 }
 
-function NumberField({ id, settingKey, config, value, onChange, onReset, disabled }: SettingFieldProps) {
+function NumberField({ id, settingKey, config, value, onChange, onReset, disabled, rejected }: SettingFieldProps) {
     const { t } = useTranslation();
     const invalid = isNumberInvalid(value, config);
+    const errorId = `${id}-error`;
     return (
         <div className="flex flex-col gap-1">
-            <ControlRow settingKey={settingKey} onReset={onReset}>
+            <ControlRow settingKey={settingKey} labelKey={config.label} onReset={onReset}>
                 <input
                     id={id}
                     type="number"
                     className={`input input-sm w-24 ${invalid ? 'input-error' : ''}`}
+                    aria-invalid={invalid || rejected || undefined}
+                    aria-describedby={invalid ? errorId : undefined}
                     min={config.min}
                     max={config.max}
                     // A number or '' (SettingInput's normalisation); the DOM coerces either.
@@ -219,14 +238,18 @@ function NumberField({ id, settingKey, config, value, onChange, onReset, disable
                 />
                 {config.unit && <span className="text-sm">{t(config.unit)}</span>}
             </ControlRow>
-            {invalid && <span className="text-error text-xs">{numberRangeMessage(config, t)}</span>}
+            {invalid && (
+                <ToneNote tone="error" as="span" id={errorId} className="text-xs">
+                    {numberRangeMessage(config, t)}
+                </ToneNote>
+            )}
         </div>
     );
 }
 
-function TextField({ id, settingKey, value, onChange, onReset, disabled }: SettingFieldProps) {
+function TextField({ id, settingKey, config, value, onChange, onReset, disabled, rejected }: SettingFieldProps) {
     return (
-        <ControlRow settingKey={settingKey} onReset={onReset}>
+        <ControlRow settingKey={settingKey} labelKey={config.label} onReset={onReset}>
             <input
                 id={id}
                 type="text"
@@ -235,6 +258,7 @@ function TextField({ id, settingKey, value, onChange, onReset, disabled }: Setti
                 value={value as string}
                 onChange={(e) => onChange(settingKey, e.currentTarget.value)}
                 disabled={disabled}
+                aria-invalid={rejected || undefined}
             />
         </ControlRow>
     );
@@ -245,7 +269,7 @@ function TextField({ id, settingKey, value, onChange, onReset, disabled }: Setti
  * name that no longer exists stays visible — marked as missing — so the user
  * sees the stale assignment instead of it silently reading as "none".
  */
-function ScenarioField({ id, settingKey, value, onChange, onReset, disabled }: SettingFieldProps) {
+function ScenarioField({ id, settingKey, config, value, onChange, onReset, disabled, rejected }: SettingFieldProps) {
     const { t } = useTranslation();
     const { scenarios } = useScenarios();
     const names = Object.keys(scenarios);
@@ -253,13 +277,14 @@ function ScenarioField({ id, settingKey, value, onChange, onReset, disabled }: S
     const selected = names.find((name) => name.toLowerCase() === current.toLowerCase()) ?? current;
     const missing = current !== '' && !names.includes(selected);
     return (
-        <ControlRow settingKey={settingKey} onReset={onReset}>
+        <ControlRow settingKey={settingKey} labelKey={config.label} onReset={onReset}>
             <select
                 id={id}
                 className="select select-sm"
                 value={selected}
                 onChange={(e) => onChange(settingKey, e.currentTarget.value)}
                 disabled={disabled}
+                aria-invalid={rejected || undefined}
             >
                 <option value="">{t('app.scenarioNone')}</option>
                 {names.map((name) => (
@@ -289,6 +314,7 @@ function getDefaultForType(type: string | undefined): number | boolean | never[]
         case 'schedule':
         case 'timeOfDayList':
         case 'timeList':
+        case 'photos':
             return [];
         default:
             return '';
@@ -309,11 +335,12 @@ const FIELD_BY_TYPE: Map<string | undefined, ComponentType<SettingFieldProps>> =
     ['boolean', BooleanField],
     ['number', NumberField],
     ['scenario', ScenarioField],
+    ['photos', PhotosField],
 ]);
 
 // Row-list fields render inside a role="group" wrapper named by the
 // SettingLabel caption; TimeField carries that role on its own row.
-const GROUP_WRAPPED_TYPES: Set<string | undefined> = new Set(['schedule', 'timeOfDayList', 'timeList']);
+const GROUP_WRAPPED_TYPES: Set<string | undefined> = new Set(['schedule', 'timeOfDayList', 'timeList', 'photos']);
 
 /**
  * Schema-driven input renderer for settings. `id` goes on the control a
@@ -327,6 +354,7 @@ export function SettingInput({
     onChange,
     onReset,
     disabled = false,
+    rejected = false,
     id = `setting-${settingKey}`,
 }: {
     settingKey: string;
@@ -335,6 +363,8 @@ export function SettingInput({
     onChange: SettingChangeHandler;
     onReset?: SettingResetHandler | null;
     disabled?: boolean;
+    /** The last Save refused this setting's value (see SettingFieldProps.rejected). */
+    rejected?: boolean;
     id?: string;
 }) {
     // Guard against missing config
@@ -353,11 +383,21 @@ export function SettingInput({
             onChange={onChange}
             onReset={onReset}
             disabled={disabled}
+            rejected={rejected}
         />
     );
     if (!GROUP_WRAPPED_TYPES.has(config.type)) return field;
+    // Photos put `id` on their own button; a row list has no single control, so its group is the focus target
+    // (a rejected Save focuses `id`). A group cannot carry aria-invalid, so a refused row list points at the
+    // save-failed alert and its inputs are the ones marked; photos name it on the focused button instead.
+    const focusable = config.type !== 'photos' ? { id, tabIndex: -1 } : {};
     return (
-        <div role="group" aria-labelledby={`${id}-label`}>
+        <div
+            {...focusable}
+            role="group"
+            aria-labelledby={`${id}-label`}
+            aria-describedby={rejected && config.type !== 'photos' ? SAVE_ERROR_ID : undefined}
+        >
             {field}
         </div>
     );

@@ -4,23 +4,38 @@
  *   - scrolls the matching challenge-<id> element into view
  *   - no-ops safely (no throw) when the card isn't mounted
  *   - a falsy id (0) still builds the correct selector
+ *   - the focused card carries data-landed until it blurs
  */
 
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
-import { invalid } from '../helpers/invalid';
 
 describe('scrollToChallenge', () => {
     afterEach(() => jest.restoreAllMocks());
 
     test('scrolls the matching card into view', () => {
-        const fakeCard = { scrollIntoView: jest.fn(), focus: jest.fn() };
-        const getById = jest.spyOn(document, 'getElementById').mockReturnValue(invalid(fakeCard));
+        const fakeCard = Object.assign(document.createElement('div'), { scrollIntoView: jest.fn(), focus: jest.fn() });
+        const getById = jest.spyOn(document, 'getElementById').mockReturnValue(fakeCard);
 
         scrollToChallenge(42);
 
         expect(getById).toHaveBeenCalledWith('challenge-42');
         expect(fakeCard.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
         expect(fakeCard.focus).toHaveBeenCalledWith({ preventScroll: true });
+    });
+
+    test('scrolls instantly for a user who prefers reduced motion', () => {
+        const original = globalThis.matchMedia;
+        globalThis.matchMedia = ((query: string) => ({
+            matches: query.includes('reduce'),
+        })) as unknown as typeof globalThis.matchMedia;
+        const fakeCard = Object.assign(document.createElement('div'), { scrollIntoView: jest.fn(), focus: jest.fn() });
+        jest.spyOn(document, 'getElementById').mockReturnValue(fakeCard);
+        try {
+            scrollToChallenge(7);
+            expect(fakeCard.scrollIntoView).toHaveBeenCalledWith({ behavior: 'auto', block: 'start' });
+        } finally {
+            globalThis.matchMedia = original;
+        }
     });
 
     test('no-ops without throwing when the card is not mounted', () => {
@@ -31,8 +46,8 @@ describe('scrollToChallenge', () => {
     });
 
     test('handles a falsy id (0) by building the correct selector', () => {
-        const fakeCard = { scrollIntoView: jest.fn(), focus: jest.fn() };
-        const getById = jest.spyOn(document, 'getElementById').mockReturnValue(invalid(fakeCard));
+        const fakeCard = Object.assign(document.createElement('div'), { scrollIntoView: jest.fn(), focus: jest.fn() });
+        const getById = jest.spyOn(document, 'getElementById').mockReturnValue(fakeCard);
 
         scrollToChallenge(0);
 
@@ -56,5 +71,23 @@ describe('scrollToChallenge', () => {
 
         first.remove();
         second.remove();
+    });
+
+    test('marks the focused card as landed until it loses focus', () => {
+        const card = document.createElement('div');
+        const other = document.createElement('button');
+        card.id = 'challenge-3';
+        card.tabIndex = -1;
+        card.scrollIntoView = jest.fn();
+        document.body.append(card, other);
+
+        scrollToChallenge(3);
+        expect(card.hasAttribute('data-landed')).toBe(true);
+
+        other.focus();
+        expect(card.hasAttribute('data-landed')).toBe(false);
+
+        card.remove();
+        other.remove();
     });
 });

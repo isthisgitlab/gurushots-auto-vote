@@ -1,9 +1,10 @@
 /**
  * votingOrchestrator — where the automatic key / swap / fill spends sit in the
  * pass: key then swap BEFORE the deadline actions (so an unlocked boost and a
- * swapped-in photo are visible to them), fill AFTER the vote with the pool the
- * vote used (so it only spends when voting fell short). The user-defined
- * scenario step runs before all of them.
+ * swapped-in photo are visible to them), the mission fill BEFORE the vote (a vote
+ * lifts exposure and a fill on a full challenge is refused), the exposure fill
+ * AFTER the vote with the pool the vote used (so it only spends when voting fell
+ * short). The user-defined scenario step runs before all of them.
  */
 
 jest.mock('../../src/ts/settings', () => ({
@@ -11,6 +12,9 @@ jest.mock('../../src/ts/settings', () => ({
 }));
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({
+    resolvePin: jest.fn(() => ({ state: 'none' })),
+    pinFallbackOf: jest.fn(() => null),
+    describePinFallback: jest.fn(() => ''),
     isWithinEmergencyWindow: jest.fn(() => false),
     shouldPlayAutoTurbo: jest.fn(() => false),
     orderDeadlineActions: jest.fn(() => []),
@@ -82,7 +86,7 @@ beforeEach(() => {
     votingLogic.evaluateVotingDecision.mockReturnValue(
         invalid({ shouldVote: false, voteReason: 'skip', targetExposure: 100 }),
     );
-    votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'autoFill' }]));
+    votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'autoSubmit' }]));
 });
 
 test('key, then swap, then the deadline actions — all with the pass currency deps', async () => {
@@ -166,32 +170,44 @@ describe('fill missions', () => {
             missions,
         });
 
-    test('with no exposure-rule fill, a mission fill gets what the mission still needs and counts it down', async () => {
+    test('a mission fill gets what the mission still needs, counts it down and lands before the vote', async () => {
+        vote();
         currencyAuto.runMissionFill.mockResolvedValueOnce(true);
-        const missions = { join: 0, fill: 2, turbo: 0, vote: 0 };
-        await runWithMissions(missions);
-        expect(currencyAuto.runMissionFill).toHaveBeenCalledWith(expect.objectContaining({ currency }), 2);
-        expect(currencyAuto.runMissionFill.mock.invocationCallOrder[0]).toBeGreaterThan(
-            currencyAuto.runAutoExposureFill.mock.invocationCallOrder[0],
+        const missions = { join: 0, fill: 2, turbo: 0, boost: 0, vote: 0 };
+        const api = makeApi();
+        await runVotingPass('tok', null, {
+            api: invalid(api),
+            cleanupStaleMetadata: null,
+            interChallengeDelay: () => 0,
+            currency,
+            missions,
+        });
+        // The mission needs themselves are handed over, for the fill to be counted against its mission.
+        expect(currencyAuto.runMissionFill).toHaveBeenCalledWith(expect.objectContaining({ currency }), missions);
+        expect(currencyAuto.runMissionFill.mock.invocationCallOrder[0]).toBeLessThan(
+            api.submitVotes.mock.invocationCallOrder[0],
+        );
+        expect(currencyAuto.runMissionFill.mock.invocationCallOrder[0]).toBeLessThan(
+            votingLogic.evaluateVotingDecision.mock.invocationCallOrder[0],
         );
         expect(missions.fill).toBe(1);
     });
 
-    test('an exposure-rule fill counts toward the mission and skips the mission fill', async () => {
+    test('an exposure-rule fill after the vote counts toward the mission', async () => {
         currencyAuto.runAutoExposureFill.mockResolvedValueOnce(true);
-        const missions = { join: 0, fill: 2, turbo: 0, vote: 0 };
+        const missions = { join: 0, fill: 2, turbo: 0, boost: 0, vote: 0 };
         await runWithMissions(missions);
-        expect(currencyAuto.runMissionFill).not.toHaveBeenCalled();
+        expect(currencyAuto.runMissionFill).toHaveBeenCalledTimes(1);
         expect(missions.fill).toBe(1);
     });
 
-    test('without missions the mission fill is asked for 0', async () => {
+    test('without missions the mission fill is handed none', async () => {
         await run(makeApi());
-        expect(currencyAuto.runMissionFill).toHaveBeenCalledWith(expect.any(Object), 0);
+        expect(currencyAuto.runMissionFill).toHaveBeenCalledWith(expect.any(Object), null);
     });
 
     test('a mission fill that spent nothing leaves the mission as it was', async () => {
-        const missions = { join: 0, fill: 2, turbo: 0, vote: 0 };
+        const missions = { join: 0, fill: 2, turbo: 0, boost: 0, vote: 0 };
         await runWithMissions(missions);
         expect(missions.fill).toBe(2);
     });
@@ -218,7 +234,7 @@ describe('vote missions', () => {
             cleanupStaleMetadata: null,
             interChallengeDelay: () => 0,
             currency,
-            missions: { join: 0, fill: 0, turbo: 0, vote: 5 },
+            missions: { join: 0, fill: 0, turbo: 0, boost: 0, vote: 5 },
         });
 
     test('a capped mission pool is handed to the fill step whole', async () => {

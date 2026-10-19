@@ -1,7 +1,9 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { useListDraft, LIST_FINGERPRINT_SEP } from '@/hooks/useListDraft';
 import { secondsToHoursMinutes, hoursMinutesToSeconds } from '@/utils/timeFieldUnits';
 import { MAX_SCHEDULED_FILL_ENTRIES } from '../../../settings/limits';
+import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 import { SettingResetButton } from './SettingResetButton';
 
 import type { ComponentChildren } from 'preact';
@@ -19,6 +21,8 @@ interface RowRenderContext<R> {
     /** The setting's translated label; row inputs are labelled "<label> <n>". */
     label: string;
     hintId: string;
+    /** The last Save refused this setting: every input of the list is marked invalid. */
+    rejected: boolean | undefined;
     setRow: (next: R) => void;
     disabled: boolean | undefined;
     t: Translate;
@@ -71,6 +75,7 @@ function HoursMinutesInputs({
     widthClass,
     hoursMax,
     invalid,
+    rejected,
     describedBy,
     disabled,
 }: {
@@ -80,6 +85,7 @@ function HoursMinutesInputs({
     widthClass: string;
     hoursMax?: number;
     invalid?: boolean;
+    rejected?: boolean;
     describedBy?: string;
     disabled?: boolean;
 }) {
@@ -94,6 +100,7 @@ function HoursMinutesInputs({
                 min="0"
                 max={hoursMax}
                 aria-label={`${labelPrefix} ${t('app.hours')}`}
+                aria-invalid={invalid || rejected || undefined}
                 aria-describedby={describedBy}
                 value={hours}
                 onChange={(e) => onChange(hoursMinutesToSeconds(parseInt(e.currentTarget.value, 10), minutes))}
@@ -106,6 +113,7 @@ function HoursMinutesInputs({
                 min="0"
                 max="59"
                 aria-label={`${labelPrefix} ${t('app.minutes')}`}
+                aria-invalid={invalid || rejected || undefined}
                 aria-describedby={describedBy}
                 value={minutes}
                 onChange={(e) => onChange(hoursMinutesToSeconds(hours, parseInt(e.currentTarget.value, 10)))}
@@ -119,18 +127,26 @@ function HoursMinutesInputs({
 /**
  * Single duration setting (`type: 'time'`): hours + minutes, stored as seconds.
  */
-export function TimeField({ id, settingKey, config, value, onChange, onReset, disabled }: SettingFieldProps) {
+export function TimeField({ id, settingKey, config, value, onChange, onReset, disabled, rejected }: SettingFieldProps) {
     const { t } = useTranslation();
     return (
-        <div className="flex items-center gap-2" role="group" aria-labelledby={`${id}-label`}>
+        <div
+            id={id}
+            tabIndex={-1}
+            className="flex items-center gap-2"
+            role="group"
+            aria-labelledby={`${id}-label`}
+            aria-describedby={rejected ? SAVE_ERROR_ID : undefined}
+        >
             <HoursMinutesInputs
                 seconds={typeof value === 'number' ? value : 0}
                 onChange={(seconds) => onChange(settingKey, seconds)}
                 labelPrefix={t(config.label)}
                 widthClass="w-20"
+                rejected={rejected}
                 disabled={disabled}
             />
-            <SettingResetButton settingKey={settingKey} onReset={onReset} />
+            <SettingResetButton settingKey={settingKey} labelKey={config.label} onReset={onReset} />
         </div>
     );
 }
@@ -157,11 +173,11 @@ const isDominated = (activeRows: { count: number; seconds: number }[], count: nu
  * trigger is max-based). Emits only rows with seconds > 0, ordered by count,
  * so "all off" emits [] — the runtime's 'no-schedule' state. Rebuilding from
  * the three fixed slots is lossy by design: any stored row not keyed by
- * counts 2/3/4 is dropped on the first edit (the load-time autoFillSchedule
+ * counts 2/3/4 is dropped on the first edit (the load-time autoSubmitSchedule
  * migration removes such rows anyway, through sanitizeFillSchedule in
- * settings/schema/autoFill.ts).
+ * settings/schema/autoSubmit.ts).
  */
-export function ScheduleField({ settingKey, value, onChange, onReset, disabled }: SettingFieldProps) {
+export function ScheduleField({ settingKey, config, value, onChange, onReset, disabled, rejected }: SettingFieldProps) {
     const { t } = useTranslation();
     // The field holds this key's value, a schedule.
     const rows = (Array.isArray(value) ? value : []) as FillSchedule;
@@ -183,7 +199,7 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled }
                 const outOfRange = secondsOutOfRange(seconds);
                 const dominated = !off && !outOfRange && isDominated(activeRows, count, seconds);
                 const hintId = `${settingKey}-row-${count}-hint`;
-                const rowLabel = `${t('app.autoFillScheduleImage')} ${count}`;
+                const rowLabel = `${t('app.autoSubmitScheduleImage')} ${count}`;
                 return (
                     <div key={count} className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm w-20">{rowLabel} ≤</span>
@@ -194,15 +210,20 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled }
                             widthClass="w-16"
                             hoursMax={SCHEDULE_MAX_HOURS}
                             invalid={outOfRange}
+                            rejected={rejected}
                             describedBy={hintId}
                             disabled={disabled}
                         />
                         <span aria-live="polite" id={hintId} className="text-xs">
-                            {off && <span className="opacity-60">{t('app.autoFillScheduleOff')}</span>}
-                            {outOfRange && <span className="text-error">{t('app.autoFillScheduleOutOfRange')}</span>}
+                            {off && <span className="text-base-content/70">{t('app.autoSubmitScheduleOff')}</span>}
+                            {outOfRange && (
+                                <ToneNote tone="error" as="span">
+                                    {t('app.autoSubmitScheduleOutOfRange')}
+                                </ToneNote>
+                            )}
                             {dominated && (
                                 <span className="badge badge-warning badge-sm">
-                                    {t('app.autoFillScheduleDominated')}
+                                    {t('app.autoSubmitScheduleDominated')}
                                 </span>
                             )}
                         </span>
@@ -210,13 +231,13 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled }
                 );
             })}
             {activeRows.length === 0 && (
-                <div role="status" className="text-xs text-warning">
-                    {t('app.autoFillScheduleEmpty')}
-                </div>
+                <ToneNote tone="warning" as="div" role="status" className="text-xs">
+                    {t('app.autoSubmitScheduleEmpty')}
+                </ToneNote>
             )}
             {onReset && (
                 <div className="flex items-center gap-2">
-                    <SettingResetButton settingKey={settingKey} onReset={onReset} />
+                    <SettingResetButton settingKey={settingKey} labelKey={config.label} onReset={onReset} />
                 </div>
             )}
         </div>
@@ -245,6 +266,7 @@ const copyRows = <R,>(arr: R[]): R[] => arr.slice();
 function RowListFooter({
     kind,
     settingKey,
+    labelKey,
     rowCount,
     onAdd,
     onReset,
@@ -252,6 +274,7 @@ function RowListFooter({
 }: {
     kind: Pick<RowKind<unknown>, 'addLabelKey' | 'emptyLabelKey'>;
     settingKey: string;
+    labelKey: string;
     rowCount: number;
     onAdd: () => void;
     onReset?: SettingResetHandler | null;
@@ -270,11 +293,11 @@ function RowListFooter({
                 </span>
             )}
             {atCap && (
-                <span role="status" className="text-xs text-warning">
+                <ToneNote tone="warning" as="span" role="status" className="text-xs">
                     {t('app.scheduledFillMaxEntries').replace('{0}', String(SCHEDULED_FILL_MAX_ENTRIES))}
-                </span>
+                </ToneNote>
             )}
-            <SettingResetButton settingKey={settingKey} onReset={onReset} />
+            <SettingResetButton settingKey={settingKey} labelKey={labelKey} onReset={onReset} />
         </div>
     );
 }
@@ -305,6 +328,7 @@ function RowListField<R>({
     onChange,
     onReset,
     disabled,
+    rejected,
 }: SettingFieldProps & { kind: RowKind<R> }) {
     const { t } = useTranslation();
     const label = t(config.label);
@@ -325,7 +349,17 @@ function RowListField<R>({
             {rows.map((row, index) => {
                 const hintId = `${settingKey}-row-${index}-hint`;
                 const setRow = (next: R) => update(rows.map((r, j) => (j === index ? next : r)));
-                const { controls, hint } = kind.renderRow({ row, index, rows, label, hintId, setRow, disabled, t });
+                const { controls, hint } = kind.renderRow({
+                    row,
+                    index,
+                    rows,
+                    label,
+                    hintId,
+                    rejected,
+                    setRow,
+                    disabled,
+                    t,
+                });
                 return (
                     <div key={index} className="flex items-center gap-2 flex-wrap">
                         {controls}
@@ -346,6 +380,7 @@ function RowListField<R>({
             <RowListFooter
                 kind={kind}
                 settingKey={settingKey}
+                labelKey={config.label}
                 rowCount={rows.length}
                 onAdd={() => update([...rows, kind.blankRow])}
                 onReset={onReset}
@@ -369,7 +404,7 @@ const TIME_OF_DAY_ROWS: RowKind<string> = {
     blankRow: '',
     addLabelKey: 'app.scheduledFillAddTime',
     emptyLabelKey: 'app.scheduledFillTimeOff',
-    renderRow: ({ row, index, rows, label, hintId, setRow, disabled, t }) => {
+    renderRow: ({ row, index, rows, label, hintId, rejected, setRow, disabled, t }) => {
         const duplicate = row !== '' && rows.indexOf(row) !== index;
         return {
             controls: (
@@ -377,13 +412,18 @@ const TIME_OF_DAY_ROWS: RowKind<string> = {
                     type="time"
                     className={`input input-sm w-32 ${duplicate ? 'input-error' : ''}`}
                     aria-label={`${label} ${index + 1}`}
+                    aria-invalid={duplicate || rejected || undefined}
                     aria-describedby={hintId}
                     value={row}
                     onChange={(e) => setRow(e.currentTarget.value)}
                     disabled={disabled}
                 />
             ),
-            hint: duplicate && <span className="text-error">{t('app.scheduledFillDuplicateEntry')}</span>,
+            hint: duplicate && (
+                <ToneNote tone="error" as="span">
+                    {t('app.scheduledFillDuplicateEntry')}
+                </ToneNote>
+            ),
         };
     },
 };
@@ -400,7 +440,7 @@ const BEFORE_END_ROWS: RowKind<number> = {
     blankRow: 0,
     addLabelKey: 'app.scheduledFillAddBeforeEnd',
     emptyLabelKey: 'app.scheduledFillBeforeEndOff',
-    renderRow: ({ row, index, rows, label, hintId, setRow, disabled, t }) => {
+    renderRow: ({ row, index, rows, label, hintId, rejected, setRow, disabled, t }) => {
         const seconds = Number.isFinite(row) ? row : 0;
         const duplicate = seconds > 0 && rows.indexOf(row) !== index;
         const outOfRange = secondsOutOfRange(seconds);
@@ -413,15 +453,24 @@ const BEFORE_END_ROWS: RowKind<number> = {
                     widthClass="w-16"
                     hoursMax={SCHEDULE_MAX_HOURS}
                     invalid={duplicate || outOfRange}
+                    rejected={rejected}
                     describedBy={hintId}
                     disabled={disabled}
                 />
             ),
             hint: (
                 <>
-                    {seconds === 0 && <span className="opacity-60">{t('app.scheduledFillEntryDraft')}</span>}
-                    {outOfRange && <span className="text-error">{t('app.autoFillScheduleOutOfRange')}</span>}
-                    {duplicate && <span className="text-error">{t('app.scheduledFillDuplicateEntry')}</span>}
+                    {seconds === 0 && <span className="text-base-content/70">{t('app.scheduledFillEntryDraft')}</span>}
+                    {outOfRange && (
+                        <ToneNote tone="error" as="span">
+                            {t('app.autoSubmitScheduleOutOfRange')}
+                        </ToneNote>
+                    )}
+                    {duplicate && (
+                        <ToneNote tone="error" as="span">
+                            {t('app.scheduledFillDuplicateEntry')}
+                        </ToneNote>
+                    )}
                 </>
             ),
         };

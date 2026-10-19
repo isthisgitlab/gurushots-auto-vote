@@ -22,10 +22,13 @@ import type * as lifecycleModule from '../../src/ts/windows/lifecycle';
 import type * as settingsWatcherModule from '../../src/ts/windows/settingsWatcher';
 import type * as backgroundActivityModule from '../../src/ts/windows/backgroundActivity';
 import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
+import type * as suspendBoostModule from '../../src/ts/windows/suspendBoost';
 import type * as applicationMenuModule from '../../src/ts/ui/applicationMenu';
 import type * as navigationGuardModule from '../../src/ts/index/navigationGuard';
 import type * as permissionsModule from '../../src/ts/index/permissions';
+import type * as sessionModule from '../../src/ts/index/session';
 import { invalid } from '../helpers/invalid';
+import { APP_PARTITION } from '../../src/ts/index/session';
 
 /** An event / IPC / process listener the fakes record by name. */
 type Listener = (...args: unknown[]) => void;
@@ -57,6 +60,7 @@ interface FakeBrowserWindowClass {
     instances: FakeWindow[];
     openWindows: FakeWindow[];
     nextLoadResult: Promise<void> | null;
+    nextConstructError: Error | null;
 }
 
 /** What the electron mock below returns (handlers maps record every registered listener). */
@@ -98,6 +102,7 @@ interface LoadedMocks {
     watcher: jest.MaybeMockedDeep<typeof settingsWatcherModule>;
     bg: jest.MaybeMockedDeep<typeof backgroundActivityModule>;
     quitGuard: jest.MaybeMockedDeep<typeof quitGuardModule>;
+    suspendBoost: jest.MaybeMockedDeep<typeof suspendBoostModule>;
     menu: jest.MaybeMockedDeep<typeof applicationMenuModule>;
     navigationGuard: jest.MaybeMockedDeep<typeof navigationGuardModule>;
     permissions: jest.MaybeMockedDeep<typeof permissionsModule>;
@@ -113,6 +118,7 @@ jest.mock('electron', (): FakeElectron => {
         declare static instances: FakeWindow[];
         declare static openWindows: FakeWindow[];
         declare static nextLoadResult: Promise<void> | null;
+        declare static nextConstructError: Error | null;
         declare opts: FakeWindow['opts'];
         declare handlers: FakeWindow['handlers'];
         declare onceHandlers: FakeWindow['onceHandlers'];
@@ -130,6 +136,11 @@ jest.mock('electron', (): FakeElectron => {
         declare close: FakeWindow['close'];
         declare focus: FakeWindow['focus'];
         constructor(opts: FakeWindow['opts']) {
+            if (BrowserWindow.nextConstructError) {
+                const error = BrowserWindow.nextConstructError;
+                BrowserWindow.nextConstructError = null;
+                throw error;
+            }
             this.opts = opts;
             this.handlers = {};
             this.onceHandlers = {};
@@ -161,6 +172,7 @@ jest.mock('electron', (): FakeElectron => {
     BrowserWindow.instances = windows;
     BrowserWindow.openWindows = [];
     BrowserWindow.nextLoadResult = null;
+    BrowserWindow.nextConstructError = null;
     return {
         app: {
             handlers: appHandlers,
@@ -202,7 +214,7 @@ jest.mock('../../src/ts/settings', () => ({
     __esModule: true,
     getWindowBounds: jest.fn((kind) => ({ width: 800, height: 600, x: kind === 'main' ? 10 : 20, y: 30 })),
     saveWindowBounds: jest.fn(),
-    loadSettings: jest.fn(() => ({})),
+    loadSettings: jest.fn(() => ({ app: { stayLoggedIn: false }, auth: { token: 't' } })),
     getSetting: jest.fn(() => false),
     setSetting: jest.fn(),
     getUserDataPath: jest.fn(() => '/tmp/userData'),
@@ -217,11 +229,17 @@ jest.mock('../../src/ts/services/AutoUpdater', () => ({
         setMainWindow: jest.fn(),
     })),
 }));
-jest.mock('../../src/ts/services/auth', () => ({ clearAuthToken: jest.fn(() => Promise.resolve()) }));
+jest.mock('../../src/ts/services/auth', () => {
+    class LogoutNotSavedError extends Error {}
+    return { clearAuthToken: jest.fn(() => Promise.resolve()), LogoutNotSavedError };
+});
 for (const mod of ['log', 'update', 'misc', 'settings', 'voting', 'actions', 'computations', 'currency', 'scenarios']) {
     jest.mock(`../../src/ts/ipc/${mod}.handlers`, () => ({ register: jest.fn() }));
 }
-jest.mock('../../src/ts/ipc/registerHandlers', () => ({ isTrustedSender: jest.fn(() => true) }));
+jest.mock('../../src/ts/ipc/registerHandlers', () => ({
+    isTrustedSender: jest.fn(() => true),
+    isChannelAllowedForSender: jest.fn(() => true),
+}));
 jest.mock('../../src/ts/windows/lifecycle', () => ({
     ensureExit: jest.fn(),
     focusExistingWindow: jest.fn(),
@@ -236,10 +254,22 @@ jest.mock('../../src/ts/windows/quitGuard', () => ({
     bypassQuitGuard: jest.fn(),
     resetQuitGuard: jest.fn(),
 }));
+jest.mock('../../src/ts/windows/suspendBoost', () => ({
+    // The real helper, run against the mocked settings above.
+    autovoteSessionLive: jest.requireActual<typeof suspendBoostModule>('../../src/ts/windows/suspendBoost')
+        .autovoteSessionLive,
+    applyImminentBoostsOnSuspend: jest.fn(() => Promise.resolve()),
+}));
 jest.mock('../../src/ts/ui/applicationMenu', () => ({ createApplicationMenu: jest.fn() }));
 jest.mock('../../src/ts/index/navigationGuard', () => ({ register: jest.fn() }));
+jest.mock('../../src/ts/index/session', () => ({
+    ...jest.requireActual<typeof sessionModule>('../../src/ts/index/session'),
+    removeStalePartitionData: jest.fn(),
+}));
 jest.mock('../../src/ts/index/permissions', () => ({ installPermissionHandlers: jest.fn() }));
-jest.mock('../../src/ts/translations/index', () => ({ translationManager: { t: (k: string) => k } }));
+jest.mock('../../src/ts/translations/index', () => ({
+    translationManager: { t: (k: string) => k, getCurrentLanguage: () => 'lv' },
+}));
 
 const originalPlatform = process.platform;
 const setPlatform = (p: NodeJS.Platform) =>
@@ -277,6 +307,7 @@ function load({ lock = true, whenReady }: { lock?: boolean; whenReady?: () => Pr
         watcher: require('../../src/ts/windows/settingsWatcher') as typeof settingsWatcherModule,
         bg: require('../../src/ts/windows/backgroundActivity') as typeof backgroundActivityModule,
         quitGuard: require('../../src/ts/windows/quitGuard') as typeof quitGuardModule,
+        suspendBoost: require('../../src/ts/windows/suspendBoost') as typeof suspendBoostModule,
         menu: require('../../src/ts/ui/applicationMenu') as typeof applicationMenuModule,
         navigationGuard: require('../../src/ts/index/navigationGuard') as typeof navigationGuardModule,
         permissions: require('../../src/ts/index/permissions') as typeof permissionsModule,
@@ -370,6 +401,19 @@ describe('module bootstrap', () => {
         expect(autoUpdaterInstance().setMainWindow).not.toHaveBeenCalled();
     });
 
+    it('clears stale on-disk session data only in the instance that holds the lock', async () => {
+        load();
+        const { removeStalePartitionData } = jest.mocked(require('../../src/ts/index/session') as typeof sessionModule);
+        expect(removeStalePartitionData).toHaveBeenCalledWith(m.settings.getUserDataPath);
+        await flush();
+
+        load({ lock: false });
+        expect(
+            jest.mocked(require('../../src/ts/index/session') as typeof sessionModule).removeStalePartitionData,
+        ).not.toHaveBeenCalled();
+        await flush();
+    });
+
     it('a losing second instance quits and never boots or registers second-instance', async () => {
         load({ lock: false });
         await flush();
@@ -382,7 +426,7 @@ describe('module bootstrap', () => {
         // before-quit is still registered, but told there is no lock.
         m.app.handlers['before-quit']({ preventDefault: jest.fn() });
         expect(m.lifecycle.clearTokenOnQuit).toHaveBeenCalledWith(false, m.settings);
-        // Nor does it ask about boosts — that would read the primary's settings.json.
+        // Nor does it ask about boosts — that would read the primary's config.json.
         expect(m.quitGuard.holdQuitForOpenBoosts).not.toHaveBeenCalled();
     });
 });
@@ -415,7 +459,7 @@ describe('startup (whenReady)', () => {
         // Prime the fresh registry's mocks before the entry point runs.
         jest.resetModules();
         const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
-        settings.loadSettings.mockReturnValue(invalid({ token: 't', stayLoggedIn: true }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { stayLoggedIn: true }, auth: { token: 't' } }));
         const AU = jest.mocked(
             require('../../src/ts/services/AutoUpdater') as typeof import('../../src/ts/services/AutoUpdater'),
         ).AutoUpdater;
@@ -443,7 +487,7 @@ describe('startup (whenReady)', () => {
     it('logs (and survives) a failing update check and a failing intent seed', async () => {
         jest.resetModules();
         const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
-        settings.loadSettings.mockReturnValue(invalid({ token: 't', stayLoggedIn: true }));
+        settings.loadSettings.mockReturnValue(invalid({ app: { stayLoggedIn: true }, auth: { token: 't' } }));
         const seedErr = new Error('seed');
         settings.seedIntentProfiles.mockImplementation(() => {
             throw seedErr;
@@ -530,9 +574,24 @@ describe('quit guard wiring', () => {
         expect(m.electron.powerMonitor.handlers.shutdown).toBe(m.quitGuard.bypassQuitGuard);
     });
 
+    it('a device sleep applies imminent boosts; auto-vote state is read by that module, not the listener', () => {
+        m.electron.powerMonitor.handlers.suspend();
+        expect(m.suspendBoost.applyImminentBoostsOnSuspend).toHaveBeenLastCalledWith();
+    });
+
+    it('a rejected sleep handler is caught and logged', async () => {
+        m.suspendBoost.applyImminentBoostsOnSuspend.mockRejectedValueOnce(new Error('boom'));
+        m.electron.powerMonitor.handlers.suspend();
+        await flush();
+        expect(m.cat.error).toHaveBeenCalledWith('Boost on sleep could not run: boom', null);
+    });
+
     it('before-quit asks first; a held quit neither clears the token nor force-exits', () => {
         m.ipcMain.handlers['login-success']({});
-        m.settings.getSetting.mockImplementation((key) => key === 'autovoteRunning');
+        m.settings.getSetting.mockImplementation((key) =>
+            key === 'autovoteStartedLaunch' ? 1 : key === 'autovoteRunning',
+        );
+        m.settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 1 }));
         m.quitGuard.holdQuitForOpenBoosts.mockReturnValueOnce(true);
         const event = { preventDefault: jest.fn() };
 
@@ -542,11 +601,31 @@ describe('quit guard wiring', () => {
         expect(heldEvent).toBe(event);
         expect(deps).toMatchObject({ autovoteRunning: true, dialog: m.electron.dialog, parent: mainWin() });
         expect(deps.t('quitGuard.title')).toBe('quitGuard.title');
+        // The dialog's times are written in the UI language.
+        expect(deps.locale).toBe('lv');
         expect(m.lifecycle.clearTokenOnQuit).not.toHaveBeenCalled();
         expect(m.lifecycle.ensureExit).not.toHaveBeenCalled();
 
         deps.proceed();
         expect(m.app.quit).toHaveBeenCalled();
+    });
+
+    it('the quit guard holds for a session started in this launch, not for a resume still held at launch', () => {
+        m.ipcMain.handlers['login-success']({});
+        m.settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 5000 }));
+        const sessionStartedBy = (launch: number) =>
+            m.settings.getSetting.mockImplementation((key) =>
+                key === 'autovoteStartedLaunch' ? launch : key === 'autovoteRunning',
+            );
+
+        sessionStartedBy(1000);
+        m.app.handlers['before-quit']({ preventDefault: jest.fn() });
+        expect(m.quitGuard.holdQuitForOpenBoosts.mock.calls[0][1].autovoteRunning).toBe(false);
+
+        m.quitGuard.holdQuitForOpenBoosts.mockClear();
+        sessionStartedBy(5000);
+        m.app.handlers['before-quit']({ preventDefault: jest.fn() });
+        expect(m.quitGuard.holdQuitForOpenBoosts.mock.calls[0][1].autovoteRunning).toBe(true);
     });
 
     it('closing the main window asks first, re-closes on confirm, and resets the guard once closed', () => {
@@ -587,8 +666,9 @@ describe('login window', () => {
             contextIsolation: true,
             sandbox: true,
             webSecurity: true,
-            partition: 'persist:gurushots',
+            partition: APP_PARTITION,
         });
+        expect(APP_PARTITION.startsWith('persist:')).toBe(false);
         expect(win.opts.webPreferences.preload).toMatch(/preload-bundle\.js$/);
     });
 
@@ -674,19 +754,17 @@ describe('main window', () => {
             expect(m.settings.saveWindowBounds).toHaveBeenCalledWith('main', win.bounds);
         });
 
-        it('passes live window state to the settings watcher and follows autovote changes', () => {
+        it('hands the settings watcher an observer that follows autovote changes', () => {
             const deps = m.watcher.watchSettingsFile.mock.calls[0][0];
             const win = mainWin()!;
-            expect(deps.getMainWindow()).toBe(win);
-            expect(typeof deps.getMainWindowCreatedTime()).toBe('number');
 
             m.bg.syncBackgroundActivity.mockClear();
-            deps.onSettingsChanged!(invalid({ autovoteRunning: true }));
-            deps.onSettingsChanged!(invalid({ autovoteRunning: 'yes' }));
+            deps.onSettingsChanged!(invalid({ app: { autovoteRunning: true } }));
+            deps.onSettingsChanged!(invalid({ app: { autovoteRunning: 'yes' } }));
             expect(m.bg.syncBackgroundActivity.mock.calls).toEqual([[true], [false]]);
 
             win.destroyed = true;
-            deps.onSettingsChanged!(invalid({ autovoteRunning: true }));
+            deps.onSettingsChanged!(invalid({ app: { autovoteRunning: true } }));
             expect(m.bg.syncBackgroundActivity).toHaveBeenCalledTimes(2);
         });
 
@@ -699,15 +777,15 @@ describe('main window', () => {
 
             expect(watcher.close).toHaveBeenCalled();
             expect(m.bg.syncBackgroundActivity).toHaveBeenCalledWith(false);
-            expect(deps.getMainWindow()).toBeNull();
 
-            deps.onSettingsChanged!(invalid({ autovoteRunning: true }));
+            deps.onSettingsChanged!(invalid({ app: { autovoteRunning: true } }));
             expect(m.bg.syncBackgroundActivity).toHaveBeenCalledTimes(1);
         });
 
         it('logs when the app page fails to load', async () => {
             const err = new Error('bad html');
             m.BrowserWindow.nextLoadResult = Promise.reject(err);
+            mainWin()!.handlers.closed();
             m.ipcMain.handlers['login-success']({});
             await flush();
             expect(m.cat.error).toHaveBeenCalledWith('Failed to load main window content:', err);
@@ -802,6 +880,15 @@ describe('login-success IPC', () => {
         expect(mainWin()).toBeUndefined();
     });
 
+    it('refuses the Logs window', () => {
+        m.registerHandlers.isChannelAllowedForSender.mockReturnValueOnce(false);
+        const event = { fromLogs: true };
+        m.ipcMain.handlers['login-success'](event);
+        expect(m.registerHandlers.isChannelAllowedForSender).toHaveBeenCalledWith(event, 'login-success');
+        expect(m.cat.warning).toHaveBeenCalledWith("Refused IPC 'login-success' from the Logs window", null);
+        expect(mainWin()).toBeUndefined();
+    });
+
     it('closes the login window (if any) and opens the main window', () => {
         const login = loginWin()!;
         m.ipcMain.handlers['login-success']({});
@@ -809,8 +896,35 @@ describe('login-success IPC', () => {
         expect(mainWin()).toBeDefined();
 
         login.handlers.closed();
+        mainWin()!.handlers.closed();
         m.ipcMain.handlers['login-success']({});
         expect(m.BrowserWindow.instances.filter((w) => w.file.endsWith('app.html'))).toHaveLength(2);
+    });
+
+    it('does nothing without a login token', () => {
+        m.settings.loadSettings.mockReturnValue(invalid({ auth: { token: '' } }));
+        const login = loginWin()!;
+        m.ipcMain.handlers['login-success']({});
+        expect(login.close).not.toHaveBeenCalled();
+        expect(mainWin()).toBeUndefined();
+        expect(m.cat.warning).toHaveBeenCalledWith(
+            "Ignored IPC 'login-success': no login token, or a main window is open",
+            null,
+        );
+    });
+
+    it('does nothing while a main window is open', () => {
+        m.ipcMain.handlers['login-success']({});
+        const main = mainWin()!;
+        const windowsBefore = m.BrowserWindow.instances.length;
+        const login = loginWin()!;
+        login.close.mockClear();
+
+        m.ipcMain.handlers['login-success']({});
+
+        expect(m.BrowserWindow.instances).toHaveLength(windowsBefore);
+        expect(login.close).not.toHaveBeenCalled();
+        expect(mainWin()).toBe(main);
     });
 });
 
@@ -824,6 +938,15 @@ describe('logout IPC', () => {
         m.registerHandlers.isTrustedSender.mockReturnValue(false);
         m.ipcMain.handlers.logout({});
         expect(m.cat.warning).toHaveBeenCalledWith("Refused IPC 'logout' from untrusted frame", null);
+        expect(m.auth.clearAuthToken).not.toHaveBeenCalled();
+    });
+
+    it('refuses the Logs window', () => {
+        m.registerHandlers.isChannelAllowedForSender.mockReturnValueOnce(false);
+        const event = { fromLogs: true };
+        m.ipcMain.handlers.logout(event);
+        expect(m.registerHandlers.isChannelAllowedForSender).toHaveBeenCalledWith(event, 'logout');
+        expect(m.cat.warning).toHaveBeenCalledWith("Refused IPC 'logout' from the Logs window", null);
         expect(m.auth.clearAuthToken).not.toHaveBeenCalled();
     });
 
@@ -864,6 +987,115 @@ describe('logout IPC', () => {
         expect(m.cat.error).toHaveBeenCalledWith('Logout failed to clear token', err);
         mainWin()!.onceHandlers.closed();
         expect(m.BrowserWindow.instances.filter((w) => w.file.endsWith('login.html'))).toHaveLength(loginsBefore + 1);
+    });
+
+    it('a logout the settings refused is told to the user and the main window stays', async () => {
+        m.ipcMain.handlers['login-success']({});
+        loginWin()!.handlers.closed();
+        const main = mainWin()!;
+        m.auth.clearAuthToken.mockRejectedValue(new m.auth.LogoutNotSavedError());
+        const loginsBefore = m.BrowserWindow.instances.filter((w) => w.file.endsWith('login.html')).length;
+
+        m.ipcMain.handlers.logout({});
+        await flush();
+
+        expect(m.electron.dialog.showMessageBox).toHaveBeenCalledWith(
+            main,
+            expect.objectContaining({ type: 'error', message: 'errors.logoutNotSavedTitle' }),
+        );
+        expect(main.close).not.toHaveBeenCalled();
+        expect(m.BrowserWindow.instances.filter((w) => w.file.endsWith('login.html'))).toHaveLength(loginsBefore);
+    });
+
+    it('a logout refused after the main window went away is still told, and the main window is opened again (the user is still logged in)', async () => {
+        m.ipcMain.handlers['login-success']({});
+        const main = mainWin()!;
+        m.auth.clearAuthToken.mockImplementation(() => {
+            main.destroyed = true;
+            return Promise.reject(new m.auth.LogoutNotSavedError());
+        });
+        const mainsBefore = m.BrowserWindow.instances.filter((w) => w.file.endsWith('app.html')).length;
+        const loginsBefore = m.BrowserWindow.instances.filter((w) => w.file.endsWith('login.html')).length;
+
+        m.ipcMain.handlers.logout({});
+        await flush();
+
+        // The window is opened first, and the dialog belongs to it.
+        const mains = m.BrowserWindow.instances.filter((w) => w.file.endsWith('app.html'));
+        expect(mains).toHaveLength(mainsBefore + 1);
+        expect(m.electron.dialog.showMessageBox).toHaveBeenCalledWith(
+            mains[mains.length - 1],
+            expect.objectContaining({ type: 'error', message: 'errors.logoutNotSavedTitle' }),
+        );
+        // Not the login form: the sign-in was not changed.
+        expect(m.BrowserWindow.instances.filter((w) => w.file.endsWith('login.html'))).toHaveLength(loginsBefore);
+    });
+
+    it('a logout refused when the main window is gone and cannot be opened again is still told, in a dialog of its own', async () => {
+        m.ipcMain.handlers['login-success']({});
+        const main = mainWin()!;
+        m.auth.clearAuthToken.mockImplementation(() => {
+            main.destroyed = true;
+            main.handlers.closed();
+            m.BrowserWindow.nextConstructError = new Error('no window');
+            return Promise.reject(new m.auth.LogoutNotSavedError());
+        });
+
+        m.ipcMain.handlers.logout({});
+        await flush();
+
+        expect(m.cat.error).toHaveBeenCalledWith('The main window could not be opened again', new Error('no window'));
+        expect(m.electron.dialog.showMessageBox).toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'error', message: 'errors.logoutNotSavedTitle' }),
+        );
+        expect(m.electron.dialog.showMessageBox.mock.calls.at(-1)).toHaveLength(1);
+    });
+
+    it('a logout refused with a main window that was destroyed and could not be opened again is told without a parent', async () => {
+        m.ipcMain.handlers['login-success']({});
+        const main = mainWin()!;
+        m.auth.clearAuthToken.mockImplementation(() => {
+            main.destroyed = true;
+            m.BrowserWindow.nextConstructError = new Error('no window');
+            return Promise.reject(new m.auth.LogoutNotSavedError());
+        });
+
+        m.ipcMain.handlers.logout({});
+        await flush();
+
+        expect(m.electron.dialog.showMessageBox.mock.calls.at(-1)).toHaveLength(1);
+    });
+
+    it('the dialog does not claim auto-vote is stopped while a session is live', async () => {
+        m.ipcMain.handlers['login-success']({});
+        m.settings.getSetting.mockImplementation((key) =>
+            key === 'autovoteStartedLaunch' ? 7 : key === 'autovoteRunning',
+        );
+        m.settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 7 }));
+        m.auth.clearAuthToken.mockRejectedValue(new m.auth.LogoutNotSavedError());
+
+        m.ipcMain.handlers.logout({});
+        await flush();
+
+        expect(m.electron.dialog.showMessageBox).toHaveBeenCalledWith(
+            mainWin(),
+            expect.objectContaining({ detail: 'errors.logoutNotSavedDetail' }),
+        );
+    });
+
+    it('the dialog says the sign-in was not changed, and that auto-vote is stopped when no session is live', async () => {
+        m.ipcMain.handlers['login-success']({});
+        m.auth.clearAuthToken.mockRejectedValue(new m.auth.LogoutNotSavedError());
+
+        m.ipcMain.handlers.logout({});
+        await flush();
+
+        expect(m.electron.dialog.showMessageBox).toHaveBeenCalledWith(
+            mainWin(),
+            expect.objectContaining({
+                detail: 'errors.logoutNotSavedDetail errors.logoutNotSavedStopped',
+            }),
+        );
     });
 
     it('if the main window was destroyed mid-logout, focuses the existing login window', async () => {

@@ -15,6 +15,7 @@ jest.mock('../../src/ts/services/votingOrchestrator', () => ({
 jest.mock('../../src/ts/services/joinChallenges', () => ({
     runJoinPass: jest.fn(async () => ({ ran: false, joined: 0, results: [] })),
     joinChallengeSingle: jest.fn(async () => ({ status: 'joined' })),
+    forgetUnconfirmedPayment: jest.fn(async () => ({ status: 'nothing-to-forget', challengeId: 1 })),
 }));
 jest.mock('../../src/ts/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
@@ -39,7 +40,7 @@ type TwoArgAutocomplete = (token: string | null, term: unknown) => Promise<strin
 const { runVotingPass } = jest.mocked(
     require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
-const { runJoinPass, joinChallengeSingle } = jest.mocked(
+const { runJoinPass, joinChallengeSingle, forgetUnconfirmedPayment } = jest.mocked(
     require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule,
 );
 const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
@@ -85,11 +86,16 @@ describe('no-token contract for every endpoint not covered elsewhere', () => {
     test.each([
         ['applyTurbo', () => mockApiClient.applyTurbo(1, 'img', invalid(null)), { ok: false, raw: null }],
         [
-            'runTurboMiniGame',
-            () => mockApiClient.runTurboMiniGame(invalid({ id: 1 }), invalid(null)),
-            { played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false },
+            'runTurboGame',
+            () => mockApiClient.runTurboGame(invalid({ id: 1 }), invalid(null)),
+            { kind: 'classic', played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false },
         ],
         ['getEligiblePhotos', () => mockApiClient.getEligiblePhotos(1, invalid(null)), []],
+        [
+            'getEligiblePhotosWalk',
+            () => mockApiClient.getEligiblePhotosWalk(1, invalid(null)),
+            { items: [], truncated: true },
+        ],
         ['getImageData', () => mockApiClient.getImageData('photo_old_008', invalid(null)), null],
         ['submitToChallenge', () => mockApiClient.submitToChallenge(1, ['a'], invalid(null)), { ok: false, raw: null }],
         ['getMemberChallenges', () => mockApiClient.getMemberChallenges(invalid(null), 'open'), []],
@@ -106,6 +112,11 @@ describe('no-token contract for every endpoint not covered elsewhere', () => {
             () => mockApiClient.joinChallenge(1, true, invalid(null)),
             { status: 'not-authenticated', challengeId: 1, cost: 0 },
         ],
+        [
+            'forgetUnconfirmedPayment',
+            () => mockApiClient.forgetUnconfirmedPayment(1, invalid(null)),
+            { status: 'not-authenticated', challengeId: 1 },
+        ],
     ])('%s resolves its failure shape and logs the auth error', async (_name, call, expected) => {
         await expect(call()).resolves.toEqual(expected);
         expect(cat.error).toHaveBeenCalledWith(expect.stringMatching(/^No token provided/), null);
@@ -121,22 +132,36 @@ describe('turbo', () => {
         expect(cat.debug).toHaveBeenCalledWith('Image ID: img', null);
     });
 
-    test('runTurboMiniGame reports one won battle', async () => {
-        await expect(settle(mockApiClient.runTurboMiniGame(invalid({ id: 5 }), 'tok'))).resolves.toEqual({
+    test('runTurboGame reports a won Snap game for a Snap challenge', async () => {
+        await expect(
+            settle(mockApiClient.runTurboGame(invalid({ id: 5, member: { turbo: { mode: 'snap' } } }), 'tok')),
+        ).resolves.toEqual({
+            kind: 'snap',
+            answered: 10,
+            total: 10,
+            meanAgreement: 72,
+            won: true,
+            stopReason: 'completed',
+        });
+    });
+
+    test('runTurboGame reports one won battle for a classic challenge', async () => {
+        await expect(settle(mockApiClient.runTurboGame(invalid({ id: 5 }), 'tok'))).resolves.toEqual({
+            kind: 'classic',
             played: 1,
             correct: 1,
             flipped: 0,
             doubleFailed: 0,
             won: true,
         });
-        expect(cat.api).toHaveBeenCalledWith('Mock runTurboMiniGame', null);
+        expect(cat.api).toHaveBeenCalledWith('Mock runTurboGame', null);
     });
 });
 
 describe('getEligiblePhotos', () => {
     test('with no options returns the whole library', async () => {
         const items = await settle(mockApiClient.getEligiblePhotos(1, 'tok'));
-        expect(items).toHaveLength(8);
+        expect(items).toHaveLength(9);
     });
 
     test('a search is an EXACT tag match, like the live endpoint', async () => {
@@ -147,7 +172,41 @@ describe('getEligiblePhotos', () => {
     });
 
     test('a non-string search is ignored', async () => {
-        expect(await settle(mockApiClient.getEligiblePhotos(1, 'tok', invalid({ search: 42 })))).toHaveLength(8);
+        expect(await settle(mockApiClient.getEligiblePhotos(1, 'tok', invalid({ search: 42 })))).toHaveLength(9);
+    });
+});
+
+describe('getEligiblePhotosWalk', () => {
+    test('reads the whole mock library in one complete walk', async () => {
+        const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok'));
+        expect(walk.items).toHaveLength(9);
+        expect(walk.truncated).toBe(false);
+        // Without a `skip` nothing is reported as left out.
+        expect(walk).not.toHaveProperty('skipped');
+    });
+
+    test('with a skip the photos it names are left out of the items and reported by id', async () => {
+        const walk = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', {
+                skip: (photo) =>
+                    photo.permission?.allowed === false && /won a challenge/.test(String(photo.permission.message)),
+            }),
+        );
+        expect(walk.items.map((p) => p.id)).not.toContain('photo_won_009');
+        expect(walk.items).toHaveLength(8);
+        expect(walk.skipped).toEqual(['photo_won_009']);
+        expect(walk.truncated).toBe(false);
+        const searched = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', { search: 'Trophy', skip: () => true }),
+        );
+        expect(searched).toEqual({ items: [], truncated: false, skipped: ['photo_won_009'] });
+    });
+
+    test('a search is the same exact tag match as the paged read; a non-string search is ignored', async () => {
+        const exact = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { search: ' Flower ' }));
+        expect(exact.items.map((p) => p.id)).toEqual(['photo_pink_flower_001', 'photo_blocked_007']);
+        const ignored = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', invalid({ search: 42 })));
+        expect(ignored.items).toHaveLength(9);
     });
 });
 
@@ -198,7 +257,7 @@ describe('submitToChallenge', () => {
 
 describe('join endpoints', () => {
     test('getMemberChallenges returns the five fixtures with epoch-second timing', async () => {
-        const list = await settle(mockApiClient.getMemberChallenges('tok', 'open'));
+        const list = (await settle(mockApiClient.getMemberChallenges('tok', 'open'))) ?? [];
         expect(list.map((c) => c.id)).toEqual([900001, 900002, 900003, 900004, 900005]);
         const nowSec = Math.floor(Date.now() / 1000);
         list.forEach((c) => {
@@ -206,6 +265,25 @@ describe('join endpoints', () => {
             expect(c.start_time).toBeLessThan(nowSec);
         });
         expect(cat.debug).toHaveBeenCalledWith('Filter: open', null);
+    });
+
+    test('getMemberChallenges branches on the filter: upcoming has its own fixtures, not started yet', async () => {
+        const list = (await settle(mockApiClient.getMemberChallenges('tok', 'upcoming'))) ?? [];
+        expect(list.map((c) => c.id)).toEqual([900101, 900102, 900103]);
+        const nowSec = Math.floor(Date.now() / 1000);
+        list.forEach((c) => {
+            expect(c.status).toBe('upcoming');
+            expect(c.start_time).toBeGreaterThan(nowSec);
+            expect(c.close_time).toBeGreaterThan(c.start_time);
+        });
+        // A free one and a paid one inside the default 24 h window, one beyond it.
+        expect(list.map((c) => c.join_coins)).toEqual([0, 150, 100]);
+        expect(list[1].start_time - nowSec).toBeLessThanOrEqual(24 * 3600);
+        expect(list[2].start_time - nowSec).toBeGreaterThan(24 * 3600);
+        expect(cat.debug).toHaveBeenCalledWith('Filter: upcoming', null);
+        // No id is shared with the open fixtures.
+        const open = (await settle(mockApiClient.getMemberChallenges('tok', 'open'))) ?? [];
+        expect(open.some((c) => list.some((u) => u.id === c.id))).toBe(false);
     });
 
     test('getBankroll returns the flat balance shape', async () => {
@@ -251,6 +329,26 @@ describe('join endpoints', () => {
         expect(cat.debug).toHaveBeenCalledWith('Join challenge ID: 900002, spendCoins: true', null);
     });
 
+    test('forgetUnconfirmedPayment runs the shared service over the mock endpoints, whose join-state store is null', async () => {
+        await expect(mockApiClient.forgetUnconfirmedPayment(900002, 'tok')).resolves.toEqual({
+            status: 'nothing-to-forget',
+            challengeId: 1,
+        });
+        expect(forgetUnconfirmedPayment).toHaveBeenCalledWith(
+            900002,
+            'tok',
+            expect.objectContaining({ joinStateStore: null }),
+        );
+    });
+
+    test('joinChallenge passes the confirmed cost on to the shared service', async () => {
+        await mockApiClient.joinChallenge(900002, true, 'tok', 100);
+        expect(joinChallengeSingle).toHaveBeenLastCalledWith(900002, 'tok', expect.any(Object), {
+            spendCoins: true,
+            expectedCost: 100,
+        });
+    });
+
     test('joinChallenge treats anything but a literal true as "do not spend"', async () => {
         await mockApiClient.joinChallenge(900002, invalid('yes'), 'tok');
         expect(joinChallengeSingle).toHaveBeenCalledWith(900002, 'tok', expect.any(Object), { spendCoins: false });
@@ -271,51 +369,23 @@ describe('searchTagAutocomplete', () => {
     });
 });
 
-describe('submitVotes — metadata bookkeeping', () => {
+describe('submitVotes — no vote metadata', () => {
     const images = [{ id: 'i1' }];
 
-    test('records the ORIGINAL exposure for the challenge after a successful mock vote', async () => {
-        await settle(
-            mockApiClient.submitVotes(
-                { images, challenge: invalid({ id: 31 }), voting: { exposure: { exposure_factor: 42.4 } } },
-                'tok',
-                80,
-            ),
-        );
-        expect(metadata.updateChallengeVoteMetadata).toHaveBeenCalledWith('31', 42);
-        expect(cat.debug).toHaveBeenCalledWith('Exposure threshold: 80', null);
-        expect(cat.success).toHaveBeenCalledWith(
-            'Mock metadata updated for challenge 31: original exposure 42%',
-            null,
-            null,
-        );
-    });
-
-    test('defaults the original exposure to 50% when the payload has none', async () => {
-        await settle(mockApiClient.submitVotes(invalid({ images, challenge: { id: 32 } }), 'tok'));
-        expect(metadata.updateChallengeVoteMetadata).toHaveBeenCalledWith('32', 50);
-    });
-
-    test('a failed metadata write is a warning, the vote still succeeds', async () => {
-        metadata.updateChallengeVoteMetadata.mockReturnValueOnce(false);
-        const res = await settle(mockApiClient.submitVotes(invalid({ images, challenge: { id: 33 } }), 'tok'));
-        expect(res).toEqual(expect.objectContaining({ success: true }));
-        expect(cat.warning).toHaveBeenCalledWith('Failed to update mock metadata for challenge 33', null);
-    });
-
-    test('a throwing metadata write is logged, the vote still succeeds', async () => {
-        metadata.updateChallengeVoteMetadata.mockImplementationOnce(() => {
-            throw new Error('disk');
-        });
-        const res = await settle(mockApiClient.submitVotes(invalid({ images, challenge: { id: 34 } }), 'tok'));
-        expect(res).toEqual(expect.objectContaining({ success: true }));
-        expect(cat.error).toHaveBeenCalledWith('Error updating mock metadata: disk', null);
-    });
-
-    test.each([[undefined], [{}]])('no challenge id (%p) → no metadata write', async (challenge) => {
-        await settle(mockApiClient.submitVotes(invalid({ images, challenge }), 'tok'));
-        expect(metadata.updateChallengeVoteMetadata).not.toHaveBeenCalled();
-    });
+    test.each([
+        ['a challenge with its pre-vote exposure', { id: 31 }, { exposure: { exposure_factor: 42.4 } }],
+        ['a challenge without one', { id: 32 }, undefined],
+        ['no challenge', undefined, undefined],
+    ])(
+        'a successful mock vote for %s writes no metadata, the real metadata.json included',
+        async (_name, challenge, voting) => {
+            await settle(mockApiClient.submitVotes(invalid({ images, challenge, voting }), 'tok', 80));
+            expect(metadata.updateChallengeVoteMetadata).not.toHaveBeenCalled();
+            expect(cat.debug).toHaveBeenCalledWith('Exposure threshold: 80', null);
+            expect(cat.info).toHaveBeenCalledWith('Submitting mock votes successfully', null);
+            expect(cat.success).not.toHaveBeenCalled();
+        },
+    );
 
     test('a payload without an images list is logged as 0 and rejected', async () => {
         await expect(settle(mockApiClient.submitVotes(invalid({}), 'tok'))).rejects.toEqual(
@@ -344,7 +414,7 @@ describe('fetchChallengesAndVote — join pre-step', () => {
     });
 
     test('reads the missions over the mock endpoint and hands the same needs to the join pass and the vote', async () => {
-        const needs = { join: 1, fill: 0, turbo: 2, vote: 0 };
+        const needs = { join: 1, fill: 0, turbo: 2, boost: 0, vote: 0 };
         loadMissionNeeds.mockResolvedValueOnce(needs);
         const unregister = jest.fn();
         registerMissionNeeds.mockReturnValueOnce(unregister);
@@ -363,8 +433,8 @@ describe('fetchChallengesAndVote — join pre-step', () => {
         const original = Object.getOwnPropertyDescriptor(globalThis, '__GS_HEADLESS__');
         Object.assign(globalThis, { __GS_HEADLESS__: true });
         loadMissionNeeds
-            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1, vote: 0 })
-            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0, vote: 0 });
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 })
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 });
         try {
             await mockApiClient.fetchChallengesAndVote('tok');
             const refresh = runVotingPass.mock.calls.at(-1)![2].refreshMissionNeeds;

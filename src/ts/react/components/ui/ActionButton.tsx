@@ -1,15 +1,22 @@
+import { ICON_PATHS, StrokeIcon } from './StrokeIcon';
+
 import type { ComponentChildren, JSX } from 'preact';
+
 const VARIANT_CLASSES = {
-    accent: 'btn-accent',
-    info: 'btn-info',
+    neutral: 'btn-neutral',
     success: 'btn-success',
     warning: 'btn-warning',
+    cost: 'btn-latvian',
+    // No colour class: the caller supplies `btn-outline`, which daisyUI draws in `base-content` (border and label).
+    plain: '',
 };
 
 export type ActionButtonVariant = keyof typeof VARIANT_CLASSES;
 
 /**
- * Small DaisyUI action button that shows the error variant after a failed action.
+ * Small DaisyUI action button that shows the error variant after a failed action: solid `btn-error` (outline would
+ * paint the label in the raw error colour) behind an error icon, so it no longer reads like the idle solid-red
+ * `btn-latvian` once colour is set aside.
  * Every other prop passes straight through to the <button>.
  *
  * @param props - `error` is truthy after a failed action (the value itself is not rendered).
@@ -26,10 +33,20 @@ export function ActionButton({
     className?: string;
     children?: ComponentChildren;
 }) {
-    const classes = ['btn', 'btn-sm', error ? 'btn-error' : VARIANT_CLASSES[variant], className];
+    const classes = [
+        'btn',
+        'btn-sm',
+        'h-auto',
+        'min-h-8',
+        'py-1',
+        'leading-tight',
+        error ? 'btn-error' : VARIANT_CLASSES[variant],
+        className,
+    ];
 
     return (
         <button className={classes.filter(Boolean).join(' ')} {...buttonProps}>
+            {error ? <StrokeIcon d={ICON_PATHS.xCircle} className="w-4 h-4 shrink-0" /> : null}
             {children}
         </button>
     );

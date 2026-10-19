@@ -56,7 +56,14 @@ const makeApi = (challenge: Challenge) => ({
     applyTurbo: jest.fn(async () => ({ ok: true })),
     getEligiblePhotos: jest.fn(async () => []),
     submitToChallenge: jest.fn(async () => ({ ok: true })),
-    runTurboMiniGame: jest.fn(async () => ({ played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false })),
+    runTurboGame: jest.fn(async () => ({
+        kind: 'classic',
+        played: 0,
+        correct: 0,
+        flipped: 0,
+        doubleFailed: 0,
+        won: false,
+    })),
 });
 
 const SETTING_DEFAULTS = {
@@ -74,14 +81,14 @@ const SETTING_DEFAULTS = {
     scheduledFillTime: [],
     scheduledFillBeforeEnd: [],
     scheduledFillWindowMinutes: 60,
-    autoFill: false,
-    autoFillSchedule: [],
-    emergencyFill: 0,
+    autoSubmit: false,
+    autoSubmitSchedule: [],
+    emergencySubmit: 0,
     autoBoost: false,
     useTurbo: false,
     autoTurbo: false,
-    boostFillNew: false,
-    turboFillNew: false,
+    boostNewSubmit: false,
+    turboNewSubmit: false,
     boostTime: 3600,
     turboTime: 3600,
     timezone: 'UTC',
@@ -213,7 +220,7 @@ describe('vote mission through the real rule engine', () => {
     const runMission = (api: ReturnType<typeof makeMissionApi>) =>
         runVotingPass('tok', null, {
             ...deps(api, createMemoryEntryTracker()),
-            missions: { join: 0, fill: 0, turbo: 0, vote: 40 },
+            missions: { join: 0, fill: 0, turbo: 0, boost: 0, vote: 40 },
         });
 
     test('onlyBoost is a hard block: no mission vote, and it takes no share of the split', async () => {

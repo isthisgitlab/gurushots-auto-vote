@@ -80,3 +80,42 @@ describe('renderer translation keys exist', () => {
         expect(missing).toEqual([]);
     });
 });
+
+describe('a chip whose accessible name starts with the text it shows (WCAG 2.5.3 label in name)', () => {
+    const fill = (template: string) => template.replace('{count}', '3').replace('{title}', 'T');
+    test.each([
+        ['english', english.app],
+        ['latvian', latvian.app],
+    ])('%s: the own-list and other-account chips', (_language, app) => {
+        expect(fill(app.discoverChosenChipLabel).startsWith(fill(app.discoverChosenChip))).toBe(true);
+        expect(fill(app.discoverChosenForeignLabel).startsWith(fill(app.discoverChosenForeignChip))).toBe(true);
+    });
+});
+
+describe('the chooser is named as the chooser, not as "this window" (the app has other windows)', () => {
+    const keys = [
+        'photoChooserSaveNoContextHeld',
+        'photoChooserSaveNotLoggedIn',
+        'photoChooserSaveUnconfirmed',
+    ] as const;
+    test.each(keys)('%s: English says "the chooser", Latvian names the dialog by its title', (key) => {
+        expect(english.app[key]).not.toMatch(/this window/i);
+        expect(english.app[key]).toMatch(/the chooser/);
+        expect(latvian.app[key]).not.toMatch(/šo logu/i);
+        // „Izvēlēties foto” is the dialog's own title (photoChooserTitle).
+        expect(latvian.app[key]).toContain(`„${latvian.app.photoChooserTitle}”`);
+    });
+});
+
+describe('the import date sentence ends in one full stop', () => {
+    // lv-LV writes a date with its own trailing full stop ("16.10.2026."), so the Latvian sentence must not add another.
+    test.each([
+        ['en-GB', english.about.importAt],
+        ['lv-LV', latvian.about.importAt],
+    ])('%s: the sentence after the date ends in a single full stop', (locale, sentence) => {
+        const date = new Date('2026-10-16T03:18:00Z').toLocaleDateString(locale);
+        const text = sentence.replace('{date}', date);
+        expect(text.endsWith('.')).toBe(true);
+        expect(text.endsWith('..')).toBe(false);
+    });
+});

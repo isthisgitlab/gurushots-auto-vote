@@ -5,16 +5,18 @@
  */
 
 import type * as joinModule from '../../src/ts/api/join';
+import { invalid } from '../helpers/invalid';
 import type * as api_clientModule from '../../src/ts/api/api-client';
 
 const { getMemberChallenges, coinsUnlock, getBankroll } = require('../../src/ts/api/join') as typeof joinModule;
 
 jest.mock('../../src/ts/api/api-client', () => ({
     makePostRequest: jest.fn(),
+    postOnce: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
+const { makePostRequest, postOnce } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
 const token = 'tok-123';
 
 beforeEach(() => jest.clearAllMocks());
@@ -32,31 +34,54 @@ describe('getMemberChallenges', () => {
 
     test('encodes the filter value (no form-field injection)', async () => {
         makePostRequest.mockResolvedValueOnce({ items: [] });
-        await getMemberChallenges(token, 'a&b=c');
+        await getMemberChallenges(token, invalid<joinModule.MemberChallengesFilter>('a&b=c'));
         expect(makePostRequest.mock.calls[0][2]).toBe('filter=a%26b%3Dc');
     });
 
-    test('returns [] on null / malformed payload', async () => {
+    test('asks for the upcoming ones with filter=upcoming', async () => {
+        makePostRequest.mockResolvedValueOnce({ items: [{ id: 9, status: 'upcoming' }] });
+        expect(await getMemberChallenges(token, 'upcoming')).toEqual([{ id: 9, status: 'upcoming' }]);
+        expect(makePostRequest.mock.calls[0][2]).toBe('filter=upcoming');
+    });
+
+    test('an empty list is an answer, not a failure', async () => {
+        makePostRequest.mockResolvedValueOnce({ items: [] });
+        expect(await getMemberChallenges(token)).toEqual([]);
+    });
+
+    test('returns null on a failed request or a malformed payload', async () => {
         makePostRequest.mockResolvedValueOnce(null);
-        expect(await getMemberChallenges(token)).toEqual([]);
+        expect(await getMemberChallenges(token)).toBeNull();
         makePostRequest.mockResolvedValueOnce({ nope: true });
-        expect(await getMemberChallenges(token)).toEqual([]);
+        expect(await getMemberChallenges(token)).toBeNull();
     });
 });
 
 describe('coinsUnlock', () => {
     test('posts encoded challenge_id + usage and maps success', async () => {
-        makePostRequest.mockResolvedValueOnce({ success: true });
+        postOnce.mockResolvedValueOnce({ kind: 'body', body: { success: true } });
         const res = await coinsUnlock('13 39', token);
-        expect(makePostRequest.mock.calls[0][2]).toBe('challenge_id=13%2039&usage=JOIN_CHALLENGE');
+        expect(postOnce.mock.calls[0][2]).toBe('challenge_id=13%2039&usage=JOIN_CHALLENGE');
         expect(res).toEqual({ ok: true, raw: { success: true } });
     });
 
-    test('ok:false on success:false and on null', async () => {
-        makePostRequest.mockResolvedValueOnce({ success: false });
-        expect((await coinsUnlock(1, token)).ok).toBe(false);
-        makePostRequest.mockResolvedValueOnce(null);
+    test('is a single attempt that tells a refusal from an unclear answer: a retried timeout could charge twice', async () => {
+        postOnce.mockResolvedValueOnce({ kind: 'body', body: { success: false } });
+        expect(await coinsUnlock(1, token)).toEqual({ ok: false, raw: { success: false } });
+        postOnce.mockResolvedValueOnce({ kind: 'refused' });
         expect(await coinsUnlock(1, token)).toEqual({ ok: false, raw: null });
+        postOnce.mockResolvedValueOnce({ kind: 'unclear' });
+        expect(await coinsUnlock(1, token)).toEqual({ ok: false, raw: null, unclear: true });
+        expect(makePostRequest).not.toHaveBeenCalled();
+    });
+});
+
+describe('reads keep the default retry', () => {
+    test('getMemberChallenges and getBankroll pass no per-call options', async () => {
+        makePostRequest.mockResolvedValue({ items: [], bankroll: { challenges: [] } });
+        await getMemberChallenges(token);
+        await getBankroll(token);
+        expect(makePostRequest.mock.calls.map((call) => call.length)).toEqual([3, 3]);
     });
 });
 

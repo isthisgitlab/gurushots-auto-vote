@@ -30,11 +30,35 @@ class FakeEventSource {
 }
 
 const g = globalThis as typeof globalThis & { api?: object };
-const saved = { fetch: g.fetch, EventSource: g.EventSource, location: g.location, open: g.open };
+const saved = {
+    fetch: g.fetch,
+    EventSource: g.EventSource,
+    location: g.location,
+    history: g.history,
+    open: g.open,
+};
+const savedSessionStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+
+/** The tab's sessionStorage, as a map the tests can read and prefill. */
+const tabStore = new Map<string, string>();
+const fakeSessionStorage = invalid({
+    getItem: (key: string) => tabStore.get(key) ?? null,
+    setItem: (key: string, value: string) => void tabStore.set(key, value),
+    removeItem: (key: string) => void tabStore.delete(key),
+});
+const stubSessionStorage = (value: unknown) =>
+    Object.defineProperty(globalThis, 'sessionStorage', { value, configurable: true, writable: true });
 
 const mockFetch = jest.fn<Promise<FetchReply>, [string, RequestInit]>();
 const mockOpen = jest.fn();
 const mockReload = jest.fn();
+const mockReplaceState = jest.fn();
+const TOKEN = 'a1b2c3';
+
+/** The page's location the bridge reads: the launch URL's fragment carries the token. */
+const stubLocation = (hash: string) => {
+    g.location = invalid({ reload: mockReload, hash, pathname: '/', search: '?lang=lv' });
+};
 
 const reply = (status: number, body: unknown): FetchReply => ({
     ok: status >= 200 && status < 300,
@@ -46,13 +70,17 @@ let bridge: typeof bridgeModule;
 let api: WindowApi;
 
 beforeEach(() => {
+    tabStore.clear();
+    stubSessionStorage(fakeSessionStorage);
     FakeEventSource.instances = [];
     mockFetch.mockReset().mockResolvedValue(reply(200, { result: { success: true } }));
     mockOpen.mockReset();
     mockReload.mockReset();
+    mockReplaceState.mockReset();
     g.fetch = invalid(mockFetch);
     g.EventSource = invalid(FakeEventSource);
-    g.location = invalid({ reload: mockReload });
+    stubLocation(`#t=${TOKEN}`);
+    g.history = invalid({ replaceState: mockReplaceState });
     g.open = mockOpen;
     jest.resetModules();
     bridge = require('../../src/ts/bridge/web') as typeof bridgeModule;
@@ -60,7 +88,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    delete (g as { webShell?: true }).webShell;
     Object.assign(g, saved);
+    if (savedSessionStorage) Object.defineProperty(globalThis, 'sessionStorage', savedSessionStorage);
+    else Reflect.deleteProperty(globalThis, 'sessionStorage');
     delete g.api;
 });
 
@@ -74,9 +105,13 @@ describe('web bridge — invoke', () => {
         await expect(api.getSetting('theme')).resolves.toBe('dark');
         expect(mockFetch).toHaveBeenCalledWith('/api/invoke/get-setting', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-web-shell-token': TOKEN },
             body: JSON.stringify({ args: ['theme'], undefinedAt: [] }),
         });
+    });
+
+    test('marks the page as the web shell', () => {
+        expect((g as { webShell?: true }).webShell).toBe(true);
     });
 
     test('undefined arguments travel as null plus their positions', async () => {
@@ -108,6 +143,107 @@ describe('web bridge — invoke', () => {
     });
 });
 
+describe('web bridge — access token', () => {
+    const reinstall = (hash: string) => {
+        stubLocation(hash);
+        mockReplaceState.mockReset();
+        jest.resetModules();
+        bridge = require('../../src/ts/bridge/web') as typeof bridgeModule;
+        return bridge.installWebBridge();
+    };
+    const sentHeaders = () => mockFetch.mock.calls[0][1].headers as Record<string, string>;
+
+    test('the launch URL fragment is read once and taken out of the address bar', () => {
+        expect(mockReplaceState).toHaveBeenCalledTimes(1);
+        expect(mockReplaceState).toHaveBeenCalledWith(null, '', '/?lang=lv');
+    });
+
+    test('every request sends it as a header, the event stream as a query parameter', async () => {
+        await api.guiVote();
+        await api.logout();
+        expect(sentHeaders()['x-web-shell-token']).toBe(TOKEN);
+        expect((mockFetch.mock.calls[1][1].headers as Record<string, string>)['x-web-shell-token']).toBe(TOKEN);
+
+        const other = reinstall('#t=a%20b&x=1');
+        other.onSettingsChanged(jest.fn());
+        expect(FakeEventSource.instances[0].url).toBe('/api/events?t=a%20b');
+    });
+
+    test('a page opened without the fragment or a kept token sends an empty token', async () => {
+        tabStore.clear();
+        const bare = reinstall('');
+        await bare.guiVote();
+        expect(sentHeaders()['x-web-shell-token']).toBe('');
+    });
+
+    test('the token from the fragment is kept for the tab', () => {
+        expect(tabStore.get('web-shell-token')).toBe(TOKEN);
+    });
+
+    test('a reload without the fragment (F5) uses the token the tab kept, and keeps the address bar clean', async () => {
+        const reloaded = reinstall('');
+        await reloaded.guiVote();
+        expect(sentHeaders()['x-web-shell-token']).toBe(TOKEN);
+        expect(mockReplaceState).toHaveBeenCalledWith(null, '', '/?lang=lv');
+    });
+
+    test('a new fragment replaces the token the tab kept', async () => {
+        const fresh = reinstall('#t=newrun');
+        await fresh.guiVote();
+        expect(sentHeaders()['x-web-shell-token']).toBe('newrun');
+        expect(tabStore.get('web-shell-token')).toBe('newrun');
+    });
+
+    test('a browser that refuses sessionStorage still works from the fragment, in memory only', async () => {
+        const refuse = () => {
+            throw new Error('denied');
+        };
+        stubSessionStorage(invalid({ getItem: refuse, setItem: refuse, removeItem: refuse }));
+        const guarded = reinstall(`#t=${TOKEN}`);
+        await guarded.guiVote();
+        expect(sentHeaders()['x-web-shell-token']).toBe(TOKEN);
+        mockFetch.mockResolvedValueOnce(reply(403, { error: 'web-shell-token' }));
+        await expect(guarded.guiVote()).rejects.toThrow('web-shell-token');
+        const bare = reinstall('');
+        await bare.guiVote();
+        expect(mockFetch.mock.calls.at(-1)![1].headers).toEqual(expect.objectContaining({ 'x-web-shell-token': '' }));
+    });
+
+    test('the kept token is removed when the server refuses it, and only then', async () => {
+        mockFetch.mockResolvedValueOnce(reply(500, { error: 'vote exploded' }));
+        await expect(api.guiVote()).rejects.toThrow('vote exploded');
+        expect(tabStore.get('web-shell-token')).toBe(TOKEN);
+
+        mockFetch.mockResolvedValueOnce(reply(403, { error: 'web-shell-token' }));
+        await expect(api.guiVote()).rejects.toThrow('web-shell-token');
+        expect(tabStore.has('web-shell-token')).toBe(false);
+    });
+
+    test('a logout keeps the token: a reload after logout and a new login still carries it', async () => {
+        await api.logout();
+        expect(tabStore.get('web-shell-token')).toBe(TOKEN);
+
+        api.login();
+        const reloaded = reinstall('');
+        await reloaded.guiVote();
+        expect(sentHeaders()['x-web-shell-token']).toBe(TOKEN);
+    });
+
+    test('a runtime with no sessionStorage works the same', async () => {
+        stubSessionStorage(undefined);
+        const bare = reinstall(`#t=${TOKEN}`);
+        await bare.guiVote();
+        expect(sentHeaders()['x-web-shell-token']).toBe(TOKEN);
+    });
+
+    test('a reload only reloads the page: the tab keeps the token, so the address bar is not touched', async () => {
+        mockReplaceState.mockClear();
+        await api.reloadWindow();
+        expect(mockReplaceState).not.toHaveBeenCalled();
+        expect(mockReload).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe('web bridge — events', () => {
     test('one EventSource feeds every subscriber of a channel until it unsubscribes', () => {
         const a = jest.fn();
@@ -118,7 +254,7 @@ describe('web bridge — events', () => {
         api.onLogMessage(logs);
         expect(FakeEventSource.instances).toHaveLength(1);
         const [source] = FakeEventSource.instances;
-        expect(source.url).toBe('/api/events');
+        expect(source.url).toBe(`/api/events?t=${TOKEN}`);
 
         source.fire('settings-changed', { theme: 'dark' });
         expect(a).toHaveBeenCalledWith({ theme: 'dark' });
@@ -144,6 +280,18 @@ describe('web bridge — login / logout', () => {
         api.login();
         expect(heard).toHaveBeenCalledTimes(1);
         expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    test('a logout the settings refused does not log out: no event, and the caller is told', async () => {
+        const heard = jest.fn();
+        bridge.onShellEvent('logout', heard);
+        mockFetch.mockResolvedValueOnce(
+            invalid({ ok: true, json: async () => ({ result: { success: false, error: 'logout-not-saved' } }) }),
+        );
+
+        await expect(api.logout()).rejects.toThrow('logout-not-saved');
+
+        expect(heard).not.toHaveBeenCalled();
     });
 
     test('logout clears the token on the server, then emits even if that fails', async () => {

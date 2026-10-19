@@ -11,6 +11,15 @@ import type { Challenge } from '../../types/gurushots';
 import type { ChallengeValues, TitleRule } from '../../types/settings';
 import { cat } from './shared';
 
+// The only join settings that read the per-id override layer (see resolveJoinSetting). The settings cleanup keeps the
+// per-id entries of the same keys (JOIN_KEPT_KEYS in settings/staleChallengeCleanup.ts); a test pins the two equal.
+const PER_ID_JOIN_KEYS: ReadonlySet<string> = new Set([
+    'chosenPhotos',
+    'chosenPhotosOnly',
+    'chosenPhotosInOrder',
+    'manualPhotosOnly',
+]);
+
 /**
  * Resolve one setting for an un-joined candidate. The id-keyed
  * getEffectiveSetting(key, id) cannot see a rule for a challenge the user has
@@ -18,11 +27,20 @@ import { cat } from './shared';
  * match the rules against the candidate payload itself and fall back to the
  * global default.
  *
- * Precedence: rules in list order, the first matching rule that sets the key
+ * Precedence (the chosen-photos keys and manualPhotosOnly only: the candidate's own
+ * per-id override first, then the same chain): rules in list order, the first matching rule that sets the key
  * wins — a rule's inline override before the profile it names — then the
  * global default. See `ruleValuesFor` in settings/ruleResolution.ts.
  */
-const resolveJoinSetting = (key: string, challenge: Challenge): unknown => {
+const resolveJoinSetting = (key: string, challenge: Partial<Challenge>): unknown => {
+    // The chosen-photos keys and manualPhotosOnly also honour an override saved for THIS id: an
+    // un-joined challenge has no cached id for getEffectiveSetting, yet the
+    // Discover view saves the user's choice per challenge id. Every other key
+    // keeps resolving by rule alone.
+    if (PER_ID_JOIN_KEYS.has(key) && challenge?.id !== undefined && challenge?.id !== null) {
+        const own = settings.getChallengeOverride?.(key, String(challenge.id));
+        if (own !== null && own !== undefined) return own;
+    }
     // Pass the whole candidate, never just its title: a rule may be keyed on the
     // challenge's own tags, type, photo count or runtime, and an un-joined
     // candidate carries them. Optional-chained like every other per-challenge
@@ -159,6 +177,7 @@ const warnMissingCloseTime = (challenge: Challenge, reason: string) => {
 };
 
 export {
+    PER_ID_JOIN_KEYS,
     resolveJoinSetting,
     anyTitleRuleEnablesAutoJoin,
     isAutoJoinActive,

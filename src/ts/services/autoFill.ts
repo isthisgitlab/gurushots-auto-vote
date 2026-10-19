@@ -6,7 +6,7 @@
  *
  * Two entry points:
  *   - maybeAutoFillChallenge: cycle-driven, schedule-based. Fills at most
- *     one slot per call. The user-defined autoFillSchedule (rows of
+ *     one slot per call. The user-defined autoSubmitSchedule (rows of
  *     { count, seconds }) sets the target entry count for the time
  *     remaining: "have ≥ count entries once ≤ seconds remain". With the
  *     default schedule (2 @ 30m, 3 @ 20m, 4 @ 10m) fills land spaced out
@@ -14,7 +14,7 @@
  *     dilutes votes per entry when several are submitted simultaneously;
  *     if the app starts behind schedule it catches up one photo per cycle.
  *   - fillChallengeNow: manual, batched. The GUI buttons call this and
- *     it ignores both the autoFill toggle and the schedule; manual
+ *     it ignores both the autoSubmit toggle and the schedule; manual
  *     means explicit user intent.
  *
  * API methods are injected so the scheduler (real API) and the IPC
@@ -26,11 +26,12 @@
  *
  *   staggeredFill.ts   maybeAutoFillChallenge (cycle-driven, schedule-based)
  *   emergencyFill.ts   maybeEmergencyFillChallenge + its shared stand-down check
- *   manualFill.ts      fillChallengeNow (GUI "Fill Now")
+ *   manualFill.ts      fillChallengeNow (GUI "Fill Now"), submitPickedPhotos (GUI "Pick…")
  *   fillNew.ts         submitNewEntryForAction (boost/turbo "fill new")
- *   pipeline.ts        the shared fill pipeline and the submit-free ranking
+ *   pipeline.ts        the shared fill pipeline and the submit-free rankings (swap, photo suggestions)
  *   candidates.ts      on-theme candidate fetch, ignore words, semantic scores
  *   memberIdentity.ts  per-token member id cache for tag resolution
+ *   chosenPhotos.ts    the Chosen Photos settings, the lookup of a missed chosen photo, the skip log
  *   fillLogging.ts     submit-failure, fallback and popularity-pick explanations
  *   challengeState.ts  entry/slot reads, local reflects, live state refresh
  *   schedule.ts        schedule-row validation and threshold math
@@ -38,11 +39,18 @@
 
 import { maybeAutoFillChallenge } from './autoFill/staggeredFill';
 import { evaluateEmergencyFill, maybeEmergencyFillChallenge } from './autoFill/emergencyFill';
-import { fillChallengeNow } from './autoFill/manualFill';
+import { fillChallengeNow, submitPickedPhotos } from './autoFill/manualFill';
 import { submitNewEntryForAction } from './autoFill/fillNew';
-import { rankCandidatesForChallenge } from './autoFill/pipeline';
+import { rankCandidatesForChallenge, suggestFillPhotos } from './autoFill/pipeline';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './autoFill/candidates';
-import { resolveMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
+import { resolveMemberId, peekMemberId, forgetFailedMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
+import {
+    resolveChosenPhotos,
+    resolveMissingChosen,
+    logChosenSkipOnce,
+    clearChosenSkip,
+    enteredIds,
+} from './autoFill/chosenPhotos';
 import { describeSubmitFailure } from './autoFill/fillLogging';
 import { getSlotsRemaining, reflectNewEntry, reflectEntryFlag, refreshChallengeState } from './autoFill/challengeState';
 import { resolveScheduleTarget, getNextScheduleThresholdSec } from './autoFill/schedule';
@@ -51,6 +59,7 @@ export {
     maybeAutoFillChallenge,
     maybeEmergencyFillChallenge,
     fillChallengeNow,
+    submitPickedPhotos,
     submitNewEntryForAction,
     reflectNewEntry,
     reflectEntryFlag,
@@ -63,10 +72,19 @@ export {
     getSlotsRemaining,
     fetchCandidatesForChallenge,
     rankCandidatesForChallenge,
+    suggestFillPhotos,
     resolveMemberId,
+    peekMemberId,
+    forgetFailedMemberId,
     __resetMemberIdCache,
     resolveSemanticScores,
     resolveIgnoreWords,
+    // The join's photo pick reads the chosen photos the way a fill does.
+    resolveChosenPhotos,
+    resolveMissingChosen,
+    logChosenSkipOnce,
+    clearChosenSkip,
+    enteredIds,
     describeSubmitFailure,
     refreshChallengeState,
 };

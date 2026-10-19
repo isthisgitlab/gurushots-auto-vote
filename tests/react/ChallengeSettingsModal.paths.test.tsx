@@ -7,6 +7,7 @@
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
 import { mockApi, mockTranslator } from './helpers/setup';
+import { titleRuleInfo } from './helpers/titleRules';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { RendererSettings } from '../../src/ts/types/settings';
@@ -85,7 +86,7 @@ beforeEach(() => {
     mockTranslator.t.mockImplementation((key) => TEMPLATES[key] ?? key);
     mockApi.getTitleProfile.mockReset().mockResolvedValue(null);
     mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
-    mockApi.getSettings.mockReset().mockResolvedValue(invalid({ timezone: 'UTC', checkFrequencyMax: 30 }));
+    mockApi.getSettings.mockReset().mockResolvedValue(invalid({ app: { timezone: 'UTC', checkFrequencyMax: 30 } }));
     mockApi.getChallengeProfiles.mockReset().mockResolvedValue({});
     mockApi.replaceChallengeOverrides.mockReset().mockResolvedValue(true);
     mockApi.saveChallengeProfile.mockReset().mockResolvedValue(true);
@@ -211,7 +212,7 @@ describe('editing and saving', () => {
         fireEvent.input(input, { target: { value: '12' } });
         fireEvent.blur(input);
         await waitFor(() => expect(screen.getAllByText('app.overridden').length).toBeGreaterThan(0));
-        fireEvent.click(document.querySelector('button[title="app.resetToDefaultNotSaved"]')!);
+        fireEvent.click(document.querySelector('button[title^="app.resetToDefaultNotSaved"]')!);
         await waitFor(() => expect(screen.queryByText('app.overridden')).toBeNull());
     });
 
@@ -221,7 +222,60 @@ describe('editing and saving', () => {
         await loaded();
         fireEvent.click(screen.getByRole('button', { name: 'app.save' }));
         await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('app.settingsSaveError'));
+        // The alert sits in the sticky footer next to the buttons.
+        expect(
+            screen
+                .getByRole('alert')
+                .closest('.sticky')!
+                .contains(screen.getByRole('button', { name: 'app.save' })),
+        ).toBe(true);
         expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test('the modal box keeps focus above the footer, which is the last child of the content', async () => {
+        renderModal();
+        await loaded();
+        const boxClasses = document.querySelector('.modal-box')!.classList;
+        expect(boxClasses.contains('scroll-pb-60')).toBe(true);
+        expect(boxClasses.contains('md:scroll-pb-32')).toBe(true);
+        const footer = screen.getByRole('button', { name: 'app.save' }).closest('.sticky')!;
+        expect(footer.parentElement!.lastElementChild).toBe(footer);
+    });
+
+    describe('Manual Only', () => {
+        const withSwitch = async (value: boolean) => {
+            mockSchemaState.schema = invalid({
+                ...BASE_SCHEMA,
+                manualPhotosOnly: field('boost', 'boolean', false),
+            });
+            mockApi.getChallengeOverrides.mockResolvedValue({ manualPhotosOnly: value });
+            renderModal();
+            await loaded();
+        };
+
+        test('on: a non-live alert states it, and a sticky label keeps it in view, with matching scroll padding', async () => {
+            await withSwitch(true);
+            const alert = screen.getByText('app.manualOnlyAlert').closest('.alert')!;
+            expect(alert.getAttribute('role')).toBeNull();
+            const label = screen.getByText(/app\.manualOnlyLabel/);
+            expect(label.getAttribute('aria-hidden')).toBe('true');
+            for (const cls of ['sticky', '-top-6', 'z-10', '-mx-6', 'px-6', 'bg-base-100'])
+                expect(label.classList.contains(cls)).toBe(true);
+            // happy-dom lays nothing out, so the padding that keeps a focused control below the label is a class check.
+            const box = document.querySelector('.modal-box')!.classList;
+            expect(box.contains('scroll-pt-16')).toBe(true);
+            expect(box.contains('md:scroll-pt-12')).toBe(true);
+            expect(box.contains('scroll-pb-60')).toBe(true);
+        });
+
+        test('off: neither the alert nor the label shows, and the box keeps only its footer padding', async () => {
+            await withSwitch(false);
+            expect(screen.queryByText('app.manualOnlyAlert')).toBeNull();
+            expect(screen.queryByText(/app\.manualOnlyLabel/)).toBeNull();
+            const box = document.querySelector('.modal-box')!.classList;
+            expect(box.contains('scroll-pt-16')).toBe(false);
+            expect(box.contains('scroll-pb-60')).toBe(true);
+        });
     });
 
     test('a successful save closes and passes the non-suppressed mode', async () => {
@@ -264,13 +318,16 @@ describe('editing and saving', () => {
     });
 
     test('Clear All re-enables an automatic title profile', async () => {
-        mockApi.getTitleProfile.mockResolvedValue({ name: 'Auto', values: { boostTime: 17 }, suppressed: true });
+        mockApi.getTitleProfile.mockResolvedValue(
+            titleRuleInfo({ profile: { name: 'Auto', values: { boostTime: 17 } }, suppressed: true }),
+        );
         mockApi.getChallengeOverrides.mockResolvedValue({ boostTime: 5 });
         renderModal();
         await loaded();
         expect(body()).not.toContain('app.usingProfile: Auto');
         fireEvent.click(screen.getByRole('button', { name: 'app.clearAll' }));
         await waitFor(() => expect(body()).toContain('app.usingProfile: Auto'));
+        expect(body()).toContain('🔄 app.usingProfile');
         fireEvent.click(screen.getByRole('button', { name: 'app.save' }));
         await waitFor(() => expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('1', {}, false));
     });
@@ -286,17 +343,23 @@ describe('profiles bar interplay', () => {
     };
 
     test('saving the assigned title profile refreshes the inherited values', async () => {
-        mockApi.getTitleProfile.mockResolvedValue({ name: 'Auto', values: { boostTime: 17 } });
+        mockApi.getTitleProfile.mockResolvedValue(
+            titleRuleInfo({ profile: { name: 'Auto', values: { boostTime: 17 } } }),
+        );
         mockApi.getChallengeOverrides.mockResolvedValue({ boostTime: 8 });
         renderModal();
         await loaded();
         fireEvent.input(screen.getByPlaceholderText('app.profileNamePlaceholder'), { target: { value: 'AUTO' } });
+        // The profile is saved first; the dialog then reads what the rules make of it.
+        mockApi.getTitleProfile.mockResolvedValue(
+            titleRuleInfo({ profile: { name: 'AUTO', values: { boostTime: 8 } } }),
+        );
         await act(async () =>
             invalid<void>(fireEvent.click(screen.getByRole('button', { name: 'app.saveAsProfile' }))),
         );
         await waitFor(() => expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('AUTO', { boostTime: 8 }));
         // The override is cleared → the row now inherits the re-saved profile value.
-        fireEvent.click(document.querySelector('button[title="app.resetToDefaultNotSaved"]')!);
+        fireEvent.click(document.querySelector('button[title^="app.resetToDefaultNotSaved"]')!);
         await waitFor(() => expect(document.querySelector<HTMLInputElement>('input[type="number"]')!.value).toBe('8'));
         expect(body()).toContain('app.usingProfile: AUTO');
     });
@@ -313,7 +376,9 @@ describe('profiles bar interplay', () => {
     });
 
     test('deleting the assigned profile after a manual Apply keeps it suppressed', async () => {
-        mockApi.getTitleProfile.mockResolvedValue({ name: 'Auto', values: { boostTime: 17 } });
+        mockApi.getTitleProfile.mockResolvedValue(
+            titleRuleInfo({ profile: { name: 'Auto', values: { boostTime: 17 } } }),
+        );
         mockApi.getChallengeProfiles.mockResolvedValue({ Auto: { boostTime: 17 }, Manual: { boostTime: 3 } });
         renderModal();
         await loaded();
@@ -321,6 +386,7 @@ describe('profiles bar interplay', () => {
         await select('Manual');
         fireEvent.click(screen.getByRole('button', { name: 'app.applyProfile' }));
         await select('Auto');
+        mockApi.getTitleProfile.mockResolvedValue(titleRuleInfo());
         await act(async () =>
             invalid<void>(fireEvent.click(screen.getByRole('button', { name: 'app.deleteProfile' }))),
         );
@@ -487,12 +553,20 @@ describe('pre-boost fill hints', () => {
 });
 
 describe('window time formatting', () => {
-    test('an unknown app timezone falls back to a UTC HH:MM label', async () => {
-        mockApi.getSettings.mockResolvedValue(invalid({ timezone: 'Not/AZone', checkFrequencyMax: 0 }));
+    test('an unknown app timezone is read as UTC, labelled UTC, with an HH:MM window', async () => {
+        mockApi.getSettings.mockResolvedValue(invalid({ app: { timezone: 'Not/AZone', checkFrequencyMax: 0 } }));
         mockApi.getChallengeOverrides.mockResolvedValue({ useScheduledFill: true, scheduledFillBeforeEnd: [600] });
         renderModal();
         await loaded();
-        expect(body()).toMatch(new RegExp(`FILL-NEXT ${HHMM}-${HHMM} Not/AZone BEFORE`));
+        expect(body()).toMatch(new RegExp(`FILL-NEXT ${HHMM}-${HHMM} UTC BEFORE`));
+    });
+
+    test('the “local” app timezone is labelled local, with an HH:MM window', async () => {
+        mockApi.getSettings.mockResolvedValue(invalid({ app: { timezone: 'local', checkFrequencyMax: 0 } }));
+        mockApi.getChallengeOverrides.mockResolvedValue({ useScheduledFill: true, scheduledFillBeforeEnd: [600] });
+        renderModal();
+        await loaded();
+        expect(body()).toMatch(new RegExp(`FILL-NEXT ${HHMM}-${HHMM} local BEFORE`));
     });
 
     test('an out-of-range window start renders a dash instead of crashing', async () => {

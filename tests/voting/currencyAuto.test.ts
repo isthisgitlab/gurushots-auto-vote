@@ -134,6 +134,15 @@ describe('pickSwapTarget', () => {
         expect(pickSwapTarget([boosted], { allowProtected: true })).toBe(boosted);
     });
 
+    test('a protected id is never picked unless protected entries are allowed', () => {
+        expect(pickSwapTarget([a, b, c], { imageIndex: 0, protectedIds: ['c'] })).toBe(b);
+        expect(pickSwapTarget([a, b, c], { lowestVotes: true, protectedIds: ['b'] })).toBe(c);
+        expect(pickSwapTarget([b], { protectedIds: ['b'] })).toBeNull();
+        expect(pickSwapTarget([b], { protectedIds: ['b'], allowProtected: true })).toBe(b);
+        // Ids compare as strings.
+        expect(pickSwapTarget([invalid({ id: 7, votes: 1 }), a], { imageIndex: 1, protectedIds: ['7'] })).toBe(a);
+    });
+
     test('lowestVotes picks the fewest-votes entry, the later one on a tie', () => {
         expect(pickSwapTarget([a, b, c], { lowestVotes: true })).toBe(b);
         const b2 = { id: 'b2', votes: 10 };

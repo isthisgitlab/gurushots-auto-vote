@@ -43,6 +43,7 @@ type StorageCtx = {
 
 const mockPrefSet = jest.fn<Promise<void>, [SetOptions]>(() => Promise.resolve());
 const mockPrefGet = jest.fn<Promise<GetResult>, [GetOptions]>(() => Promise.resolve({ value: null }));
+const mockPrefKeys = jest.fn<Promise<{ keys: string[] }>, []>(() => Promise.resolve({ keys: [] }));
 jest.mock('../../src/ts/runtime', () => ({
     __esModule: true,
     ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
@@ -53,6 +54,7 @@ jest.mock(
         Preferences: {
             set: (...a: Parameters<typeof mockPrefSet>) => mockPrefSet(...a),
             get: (...a: Parameters<typeof mockPrefGet>) => mockPrefGet(...a),
+            keys: () => mockPrefKeys(),
         },
     }),
     { virtual: true },
@@ -95,6 +97,7 @@ const loadStorage = ({
 describe('settings storage — edge cases', () => {
     beforeEach(() => {
         mockPrefGet.mockReset();
+        mockPrefKeys.mockClear();
         mockPrefSet.mockReset();
         mockPrefSet.mockResolvedValue(undefined);
     });
@@ -122,18 +125,26 @@ describe('settings storage — edge cases', () => {
 
         test('hydrates the cache once from Preferences on Capacitor', async () => {
             g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
-            mockPrefGet.mockResolvedValue({ value: '{"token":"t"}' });
+            mockPrefGet.mockImplementation(({ key }) =>
+                Promise.resolve({ value: key === 'gurushots-config' ? '{"token":"t"}' : null }),
+            );
             const { mod } = loadStorage();
 
             expect(mod.storage.readRaw()).toBeNull();
             await mod.initializeAsync();
-            expect(mockPrefGet).toHaveBeenCalledWith({ key: 'gurushots-settings' });
+            // The configuration and the 1.x settings file; the copies set aside are found among the keys.
+            expect(mockPrefGet.mock.calls.map(([call]) => call.key).sort()).toEqual([
+                'gurushots-config',
+                'gurushots-settings',
+            ]);
+            expect(mockPrefKeys).toHaveBeenCalledTimes(2);
             expect(mod.storage.readRaw()).toBe('{"token":"t"}');
+            expect(mod.legacyStorage.readRaw()).toBeNull();
 
             // Second call must not re-hydrate (and so must not clobber a newer write).
             mod.storage.writeRaw('{"token":"newer"}');
             await mod.initializeAsync();
-            expect(mockPrefGet).toHaveBeenCalledTimes(1);
+            expect(mockPrefGet).toHaveBeenCalledTimes(2);
             expect(mod.storage.readRaw()).toBe('{"token":"newer"}');
         });
 
@@ -147,7 +158,8 @@ describe('settings storage — edge cases', () => {
             expect(mod.storage.readRaw()).toBeNull();
 
             await mod.initializeAsync();
-            expect(mockPrefGet).toHaveBeenCalledTimes(1);
+            // Each file's first read failed; neither is read again.
+            expect(mockPrefGet).toHaveBeenCalledTimes(2);
         });
     });
 
@@ -176,12 +188,16 @@ describe('settings storage — edge cases', () => {
     });
 
     describe('fs transport', () => {
-        test('settings writeRaw creates the userData dir when missing', () => {
+        // The chmod-then-write path of the stores that are not atomic (the settings file is written atomically).
+        const plainStore = (mod: typeof storageModule) =>
+            mod.createJsonStore({ fileName: 'metadata.json', prefKey: 'k' });
+
+        test('a plain store writeRaw creates the userData dir when missing', () => {
             const { mod, fs } = loadStorage();
             fs.existsSync.mockReturnValue(false);
-            mod.storage.writeRaw('{}');
+            plainStore(mod).writeRaw('{}');
             expect(fs.mkdirSync).toHaveBeenCalledWith(USER_DATA, { recursive: true, mode: 0o700 });
-            expect(fs.writeFileSync).toHaveBeenCalledWith(`${USER_DATA}/settings.json`, '{}', {
+            expect(fs.writeFileSync).toHaveBeenCalledWith(`${USER_DATA}/metadata.json`, '{}', {
                 encoding: 'utf8',
                 mode: 0o600,
             });
@@ -194,24 +210,24 @@ describe('settings storage — edge cases', () => {
             expect(fs.readFileSync).not.toHaveBeenCalled();
         });
 
-        test('settings writeRaw chmods the file to 0o600 before writing into it', () => {
+        test('a plain store writeRaw chmods the file to 0o600 before writing into it', () => {
             const { mod, fs, categoryLogger } = loadStorage();
-            mod.storage.writeRaw('{}');
+            plainStore(mod).writeRaw('{}');
             expect(categoryLogger.info).not.toHaveBeenCalled();
             expect(categoryLogger.warning).not.toHaveBeenCalled();
-            expect(fs.chmodSync).toHaveBeenCalledWith(`${USER_DATA}/settings.json`, 0o600);
+            expect(fs.chmodSync).toHaveBeenCalledWith(`${USER_DATA}/metadata.json`, 0o600);
             expect(fs.chmodSync.mock.invocationCallOrder[0]).toBeLessThan(fs.writeFileSync.mock.invocationCallOrder[0]);
         });
 
-        test('settings writeRaw skips a chmod that finds no file (ENOENT) silently and still creates it', () => {
+        test('a plain store writeRaw skips a chmod that finds no file (ENOENT) silently and still creates it', () => {
             const { mod, fs, categoryLogger } = loadStorage();
             fs.chmodSync.mockImplementationOnce(() => {
                 throw Object.assign(new Error('no such file or directory'), { code: 'ENOENT' });
             });
-            mod.storage.writeRaw('{}');
+            plainStore(mod).writeRaw('{}');
             expect(categoryLogger.warning).not.toHaveBeenCalled();
             expect(categoryLogger.info).not.toHaveBeenCalled();
-            expect(fs.writeFileSync).toHaveBeenCalledWith(`${USER_DATA}/settings.json`, '{}', {
+            expect(fs.writeFileSync).toHaveBeenCalledWith(`${USER_DATA}/metadata.json`, '{}', {
                 encoding: 'utf8',
                 mode: 0o600,
             });
@@ -222,10 +238,10 @@ describe('settings storage — edge cases', () => {
             fs.chmodSync.mockImplementationOnce(() => {
                 throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
             });
-            mod.storage.writeRaw('{}');
+            plainStore(mod).writeRaw('{}');
             expect(categoryLogger.warning).not.toHaveBeenCalled();
             expect(categoryLogger.info).not.toHaveBeenCalled();
-            expect(fs.writeFileSync).toHaveBeenCalledWith(`${USER_DATA}/settings.json`, '{}', {
+            expect(fs.writeFileSync).toHaveBeenCalledWith(`${USER_DATA}/metadata.json`, '{}', {
                 encoding: 'utf8',
                 mode: 0o600,
             });
@@ -240,9 +256,9 @@ describe('settings storage — edge cases', () => {
                 throw Object.assign(new Error('no such file or directory'), { code: 'ENOENT' });
             };
             fs.chmodSync.mockImplementationOnce(refuse).mockImplementationOnce(missing).mockImplementationOnce(refuse);
-            mod.storage.writeRaw('{}');
-            mod.storage.writeRaw('{}');
-            mod.storage.writeRaw('{}');
+            plainStore(mod).writeRaw('{}');
+            plainStore(mod).writeRaw('{}');
+            plainStore(mod).writeRaw('{}');
             expect(fs.writeFileSync).toHaveBeenCalledTimes(3);
             expect(categoryLogger.warning).toHaveBeenCalledTimes(1);
             expect(categoryLogger.info).not.toHaveBeenCalled();
@@ -254,15 +270,15 @@ describe('settings storage — edge cases', () => {
                 throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
             });
 
-            expect(() => mod.storage.writeRaw('{"token":"t"}')).not.toThrow();
+            expect(() => plainStore(mod).writeRaw('{"token":"t"}')).not.toThrow();
 
-            expect(fs.writeFileSync).toHaveBeenCalledWith(`${USER_DATA}/settings.json`, '{"token":"t"}', {
+            expect(fs.writeFileSync).toHaveBeenCalledWith(`${USER_DATA}/metadata.json`, '{"token":"t"}', {
                 encoding: 'utf8',
                 mode: 0o600,
             });
             expect(categoryLogger.warning).toHaveBeenCalledTimes(1);
             expect(categoryLogger.warning).toHaveBeenCalledWith(
-                `Could not restrict ${USER_DATA}/settings.json to owner-only (EPERM); other local users may be able to read it. It must be a regular file owned by the account this app runs as, on a filesystem that supports permissions (not FAT, SMB or FUSE); once it is, the next save restricts it automatically.`,
+                `Could not restrict ${USER_DATA}/metadata.json to owner-only (EPERM); other local users may be able to read it. It must be a regular file owned by the account this app runs as, on a filesystem that supports permissions (not FAT, SMB or FUSE); once it is, the next save restricts it automatically.`,
             );
         });
 
@@ -272,8 +288,8 @@ describe('settings storage — edge cases', () => {
                 throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
             });
 
-            mod.storage.writeRaw('{"n":1}');
-            mod.storage.writeRaw('{"n":2}');
+            plainStore(mod).writeRaw('{"n":1}');
+            plainStore(mod).writeRaw('{"n":2}');
 
             expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
             expect(categoryLogger.warning).toHaveBeenCalledTimes(1);
@@ -292,7 +308,7 @@ describe('settings storage — edge cases', () => {
                 .mockImplementationOnce(refuse);
 
             const logsAfterEachWrite = [0, 1, 2, 3, 4].map((i) => {
-                mod.storage.writeRaw(`{"n":${i}}`);
+                plainStore(mod).writeRaw(`{"n":${i}}`);
                 return [categoryLogger.warning.mock.calls.length, categoryLogger.info.mock.calls.length];
             });
 
@@ -305,23 +321,24 @@ describe('settings storage — edge cases', () => {
                 [2, 1],
                 [2, 1],
             ]);
-            expect(categoryLogger.info).toHaveBeenCalledWith(`Restricted ${USER_DATA}/settings.json to owner-only`);
+            expect(categoryLogger.info).toHaveBeenCalledWith(`Restricted ${USER_DATA}/metadata.json to owner-only`);
         });
 
         test('refused chmods on two different paths warn once each', () => {
             const { mod, fs, categoryLogger } = loadStorage();
             const store = mod.createJsonStore({ fileName: 'metadata.json', prefKey: 'k' });
+            const other = mod.createJsonStore({ fileName: 'other.json', prefKey: 'o' });
             fs.chmodSync.mockImplementation(() => {
                 throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
             });
 
-            mod.storage.writeRaw('{}');
+            other.writeRaw('{}');
             store.writeRaw('{}');
-            mod.storage.writeRaw('{}');
+            other.writeRaw('{}');
             store.writeRaw('{}');
 
             expect(categoryLogger.warning).toHaveBeenCalledTimes(2);
-            expect(categoryLogger.warning).toHaveBeenNthCalledWith(1, expect.stringContaining('/settings.json'));
+            expect(categoryLogger.warning).toHaveBeenNthCalledWith(1, expect.stringContaining('/other.json'));
             expect(categoryLogger.warning).toHaveBeenNthCalledWith(2, expect.stringContaining('/metadata.json'));
         });
 
@@ -381,7 +398,7 @@ describe('settings storage — edge cases', () => {
             const { mod, fs, categoryLogger } = loadStorage({ electronApp });
             fs.existsSync.mockImplementation((p) => p === LEGACY_FILE);
 
-            expect(mod.getSettingsPath()).toBe(`${USER_DATA}/settings.json`);
+            expect(mod.getSettingsPath()).toBe(`${USER_DATA}/config.json`);
             expect(categoryLogger.warning).toHaveBeenCalledTimes(1);
             expect(categoryLogger.warning.mock.calls[0][0]).toContain('/apps/gurushots-auto-vote-dev');
 
@@ -413,7 +430,7 @@ describe('settings storage — edge cases', () => {
             fs.existsSync.mockImplementation(() => {
                 throw new Error('EACCES');
             });
-            expect(mod.getSettingsPath()).toBe(`${USER_DATA}/settings.json`);
+            expect(mod.getSettingsPath()).toBe(`${USER_DATA}/config.json`);
             expect(categoryLogger.warning).not.toHaveBeenCalled();
         });
 
@@ -432,6 +449,15 @@ describe('settings storage — edge cases', () => {
             expect(info.isElectronPackaged).toBe(true);
             expect(info.isBuiltApp).toBe(true);
             expect(info.userDataPath).toBe(USER_DATA);
+        });
+
+        test('getEnvironmentInfo reports when the process loaded, the same on every call', () => {
+            const before = Date.now();
+            const { mod } = loadStorage();
+            const { launchedAt } = mod.getEnvironmentInfo();
+            expect(launchedAt).toBeGreaterThanOrEqual(before);
+            expect(launchedAt).toBeLessThanOrEqual(Date.now());
+            expect(mod.getEnvironmentInfo().launchedAt).toBe(launchedAt);
         });
 
         test('getEnvironmentInfo without Electron: built only when not running from source', () => {

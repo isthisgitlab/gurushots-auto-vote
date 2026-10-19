@@ -67,6 +67,25 @@ const mockSettings = (overrides: Record<string, unknown> = {}) => {
 
 beforeEach(() => jest.clearAllMocks());
 
+describe('getVotingPauseState — the timezone setting', () => {
+    // 12:00 in UTC is 14:00 in Riga in January, so a 30 minute pause opening at 12:00 holds `NOW` only when read in UTC.
+    const pausedAtNoon = (timezone: string | undefined) => {
+        mockSettings({ useVotingPause: true, votingPauseTime: ['12:00'], votingPauseDurationMinutes: 30 });
+        settings.getSetting = invalid(jest.fn((key: string) => (key === 'timezone' ? timezone : undefined)));
+        return VotingLogic.getVotingPauseState(buildChallenge(), '777', NOW).inWindow;
+    };
+
+    test('an empty timezone reads the daily times in UTC', () => {
+        expect(pausedAtNoon('')).toBe(true);
+        expect(pausedAtNoon('  ')).toBe(true);
+    });
+
+    test('a missing timezone reads them in the default zone, Europe/Riga', () => {
+        expect(pausedAtNoon(undefined)).toBe(false);
+        expect(pausedAtNoon('Europe/Riga')).toBe(false);
+    });
+});
+
 describe('getVotingPauseState — active semantics', () => {
     test('inactive when useVotingPause is off, even with times configured', () => {
         mockSettings({ useVotingPause: false, votingPauseTime: ['12:00'], votingPauseBeforeEnd: [300] });
@@ -358,28 +377,21 @@ describe('voting pause never abandons a closing challenge', () => {
     });
 });
 
-describe('the last-minute rescue survives a corrupt lastMinuteThreshold', () => {
-    // Guards the clamp in getEffectiveLastMinuteThreshold. Without it, a corrupt
-    // value makes the comparison NaN-false so the last-minute rule never fires —
-    // and with the pause sitting above final-window, the challenge never votes.
-    test.each([['soon'], [NaN], [0], [999], [null], [undefined]])(
-        'lastMinuteThreshold %p falls back to the 10m default, so a closing challenge still votes',
-        (threshold) => {
-            mockSettings({
-                lastMinuteThreshold: threshold,
-                useVotingPause: true,
-                votingPauseBeforeEnd: [600],
-                votingPauseDurationMinutes: 240,
-            });
-            // 5 minutes to close — inside the defaulted 10m window.
-            const decision = VotingLogic.evaluateVotingDecision(buildChallenge({ closeInSeconds: 300 }), NOW);
-            expect(decision.shouldVote).toBe(true);
-            expect(decision.targetExposure).toBe(100);
-            // And the message quotes the threshold that actually applied, not the
-            // raw corrupt value.
-            expect(decision.voteReason).toContain('10m');
-        },
-    );
+describe('the last-minute rescue honours the configured lastMinuteThreshold', () => {
+    // The pause sits above final-window; last-minute is the one rule it cannot block.
+    test('a closing challenge still votes under an active pause, quoting the threshold that applied', () => {
+        mockSettings({
+            lastMinuteThreshold: 10,
+            useVotingPause: true,
+            votingPauseBeforeEnd: [600],
+            votingPauseDurationMinutes: 240,
+        });
+        // 5 minutes to close — inside the 10m window.
+        const decision = VotingLogic.evaluateVotingDecision(buildChallenge({ closeInSeconds: 300 }), NOW);
+        expect(decision.shouldVote).toBe(true);
+        expect(decision.targetExposure).toBe(100);
+        expect(decision.voteReason).toContain('10m');
+    });
 
     test('a valid in-range threshold is still honoured as configured', () => {
         mockSettings({ lastMinuteThreshold: 30, useVotingPause: false });

@@ -1,6 +1,6 @@
 import type { RendererGlobals } from '../../types/capacitor';
 import { createRoot } from 'react-dom/client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
 import { useSettings, useEnvironmentInfo } from '@/api/useSettings';
 import { useAuth } from '@/api/useAuth';
@@ -11,33 +11,61 @@ import { ModeInfoText } from '@/components/login/ModeInfoText';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { useDocumentTheme } from '@/hooks/useDocumentTheme';
+import { useNoticeGate } from '@/hooks/useNoticeGate';
+import { UnofficialNoticeModal } from '@/components/app/UnofficialNoticeModal';
+import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice';
+import { ipcErrorText } from '@/api/ipcErrorText';
+import * as ipc from '@/api/ipc';
+import { isPlainObject } from '../../plainObject';
+import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 
 /**
  * Login page content component
  */
-function LoginPageContent() {
+function LoginPageContent({ startupError }: { startupError?: string }) {
     const { ready, t } = useTranslation();
     const { settings, loading: settingsLoading, updateSetting } = useSettings();
     const { envInfo, loading: envLoading } = useEnvironmentInfo();
+    const notice = useNoticeGate(settings, settingsLoading, updateSetting);
     const { authenticate, login, loading: authLoading, error: authError } = useAuth();
+    const { settingsFile } = usePlatformCapabilities();
+    // Where focus goes when the settings notice has nothing of its own left to return it to.
+    const headingRef = useRef<HTMLHeadingElement>(null);
 
     // Local state
     const [theme, setTheme] = useState('light');
     const [stayLoggedIn, setStayLoggedIn] = useState(false);
     const [mockMode, setMockMode] = useState(false);
     const [initialUsername, setInitialUsername] = useState('');
+    // Whether a session was stored as of the last settings seen (null until the first): a session that was there when
+    // the page opened is not an arrival, so ticking Stay logged in must not sign in with it.
+    const hadToken = useRef<boolean | null>(null);
 
     useEffect(() => {
         if (settings) {
-            setTheme(settings.theme || 'light');
-            setStayLoggedIn(settings.stayLoggedIn || false);
-
-            // Pre-fill username if stay logged in is enabled
-            if (settings.stayLoggedIn && settings.lastUsername) {
-                setInitialUsername(settings.lastUsername);
-            }
+            setTheme(settings.app.theme || 'light');
+            setStayLoggedIn(settings.app.stayLoggedIn || false);
+            // Whether a session was already stored when the page opened: only the first settings say so (a later
+            // arrival is told by the broadcast that carries it).
+            hadToken.current ??= settings.hasToken === true;
         }
     }, [settings]);
+
+    // Pre-fill username if stay logged in is enabled, until a name is there. The saved name is part of the sign-in
+    // state, which the settings the renderer is handed leave out: it is read on its own.
+    const rememberedName = settings?.app.stayLoggedIn === true;
+    useEffect(() => {
+        if (!rememberedName || initialUsername !== '') return undefined;
+        let current = true;
+        void ipc
+            .callOrNull(() => ipc.getSetting('lastUsername'))
+            .then((saved) => {
+                if (current && typeof saved === 'string' && saved !== '') setInitialUsername(saved);
+            });
+        return () => {
+            current = false;
+        };
+    }, [rememberedName, initialUsername]);
 
     useEffect(() => {
         if (envInfo) {
@@ -59,12 +87,8 @@ function LoginPageContent() {
     const handleStayLoggedInChange = useCallback(
         async (value: boolean) => {
             setStayLoggedIn(value);
+            // Turning it off also clears the saved username: the main process does that with the write.
             await updateSetting('stayLoggedIn', value);
-
-            // Clear saved username if toggling off
-            if (!value) {
-                await updateSetting('lastUsername', '');
-            }
         },
         [updateSetting],
     );
@@ -77,24 +101,62 @@ function LoginPageContent() {
         [updateSetting],
     );
 
+    // Whether this page has started the move to the app (a login made here, or a stored session that arrived): once, so
+    // that a login does not also move on because its own token was stored.
+    const moving = useRef(false);
+
     const handleSubmit = useCallback(
         async (username: string, password: string) => {
-            const result = await authenticate(username, password, mockMode);
+            moving.current = true;
+            let moved = false;
+            try {
+                const result = await authenticate(username, password, mockMode);
 
-            if (result.success) {
-                // Save username if stay logged in is enabled
-                if (stayLoggedIn) {
-                    await updateSetting('lastUsername', username);
+                if (result.success) {
+                    // The main process saved the username when stay logged in is on, as part of the login.
+                    await updateSetting('mock', mockMode);
+
+                    // Transition to main window
+                    await login();
+                    moved = true;
                 }
-
-                await updateSetting('mock', mockMode);
-
-                // Transition to main window
-                await login();
+            } finally {
+                // A login that failed, or threw on the way, leaves the page free to move on when a session arrives.
+                if (!moved) moving.current = false;
             }
         },
-        [authenticate, login, mockMode, stayLoggedIn, updateSetting],
+        [authenticate, login, mockMode, updateSetting],
     );
+
+    // A session that is stored while this page shows, without a login made here (the settings a pending restore was
+    // waiting for came through, or another process signed in), moves on to the app as a login does. Only for a session
+    // that is kept (Stay logged in), as at the start, and only when it arrives: one stored at open stays out.
+    useEffect(() => {
+        const unsubscribe = ipc.onSettingsChanged?.((changed: unknown) => {
+            if (!isPlainObject(changed)) return;
+            const arrived = changed.hasToken === true && hadToken.current === false;
+            hadToken.current = changed.hasToken === true;
+            const app = changed.app;
+            if (moving.current || !arrived) return;
+            if (!isPlainObject(app) || app.stayLoggedIn !== true) return;
+            moving.current = true;
+            // (If the shell ignores the move, as the main process does when no session is stored after all, the page is still
+            // here, and a later session may move it.)
+            void login().finally(() => {
+                moving.current = false;
+                hadToken.current = false;
+            });
+        });
+        return () => unsubscribe?.();
+    }, [login]);
+
+    // A failure the shell reported before any login attempt shows until an attempt answers.
+    const shownError = authError ?? startupError;
+    // A login that could not be saved: the next step differs where the settings are not a file the user can open.
+    const shownText =
+        shownError === 'token-not-saved' && !settingsFile
+            ? t('errors.tokenNotSavedAndroid')
+            : ipcErrorText(shownError, t, 'errors.loginFailed');
 
     // Show loading while initializing
     if (!ready || settingsLoading || envLoading) {
@@ -102,20 +164,28 @@ function LoginPageContent() {
     }
 
     return (
-        <div className="min-h-screen bg-base-200 flex items-center justify-center">
+        <main className="min-h-screen bg-base-200 flex items-center justify-center p-4">
             <div className="card w-full max-w-lg bg-base-100 shadow-xl">
                 <div className="card-body">
                     {/* Language Switcher */}
                     <LanguageSwitcher />
 
+                    <SettingsRecoveryNotice returnFocusTo={headingRef} />
+
                     {/* Title */}
-                    <h2 className="card-title text-2xl font-bold text-center mb-6">{t('login.heading')}</h2>
+                    <h1
+                        ref={headingRef}
+                        tabIndex={-1}
+                        className="card-title text-2xl font-bold text-center mb-6 focus-visible:ring-base-content focus-visible:ring-2 focus-visible:outline-none"
+                    >
+                        {t('login.heading')}
+                    </h1>
 
                     {/* Auth Error */}
-                    {authError && (
-                        <div className="alert alert-error mb-4">
+                    {shownError && (
+                        <div className="alert alert-error mb-4" role="alert">
                             <StrokeIcon className="stroke-current shrink-0 h-6 w-6" d={ICON_PATHS.xCircle} />
-                            <span>{authError}</span>
+                            <span>{shownText}</span>
                         </div>
                     )}
 
@@ -136,17 +206,22 @@ function LoginPageContent() {
                     <ModeInfoText isMock={mockMode} />
                 </div>
             </div>
-        </div>
+
+            {/* Shown here when there is no auto-login; with one, the app page shows it instead */}
+            <UnofficialNoticeModal isOpen={notice.open} onAcknowledge={() => void notice.acknowledge()} />
+        </main>
     );
 }
 
 /**
  * Login page with providers
+ *
+ * @param startupError - an IPC failure the shell met before the page loaded, shown as a login error
  */
-function LoginPage() {
+function LoginPage({ startupError }: { startupError?: string }) {
     return (
         <TranslationProvider>
-            <LoginPageContent />
+            <LoginPageContent startupError={startupError} />
         </TranslationProvider>
     );
 }
@@ -155,11 +230,11 @@ function LoginPage() {
 // __capacitorBootstrap before importing this module so it can
 // conditionally mount Login vs App; everywhere else (Electron's
 // loginWindow) auto-mounts.
-export const mountLogin = () => {
+export const mountLogin = (startupError?: string) => {
     const container = document.getElementById('root');
     if (container) {
         const root = createRoot(container);
-        root.render(<LoginPage />);
+        root.render(<LoginPage startupError={startupError} />);
     }
 };
 

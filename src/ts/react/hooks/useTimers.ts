@@ -8,7 +8,7 @@ import type { Challenge } from '../../types/gurushots';
 /**
  * Hook that manages countdown timers for challenges.
  *
- * Returns a stable map of `challengeId → Signal<string>`. A single 1-second
+ * Returns a stable map of `challengeId → Signal<string | null>` (null once the challenge has ended). A single 1-second
  * interval mutates each signal's `.value` in place; because the map and the
  * individual signal identities persist across renders, the consuming component
  * does NOT re-render on every tick — only the DOM text nodes bound to each
@@ -19,9 +19,11 @@ import type { Challenge } from '../../types/gurushots';
  * @param challenges - Array of challenge objects with close_time
  *   (always an array — ChallengesContext normalises a missing payload to [])
  */
-export function useTimers(challenges: Array<Pick<Challenge, 'id' | 'close_time'>>): Record<string, Signal<string>> {
+export function useTimers(
+    challenges: Array<Pick<Challenge, 'id' | 'close_time'>>,
+): Record<string, Signal<string | null>> {
     // Per-challenge time signals, reused across renders so each card binds once.
-    const signalsRef = useRef(new Map<string | number, Signal<string>>());
+    const signalsRef = useRef(new Map<string | number, Signal<string | null>>());
 
     // Build/prune the signal map for the current challenge set. Recomputed only
     // when the challenge identities change — not every second. New signals are
@@ -31,12 +33,12 @@ export function useTimers(challenges: Array<Pick<Challenge, 'id' | 'close_time'>
     const times = useMemo(() => {
         const store = signalsRef.current;
         const present = new Set<string | number>();
-        const out: Record<string, Signal<string>> = {};
+        const out: Record<string, Signal<string | null>> = {};
         for (const challenge of challenges) {
             present.add(challenge.id);
             let sig = store.get(challenge.id);
             if (!sig) {
-                sig = signal(formatTimeRemaining(challenge.close_time));
+                sig = signal<string | null>(formatTimeRemaining(challenge.close_time));
                 store.set(challenge.id, sig);
             }
             out[challenge.id] = sig;
@@ -56,7 +58,7 @@ export function useTimers(challenges: Array<Pick<Challenge, 'id' | 'close_time'>
             for (const challenge of challenges) {
                 // The memo above ran for this same `challenges` array, so every
                 // id already has a signal.
-                (signalsRef.current.get(challenge.id) as Signal<string>).value = formatTimeRemaining(
+                (signalsRef.current.get(challenge.id) as Signal<string | null>).value = formatTimeRemaining(
                     challenge.close_time,
                 );
             }

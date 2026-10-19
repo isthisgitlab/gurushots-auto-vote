@@ -457,17 +457,19 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 expect(result.delayMs).toBe(NORMAL);
             });
 
-            it('a non-positive/NaN leadSec falls back to the 15-min default', async () => {
+            it('a non-positive/NaN/undefined leadSec falls back to the 15-min default', async () => {
                 const now = Math.floor(Date.now() / 1000);
                 // leadSec 0 → fallback 900s → start = close-4500. Close+4620 → 120s away.
                 const challenges = [{ id: 9, title: 'BadLead', type: 'regular', close_time: now + 4620 }];
-                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
-                    ...opts(),
-                    resolveFinalWindowTopUp: on(0),
-                });
-                expect(result.mode).toBe('pre-final-window');
-                expect(result.delayMs).toBe(120_000);
-                expect(result.nextFinalWindowTopUp!.leadMin).toBe(15);
+                for (const badLead of [0, Number.NaN, invalid<number>(undefined)]) {
+                    const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                        ...opts(),
+                        resolveFinalWindowTopUp: on(badLead),
+                    });
+                    expect(result.mode).toBe('pre-final-window');
+                    expect(result.delayMs).toBe(120_000);
+                    expect(result.nextFinalWindowTopUp!.leadMin).toBe(15);
+                }
             });
 
             it('the sooner of a threshold boundary and a top-up start wins', async () => {
@@ -565,14 +567,14 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 expect(result.nextFinalWindowTopUp).toMatchObject({ challengeId: 9, leadMin: 15 });
             });
 
-            it('falls back to the 3600 default when durationSec is sub-60 or non-finite', async () => {
+            it('falls back to the 3600 default when durationSec is sub-60, non-finite or undefined', async () => {
                 const now = Math.floor(Date.now() / 1000);
                 // Same geometry as the default-duration cases: lead 900 + fallback 3600 →
                 // start = close-4500 = 120s away for close+4620. Were the corrupt
-                // durationSec (30, NaN) honored the start would sit far out (→ 'normal'),
+                // durationSec (30, NaN, undefined) honored the start would sit far out (→ 'normal'),
                 // so a pre-final-window cap proves the 3600 fallback took effect.
                 const challenges = [{ id: 9, title: 'BadDuration', type: 'regular', close_time: now + 4620 }];
-                for (const badDuration of [30, Number.NaN]) {
+                for (const badDuration of [30, Number.NaN, invalid<number>(undefined)]) {
                     const result = await computeNextCycleDelayMs(invalid(challenges), now, {
                         ...opts(),
                         resolveFinalWindowTopUp: () => wrap({ enabled: true, leadSec: 900, durationSec: badDuration }),
@@ -688,20 +690,22 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
 
             it('a corrupt leadSec falls back to the 15-min default', async () => {
                 const now = Math.floor(Date.now() / 1000);
-                const result = await computeNextCycleDelayMs(timerBoost(now), now, {
-                    ...opts(),
-                    resolveBoostPrefill: on({ leadSec: Number.NaN }),
-                });
-                expect(result.mode).toBe('pre-boost');
-                expect(result.delayMs).toBe(120_000);
-                expect(result.nextBoostPrefill!.leadMin).toBe(15);
+                for (const badLead of [Number.NaN, undefined]) {
+                    const result = await computeNextCycleDelayMs(timerBoost(now), now, {
+                        ...opts(),
+                        resolveBoostPrefill: on({ leadSec: badLead }),
+                    });
+                    expect(result.mode).toBe('pre-boost');
+                    expect(result.delayMs).toBe(120_000);
+                    expect(result.nextBoostPrefill!.leadMin).toBe(15);
+                }
             });
 
-            it('falls back to the 900s default for a corrupt keyUnlockedBoostTimeSec, matching the rule side', async () => {
+            it('falls back to the 900s default for a corrupt keyUnlockedBoostTimeSec', async () => {
                 const now = Math.floor(Date.now() / 1000);
-                // Rule side (getEffectiveKeyUnlockedBoostTime) falls back to 900 for a
-                // missing/NaN value; skipping the challenge here instead would arm the
-                // rule for a boundary the scheduler never wakes for.
+                // The rule side reads the validated setting (default 900); a resolver value that
+                // is missing or NaN must not skip the challenge, which would arm the rule for a
+                // boundary the scheduler never wakes for.
                 const challenges = [
                     {
                         id: 9,
@@ -711,12 +715,14 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                         member: { boost: { state: 'AVAILABLE_KEY' } },
                     },
                 ];
-                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
-                    ...opts(),
-                    resolveBoostPrefill: on({ keyUnlockedBoostTimeSec: Number.NaN }),
-                });
-                expect(result.mode).toBe('pre-boost');
-                expect(result.delayMs).toBe(120_000);
+                for (const badKeyUnlocked of [Number.NaN, undefined, -1]) {
+                    const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                        ...opts(),
+                        resolveBoostPrefill: on({ keyUnlockedBoostTimeSec: badKeyUnlocked }),
+                    });
+                    expect(result.mode).toBe('pre-boost');
+                    expect(result.delayMs).toBe(120_000);
+                }
             });
 
             it('skips malformed data where the boost outlives the challenge', async () => {

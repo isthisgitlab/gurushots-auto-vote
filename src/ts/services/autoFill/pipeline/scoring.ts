@@ -2,12 +2,18 @@
  * Fill pipeline, first stages: load the candidate library and score it.
  */
 
-import { buildScoredCandidates, selectEnrichmentSet } from '../../photoPicker';
+import { buildChosenCandidates, selectBlockEnrichmentSet } from '../../photoPicker';
 import { enrichCandidates } from '../../photoStats';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from '../candidates';
 import { makeFallbackLogger } from '../fillLogging';
 import type { Challenge } from '../../../types/gurushots';
-import type { IgnoreWords, PickerPhoto, ScoredCandidate, SemanticScoreMap } from '../../../types/photoPicker';
+import type {
+    ChosenPick,
+    IgnoreWords,
+    PickerPhoto,
+    ScoredCandidate,
+    SemanticScoreMap,
+} from '../../../types/photoPicker';
 import type { FetchErrorResult, RankDeps } from '../../../types/autoFill';
 import { errorMessage } from '../../../errorMessage';
 
@@ -15,7 +21,9 @@ import { errorMessage } from '../../../errorMessage';
  * First half of the fill pipeline: fetch the candidate library for a challenge
  * and score it semantically. Shared by runFillAttempt and
  * rankCandidatesForChallenge so a swap ranks photos exactly the way a fill
- * does.
+ * does. `walkedUnfiltered` says the fetch already read the whole unfiltered
+ * library, which the chosen-photos lookup in runFillAttempt uses to know there
+ * is nothing left to find; swap ignores it.
  */
 const loadFillCandidates = async ({
     label,
@@ -35,7 +43,13 @@ const loadFillCandidates = async ({
     usage?: string;
 }): Promise<
     | FetchErrorResult
-    | { status: 'loaded'; eligible: PickerPhoto[]; semanticScores: SemanticScoreMap | null; ignoreWords: IgnoreWords }
+    | {
+          status: 'loaded';
+          eligible: PickerPhoto[];
+          semanticScores: SemanticScoreMap | null;
+          ignoreWords: IgnoreWords;
+          walkedUnfiltered: boolean;
+      }
 > => {
     const { logger, getEligiblePhotos, searchTagAutocomplete, getCurrentMemberProfile } = deps;
     // One lookup for the whole fill — see resolveIgnoreWords for why it is not
@@ -43,6 +57,7 @@ const loadFillCandidates = async ({
     const ignoreWords = resolveIgnoreWords(deps.settings, challenge);
 
     let eligible;
+    const trace = { walkedUnfiltered: false };
     try {
         eligible = await fetchCandidatesForChallenge(
             challenge,
@@ -53,11 +68,11 @@ const loadFillCandidates = async ({
             // silently dropped — which is how resolution can look wired (the
             // orchestrator supplies it) while never reaching THIS path, the one
             // that does ordinary auto-fill, emergency fill and manual fill.
-            { getEligiblePhotos, logger, searchTagAutocomplete, getCurrentMemberProfile, usage },
+            { getEligiblePhotos, logger, searchTagAutocomplete, getCurrentMemberProfile, usage, trace },
         );
     } catch (error) {
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .warning(
                 `${label}: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`,
                 null,
@@ -69,13 +84,20 @@ const loadFillCandidates = async ({
     // probe and its actual pick rank the same eligible set, so they must see
     // the same map).
     const semanticScores = await resolveSemanticScores(challenge, eligible, { ...deps, ignoreWords });
-    return { status: 'loaded', eligible, semanticScores, ignoreWords };
+    return { status: 'loaded', eligible, semanticScores, ignoreWords, walkedUnfiltered: trace.walkedUnfiltered };
 };
 
 /**
  * Second half of the fill pipeline: build the scored candidate list and enrich
  * the contested ones with real stats. Returns the FULL scored pool —
  * finalizePick (which truncates to wantCount) is the caller's job.
+ *
+ * With `chosen` the pool is split into the user's chosen block and the rest
+ * (see buildChosenCandidates), and enrichment runs per block; `chosenIds`
+ * names the chosen block for finalizePick, verifyFillPick and the logging, and
+ * `orderedIds` is that block in the list's order. When the pick goes by that order
+ * (`chosen.inOrder`) the chosen block is not ranked, so it is not enriched either.
+ * Without `chosen` nothing differs from the ranking a swap uses.
  */
 const scoreFillCandidates = async ({
     label,
@@ -88,7 +110,8 @@ const scoreFillCandidates = async ({
     wantCount,
     mustIncludeTags,
     shouldIncludeTags,
-    fillWithoutTagMatch,
+    submitWithoutTagMatch,
+    chosen = null,
 }: {
     label: string;
     challenge: Challenge;
@@ -100,23 +123,31 @@ const scoreFillCandidates = async ({
     wantCount: number;
     mustIncludeTags: readonly string[] | null;
     shouldIncludeTags: readonly string[] | null;
-    fillWithoutTagMatch: boolean | undefined;
-}): Promise<{ scored: ScoredCandidate[]; contested: PickerPhoto[]; contestedIds: Set<string> }> => {
+    submitWithoutTagMatch: boolean | undefined;
+    chosen?: ChosenPick | null;
+}): Promise<{
+    scored: ScoredCandidate[];
+    contested: PickerPhoto[];
+    contestedIds: Set<string>;
+    chosenIds: ReadonlySet<string> | null;
+    orderedIds: readonly string[];
+}> => {
     const { logger } = deps;
-    const scored = buildScoredCandidates(challenge, eligible, {
+    const { scored, chosenIds, orderedIds } = buildChosenCandidates(challenge, eligible, {
         mustIncludeTags,
         shouldIncludeTags,
-        fillWithoutTagMatch,
+        submitWithoutTagMatch,
         semanticScores,
         ignoreWords,
         onFallback: makeFallbackLogger(label, challenge, logger),
+        chosen,
     });
 
     // Stat enrichment. selectEnrichmentSet returns the candidates still
     // competing for the last slot after the theme tiers — i.e. exactly the set
     // whose order the popularity tiers decide. It is empty whenever the theme
     // settled things, so a clean match costs no extra requests.
-    const contested = selectEnrichmentSet(scored, wantCount);
+    const contested = selectBlockEnrichmentSet(scored, wantCount, chosenIds, chosen?.inOrder === true);
     const contestedIds = new Set(contested.map((photo) => String(photo.id)));
     if (contested.length > 0) {
         const enriched = await enrichCandidates(contested, token, deps);
@@ -134,7 +165,7 @@ const scoreFillCandidates = async ({
             }
         }
     }
-    return { scored, contested, contestedIds };
+    return { scored, contested, contestedIds, chosenIds, orderedIds };
 };
 
 export { loadFillCandidates, scoreFillCandidates };

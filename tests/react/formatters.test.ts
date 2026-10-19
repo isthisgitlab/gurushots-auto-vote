@@ -1,6 +1,9 @@
 import { invalid } from '../helpers/invalid';
 import type * as formattersModule from '../../src/ts/react/utils/formatters';
+import type * as wallClockModule from '../../src/ts/scheduling/wallClock';
 import type * as interpModule from '../../src/ts/react/utils/interp';
+import type * as rendererModule from '../../src/ts/translations/renderer';
+import type * as levelBadgeModule from '../../src/ts/react/utils/levelBadge';
 const {
     formatSettingDefault,
     formatTimeRemaining,
@@ -9,8 +12,15 @@ const {
     getTurboStatus,
     getLevelStatus,
     getEntryStatus,
+    isBoostAvailable,
+    statusText,
+    dateLocale,
 } = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
+const { timeOfDayIn } = require('../../src/ts/scheduling/wallClock') as typeof wallClockModule;
 const { interp } = require('../../src/ts/react/utils/interp') as typeof interpModule;
+const { rendererTranslator } = require('../../src/ts/translations/renderer') as typeof rendererModule;
+const { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } =
+    require('../../src/ts/react/utils/levelBadge') as typeof levelBadgeModule;
 
 const t = (key: string) =>
     (({ 'app.none': '(none)', 'app.hours': 'h', 'app.minutes': 'm' }) as Record<string, string>)[key] ?? key;
@@ -24,6 +34,7 @@ beforeEach(() => {
 
 afterEach(() => {
     jest.useRealTimers();
+    jest.mocked(rendererTranslator.getCurrentLanguage).mockReturnValue('en');
 });
 
 describe('formatSettingDefault edge shapes', () => {
@@ -55,9 +66,9 @@ describe('formatSettingDefault edge shapes', () => {
 });
 
 describe('formatTimeRemaining', () => {
-    test('returns Ended at or past the close time', () => {
-        expect(formatTimeRemaining(NOW_SEC)).toBe('Ended');
-        expect(formatTimeRemaining(NOW_SEC - 10)).toBe('Ended');
+    test('returns null (ended) at or past the close time', () => {
+        expect(formatTimeRemaining(NOW_SEC)).toBeNull();
+        expect(formatTimeRemaining(NOW_SEC - 10)).toBeNull();
     });
 
     test('formats a future close time with seconds', () => {
@@ -68,8 +79,12 @@ describe('formatTimeRemaining', () => {
 describe('formatEndTime', () => {
     const end = NOW_SEC;
 
-    test('local timezone (default) uses the runtime zone', () => {
-        const expected = new Date(end * 1000).toLocaleString('lv-LV', {
+    test.each([
+        ['en', 'en-GB'],
+        ['lv', 'lv-LV'],
+    ])('local timezone (default) uses the runtime zone, written for the UI language (%s)', (language, locale) => {
+        jest.mocked(rendererTranslator.getCurrentLanguage).mockReturnValue(language);
+        const expected = new Date(end * 1000).toLocaleString(locale, {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
@@ -77,82 +92,181 @@ describe('formatEndTime', () => {
             minute: '2-digit',
             hour12: false,
         });
+        expect(dateLocale()).toBe(locale);
         expect(formatEndTime(end)).toBe(expected);
     });
 
-    test('a named timezone is honoured', () => {
-        const out = formatEndTime(end, 'UTC');
+    test("a named timezone is honoured, in the UI language's date layout", () => {
         // 1700000000 = 2023-11-14 22:13 UTC
-        expect(out).toContain('14.11.2023');
-        expect(out).toContain('22:13');
+        const english = formatEndTime(end, 'UTC');
+        expect(english).toContain('14/11/2023');
+        expect(english).toContain('22:13');
+        jest.mocked(rendererTranslator.getCurrentLanguage).mockReturnValue('lv');
+        const latvian = formatEndTime(end, 'UTC');
+        expect(latvian).toContain('14.11.2023');
+        expect(latvian).toContain('22:13');
     });
 
-    test('an invalid timezone falls back to local instead of throwing', () => {
-        expect(() => formatEndTime(end, 'Not/AZone')).not.toThrow();
-        expect(formatEndTime(end, 'Not/AZone')).toBe(formatEndTime(end, 'local'));
+    // The "closes at" rule condition must read the same HH:MM the card shows.
+    test.each([
+        ['an afternoon instant', Date.UTC(2026, 5, 15, 14, 10, 59) / 1000],
+        ['just after midnight (00:xx, not 24:xx)', Date.UTC(2026, 5, 14, 21, 5, 30) / 1000],
+        ['winter time, after midnight', Date.UTC(2026, 0, 14, 22, 7, 0) / 1000],
+    ])('timeOfDayIn agrees with the HH:MM on the card: %s', (_label, sec) => {
+        const card = /\b(\d{2}:\d{2})\b/.exec(formatEndTime(sec, 'Europe/Riga'));
+        expect(card?.[1]).toBeDefined();
+        expect(timeOfDayIn(sec, 'Europe/Riga')).toBe(card?.[1]);
+    });
+
+    // 'local' reads the device clock on each side, so this holds on any host.
+    test('timeOfDayIn agrees with the card on the device clock (local)', () => {
+        for (const sec of [Date.UTC(2026, 5, 15, 14, 10, 59) / 1000, Date.UTC(2026, 5, 14, 21, 5, 30) / 1000]) {
+            const card = /\b(\d{2}:\d{2})\b/.exec(formatEndTime(sec, 'local'));
+            expect(card?.[1]).toBeDefined();
+            expect(timeOfDayIn(sec, 'local')).toBe(card?.[1]);
+        }
+    });
+
+    // An unknown zone reads as UTC on each side; the device clock is pinned to a sentinel so UTC and the
+    // device cannot coincide on a UTC runner.
+    describe('an unknown timezone', () => {
+        afterEach(() => {
+            jest.restoreAllMocks();
+        });
+
+        const pinDeviceClock = (): void => {
+            const real = Date.prototype.toLocaleString;
+            jest.spyOn(Date.prototype, 'toLocaleString').mockImplementation(function (
+                this: Date,
+                locales?: Intl.LocalesArgument,
+                options?: Intl.DateTimeFormatOptions,
+            ) {
+                return options?.timeZone ? real.call(this, locales, options) : 'DEVICE';
+            });
+            jest.spyOn(Date.prototype, 'getHours').mockReturnValue(5);
+            jest.spyOn(Date.prototype, 'getMinutes').mockReturnValue(37);
+        };
+
+        test('timeOfDayIn agrees with the card, both reading UTC', () => {
+            pinDeviceClock();
+            const sec = Date.UTC(2026, 5, 15, 14, 10, 59) / 1000;
+            const card = /\b(\d{2}:\d{2})\b/.exec(formatEndTime(sec, 'Not/AZone'));
+            expect(card?.[1]).toBe('14:10');
+            expect(timeOfDayIn(sec, 'Not/AZone')).toBe('14:10');
+        });
+
+        test('formatEndTime reads as UTC instead of throwing', () => {
+            pinDeviceClock();
+            expect(() => formatEndTime(end, 'Not/AZone')).not.toThrow();
+            expect(formatEndTime(end, 'Not/AZone')).toBe(formatEndTime(end, 'UTC'));
+            expect(formatEndTime(end, 'Not/AZone')).not.toBe('DEVICE');
+        });
     });
 });
 
 describe('getBoostStatus', () => {
     test.each([
-        [null, 'Unknown', 'text-secondary'],
-        [{}, 'Unknown', 'text-secondary'],
-        [{ state: 'USED' }, 'Used', 'text-success'],
-        [{ state: 'UNAVAILABLE' }, 'Unavailable', 'text-error'],
-        [{ state: 'LOCKED' }, 'Locked', 'text-error'],
-        [{ state: 'WEIRD' }, 'WEIRD', 'text-secondary'],
-    ])('%j → %s', (boost, text, colorClass) => {
-        expect(getBoostStatus(boost)).toEqual({ text, colorClass });
+        [null, { code: 'unknown', colorClass: 'text-base-content/70' }],
+        [{}, { code: 'unknown', colorClass: 'text-base-content/70' }],
+        [{ state: 'USED' }, { code: 'used', colorClass: 'text-success' }],
+        [{ state: 'UNAVAILABLE' }, { code: 'unavailable', colorClass: 'text-base-content/70' }],
+        [{ state: 'LOCKED' }, { code: 'locked', colorClass: 'text-base-content/70' }],
+        [{ state: 'WEIRD' }, { code: 'other', colorClass: 'text-base-content/70', raw: 'WEIRD' }],
+    ])('%j → %j', (boost, status) => {
+        expect(getBoostStatus(boost)).toEqual(status);
     });
 
-    test('available with time left shows minutes remaining', () => {
+    test('available with time left carries the whole minutes remaining', () => {
         expect(getBoostStatus({ state: 'AVAILABLE_KEY', timeout: NOW_SEC + 125 })).toEqual({
-            text: 'Available (2m left)',
+            code: 'availableMinutes',
             colorClass: 'text-info',
+            minutes: 2,
         });
     });
 
-    test('available with an expired timeout shows plain Available', () => {
-        expect(getBoostStatus({ state: 'AVAILABLE', timeout: NOW_SEC - 1 }).text).toBe('Available');
+    test('available with an expired timeout is plain available', () => {
+        expect(getBoostStatus({ state: 'AVAILABLE', timeout: NOW_SEC - 1 }).code).toBe('available');
+    });
+
+    test('isBoostAvailable is true for both available codes only', () => {
+        expect(isBoostAvailable(getBoostStatus({ state: 'AVAILABLE', timeout: NOW_SEC + 600 }))).toBe(true);
+        expect(isBoostAvailable(getBoostStatus({ state: 'AVAILABLE', timeout: NOW_SEC - 1 }))).toBe(true);
+        expect(isBoostAvailable(getBoostStatus({ state: 'USED' }))).toBe(false);
+        expect(isBoostAvailable(getBoostStatus(null))).toBe(false);
+    });
+});
+
+describe('statusText', () => {
+    const keyT = (key: string) => key;
+
+    test('words each code through its translation key; minutes fill the placeholder', () => {
+        const words = (status: Parameters<typeof statusText>[0]) => statusText(status, keyT);
+        expect(words({ code: 'unknown', colorClass: '' })).toBe('app.stateUnknown');
+        expect(words({ code: 'available', colorClass: '' })).toBe('app.available');
+        expect(words({ code: 'used', colorClass: '' })).toBe('app.used');
+        expect(words({ code: 'unavailable', colorClass: '' })).toBe('app.unavailable');
+        expect(words({ code: 'locked', colorClass: '' })).toBe('app.stateLocked');
+        expect(words({ code: 'free', colorClass: '' })).toBe('app.stateFree');
+        expect(words({ code: 'timer', colorClass: '' })).toBe('app.stateTimer');
+        expect(words({ code: 'inProgress', colorClass: '' })).toBe('app.stateInProgress');
+        expect(words({ code: 'won', colorClass: '' })).toBe('app.stateWon');
+        expect(statusText({ code: 'availableMinutes', colorClass: '', minutes: 7 }, () => 'Left: {minutes} min')).toBe(
+            'Left: 7 min',
+        );
+        expect(statusText({ code: 'availableMinutes', colorClass: '' }, () => '{minutes} min')).toBe('0 min');
+    });
+
+    test("an 'other' state is the API's own text, untranslated", () => {
+        expect(statusText({ code: 'other', colorClass: '', raw: 'NEW_STATE' }, keyT)).toBe('NEW_STATE');
+        expect(statusText({ code: 'other', colorClass: '' }, keyT)).toBe('');
     });
 });
 
 describe('getTurboStatus', () => {
     test.each([
-        [undefined, 'Unavailable', 'text-error'],
-        [{ state: '' }, 'Unavailable', 'text-error'],
-        [{ state: 'FREE' }, 'Free', 'text-info'],
-        [{ state: 'TIMER' }, 'Timer', 'text-error'],
-        [{ state: 'IN_PROGRESS' }, 'In Progress', 'text-warning'],
-        [{ state: 'WON' }, 'Won', 'text-accent'],
-        [{ state: 'USED' }, 'Used', 'text-success'],
-        [{ state: 'UNAVAILABLE' }, 'Unavailable', 'text-error'],
-        [{ state: 'LOCKED' }, 'Locked', 'text-latvian'],
-        [{ state: 'NEW_STATE' }, 'NEW_STATE', 'text-secondary'],
-    ])('%j → %s', (turbo, text, colorClass) => {
-        expect(getTurboStatus(turbo)).toEqual({ text, colorClass });
+        [undefined, { code: 'unavailable', colorClass: 'text-base-content/70' }],
+        [{ state: '' }, { code: 'unavailable', colorClass: 'text-base-content/70' }],
+        [{ state: 'FREE' }, { code: 'free', colorClass: 'text-info' }],
+        [{ state: 'TIMER' }, { code: 'timer', colorClass: 'text-base-content/70' }],
+        [{ state: 'IN_PROGRESS' }, { code: 'inProgress', colorClass: 'text-warning' }],
+        [{ state: 'WON' }, { code: 'won', colorClass: 'text-success' }],
+        [{ state: 'USED' }, { code: 'used', colorClass: 'text-success' }],
+        [{ state: 'UNAVAILABLE' }, { code: 'unavailable', colorClass: 'text-base-content/70' }],
+        [{ state: 'LOCKED' }, { code: 'locked', colorClass: 'text-base-content/70' }],
+        [{ state: 'NEW_STATE' }, { code: 'other', colorClass: 'text-base-content/70', raw: 'NEW_STATE' }],
+    ])('%j → %j', (turbo, status) => {
+        expect(getTurboStatus(turbo)).toEqual(status);
     });
 });
 
 describe('getLevelStatus', () => {
     test('missing level or name is Unknown', () => {
-        expect(getLevelStatus(0, 'POPULAR')).toEqual({ text: 'Unknown', colorClass: 'badge-success' });
-        expect(getLevelStatus(3, '')).toEqual({ text: 'Unknown', colorClass: 'badge-success' });
+        const unknown = { text: 'Unknown', colorClass: 'badge-success', progressClass: 'progress-latvian' };
+        expect(getLevelStatus(0, 'POPULAR')).toEqual(unknown);
+        expect(getLevelStatus(3, '')).toEqual(unknown);
     });
 
     test.each([
-        ['Popular', 'badge-popular'],
-        ['SKILLED', 'badge-skilled'],
-        ['premier', 'badge-premier'],
-        ['ELITE', 'badge-elite'],
-        ['All Star', 'badge-allstar'],
-        ['Newbie', 'badge-warning'],
-    ])('%s → %s (case-insensitive)', (name, colorClass) => {
-        expect(getLevelStatus(2, name)).toEqual({ text: `${name} 2`, colorClass });
+        ['Popular', LEVEL_BADGE_CLASS.popular, LEVEL_PROGRESS_CLASS.popular],
+        ['SKILLED', LEVEL_BADGE_CLASS.skilled, LEVEL_PROGRESS_CLASS.skilled],
+        ['premier', LEVEL_BADGE_CLASS.premier, LEVEL_PROGRESS_CLASS.premier],
+        ['ELITE', LEVEL_BADGE_CLASS.elite, LEVEL_PROGRESS_CLASS.elite],
+        ['All Star', LEVEL_BADGE_CLASS.allstar, LEVEL_PROGRESS_CLASS.allstar],
+        ['Newbie', 'badge-warning', 'progress-latvian'],
+    ])('%s → %s / %s (case-insensitive)', (name, colorClass, progressClass) => {
+        expect(getLevelStatus(2, name)).toEqual({ text: `${name} 2`, colorClass, progressClass });
     });
 });
 
 describe('getEntryStatus', () => {
+    test('every state is told by its icon alone, with no colour fields', () => {
+        const states = [{ boosted: true }, { turbo: true }, { guru_pick: true }, {}].map((entry) =>
+            getEntryStatus(invalid(entry)),
+        );
+        expect(states.map((state) => state.icon)).toEqual(['🚀', '⚡', '⭐', '📷']);
+        for (const state of states) expect(Object.keys(state).sort()).toEqual(['icon', 'isBoosted', 'isTurboed']);
+    });
+
     test('guru pick and plain entries', () => {
         expect(getEntryStatus(invalid({ guru_pick: true })).icon).toBe('⭐');
         expect(getEntryStatus(undefined)).toMatchObject({ isBoosted: false, isTurboed: false, icon: '📷' });
@@ -162,8 +276,11 @@ describe('getEntryStatus', () => {
 describe('re-exports from the shared core', () => {
     test('formatters exposes the same functions the core modules define', () => {
         const fm = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
-        expect(fm.formatDuration).toBe(
-            (require('../../src/ts/format/duration') as typeof import('../../src/ts/format/duration')).formatDuration,
+        // formatDuration is the shared one in the UI's language (see formatDuration.test.ts): same text in English.
+        const core = (require('../../src/ts/format/duration') as typeof import('../../src/ts/format/duration'))
+            .formatDuration;
+        expect([0, 59, 630, 3700, 90_000].map((seconds) => fm.formatDuration(seconds))).toEqual(
+            [0, 59, 630, 3700, 90_000].map((seconds) => core(seconds)),
         );
         expect(fm.entryPhotoUrl).toBe(
             (require('../../src/ts/format/photoUrl') as typeof import('../../src/ts/format/photoUrl')).entryPhotoUrl,

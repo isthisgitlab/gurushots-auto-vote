@@ -3,10 +3,11 @@
  * JSON tab, simulation on a live challenge, and save (with rename).
  */
 
-import { act, render, screen, waitFor, fireEvent, within } from './helpers/test-utils';
+import { act, cleanup, render, screen, waitFor, fireEvent, within } from './helpers/test-utils';
 import type { ComponentProps } from 'preact';
 import { ScenarioBuilder } from '@/components/app/scenarioBuilder/ScenarioBuilder';
 import type { ScenarioDraft, ScenarioDraftRule } from '../../src/ts/types/scenarioBuilder';
+import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { invalid } from '../helpers/invalid';
 
 /** The saved document as these tests read it: each phase they inspect has rules, and every action a type. */
@@ -48,11 +49,22 @@ const doc = () => ({
 let saved: unknown;
 let onSaved: jest.MockedFunction<ComponentProps<typeof ScenarioBuilder>['onSaved']>;
 let onCancel: jest.MockedFunction<ComponentProps<typeof ScenarioBuilder>['onCancel']>;
+let onDirtyChange: jest.MockedFunction<ComponentProps<typeof ScenarioBuilder>['onDirtyChange']>;
 
 const renderBuilder = async (props: Partial<ComponentProps<typeof ScenarioBuilder>> = {}) => {
     onSaved = jest.fn();
     onCancel = jest.fn();
-    render(<ScenarioBuilder initial={doc()} originalName="Plan" onSaved={onSaved} onCancel={onCancel} {...props} />);
+    onDirtyChange = jest.fn();
+    render(
+        <ScenarioBuilder
+            initial={doc()}
+            originalName="Plan"
+            onSaved={onSaved}
+            onCancel={onCancel}
+            onDirtyChange={onDirtyChange}
+            {...props}
+        />,
+    );
     await waitFor(() => expect(window.api.getSettingsSchema).toHaveBeenCalled());
 };
 
@@ -69,14 +81,15 @@ beforeEach(() => {
         invalid({
             schema: {
                 exposure: { type: 'number', perChallenge: true, default: 100, label: 'app.exposure' },
-                autoFill: { type: 'boolean', perChallenge: true, default: false, label: 'app.autoFill' },
+                autoSubmit: { type: 'boolean', perChallenge: true, default: false, label: 'app.autoSubmit' },
                 scenario: { type: 'scenario', perChallenge: true, default: '', label: 'app.scenario' },
+                chosenPhotos: { type: 'photos', perChallenge: true, default: [], label: 'app.chosenPhotos' },
                 timezone: { type: 'string', perChallenge: false, default: 'UTC', label: 'app.timezone' },
             },
             defaults: {},
         }),
     );
-    jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ token: 'tok' }));
+    jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: {} }));
     jest.mocked(window.api.getActiveChallenges).mockResolvedValue({ challenges: [invalid({ id: 7, title: 'Show' })] });
     window.api.saveScenario = invalid(
         jest.fn(async (draft: ScenarioDraft) => {
@@ -126,7 +139,7 @@ describe('phases', () => {
         fireEvent.change(names[0], { target: { value: 'end' } });
         fireEvent.focusOut(names[0]);
         expect(names[0].value).toBe('main');
-        fireEvent.click(screen.getAllByRole('button', { name: 'app.sbRemovePhase' })[2]);
+        fireEvent.click(screen.getAllByRole('button', { name: /^app\.sbRemovePhase: / })[2]);
         const draft = await saveDraft();
         expect(Object.keys(draft.phases)).toEqual(['main', 'end']);
         expect(draft.phases.main.rules[0].do[0]).toEqual({ type: 'goto', phase: 'end' });
@@ -134,7 +147,7 @@ describe('phases', () => {
 
     test('the only phase cannot be removed', async () => {
         await renderBuilder({ initial: { ...doc(), phases: { main: {} } } });
-        expect(screen.getByRole<HTMLButtonElement>('button', { name: 'app.sbRemovePhase' }).disabled).toBe(true);
+        expect(screen.getByRole<HTMLButtonElement>('button', { name: 'app.sbRemovePhase: main' }).disabled).toBe(true);
         expect(screen.getByText('app.sbNoSettings')).toBeTruthy();
     });
 
@@ -144,16 +157,38 @@ describe('phases', () => {
         const picker = screen.getAllByLabelText<HTMLSelectElement>('app.sbAddSetting')[0];
         expect(within(picker).queryByText('app.scenario')).toBeNull();
         expect(within(picker).queryByText('app.timezone')).toBeNull();
-        changeSelect(picker, 'autoFill');
+        changeSelect(picker, 'autoSubmit');
         fireEvent.change(document.querySelector('#sb-setting-exposure')!, { target: { value: '55' } });
-        fireEvent.click(screen.getAllByTitle('app.resetToDefaultNotSaved')[0]);
+        fireEvent.click(screen.getAllByTitle(/^app\.resetToDefaultNotSaved/)[0]);
         expect(document.querySelector<HTMLInputElement>('#sb-setting-exposure')!.value).toBe('100');
         fireEvent.change(document.querySelector('#sb-setting-exposure')!, { target: { value: '12' } });
         // unknownKey (not in the schema) shows its key and only a remove button.
         expect(screen.getByText('unknownKey')).toBeTruthy();
-        fireEvent.click(screen.getAllByRole('button', { name: 'app.sbRemove' })[1]);
+        fireEvent.click(screen.getByRole('button', { name: 'app.sbRemove: unknownKey' }));
         const draft = await saveDraft();
-        expect(draft.phases.main.settings).toEqual({ exposure: 12, autoFill: false });
+        expect(draft.phases.main.settings).toEqual({ exposure: 12, autoSubmit: false });
+    });
+});
+
+describe('chosen photos in a phase', () => {
+    test('the row wraps and says a scenario list only applies after joining', async () => {
+        window.api.getSetting = jest.fn().mockResolvedValue('');
+        await renderBuilder({
+            initial: { ...doc(), phases: { main: { settings: { chosenPhotos: ['p1'] }, rules: [] } } },
+        });
+        const hint = await screen.findByText('app.chosenPhotosScenarioHint');
+        expect(hint.closest('div')!.className).toContain('flex-wrap');
+        expect(screen.getByRole('button', { name: 'app.choosePhotos' })).toBeTruthy();
+    });
+
+    test('other settings carry no such hint, and the key can be picked from the list', async () => {
+        await renderBuilder();
+        await waitFor(() => expect(screen.getAllByText('app.exposure').length).toBeGreaterThan(0));
+        expect(screen.queryByText('app.chosenPhotosScenarioHint')).toBeNull();
+        changeSelect(screen.getAllByLabelText<HTMLSelectElement>('app.sbAddSetting')[0], 'chosenPhotos');
+        expect(await screen.findByText('app.chosenPhotosScenarioHint')).toBeTruthy();
+        const draft = await saveDraft();
+        expect(draft.phases.main.settings).toEqual({ exposure: 10, unknownKey: 1, chosenPhotos: [] });
     });
 });
 
@@ -163,7 +198,10 @@ describe('rules', () => {
         // A rule's own controls come first in its card, before its condition and action lists.
         const ruleCards = () => [...document.querySelectorAll<HTMLElement>('section .bg-base-100')];
         const ruleButton = (index: number, name: string) =>
-            within(ruleCards()[index]).getAllByRole<HTMLButtonElement>('button', { name })[0];
+            // Named by the action and the rule's place: "Move up: Rule 2".
+            within(ruleCards()[index]).getAllByRole<HTMLButtonElement>('button', {
+                name: new RegExp(`^${name.replace('.', '\\.')}: Rule ${index + 1}\$`),
+            })[0];
         const labels = screen.getAllByLabelText('app.sbRuleLabel');
         fireEvent.change(labels[0], { target: { value: '' } });
         fireEvent.change(labels[1], { target: { value: 'Second' } });
@@ -194,11 +232,64 @@ describe('rules', () => {
     });
 });
 
+describe('tabs', () => {
+    const tabs = () => screen.getAllByRole('tab');
+
+    test('follow the WAI-ARIA tabs pattern', async () => {
+        await renderBuilder();
+        const [builder, json] = tabs();
+        expect(screen.getByRole('tablist').className).toContain('tabs-border');
+        expect([builder.getAttribute('tabindex'), json.getAttribute('tabindex')]).toEqual(['0', '-1']);
+        const panel = screen.getByRole('tabpanel');
+        expect(panel.getAttribute('aria-labelledby')).toBe(builder.id);
+        // only the selected tab controls a mounted panel
+        expect(builder.getAttribute('aria-controls')).toBe(panel.id);
+        expect(json.hasAttribute('aria-controls')).toBe(false);
+
+        fireEvent.click(json);
+        expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(json.id);
+        expect(json.getAttribute('aria-controls')).toBe(screen.getByRole('tabpanel').id);
+        expect(builder.hasAttribute('aria-controls')).toBe(false);
+        expect([builder.getAttribute('tabindex'), json.getAttribute('tabindex')]).toEqual(['-1', '0']);
+    });
+
+    test('the arrow keys wrap and Home / End jump, selecting and focusing the target', async () => {
+        await renderBuilder();
+        const [builder, json] = tabs();
+        const press = (from: HTMLElement, key: string) => fireEvent.keyDown(from, { key });
+
+        press(builder, 'ArrowRight');
+        expect(json.getAttribute('aria-selected')).toBe('true');
+        expect(document.activeElement).toBe(json);
+        press(json, 'ArrowRight');
+        expect(builder.getAttribute('aria-selected')).toBe('true');
+        expect(document.activeElement).toBe(builder);
+        press(builder, 'ArrowLeft');
+        expect(json.getAttribute('aria-selected')).toBe('true');
+        press(json, 'ArrowLeft');
+        expect(builder.getAttribute('aria-selected')).toBe('true');
+        press(builder, 'End');
+        expect(json.getAttribute('aria-selected')).toBe('true');
+        expect(document.activeElement).toBe(json);
+        press(json, 'Home');
+        expect(builder.getAttribute('aria-selected')).toBe('true');
+        expect(document.activeElement).toBe(builder);
+    });
+
+    test('other keys leave the selection alone', async () => {
+        await renderBuilder();
+        const [builder] = tabs();
+        expect(fireEvent.keyDown(builder, { key: 'a' })).toBe(true);
+        expect(builder.getAttribute('aria-selected')).toBe('true');
+    });
+});
+
 describe('JSON tab', () => {
     test('a valid edit replaces the draft; invalid or unrenderable JSON keeps it', async () => {
         await renderBuilder();
         fireEvent.click(screen.getByRole('tab', { name: 'app.sbTabJson' }));
-        const box = screen.getByLabelText('app.sbTabJson');
+        const box = screen.getByRole('textbox', { name: 'app.sbTabJson' });
+        expect(box.getAttribute('autocapitalize')).toBe('off');
         fireEvent.change(box, { target: { value: '{nope' } });
         expect(screen.getByRole('status').textContent).toBe('app.sbJsonInvalid');
         fireEvent.change(box, { target: { value: '{"phases": 5}' } });
@@ -250,6 +341,29 @@ describe('simulate', () => {
         expect(screen.getByText(/\[main\] First: goto/).textContent).toContain('app.sbToPhase');
         expect(screen.getByText('app.sbStop_halted')).toBeTruthy();
         expect(screen.getByText('Phase gone')).toBeTruthy();
+    });
+
+    test('a Manual Only challenge keeps the timeline and says it is paused; a plain one does not', async () => {
+        jest.mocked(window.api.simulateScenario)
+            .mockResolvedValueOnce(
+                invalid({ success: true, events: [], stoppedBecause: 'idle', halted: null, manualOnly: true }),
+            )
+            .mockResolvedValueOnce(
+                invalid({ success: true, events: [], stoppedBecause: 'idle', halted: null, manualOnly: false }),
+            );
+        jest.mocked(window.api.getActiveChallenges).mockResolvedValue({
+            challenges: [invalid({ id: 7, title: 'Show' })],
+        });
+        await renderBuilder();
+        const picker = await screen.findByLabelText<HTMLSelectElement>('app.sbSimulateOn');
+        await waitFor(() => expect(within(picker).getByText('Show')).toBeTruthy());
+        changeSelect(picker, '7');
+        click('app.sbSimulate');
+        await screen.findByText('app.sbSimulatePausedManual');
+        expect(screen.getByText('app.sbSimulateNothing')).toBeTruthy();
+        click('app.sbSimulate');
+        await waitFor(() => expect(screen.queryByText('app.sbSimulatePausedManual')).toBeNull());
+        expect(screen.getByText('app.sbSimulateNothing')).toBeTruthy();
     });
 
     test('an empty timeline, and a failed run with its problems', async () => {
@@ -308,7 +422,11 @@ describe('save', () => {
         await renderBuilder();
         fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'New' } });
         click('app.sbSave');
-        expect((await screen.findByRole('alert')).textContent).toContain('No phase');
+        // The validator's English message is worded in the UI language; its path stays.
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('start');
+        expect(alert.textContent).not.toContain('No phase');
+        expect(alert.textContent).toContain('app.scenarioIssueGeneric');
         expect(window.api.renameScenario).not.toHaveBeenCalled();
         expect(window.api.saveScenario).not.toHaveBeenCalled();
     });
@@ -321,7 +439,12 @@ describe('save', () => {
         await renderBuilder();
         fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'New' } });
         click('app.sbSave');
-        expect((await screen.findByRole('alert')).textContent).toContain('disk full');
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('app.scenarioIssueGeneric');
+        expect(alert.textContent).not.toContain('disk full');
+        await waitFor(() =>
+            expect(window.api.logDebug).toHaveBeenCalledWith('Scenario issue without wording at "": disk full'),
+        );
         click('app.sbSave');
         await waitFor(() => expect(onSaved).toHaveBeenCalled());
         expect(window.api.renameScenario).toHaveBeenCalledTimes(1);
@@ -340,7 +463,7 @@ describe('save', () => {
         await renderBuilder();
         fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'Other' } });
         click('app.sbSave');
-        expect((await screen.findByRole('alert')).textContent).toContain('taken');
+        expect((await screen.findByRole('alert')).textContent).toContain('app.scenarioIssueGeneric');
         expect(window.api.saveScenario).not.toHaveBeenCalled();
         expect(saved).toBeNull();
     });
@@ -350,5 +473,74 @@ describe('save', () => {
         expect(screen.getByText('app.sbTitleEdit')).toBeTruthy();
         click('app.cancel');
         expect(onCancel).toHaveBeenCalled();
+    });
+});
+
+test('every list removed while the builder is open is dropped from the draft, so saving cannot restore it', async () => {
+    await renderBuilder({
+        initial: {
+            ...doc(),
+            phases: {
+                main: { settings: { exposure: 10, chosenPhotos: ['p1'] }, rules: [] },
+                later: { rules: [] },
+            },
+        },
+    });
+    await screen.findByText('app.chosenPhotosScenarioHint');
+    act(() => announceChosenPhotosCleared());
+    await waitFor(() => expect(screen.queryByText('app.chosenPhotosScenarioHint')).toBeNull());
+    const draft = await saveDraft();
+    // The other settings stay; a phase without settings is left as it was.
+    expect(draft.phases.main.settings).toEqual({ exposure: 10 });
+    expect(draft.phases.later).toEqual({ rules: [] });
+});
+
+describe('dirty reporting', () => {
+    const lastReport = () => onDirtyChange.mock.calls.at(-1)?.[0];
+
+    test('false when opened, true after an edit, false again when the edit is undone', async () => {
+        await renderBuilder();
+        expect(lastReport()).toBe(false);
+        fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'Plan B' } });
+        expect(lastReport()).toBe(true);
+        fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'Plan' } });
+        expect(lastReport()).toBe(false);
+    });
+
+    test('closing the builder reports false', async () => {
+        await renderBuilder();
+        fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'Plan B' } });
+        expect(lastReport()).toBe(true);
+        cleanup();
+        await waitFor(() => expect(lastReport()).toBe(false));
+    });
+
+    test('JSON text that never became the draft is dirty; leaving the tab clears it', async () => {
+        await renderBuilder();
+        fireEvent.click(screen.getByRole('tab', { name: 'app.sbTabJson' }));
+        expect(lastReport()).toBe(false);
+        fireEvent.change(screen.getByRole('textbox', { name: 'app.sbTabJson' }), { target: { value: '{nope' } });
+        expect(lastReport()).toBe(true);
+        fireEvent.click(screen.getByRole('tab', { name: 'app.sbTabBuilder' }));
+        expect(lastReport()).toBe(false);
+    });
+
+    test('every list removed while the builder is open is not an unsaved edit, in the builder or the JSON tab', async () => {
+        await renderBuilder({
+            initial: { ...doc(), phases: { main: { settings: { exposure: 10, chosenPhotos: ['p1'] }, rules: [] } } },
+        });
+        fireEvent.click(screen.getByRole('tab', { name: 'app.sbTabJson' }));
+        expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'app.sbTabJson' }).value).toContain(
+            'chosenPhotos',
+        );
+
+        act(() => announceChosenPhotosCleared());
+
+        await waitFor(() =>
+            expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'app.sbTabJson' }).value).not.toContain(
+                'chosenPhotos',
+            ),
+        );
+        expect(lastReport()).toBe(false);
     });
 });

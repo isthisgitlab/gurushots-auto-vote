@@ -17,6 +17,7 @@ type LoggerMock = typeof loggerModule & {
 // Mock the settings module
 const mockSettings = {
     getEffectiveSetting: jest.fn(),
+    getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     SETTINGS_SCHEMA: {
         boostTime: {
             default: 3600, // 1 hour default
@@ -61,10 +62,14 @@ jest.mock('../../src/ts/timing', () => mockUtils);
 
 // Mock the voting logic service
 const mockVotingLogic = {
+    resolvePin: jest.fn(() => ({ state: 'none' })),
+    pinFallbackOf: jest.fn(() => null),
+    describePinFallback: jest.fn(() => ''),
     shouldApplyBoost: jest.fn(),
+    isWithinEmergencyWindow: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
     getEffectiveBoostTime: jest.fn(),
-    pickBoostEntry: jest.fn(() => null),
+    pickBoostEntry: jest.fn(() => ({ id: 'e1' })),
     getBoostHoldUntil: jest.fn(() => null),
     evaluateVotingDecision: jest.fn(),
     shouldPlayAutoTurbo: jest.fn(() => false),
@@ -73,9 +78,9 @@ const mockVotingLogic = {
     // the boost runner still executes (order is irrelevant to these assertions).
     orderDeadlineActions: jest.fn(() => [
         { action: 'boost', thresholdSec: 0 },
-        { action: 'autoFill', thresholdSec: 0 },
+        { action: 'autoSubmit', thresholdSec: 0 },
         { action: 'turbo', thresholdSec: 0 },
-        { action: 'emergencyFill', thresholdSec: 0 },
+        { action: 'emergencySubmit', thresholdSec: 0 },
     ]),
 };
 

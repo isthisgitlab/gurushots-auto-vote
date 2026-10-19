@@ -13,6 +13,7 @@ jest.mock('../../src/ts/services/currencyActions');
 
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
+import { logCategories } from '../helpers/logCategories';
 
 import apiFactoryModule = require('../../src/ts/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
@@ -22,7 +23,10 @@ import currencyActionsModule = require('../../src/ts/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
 import type * as currency_handlersModule from '../../src/ts/ipc/currency.handlers';
 import type * as swapBackStoreModule from '../../src/ts/swapBackStore';
+import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
 const { buildHandlers } = require('../../src/ts/ipc/currency.handlers') as typeof currency_handlersModule;
+const { writeListing, readFresh, clearLibraryCache } =
+    require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
 
 const OK = { ok: true, outcome: 'ok' };
 // The handlers as the tests read them: every result is an envelope whose `outcome` the
@@ -39,6 +43,7 @@ let handlers: Handlers;
 
 beforeEach(() => {
     jest.clearAllMocks();
+    clearLibraryCache();
     auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'tok', settings: {} });
     apiFactory.getApiStrategy = jest.fn().mockReturnValue({});
     // The spend lock is real (the handlers share it with the automatic runners);
@@ -203,6 +208,77 @@ describe('swap preview binding', () => {
     });
 });
 
+describe('swap preview of a chosen photo', () => {
+    const chosen = (chosenId: unknown) => handlers['preview-swap-photo'](null, 10, 'old', invalid(chosenId));
+
+    test.each([[undefined], [null]])('%s means "not given": the ranked path', async (chosenId) => {
+        expect((await chosen(chosenId)).success).toBe(true);
+        expect(currencyActions.previewSwap).toHaveBeenCalledWith(10, 'old', 'tok', expect.any(Object), {});
+    });
+
+    test('a chosen id goes to the service, as a string', async () => {
+        currencyActions.previewSwap.mockResolvedValueOnce({ ...OK, candidate: { id: 'pick-1', member_id: 'm' } });
+        expect(await chosen('pick-1')).toEqual({
+            success: true,
+            outcome: 'ok',
+            candidate: { id: 'pick-1', member_id: 'm' },
+        });
+        expect(currencyActions.previewSwap).toHaveBeenCalledWith(10, 'old', 'tok', expect.any(Object), {
+            chosenId: 'pick-1',
+        });
+    });
+
+    test('a numeric chosen id is normalised to a string', async () => {
+        await chosen(4242);
+        expect(currencyActions.previewSwap.mock.calls[0][4]).toEqual({ chosenId: '4242' });
+    });
+
+    test.each([['has space'], ['a/b'], [''], ['x'.repeat(65)], [{}], [true], [Number.NaN]])(
+        'a chosen id that is not a library id (%p) → invalid-args, nothing previewed',
+        async (chosenId) => {
+            expect((await chosen(chosenId)).outcome).toBe('invalid-args');
+            expect(currencyActions.previewSwap).not.toHaveBeenCalled();
+        },
+    );
+
+    test('the chosen id is logged only when given', async () => {
+        await chosen(null);
+        await chosen('pick-1');
+        const base = '🔄 Swap preview request: Challenge=10, Image=old';
+        expect(logCategories('info', base, null)).toEqual(['currency']);
+        expect(logCategories('info', `${base}, chosen=pick-1`, null)).toEqual(['currency']);
+    });
+
+    test('the commit takes exactly the remembered chosen id, once', async () => {
+        currencyActions.previewSwap.mockResolvedValueOnce({ ...OK, candidate: { id: 'pick-1', member_id: 'm' } });
+        await chosen('pick-1');
+        expect((await handlers['swap-entry-photo'](null, 10, 'old', 'other', true)).outcome).toBe('stale-candidate');
+        expect(currencyActions.swapEntry).not.toHaveBeenCalled();
+        // The refused attempt consumed it.
+        expect((await handlers['swap-entry-photo'](null, 10, 'old', 'pick-1', true)).outcome).toBe('stale-candidate');
+    });
+
+    test('the remembered chosen id is accepted at the commit', async () => {
+        currencyActions.previewSwap.mockResolvedValueOnce({ ...OK, candidate: { id: 'pick-1', member_id: 'm' } });
+        await chosen('pick-1');
+        expect((await handlers['swap-entry-photo'](null, 10, 'old', 'pick-1', true)).success).toBe(true);
+        expect(currencyActions.swapEntry).toHaveBeenCalledWith(10, 'old', 'pick-1', 'tok', expect.any(Object));
+    });
+
+    test('a later preview for the same entry replaces the earlier one', async () => {
+        currencyActions.previewSwap.mockResolvedValueOnce({ ...OK, candidate: { id: 'pick-1', member_id: 'm' } });
+        await chosen('pick-1');
+        await handlers['preview-swap-photo'](null, 10, 'old');
+        expect((await handlers['swap-entry-photo'](null, 10, 'old', 'pick-1', true)).outcome).toBe('stale-candidate');
+    });
+
+    test('an already-entered refusal is passed on and not remembered', async () => {
+        currencyActions.previewSwap.mockResolvedValueOnce({ ok: false, outcome: 'already-entered' });
+        expect((await chosen('pick-1')).outcome).toBe('already-entered');
+        expect((await handlers['swap-entry-photo'](null, 10, 'old', 'pick-1', true)).outcome).toBe('stale-candidate');
+    });
+});
+
 describe('swap back channels', () => {
     beforeEach(() => {
         currencyActions.swapBack.mockResolvedValue(OK);
@@ -252,6 +328,67 @@ describe('swap back channels', () => {
         const { swapBackLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
         await handlers['swap-back-entry-photo'](null, 10, 'repl', true);
         expect(currencyActions.swapBack.mock.calls[0][3].ledger).not.toBe(swapBackLedger);
+    });
+});
+
+describe('the library listing a swap outdates', () => {
+    const keepListings = () => {
+        const listing = {
+            photos: [],
+            memberId: 'm',
+            wonIds: [],
+            wonCount: 0,
+            truncated: false,
+            allowedKnown: true,
+            readAtMs: Date.now(),
+        };
+        writeListing('tok', '10', listing);
+        writeListing('tok', '11', listing);
+    };
+    const kept = (id: string) => readFresh('tok', id) !== null;
+    const swap = async () => {
+        await handlers['preview-swap-photo'](null, 10, 'old');
+        return handlers['swap-entry-photo'](null, 10, 'old', 'new1', true);
+    };
+    const swapBack = () => handlers['swap-back-entry-photo'](null, 10, 'repl', true);
+
+    test.each([
+        ['swap-entry-photo', swap, () => currencyActions.swapEntry],
+        ['swap-back-entry-photo', swapBack, () => currencyActions.swapBack],
+    ])('%s drops that challenge’s listing, whatever the spend came to', async (_name, act, service) => {
+        for (const outcome of [
+            () => Promise.resolve(OK),
+            () => Promise.resolve({ ok: false, outcome: 'api-failed' }),
+            () => Promise.reject(new Error('boom')),
+        ]) {
+            keepListings();
+            service().mockImplementationOnce(outcome);
+            await act();
+            expect(kept('10')).toBe(false);
+            expect(kept('11')).toBe(true);
+        }
+    });
+
+    test('nothing is dropped when nothing was spent: unconfirmed, a stale preview, a busy lock, invalid arguments, no token', async () => {
+        keepListings();
+        await handlers['swap-entry-photo'](null, 10, 'old', 'new1', false);
+        await handlers['swap-entry-photo'](null, 10, 'old', 'never-previewed', true);
+        await invalid<OmitLast<Handlers['swap-back-entry-photo']>>(handlers['swap-back-entry-photo'])(null, 10, 'repl');
+        await handlers['swap-back-entry-photo'](null, invalid<number>({}), 'repl', true);
+        auth.requireAuthToken = jest
+            .fn()
+            .mockReturnValue({ ok: false, response: { success: false, error: 'No authentication token found' } });
+        await handlers['swap-back-entry-photo'](null, 10, 'repl', true);
+        expect([kept('10'), kept('11')]).toEqual([true, true]);
+        expect(currencyActions.swapEntry).not.toHaveBeenCalled();
+        expect(currencyActions.swapBack).not.toHaveBeenCalled();
+    });
+
+    test('the other spends leave the listing alone: a key unlock and an exposure fill change no photo', async () => {
+        keepListings();
+        await handlers['key-unlock-boost'](null, 10, true);
+        await handlers['fill-exposure'](null, 10, true);
+        expect([kept('10'), kept('11')]).toEqual([true, true]);
     });
 });
 

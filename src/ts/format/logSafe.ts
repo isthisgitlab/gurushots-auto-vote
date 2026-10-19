@@ -24,13 +24,52 @@ import { errorMessage } from '../errorMessage';
  */
 const oneLine = (value: unknown): string => String(value).replace(/[\r\n\v\f\u0085\u2028\u2029]+/g, ' ');
 
-/** Sentence-case a log's first word, including after a logger icon. */
-const sentenceCaseLogMessage = (message: string): string => {
-    const challenge = /^((?:[\p{Extended_Pictographic}\uFE0F\u200D]+\s+)*)(\[Challenge [^\]]+\]\s+)(.+)$/u.exec(
-        message,
+// An ANSI escape sequence (CSI "ESC [ … final", or OSC "ESC ] … BEL/ST"). Built
+// from the ESC code point rather than written as a literal, so the pattern
+// holds no control character.
+const ESC = String.fromCharCode(27);
+const ANSI_SEQUENCE = new RegExp(`${ESC}(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\u0007${ESC}]*(?:\\u0007|${ESC}\\\\)?)`, 'g');
+
+/**
+ * Text from an untrusted source made safe to print to a terminal: ANSI sequences are
+ * removed whole, every other control character (the C1 range included) and every
+ * invisible format character (`\p{Cf}`: the bidi controls, zero-width spaces, word
+ * joiner, invisible operators, the soft hyphen, interlinear annotation marks, the
+ * tag characters) is dropped, so the value can neither drive the terminal nor
+ * reorder or hide what is printed. The two joiners, ZWJ (U+200D) and ZWNJ
+ * (U+200C), stay: emoji sequences and Persian text need them.
+ *
+ * Line breaks and tabs become a space, so the value cannot forge extra output lines —
+ * unless `keepLayout` is set, for a document whose own lines are wanted: then `\n` and
+ * `\t` stay, and the other line separators (CR, CRLF, VT, FF, NEL, LS, PS) become `\n`.
+ */
+const stripTerminalControl = (value: unknown, { keepLayout = false }: { keepLayout?: boolean } = {}): string => {
+    const text = String(value).replace(ANSI_SEQUENCE, '');
+    const laidOut = keepLayout
+        ? text.replace(/\r\n?|[\v\f\u0085\u2028\u2029]/g, '\n')
+        : text.replace(/[\t\r\n\v\f\u0085\u2028\u2029]+/g, ' ');
+    return laidOut.replace(/(?![\n\t\u200C\u200D])[\p{Cc}\p{Cf}]/gu, '');
+};
+
+/**
+ * A JSON document made safe to print: every character `stripTerminalControl` would drop (control,
+ * C1, invisible format characters, the Unicode line and paragraph separators) becomes its
+ * `\uXXXX` escape — a surrogate pair above the BMP. Inside a JSON string that is the same value,
+ * so the document parses back unchanged and prints the same on a terminal as it is written to a
+ * file, where stripping would have altered the data. Layout whitespace and the two joiners stay.
+ */
+const escapeTerminalUnsafe = (json: string): string =>
+    json.replace(/(?![\n\r\t\u200C\u200D])[\p{Cc}\p{Cf}\u2028\u2029]/gu, (char) =>
+        Array.from({ length: char.length }, (_, i) => `\\u${char.charCodeAt(i).toString(16).padStart(4, '0')}`).join(
+            '',
+        ),
     );
+
+/** Sentence-case a log's first word, including after a logger icon. An indented row keeps its text as is. */
+const sentenceCaseLogMessage = (message: string): string => {
+    const challenge = /^((?:[\p{Extended_Pictographic}\uFE0F\u200D]+ )*)(\[Challenge [^\]]+\]\s+)(.+)$/u.exec(message);
     if (challenge) return `${challenge[1]}${challenge[2]}${sentenceCaseLogMessage(challenge[3])}`;
-    const match = /^((?:[\p{Extended_Pictographic}\uFE0F\u200D]+\s+)*)(\p{Ll}[\p{L}\p{N}-]*)/u.exec(message);
+    const match = /^((?:[\p{Extended_Pictographic}\uFE0F\u200D]+ )*)(\p{Ll}[\p{L}\p{N}-]*)/u.exec(message);
     if (!match) return message;
     const [, icon, word] = match;
     const rest = message.slice(match[0].length);
@@ -46,6 +85,19 @@ const sentenceCaseLogMessage = (message: string): string => {
 };
 
 /**
+ * Split a leading icon (a pictographic cluster: variation selector, skin tone, ZWJ sequence) and the
+ * single space after it off a log message. A message without one — blank, an indented detail row, a
+ * banner — gives an empty icon and the text unchanged.
+ */
+const splitIcon = (message: string): { icon: string; text: string } => {
+    const match =
+        /^(\p{Extended_Pictographic}[\uFE0F\p{Emoji_Modifier}]?(?:\u200D\p{Extended_Pictographic}[\uFE0F\p{Emoji_Modifier}]?)*) ?/u.exec(
+            message,
+        );
+    return match ? { icon: match[1], text: message.slice(match[0].length) } : { icon: '', text: message };
+};
+
+/**
  * Text for a caught value in a failure log line: its `message`, else the value
  * itself as text, else 'unknown error'. Never empty — `logger.endOperation`
  * records an operation as completed when its error text is empty, so a
@@ -55,4 +107,4 @@ const sentenceCaseLogMessage = (message: string): string => {
  */
 const failureText = (error: unknown): string => errorMessage(error) || String(error ?? '') || 'unknown error';
 
-export { oneLine, failureText, sentenceCaseLogMessage };
+export { oneLine, failureText, stripTerminalControl, escapeTerminalUnsafe, sentenceCaseLogMessage, splitIcon };

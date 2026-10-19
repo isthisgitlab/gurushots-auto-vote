@@ -21,6 +21,7 @@ const MOCK_PHOTO_LABELS = {
     photo_animal_006: ['Animal', 'Wildlife', 'Bird'],
     photo_blocked_007: ['Pink', 'Flower'],
     photo_old_008: ['Misc'],
+    photo_won_009: ['Trophy'],
 };
 
 // Every distinct tag the mock library carries, lowercased — what
@@ -34,7 +35,7 @@ const MOCK_LIBRARY_TAGS = Array.from(
 ).sort();
 
 /**
- * The library listing (/rest/get_photos_private items) as of `now`: eight
+ * The library listing (/rest/get_photos_private items) as of `now`: nine
  * photos with the fields the picker uses (id, labels, votes, views,
  * upload_date, permission) and varied labels so the tag-match picker has
  * something to differentiate. (The live endpoint returns votes=0 for library
@@ -108,6 +109,18 @@ const buildLibraryPhotos = (now: number): Array<LibraryPhoto & { labels: string[
         upload_date: now - 86400 * 30,
         permission: { allowed: true, message: null },
     },
+    {
+        id: 'photo_won_009',
+        labels: MOCK_PHOTO_LABELS.photo_won_009,
+        votes: 640,
+        views: 3100,
+        upload_date: now - 86400 * 20,
+        // The server's own wording, HTML included: a photo that has won a challenge cannot enter another.
+        permission: {
+            allowed: false,
+            message: "This image <b>has won a challenge</b><br/><span>it can't participate in another</span>",
+        },
+    },
 ];
 
 /**
@@ -130,6 +143,7 @@ const buildImageStats = (): Record<string, { votes: number; views: number; achie
     photo_animal_006: { votes: 1560, views: 980, achievements: ['top_100'] },
     photo_blocked_007: { votes: 9990, views: 5000, achievements: ['elite'] },
     photo_old_008: { votes: 12400, views: 70, achievements: ['elite', 'top_30', 'top_50', 'top_100'] },
+    photo_won_009: { votes: 6400, views: 3100, achievements: ['winner'] },
 });
 
 export { MOCK_LIBRARY_TAGS, buildLibraryPhotos, buildImageStats };

@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { ToneNote } from '@/components/ui/ToneNote';
 import type { TargetedEvent, TargetedSubmitEvent } from 'preact';
 
 /**
@@ -19,12 +20,18 @@ export function LoginForm({
 }) {
     const { t } = useTranslation();
     const [username, setUsername] = useState(initialUsername);
+    // A saved name that arrives after the form is up fills the field, unless something was typed by then.
+    useEffect(() => {
+        setUsername((typed) => typed || initialUsername);
+    }, [initialUsername]);
     const [password, setPassword] = useState('');
     const [errors, setErrors] = useState<{ username?: string | null; password?: string | null }>({});
+    const usernameRef = useRef<HTMLInputElement>(null);
+    const passwordRef = useRef<HTMLInputElement>(null);
 
     /**
      * Validate form fields
-     * @returns Whether form is valid
+     * @returns The error text of each invalid field (empty when the form is valid)
      */
     const validateForm = useCallback(() => {
         const newErrors: { username?: string; password?: string } = {};
@@ -38,7 +45,7 @@ export function LoginForm({
         }
 
         setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
+        return newErrors;
     }, [username, password, t]);
 
     /**
@@ -48,9 +55,11 @@ export function LoginForm({
         (e: TargetedSubmitEvent<HTMLFormElement>) => {
             e.preventDefault();
 
-            if (validateForm()) {
-                void onSubmit(username.trim(), password);
-            }
+            const found = validateForm();
+            // Focus follows the first invalid field, so the keyboard and a screen reader land on what to fix.
+            if (found.username) usernameRef.current?.focus();
+            else if (found.password) passwordRef.current?.focus();
+            else void onSubmit(username.trim(), password);
         },
         [username, password, validateForm, onSubmit],
     );
@@ -86,16 +95,25 @@ export function LoginForm({
                     <span>{t('login.username')}</span>
                 </label>
                 <input
+                    ref={usernameRef}
                     id="username"
                     type="text"
-                    className={`input input-sm w-full ${errors.username ? 'input-error' : ''}`}
+                    className={`input w-full ${errors.username ? 'input-error' : ''}`}
                     placeholder={t('login.usernamePlaceholder')}
                     value={username}
                     onChange={handleUsernameChange}
                     disabled={loading}
                     autoComplete="username"
+                    autoCapitalize="none"
+                    spellcheck={false}
+                    aria-invalid={errors.username ? true : undefined}
+                    aria-describedby={errors.username ? 'username-error' : undefined}
                 />
-                {errors.username && <div className="text-error font-medium mt-1">{errors.username}</div>}
+                {errors.username && (
+                    <ToneNote tone="error" as="div" id="username-error" className="font-medium mt-1">
+                        {errors.username}
+                    </ToneNote>
+                )}
             </div>
 
             {/* Password field */}
@@ -104,25 +122,32 @@ export function LoginForm({
                     <span>{t('login.password')}</span>
                 </label>
                 <input
+                    ref={passwordRef}
                     id="password"
                     type="password"
-                    className={`input input-sm w-full ${errors.password ? 'input-error' : ''}`}
+                    className={`input w-full ${errors.password ? 'input-error' : ''}`}
                     placeholder={t('login.passwordPlaceholder')}
                     value={password}
                     onChange={handlePasswordChange}
                     disabled={loading}
                     autoComplete="current-password"
+                    aria-invalid={errors.password ? true : undefined}
+                    aria-describedby={errors.password ? 'password-error' : undefined}
                 />
-                {errors.password && <div className="text-error font-medium mt-1">{errors.password}</div>}
+                {errors.password && (
+                    <ToneNote tone="error" as="div" id="password-error" className="font-medium mt-1">
+                        {errors.password}
+                    </ToneNote>
+                )}
             </div>
 
             {/* Submit button */}
             <div className="flex flex-col w-full mt-6">
-                <button type="submit" className="btn btn-latvian btn-sm w-full" disabled={loading}>
+                <button type="submit" className="btn btn-neutral w-full" disabled={loading}>
                     {loading ? (
                         <>
                             <span>{t('login.loggingIn')}</span>
-                            <LoadingSpinner size="sm" className="ml-2" />
+                            <LoadingSpinner size="sm" className="ml-2" decorative />
                         </>
                     ) : (
                         <span>{t('login.loginButton')}</span>

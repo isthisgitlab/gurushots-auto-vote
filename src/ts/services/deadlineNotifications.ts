@@ -28,20 +28,20 @@
  * action string (from server data), so typed with a string index.
  */
 const ACTION_LABEL_KEY: Record<string, string> = {
-    autoFill: 'app.deadlineActionAutoFill',
+    autoSubmit: 'app.deadlineActionAutoSubmit',
     boost: 'app.deadlineActionBoost',
     turbo: 'app.deadlineActionTurbo',
-    emergencyFill: 'app.deadlineActionEmergencyFill',
+    emergencySubmit: 'app.deadlineActionEmergencySubmit',
 };
 
 /**
  * The settings key that gates each action. Indexed by a dynamic action string.
  */
 const NOTIFY_SETTING_KEYS: Record<string, string> = {
-    autoFill: 'notifyOnAutoFill',
+    autoSubmit: 'notifyOnAutoSubmit',
     boost: 'notifyOnBoost',
     turbo: 'notifyOnTurbo',
-    emergencyFill: 'notifyOnEmergencyFill',
+    emergencySubmit: 'notifyOnEmergencySubmit',
 };
 
 /**

@@ -8,18 +8,18 @@
 import * as logger from '../logger';
 import { ruleConditions, matchingRules } from './challengeRules';
 import { loadSettings, saveSettings } from './persistence';
-import { readProfilesMap, profileNameForLog } from './profileStore';
+import { profileNameForLog } from './profileStore';
 import { factsForChallengeId } from './challengeFacts';
 import { MAX_TITLE_RULES, sanitizeTitleRule, titleRuleKey, ruleLogLabel } from './titleRuleSanitize';
 import {
-    profileFromMatches,
+    ruleTimeZone,
     ruleValuesFor,
     isTitleProfileSuppressed,
     titleProfileComposesWithKnownOverrides,
 } from './ruleResolution';
 import { getEffectiveSetting } from './challengeOverrides';
 
-import type { ChallengeValues, RuleMatchChallenge, SettingValueOf, TitleRule } from '../types/settings';
+import type { RuleMatchChallenge, SettingValueOf, TitleRule, TitleRuleInfo } from '../types/settings';
 import type { RuleLike } from './challengeRules';
 
 /**
@@ -48,7 +48,7 @@ const unionTags = (base: readonly string[], extra: unknown[]): string[] => {
 /**
  * Get the saved challenge rules.
  */
-const getTitleRules = (): TitleRule[] => loadSettings().challengeSettings.titleRules;
+const getTitleRules = (): TitleRule[] => loadSettings().rules;
 
 /**
  * Public per-setting resolver for callers holding a challenge payload (the join
@@ -88,10 +88,7 @@ const _titleForLog = (title: string): string => (title.length > 80 ? `${title.sl
  * first one's position. Returns the rule list, or null (logged) on the first
  * rejected rule.
  */
-const _sanitizedUniqueRules = (
-    rules: unknown[],
-    storedProfiles: Record<string, ChallengeValues>,
-): TitleRule[] | null => {
+const _sanitizedUniqueRules = (rules: unknown[], storedProfiles: Record<string, unknown>): TitleRule[] | null => {
     const byKey: Map<string, TitleRule> = new Map();
     for (const rule of rules) {
         const result = sanitizeTitleRule(rule as RuleLike, storedProfiles);
@@ -130,7 +127,7 @@ const setTitleRules = (rules: unknown): boolean => {
     }
 
     const settings = loadSettings();
-    const storedProfiles = readProfilesMap(settings);
+    const storedProfiles = settings.profiles;
     const sanitized = _sanitizedUniqueRules(rules, storedProfiles);
     if (sanitized === null) return false;
 
@@ -146,26 +143,27 @@ const setTitleRules = (rules: unknown): boolean => {
         }
     }
 
-    settings.challengeSettings.titleRules = sanitized;
-    // The list is saved in the order the user gave, which IS the precedence, so
-    // the one-time ordering migration must never re-sort it afterwards (a fresh
-    // install saves before any file exists for that migration to have flagged).
-    settings._challengeRulesOrderedV1 = true;
+    // The list is saved in the order the user gave, which IS the precedence.
+    settings.rules = sanitized;
     return saveSettings(settings);
 };
 
 /**
- * Public read model for the renderer: returns the sanitized profile inherited
- * by a challenge, or null when nothing matches.
+ * Public read model for the renderer: what the rules matching a challenge
+ * contribute (see TitleRuleInfo): the profile they apply, the challenge's
+ * suppression of it, and the value maps with and without the profile layer.
+ * Rules that match nothing give empty layers and no profile.
  *
  * Accepts a challenge object or a bare title. With only a title, a rule keyed
  * on tag / type / photo count / runtime can still resolve when `challengeId` is
  * given, because those facts come from the remembered active-challenge list.
+ * Everything is read against that fact-enriched challenge, the one the rules
+ * are matched on, never against the bare title.
  */
 const getTitleProfile = (
     target: RuleMatchChallenge | string,
     challengeId: string | number | null = null,
-): { name: string; values: ChallengeValues; suppressed?: boolean } | null => {
+): TitleRuleInfo => {
     const settings = loadSettings();
     const challenge: Record<string, unknown> = typeof target === 'string' ? { title: target } : { ...target };
     const hasId = challengeId !== null && challengeId !== undefined;
@@ -175,10 +173,16 @@ const getTitleProfile = (
             if (challenge[key] === undefined) challenge[key] = value;
         }
     }
-    const matched = profileFromMatches(settings, matchingRules(settings.challengeSettings?.titleRules, challenge));
-    if (!matched) return null;
-    const profile = { name: matched.name, values: matched.values };
-    return hasId ? { ...profile, suppressed: isTitleProfileSuppressed(settings, challengeId) } : profile;
+    const { values: ruleValues, profile, sources: ruleSources } = ruleValuesFor(settings, challenge);
+    const { values: inlineValues, sources: inlineSources } = ruleValuesFor(settings, challenge, true);
+    return {
+        profile: profile ? { name: profile.name, values: profile.values } : null,
+        suppressed: hasId && isTitleProfileSuppressed(settings, challengeId),
+        ruleValues,
+        inlineValues,
+        ruleSources,
+        inlineSources,
+    };
 };
 
 /**
@@ -201,7 +205,8 @@ const getEffectiveTagSetting = <K extends string>(
     // Pass the whole challenge, not just its title: a rule may be keyed on any
     // of the challenge's own facts, and a joined challenge carries them in the
     // payload. The first matching rule that lists tags for this key wins.
-    const rule = matchingRules(getTitleRules(), challenge).find(
+    const settings = loadSettings();
+    const rule = matchingRules(settings.rules, challenge, ruleTimeZone(settings)).find(
         (candidate) => Array.isArray(candidate?.[settingKey]) && candidate[settingKey].length > 0,
     );
     if (!rule) return base;

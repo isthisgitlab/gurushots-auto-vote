@@ -3,6 +3,7 @@
 @source "../../src/html/**/*.html";
 @source "../../src/ts/**/*.ts";
 @source "../../src/ts/**/*.tsx";
+@source "../../scripts/build-react.ts";
 @plugin "daisyui" {
     themes: all;
     base: true;
@@ -11,24 +12,44 @@
     logs: false;
 }
 
+/* The Latvian theme: the brand red, the GuruShots ranking-level colours (each white-on-colour pair is at least
+ * 4.5:1, the WCAG AA contrast for text), and the few utilities that apply them. Everything else is Tailwind and
+ * DaisyUI classes. */
 :root {
     --color-latvian: #960018;
+    --color-level-allstar: #1c1c1c;
+    --color-level-elite: #234f64;
+    --color-level-premier: #853445;
+    --color-level-skilled: #0a655c;
+    --color-level-popular: #2a7aa0;
     scrollbar-color: color-mix(in oklch, currentColor 0%, var(--color-latvian)) transparent;
 }
 
-/* Capacitor / mobile safe-area handling. The Android WebView paints
- * underneath the status bar and gesture nav by default; without these
- * insets the title overlaps the time/battery indicators at the top
- * and the bottom edge gets cut off on phones with a gesture bar.
- * env(safe-area-inset-*) returns 0 on desktop so this is harmless
- * for Electron. */
-html,
-body {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-    box-sizing: border-box;
+/* The level colours as the progress bar's fill: on a dark theme (as for text-latvian below) they are lightened, as
+ * All Star's near-black would otherwise vanish against the card. The badge keeps the dark colour under its white text. */
+@supports (color: light-dark(red, red)) {
+    :root {
+        --level-fill-allstar: light-dark(
+            var(--color-level-allstar),
+            color-mix(in oklch, var(--color-level-allstar) 45%, white)
+        );
+        --level-fill-elite: light-dark(
+            var(--color-level-elite),
+            color-mix(in oklch, var(--color-level-elite) 55%, white)
+        );
+        --level-fill-premier: light-dark(
+            var(--color-level-premier),
+            color-mix(in oklch, var(--color-level-premier) 55%, white)
+        );
+        --level-fill-skilled: light-dark(
+            var(--color-level-skilled),
+            color-mix(in oklch, var(--color-level-skilled) 55%, white)
+        );
+        --level-fill-popular: light-dark(
+            var(--color-level-popular),
+            color-mix(in oklch, var(--color-level-popular) 55%, white)
+        );
+    }
 }
 
 /* Latvian color utility classes */
@@ -41,6 +62,14 @@ body {
 .btn-latvian:hover {
     background-color: #7a0014;
     border-color: #7a0014;
+}
+
+/* These rules sit outside any layer, so they would beat DaisyUI's (layered) disabled look and leave a held button
+ * at full carmine: give it that look here. */
+.btn-latvian:is(:disabled, [disabled], [aria-disabled='true'], .btn-disabled) {
+    background-color: color-mix(in oklab, var(--color-base-content) 10%, transparent);
+    border-color: transparent;
+    color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
 }
 
 .progress-latvian::-webkit-progress-value {
@@ -67,29 +96,4 @@ body {
 
 .border-latvian {
     border-color: var(--color-latvian);
-}
-
-.badge-allstar {
-    --badge-color: #1c1c1c;
-    --badge-fg: white;
-}
-
-.badge-elite {
-    --badge-color: #234f64;
-    --badge-fg: white;
-}
-
-.badge-premier {
-    --badge-color: #853445;
-    --badge-fg: white;
-}
-
-.badge-skilled {
-    --badge-color: #0a655c;
-    --badge-fg: white;
-}
-
-.badge-popular {
-    --badge-color: #2c7fa6;
-    --badge-fg: white;
 }

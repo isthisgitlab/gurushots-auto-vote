@@ -1,0 +1,554 @@
+{
+    "@capacitor/android": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2017-present Drifty Co."]
+    },
+    "@capacitor/core": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2017-present Drifty Co."]
+    },
+    "@capacitor/preferences": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright 2020-present Ionic"]
+    },
+    "@capawesome-team/capacitor-android-foreground-service": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2022 Robin Genz"]
+    },
+    "@emnapi/runtime": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2021-present Toyobayashi"]
+    },
+    "@huggingface/jinja": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2023 Hugging Face"]
+    },
+    "@huggingface/tokenizers": {
+        "license": "Apache-2.0",
+        "texts": ["Apache-2.0"],
+        "copyright": ["Copyright Hugging Face"]
+    },
+    "@huggingface/transformers": {
+        "license": "Apache-2.0",
+        "texts": ["Apache-2.0"],
+        "copyright": ["Copyright Hugging Face"]
+    },
+    "@img/colour": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": [
+            "Copyright (c) 2012 Heather Arthur",
+            "Copyright (c) 2011-2016 Heather Arthur <fayearthur@gmail.com>.",
+            "Copyright (c) 2016-2021 Josh Junon <josh@junon.me>.",
+            "Copyright (c) 2011 Heather Arthur <fayearthur@gmail.com>"
+        ]
+    },
+    "@img/sharp-*": {
+        "license": "Apache-2.0",
+        "texts": ["Apache-2.0"],
+        "copyright": ["Copyright Lovell Fuller"]
+    },
+    "@img/sharp-freebsd-wasm32": {
+        "license": "Apache-2.0 AND LGPL-3.0-or-later AND MIT",
+        "texts": ["Apache-2.0", "LGPL-3.0", "GPL-3.0", "MIT"],
+        "copyright": [
+            "Copyright Lovell Fuller",
+            "Statically contains libvips (LGPL-3.0-or-later), emnapi (MIT, Copyright (c) 2021-present Toyobayashi) and the libraries they are built from"
+        ],
+        "source": "https://github.com/lovell/sharp-libvips"
+    },
+    "@img/sharp-libvips-*": {
+        "license": "LGPL-3.0-or-later",
+        "texts": ["LGPL-3.0", "GPL-3.0"],
+        "copyright": [
+            "Copyright Lovell Fuller and contributors",
+            "Contains libvips (Copyright libvips contributors) and the libraries it is built from, listed in the source repository"
+        ],
+        "source": "https://github.com/lovell/sharp-libvips/tree/v{version}"
+    },
+    "@img/sharp-wasm32": {
+        "license": "Apache-2.0 AND LGPL-3.0-or-later AND MIT",
+        "texts": ["Apache-2.0", "LGPL-3.0", "GPL-3.0", "MIT"],
+        "copyright": [
+            "Copyright Lovell Fuller",
+            "Statically contains libvips (LGPL-3.0-or-later), emnapi (MIT, Copyright (c) 2021-present Toyobayashi) and the libraries they are built from"
+        ],
+        "source": "https://github.com/lovell/sharp-libvips"
+    },
+    "@img/sharp-webcontainers-wasm32": {
+        "license": "Apache-2.0 AND LGPL-3.0-or-later AND MIT",
+        "texts": ["Apache-2.0", "LGPL-3.0", "GPL-3.0", "MIT"],
+        "copyright": [
+            "Copyright Lovell Fuller",
+            "Statically contains libvips (LGPL-3.0-or-later), emnapi (MIT, Copyright (c) 2021-present Toyobayashi) and the libraries they are built from"
+        ],
+        "source": "https://github.com/lovell/sharp-libvips"
+    },
+    "@img/sharp-win32-*": {
+        "license": "Apache-2.0 AND LGPL-3.0-or-later",
+        "texts": ["Apache-2.0", "LGPL-3.0", "GPL-3.0"],
+        "copyright": [
+            "Copyright Lovell Fuller",
+            "Statically contains libvips (LGPL-3.0-or-later) and the libraries it is built from; their source is at the sharp-libvips repository"
+        ],
+        "source": "https://github.com/lovell/sharp-libvips"
+    },
+    "@isaacs/fs-minipass": {
+        "license": "ISC",
+        "texts": ["ISC"],
+        "copyright": ["Copyright (c) Isaac Z. Schlueter and Contributors"]
+    },
+    "@preact/signals": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2022-present Preact Team"]
+    },
+    "@preact/signals-core": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2022-present Preact Team"]
+    },
+    "@protobufjs/aspromise": {
+        "license": "BSD-3-Clause",
+        "texts": ["BSD-3-Clause-protobufjs"],
+        "copyright": ["Copyright (c) 2016, Daniel Wirtz"]
+    },
+    "@protobufjs/base64": {
+        "license": "BSD-3-Clause",
+        "texts": ["BSD-3-Clause-protobufjs"],
+        "copyright": ["Copyright (c) 2016, Daniel Wirtz"]
+    },
+    "@protobufjs/codegen": {
+        "license": "BSD-3-Clause",
+        "texts": ["BSD-3-Clause-protobufjs"],
+        "copyright": ["Copyright (c) 2016, Daniel Wirtz"]
+    },
+    "@protobufjs/eventemitter": {
+        "license": "BSD-3-Clause",
+        "texts": ["BSD-3-Clause-protobufjs"],
+        "copyright": ["Copyright (c) 2016, Daniel Wirtz"]
+    },
+    "@protobufjs/fetch": {
+        "license": "BSD-3-Clause",
+        "texts": ["BSD-3-Clause-protobufjs"],
+        "copyright": ["Copyright (c) 2016, Daniel Wirtz"]
+    },
+    "@protobufjs/float": {
+        "license": "BSD-3-Clause",
+        "texts": ["BSD-3-Clause-protobufjs"],
+        "copyright": ["Copyright (c) 2016, Daniel Wirtz"]
+    },
+    "@protobufjs/path": {
+        "license": "BSD-3-Clause",
+        "texts": ["BSD-3-Clause-protobufjs"],
+        "copyright": ["Copyright (c) 2016, Daniel Wirtz"]
+    },
+    "@protobufjs/pool": {
+        "license": "BSD-3-Clause",
+        "texts": ["BSD-3-Clause-protobufjs"],
+        "copyright": ["Copyright (c) 2016, Daniel Wirtz"]
+    },
+    "@protobufjs/utf8": {
+        "license": "BSD-3-Clause",
+        "texts": ["BSD-3-Clause-protobufjs"],
+        "copyright": ["Copyright (c) 2016, Daniel Wirtz"]
+    },
+    "@types/node": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Microsoft Corporation."]
+    },
+    "adm-zip": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2012 Another-D-Mention Software and other contributors"]
+    },
+    "agent-base": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Nathan Rajlich"]
+    },
+    "argparse": {
+        "license": "Python-2.0",
+        "texts": ["Python-2.0"],
+        "copyright": [
+            "Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam; Copyright (c) 2001-2020 Python Software Foundation; and the copyright holders named in the license text below"
+        ]
+    },
+    "asynckit": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2016 Alex Indigo"]
+    },
+    "axios": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2014-present Matt Zabriskie & Collaborators"]
+    },
+    "builder-util-runtime": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2015 Loopline Systems"]
+    },
+    "call-bind-apply-helpers": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2024 Jordan Harband"]
+    },
+    "chownr": {
+        "license": "BlueOak-1.0.0",
+        "texts": ["BlueOak-1.0.0"],
+        "copyright": ["Copyright Isaac Z. Schlueter"]
+    },
+    "combined-stream": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2011 Debuggable Limited <felix@debuggable.com>"]
+    },
+    "daisyui": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2020 Pouya Saadeghi"]
+    },
+    "debug": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": [
+            "Copyright (c) 2014-2017 TJ Holowaychuk <tj@vision-media.ca>",
+            "Copyright (c) 2018-2021 Josh Junon"
+        ]
+    },
+    "define-data-property": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2023 Jordan Harband"]
+    },
+    "define-properties": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (C) 2015 Jordan Harband"]
+    },
+    "delayed-stream": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2011 Debuggable Limited <felix@debuggable.com>"]
+    },
+    "detect-libc": {
+        "license": "Apache-2.0",
+        "texts": ["Apache-2.0"],
+        "copyright": ["Copyright Lovell Fuller"]
+    },
+    "dunder-proto": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2024 ECMAScript Shims"]
+    },
+    "electron-updater": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2015 Loopline Systems"]
+    },
+    "es-define-property": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2024 Jordan Harband"]
+    },
+    "es-errors": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2024 Jordan Harband"]
+    },
+    "es-object-atoms": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2024 Jordan Harband"]
+    },
+    "es-set-tostringtag": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2022 ECMAScript Shims"]
+    },
+    "escape-string-regexp": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)"]
+    },
+    "flatbuffers": {
+        "license": "Apache-2.0",
+        "texts": ["Apache-2.0"],
+        "copyright": ["Copyright Google Inc. and the FlatBuffers project"]
+    },
+    "follow-redirects": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": [
+            "Copyright 2014–present Olivier Lalonde <olalonde@gmail.com>, James Talmage <james@talmage.io>, Ruben Verborgh"
+        ]
+    },
+    "form-data": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2012 Felix Geisendörfer (felix@debuggable.com) and contributors"]
+    },
+    "fs-extra": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2011-2017 JP Richardson"]
+    },
+    "function-bind": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2013 Raynos."]
+    },
+    "get-intrinsic": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2020 Jordan Harband"]
+    },
+    "get-proto": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2025 Jordan Harband"]
+    },
+    "global-agent": {
+        "license": "BSD-3-Clause",
+        "texts": ["BSD-3-Clause-global-agent"],
+        "copyright": ["Copyright (c) 2026, Gajus Kuizinas (https://gajus.com/)"]
+    },
+    "globalthis": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2016 Jordan Harband"]
+    },
+    "gopd": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2022 Jordan Harband"]
+    },
+    "graceful-fs": {
+        "license": "ISC",
+        "texts": ["ISC"],
+        "copyright": ["Copyright (c) 2011-2022 Isaac Z. Schlueter, Ben Noordhuis, and Contributors"]
+    },
+    "guid-typescript": {
+        "license": "ISC",
+        "texts": ["ISC"],
+        "copyright": ["Copyright nicolas (https://github.com/NicolasDeveloper/guid-typescript)"]
+    },
+    "has-property-descriptors": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2022 Inspect JS"]
+    },
+    "has-symbols": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2016 Jordan Harband"]
+    },
+    "has-tostringtag": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2021 Inspect JS"]
+    },
+    "hasown": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Jordan Harband and contributors"]
+    },
+    "https-proxy-agent": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Nathan Rajlich"]
+    },
+    "js-yaml": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (C) 2011-2015 by Vitaly Puzrin"]
+    },
+    "jsonfile": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2012-2015, JP Richardson <jprichardson@gmail.com>"]
+    },
+    "lazy-val": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Vladimir Krivosheev"]
+    },
+    "lodash.escaperegexp": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright jQuery Foundation and other contributors <https://jquery.org/>"]
+    },
+    "lodash.isequal": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright JS Foundation and other contributors <https://js.foundation/>"]
+    },
+    "long": {
+        "license": "Apache-2.0",
+        "texts": ["Apache-2.0"],
+        "copyright": ["Copyright Daniel Wirtz"]
+    },
+    "matcher": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)"]
+    },
+    "math-intrinsics": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2024 ECMAScript Shims"]
+    },
+    "mime-db": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": [
+            "Copyright (c) 2014 Jonathan Ong <me@jongleberry.com>",
+            "Copyright (c) 2015-2022 Douglas Christopher Wilson <doug@somethingdoug.com>"
+        ]
+    },
+    "mime-types": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": [
+            "Copyright (c) 2014 Jonathan Ong <me@jongleberry.com>",
+            "Copyright (c) 2015 Douglas Christopher Wilson <doug@somethingdoug.com>"
+        ]
+    },
+    "minipass": {
+        "license": "BlueOak-1.0.0",
+        "texts": ["BlueOak-1.0.0"],
+        "copyright": ["Copyright Isaac Z. Schlueter"]
+    },
+    "minizlib": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": [
+            "Copyright (c) 2017-2023 Isaac Z. Schlueter and Contributors",
+            "Copyright (c) 2017-2023 Node.js contributors. All rights reserved.",
+            "Copyright (c) 2017-2023 Joyent, Inc. and other Node contributors. All rights reserved."
+        ]
+    },
+    "ms": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2020 Vercel, Inc."]
+    },
+    "object-keys": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (C) 2013 Jordan Harband"]
+    },
+    "onnxruntime-common": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Microsoft Corporation"]
+    },
+    "onnxruntime-node": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Microsoft Corporation"]
+    },
+    "onnxruntime-web": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Microsoft Corporation"]
+    },
+    "platform": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright 2014-2020 Benjamin Tan", "Copyright 2011-2013 John-David Dalton"]
+    },
+    "preact": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2015-present Jason Miller"]
+    },
+    "protobufjs": {
+        "license": "BSD-3-Clause",
+        "texts": ["BSD-3-Clause-protobufjs"],
+        "copyright": ["Copyright (c) 2016, Daniel Wirtz"]
+    },
+    "proxy-from-env": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (C) 2016-2018 Rob Wu <rob@robwu.nl>"]
+    },
+    "sax": {
+        "license": "BlueOak-1.0.0",
+        "texts": ["BlueOak-1.0.0"],
+        "copyright": ["Copyright Isaac Z. Schlueter"]
+    },
+    "semver": {
+        "license": "ISC",
+        "texts": ["ISC"],
+        "copyright": ["Copyright (c) Isaac Z. Schlueter and Contributors"]
+    },
+    "serialize-error": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)"]
+    },
+    "sharp": {
+        "license": "Apache-2.0",
+        "texts": ["Apache-2.0"],
+        "copyright": ["Copyright Lovell Fuller"]
+    },
+    "supports-color": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)"]
+    },
+    "tailwindcss": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Tailwind Labs, Inc."]
+    },
+    "tar": {
+        "license": "BlueOak-1.0.0",
+        "texts": ["BlueOak-1.0.0"],
+        "copyright": ["Copyright Isaac Z. Schlueter"]
+    },
+    "tiny-typed-emitter": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2020 Zurab Benashvili (binier) <zura.bena@gmail.com>"]
+    },
+    "tslib": {
+        "license": "0BSD",
+        "texts": ["0BSD"],
+        "copyright": ["Copyright (c) Microsoft Corporation."]
+    },
+    "type-fest": {
+        "license": "MIT OR CC0-1.0 (used under MIT)",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)"]
+    },
+    "undici-types": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Matteo Collina and Undici contributors"]
+    },
+    "universalify": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2017, Ryan Zimmerman <opensrc@ryanzim.com>"]
+    },
+    "yallist": {
+        "license": "BlueOak-1.0.0",
+        "texts": ["BlueOak-1.0.0"],
+        "copyright": ["Copyright Isaac Z. Schlueter"]
+    },
+    "zod": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2025 Colin McDonnell"]
+    }
+}

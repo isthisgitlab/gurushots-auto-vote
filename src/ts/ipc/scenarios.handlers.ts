@@ -16,6 +16,7 @@
  *   get-scenario-status      where a challenge is in its scenario (the GUI
  *                            scheduler's boundary and the card status read it)
  *   reset-scenario-state     forget a challenge's progress — its plan restarts
+ *   reset-all-scenario-state forget every challenge's progress (the only way past an unreadable state file)
  *   dry-run-scenario         what would fire right now and why; spends nothing
  *   simulate-scenario        a what-if timeline until the challenge closes, of
  *                            the assigned scenario or an unsaved draft
@@ -28,16 +29,23 @@ import * as auth from '../services/auth';
 import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 import { isIdArg } from './isIdArg';
-import { getScenarioStatus, ledgerForMode } from '../services/scenarioStatus';
+import { stampChosenPhotosOwner } from './chosenPhotosOwner';
+import { getScenarioStatus, ledgerForMode, stepLockForMode } from '../services/scenarioStatus';
 import { findActiveChallenge } from '../services/findActiveChallenge';
 import { evaluateScenario, startState } from '../scenarios/evaluate';
 import { simulateScenario } from '../scenarios/simulate';
+import { entriesOf } from '../scenarios/selectors';
+import { recordVoteSample } from '../scenarios/speed';
+import { isManualPhotosOnly } from '../services/manualPhotosOnly';
 import { SCENARIO_TEMPLATES } from '../scenarios/templates';
 import { refreshScenarioStateAsync } from '../scenarioStateStore';
+import { ALL_KEY } from '../scenarioStateFile';
+import { backgroundServiceOwnsScenarios } from '../services/scenarioRunner';
 
 import type { IpcMain } from 'electron';
 import type { IpcHandlerMap } from './registerHandlers';
 import type { ScenarioDocument, ScenarioIssue } from '../settings/scenarioSchema';
+import type { VoteHistory } from '../scenarios/speed';
 import type { ActiveChallengesResponse, Bankroll, Challenge } from '../types/gurushots';
 
 /**
@@ -87,6 +95,16 @@ const safely = async <T>(
 };
 
 /**
+ * The state with this pass's vote sample recorded, the transform the live pass applies first
+ * (scenarioRunner/step.ts): it is pure, so a preview reads the speed history the pass would, the 48 h
+ * trim and the sample cap included, after a pause or downtime.
+ */
+const withVoteSample = <S extends { history?: VoteHistory }>(state: S, challenge: Challenge, now: number): S => ({
+    ...state,
+    history: recordVoteSample(state.history, entriesOf(challenge), now),
+});
+
+/**
  * What the dry run and the simulation both need: the challenge's scenario
  * status, the live challenge, its state (or a start state) and the bankroll.
  * `draft` replaces the assigned scenario with an unsaved document, which then
@@ -124,7 +142,7 @@ const loadLiveScenario = async (
         status = { ...status, scenario: checked.scenario, state: null, corrupt: false };
     }
     if (!status.scenario) return refuse(status.assigned ? 'unknown-scenario' : 'no-scenario');
-    if (status.corrupt) return refuse('state-unreadable');
+    if (status.corrupt) return refuse(status.corrupt === 'unloaded' ? 'state-unloaded' : 'state-unreadable');
     const strategy = apiFactory.getApiStrategy();
     const response: ActiveChallengesResponse | null = await strategy.getActiveChallenges(guard.token);
     const challenge = findActiveChallenge(response?.challenges, challengeId);
@@ -136,7 +154,9 @@ const loadLiveScenario = async (
         status: status as Omit<ScenarioStatus, 'scenario'> & { scenario: ScenarioDocument },
         challenge,
         now,
-        state: status.state ?? startState(status.scenario, now),
+        // The live pass records a vote sample first (scenarioRunner/step.ts), so a preview reads the same
+        // speed history the pass would after a pause or downtime.
+        state: withVoteSample(status.state ?? startState(status.scenario, now), challenge, now),
         bankroll: await strategy.getBankroll(guard.token),
     };
 };
@@ -155,6 +175,48 @@ const runInput = ({ status, challenge, state, now, bankroll }: LiveScenario) => 
     bankroll,
 });
 
+// What a reset that was not made says: a lock is held, the app cannot make its locks, the file cannot be read or was not
+// loaded yet, it reads again where the caller meant to clear an unreadable one, or the reset could not be saved (it
+// takes effect only once it is, so nothing changed).
+const RESET_ERROR = {
+    busy: 'busy',
+    unavailable: 'locks-unavailable',
+    unreadable: 'state-unreadable',
+    unloaded: 'state-unloaded',
+    readable: 'state-readable',
+    'not-saved': 'not-saved',
+} as const;
+
+/**
+ * Forgets one challenge's progress, under the challenge's step lock so that it never runs in the middle of its rule
+ * steps in another process. An unreadable file is cleared only by a reset of every challenge.
+ */
+const resetScenario = async (challengeId: string | number) => {
+    await refreshScenarioStateAsync();
+    const lock = stepLockForMode(challengeId);
+    if (!lock.ok) return { success: false as const, error: lock.unavailable ? 'locks-unavailable' : 'busy' };
+    try {
+        const result = await ledgerForMode().remove(String(challengeId));
+        if (result !== 'removed') return { success: false as const, error: RESET_ERROR[result] };
+        log().info(`Scenario progress reset for challenge ${logger.sanitizeLogString(String(challengeId))}`, null);
+        return { success: true as const };
+    } finally {
+        lock.release();
+    }
+};
+
+/**
+ * Forgets every challenge's progress: the only way past a state file that cannot be read. With `onlyIfUnreadable`
+ * (the dialog that offers it for that reason) a file that turns out to read again is left alone.
+ */
+const resetEveryScenario = async (onlyIfUnreadable: boolean) => {
+    await refreshScenarioStateAsync();
+    const result = await ledgerForMode().removeAll(onlyIfUnreadable);
+    if (result !== 'removed') return { success: false as const, error: RESET_ERROR[result] };
+    log().warning('Scenario progress reset for every challenge', null);
+    return { success: true as const };
+};
+
 const buildHandlers = () =>
     ({
         'get-scenarios': async () =>
@@ -171,9 +233,12 @@ const buildHandlers = () =>
             }),
 
         'save-scenario': async (event: unknown, doc: unknown, options?: { overwrite?: boolean } | null) =>
-            safely('save-scenario', () =>
-                fromResult(settings.saveScenario(doc, { overwrite: options?.overwrite !== false })),
-            ),
+            safely('save-scenario', () => {
+                const saved = fromResult(settings.saveScenario(doc, { overwrite: options?.overwrite !== false }));
+                // A phase's chosen photos belong to the account that just saved them.
+                if (saved.success) stampChosenPhotosOwner([doc]);
+                return saved;
+            }),
 
         'rename-scenario': async (event: unknown, oldName: string, newName: string) => {
             if (!isName(oldName) || typeof newName !== 'string') return invalidArgs;
@@ -200,10 +265,11 @@ const buildHandlers = () =>
         'export-scenario': async (event: unknown, name: string) => {
             if (!isName(name)) return invalidArgs;
             return safely('export-scenario', () => {
-                const json = settings.exportScenario(name);
-                return json === null
+                // `omitted`: account-bound settings (the chosen photos) left out of the file.
+                const exported = settings.exportScenarioWithNotes(name);
+                return exported === null
                     ? { success: false as const, error: 'not-found' }
-                    : { success: true as const, json };
+                    : { success: true as const, json: exported.json, omitted: exported.omitted };
             });
         },
 
@@ -211,22 +277,25 @@ const buildHandlers = () =>
             if (!isIdArg(challengeId)) return invalidArgs;
             return safely('get-scenario-status', async () => {
                 await refreshScenarioStateAsync();
-                return { success: true as const, ...getScenarioStatus(challengeId) };
+                // `serviceRuns`: the background service is installed, so it alone advances the plans, whatever this window could read.
+                // `manualOnly`: Manual Only is on, so no step runs; read here, never echoed from the renderer.
+                return {
+                    success: true as const,
+                    ...getScenarioStatus(challengeId),
+                    serviceRuns: backgroundServiceOwnsScenarios(),
+                    manualOnly: isManualPhotosOnly(settings, challengeId),
+                };
             });
         },
 
         'reset-scenario-state': async (event: unknown, challengeId: string | number) => {
-            if (!isIdArg(challengeId)) return invalidArgs;
-            return safely('reset-scenario-state', async () => {
-                await refreshScenarioStateAsync();
-                ledgerForMode().remove(String(challengeId));
-                log().info(
-                    `Scenario progress reset for challenge ${logger.sanitizeLogString(String(challengeId))}`,
-                    null,
-                );
-                return { success: true as const };
-            });
+            // The state file keeps its count of resets of every challenge under ALL_KEY: that is no challenge's id.
+            if (!isIdArg(challengeId) || String(challengeId) === ALL_KEY) return invalidArgs;
+            return safely('reset-scenario-state', () => resetScenario(challengeId));
         },
+
+        'reset-all-scenario-state': async (event: unknown, onlyIfUnreadable?: boolean) =>
+            safely('reset-all-scenario-state', () => resetEveryScenario(onlyIfUnreadable === true)),
 
         'dry-run-scenario': async (event: unknown, challengeId: string | number) => {
             if (!isIdArg(challengeId)) return invalidArgs;
@@ -234,23 +303,30 @@ const buildHandlers = () =>
                 const loaded = await loadLiveScenario('scenario dry run', challengeId);
                 if (!loaded.ok) return loaded.response;
                 const { status } = loaded;
-                const decision = evaluateScenario(runInput(loaded));
+                // A plan that has not started has no phase clock yet: its in-phase bounds are left out.
+                const decision = evaluateScenario({ ...runInput(loaded), phaseClock: status.state !== null });
+                // Manual Only pauses the scenario: nothing fires and no wake is due.
+                const manualOnly = isManualPhotosOnly(settings, challengeId);
                 return {
                     success: true as const,
                     scenario: status.scenario.name,
                     phase: decision.phase,
                     started: status.state !== null,
                     halted: decision.halted,
-                    fire: decision.fire
-                        ? {
-                              ruleId: decision.fire.ruleId,
-                              startIndex: decision.fire.startIndex,
-                              // `rule` is untyped in scenarios/evaluate; a validated rule's `do` is its action list.
-                              actions: (decision.fire.rule.do as Array<{ type: string }>).map((action) => action.type),
-                          }
-                        : null,
+                    manualOnly,
+                    fire:
+                        decision.fire && !manualOnly
+                            ? {
+                                  ruleId: decision.fire.ruleId,
+                                  startIndex: decision.fire.startIndex,
+                                  // `rule` is untyped in scenarios/evaluate; a validated rule's `do` is its action list.
+                                  actions: (decision.fire.rule.do as Array<{ type: string }>).map(
+                                      (action) => action.type,
+                                  ),
+                              }
+                            : null,
                     explain: decision.explain,
-                    nextWakeAt: decision.nextWakeAt,
+                    nextWakeAt: manualOnly ? null : decision.nextWakeAt,
                 };
             });
         },
@@ -267,6 +343,8 @@ const buildHandlers = () =>
                     scenario: status.scenario.name,
                     startPhase: state.phase,
                     now,
+                    // The timeline is what would run if the switch were off now.
+                    manualOnly: isManualPhotosOnly(settings, challengeId),
                     ...timeline,
                 };
             });

@@ -45,14 +45,13 @@ const EXPECTED_THIN_HANDLERS: [string, string, string | boolean | null][] = [
     ['get-title-rules', 'getTitleRules', null],
     ['set-title-rules', 'setTitleRules', false],
     ['get-title-profile', 'getTitleProfile', null],
+    ['get-entry-pins', 'getEntryPins', null],
     ['get-challenge-overrides', 'getChallengeOverrides', null],
     ['replace-challenge-overrides', 'replaceChallengeOverrides', false],
     ['get-challenge-profiles', 'getChallengeProfiles', null],
     ['save-challenge-profile', 'saveChallengeProfile', false],
     ['delete-challenge-profile', 'deleteChallengeProfile', false],
     ['apply-challenge-profile', 'applyChallengeProfile', false],
-    ['cleanup-stale-challenge-setting', 'cleanupStaleChallengeSetting', false],
-    ['cleanup-obsolete-settings', 'cleanupObsoleteSettings', false],
     ['reset-setting', 'resetSetting', false],
     ['reset-global-default', 'resetGlobalDefault', false],
     ['reset-all-global-defaults', 'resetAllGlobalDefaults', false],
@@ -104,7 +103,7 @@ describe('settings.handlers thin-handler rows', () => {
             });
             const handlers = buildHandlers();
 
-            const result = await invalid<HandlerTable>(handlers)[channel]({}, 'arg');
+            const result = await invalid<HandlerTable>(handlers)[channel]({}, 'arg', 'arg');
 
             expect(result).toBe(fallback);
         },
@@ -125,14 +124,125 @@ describe('settings.handlers thin-handler rows', () => {
     test.each(CHANGE_BROADCAST_CHANNELS)('channel "%s" broadcasts a successful mutation', async (channel) => {
         const row = EXPECTED_THIN_HANDLERS.find(([candidate]) => candidate === channel);
         const method = row![1];
-        const snapshot = { token: 'secret', challengeSettings: { changed: true } };
+        const snapshot = { auth: { token: 'secret' }, defaults: { changed: true } };
         const broadcastSettingsChange = jest.fn();
         invalid<MockTable>(settings)[method] = jest.fn().mockReturnValue(true);
         settings.loadSettings.mockReturnValue(invalid(snapshot));
 
         const handlers = buildHandlers({ broadcastSettingsChange });
-        await invalid<HandlerTable>(handlers)[channel]({}, 'arg');
+        await invalid<HandlerTable>(handlers)[channel]({}, 'arg', 'arg');
 
-        expect(broadcastSettingsChange).toHaveBeenCalledWith({ challengeSettings: { changed: true }, hasToken: true });
+        expect(broadcastSettingsChange).toHaveBeenCalledWith({ defaults: { changed: true }, hasToken: true });
+    });
+});
+
+describe('settings.handlers hidden setting keys', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    const KEY_CHANNELS: [string, string][] = [
+        ['reset-setting', 'resetSetting'],
+        ['is-setting-modified', 'isSettingModified'],
+    ];
+
+    test.each(
+        KEY_CHANNELS.flatMap(([channel, method]) =>
+            ['auth', 'token', 'hasToken', 'apiHeaders'].map((key) => [channel, method, key] as const),
+        ),
+    )('"%s" refuses the hidden key %s without touching settings.%s', async (channel, method, key) => {
+        invalid<MockTable>(settings)[method] = jest.fn().mockReturnValue(true);
+        const broadcastSettingsChange = jest.fn();
+
+        const result = await invalid<HandlerTable>(buildHandlers({ broadcastSettingsChange }))[channel]({}, key);
+
+        expect(result).toBe(false);
+        expect(invalid<MockTable>(settings)[method]).not.toHaveBeenCalled();
+        expect(broadcastSettingsChange).not.toHaveBeenCalled();
+    });
+
+    test.each(KEY_CHANNELS)('"%s" still serves an ordinary key', async (channel, method) => {
+        invalid<MockTable>(settings)[method] = jest.fn().mockReturnValue(true);
+
+        await expect(invalid<HandlerTable>(buildHandlers())[channel]({}, 'language')).resolves.toBe(true);
+        expect(invalid<MockTable>(settings)[method]).toHaveBeenCalledWith('language');
+    });
+});
+
+// The channels that name a challenge, with where its id sits among the arguments: a value that is not a plain id
+// (a non-blank string of bounded length, or a number) never reaches the settings, and the row's fallback comes back.
+const CHALLENGE_ID_CHANNELS: [string, string, number][] = [
+    ['get-challenge-override', 'getChallengeOverride', 1],
+    ['set-challenge-override', 'setChallengeOverride', 1],
+    ['set-challenge-overrides', 'setChallengeOverrides', 0],
+    ['remove-challenge-override', 'removeChallengeOverride', 1],
+    ['get-effective-setting', 'getEffectiveSetting', 1],
+    ['get-challenge-overrides', 'getChallengeOverrides', 0],
+    ['replace-challenge-overrides', 'replaceChallengeOverrides', 0],
+    ['apply-challenge-profile', 'applyChallengeProfile', 1],
+    ['get-entry-pins', 'getEntryPins', 0],
+];
+
+describe('settings.handlers challenge id arguments', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    const argsWithId = (index: number, id: unknown): unknown[] => {
+        const args: unknown[] = ['key', 'value', 'extra'];
+        args[index] = id;
+        return args;
+    };
+
+    test.each(
+        CHALLENGE_ID_CHANNELS.flatMap(([channel, method, index]) =>
+            [
+                ['an object', {}],
+                ['an empty string', ''],
+                ['a blank string', '   '],
+                ['an over-long string', '9'.repeat(65)],
+                ['NaN', Number.NaN],
+                ['a list', ['1']],
+            ].map(([what, id]) => [channel, method, index, what, id] as const),
+        ),
+    )('"%s" refuses %s (id at %s) without touching settings.%s', async (channel, method, index, _what, id) => {
+        invalid<MockTable>(settings)[method] = jest.fn().mockReturnValue('delegate-result');
+        const expected = EXPECTED_THIN_HANDLERS.find(([candidate]) => candidate === channel)![2];
+
+        const result = await invalid<HandlerTable>(buildHandlers())[channel]({}, ...argsWithId(index, id));
+
+        expect(result).toBe(expected);
+        expect(invalid<MockTable>(settings)[method]).not.toHaveBeenCalled();
+    });
+
+    test.each(CHALLENGE_ID_CHANNELS.map(([channel, method, index]) => [channel, method, index] as const))(
+        '"%s" passes a numeric or string id through to settings.%s',
+        async (channel, method, index) => {
+            invalid<MockTable>(settings)[method] = jest.fn().mockReturnValue('delegate-result');
+            const handlers = invalid<HandlerTable>(buildHandlers());
+
+            await expect(handlers[channel]({}, ...argsWithId(index, 123))).resolves.toBe('delegate-result');
+            await expect(handlers[channel]({}, ...argsWithId(index, ' 123 '))).resolves.toBe('delegate-result');
+
+            expect(invalid<MockTable>(settings)[method]).toHaveBeenCalledTimes(2);
+        },
+    );
+
+    test('get-effective-setting may be asked without a challenge', async () => {
+        invalid<MockTable>(settings).getEffectiveSetting = jest.fn().mockReturnValue(80);
+        const handlers = invalid<HandlerTable>(buildHandlers());
+
+        await expect(handlers['get-effective-setting']({}, 'exposure')).resolves.toBe(80);
+        await expect(handlers['get-effective-setting']({}, 'exposure', null)).resolves.toBe(80);
+        await expect(handlers['get-effective-setting']({}, 'exposure', undefined)).resolves.toBe(80);
+    });
+
+    test('a refused id is logged as a refused request, not an error', async () => {
+        const logger = jest.requireMock<{ withCategory: jest.Mock<unknown, [string]> }>('../../src/ts/logger');
+        invalid<MockTable>(settings).setChallengeOverride = jest.fn();
+
+        await invalid<HandlerTable>(buildHandlers())['set-challenge-override']({}, 'exposure', '', 55);
+
+        expect(logger.withCategory).toHaveBeenCalledWith('settings');
     });
 });

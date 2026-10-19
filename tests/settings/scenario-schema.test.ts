@@ -9,9 +9,9 @@ import type * as defaultsModule from '../../src/ts/settings/defaults';
 
 const { validateScenario, parseScenarioJson, formatPath } =
     require('../../src/ts/settings/scenarioSchema') as typeof scenarioSchemaModule;
-const { getDefaultSettings } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
+const { schemaDefaults } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
 
-const globalDefaults = getDefaultSettings().challengeSettings.globalDefaults;
+const globalDefaults = schemaDefaults();
 
 type Accepted = Extract<ReturnType<typeof validateScenario>, { ok: true }>;
 type Refused = Extract<ReturnType<typeof validateScenario>, { ok: false }>;
@@ -143,7 +143,7 @@ describe('validateScenario — accepted documents', () => {
     });
 
     test('a phase with valid paired settings validates', () => {
-        const input = doc({ phases: { main: { settings: { exposure: 10, exposureTarget: 12, autoFill: false } } } });
+        const input = doc({ phases: { main: { settings: { exposure: 10, exposureTarget: 12, autoSubmit: false } } } });
         expect(validate(input).ok).toBe(true);
     });
 });
@@ -319,8 +319,15 @@ describe('validateScenario — semantic checks', () => {
             });
         });
 
+        test('Manual Only cannot be overlaid either, and says so in its own words', () => {
+            expect(withSettings({ manualPhotosOnly: false })).toEqual([
+                { path: 'phases.main.settings.manualPhotosOnly', message: 'A phase cannot change Manual Only' },
+            ]);
+            expect(withSettings({ manualPhotosOnly: true })[0].message).not.toContain('scenario assignment');
+        });
+
         test('each value is validated like a setting', () => {
-            expect(withSettings({ autoFill: 'yes' })[0].path).toBe('phases.main.settings.autoFill');
+            expect(withSettings({ autoSubmit: 'yes' })[0].path).toBe('phases.main.settings.autoSubmit');
         });
 
         test('cross-field pairs are set together', () => {

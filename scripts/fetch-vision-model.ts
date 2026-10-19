@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import { runIfMain } from './lib/run-if-main';
+import { readLicenseText, visionModelNotice } from './lib/licenses';
 
 const ROOT = path.join(__dirname, '..');
 const MODEL_DIR = path.join(ROOT, '.cache', 'vision-model');
@@ -68,6 +70,10 @@ const ensureVisionModel = async ({
             fs.rmSync(temporary, { force: true });
         }
     }
+    // The model's Apache-2.0 license and its derivative-work notice travel with every copy of it.
+    fs.mkdirSync(modelDir, { recursive: true });
+    fs.writeFileSync(path.join(modelDir, 'LICENSE'), `${readLicenseText('Apache-2.0')}\n`);
+    fs.writeFileSync(path.join(modelDir, 'NOTICE'), visionModelNotice(REPOS));
     return modelDir;
 };
 
@@ -89,7 +95,8 @@ const stageVisionWebAssets = async (distDir: string, options?: VisionModelOption
     removeVisionWebAssets(distDir);
     fs.cpSync(modelDir, path.join(distDir, 'vision-model'), { recursive: true });
     const transformersEntry = require.resolve('@huggingface/transformers');
-    const ortEntry = require.resolve('onnxruntime-web/webgpu', { paths: [path.dirname(transformersEntry)] });
+    // transformers' own onnxruntime-web, the build its WebAssembly files belong to.
+    const ortEntry = createRequire(transformersEntry).resolve('onnxruntime-web/webgpu');
     for (const name of ['ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm']) {
         fs.copyFileSync(path.join(path.dirname(ortEntry), name), path.join(distDir, name));
     }
@@ -103,4 +110,4 @@ const main = () =>
 
 runIfMain(require.main, module, main);
 
-export { FILES, MODEL_DIR, ensureVisionModel, removeVisionWebAssets, stageVisionWebAssets, main };
+export { FILES, MODEL_DIR, REPOS, ensureVisionModel, removeVisionWebAssets, stageVisionWebAssets, main };

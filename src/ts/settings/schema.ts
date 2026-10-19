@@ -3,7 +3,7 @@ import type { z } from 'zod';
 // can read them without pulling zod in through this file. Re-exported below to
 // keep this module's public surface unchanged.
 import { MAX_SCHEDULED_FILL_ENTRIES } from './limits';
-import { autoFillSettings, sanitizeFillSchedule } from './schema/autoFill';
+import { autoSubmitSettings } from './schema/autoSubmit';
 import { autoJoinSettings } from './schema/autoJoin';
 import { boostSettings } from './schema/boost';
 import { currencyAutoSettings } from './schema/currencyAuto';
@@ -14,7 +14,7 @@ import { internalSettings } from './schema/internal';
 import { lastMinuteSettings } from './schema/lastMinute';
 import { notificationsSettings } from './schema/notifications';
 import { rewardsSettings } from './schema/rewards';
-import { sanitizeBeforeEndList, sanitizeTimeOfDayList, scheduledFillSettings } from './schema/scheduledFill';
+import { scheduledFillSettings } from './schema/scheduledFill';
 import { turboSettings } from './schema/turbo';
 import { votingPauseSettings } from './schema/votingPause';
 
@@ -53,7 +53,7 @@ const SETTINGS_SCHEMA = {
     ...scheduledFillSettings,
     ...votingPauseSettings,
     ...autoJoinSettings,
-    ...autoFillSettings,
+    ...autoSubmitSettings,
     ...rewardsSettings,
     ...notificationsSettings,
     ...internalSettings,
@@ -73,7 +73,7 @@ export type SettingValues = {
  * an unknown key.
  */
 const schemaEntry = (key: string): SettingsSchemaEntry | undefined =>
-    (SETTINGS_SCHEMA as Record<string, SettingsSchemaEntry | undefined>)[key];
+    Object.hasOwn(SETTINGS_SCHEMA, key) ? (SETTINGS_SCHEMA as Record<string, SettingsSchemaEntry>)[key] : undefined;
 
 /**
  * A key's schema default, typed as that key's value: every default passes its
@@ -112,18 +112,16 @@ const SETTINGS_TIERS: ReadonlyArray<{ id: string; label: string }> = [
  * and tests assert on them — so ordering and labels change here freely, but an
  * id does not. In particular `scheduledFill` keeps its id while its labels
  * read "Scheduled Voting": it is an exposure-voting rule (it returns a
- * `decided('scheduled', ...)` from `_runVotingRules`), not an entry fill like
- * autoFill/emergencyFill, and sharing the word "fill" with them would read as if
- * the three were siblings. `autoFill`/`emergencyFill` are labelled "Auto-Submit" /
- * "Emergency Submit": in GuruShots "fill" is the currency that tops exposure up
- * to 100% (`autoExposureFill`, `fills`), so user-facing text reserves the word.
+ * `decided('scheduled', ...)` from `_runVotingRules`), not an entry submission like
+ * `autoSubmit`/`emergencySubmit`. In GuruShots "fill" is the currency that tops exposure up
+ * to 100% (`autoExposureFill`, `fills`), so user-facing text reserves the word for it.
  */
 const SETTINGS_GROUPS = [
     { id: 'general', label: 'app.groupGeneral', tier: 'core' },
     { id: 'boost', label: 'app.groupBoost', tier: 'core' },
     { id: 'turbo', label: 'app.groupTurbo', tier: 'core' },
     { id: 'currencyAuto', label: 'app.groupCurrencyAuto', tier: 'core' },
-    { id: 'autoFill', label: 'app.groupAutoFill', tier: 'entries' },
+    { id: 'autoSubmit', label: 'app.groupAutoSubmit', tier: 'entries' },
     { id: 'autoJoin', label: 'app.groupAutoJoin', tier: 'entries' },
     { id: 'finalWindow', label: 'app.groupFinalWindow', tier: 'overrides' },
     { id: 'lastMinute', label: 'app.groupLastMinute', tier: 'overrides' },
@@ -213,13 +211,10 @@ export {
     validateSetting,
     getValidationError,
     getSettingsSchema,
-    sanitizeFillSchedule,
-    sanitizeTimeOfDayList,
-    sanitizeBeforeEndList,
     // Shared cap for the scheduled-fill lists: the write path enforces it via
-    // zod, the load-time bounds migration heals older data, and the hot-path
+    // zod, load validation drops what exceeds it, and the hot-path
     // consumers (VotingLogic, scheduledFill.ts, the settings modal) slice
-    // defensively with it so a post-migration hand-edited array can't inflate
+    // defensively with it so a hand-edited array can't inflate
     // per-cycle Intl work.
     MAX_SCHEDULED_FILL_ENTRIES,
 };

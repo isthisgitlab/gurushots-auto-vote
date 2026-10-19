@@ -77,6 +77,7 @@ describe('CLI settings commands — per-challenge support', () => {
         // apiTimeout is deliberately absent from the schema mocked in beforeEach — app-level
         // keys live outside SETTINGS_SCHEMA and must not be redirected to a global default.
         settings.setSetting.mockReturnValue(true);
+        settings.getDefaultSettings.mockReturnValue(invalid({ app: { apiTimeout: 30 }, auth: {} }));
 
         setSetting('apiTimeout', '45');
 
@@ -117,13 +118,13 @@ describe('CLI settings commands — challenge profiles', () => {
     });
 
     test("saveProfileFromChallenge snapshots that challenge's overrides", () => {
-        settings.getChallengeOverrides.mockReturnValue({ exposure: 80, autoFill: true });
+        settings.getChallengeOverrides.mockReturnValue({ exposure: 80, autoSubmit: true });
         settings.saveChallengeProfile.mockReturnValue(true);
         saveProfileFromChallenge('2-pic tactic', '12345');
         expect(settings.getChallengeOverrides).toHaveBeenCalledWith('12345');
         expect(settings.saveChallengeProfile).toHaveBeenCalledWith('2-pic tactic', {
             exposure: 80,
-            autoFill: true,
+            autoSubmit: true,
         });
     });
 
@@ -140,24 +141,24 @@ describe('CLI settings commands — challenge profiles', () => {
     });
 
     // Time settings are stored in seconds but read as durations everywhere else. Printing
-    // the bare number invited the wrong comparison: emergencyFill 300 sitting next to
+    // the bare number invited the wrong comparison: emergencySubmit 300 sitting next to
     // lastMinuteThreshold 10 reads as 300 > 10 when it is really 5 minutes vs 10 minutes.
     describe('formatSettingForLog annotates time settings', () => {
         beforeEach(() => {
             settings.SETTINGS_SCHEMA = invalid({
-                emergencyFill: { type: 'time', perChallenge: true, default: 300 },
+                emergencySubmit: { type: 'time', perChallenge: true, default: 300 },
                 lastMinuteThreshold: { type: 'number', perChallenge: true, default: 10 },
             });
         });
 
         test('renders a duration alongside the stored seconds', () => {
             // The raw value is kept so it still round-trips through set-setting.
-            expect(formatSettingForLog('emergencyFill', 300)).toBe('300 (5m)');
-            expect(formatSettingForLog('emergencyFill', 3600)).toBe('3600 (1h 0m)');
+            expect(formatSettingForLog('emergencySubmit', 300)).toBe('300 (5m)');
+            expect(formatSettingForLog('emergencySubmit', 3600)).toBe('3600 (1h 0m)');
         });
 
         test('marks the off sentinel rather than printing "<1m"', () => {
-            expect(formatSettingForLog('emergencyFill', 0)).toBe('0 (off)');
+            expect(formatSettingForLog('emergencySubmit', 0)).toBe('0 (off)');
         });
 
         test('leaves non-time settings alone', () => {

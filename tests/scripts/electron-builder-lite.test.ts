@@ -40,4 +40,31 @@ describe('scripts/electron-builder-lite.ts', () => {
         expect(lite.mac.target).toEqual(build.mac.target);
         expect(lite.publish).toEqual({ ...build.publish, channel: 'lite' });
     });
+
+    test('both builds ship src/assets, which holds the third-party notices, inside the asar', () => {
+        const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+        const path = jest.requireActual<typeof import('node:path')>('node:path');
+        expect(fs.existsSync(path.join(__dirname, '..', '..', 'src', 'assets', 'THIRD_PARTY_NOTICES.txt'))).toBe(true);
+        for (const config of [build, lite]) {
+            expect(config.files).toContain('src/assets/**/*');
+            expect(config.files.filter((pattern) => pattern.startsWith('!') && pattern.includes('assets'))).toEqual([]);
+        }
+    });
+
+    test('never signs with a keychain certificate', () => {
+        // Without an identity electron-builder signs with any certificate it finds in the
+        // keychain, putting its owner's name on the app; afterPack's ad-hoc signature is the only one.
+        expect(build.mac.identity).toBeNull();
+        expect(lite.mac.identity).toBeNull();
+        // The pkg and mas targets look a certificate up on their own, past the null identity.
+        for (const { target } of [...build.mac.target, ...lite.mac.target]) {
+            expect(['pkg', 'mas', 'mas-dev']).not.toContain(target);
+        }
+    });
+
+    test('uses the project app id', () => {
+        expect(build.appId).toBe('com.isthisgitlab.gurushotsautovote');
+        expect(lite.appId).toBe(build.appId);
+        expect(build.productName).toBe('GuruShotsAutoVote');
+    });
 });

@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod';
+import { DEFAULT_STARTUP_DELAY_SECONDS, MAX_STARTUP_DELAY_SECONDS, MAX_UPCOMING_HOURS } from '../limits';
 import { percentage, percentageOrZero, validatedNumber, zBool } from './validators';
 import type { SettingsSchemaEntry } from './entry';
 
@@ -96,6 +97,54 @@ export const generalSettings = {
         group: 'general',
         label: 'app.voteOnNewEntry',
         description: 'app.voteOnNewEntryDesc',
+    },
+    // Manual Only: the app runs nothing by itself in this challenge (services/manualPhotosOnly.ts); the key keeps its
+    // original name so saved settings, the format-1 mirror and the frozen v1 importer need no migration.
+    // challengeOnly: `false` exists only as a per-challenge override. An explicit `false` in a rule or profile
+    // would, with first-match-wins rule order, silently cancel a later, more specific "on".
+    // It sits in `general`, not `autoSubmit`: that group is disabled once the slots are full, which is
+    // exactly when Auto-Swap is the only automatic photo path left.
+    manualPhotosOnly: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'general',
+        label: 'app.manualPhotosOnly',
+        description: 'app.manualPhotosOnlyDesc',
+    },
+    // Global only: how far ahead Discover lists challenges that have not started yet, so photos can be
+    // chosen early. 0 = off (Discover lists the open challenges alone, as before).
+    discoverUpcomingHours: {
+        type: 'number',
+        default: 24,
+        perChallenge: false,
+        validation: z.number().int().min(0).max(MAX_UPCOMING_HOURS),
+        min: 0,
+        max: MAX_UPCOMING_HOURS,
+        unit: 'app.unitHours',
+        validationOrder: 1,
+        group: 'general',
+        label: 'app.discoverUpcomingHours',
+        description: 'app.discoverUpcomingHoursDesc',
+    },
+    // Global only: how long the app waits after launching before it resumes an auto-vote session
+    // that was running when it closed, so settings can be checked first. 0 = off (resume at once).
+    // CLI `start` is an explicit start and ignores it.
+    autovoteStartupDelay: {
+        type: 'number',
+        default: DEFAULT_STARTUP_DELAY_SECONDS,
+        perChallenge: false,
+        validation: z.number().int().min(0).max(MAX_STARTUP_DELAY_SECONDS),
+        min: 0,
+        max: MAX_STARTUP_DELAY_SECONDS,
+        unit: 'app.unitSeconds',
+        validationOrder: 1,
+        group: 'general',
+        label: 'app.autovoteStartupDelay',
+        description: 'app.autovoteStartupDelayDesc',
     },
     compactCards: {
         type: 'boolean',

@@ -1,5 +1,6 @@
 /** Pure vector math and vocabulary selection: parse, normalize, retrofit, stem assignment, quantize. */
 
+import { isPlainObject } from '../../src/ts/plainObject';
 import { stem } from '../../src/ts/services/photoPicker';
 
 import type { ConceptsConfig } from '../build-lexicon';
@@ -19,6 +20,10 @@ export interface VocabRow extends GloveRow {
 export interface ScanRow extends VocabRow {
     centerBaseline: boolean;
 }
+
+/** True for a parsed scripts/lexicon-concepts.json: an object carrying the concepts list. */
+export const isConceptsConfig = (value: unknown): value is ConceptsConfig =>
+    isPlainObject(value) && Array.isArray(value.concepts);
 
 /**
  * Authored vocabulary: surface word -> owning concept id (or 'extraWords'),

@@ -16,7 +16,7 @@ const loweredExposureSettings = () => ({
     // Off here, so a final-window trigger above 10% in the
     // global defaults cannot conflict with the lowered exposure.
     useFinalWindowExposure: false,
-    autoFill: false,
+    autoSubmit: false,
     autoBoost: false,
 });
 
@@ -113,7 +113,7 @@ const SCENARIO_TEMPLATES = [
                     ],
                 },
                 pulse: {
-                    settings: { autoFill: false, autoBoost: false },
+                    settings: { autoSubmit: false, autoBoost: false },
                     rules: [
                         {
                             id: 'pulse-out',
@@ -140,7 +140,7 @@ const SCENARIO_TEMPLATES = [
                     ],
                 },
                 pulseWait: {
-                    settings: { autoFill: false, autoBoost: false },
+                    settings: { autoSubmit: false, autoBoost: false },
                     rules: [
                         {
                             id: 'pulse-back',

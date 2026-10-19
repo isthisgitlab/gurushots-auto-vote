@@ -1,11 +1,12 @@
 /**
- * Tests for useChallengeSettings — reads a card's effective autoFill /
+ * Tests for useChallengeSettings — reads a card's effective autoSubmit /
  * compactCards values plus override flags, and toggles the per-card density.
  */
 
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { useChallengeSettings } from '@/hooks/useChallengeSettings';
 import { invalid } from '../helpers/invalid';
+import { isBoolean, isShape, parseJsonAs } from '../helpers/parseJson';
 
 function Probe({ id = 42, initialCompact, version }: { id?: number; initialCompact?: boolean; version?: number }) {
     const s = useChallengeSettings(id, initialCompact, version);
@@ -14,7 +15,8 @@ function Probe({ id = 42, initialCompact, version }: { id?: number; initialCompa
             <span data-testid="state">
                 {JSON.stringify({
                     custom: s.hasCustomSettings,
-                    fill: s.autoFillEnabled,
+                    fill: s.autoSubmitEnabled,
+                    manual: s.manualPhotosOnly,
                     compact: s.isCompact,
                     override: s.hasCompactOverride,
                 })}
@@ -25,15 +27,25 @@ function Probe({ id = 42, initialCompact, version }: { id?: number; initialCompa
 }
 
 /** What Probe renders into its state span. */
-type ProbeState = { custom: boolean; fill: boolean; compact: boolean; override: boolean };
-const state = () => JSON.parse(screen.getByTestId('state').textContent) as ProbeState;
+type ProbeState = { custom: boolean; fill: boolean; manual: boolean; compact: boolean; override: boolean };
+const state = () =>
+    parseJsonAs(
+        screen.getByTestId('state').textContent,
+        isShape<ProbeState>({
+            custom: isBoolean,
+            fill: isBoolean,
+            manual: isBoolean,
+            compact: isBoolean,
+            override: isBoolean,
+        }),
+    );
 
 let overrides: Record<string, unknown>;
 let effective: Record<string, unknown>;
 
 beforeEach(() => {
     overrides = {};
-    effective = { autoFill: false, compactCards: false };
+    effective = { autoSubmit: false, manualPhotosOnly: false, compactCards: false };
     window.api.getSettingsSchema = jest.fn().mockResolvedValue({
         schema: { boostTime: { perChallenge: true }, compactCards: { perChallenge: true }, theme: {} },
     });
@@ -51,13 +63,21 @@ beforeEach(() => {
 
 test('seeds isCompact from initialCompact, then applies the IPC values', async () => {
     overrides = { boostTime: 10 };
-    effective = { autoFill: true, compactCards: false };
+    effective = { autoSubmit: true, compactCards: false };
     render(<Probe initialCompact={true} />);
     expect(state().compact).toBe(true);
-    await waitFor(() => expect(state()).toEqual({ custom: true, fill: true, compact: false, override: false }));
+    await waitFor(() =>
+        expect(state()).toEqual({ custom: true, fill: true, manual: false, compact: false, override: false }),
+    );
     // Only perChallenge schema keys are probed, with a stringified id.
     expect(window.api.getChallengeOverride).toHaveBeenCalledWith('boostTime', '42');
     expect(window.api.getChallengeOverride).not.toHaveBeenCalledWith('theme', '42');
+});
+
+test('reads the effective Manual Only value', async () => {
+    effective = { autoSubmit: true, manualPhotosOnly: true, compactCards: false };
+    render(<Probe />);
+    await waitFor(() => expect(state().manual).toBe(true));
 });
 
 test('initialCompact defaults to false', () => {
@@ -70,13 +90,15 @@ test('toggle sets an override opposite to the current density, second toggle rem
     await waitFor(() => expect(window.api.getEffectiveSetting).toHaveBeenCalled());
 
     fireEvent.click(screen.getByText('toggle'));
-    await waitFor(() => expect(state()).toEqual({ custom: true, fill: false, compact: true, override: true }));
+    await waitFor(() =>
+        expect(state()).toEqual({ custom: true, fill: false, manual: false, compact: true, override: true }),
+    );
     expect(window.api.setChallengeOverride).toHaveBeenCalledWith('compactCards', '42', true);
 
     fireEvent.click(screen.getByText('toggle'));
     await waitFor(() => expect(state().override).toBe(false));
     expect(window.api.removeChallengeOverride).toHaveBeenCalledWith('compactCards', '42');
-    expect(state()).toEqual({ custom: false, fill: false, compact: false, override: false });
+    expect(state()).toEqual({ custom: false, fill: false, manual: false, compact: false, override: false });
 });
 
 test('a failed toggle leaves the UI unchanged', async () => {
@@ -85,14 +107,14 @@ test('a failed toggle leaves the UI unchanged', async () => {
     await waitFor(() => expect(window.api.getEffectiveSetting).toHaveBeenCalled());
     fireEvent.click(screen.getByText('toggle'));
     await waitFor(() => expect(window.api.setChallengeOverride).toHaveBeenCalled());
-    expect(state()).toEqual({ custom: false, fill: false, compact: false, override: false });
+    expect(state()).toEqual({ custom: false, fill: false, manual: false, compact: false, override: false });
 });
 
 test('a failed or empty schema read leaves the defaults', async () => {
     window.api.getSettingsSchema = jest.fn().mockRejectedValue(new Error('boom'));
     const { unmount } = render(<Probe initialCompact={true} />);
     await waitFor(() => expect(window.api.getSettingsSchema).toHaveBeenCalled());
-    expect(state()).toEqual({ custom: false, fill: false, compact: true, override: false });
+    expect(state()).toEqual({ custom: false, fill: false, manual: false, compact: true, override: false });
     unmount();
 
     window.api.getSettingsSchema = jest.fn().mockResolvedValue(null);
@@ -136,7 +158,8 @@ describe('unmount mid-reload drops the pending results', () => {
         // Resolving after unmount must not throw / warn about state updates.
         await act(async () => d.resolve(true));
         expect(jest.mocked(window.api.getEffectiveSetting).mock.calls.map((c) => c[0])).toEqual([
-            'autoFill',
+            'autoSubmit',
+            'manualPhotosOnly',
             'compactCards',
         ]);
     });

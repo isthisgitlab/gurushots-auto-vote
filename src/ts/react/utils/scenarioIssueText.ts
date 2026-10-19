@@ -1,0 +1,138 @@
+import { interp } from './interp';
+
+type Translate = (key: string) => string;
+
+/**
+ * One kind of validator message: the pattern it is recognised by, the translation key of its wording and the
+ * placeholder each capture group fills. The validator (settings/scenarioSchema) and zod write English for the
+ * log; this is how the renderer words the same findings in the UI's language.
+ */
+type IssueKind = { pattern: RegExp; key: string; params?: string[] };
+
+const KINDS: IssueKind[] = [
+    // The parser's
+    { pattern: /^No scenario JSON was given$/, key: 'app.scenarioIssueNoJson' },
+    { pattern: /^The file is larger than (\d+) KB$/, key: 'app.scenarioIssueTooLarge', params: ['kb'] },
+    { pattern: /^Not valid JSON: /, key: 'app.scenarioIssueNotJson' },
+    // The semantic checks'
+    { pattern: /^A phase cannot change the scenario assignment itself$/, key: 'app.scenarioIssuePhaseScenario' },
+    { pattern: /^A phase cannot change Manual Only$/, key: 'app.scenarioIssuePhaseManualPhotos' },
+    { pattern: /^Not a per-challenge setting$/, key: 'app.scenarioIssueNotPerChallenge' },
+    { pattern: /^Set (.+) together$/, key: 'app.scenarioIssueSetTogether', params: ['fields'] },
+    { pattern: /^These values conflict with the global defaults/, key: 'app.scenarioIssueConflictDefaults' },
+    { pattern: /^No phase named "(.*)"$/, key: 'app.scenarioIssueNoPhase', params: ['name'] },
+    { pattern: /^Duplicate rule id "(.*)"$/, key: 'app.scenarioIssueDuplicateRuleId', params: ['id'] },
+    {
+        pattern: /^Conditions nest deeper than (\d+) levels$/,
+        key: 'app.scenarioIssueConditionDepth',
+        params: ['depth'],
+    },
+    {
+        pattern: /^Memory slot "(.*)" is never remembered by any action$/,
+        key: 'app.scenarioIssueMemoryNeverSet',
+        params: ['slot'],
+    },
+    // The document shape's
+    { pattern: /^Remove line breaks and other control characters$/, key: 'app.scenarioIssueControlChars' },
+    { pattern: /^Use letters, digits, "-" or "_", starting with a letter/, key: 'app.scenarioIssueIdentifier' },
+    { pattern: /^This name is reserved$/, key: 'app.scenarioIssueReserved' },
+    { pattern: /^Name is required$/, key: 'app.scenarioIssueNameRequired' },
+    { pattern: /^Name is longer than (\d+) characters$/, key: 'app.scenarioIssueNameTooLong', params: ['max'] },
+    { pattern: /^Use letters, digits, spaces and /, key: 'app.scenarioIssueNameChars' },
+    { pattern: /^Use a 24-hour time, HH:MM$/, key: 'app.scenarioIssueTimeOfDay' },
+    { pattern: /^Use an upper-case state name/, key: 'app.scenarioIssueStateName' },
+    { pattern: /^Set min, max or both$/, key: 'app.scenarioIssueSetMinMax' },
+    { pattern: /^min is larger than max$/, key: 'app.scenarioIssueMinMax' },
+    { pattern: /^window only applies to (.+)$/, key: 'app.scenarioIssueWindowOnly', params: ['fields'] },
+    { pattern: /^(\w+) compares with true or false$/, key: 'app.scenarioIssueCompareBool', params: ['field'] },
+    { pattern: /^(\w+) only supports = and !=$/, key: 'app.scenarioIssueOpEquals', params: ['field'] },
+    { pattern: /^(\w+) compares with a number$/, key: 'app.scenarioIssueCompareNumber', params: ['field'] },
+    { pattern: /^from and to are the same time$/, key: 'app.scenarioIssueSameTime' },
+    { pattern: /^Write the message$/, key: 'app.scenarioIssueWriteMessage' },
+    { pattern: /^Use letters, digits, "-" or "_" \(max/, key: 'app.scenarioIssueIdChars' },
+    { pattern: /^A rule needs at least one action$/, key: 'app.scenarioIssueNeedsAction' },
+    { pattern: /^A scenario needs at least one phase$/, key: 'app.scenarioIssuePhaseNeeded' },
+    { pattern: /^A scenario has at most (\d+) phases$/, key: 'app.scenarioIssueTooManyPhases', params: ['max'] },
+    // zod's own
+    { pattern: /^Invalid input: expected .+, received undefined$/, key: 'app.scenarioIssueMissing' },
+    { pattern: /^Invalid input: expected .+, received /, key: 'app.scenarioIssueWrongType' },
+    { pattern: /^Unrecognized key/, key: 'app.scenarioIssueUnknownKey' },
+    { pattern: /^Too (?:big|small): /, key: 'app.scenarioIssueRange' },
+    { pattern: /^Invalid (?:option|input): expected /, key: 'app.scenarioIssueInvalidOption' },
+    { pattern: /^Invalid string: /, key: 'app.scenarioIssueInvalidFormat' },
+];
+
+/**
+ * A validator message in the UI's language. `known` is false for a message no wording exists for — the text is then
+ * the generic "not valid" line and the caller logs the original.
+ *
+ * @param message - a ScenarioIssue's English message
+ * @param t - the translation function
+ */
+export const scenarioIssueText = (message: string, t: Translate): { text: string; known: boolean } => {
+    for (const { pattern, key, params = [] } of KINDS) {
+        const match = pattern.exec(message);
+        if (!match) continue;
+        const values = Object.fromEntries(params.map((name, index) => [name, match[index + 1]]));
+        // A list of setting keys ("exposureTarget and boostTime") reads in their translated names.
+        if (values.fields !== undefined && key === 'app.scenarioIssueSetTogether') {
+            values.fields = values.fields
+                .split(' and ')
+                .map((field) => (t(`app.${field}`) === `app.${field}` ? field : t(`app.${field}`)))
+                .join(', ');
+        }
+        return { text: interp(t(key), values), known: true };
+    }
+    return { text: t('app.scenarioIssueGeneric'), known: false };
+};
+
+// The path keys that name a numbered item, with the wording of the item.
+const NUMBERED_SEGMENTS: Record<string, string> = {
+    rules: 'app.sbRuleN',
+    if: 'app.scenarioPathCondition',
+    of: 'app.scenarioPathCondition',
+    do: 'app.scenarioPathAction',
+};
+// The path keys that name a part of the document by themselves.
+const NAMED_SEGMENTS: Record<string, string> = {
+    settings: 'app.scenarioPathSettings',
+    limits: 'app.scenarioPathLimits',
+};
+
+/**
+ * A path segment split into its name and a trailing `[n]` index (undefined when it has none). A scan from the last
+ * `[`, not a pattern with a lazy name group, so a long segment costs one pass.
+ */
+const splitIndex = (segment: string): { name: string; index: string | undefined } => {
+    const open = segment.lastIndexOf('[');
+    const tail = segment.slice(open + 1);
+    if (open < 0 || !/^\d+\]$/.test(tail)) return { name: segment, index: undefined };
+    return { name: segment.slice(0, open), index: tail.slice(0, -1) };
+};
+
+/**
+ * A ScenarioIssue's path (`phases.main.rules[0].if[0].window`) in the UI's language
+ * ("Phase main › Rule 1 › Condition 1 › window"). A segment with no wording stays as written.
+ *
+ * @param path - the issue's path; empty for a problem with the file as a whole
+ * @param t - the translation function
+ */
+export const scenarioPathText = (path: string, t: Translate): string => {
+    const segments = path.split('.');
+    const words: string[] = [];
+    for (let at = 0; at < segments.length; at++) {
+        const segment = segments[at];
+        const { name, index } = splitIndex(segment);
+        if (name === 'phases' && index === undefined && at + 1 < segments.length) {
+            at++;
+            words.push(interp(t('app.scenarioPathPhase'), { name: segments[at] }));
+        } else if (index !== undefined && Object.hasOwn(NUMBERED_SEGMENTS, name)) {
+            words.push(interp(t(NUMBERED_SEGMENTS[name]), { n: Number(index) + 1 }));
+        } else if (index === undefined && Object.hasOwn(NAMED_SEGMENTS, name)) {
+            words.push(t(NAMED_SEGMENTS[name]));
+        } else {
+            words.push(segment);
+        }
+    }
+    return words.join(' › ');
+};

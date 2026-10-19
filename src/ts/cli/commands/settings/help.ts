@@ -4,7 +4,8 @@ import * as logger from '../../../logger';
 import { THEMES } from '../../../settings/uiDefaults';
 
 export const helpSettings = () => {
-    logger.withCategory('ui').info(`
+    // A block of text the user asked to read: printed with its line breaks, on the console only.
+    logger.printDocument(`
 === Settings Management Help ===
 
 Available Commands:
@@ -52,7 +53,12 @@ Common Settings:
   theme                - UI theme (default: "light"), one of:
                          ${THEMES.join(', ')}
   language             - UI language: "en" or "lv" (default: "en")
-  timezone             - Timezone for timestamps (default: "Europe/Riga")
+  timezone             - Timezone for timestamps (default: "Europe/Riga"; empty or unknown = UTC)
+  manualPhotosOnly     - Manual Only. Per-challenge only (set-setting --challenge=<id>, or a challenge
+                         rule): true = the app runs nothing there by itself: no join, photo entry,
+                         swap, vote, boost, Turbo, key unlock, fill or scenario step. Manual Join,
+                         vote, +1/+N, Pick…, Swap, Boost and Turbo still work; bulk vote and
+                         run --challenge skip it (default: false)
 
 Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
   boostTime            - Seconds left on the BOOST'S OWN timer at which a timer
@@ -61,14 +67,15 @@ Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
                          has no timer of its own, so boostTime cannot describe it
                          (default: 900 = 15 min; 0 = off)
   turboTime            - Seconds before close to apply turbo (default: 7200 = 2h)
-  emergencyFill        - Emergency Submit: seconds before close to submit photos to
+  emergencySubmit      - Emergency Submit: seconds before close to submit photos to
                          empty slots as a last resort
-                         (default: 300 = 5 min; 0 = off).
+                         (default: 300 = 5 min; 0 = off). To turn it off for one
+                         challenge only, set emergencySubmit to 0 there.
 
 Scheduled voting (vote exposure up to 100% at chosen times — per-challenge, set
 with set-global-default or set-setting --challenge=<id>; every entry opens its
-own voting window, all OR'd; a single stored value is converted to an
-array on load):
+own voting window, all OR'd; each list is a JSON array, and a stored value that
+is not valid is replaced by the default when the settings load):
   useScheduledFill           - Master switch (default: false). Inert until a
                                time below is set; never applies to flash or
                                boost-only challenges.
@@ -89,7 +96,7 @@ array on load):
                                and manual voting still apply). A window missed
                                while the app is not running is skipped with no
                                catch-up. (default: false)
-  Set them like autoFillSchedule (validated JSON values):
+  Set them like autoSubmitSchedule (validated JSON values):
     set-global-default scheduledFillTime '["09:00","21:30"]'
     set-setting scheduledFillBeforeEnd '[14400,36000]' --challenge=12345
 
@@ -119,7 +126,7 @@ few votes. Same per-challenge scoping and JSON value format):
     set-global-default votingPauseDurationMinutes 270
 
 Auto-Submit schedule (JSON array of {count, seconds} rows):
-  autoFillSchedule     - Each row: have at least <count> entries once <seconds>
+  autoSubmitSchedule   - Each row: have at least <count> entries once <seconds>
                          remain before close. Counts 2-4 (max 3 rows, unique) —
                          challenges allow at most 4 images and image 1 always
                          exists. Omit a count to never schedule that image; an
@@ -127,9 +134,9 @@ Auto-Submit schedule (JSON array of {count, seconds} rows):
                          Default: [{"count":2,"seconds":1800},{"count":3,"seconds":1200},{"count":4,"seconds":600}]
   Set it with set-global-default (set-setting without --challenge redirects
   here, since the scheduler reads only the global default):
-    set-global-default autoFillSchedule '[{"count":2,"seconds":172800},{"count":3,"seconds":10800},{"count":4,"seconds":900}]'
+    set-global-default autoSubmitSchedule '[{"count":2,"seconds":172800},{"count":3,"seconds":10800},{"count":4,"seconds":900}]'
   Per-challenge override (also validated):
-    set-setting autoFillSchedule '[{"count":2,"seconds":172800}]' --challenge=12345
+    set-setting autoSubmitSchedule '[{"count":2,"seconds":172800}]' --challenge=12345
 
 Value Types:
   String:   "value" or value

@@ -107,11 +107,39 @@ const statsStore = createJsonStore({ fileName: 'photo-stats.json', prefKey: 'gur
 let cache: Map<string, PhotoStatsEntry> | null = null;
 let cacheDirty = false;
 
+/**
+ * The request allowance of one run of enrichment: how many lookups it may start,
+ * how many failed in a row, and whether its limits were already reported. The
+ * voting pass shares one (reset by resetPassState); a run outside any pass — the
+ * photo suggestions — takes its own, so it neither spends nor trips the pass's.
+ * A `quiet` budget logs no limit warnings: they speak of "this pass".
+ */
+export type StatsBudget = {
+    cap: number;
+    quiet: boolean;
+    consecutiveFailures: number;
+    breakerLogged: boolean;
+    fetched: number;
+    capLogged: boolean;
+};
+
+const newBudget = (cap: number, quiet: boolean): StatsBudget => ({
+    cap,
+    quiet,
+    consecutiveFailures: 0,
+    breakerLogged: false,
+    fetched: 0,
+    capLogged: false,
+});
+
 // Reset per voting pass by resetPassState().
-let consecutiveFailures = 0;
-let breakerLoggedThisPass = false;
-let fetchedThisPass = 0;
-let passCapLogged = false;
+const passBudget = newBudget(MAX_ENRICH_PER_PASS, false);
+
+/**
+ * A fresh, quiet budget for a run that is not part of a voting pass: one fill's lookups, as a ranking makes
+ * a single enrichment call, which is already limited to MAX_ENRICH_PER_FILL.
+ */
+const createStatsBudget = (): StatsBudget => newBudget(MAX_ENRICH_PER_FILL, true);
 
 // Only ids short enough to be safe cache keys are persisted; see
 // MAX_PHOTO_ID_LENGTH. Both callers pass an already-stringified id (a persisted
@@ -175,7 +203,7 @@ const loadCache = (): Map<string, PhotoStatsEntry> => {
         }
     } catch (error) {
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .debug(`photoStats: could not read the stats cache: ${errorMessage(error) || error}`, null);
         cache = new Map();
     }
@@ -202,7 +230,7 @@ const persistCache = () => {
         cacheDirty = false;
     } catch (error) {
         logger
-            .withCategory('autoFill')
+            .withCategory('autoSubmit')
             .debug(`photoStats: could not persist the stats cache: ${errorMessage(error) || error}`, null);
     }
 };
@@ -212,26 +240,30 @@ const persistCache = () => {
  * so a pass that failed does not permanently disable enrichment.
  */
 const resetPassState = () => {
-    consecutiveFailures = 0;
-    breakerLoggedThisPass = false;
-    fetchedThisPass = 0;
-    passCapLogged = false;
+    passBudget.consecutiveFailures = 0;
+    passBudget.breakerLogged = false;
+    passBudget.fetched = 0;
+    passBudget.capLogged = false;
 };
 
-// Enrichment stops for the pass either because the endpoint is failing or
-// because the pass has spent its request budget.
-const breakerOpen = () => consecutiveFailures >= FAILURE_BREAKER_THRESHOLD || fetchedThisPass >= MAX_ENRICH_PER_PASS;
+// Enrichment stops for the budget either because the endpoint is failing or
+// because the budget has spent its requests.
+const breakerOpen = (budget: StatsBudget) =>
+    budget.consecutiveFailures >= FAILURE_BREAKER_THRESHOLD || budget.fetched >= budget.cap;
+
+/** Whether the budget's failure breaker tripped: its lookups failed in a row, so the rest were skipped. */
+const statsBudgetTripped = (budget: StatsBudget) => budget.consecutiveFailures >= FAILURE_BREAKER_THRESHOLD;
 
 /**
  * Run `worker` over `items` at most ENRICH_CONCURRENCY at a time, for its side
  * effects only. allSettled keeps one item's rejection from aborting the rest
  * of its chunk.
  */
-const forEachChunked = async <T>(items: T[], worker: (item: T) => Promise<unknown>) => {
+const forEachChunked = async <T>(items: T[], budget: StatsBudget, worker: (item: T) => Promise<unknown>) => {
     for (let i = 0; i < items.length; i += ENRICH_CONCURRENCY) {
         const chunk = items.slice(i, i + ENRICH_CONCURRENCY);
         await Promise.allSettled(chunk.map(worker));
-        if (breakerOpen()) break;
+        if (breakerOpen(budget)) break;
     }
 };
 
@@ -248,9 +280,10 @@ const forEachChunked = async <T>(items: T[], worker: (item: T) => Promise<unknow
 const enrichCandidates = async (
     photos: PickerPhoto[],
     token: string,
-    deps: Pick<RankDeps, 'getImageData'> & { logger?: FillLogger },
+    deps: Pick<RankDeps, 'getImageData' | 'statsBudget'> & { logger?: FillLogger },
 ): Promise<PickerPhoto[]> => {
     const log = (deps && deps.logger) || logger;
+    const budget = deps?.statsBudget ?? passBudget;
     if (!Array.isArray(photos) || photos.length === 0) return [];
     const getImageData = deps && deps.getImageData;
     if (typeof getImageData !== 'function' || !token) {
@@ -301,7 +334,7 @@ const enrichCandidates = async (
     }
 
     let fetchList: PickerPhoto[] = [];
-    if (!breakerOpen()) {
+    if (!breakerOpen(budget)) {
         fetchList = needFetch
             .slice()
             .sort((a, b) => {
@@ -313,39 +346,43 @@ const enrichCandidates = async (
     }
 
     if (fetchList.length > 0) {
-        await forEachChunked(fetchList, async (photo) => {
-            if (breakerOpen()) return null;
+        await forEachChunked(fetchList, budget, async (photo) => {
+            if (breakerOpen(budget)) return null;
             const id = String(photo.id);
-            fetchedThisPass++;
-            if (fetchedThisPass >= MAX_ENRICH_PER_PASS && !passCapLogged) {
-                passCapLogged = true;
-                log.withCategory('autoFill').warning(
-                    `autoFill: reached this cycle's limit of ${MAX_ENRICH_PER_PASS} photo-stat lookups; remaining challenges rank on what is already known and resume next cycle`,
-                    null,
-                );
+            budget.fetched++;
+            if (budget.fetched >= budget.cap && !budget.capLogged) {
+                budget.capLogged = true;
+                if (!budget.quiet) {
+                    log.withCategory('autoSubmit').warning(
+                        `autoSubmit: reached this cycle's limit of ${MAX_ENRICH_PER_PASS} photo-stat lookups; remaining challenges rank on what is already known and resume next cycle`,
+                        null,
+                    );
+                }
             }
             let payload;
             try {
                 payload = await getImageData(id, token);
             } catch (error) {
-                log.withCategory('autoFill').debug(
+                log.withCategory('autoSubmit').debug(
                     `photoStats: get_image_data failed for photo ${oneLine(id)}: ${oneLine(errorMessage(error) || error)}`,
                     null,
                 );
                 payload = null;
             }
             if (!payload) {
-                consecutiveFailures++;
-                if (breakerOpen() && !breakerLoggedThisPass) {
-                    breakerLoggedThisPass = true;
-                    log.withCategory('autoFill').warning(
-                        `autoFill: photo-stats lookups failed ${FAILURE_BREAKER_THRESHOLD} times in a row; skipping stat enrichment for the rest of this pass — ranking falls back to views and upload date`,
-                        null,
-                    );
+                budget.consecutiveFailures++;
+                if (breakerOpen(budget) && !budget.breakerLogged) {
+                    budget.breakerLogged = true;
+                    if (!budget.quiet) {
+                        log.withCategory('autoSubmit').warning(
+                            `autoSubmit: photo-stats lookups failed ${FAILURE_BREAKER_THRESHOLD} times in a row; skipping stat enrichment for the rest of this pass — ranking falls back to views and upload date`,
+                            null,
+                        );
+                    }
                 }
                 return null;
             }
-            consecutiveFailures = 0;
+            budget.consecutiveFailures = 0;
             const stats = { ...toStats(payload), fetchedAt: now };
             // Always usable for THIS fill; only persisted when the id is a safe
             // cache key (see MAX_PHOTO_ID_LENGTH).
@@ -376,17 +413,21 @@ const enrichCandidates = async (
     });
 };
 
-/** Test-only: drop the in-memory cache and per-pass breaker state. */
+/** Test-only: drop the in-memory cache and per-pass budget state. */
 const __resetForTests = () => {
     cache = null;
     cacheDirty = false;
-    consecutiveFailures = 0;
-    breakerLoggedThisPass = false;
+    resetPassState();
 };
+
+export const initializePhotoStatsAsync = statsStore.initializeAsync;
+export const flushPhotoStatsWrites = statsStore.flushPendingWrites;
 
 export {
     enrichCandidates,
     resetPassState,
+    createStatsBudget,
+    statsBudgetTripped,
     MAX_ENRICH_PER_FILL,
     MAX_ENRICH_PER_PASS,
     MAX_CACHE_ENTRIES,

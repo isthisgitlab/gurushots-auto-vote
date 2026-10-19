@@ -37,6 +37,7 @@ const buildMember = (spec: ChallengeSpec, now: number) => ({
         turbo_unlock_amount: 250,
         required_selections: 6,
         state: spec.turbo.state,
+        mode: spec.turbo.mode ?? 'classic',
         time_to_open: spec.turbo.opensIn === null ? null : now + spec.turbo.opensIn,
     },
     ranking: {
@@ -84,6 +85,7 @@ const buildChallenge = (spec: ChallengeSpec, id: number, now: number) => {
         top_photo_enable: true,
         time_left: { ...spec.timeLeft },
         member: buildMember(spec, now),
+        ...(spec.teamMatch ? { teamMatch: { us: { ...spec.teamMatch.us }, them: { ...spec.teamMatch.them } } } : {}),
     };
 };
 

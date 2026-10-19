@@ -19,6 +19,7 @@ type CreatedWindow = {
     loadFile: jest.Mock<Promise<void>, [string]>;
     focus: jest.Mock<void, []>;
     show: jest.Mock<void, []>;
+    webContents: object;
 };
 /** Shape of the `electron` mock factory below. */
 type ElectronMock = {
@@ -44,6 +45,7 @@ jest.mock('electron', () => {
         declare show: jest.Mock<void, []>;
         declare focus: jest.Mock<void, []>;
         declare isDestroyed: () => boolean;
+        declare webContents: object;
         declare static created: BrowserWindow[];
         declare static nextLoadResult: Promise<void> | null;
         constructor(opts: BrowserWindowConstructorOptions) {
@@ -59,6 +61,7 @@ jest.mock('electron', () => {
             this.show = jest.fn<void, []>();
             this.focus = jest.fn<void, []>();
             this.isDestroyed = () => false;
+            this.webContents = {};
             BrowserWindow.created.push(this);
         }
     }
@@ -84,6 +87,11 @@ jest.mock('../../src/ts/services/AutoUpdater', () => ({
         mockAutoUpdaterCtor(win);
         return { checkForUpdates: mockAutoUpdaterCheck };
     }),
+}));
+
+const mockRestrictToLogsChannels = jest.fn<void, [object]>();
+jest.mock('../../src/ts/ipc/registerHandlers', () => ({
+    restrictToLogsChannels: (webContents: object) => mockRestrictToLogsChannels(webContents),
 }));
 
 let electron: ElectronMock;
@@ -328,6 +336,9 @@ describe('Help → Logs', () => {
             webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
         });
         expect(win.loadFile.mock.calls[0][0]).toMatch(/html[/\\]logs\.html$/);
+        // The reduced preload, and the main process limits this window's webContents to the Logs channels.
+        expect(win.opts.webPreferences?.preload).toMatch(/preloadLogs-bundle\.js$/);
+        expect(mockRestrictToLogsChannels).toHaveBeenCalledWith(win.webContents);
         expect(win.show).not.toHaveBeenCalled();
         win.handlers['ready-to-show']();
         expect(win.show).toHaveBeenCalled();

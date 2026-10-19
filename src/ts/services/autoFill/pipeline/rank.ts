@@ -29,7 +29,7 @@ const rankCandidatesForChallenge = async (
         wantCount?: number;
         mustIncludeTags?: readonly string[] | null;
         shouldIncludeTags?: readonly string[] | null;
-        fillWithoutTagMatch?: boolean;
+        submitWithoutTagMatch?: boolean;
     } = {},
 ): Promise<FetchErrorResult | { status: 'ranked'; picked: PickerPhoto[] }> => {
     const {
@@ -39,7 +39,7 @@ const rankCandidatesForChallenge = async (
         wantCount = 1,
         mustIncludeTags = null,
         shouldIncludeTags = null,
-        fillWithoutTagMatch = true,
+        submitWithoutTagMatch = true,
     } = opts;
     const loaded = await loadFillCandidates({
         label,
@@ -65,7 +65,7 @@ const rankCandidatesForChallenge = async (
         wantCount,
         mustIncludeTags,
         shouldIncludeTags,
-        fillWithoutTagMatch,
+        submitWithoutTagMatch,
     });
     const byId = new Map(eligible.map((photo) => [String(photo.id), photo]));
     const { picked: pickedIds } = await verifyFillPick(

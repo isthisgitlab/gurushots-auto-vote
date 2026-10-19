@@ -3,8 +3,9 @@
  */
 
 import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from '../../types/gurushots';
-import type { ScenarioState } from '../../types/stores';
+import type { ScenarioState, SpendAction } from '../../types/stores';
 import type { ScenarioStateLedger } from '../../types/votingPass';
+import type { StateLock } from '../../scenarioStateStore';
 import type { CurrencyPassDeps } from '../currencyAuto';
 import type { ScenarioDocument } from '../../settings/scenarioSchema';
 import type { PassContext } from '../votingOrchestrator';
@@ -16,8 +17,6 @@ type ValidatedRule = ScenarioRule & { id: string };
 type ScenarioAction = ScenarioRule['do'][number];
 
 type ActionType = ScenarioAction['type'];
-
-type SpendAction = 'swap' | 'unlockBoost' | 'fillExposure';
 
 type SpendKind = 'swaps' | 'keys' | 'fills';
 
@@ -36,6 +35,14 @@ type RunnerContext = {
     timezone: string;
     pass: ScenarioPass;
     ledger: ScenarioStateLedger;
+    /** The cross-process lock of the challenge's steps that this step runs under (none where one process runs them). */
+    stepLock?: StateLock;
+    /**
+     * Set by the rule for the step it is running: writes the spend down just before its request is made (the
+     * pending marker). False means it could not be written, and the spend is not made. Null where the step makes no
+     * spend (a retry only looks): a spend asked for with none is refused, never made without its marker.
+     */
+    beforeSpend: ((action: SpendAction) => boolean) | null;
 };
 
 /**
@@ -60,7 +67,17 @@ type ActionEffects = {
 
 type DoneOutcome = { status: 'done' } & ActionEffects;
 
-type NotDoneOutcome = { status: 'skipped' | 'failed' | 'deferred'; message: string };
+// `unclear`: the spend of the step got no answer, so it may have gone through and is never spent again; `spent` is
+// what the run counts against its limit for it (conservatively); `halt` ends the rule instead of resuming at the step.
+type NotDoneOutcome = {
+    status: 'skipped' | 'failed' | 'deferred';
+    message: string;
+    spent?: SpendKind;
+    unclear?: SpendAction;
+    halt?: true;
+    /** `pending`: the rule is stopped from a marker written before the spend, not from a spend that got no answer. */
+    origin?: 'pending';
+};
 
 type ActionOutcome = DoneOutcome | NotDoneOutcome;
 
@@ -84,5 +101,6 @@ export type {
     ActionEffects,
     DoneOutcome,
     NotDoneOutcome,
+    ActionOutcome,
     ActionHandler,
 };

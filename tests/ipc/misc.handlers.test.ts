@@ -28,7 +28,7 @@ jest.mock('../../src/ts/logger', () => {
 const { buildHandlers } = require('../../src/ts/ipc/misc.handlers') as typeof misc_handlersModule;
 
 describe('misc.handlers open-external-url scheme gate', () => {
-    let handler: (event: unknown, url: unknown) => Promise<{ success: boolean; error?: string }>;
+    let handler: (event: unknown, url: string) => Promise<{ success: boolean; error?: string }>;
     beforeEach(() => {
         openExternalMock.mockClear();
         handler = buildHandlers({ getMainWindow: jest.fn(), getLoginWindow: jest.fn() })['open-external-url'];
@@ -48,7 +48,7 @@ describe('misc.handlers open-external-url scheme gate', () => {
         ['non-string', 42],
         ['empty', ''],
     ])('refuses %s and never calls shell.openExternal', async (_label, url) => {
-        const res = await handler({}, url);
+        const res = await handler({}, invalid<string>(url));
         expect(openExternalMock).not.toHaveBeenCalled();
         expect(res.success).toBe(false);
         expect(res.error).toMatch(/https/i);

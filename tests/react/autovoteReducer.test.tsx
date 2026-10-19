@@ -28,6 +28,24 @@ describe('autovoteReducer — nextRunAt', () => {
     });
 });
 
+describe('autovoteReducer — pendingStartAt', () => {
+    test('initialState has no pending start', () => {
+        expect(initialState.pendingStartAt).toBeNull();
+    });
+
+    test('SET_PENDING_START stores the resume time and can clear it', () => {
+        const set = autovoteReducer(initialState, { type: ACTIONS.SET_PENDING_START, payload: 9000 });
+        expect(set).toMatchObject({ pendingStartAt: 9000, running: false, status: 'Stopped' });
+        expect(autovoteReducer(set, { type: ACTIONS.SET_PENDING_START, payload: null }).pendingStartAt).toBeNull();
+    });
+
+    test('START and STOP clear it', () => {
+        const pending = autovoteReducer(initialState, { type: ACTIONS.SET_PENDING_START, payload: 9000 });
+        expect(autovoteReducer(pending, { type: ACTIONS.START }).pendingStartAt).toBeNull();
+        expect(autovoteReducer(pending, { type: ACTIONS.STOP }).pendingStartAt).toBeNull();
+    });
+});
+
 describe('autovoteReducer — cycle recovery', () => {
     test('clears a transient error when the next voting cycle succeeds', () => {
         const running = autovoteReducer(initialState, { type: ACTIONS.START });

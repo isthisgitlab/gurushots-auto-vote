@@ -30,7 +30,7 @@ type BoostFixture = { state: string; timeout?: number | null };
 jest.mock('@/hooks/useChallengeSettings', () => ({
     useChallengeSettings: () => ({
         hasCustomSettings: false,
-        autoFillEnabled: false,
+        autoSubmitEnabled: false,
         isCompact: false,
         hasCompactOverride: false,
         toggleCompact: jest.fn(),
