@@ -86,7 +86,7 @@ export const errors = {
         'Nav ko ieteikt. Tavā bibliotēkā šobrīd nav foto, ko šis izaicinājums pieņem. Augšupielādē foto vai pamēģini meklēšanu.',
     suggestBusy: 'Foto netika sarindoti. Cita rindošana vēl turpinās. Pagaidi, kamēr tā beidzas, un mēģini vēlreiz.',
     suggestAccountChanged:
-        'Foto netika sarindoti. Rindošanas laikā tu nomainīji kontu. Atver „Izvēlēties foto…” vēlreiz.',
+        'Foto netika sarindoti. Rindošanas laikā tu nomainīji kontu. Aizver šo dialoglodziņu un atver to vēlreiz.',
     suggestChallengeEnded:
         'Foto netika sarindoti. Izaicinājums ir beidzies vai to nevarēja nolasīt. Aizver šo dialoglodziņu un atver kartīti vēlreiz.',
     suggestFailed: 'Foto netika sarindoti. GuruShots neatbildēja vai rindošana nepabeidzās. Mēģini vēlreiz pēc brīža.',
@@ -953,7 +953,7 @@ export const app = {
     pickSubmitCount: 'Iesniegt {count} foto',
     pickAuto: 'Automātiski',
     pickAutoHelp:
-        'Šī poga sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem, arī ar vietējo attēlu pārbaudi. Nekas netiek iesniegts.',
+        'Šī poga sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem un, ja tava versija to atbalsta, arī ar vietējo attēlu pārbaudi. Nekas netiek iesniegts.',
     pickLoadAll: 'Ielādēt visus foto',
     pickIdle: 'Foto vēl nav ielādēti. Ielādē visus, meklē vai izmanto pogu „Automātiski”.',
     pickIdleWithPicks:
@@ -972,7 +972,7 @@ export const app = {
     swapPickHelp:
         'Izvēlētais foto aizstās pašreizējo. Foto, ko šis izaicinājums apmaiņā nepieņem, ir paslēpti. Pogas „Automātiski” rindojums balstās uz taviem tagu noteikumiem un uzstādījumu „Izvēlētie foto”; pašam izvēlētam foto tie netiek piemēroti. Nekas netiek tērēts, kamēr neapstiprini.',
     swapPickAutoHelp:
-        'Šī poga sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem, arī ar vietējo attēlu pārbaudi. Nekas netiek apmainīts.',
+        'Šī poga sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem un, ja tava versija to atbalsta, arī ar vietējo attēlu pārbaudi. Nekas netiek apmainīts.',
     swapPickAutoRunning: 'Foto tiek sarindoti… tas var aizņemt minūti. Nekas netiek tērēts.',
     swapPickIdleWithPicks:
         'Izvēlēto foto var izmantot jau tagad. Ielādē visus foto vai meklē, lai redzētu pārējo bibliotēku.',

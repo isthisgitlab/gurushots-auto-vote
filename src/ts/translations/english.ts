@@ -84,7 +84,8 @@ export const errors = {
     suggestNoEligible:
         'Nothing to suggest. Your library has no photo this challenge accepts right now. Upload one, or try a search.',
     suggestBusy: 'The photos were not ranked. Another ranking is still running. Wait for it to finish, then try again.',
-    suggestAccountChanged: 'The photos were not ranked. You switched accounts while it ran. Reopen Pick photos….',
+    suggestAccountChanged:
+        'The photos were not ranked. You switched accounts while it ran. Close this dialog and open it again.',
     suggestChallengeEnded:
         'The photos were not ranked. This challenge has ended or could not be read. Close this dialog and reopen the card.',
     suggestFailed:
@@ -941,7 +942,7 @@ export const app = {
     pickSubmitCount: 'Submit {count}',
     pickAuto: 'Auto',
     pickAutoHelp:
-        'Auto ranks your photos by your auto-submit rules, including the local image check. Nothing is submitted.',
+        'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is submitted.',
     pickLoadAll: 'Load all photos',
     pickIdle: 'Photos are not loaded yet. Load them all, search, or press Auto.',
     pickIdleWithPicks:
@@ -960,7 +961,7 @@ export const app = {
     swapPickHelp:
         "The photo you pick replaces the current one. Photos this challenge doesn't accept for a swap are hidden. Auto ranks your photos by your tag rules and Chosen Photos; a photo you pick yourself skips them. Nothing is spent until you confirm.",
     swapPickAutoHelp:
-        'Auto ranks your photos by your auto-submit rules, including the local image check. Nothing is swapped.',
+        'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is swapped.',
     swapPickAutoRunning: 'Ranking your photos… this can take a minute. Nothing is spent.',
     swapPickIdleWithPicks: 'Your pick can be used as it is. Load all photos or search to see the rest of your library.',
     swapPickCount: 'Picked: {count}/1',

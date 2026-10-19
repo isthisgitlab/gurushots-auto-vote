@@ -770,7 +770,7 @@ describe('Auto suggestions', () => {
         await loadedAll();
         expect(
             screen.getByText(
-                'Auto ranks your photos by your auto-submit rules, including the local image check. Nothing is submitted.',
+                'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is submitted.',
             ),
         ).toBeTruthy();
         expect(autoButton().getAttribute('aria-disabled')).toBe('false');
@@ -778,7 +778,7 @@ describe('Auto suggestions', () => {
         setup({ max: 1, texts: { ...PICK_TEXTS, autoHelp: 'app.swapPickAutoHelp' } });
         expect(
             screen.getByText(
-                'Auto ranks your photos by your auto-submit rules, including the local image check. Nothing is swapped.',
+                'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is swapped.',
             ),
         ).toBeTruthy();
     });
@@ -1099,7 +1099,7 @@ describe('Auto suggestions', () => {
         ['suggest-busy', /^The photos were not ranked\. Another ranking is still running/],
         [
             'account-changed',
-            /^The photos were not ranked\. You switched accounts while it ran\. Reopen Pick photos…\.$/,
+            /^The photos were not ranked\. You switched accounts while it ran\. Close this dialog and open it again\.$/,
         ],
         ['challenge-ended', /^The photos were not ranked\. This challenge has ended or could not be read/],
         ['fetch-failed', /^The photos were not ranked\. GuruShots did not answer/],
@@ -1482,19 +1482,54 @@ describe('photos the challenge refuses', () => {
             .getAllByRole('button', { name: new RegExp(`^Photo ${shortOf(n)}:`) })
             .find((el) => !screen.getByRole('region', { name: 'Suggestions' }).contains(el)) as HTMLElement;
 
-    test('are left out and counted, in a status line that is always mounted', async () => {
+    const statusRegion = () => document.querySelector<HTMLElement>('[role="status"][tabindex="-1"]');
+
+    test('are left out and counted, in the one status region that was mounted before anything was read', async () => {
         getLibrary().mockResolvedValue(listing([photo(1), refused(2), refused(3), photo(4)]));
         setup();
-        const region = document.querySelector('[role="status"][tabindex="-1"]');
-        expect(region?.textContent ?? '').toBe('');
+        const region = statusRegion();
+        expect(region).not.toBeNull();
+        expect(region?.textContent).toBe('');
+        expect(region?.className).toContain('empty:hidden');
         await loadedAll();
         expect(has(2)).toBe(false);
         expect(has(3)).toBe(false);
         expect(has(4)).toBe(true);
-        expect(screen.getByText(hiddenLine(2)).closest('[role="status"]')).toBe(
-            document.querySelector('[role="status"][tabindex="-1"]'),
-        );
+        expect(statusRegion()).toBe(region);
+        expect(region?.textContent).toBe(hiddenLine(2));
         expect(screen.queryByText(noneAccepted)).toBeNull();
+    });
+
+    test('the same region carries the nothing-to-pick line, and stays mounted through loading', async () => {
+        const answer = deferred<Listing>();
+        // The first read is held; the re-check that follows it answers the same.
+        getLibrary()
+            .mockResolvedValue(listing([refused(1), refused(2)]))
+            .mockReturnValueOnce(answer.promise);
+        setup();
+        const region = statusRegion();
+        loadAll();
+        await screen.findByText('Loading your photos…');
+        expect(statusRegion()).toBe(region);
+        await act(async () => answer.resolve(listing([refused(1), refused(2)])));
+        await screen.findByText(noneAccepted);
+        expect(statusRegion()).toBe(region);
+        expect(region?.textContent).toBe(`${hiddenLine(2)}${noneAccepted}`);
+    });
+
+    test('the region is still the same one when the read fails', async () => {
+        getLibrary().mockResolvedValue(
+            invalid<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>>({
+                success: false,
+                error: 'Failed to read your photo library',
+            }),
+        );
+        setup();
+        const region = statusRegion();
+        loadAll();
+        await screen.findByRole('button', { name: 'Retry' });
+        expect(statusRegion()).toBe(region);
+        expect(region?.textContent).toBe('');
     });
 
     test('a cut-short listing says at least how many are hidden, and still counts the photos it listed', async () => {
@@ -1640,5 +1675,130 @@ describe('photos the challenge refuses', () => {
         await act(async () => fresh.resolve(listing([photo(1), refused(2), photo(3)])));
         await waitFor(() => expect(has(2)).toBe(false));
         expect(document.activeElement).toBe(tile(3));
+    });
+
+    test('the focus is not handed to the hidden line when the user moved it off the tile, even to a place that cannot hold it', async () => {
+        const fresh = deferred<Listing>();
+        getLibrary()
+            .mockResolvedValueOnce(listing([photo(1), photo(2), photo(3)], { allowedKnown: false, preview: true }))
+            .mockReturnValueOnce(fresh.promise);
+        setup();
+        loadAll();
+        await screen.findByRole('button', { name: /^Photo 00000002:/ });
+        tile(2).focus();
+        // A click on the page's blank space: the focus falls to <body>, and the tile stays.
+        tile(2).blur();
+        await act(async () => undefined);
+        expect(document.activeElement).toBe(document.body);
+        await act(async () => fresh.resolve(listing([photo(1), refused(2), photo(3)])));
+        await waitFor(() => expect(has(2)).toBe(false));
+        expect(document.activeElement).toBe(document.body);
+    });
+
+    test('the focus moving from one tile to another keeps the hand-off for the one it lands on', async () => {
+        const fresh = deferred<Listing>();
+        getLibrary()
+            .mockResolvedValueOnce(listing([photo(1), photo(2), photo(3)], { allowedKnown: false, preview: true }))
+            .mockReturnValueOnce(fresh.promise);
+        setup();
+        loadAll();
+        await screen.findByRole('button', { name: /^Photo 00000002:/ });
+        tile(1).focus();
+        fireEvent.blur(tile(1), { relatedTarget: tile(2) });
+        tile(2).focus();
+        await act(async () => undefined);
+        await act(async () => fresh.resolve(listing([photo(1), refused(2), photo(3)])));
+        await waitFor(() => expect(has(2)).toBe(false));
+        expect(document.activeElement).toBe(statusRegion());
+    });
+
+    test('a blur that comes with the tile being removed keeps the hand-off', async () => {
+        const fresh = deferred<Listing>();
+        getLibrary()
+            .mockResolvedValueOnce(listing([photo(1), photo(2), photo(3)], { allowedKnown: false, preview: true }))
+            .mockReturnValueOnce(fresh.promise);
+        setup();
+        loadAll();
+        await screen.findByRole('button', { name: /^Photo 00000002:/ });
+        const focused = tile(2);
+        focused.focus();
+        // A browser that reports the blur of a tile it is taking out of the page: by then it is not connected.
+        Object.defineProperty(focused, 'isConnected', { configurable: true, get: () => false });
+        fireEvent.blur(focused);
+        await act(async () => undefined);
+        // The override is gone again before the read lands, so the tile leaves the page as it would for real.
+        Reflect.deleteProperty(focused, 'isConnected');
+        await act(async () => fresh.resolve(listing([photo(1), refused(2), photo(3)])));
+        await waitFor(() => expect(has(2)).toBe(false));
+        expect(document.activeElement).toBe(statusRegion());
+    });
+
+    test('a refused pick the user takes back stays on screen with its reason, until the next listing replaces it', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1), refused(2), photo(3)]));
+        setup();
+        await autoSuggesting([photo(2)]);
+        fireEvent.click(stripTile(2));
+        loadAll();
+        await waitFor(() => expect(gridTile(1).textContent).toContain('Can be entered'));
+        fireEvent.click(gridTile(2));
+        expect(gridTile(2).getAttribute('aria-pressed')).toBe('false');
+        expect(gridTile(2).textContent).toContain('No 2');
+        expect(screen.queryByText(/^Hidden: /)).toBeNull();
+        // A second photo taken back in the same listing is kept too.
+        fireEvent.click(gridTile(1));
+        fireEvent.click(gridTile(1));
+        expect(gridTile(2)).toBeTruthy();
+        // The next read is another listing: the normal rule hides the photo and counts it.
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
+        await screen.findByText(hiddenLine(1));
+        expect(has(2)).toBe(false);
+    });
+
+    test('a refused pick taken back from the strip stays on screen with its reason as well', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1), refused(2), photo(3)]));
+        setup();
+        await autoSuggesting([photo(2)]);
+        fireEvent.click(stripTile(2));
+        loadAll();
+        await waitFor(() => expect(gridTile(1).textContent).toContain('Can be entered'));
+        fireEvent.click(stripTile(2));
+        expect(gridTile(2).getAttribute('aria-pressed')).toBe('false');
+        expect(screen.queryByText(/^Hidden: /)).toBeNull();
+    });
+
+    test('with one slot, tapping another photo replaces a refused pick, which stays on screen with its reason and is not counted', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1), refused(2), photo(3)]));
+        setup({ max: 1 });
+        await autoSuggesting([photo(2)]);
+        fireEvent.click(stripTile(2));
+        loadAll();
+        await waitFor(() => expect(gridTile(1).textContent).toContain('Can be entered'));
+        fireEvent.click(gridTile(1));
+        expect(gridTile(1).getAttribute('aria-pressed')).toBe('true');
+        expect(gridTile(2).getAttribute('aria-pressed')).toBe('false');
+        expect(gridTile(2).textContent).toContain('No 2');
+        expect(screen.queryByText(/^Hidden: /)).toBeNull();
+        // The next listing is another one: the refused photo is hidden and counted.
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
+        await screen.findByText(hiddenLine(1));
+        expect(has(2)).toBe(false);
+    });
+
+    test('with one slot, Add suggestions replaces a refused pick, which stays on screen with its reason and is not counted', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1), refused(2), photo(3)]));
+        setup({ max: 1 });
+        await autoSuggesting([photo(3), photo(2)]);
+        fireEvent.click(stripTile(2));
+        loadAll();
+        await waitFor(() => expect(gridTile(1).textContent).toContain('Can be entered'));
+        fireEvent.click(
+            within(screen.getByRole('region', { name: 'Suggestions' })).getByRole('button', {
+                name: 'Add suggestions',
+            }),
+        );
+        expect(gridTile(3).getAttribute('aria-pressed')).toBe('true');
+        expect(gridTile(2).getAttribute('aria-pressed')).toBe('false');
+        expect(gridTile(2).textContent).toContain('No 2');
+        expect(screen.queryByText(/^Hidden: /)).toBeNull();
     });
 });

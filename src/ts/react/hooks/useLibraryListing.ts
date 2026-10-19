@@ -40,8 +40,9 @@ const replacesListing = (error: string | undefined): boolean =>
  * The listing for a challenge. A no-search read may come from memory as a preview, which is read again in
  * the background; a search, Retry and Refresh read afresh. Answers to any but the newest request are dropped.
  * With `onDemand` nothing is read on mount: the listing is `idle` until `load` (or `retry`) is called.
- * `usage` is what the listing's eligibility marks are read for (submit, or a swap's); a change of it sends the next
- * read with the new one and reads nothing by itself.
+ * `usage` is what the listing's eligibility marks are read for (submit, or a swap's). With `onDemand` a change of it
+ * reads nothing by itself and the next read sends the new one; without `onDemand` it re-reads, as a change of
+ * challenge does.
  */
 export function useLibraryListing(
     challengeId: string | number | null,

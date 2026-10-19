@@ -24,7 +24,8 @@ import { recordUncertainSubmission, verifyFillPick } from './verify';
 // The paths that honour Submit Only Chosen Photos. Emergency fill exists so no
 // slot is left empty at the buzzer and manual fill is explicit user intent, so
 // neither does; both still rank the chosen photos first. The photo suggestions
-// rank the way the scheduled fill picks, so they honour it too.
+// rank the way the scheduled fill picks, so they honour it too, except the swap picker's (`ignoreOnly`): a swap
+// ignores Submit Only by design.
 const ONLY_LABELS: ReadonlySet<string> = new Set(['autoSubmit', 'fillNew', 'suggest']);
 
 /**
@@ -36,12 +37,15 @@ type ChosenLabel = FillLabel | 'suggest';
 /** What the chosen-photo steps read: no submitter, so the suggestions cannot reach one. */
 type ChosenParams = { label: ChosenLabel; challenge: Challenge; token: string; deps: RankDeps };
 
+/** `ignoreOnly`: the pick ranks the chosen photos first but never enforces Submit Only (the swap picker's Auto). */
+type PlanParams = ChosenParams & { ignoreOnly?: boolean };
+
 /**
  * What the Chosen Photos settings mean for this attempt: the resolved settings,
  * whether Submit Only applies on this path, the chosen photos not yet entered,
  * and the pick options the scorer takes (null when no list is set).
  */
-const planChosen = async ({ label, challenge, token, deps }: ChosenParams) => {
+const planChosen = async ({ label, challenge, token, deps, ignoreOnly = false }: PlanParams) => {
     const settings = await resolveChosenPhotos({
         read: (key) =>
             key === 'chosenPhotosMemberId'
@@ -52,7 +56,7 @@ const planChosen = async ({ label, challenge, token, deps }: ChosenParams) => {
         logger: deps.logger,
         label,
     });
-    const enforceOnly = settings.only && ONLY_LABELS.has(label);
+    const enforceOnly = settings.only && ONLY_LABELS.has(label) && !ignoreOnly;
     const entered = enteredIds(challenge);
     const chosen: ChosenPick | null =
         settings.ids.length > 0

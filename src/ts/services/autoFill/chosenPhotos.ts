@@ -195,7 +195,8 @@ const foundPhotos = (outcomes: ReadonlyMap<string, WalkOutcome> | undefined, ids
  * the memo as it is.
  */
 const refuseRememberedChosen = (challenge: Challenge, submitted: readonly string[], now: number): void => {
-    const memo = walkMemos.get(String(challenge.id));
+    // Submit-only: a refused swap goes through the swap preview, not this memo.
+    const memo = walkMemos.get(memoKey(challenge, 'submit'));
     if (!memo) return;
     for (const id of submitted) {
         if (memo.outcomes.get(id)?.state === 'found') {
@@ -376,8 +377,11 @@ const MAX_LOGGED_SKIPS = 64;
 
 const logChosenSkipOnce = (logger: FillLogger, challenge: Challenge, label: string, reason: ChosenSkipReason): void => {
     const key = String(challenge.id);
+    // Submit-only, like the skip it explains: the swap's memo (`memoKey(challenge, 'swap')`) never reaches it.
     // A walk that found chosen photos missing from the library adds a hint to the line: logged again once it shows.
-    const foreign = [...(walkMemos.get(key)?.outcomes.values() ?? [])].some((outcome) => outcome.state === 'not-found');
+    const foreign = [...(walkMemos.get(memoKey(challenge, 'submit'))?.outcomes.values() ?? [])].some(
+        (outcome) => outcome.state === 'not-found',
+    );
     const logged = foreign && reason === 'none-usable' ? `${reason}+foreign` : reason;
     if (loggedSkips.get(key) === logged) return;
     if (!loggedSkips.has(key) && loggedSkips.size >= MAX_LOGGED_SKIPS) evictOldest(loggedSkips);

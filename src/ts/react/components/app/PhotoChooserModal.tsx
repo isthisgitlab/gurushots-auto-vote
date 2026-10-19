@@ -18,6 +18,7 @@ import { useLibraryListing } from '@/hooks/useLibraryListing';
 import * as ipc from '@/api/ipc';
 import { MAX_CHOSEN_PHOTOS } from '../../../settings/limits';
 
+import type { ReactNode } from 'react';
 import type { AccountCheck } from '@/hooks/usePhotoChooser';
 import type { LibraryPhoto, ListState } from '@/hooks/useLibraryListing';
 
@@ -344,6 +345,7 @@ export function PhotoGrid({
     idleMemberId = null,
     idleIds,
     idleWithPicksKey = 'app.pickIdleWithPicks',
+    keepIds,
 }: {
     state: ListState;
     known: Map<string, LibraryPhoto>;
@@ -385,6 +387,8 @@ export function PhotoGrid({
     idleIds?: string[];
     /** The translation key of the idle line shown while something is picked. */
     idleWithPicksKey?: string;
+    /** Photos the submit modal's grid keeps showing, with their reason, whatever the listing says (taken back during it). */
+    keepIds?: ReadonlySet<string>;
 }) {
     const { t } = useTranslation();
     // Every won id this chooser has been told of: a search that no longer lists a chosen photo still knows it has won.
@@ -392,140 +396,139 @@ export function PhotoGrid({
     // The tile that last had the keyboard focus, and the hidden-count line a tile the fresh read hides hands it to.
     const lastFocusedTile = useRef<Element | null>(null);
     const hiddenLineRef = useRef<HTMLDivElement>(null);
-    // A tile that leaves the page takes the focus to <body>: when that was a tile of this grid, the focus goes to
-    // the hidden-count line (if there is one to go to) instead of being lost.
+    // A tile that leaves the page takes the focus to <body>: when that was a tile of this grid and the user had not
+    // moved the focus off it (see onBlurCapture), the focus goes to the status line (if it is shown) instead of
+    // being lost.
     useLayoutEffect(() => {
         const last = lastFocusedTile.current;
         if (last === null || last.isConnected) return;
         lastFocusedTile.current = null;
-        if (document.activeElement === document.body) hiddenLineRef.current?.focus();
+        hiddenLineRef.current?.focus();
     });
-    if (state.status === 'idle') {
-        // Nothing is read yet: only the photos Auto named that were picked are shown, from the records it brought,
-        // so a pick never goes invisible. An unpicked one keeps its place, so it can be picked again.
-        const chosenIdle = new Set(selected);
-        const shownIdle = (idleIds ?? selected).flatMap((id) => extraPhotos?.get(id) ?? []);
-        return (
-            <>
-                <p className="text-base-content/70 text-sm" role="status">
-                    {t(selected.length > 0 ? idleWithPicksKey : 'app.pickIdle')}
-                </p>
-                {shownIdle.length > 0 && (
-                    <div className={TILE_GRID}>
-                        {shownIdle.map((photo) => (
-                            <PhotoTile
-                                key={photo.id}
-                                photo={photo}
-                                memberId={idleMemberId}
-                                selected={chosenIdle.has(photo.id)}
-                                position={null}
-                                blockedReason={null}
-                                atCap={selected.length >= max}
-                                fullKey={fullKey}
-                                allowedKnown={false}
-                                locked={locked}
-                                lockedKey={lockedKey}
-                                onToggle={onToggle}
-                            />
-                        ))}
+    const render = (): { status: ReactNode; body: ReactNode } => {
+        if (state.status === 'idle') {
+            // Nothing is read yet: only the photos Auto named that were picked are shown, from the records it brought,
+            // so a pick never goes invisible. An unpicked one keeps its place, so it can be picked again.
+            const chosenIdle = new Set(selected);
+            const shownIdle = (idleIds ?? selected).flatMap((id) => extraPhotos?.get(id) ?? []);
+            return {
+                status: null,
+                body: (
+                    <>
+                        <p className="text-base-content/70 text-sm" role="status">
+                            {t(selected.length > 0 ? idleWithPicksKey : 'app.pickIdle')}
+                        </p>
+                        {shownIdle.length > 0 && (
+                            <div className={TILE_GRID}>
+                                {shownIdle.map((photo) => (
+                                    <PhotoTile
+                                        key={photo.id}
+                                        photo={photo}
+                                        memberId={idleMemberId}
+                                        selected={chosenIdle.has(photo.id)}
+                                        position={null}
+                                        blockedReason={null}
+                                        atCap={selected.length >= max}
+                                        fullKey={fullKey}
+                                        allowedKnown={false}
+                                        locked={locked}
+                                        lockedKey={lockedKey}
+                                        onToggle={onToggle}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </>
+                ),
+            };
+        }
+        if (state.status === 'loading')
+            return { status: null, body: <InlineLoader text={t('app.photoChooserLoading')} /> };
+        if (state.status === 'no-context') {
+            return {
+                status: null,
+                body: (
+                    <div role="alert" className="alert alert-warning py-2 text-sm">
+                        <span>{t('app.photoChooserNoContext')}</span>
                     </div>
-                )}
-            </>
-        );
-    }
-    if (state.status === 'loading') return <InlineLoader text={t('app.photoChooserLoading')} />;
-    if (state.status === 'no-context') {
-        return (
-            <div role="alert" className="alert alert-warning py-2 text-sm">
-                <span>{t('app.photoChooserNoContext')}</span>
-            </div>
-        );
-    }
-    if (state.status === 'error') {
-        return (
-            <div role="alert" className="alert alert-error py-2 text-sm">
-                <div className="flex-1">
-                    <p>{t(state.error ? 'app.photoChooserLoadError' : 'app.photoChooserLoadErrorNoDetail')}</p>
-                    {state.error && <p className="text-xs">{ipcErrorText(state.error, t)}</p>}
-                </div>
-                <button type="button" className="btn btn-sm" onClick={onRetry}>
-                    {t('app.photoChooserRetry')}
-                </button>
-            </div>
-        );
-    }
-    const { listing } = state;
-    const chosen = new Set(selected);
-    for (const id of listing.wonIds) everWon.current.add(id);
-    const won = everWon.current;
-    // A preview's photos carry no marks and are not remembered in `known`, so the selection is looked up in them.
-    const previewPhotos = listing.preview ? new Map(listing.photos.map((photo) => [photo.id, photo])) : null;
-    const lookup = (id: string): LibraryPhoto | undefined => (previewPhotos ?? known).get(id) ?? extraPhotos?.get(id);
-    const atCap = selected.length >= max;
-    const refusedHere = (photo: LibraryPhoto): boolean => listing.allowedKnown && !photo.allowed;
-    const blockedReasonOf = (photo: LibraryPhoto): string | null => {
-        if (blockedIds?.has(photo.id)) return t(blockedKey);
-        return refusedHere(photo) ? photo.message || t('app.photoChooserNotEligible') : null;
-    };
-    // Left out of the submit modal's grid, in this order: a pick is shown, a blocked photo is shown blocked, and a
-    // photo the challenge refuses is hidden. Nothing is hidden before the fresh read says what is accepted.
-    const hiddenFromGrid = (photo: LibraryPhoto): boolean =>
-        submit && !chosen.has(photo.id) && !blockedIds?.has(photo.id) && refusedHere(photo);
-    const refusedHidden = listing.photos.filter(hiddenFromGrid).length;
-    const shownPhotos = listing.photos.filter((photo) => !hiddenFromGrid(photo));
-    // A non-empty listing with nothing in it to pick: every photo is hidden or blocked, and nothing is picked.
-    const noneAccepted =
-        submit &&
-        listing.allowedKnown &&
-        listing.photos.length > 0 &&
-        selected.length === 0 &&
-        shownPhotos.every((photo) => blockedIds?.has(photo.id));
-    // A pick's number is its index in `selected` (the order it is saved in) among the picks that are shown: a photo
-    // left out (another account's) leaves no gap. The listed picks keep their place in the library's order.
-    const listed = new Set(listing.photos.map((photo) => photo.id));
-    const numberOf = new Map<string, number>();
-    for (const id of selected) {
-        if (listed.has(id) || lookup(id) || !hideUnlisted) numberOf.set(id, numberOf.size + 1);
-    }
-    const shown = (id: string): number | null => (numbered ? (numberOf.get(id) ?? null) : null);
-    const tile = (photo: LibraryPhoto, position: number | null) => (
-        <PhotoTile
-            key={photo.id}
-            photo={photo}
-            memberId={listing.memberId}
-            selected={chosen.has(photo.id)}
-            position={position}
-            blockedReason={blockedReasonOf(photo)}
-            atCap={atCap}
-            fullKey={fullKey}
-            allowedKnown={listing.allowedKnown}
-            locked={locked}
-            lockedKey={lockedKey}
-            onToggle={onToggle}
-        />
-    );
-    return (
-        <>
-            <ListingHeader
-                readAtMs={listing.readAtMs}
-                reading={revalidating}
-                disabled={refreshDisabled}
-                preview={listing.preview}
-                recheckFailed={recheckFailed}
-                hasChallenge={hasChallenge}
-                submit={submit}
-                onRefresh={onRefresh}
+                ),
+            };
+        }
+        if (state.status === 'error') {
+            return {
+                status: null,
+                body: (
+                    <div role="alert" className="alert alert-error py-2 text-sm">
+                        <div className="flex-1">
+                            <p>{t(state.error ? 'app.photoChooserLoadError' : 'app.photoChooserLoadErrorNoDetail')}</p>
+                            {state.error && <p className="text-xs">{ipcErrorText(state.error, t)}</p>}
+                        </div>
+                        <button type="button" className="btn btn-sm" onClick={onRetry}>
+                            {t('app.photoChooserRetry')}
+                        </button>
+                    </div>
+                ),
+            };
+        }
+        const { listing } = state;
+        const chosen = new Set(selected);
+        for (const id of listing.wonIds) everWon.current.add(id);
+        const won = everWon.current;
+        // A preview's photos carry no marks and are not remembered in `known`, so the selection is looked up in them.
+        const previewPhotos = listing.preview ? new Map(listing.photos.map((photo) => [photo.id, photo])) : null;
+        const lookup = (id: string): LibraryPhoto | undefined =>
+            (previewPhotos ?? known).get(id) ?? extraPhotos?.get(id);
+        const atCap = selected.length >= max;
+        const refusedHere = (photo: LibraryPhoto): boolean => listing.allowedKnown && !photo.allowed;
+        const blockedReasonOf = (photo: LibraryPhoto): string | null => {
+            if (blockedIds?.has(photo.id)) return t(blockedKey);
+            return refusedHere(photo) ? photo.message || t('app.photoChooserNotEligible') : null;
+        };
+        // Left out of the submit modal's grid, in this order: a pick is shown, a blocked photo is shown blocked, a photo
+        // taken back from the pick during this listing stays visible with its reason (it does not vanish under the
+        // click), and a photo the challenge refuses is hidden. Nothing is hidden before the fresh read says what is accepted.
+        const hiddenFromGrid = (photo: LibraryPhoto): boolean =>
+            submit &&
+            !chosen.has(photo.id) &&
+            !blockedIds?.has(photo.id) &&
+            !keepIds?.has(photo.id) &&
+            refusedHere(photo);
+        const refusedHidden = listing.photos.filter(hiddenFromGrid).length;
+        const shownPhotos = listing.photos.filter((photo) => !hiddenFromGrid(photo));
+        // A non-empty listing with nothing in it to pick: every photo is hidden or blocked, and nothing is picked.
+        const noneAccepted =
+            submit &&
+            listing.allowedKnown &&
+            listing.photos.length > 0 &&
+            selected.length === 0 &&
+            shownPhotos.every((photo) => blockedIds?.has(photo.id));
+        // A pick's number is its index in `selected` (the order it is saved in) among the picks that are shown: a photo
+        // left out (another account's) leaves no gap. The listed picks keep their place in the library's order.
+        const listed = new Set(listing.photos.map((photo) => photo.id));
+        const numberOf = new Map<string, number>();
+        for (const id of selected) {
+            if (listed.has(id) || lookup(id) || !hideUnlisted) numberOf.set(id, numberOf.size + 1);
+        }
+        const shown = (id: string): number | null => (numbered ? (numberOf.get(id) ?? null) : null);
+        const tile = (photo: LibraryPhoto, position: number | null) => (
+            <PhotoTile
+                key={photo.id}
+                photo={photo}
+                memberId={listing.memberId}
+                selected={chosen.has(photo.id)}
+                position={position}
+                blockedReason={blockedReasonOf(photo)}
+                atCap={atCap}
+                fullKey={fullKey}
+                allowedKnown={listing.allowedKnown}
+                locked={locked}
+                lockedKey={lockedKey}
+                onToggle={onToggle}
             />
-            {!hasChallenge && <p className="text-base-content/70 text-xs">{t('app.photoChooserEligibilityLater')}</p>}
-            {listing.wonCount > 0 && (
-                <p className="text-base-content/70 text-xs">
-                    {interp(t(listing.truncated ? 'app.photoChooserWonHiddenTruncated' : 'app.photoChooserWonHidden'), {
-                        count: listing.wonCount,
-                    })}
-                </p>
-            )}
-            {/* Always mounted, so a screen reader announces the line that arrives in it. */}
-            <div role="status" tabIndex={-1} ref={hiddenLineRef} className="empty:hidden">
+        );
+        // What the status line says about the listing: how many photos were left out, and that none of the rest can be picked.
+        const statusLines = (
+            <>
                 {refusedHidden > 0 && (
                     <p className="text-base-content/70 text-xs">
                         {interp(
@@ -538,62 +541,116 @@ export function PhotoGrid({
                         )}
                     </p>
                 )}
-            </div>
-            {listing.truncated && (
-                <ToneNote tone="warning" className="text-xs">
-                    {interp(t('app.photoChooserTruncated'), { count: listing.photos.length })}
-                </ToneNote>
-            )}
-            {listing.photos.length === 0 && (
-                <p className="text-base-content/70 text-sm">
-                    {t(
-                        listing.wonCount > 0 && !listing.truncated
-                            ? 'app.photoChooserEmptyAllWon'
-                            : 'app.photoChooserEmpty',
+                {noneAccepted && <p className="text-base-content/70 text-sm">{t('app.photoChooserNoneAccepted')}</p>}
+            </>
+        );
+        return {
+            status: statusLines,
+            body: (
+                <>
+                    <ListingHeader
+                        readAtMs={listing.readAtMs}
+                        reading={revalidating}
+                        disabled={refreshDisabled}
+                        preview={listing.preview}
+                        recheckFailed={recheckFailed}
+                        hasChallenge={hasChallenge}
+                        submit={submit}
+                        onRefresh={onRefresh}
+                    />
+                    {!hasChallenge && (
+                        <p className="text-base-content/70 text-xs">{t('app.photoChooserEligibilityLater')}</p>
                     )}
-                </p>
-            )}
-            {noneAccepted && <p className="text-base-content/70 text-sm">{t('app.photoChooserNoneAccepted')}</p>}
-            <div
-                className={TILE_GRID}
-                onFocusCapture={() => {
-                    // The focus event's target is typed as a bare EventTarget; the focused element is the same node.
-                    lastFocusedTile.current = document.activeElement;
-                }}
-            >
-                {/* The picks the listing does not return stay pinned first, in pick order. */}
-                {selected
-                    .filter((id) => !listed.has(id))
-                    .map((id) => {
-                        const photo = lookup(id);
-                        if (photo) return tile(photo, shown(id));
-                        if (hideUnlisted) return null;
-                        if (listing.preview && !won.has(id)) {
-                            return (
-                                <PendingTile
-                                    key={id}
-                                    id={id}
-                                    position={shown(id)}
-                                    recheckFailed={recheckFailed}
-                                    onToggle={onToggle}
-                                />
-                            );
-                        }
-                        return (
-                            <MissingTile
-                                key={id}
-                                id={id}
-                                position={shown(id)}
-                                count={listing.photos.length}
-                                hasChallenge={hasChallenge}
-                                truncated={listing.truncated}
-                                won={won.has(id)}
-                                onToggle={onToggle}
-                            />
-                        );
-                    })}
-                {shownPhotos.map((photo) => tile(photo, shown(photo.id)))}
+                    {listing.wonCount > 0 && (
+                        <p className="text-base-content/70 text-xs">
+                            {interp(
+                                t(
+                                    listing.truncated
+                                        ? 'app.photoChooserWonHiddenTruncated'
+                                        : 'app.photoChooserWonHidden',
+                                ),
+                                {
+                                    count: listing.wonCount,
+                                },
+                            )}
+                        </p>
+                    )}
+                    {listing.truncated && (
+                        <ToneNote tone="warning" className="text-xs">
+                            {interp(t('app.photoChooserTruncated'), { count: listing.photos.length })}
+                        </ToneNote>
+                    )}
+                    {listing.photos.length === 0 && (
+                        <p className="text-base-content/70 text-sm">
+                            {t(
+                                listing.wonCount > 0 && !listing.truncated
+                                    ? 'app.photoChooserEmptyAllWon'
+                                    : 'app.photoChooserEmpty',
+                            )}
+                        </p>
+                    )}
+                    <div
+                        className={TILE_GRID}
+                        onFocusCapture={() => {
+                            // The focus event's target is typed as a bare EventTarget; the focused element is the same node.
+                            lastFocusedTile.current = document.activeElement;
+                        }}
+                        onBlurCapture={(event) => {
+                            // The focus moving to another tile of the grid keeps the hand-off. Moving anywhere else ends it, if
+                            // the user did it: a tile that was removed (a browser may report a blur for it) keeps the hand-off.
+                            const next = event.relatedTarget;
+                            if (next instanceof Node && event.currentTarget.contains(next)) return;
+                            queueMicrotask(() => {
+                                if (lastFocusedTile.current?.isConnected) lastFocusedTile.current = null;
+                            });
+                        }}
+                    >
+                        {/* The picks the listing does not return stay pinned first, in pick order. */}
+                        {selected
+                            .filter((id) => !listed.has(id))
+                            .map((id) => {
+                                const photo = lookup(id);
+                                if (photo) return tile(photo, shown(id));
+                                if (hideUnlisted) return null;
+                                if (listing.preview && !won.has(id)) {
+                                    return (
+                                        <PendingTile
+                                            key={id}
+                                            id={id}
+                                            position={shown(id)}
+                                            recheckFailed={recheckFailed}
+                                            onToggle={onToggle}
+                                        />
+                                    );
+                                }
+                                return (
+                                    <MissingTile
+                                        key={id}
+                                        id={id}
+                                        position={shown(id)}
+                                        count={listing.photos.length}
+                                        hasChallenge={hasChallenge}
+                                        truncated={listing.truncated}
+                                        won={won.has(id)}
+                                        onToggle={onToggle}
+                                    />
+                                );
+                            })}
+                        {shownPhotos.map((photo) => tile(photo, shown(photo.id)))}
+                    </div>
+                </>
+            ),
+        };
+    };
+    const { status, body } = render();
+    return (
+        <>
+            {/* One live region at the same place in every state, so a line that arrives in it is announced. It is
+                also where the focus goes when the tile it was on is left out of the listing. */}
+            <div role="status" tabIndex={-1} ref={hiddenLineRef} className="empty:hidden">
+                {status}
             </div>
+            {body}
         </>
     );
 }

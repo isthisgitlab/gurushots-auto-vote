@@ -70,7 +70,14 @@ const suggestFillPhotos = async (
         enforceOnly,
         unentered,
         chosen,
-    } = await planChosen({ label, challenge, token, deps: runDeps });
+    } = await planChosen({
+        label,
+        challenge,
+        token,
+        deps: runDeps,
+        // A swap goes in whatever Submit Only says: the chosen photos rank first, but no gate keeps the picker empty.
+        ignoreOnly: usage === 'swap',
+    });
     if (enforceOnly && unentered.length === 0) {
         log.info(`${label}: every chosen photo is already entered in ${tag}, and Submit Only is on`, null);
         return { status: 'no-chosen-entered' };

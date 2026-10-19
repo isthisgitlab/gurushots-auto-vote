@@ -244,6 +244,29 @@ describe('suggestFillPhotos', () => {
             expect(await suggestFillPhotos(makeChallenge(), 'tok', deps)).toEqual({ status: 'no-chosen-unusable' });
         });
 
+        test('a swap ranking never enforces it: with every chosen photo entered, or none usable, it still suggests', async () => {
+            const { logger, lines } = makeLog();
+            const entered = makeDeps({ logger, settings: { chosen: ['p1', 'p2'], only: true } });
+            const challenge = makeChallenge([{ id: 'p1' }, { id: 'p2' }]);
+            const result = await suggestFillPhotos(challenge, 'tok', entered, undefined, { usage: 'swap' });
+            expect(result.status).toBe('suggested');
+            const unusable = makeDeps({ logger, settings: { chosen: ['gone'], only: true } });
+            const other = await suggestFillPhotos(makeChallenge(), 'tok', unusable, undefined, { usage: 'swap' });
+            expect(other.status).toBe('suggested');
+            expect(lines.info.filter((line) => line.includes('Submit Only is on'))).toEqual([]);
+        });
+
+        test('a swap ranking still ranks the chosen photos first', async () => {
+            const { logger, lines } = makeLog();
+            const deps = makeDeps({ logger, settings: { chosen: ['p7'], only: true } });
+            const ids = suggestedIds(
+                await suggestFillPhotos(makeChallenge(), 'tok', deps, undefined, { usage: 'swap' }),
+            ) as string[];
+            expect(ids[0]).toBe('p7');
+            expect(ids).toHaveLength(SUGGEST_COUNT);
+            expect(lines.info.filter((line) => line.includes('Submit Only is on'))).toEqual([]);
+        });
+
         test('answers only the chosen photos that are not entered yet', async () => {
             const deps = makeDeps({ settings: { chosen: ['p5', 'p6', 'p7'], only: true } });
             const challenge = makeChallenge([{ id: 'p6' }]);

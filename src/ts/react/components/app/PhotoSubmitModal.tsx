@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { StickyModalFooter, STICKY_FOOTER_SCROLL_PADDING } from '@/components/ui/StickyModalFooter';
@@ -180,17 +180,43 @@ function PhotoSubmitBody({
         [],
     );
 
+    // Photos taken out of the pick stay on screen with their reason until the next listing replaces this one.
+    const onScreen = state.status === 'ready' ? state.listing : null;
+    const [takenBack, setTakenBack] = useState<{ listing: typeof onScreen; ids: ReadonlySet<string> }>({
+        listing: null,
+        ids: new Set(),
+    });
+    const keepIds = takenBack.listing === onScreen ? takenBack.ids : undefined;
+    const current = useRef({ selected, onScreen });
+    // The latest pick and listing, for `toggle`, which must stay the same function between renders.
+    useLayoutEffect(() => {
+        current.current = { selected, onScreen };
+    });
+
+    // Records photos taken out of the pick (taken back, or replaced with one slot) for the listing on screen.
+    const keepShown = useCallback((ids: readonly string[]) => {
+        if (ids.length === 0) return;
+        const listing = current.current.onScreen;
+        setTakenBack((prev) => ({
+            listing,
+            ids: new Set([...(prev.listing === listing ? prev.ids : []), ...ids]),
+        }));
+    }, []);
+
     // With one slot a tap swaps the pick instead of being refused. The pick is what is being sent while a
     // submit is in flight, so it does not change then.
     const toggle = useCallback(
         (id: string) => {
             if (submitting) return;
+            const picked = current.current.selected;
+            // Taps take back a picked photo; with one slot they also replace the pick.
+            keepShown(picked.includes(id) ? [id] : max === 1 ? picked : []);
             setSelected((prev) => {
                 if (prev.includes(id)) return prev.filter((other) => other !== id);
                 return max === 1 ? [id] : [...prev, id];
             });
         },
-        [max, submitting],
+        [max, submitting, keepShown],
     );
 
     useEffect(() => {
@@ -256,6 +282,7 @@ function PhotoSubmitBody({
     // it swaps the pick for the best one, as a tap does.
     const addSuggestions = (photos: LibraryPhoto[]) => {
         const ranked = photos.map((photo) => photo.id);
+        if (max === 1) keepShown(selected.filter((id) => id !== ranked[0]));
         setSelected((prev) => {
             if (max === 1) return ranked.slice(0, 1);
             const added = ranked.filter((id) => !prev.includes(id)).slice(0, Math.max(0, max - prev.length));
@@ -410,6 +437,7 @@ function PhotoSubmitBody({
                 idleMemberId={suggestedMemberId}
                 idleIds={idleShown}
                 idleWithPicksKey={texts.idleWithPicks}
+                keepIds={keepIds}
             />
             <StickyModalFooter>
                 {alert}
