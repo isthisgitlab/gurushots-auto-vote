@@ -3,7 +3,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useSettings } from '@/api/useSettings';
 import { dateLocale } from '@/utils/formatters';
 import { interp } from '@/utils/interp';
-import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
+import { effectiveTimezone } from '../../../settings/uiDefaults';
 
 /**
  * When the listing was read, as the line above the photos words it: the time, with the date when it is not
@@ -70,7 +70,7 @@ export function ListingHeader({
 }) {
     const { t } = useTranslation();
     const { settings } = useSettings();
-    const timezone = settings?.app.timezone || DEFAULT_TIMEZONE;
+    const timezone = effectiveTimezone(settings?.app.timezone);
     return (
         <>
             <div className="flex items-center justify-between gap-2">

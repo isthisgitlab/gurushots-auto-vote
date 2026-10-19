@@ -6,7 +6,7 @@
  */
 
 import * as settings from '../settings';
-import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
+import { effectiveTimezone } from '../settings/uiDefaults';
 import { scenarioStateLedger, mockScenarioStateLedger, scenarioStepLock } from '../scenarioStateStore';
 
 import type { ScenarioState } from '../types/stores';
@@ -43,7 +43,7 @@ const getScenarioStatus = (
     timezone: string;
 } => {
     const id = String(challengeId);
-    const timezone = settings.getSetting('timezone') || DEFAULT_TIMEZONE;
+    const timezone = effectiveTimezone(settings.getSetting('timezone'));
     const assigned = settings.getEffectiveSetting('scenario', id) || '';
     const scenario = assigned ? settings.getScenario(assigned) : null;
     if (!scenario) return { assigned, scenario: null, state: null, corrupt: false, timezone };

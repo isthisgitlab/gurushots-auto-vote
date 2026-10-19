@@ -117,13 +117,28 @@ describe('useSettingsForm — per-key fallback on hydrate', () => {
 
         // Array default: a non-array stored value is replaced.
         expect(ui.customTimezones).toEqual(DEFAULT_UI_VALUES.customTimezones);
-        // String default: '' counts as unset, a real string is kept.
-        expect(ui.timezone).toBe(DEFAULT_UI_VALUES.timezone);
+        // String default: '' counts as unset, a real string is kept; a timezone of '' is UTC, not unset.
+        expect(ui.timezone).toBe('UTC');
         expect(ui.language).toBe('lv');
         // Scalars: an explicit false / 0 is preserved; null falls back.
         expect(ui.stayLoggedIn).toBe(false);
         expect(ui.apiMaxRetries).toBe(0);
         expect(ui.apiTimeout).toBe(DEFAULT_UI_VALUES.apiTimeout);
+    });
+
+    test('a missing timezone hydrates as the default zone; an empty one as UTC, with nothing to save', async () => {
+        const missing = renderForm(baseProps({ settings: { app: { language: 'lv' } } }));
+        expect(missing.result.current.uiValues.timezone).toBe(DEFAULT_UI_VALUES.timezone);
+
+        const props = baseProps({ settings: { app: { ...DEFAULT_UI_VALUES, timezone: '' } } });
+        const { result } = renderForm(props);
+        expect(result.current.uiValues.timezone).toBe('UTC');
+        expect(result.current.isDirty()).toBe(false);
+
+        await act(async () => {
+            await result.current.commit();
+        });
+        expect(props.updateSetting).not.toHaveBeenCalled();
     });
 
     test('a stored array is kept as-is', () => {

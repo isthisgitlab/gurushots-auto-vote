@@ -10,6 +10,7 @@ import * as logger from '../../logger';
 import { ensureAuthenticated } from '../guards';
 import { formatSettingForLog } from './settings/shared';
 import * as settings from '../../settings';
+import { effectiveTimezone } from '../../settings/uiDefaults';
 import { getMiddleware } from '../../apiFactory';
 import { createScheduler } from '../../scheduling/runScheduler';
 import { formatDateTime } from '../../dateFormat';
@@ -256,7 +257,7 @@ const showStatus = async () => {
     logger.withCategory('settings').info('\nSettings:');
     logger.withCategory('settings').info(`  Theme: ${userSettings.app.theme}`);
     logger.withCategory('settings').info(`  Language: ${userSettings.app.language}`);
-    logger.withCategory('settings').info(`  Timezone: ${userSettings.app.timezone}`);
+    logger.withCategory('settings').info(`  Timezone: ${effectiveTimezone(userSettings.app.timezone)}`);
     logger.withCategory('settings').info(`  API Timeout: ${userSettings.app.apiTimeout}s`);
     {
         const min = userSettings.app.checkFrequencyMin;

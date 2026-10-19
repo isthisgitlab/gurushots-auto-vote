@@ -17,7 +17,8 @@ import { getV1Defaults } from '../../../src/ts/settings/importV1/defaults';
 import { dropInvalidV1Values } from '../../../src/ts/settings/importV1/loadValidation';
 import { API_MAX_RETRIES_MAX, API_TIMEOUT_MAX_SEC, API_TIMEOUT_MIN_SEC } from '../../../src/ts/settings/limits';
 import { appValueAllowed } from '../../../src/ts/settings/loadValidation';
-import { getUiDefaultSettings } from '../../../src/ts/settings/uiDefaults';
+import { effectiveTimezone, getUiDefaultSettings } from '../../../src/ts/settings/uiDefaults';
+import { withImportedTimezone } from '../../../src/ts/settings/formatOneTimezone';
 import { SETTINGS_SCHEMA, schemaEntry } from '../../../src/ts/settings/schema';
 import { dropInvalidValues, mergeWithDefaults } from '../../../src/ts/settings/loadValidation';
 import { mirrorTextOf, toFormatOne } from '../../../src/ts/settings/formatOneMirror';
@@ -53,6 +54,16 @@ const loaded = (config: ConfigV2 | StoredConfigV2): unknown => {
 };
 
 /**
+ * `loaded`, with the timezone read through `effectiveTimezone`: the mirror writes a blank timezone as UTC on purpose (what
+ * the configuration means by it), so a configuration → mirror → configuration round trip keeps the zone's meaning, not
+ * its spelling.
+ */
+const loadedByMeaning = (config: ConfigV2 | StoredConfigV2): unknown => {
+    const read = loaded(config) as { app: { timezone?: string } };
+    return { ...read, app: { ...read.app, timezone: effectiveTimezone(read.app.timezone) } };
+};
+
+/**
  * The generator's own check, before anything is compared: the live load keeps the configuration as it is generated, and
  * every value is valid in the set it sits in. A value the load or the cross-field checks refuse would pass the
  * comparison below vacuously (both sides would lose it).
@@ -72,8 +83,9 @@ const generatedIsValid = (config: ConfigV2): void => {
 // importer sees the text, and put back where they stood (legacyImport.ts).
 const importMirrorText = (text: string) => {
     const { raw, carried } = takeCloseTimeRules(text);
-    const result = importV1Settings(raw, { keptKey });
-    if (!result.ok) throw new Error(`the importer refused the mirror: ${result.code}: ${result.detail}`);
+    const converted = importV1Settings(raw, { keptKey });
+    if (!converted.ok) throw new Error(`the importer refused the mirror: ${converted.code}: ${converted.detail}`);
+    const result = { ...converted, config: withImportedTimezone(converted.config) };
     if (carried.length > 0) result.config.rules = attachCloseTimeRules(result.config.rules, carried);
     return result;
 };
@@ -177,7 +189,7 @@ describe('import(toFormatOne(config)) equals the configuration', () => {
 
         const result = importMirror(config, {});
 
-        expect(loaded(result.config)).toEqual(loaded(config));
+        expect(loadedByMeaning(result.config)).toEqual(loadedByMeaning(config));
     });
 
     test.each(SEEDS.map((seed) => [seed]))('seed %i: every container filled, every key somewhere', (seed) => {
@@ -186,7 +198,7 @@ describe('import(toFormatOne(config)) equals the configuration', () => {
 
         const result = importMirror(config, titlePins);
 
-        expect(loaded(result.config)).toEqual(loaded(config));
+        expect(loadedByMeaning(result.config)).toEqual(loadedByMeaning(config));
         expect(result.titlePins).toEqual(titlePins);
     });
 
@@ -201,7 +213,7 @@ describe('import(toFormatOne(config)) equals the configuration', () => {
 
             const result = importMirror(config, {});
 
-            expect(loaded(result.config)).toEqual(loaded(config));
+            expect(loadedByMeaning(result.config)).toEqual(loadedByMeaning(config));
         },
     );
 
@@ -211,7 +223,7 @@ describe('import(toFormatOne(config)) equals the configuration', () => {
 
         const result = importMirror(config, {});
 
-        expect(loaded(result.config)).toEqual(loaded(config));
+        expect(loadedByMeaning(result.config)).toEqual(loadedByMeaning(config));
         expect(result.config.app.windowBounds).toEqual(config.app.windowBounds);
         expect(config.app.windowBounds).not.toEqual(getDefaultSettings().app.windowBounds);
     });
@@ -407,8 +419,10 @@ describe('importing, mirroring and importing again changes nothing', () => {
     ];
 
     test.each(files)('%s', (_name, raw) => {
-        const first = importV1Settings(raw, { keptKey });
-        if (!first.ok) throw new Error(`the importer refused the file: ${first.code}: ${first.detail}`);
+        const imported = importV1Settings(raw, { keptKey });
+        if (!imported.ok) throw new Error(`the importer refused the file: ${imported.code}: ${imported.detail}`);
+        // An empty timezone is Riga after the import (it was in format 1), so the second import keeps the first's zone.
+        const first = { ...imported, config: withImportedTimezone(imported.config) };
 
         const text = mirrorTextOf(JSON.stringify(first.config), first.titlePins);
         const second = importMirrorText(text ?? 'null');

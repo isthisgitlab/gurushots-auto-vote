@@ -890,7 +890,7 @@ describe('SettingsModal — timezone select and custom zones', () => {
         mockFormState.uiValues.timezone = 'Asia/Tokyo';
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
 
-        expect(Array.from(tzSelect().options).map((o) => o.value)).toEqual(['Europe/Riga', 'Asia/Tokyo']);
+        expect(Array.from(tzSelect().options).map((o) => o.value)).toEqual(['Europe/Riga', 'UTC', 'Asia/Tokyo']);
         pickOption(tzSelect(), 'Europe/Riga');
         expect(mockFormState.handleUiChange).toHaveBeenCalledWith('timezone', 'Europe/Riga');
     });
@@ -898,7 +898,35 @@ describe('SettingsModal — timezone select and custom zones', () => {
     test('a selected zone missing from the custom list still gets its own option', () => {
         mockFormState.uiValues.timezone = 'America/New_York';
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-        expect(Array.from(tzSelect().options).map((o) => o.value)).toEqual(['Europe/Riga', 'America/New_York']);
+        expect(Array.from(tzSelect().options).map((o) => o.value)).toEqual(['Europe/Riga', 'UTC', 'America/New_York']);
+    });
+
+    test('UTC is always offered, selected or not, and has no remove button', () => {
+        mockFormState.uiValues.timezone = 'UTC';
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        expect(Array.from(tzSelect().options).map((o) => o.value)).toEqual(['Europe/Riga', 'UTC']);
+        expect(tzSelect().value).toBe('UTC');
+        expect(removeButton().className).toContain('invisible');
+    });
+
+    test('a custom zone that is UTC is offered once', () => {
+        mockFormState.uiValues.customTimezones = ['UTC', 'Asia/Tokyo'];
+        mockFormState.uiValues.timezone = 'UTC';
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        expect(Array.from(tzSelect().options).map((o) => o.value)).toEqual(['Europe/Riga', 'UTC', 'Asia/Tokyo']);
+    });
+
+    test('adding UTC selects it without putting it in the custom list', () => {
+        mockFormState.uiValues.customTimezones = ['Asia/Tokyo'];
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        fireEvent.click(findTimezoneAddButton());
+        const input = document.querySelector('input[type="text"]')!;
+        fireEvent.change(input, { target: { value: 'UTC' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('customTimezones', ['Asia/Tokyo']);
+        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('timezone', 'UTC');
     });
 
     test('removing the current zone drops it from the list and falls back to the default', () => {

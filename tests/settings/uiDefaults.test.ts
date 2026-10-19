@@ -6,7 +6,8 @@
 
 import type * as uiDefaultsModule from '../../src/ts/settings/uiDefaults';
 
-const { getUiDefaultSettings } = require('../../src/ts/settings/uiDefaults') as typeof uiDefaultsModule;
+const { getUiDefaultSettings, effectiveTimezone, BUILT_IN_TIMEZONES } =
+    require('../../src/ts/settings/uiDefaults') as typeof uiDefaultsModule;
 
 describe('getUiDefaultSettings', () => {
     test('returns the documented UI-form defaults', () => {
@@ -29,5 +30,25 @@ describe('getUiDefaultSettings', () => {
         const b = getUiDefaultSettings();
         expect(a).not.toBe(b);
         expect(a.customTimezones).not.toBe(b.customTimezones);
+    });
+});
+
+describe('effectiveTimezone', () => {
+    test.each([
+        [undefined, 'Europe/Riga'],
+        [null, 'Europe/Riga'],
+        ['', 'UTC'],
+        ['  ', 'UTC'],
+        [' Asia/Tokyo ', 'Asia/Tokyo'],
+        ['local', 'local'],
+        ['America/New_York', 'America/New_York'],
+    ])('%j is read as %s', (value, zone) => {
+        expect(effectiveTimezone(value)).toBe(zone);
+    });
+});
+
+describe('BUILT_IN_TIMEZONES', () => {
+    test('are the default zone and UTC', () => {
+        expect(BUILT_IN_TIMEZONES).toEqual(['Europe/Riga', 'UTC']);
     });
 });

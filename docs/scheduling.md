@@ -122,7 +122,8 @@ Deliberate semantics and caveats:
   decision path re-reads `settings.getSetting('timezone')` every evaluation —
   so it can be up to one full wait late, and a time-of-day fill window
   shorter than the remaining wait is skipped, the same as a CLI
-  `scheduledFillTime` edit.
+  `scheduledFillTime` edit. An empty `timezone` means UTC (a missing one,
+  Europe/Riga).
 - **Fail-soft**: corrupt persisted values (hand-edited settings.json)
   degrade that one challenge's scheduled fill to "off" — the string key is
   type-guarded, numeric corruption coerces to `NaN`-false, an unknown

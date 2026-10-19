@@ -631,7 +631,7 @@ repeated six times is one that gets forgotten at one of them.
   (`V1_KEY_RENAMES`) under their format 1 names (where a key exists under both names the current one wins, so the same
   configuration always mirrors to the same text), `auth` back among the top-level keys, `challenges` split into
   `perChallenge`, `titleProfileSuppressions` and `entryPins`, `defaults` as `globalDefaults`, every one-time migration
-  flag set (an older build never migrates the values again) and no `version` or `imported`. The mirror is written
+  flag set (an older build never migrates the values again) and no `version` or `imported`. An empty or blank `timezone` is written as `UTC` (the configuration's meaning of it; a format-1 build read `''` as Europe/Riga, so `settings/formatOneTimezone.ts` translates both ways). The mirror is written
   after the configuration is stored, as an overwrite of the text it read, and skipped when it is unchanged:
     - **Desktop and the CLI (`mirrorSync`)** read `settings.json` first, then the stored configuration, and write with
       `overwriteIf(current, text)`; a mirror another process wrote in between makes the write a conflict, and it is
@@ -708,7 +708,8 @@ repeated six times is one that gets forgotten at one of them.
 - **Import and recovery (`settings/legacyImport.ts`, `persistence.ts`).** With no `config.json`, the first load imports
   `settings.json` under the import lock (Android has none: the native compare-and-write of the configuration decides
   which context is first) and writes the marker (`v2-import.json`, kept outside `config.json`, so setting the
-  configuration aside never makes the next start import unasked). A damaged `config.json` is set aside
+  configuration aside never makes the next start import unasked). An import reads a `timezone` of exactly `''` as
+  Europe/Riga, the meaning it had in format 1 (`withImportedTimezone`). A damaged `config.json` is set aside
   (`config.json.corrupt-<time>`; `gurushots-config_corrupt-<time>` on Android) and the configuration is restored from
   `settings.json`; a missing one, once the import has run and the mirror has started, is restored silently with a log
   line. A restore keeps the `imported` record the marker holds, so the import report is not shown again. The load

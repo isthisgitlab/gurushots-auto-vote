@@ -67,6 +67,25 @@ const mockSettings = (overrides: Record<string, unknown> = {}) => {
 
 beforeEach(() => jest.clearAllMocks());
 
+describe('getVotingPauseState — the timezone setting', () => {
+    // 12:00 in UTC is 14:00 in Riga in January, so a 30 minute pause opening at 12:00 holds `NOW` only when read in UTC.
+    const pausedAtNoon = (timezone: string | undefined) => {
+        mockSettings({ useVotingPause: true, votingPauseTime: ['12:00'], votingPauseDurationMinutes: 30 });
+        settings.getSetting = invalid(jest.fn((key: string) => (key === 'timezone' ? timezone : undefined)));
+        return VotingLogic.getVotingPauseState(buildChallenge(), '777', NOW).inWindow;
+    };
+
+    test('an empty timezone reads the daily times in UTC', () => {
+        expect(pausedAtNoon('')).toBe(true);
+        expect(pausedAtNoon('  ')).toBe(true);
+    });
+
+    test('a missing timezone reads them in the default zone, Europe/Riga', () => {
+        expect(pausedAtNoon(undefined)).toBe(false);
+        expect(pausedAtNoon('Europe/Riga')).toBe(false);
+    });
+});
+
 describe('getVotingPauseState — active semantics', () => {
     test('inactive when useVotingPause is off, even with times configured', () => {
         mockSettings({ useVotingPause: false, votingPauseTime: ['12:00'], votingPauseBeforeEnd: [300] });

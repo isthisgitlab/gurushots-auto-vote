@@ -2,7 +2,7 @@ import { deriveWindowHints } from '@/utils/windowHints';
 import { formatSecondsAsHoursMinutes } from '@/utils/timeFieldUnits';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { MAX_VOTING_PAUSE_MINUTES } from '../../../settings/limits';
-import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
+import { effectiveTimezone } from '../../../settings/uiDefaults';
 
 import type { WindowHintPolicy, WindowHintState } from '@/utils/windowHints';
 import type { Challenge } from '../../../types/gurushots';
@@ -390,7 +390,7 @@ export function challengeSettingHints({
     profileReplacesWarning: boolean;
     t: Translate;
 }): HintsFor {
-    const timezone = appSettings?.timezone || DEFAULT_TIMEZONE;
+    const timezone = effectiveTimezone(appSettings?.timezone);
     const nowSec = Math.floor(Date.now() / 1000);
     const closeTime = Number(challenge?.close_time) || 0;
     const derive = (keys: typeof SCHEDULED_FILL_KEYS, policy: WindowHintPolicy) =>

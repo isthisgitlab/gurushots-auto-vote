@@ -33,7 +33,7 @@ import {
     resolveCurrencyAuto,
     resolveScenarioWake,
 } from '../scheduling/nodeResolvers';
-import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
+import { effectiveTimezone } from '../settings/uiDefaults';
 
 import type { ActiveChallengesResponse, Challenge } from '../types/gurushots';
 import type { HeadlessGlobals } from '../types/capacitor';
@@ -79,7 +79,7 @@ const computeNextDelayMs = async (token: string, prefetched: Challenge[] | null 
             lastMinuteCheckMinutes,
             minGapMs: MIN_CYCLE_GAP_MS,
             resolveScheduledFill,
-            timezone: userSettings.timezone || DEFAULT_TIMEZONE,
+            timezone: effectiveTimezone(userSettings.timezone),
             resolveFinalWindowTopUp,
             resolveBoostPrefill,
             resolveCurrencyAuto,

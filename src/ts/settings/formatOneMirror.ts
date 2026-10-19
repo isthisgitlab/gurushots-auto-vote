@@ -18,6 +18,7 @@ import { errorMessage } from '../errorMessage';
 import { isPlainObject } from '../plainObject';
 import { V1_KEY_RENAMES } from './importV1/renames';
 import { V1_MIGRATION_FLAGS } from './importV1/migrations';
+import { mirroredTimezone } from './formatOneTimezone';
 import {
     clearSignOutScrubPending,
     isMirrorStarted,
@@ -118,7 +119,7 @@ const toFormatOne = (config: ConfigV2, titlePins: Record<string, string>): Recor
     const records = Object.entries(config.challenges);
     const { mirrored, carried } = splitCloseTimeRules(config.rules);
     return {
-        ...formatOneKeys(config.app),
+        ...formatOneKeys(mirroredTimezone(config.app)),
         ...config.auth,
         ...Object.fromEntries(V1_MIGRATION_FLAGS.map((flag) => [flag, true])),
         ...(carried.length > 0 ? { [CLOSE_TIME_RULES_KEY]: carried } : {}),

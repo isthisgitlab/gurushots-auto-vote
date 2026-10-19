@@ -707,13 +707,15 @@ describe('settings facade — title-keyed tag rules', () => {
             expect(settings.getEffectiveTagSetting('mustIncludeTags', UTC_1710)).toEqual([]);
         });
 
-        test('an empty timezone setting reads in the default zone, like the challenge cards', () => {
+        test('an empty timezone setting reads in UTC, like the challenge cards', () => {
             settings.setSetting('timezone', '');
             settings.saveChallengeProfile('Late', { exposure: 80 });
             save({ closesAt: '17:10', profile: 'Late' });
-            expect(settings.getTitleProfile(RIGA_1710)).toMatchObject({ profile: { name: 'Late' } });
+            expect(settings.getTitleProfile(UTC_1710)).toMatchObject({ profile: { name: 'Late' } });
+            expect(settings.getTitleProfile(RIGA_1710).profile).toBeNull();
             save({ closesAt: '17:10', mustIncludeTags: ['hat'] });
-            expect(settings.getEffectiveTagSetting('mustIncludeTags', RIGA_1710)).toEqual(['hat']);
+            expect(settings.getEffectiveTagSetting('mustIncludeTags', UTC_1710)).toEqual(['hat']);
+            expect(settings.getEffectiveTagSetting('mustIncludeTags', RIGA_1710)).toEqual([]);
         });
     });
 

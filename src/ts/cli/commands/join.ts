@@ -13,6 +13,7 @@ import { formatDuration } from '../../format/duration';
 import { challengeKind, challengePhotoCount, listedTags } from '../../format/challengeListing';
 import { endTimeOf, formatEndTimeIn } from '../../format/endTime';
 import * as settings from '../../settings';
+import { effectiveTimezone } from '../../settings/uiDefaults';
 
 import type { NullEventHandlers } from '../../types/cli';
 import type { ForgetStatus } from '../../types/join';
@@ -75,7 +76,7 @@ const showDiscover = async () => {
         return;
     }
     const nowSec = Date.now() / 1000;
-    const timezone = settings.getSetting('timezone');
+    const timezone = effectiveTimezone(settings.getSetting('timezone'));
     items.forEach((c) => logger.withCategory('ui').info(discoverLine(c, nowSec, timezone)));
     const upcoming = items.filter((c) => c?.status === 'upcoming');
     // Only a challenge that has started can be joined: a list of upcoming ones alone has nothing to join yet.

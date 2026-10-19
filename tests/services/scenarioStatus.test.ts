@@ -69,8 +69,13 @@ describe('getScenarioStatus', () => {
         expect(getScenarioStatus(7, invalid(broken)).corrupt).toBe(true);
     });
 
-    test('falls back to the default timezone', () => {
+    test('reads an empty timezone as UTC', () => {
         topLevel.timezone = '';
+        expect(getScenarioStatus(7, createMemoryStateLedger()).timezone).toBe('UTC');
+    });
+
+    test('falls back to the default timezone when none is stored', () => {
+        topLevel.timezone = undefined;
         expect(getScenarioStatus(7, createMemoryStateLedger()).timezone).toBe('Europe/Riga');
     });
 });

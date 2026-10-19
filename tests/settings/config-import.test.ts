@@ -183,6 +183,17 @@ describe('the import of a settings.json (real fs)', () => {
             if (process.platform !== 'win32') expect(fs.statSync(originalFile).mode & 0o777).toBe(0o600);
         });
 
+        test.each([
+            ['an empty timezone is Riga, as it was in format 1', '', 'Europe/Riga'],
+            ['a blank timezone is kept, as format 1 took it for an invalid zone', '  ', '  '],
+            ['a zone is kept', 'Asia/Tokyo', 'Asia/Tokyo'],
+        ])('%s', (_name, written, imported) => {
+            fs.writeFileSync(legacyFile, JSON.stringify({ ...ONE_X, timezone: written }));
+            loadFresh();
+
+            expect(settings.loadSettings().app.timezone).toBe(imported);
+        });
+
         test('imports once: the next loads (and the next process) read config.json, not settings.json', () => {
             fs.writeFileSync(legacyFile, RAW);
             loadFresh();
@@ -697,7 +708,12 @@ describe('the import of a settings.json (real fs)', () => {
                 jest.doMock('../../src/ts/settings/importV1', () => ({
                     importV1Settings: () => {
                         write();
-                        return { ok: true, config: { version: 2 }, titlePins: {}, report: { refsBlocked: [] } };
+                        return {
+                            ok: true,
+                            config: { version: 2, app: {} },
+                            titlePins: {},
+                            report: { refsBlocked: [] },
+                        };
                     },
                 }));
             });

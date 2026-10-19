@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getUiDefaultSettings } from '../../settings/uiDefaults';
+import { effectiveTimezone, getUiDefaultSettings } from '../../settings/uiDefaults';
 import * as ipc from '@/api/ipc';
 import { useOnChosenPhotosCleared, withEmptyChosenPhotos } from '@/api/chosenPhotosCleared';
 import { valuesEqual } from '@/utils/valuesEqual';
@@ -26,7 +26,8 @@ export const DEFAULT_UI_VALUES = getUiDefaultSettings();
 /**
  * Per-key fallback: arrays keep the Array.isArray guard, strings treat '' as unset (||),
  * and numeric/boolean keys use ?? so an explicit 0 / false from settings
- * is preserved rather than silently replaced by the default.
+ * is preserved rather than silently replaced by the default. The exception is
+ * `timezone`, where '' means UTC (effectiveTimezone), not unset.
  */
 const withFallback = (value: unknown, defaultValue: unknown): unknown => {
     if (Array.isArray(defaultValue)) return Array.isArray(value) ? value : defaultValue;
@@ -113,7 +114,10 @@ export function useSettingsForm({
             // withFallback keeps each key's default shape (see above).
             const initialUiValues = {} as UiValues;
             for (const [key, defaultValue] of Object.entries(DEFAULT_UI_VALUES)) {
-                (initialUiValues as Record<string, unknown>)[key] = withFallback(settings.app[key], defaultValue);
+                (initialUiValues as Record<string, unknown>)[key] =
+                    key === 'timezone'
+                        ? effectiveTimezone(settings.app.timezone)
+                        : withFallback(settings.app[key], defaultValue);
             }
             setUiValues(initialUiValues);
             setOriginalUiValues(initialUiValues);

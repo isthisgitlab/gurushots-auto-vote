@@ -53,7 +53,7 @@ Common Settings:
   theme                - UI theme (default: "light"), one of:
                          ${THEMES.join(', ')}
   language             - UI language: "en" or "lv" (default: "en")
-  timezone             - Timezone for timestamps (default: "Europe/Riga")
+  timezone             - Timezone for timestamps (default: "Europe/Riga"; empty = UTC)
   manualPhotosOnly     - Manual Only. Per-challenge only (set-setting --challenge=<id>, or a challenge
                          rule): true = the app runs nothing there by itself: no join, photo entry,
                          swap, vote, boost, Turbo, key unlock, fill or scenario step. Manual Join,

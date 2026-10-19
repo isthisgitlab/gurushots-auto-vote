@@ -11,7 +11,7 @@ import { challengeTargetForId } from './challengeFacts';
 import { globalChallengeValues, challengeValueSetIsValid } from './defaults';
 import { RESERVED_PROFILE_NAMES, normalizeProfileName, findProfileKey, sanitizeProfileValues } from './profileStore';
 import { sanitizeTitleRuleInline } from './titleRuleSanitize';
-import { DEFAULT_TIMEZONE } from './uiDefaults';
+import { effectiveTimezone } from './uiDefaults';
 
 import type { ConfigV2 } from '../types/config';
 import type { ChallengeValues, RuleMatchChallenge, RuleSource, TitleRule } from '../types/settings';
@@ -48,7 +48,7 @@ const profileFromMatches = (settings: ConfigV2, matches: TitleRule[]): RuleProfi
  * The zone close-time conditions are read in: the app's timezone setting, the
  * same one the challenge cards show their end time in.
  */
-const ruleTimeZone = (settings: ConfigV2): string => settings.app.timezone || DEFAULT_TIMEZONE;
+const ruleTimeZone = (settings: ConfigV2): string => effectiveTimezone(settings.app.timezone);
 
 /**
  * The settings the rules matching a challenge contribute, as one sparse map.

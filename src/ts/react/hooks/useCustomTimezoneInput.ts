@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
+import { BUILT_IN_TIMEZONES, DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 
 import type { UiChangeHandler, UiValues } from '../../types/settingsEditor';
 
@@ -16,7 +16,7 @@ const isValidTimezone = (tz: string) => {
  * The custom-timezone "+" input: local UI state, never persisted, so it stays
  * out of the settings form hook. Reset on every open so a stale "+" panel from
  * a previous session doesn't carry over. Adding a valid zone stores it in
- * `customTimezones` and selects it; removing drops the selected custom zone
+ * `customTimezones` and selects it (a built-in zone is only selected); removing drops the selected custom zone
  * and falls back to the default. `dirty` is a typed zone that was not added.
  */
 export function useCustomTimezoneInput({
@@ -59,7 +59,11 @@ export function useCustomTimezoneInput({
         // useSettingsForm guarantees an array here (withFallback's array guard
         // on hydrate, DEFAULT_UI_VALUES before it), so no `|| []` fallback.
         const list = uiValues.customTimezones;
-        handleUiChange('customTimezones', list.includes(zone) ? list : [...list, zone]);
+        // A built-in zone is always offered, so selecting it needs no entry of its own.
+        handleUiChange(
+            'customTimezones',
+            list.includes(zone) || BUILT_IN_TIMEZONES.includes(zone) ? list : [...list, zone],
+        );
         handleUiChange('timezone', zone);
         close();
     }, [value, uiValues.customTimezones, handleUiChange, close]);

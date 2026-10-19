@@ -6,7 +6,7 @@ import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { ResetButton } from '@/components/ui/ResetButton';
 import { ThemeSelect } from '@/components/ui/ThemeSelect';
 import { ToneNote } from '@/components/ui/ToneNote';
-import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
+import { BUILT_IN_TIMEZONES } from '../../../settings/uiDefaults';
 import { SettingLabel, numberRangeMessage, parseNumberInput } from './SettingInput';
 import { SettingsSectionPanel } from './SettingsSectionPanel';
 
@@ -374,13 +374,19 @@ function TimezoneSetting({
                     value={timezone}
                     onChange={(e) => handleUiChange('timezone', e.currentTarget.value)}
                 >
-                    <option value={DEFAULT_TIMEZONE}>{DEFAULT_TIMEZONE}</option>
-                    {customTimezones.map((tz) => (
+                    {BUILT_IN_TIMEZONES.map((tz) => (
                         <option key={tz} value={tz}>
                             {tz}
                         </option>
                     ))}
-                    {timezone !== DEFAULT_TIMEZONE && !customTimezones.includes(timezone) && (
+                    {customTimezones
+                        .filter((tz) => !BUILT_IN_TIMEZONES.includes(tz))
+                        .map((tz) => (
+                            <option key={tz} value={tz}>
+                                {tz}
+                            </option>
+                        ))}
+                    {!BUILT_IN_TIMEZONES.includes(timezone) && !customTimezones.includes(timezone) && (
                         <option value={timezone}>{timezone}</option>
                     )}
                 </select>
@@ -393,7 +399,7 @@ function TimezoneSetting({
                     +
                 </button>
                 <button
-                    className={`btn btn-error btn-sm ${timezone !== DEFAULT_TIMEZONE ? '' : 'invisible'}`}
+                    className={`btn btn-error btn-sm ${BUILT_IN_TIMEZONES.includes(timezone) ? 'invisible' : ''}`}
                     title={t('app.removeCurrentTimezone')}
                     aria-label={t('app.removeCurrentTimezone')}
                     onClick={timezoneInput.remove}

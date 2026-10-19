@@ -168,6 +168,16 @@ describe('the mirror of the configuration in settings.json (real fs)', () => {
             if (process.platform !== 'win32') expect(fs.statSync(legacyFile).mode & 0o777).toBe(0o600);
         });
 
+        test('an empty timezone is mirrored as UTC, what the configuration means by it; a zone as it is', () => {
+            loadFresh();
+
+            expect(settings.setSetting('timezone', '')).toBe(true);
+            expect(stored(legacyFile).timezone).toBe('UTC');
+
+            expect(settings.setSetting('timezone', 'Asia/Tokyo')).toBe(true);
+            expect(stored(legacyFile).timezone).toBe('Asia/Tokyo');
+        });
+
         test('a logout is mirrored: the token is gone from settings.json too', () => {
             loadFresh();
             settings.setSetting('token', 'tok-1');
@@ -498,6 +508,17 @@ describe('the mirror of the configuration in settings.json (real fs)', () => {
             expect(settings.getSettingsRecovery()).toBeNull();
             expect(fs.existsSync(configFile)).toBe(true);
             expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('restored from settings.json'));
+        });
+
+        test('a restore from a mirror this build wrote reads its UTC as UTC', () => {
+            mirrored();
+            settings.setSetting('timezone', '');
+            expect(stored(legacyFile).timezone).toBe('UTC');
+            fs.rmSync(configFile);
+
+            loadFresh();
+
+            expect(settings.loadSettings().app.timezone).toBe('UTC');
         });
 
         test.each([

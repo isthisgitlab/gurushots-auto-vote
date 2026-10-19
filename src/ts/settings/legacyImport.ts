@@ -11,6 +11,7 @@ import { isPlainObject } from '../plainObject';
 import { getDefaultSettings } from './defaults';
 import { attachCloseTimeRules, takeCloseTimeRules } from './closeTimeRules';
 import { importV1Settings } from './importV1';
+import { withImportedTimezone } from './formatOneTimezone';
 import { isImportMarked, isMirrorStarted, keptImportedRecord, markImportDone } from './importMarker';
 import { invalidReferences } from './importReport';
 import { setAsideLegacy } from './formatOneMirror';
@@ -132,8 +133,9 @@ const importLegacyText = (
     // The rules the mirror carries beside `titleRules` are taken out before the frozen importer sees the text, and put back
     // where they stood (before the report is made, so it covers them too).
     const { raw: mirrored, carried } = takeCloseTimeRules(raw);
-    const result = importV1Settings(mirrored, { keptKey: (key) => schemaEntry(key) !== undefined });
-    if (!result.ok) return failure(result.code, result.detail);
+    const converted = importV1Settings(mirrored, { keptKey: (key) => schemaEntry(key) !== undefined });
+    if (!converted.ok) return failure(converted.code, converted.detail);
+    const result = { ...converted, config: withImportedTimezone(converted.config) };
     if (carried.length > 0) result.config.rules = attachCloseTimeRules(result.config.rules, carried);
     const { refsBlocked } = result.report;
     const imported: ImportedV2 | undefined = recovering

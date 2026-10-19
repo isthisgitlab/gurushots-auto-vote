@@ -30,7 +30,7 @@ import { ScrollToTopButton } from '@/components/ui/ScrollToTopButton';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { useDocumentTheme } from '@/hooks/useDocumentTheme';
 import { useNoticeGate } from '@/hooks/useNoticeGate';
-import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
+import { effectiveTimezone } from '../../settings/uiDefaults';
 import * as ipc from '@/api/ipc';
 import { errorMessage } from '../../errorMessage';
 
@@ -294,7 +294,7 @@ function AppContent() {
         return <PageLoader text={t('common.loading')} />;
     }
 
-    const timezone = settings?.app.timezone || DEFAULT_TIMEZONE;
+    const timezone = effectiveTimezone(settings?.app.timezone);
     const isMock = settings?.app.mock || false;
     const isLoggedIn = !!settings?.hasToken;
 

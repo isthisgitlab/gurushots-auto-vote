@@ -9,7 +9,7 @@ import * as logger from '../../logger';
 import * as settings from '../../settings';
 import * as runtime from '../../runtime';
 import * as nativeAutovote from '../NativeAutovoteBridge';
-import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
+import { effectiveTimezone } from '../../settings/uiDefaults';
 import { evaluateScenario } from '../../scenarios/evaluate';
 import { entriesOf } from '../../scenarios/selectors';
 import { recordVoteSample } from '../../scenarios/speed';
@@ -165,7 +165,7 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
             );
             return;
         }
-        const timezone = settings.getSetting('timezone') || DEFAULT_TIMEZONE;
+        const timezone = effectiveTimezone(settings.getSetting('timezone'));
         // The GUI and the CLI can run a pass at once: one rule step of a challenge runs at a time, or both would spend.
         const lock: StateLock = deps.lock ? deps.lock(challengeId) : NO_LOCK;
         if (!lock.ok) {

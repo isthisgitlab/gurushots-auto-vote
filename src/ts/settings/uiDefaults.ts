@@ -10,11 +10,19 @@
  */
 
 /**
- * Canonical default timezone. Every `settings.timezone || <fallback>`
- * site must use this constant — changing the default means changing
- * exactly one line.
+ * Canonical default timezone — what a missing `timezone` setting means.
+ * Every reader resolves the setting through `effectiveTimezone`, never
+ * `|| DEFAULT_TIMEZONE`, so an empty value means UTC and changing the
+ * default means changing exactly one line.
  */
 const DEFAULT_TIMEZONE = 'Europe/Riga';
+
+/** The zones the timezone picker always offers; they are never added to `customTimezones` or removed from the picker. */
+const BUILT_IN_TIMEZONES: readonly string[] = [DEFAULT_TIMEZONE, 'UTC'];
+
+/** The zone a `timezone` value means: missing → DEFAULT_TIMEZONE, empty/blank → 'UTC', else the value trimmed ('local' included). */
+const effectiveTimezone = (value: string | null | undefined): string =>
+    value == null ? DEFAULT_TIMEZONE : value.trim() || 'UTC';
 
 /**
  * Every DaisyUI theme, in DaisyUI's own order — styles.css compiles them all
@@ -92,4 +100,4 @@ const getUiDefaultSettings = (): {
     apiRetryBaseDelayMs: 1000, // Base for exponential backoff between retries (ms).
 });
 
-export { getUiDefaultSettings, DEFAULT_TIMEZONE, THEMES };
+export { getUiDefaultSettings, DEFAULT_TIMEZONE, BUILT_IN_TIMEZONES, effectiveTimezone, THEMES };
