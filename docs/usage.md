@@ -82,10 +82,10 @@ Settings are shared with the GUI: a `set-setting` from the CLI is picked up by t
 > Replace `[platform]` below with `mac`, `linux`, or `linux-arm`.
 
 ```bash
-./gurucli-v1.13.0-beta.10-[platform] set-global-default exposure 80
-./gurucli-v1.13.0-beta.10-[platform] set-setting onlyBoost true --challenge=12345
-./gurucli-v1.13.0-beta.10-[platform] list-settings --challenge=12345
-./gurucli-v1.13.0-beta.10-[platform] logs --error --lines=50
+./gurucli-v1.13.0-beta.11-[platform] set-global-default exposure 80
+./gurucli-v1.13.0-beta.11-[platform] set-setting onlyBoost true --challenge=12345
+./gurucli-v1.13.0-beta.11-[platform] list-settings --challenge=12345
+./gurucli-v1.13.0-beta.11-[platform] logs --error --lines=50
 ```
 
 ## ⚙️ How Voting Works
