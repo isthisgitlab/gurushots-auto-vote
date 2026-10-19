@@ -116,6 +116,10 @@ describe('htmlToText', () => {
 
     test('a break formed in a later round joins the break beside it', () => {
         expect(htmlToText('a<br><b<i>r>b')).toBe('a — b');
+        // A dash the server wrote itself is text, not a break: it is not merged.
+        expect(htmlToText('a<br>&mdash;<br>b')).toBe('a — — — b');
+        // Breaks with only an empty tag between them are one.
+        expect(htmlToText('a<br><span></span><br>b')).toBe('a — b');
     });
 
     test('only a real block end becomes a space: a longer tag name or an attribute is a plain tag', () => {
