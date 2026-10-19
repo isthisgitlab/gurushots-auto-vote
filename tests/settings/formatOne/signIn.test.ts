@@ -34,6 +34,7 @@ import type * as runtimeModule from '../../../src/ts/runtime';
 import type * as settingsModule from '../../../src/ts/settings';
 import type * as loggerModule from '../../../src/ts/logger';
 import type { CategoryLogger } from '../../../src/ts/logger';
+import { isPlainObject } from '../../../src/ts/plainObject';
 import { invalid } from '../../helpers/invalid';
 import { parseJsonObject } from '../../helpers/parseJson';
 
@@ -76,6 +77,15 @@ describe('the sign-in in the mirror (real fs)', () => {
         });
     };
     const stored = (file: string) => parseJsonObject(fs.readFileSync(file, 'utf8'));
+    // The inode of the file as opened, so the answer is about the file read and not a path looked up again.
+    const inodeOf = (file: string) => {
+        const fd = fs.openSync(file, 'r');
+        try {
+            return fs.fstatSync(fd).ino;
+        } finally {
+            fs.closeSync(fd);
+        }
+    };
     // The app has been used and signed in: the mirror has written, and the marker holds the sign-in it wrote.
     const signedIn = () => {
         loadFresh();
@@ -145,12 +155,12 @@ describe('the sign-in in the mirror (real fs)', () => {
             expect(second).not.toBe(first);
 
             // Clearing the record that was seen first leaves the newer one owed.
-            const written = fs.statSync(markerFile).ino;
+            const written = inodeOf(markerFile);
             marker().clearSignOutScrubPending(String(first));
             expect(stored(markerFile).signOutScrubPending).toBe(second);
             // (Not even written again: the marker is read as stored here, so a record that is not the one seen is left alone.
             // The inode tells, as the marker is written atomically: a temp file renamed over it.)
-            expect(fs.statSync(markerFile).ino).toBe(written);
+            expect(inodeOf(markerFile)).toBe(written);
             marker().clearSignOutScrubPending(String(second));
             expect(fs.readFileSync(markerFile, 'utf8')).toBe(untouched);
         });
@@ -819,8 +829,12 @@ describe('the sign-in in the mirror (real fs)', () => {
                 fs.mkdirSync(path.join(userData, 'sub'), { recursive: true });
                 fs.mkdirSync(path.join(root, 'elsewhere'), { recursive: true });
                 fs.mkdirSync(path.dirname(target), { recursive: true });
-                if (!fs.existsSync(target))
-                    fs.writeFileSync(target, JSON.stringify({ theme: 'other', token: 'tok-other' }));
+                try {
+                    fs.writeFileSync(target, JSON.stringify({ theme: 'other', token: 'tok-other' }), { flag: 'wx' });
+                } catch (error) {
+                    // Already there (a file, or a directory) is what some of these paths are.
+                    if (!isPlainObject(error) || error.code !== 'EEXIST') throw error;
+                }
                 expect(fs.existsSync(target)).toBe(true);
                 fs.writeFileSync(markerFile, JSON.stringify({ ...stored(markerFile), unimportableCopy: target }));
                 fs.writeFileSync(legacyFile, JSON.stringify({ theme: 'dark', token: 'tok-fixed' }));

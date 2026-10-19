@@ -105,6 +105,12 @@ describe('htmlToText', () => {
         expect(htmlToText('<!-- never closed')).toBe('<!-- never closed');
     });
 
+    test('what one removal joins into a comment or a tag is removed too', () => {
+        expect(htmlToText('a<!<!---->-- x -->b')).toBe('ab');
+        expect(htmlToText('a<scr<b>ipt>alert(1)</scr</i>ipt>b')).toBe('aalert(1)b');
+        expect(htmlToText('This image has won a challenge')).toBe('This image has won a challenge');
+    });
+
     test('an unknown entity is left as written', () => {
         expect(htmlToText('&bogus; &amp;')).toBe('&bogus; &');
     });

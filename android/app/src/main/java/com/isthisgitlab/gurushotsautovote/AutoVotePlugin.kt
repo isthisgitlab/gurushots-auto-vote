@@ -126,10 +126,10 @@ class AutoVotePlugin : Plugin() {
             val webGone = try {
                 WebStorage.getInstance().deleteAllData()
                 // The HTTP cache is shared by every WebView of the app, so a throwaway one clears it for all.
-                newWebView(ctx).apply {
-                    clearCache(true)
-                    destroy()
-                }
+                val cacheWiper = newWebView(ctx)
+                noContentAccess(cacheWiper)
+                cacheWiper.clearCache(true)
+                cacheWiper.destroy()
                 CookieManager.getInstance().apply {
                     removeAllCookies(null)
                     flush()
@@ -147,6 +147,16 @@ class AutoVotePlugin : Plugin() {
 
     internal companion object {
         /** How the wipe obtains the WebView that clears the HTTP cache; a test swaps it for one it can inspect. */
-        @JvmField var newWebView: (Context) -> WebView = { WebView(it) }
+        @JvmField var newWebView: (Context) -> WebView = {
+            val webView = WebView(it)
+            noContentAccess(webView)
+            webView
+        }
+
+        /** The throwaway WebView loads nothing, so it reads neither files nor content:// URIs. */
+        private fun noContentAccess(webView: WebView) {
+            webView.settings.allowFileAccess = false
+            webView.settings.allowContentAccess = false
+        }
     }
 }

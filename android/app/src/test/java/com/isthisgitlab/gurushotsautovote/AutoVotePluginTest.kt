@@ -294,6 +294,8 @@ class AutoVotePluginTest {
         assertTrue(shadowOf(webView).wasClearCacheCalled())
         assertTrue(shadowOf(webView).didClearCacheIncludeDiskFiles())
         assertTrue(shadowOf(webView).wasDestroyCalled())
+        assertFalse(webView.settings.allowFileAccess)
+        assertFalse(webView.settings.allowContentAccess)
     }
 
     @Test

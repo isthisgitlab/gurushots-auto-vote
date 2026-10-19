@@ -197,11 +197,11 @@ describe('extraction failure paths', () => {
     test('a hashing error that is not a missing file (too many open files) is rethrown and the copy is kept', () => {
         mockSea.getAsset.mockImplementation(assets);
         const { root } = extractVisionCliAssets();
-        const read = fs.readFileSync;
-        jest.spyOn(fs, 'readFileSync').mockImplementation(((file: fsModule.PathOrFileDescriptor, ...rest: never[]) => {
+        const open = fs.openSync;
+        jest.spyOn(fs, 'openSync').mockImplementation(((file: fsModule.PathLike, ...rest: never[]) => {
             if (String(file).endsWith('index.js')) throw Object.assign(new Error('EMFILE'), { code: 'EMFILE' });
-            return (read as (...args: unknown[]) => unknown)(file, ...rest);
-        }) as typeof fs.readFileSync);
+            return (open as (...args: unknown[]) => unknown)(file, ...rest);
+        }) as typeof fs.openSync);
         expect(() => extractVisionCliAssets()).toThrow('EMFILE');
         jest.restoreAllMocks();
         expect(fs.existsSync(path.join(root, 'node_modules', 'example', 'index.js'))).toBe(true);
@@ -218,6 +218,28 @@ describe('extraction failure paths', () => {
             throw thrown;
         });
         expect(() => extractVisionCliAssets()).toThrow();
+        jest.restoreAllMocks();
+        expect(fs.existsSync(root)).toBe(true);
+    });
+
+    test('a file swapped for a symlink after the listing is refused, and the copy is kept', () => {
+        mockSea.getAsset.mockImplementation(assets);
+        const { root } = extractVisionCliAssets();
+        const file = path.join(root, 'node_modules', 'example', 'index.js');
+        const target = path.join(root, 'node_modules', 'example', 'other.js');
+        fs.writeFileSync(target, 'module.exports = 1');
+        const list = fs.readdirSync;
+        let swapped = false;
+        jest.spyOn(fs, 'readdirSync').mockImplementation(((dir: fsModule.PathLike, ...rest: never[]) => {
+            const entries = (list as (...args: unknown[]) => unknown)(dir, ...rest);
+            if (String(dir).endsWith('example') && !swapped) {
+                swapped = true;
+                fs.rmSync(file);
+                fs.symlinkSync(target, file);
+            }
+            return entries;
+        }) as typeof fs.readdirSync);
+        expect(() => extractVisionCliAssets()).toThrow(/ELOOP/);
         jest.restoreAllMocks();
         expect(fs.existsSync(root)).toBe(true);
     });

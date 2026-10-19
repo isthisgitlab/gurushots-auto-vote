@@ -10,8 +10,10 @@ import { stripTerminalControl } from './logSafe';
  * ones included, is left as written (a real `&mdash;` at either end stays); then control and invisible format
  * characters are dropped (`stripTerminalControl`, which keeps the two joiners) and whitespace is collapsed. Markup
  * the pattern does not recognise (an unterminated comment, a `<` not followed by a letter) stays as text, and the
- * result is not escaped: a caller that prints it must still treat it as text. The comment pass is not linear in the
- * length of the input, so a caller must bound it first (library.ts cuts the message to 800 characters).
+ * result is not escaped: a caller that prints it must still treat it as text. The comment pass and the tag pass each
+ * repeat until the text stops changing, so what one removal joins together (`<!<!---->-- x -->`, `<scr<b>ipt>`) is removed
+ * on the next round. That is not linear in the length of the input, so a caller must bound it first (library.ts cuts
+ * the message to 800 characters).
  */
 
 const ENTITIES = new Map<string, string>([
@@ -43,14 +45,23 @@ const ENTITY_SHAPE = /&#?\w+;/g;
 const BREAK = '\uE000';
 const BREAKS_AND_SPACE = new RegExp(`^[\\s${BREAK}]+|[\\s${BREAK}]+$`, 'g');
 
+// One removal can join the text around it into a new match (`<!<!---->-- x -->`, `<scr<b>ipt>`), so it runs until the text
+// stops changing.
+const removeAll = (text: string, pattern: RegExp): string => {
+    let previous: string;
+    do {
+        previous = text;
+        text = text.replace(pattern, '');
+    } while (text !== previous);
+    return text;
+};
+
 const htmlToText = (html: string): string =>
     stripTerminalControl(
-        html
-            .replaceAll(BREAK, '')
-            .replace(COMMENTS, '')
-            .replace(LINE_BREAKS, BREAK)
-            .replace(BLOCK_ENDS, ' ')
-            .replace(TAGS, '')
+        removeAll(
+            removeAll(html.replaceAll(BREAK, ''), COMMENTS).replace(LINE_BREAKS, BREAK).replace(BLOCK_ENDS, ' '),
+            TAGS,
+        )
             // A break at either end separates nothing.
             .replace(BREAKS_AND_SPACE, '')
             .replace(ENTITY_SHAPE, (entity) => ENTITIES.get(entity) ?? entity)

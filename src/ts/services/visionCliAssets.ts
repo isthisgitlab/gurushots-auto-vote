@@ -10,6 +10,20 @@ const IN_USE_WINDOW_MS = 60 * 60 * 1000;
 const sha256 = (data: string | Buffer) => crypto.createHash('sha256').update(data).digest('hex');
 
 /**
+ * Reads a regular file through a descriptor opened with O_NOFOLLOW, so an entry swapped for a symlink after the
+ * directory was listed is refused (ELOOP) instead of followed. The CLI ships for macOS and Linux only, where the flag
+ * exists.
+ */
+const readFileNoFollow = (file: string) => {
+    const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    try {
+        return fs.readFileSync(fd);
+    } finally {
+        fs.closeSync(fd);
+    }
+};
+
+/**
  * Digest of the runtime's executable code: every file under `node_modules`
  * (JavaScript, the `.node` addons, the shared libraries they load) by path and
  * content, and every symlink by path and target, in name order. The model
@@ -20,13 +34,15 @@ const digestVisionRuntime = (root: string) => {
     const hash = crypto.createHash('sha256');
     const walk = (dir: string, name: string) => {
         // Default sort: UTF-16 code-unit order, the same on every host and locale.
-        for (const entryName of fs.readdirSync(dir).sort()) {
-            const entryPath = path.join(dir, entryName);
-            const entryId = `${name}/${entryName}`;
-            const stat = fs.lstatSync(entryPath);
-            if (stat.isSymbolicLink()) hash.update(`L ${entryId}\0${fs.readlinkSync(entryPath)}\n`);
-            else if (stat.isDirectory()) walk(entryPath, entryId);
-            else hash.update(`F ${entryId}\0${sha256(fs.readFileSync(entryPath))}\n`);
+        const entries = fs
+            .readdirSync(dir, { withFileTypes: true })
+            .sort((a, b) => Number(a.name > b.name) - Number(a.name < b.name));
+        for (const entry of entries) {
+            const entryPath = path.join(dir, entry.name);
+            const entryId = `${name}/${entry.name}`;
+            if (entry.isSymbolicLink()) hash.update(`L ${entryId}\0${fs.readlinkSync(entryPath)}\n`);
+            else if (entry.isDirectory()) walk(entryPath, entryId);
+            else hash.update(`F ${entryId}\0${sha256(readFileNoFollow(entryPath))}\n`);
         }
     };
     walk(path.join(root, 'node_modules'), 'node_modules');
@@ -39,6 +55,8 @@ const digestVisionRuntime = (root: string) => {
  * whoever can edit the files can edit too). A copy that fails is removed so
  * the next run extracts a clean one. Only a digest mismatch or a missing file or
  * directory counts as a failed check; any other error is rethrown and the copy stays.
+ * That includes ELOOP, a file swapped for a symlink while the tree was read: it is
+ * refused, the load stops, and the next run checks the copy again.
  */
 const verifyVisionRuntime = (root: string) => {
     const embedded = sea.getAsset('vision-runtime.code.sha256', 'utf8').trim();
