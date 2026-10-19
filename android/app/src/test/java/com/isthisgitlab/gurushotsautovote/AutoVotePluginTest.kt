@@ -37,6 +37,9 @@ class AutoVotePluginTest {
     private lateinit var app: Application
     private lateinit var plugin: AutoVotePlugin
 
+    // The app's own factory, saved before any test swaps it, so tearDown puts back the real one.
+    private val defaultNewWebView = AutoVotePlugin.newWebView
+
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
@@ -54,7 +57,7 @@ class AutoVotePluginTest {
         AutoVoteService.lastError = null
         ServiceState.clear(app)
         SideStores.resume()
-        AutoVotePlugin.newWebView = { WebView(it) }
+        AutoVotePlugin.newWebView = defaultNewWebView
     }
 
     private fun resolved(block: (PluginCall) -> Unit): JSObject {
@@ -294,6 +297,14 @@ class AutoVotePluginTest {
         assertTrue(shadowOf(webView).wasClearCacheCalled())
         assertTrue(shadowOf(webView).didClearCacheIncludeDiskFiles())
         assertTrue(shadowOf(webView).wasDestroyCalled())
+        assertFalse(webView.settings.allowFileAccess)
+        assertFalse(webView.settings.allowContentAccess)
+    }
+
+    @Test
+    fun theDefaultWebViewFactoryTurnsFileAndContentAccessOff() {
+        val webView = defaultNewWebView(app)
+
         assertFalse(webView.settings.allowFileAccess)
         assertFalse(webView.settings.allowContentAccess)
     }

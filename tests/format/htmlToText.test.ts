@@ -108,7 +108,9 @@ describe('htmlToText', () => {
     test('what one removal joins into a comment or a tag is removed too', () => {
         expect(htmlToText('a<!<!---->-- x -->b')).toBe('ab');
         expect(htmlToText('a<scr<b>ipt>alert(1)</scr</i>ipt>b')).toBe('aalert(1)b');
-        expect(htmlToText('This image has won a challenge')).toBe('This image has won a challenge');
+        expect(htmlToText('x<b<i>r>y')).toBe('x — y');
+        expect(htmlToText('a</<b>p>b')).toBe('a b');
+        expect(htmlToText('a<<b>!-- x -->b')).toBe('ab');
     });
 
     test('an unknown entity is left as written', () => {

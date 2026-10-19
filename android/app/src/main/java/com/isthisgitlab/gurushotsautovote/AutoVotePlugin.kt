@@ -127,6 +127,8 @@ class AutoVotePlugin : Plugin() {
                 WebStorage.getInstance().deleteAllData()
                 // The HTTP cache is shared by every WebView of the app, so a throwaway one clears it for all.
                 val cacheWiper = newWebView(ctx)
+                // Also locked here, not only in the default factory: it holds when a test swaps the factory, and CodeQL
+                // tracks each WebView source separately, so neither call is redundant.
                 noContentAccess(cacheWiper)
                 cacheWiper.clearCache(true)
                 cacheWiper.destroy()
