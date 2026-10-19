@@ -161,7 +161,7 @@ Domain terms used throughout, in reader's terms:
   `closesAtTimes` wins over `closesAt`, and an empty list (or one of blanks) falls back to it; the rule matches
   when the challenge closes at **any** of them. A close time compares against the end time the
   challenge card shows: `close_time` read in the app's `timezone` setting (`timeOfDayIn` in
-  `scheduling/wallClock.ts`; `'local'` and an unknown zone read the device clock, like `formatEndTime`),
+  `scheduling/wallClock.ts`; `'local'` reads the device clock; an unknown zone reads as UTC, like `formatEndTime`),
   minute floored. It fails closed both ways: an unreadable `close_time` matches nothing, and a stored
   `closesAt` or `closesAtTimes` that is present but malformed (a list that is not an array, a non-text entry,
   or a non-blank entry that is not strict `HH:MM`; hand-edited) makes the rule match nothing and is not

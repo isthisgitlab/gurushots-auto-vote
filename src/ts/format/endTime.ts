@@ -1,6 +1,6 @@
 /**
  * A challenge's end time as the challenge card shows it: day, month, year and 24-hour time, in the named
- * timezone ('local' for the device's; a zone that is not valid falls back to it). The renderer words it for the UI's
+ * timezone ('local' for the device's; a zone that is not valid reads as UTC). The renderer words it for the UI's
  * language and the CLI in English, so both write the same instant the same way.
  */
 
@@ -36,8 +36,9 @@ const formatEndTimeIn = (endTime: number, timezone: string, locale: string): str
     try {
         return date.toLocaleString(locale, { ...FORMAT_OPTIONS, timeZone: timezone });
     } catch {
-        // Fallback to local on invalid timezone
-        return date.toLocaleString(locale, FORMAT_OPTIONS);
+        // Callers pass effectiveTimezone output; this keeps an unresolved zone from breaking a challenge card
+        // render or the CLI discover line.
+        return date.toLocaleString(locale, { ...FORMAT_OPTIONS, timeZone: 'UTC' });
     }
 };
 

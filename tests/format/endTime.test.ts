@@ -18,17 +18,34 @@ describe('formatEndTimeIn', () => {
         expect(formatEndTimeIn(END, timezone, locale)).toBe(expected);
     });
 
-    test('“local” and a zone that is not valid read the device clock', () => {
-        const device = new Date(END * 1000).toLocaleString('en-GB', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
+    describe('the device clock', () => {
+        afterEach(() => {
+            jest.restoreAllMocks();
         });
-        expect(formatEndTimeIn(END, 'local', 'en-GB')).toBe(device);
-        expect(formatEndTimeIn(END, 'Not/AZone', 'en-GB')).toBe(device);
+
+        // Without a timeZone option toLocaleString reads the device clock. A sentinel makes that branch observable
+        // on any host (process.env.TZ does not reach Node under Jest); a call that names a zone goes through, so an
+        // invalid one still throws its real RangeError into the fallback.
+        const pinDeviceClock = (): void => {
+            const real = Date.prototype.toLocaleString;
+            jest.spyOn(Date.prototype, 'toLocaleString').mockImplementation(function (
+                this: Date,
+                locales?: Intl.LocalesArgument,
+                options?: Intl.DateTimeFormatOptions,
+            ) {
+                return options?.timeZone ? real.call(this, locales, options) : 'DEVICE';
+            });
+        };
+
+        test('“local” reads the device clock', () => {
+            pinDeviceClock();
+            expect(formatEndTimeIn(END, 'local', 'en-GB')).toBe('DEVICE');
+        });
+
+        test('a zone that is not valid reads as UTC, not the device clock', () => {
+            pinDeviceClock();
+            expect(formatEndTimeIn(END, 'Not/AZone', 'en-GB')).toBe('14/11/2023, 22:13');
+        });
     });
 });
 

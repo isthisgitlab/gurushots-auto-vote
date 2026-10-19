@@ -80,7 +80,7 @@ const MATCHERS: Fixture[] = [
         },
     },
     {
-        name: 'close times in a zone no clock knows read the device clock',
+        name: 'close times in a zone no clock knows read as UTC',
         blob: {
             ...MODERN,
             timezone: 'Nowhere/Land',
@@ -91,7 +91,13 @@ const MATCHERS: Fixture[] = [
                 ],
             },
         },
+        // v2 reads an unknown zone as UTC everywhere, while 1.x read close times in it on the device clock.
+        oracleTimezone: 'UTC',
         golden: false,
+        check: (oracle) => {
+            expect(oracle.effective('autoFill', '101')).toBe(true);
+            expect(oracle.effective('autoFill', '102')).toBe(true);
+        },
     },
     {
         name: 'every kind of condition: title modes, tag, type, photo count, runtime',

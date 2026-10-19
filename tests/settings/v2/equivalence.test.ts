@@ -24,13 +24,25 @@ import { CANDIDATES, CHALLENGES, NOW } from './fixtures/types';
 
 import type { OracleEnv } from '../../helpers/v1Oracle';
 import type { Case } from './random';
+import type { Fixture } from './fixtures/types';
 import type { Counter, Naming, Tree } from './snapshot';
 
 const DEFAULT_SEEDS = Array.from({ length: 30 }, (_, index) => index + 1);
 
+/** The file the oracle reads for a fixture: the file itself, or with the zone the fixture names for it. */
+const oracleRawOf = (fixture: Fixture): string =>
+    typeof fixture.blob === 'string'
+        ? fixture.blob
+        : JSON.stringify(
+              fixture.oracleTimezone === undefined
+                  ? fixture.blob
+                  : { ...fixture.blob, timezone: fixture.oracleTimezone },
+          );
+
 const fixtureCases: Case[] = FIXTURES.map((fixture) => ({
     name: fixture.name,
     raw: typeof fixture.blob === 'string' ? fixture.blob : JSON.stringify(fixture.blob),
+    oracleRaw: oracleRawOf(fixture),
     challenges: fixture.challenges ?? CHALLENGES,
     offList: fixture.offList ?? [],
     candidates: fixture.candidates ?? CANDIDATES,
@@ -63,7 +75,7 @@ const totals = { comparisons: 0, leaves: 0, startedAt: Date.now() };
 
 const equivalence = (c: Case) => {
     const oracleEnv = environment(c);
-    const oracle = createV1Oracle(c.raw, oracleEnv);
+    const oracle = createV1Oracle(c.oracleRaw ?? c.raw, oracleEnv);
     const variants = variantsFor(oracle, c.challenges);
     const expected = snapshot(oracle, c, oracleEnv, variants, OWN_NAMES, { calls: 0 });
     const liveEnv = environment(c);
@@ -152,7 +164,6 @@ describe('the live resolver against the frozen oracle', () => {
 describe('the hand-written fixtures exercise what they claim', () => {
     test.each(FIXTURES.filter((fixture) => fixture.check))('%s', (fixture) => {
         const env: OracleEnv = { now: NOW, challenges: fixture.challenges ?? CHALLENGES, ledger: {} };
-        const raw = typeof fixture.blob === 'string' ? fixture.blob : JSON.stringify(fixture.blob);
-        fixture.check?.(createV1Oracle(raw, env));
+        fixture.check?.(createV1Oracle(oracleRawOf(fixture), env));
     });
 });

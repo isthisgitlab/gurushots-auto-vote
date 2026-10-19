@@ -141,6 +141,18 @@ describe('useSettingsForm — per-key fallback on hydrate', () => {
         expect(props.updateSetting).not.toHaveBeenCalled();
     });
 
+    test('a stored timezone no clock knows hydrates as UTC, with nothing to save', async () => {
+        const props = baseProps({ settings: { app: { ...DEFAULT_UI_VALUES, timezone: 'Europe/Rgia' } } });
+        const { result } = renderForm(props);
+        expect(result.current.uiValues.timezone).toBe('UTC');
+        expect(result.current.isDirty()).toBe(false);
+
+        await act(async () => {
+            await result.current.commit();
+        });
+        expect(props.updateSetting).not.toHaveBeenCalled();
+    });
+
     test('a stored array is kept as-is', () => {
         const props = baseProps({ settings: { app: { customTimezones: ['Asia/Tokyo'] } } });
         const { result } = renderForm(props);

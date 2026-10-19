@@ -49,10 +49,16 @@ describe('timeOfDayIn', () => {
 
         // The device clock is read through Date#getHours/getMinutes; sentinels make
         // the branch observable on any host (process.env.TZ does not reach Node under Jest).
-        test.each([['local'], ['Not/AZone']])('%s reads the device clock', (zone) => {
+        test('local reads the device clock', () => {
             jest.spyOn(Date.prototype, 'getHours').mockReturnValue(5);
             jest.spyOn(Date.prototype, 'getMinutes').mockReturnValue(37);
-            expect(timeOfDayIn(utc(2026, 6, 15, 17, 10), zone)).toBe('05:37');
+            expect(timeOfDayIn(utc(2026, 6, 15, 17, 10), 'local')).toBe('05:37');
+        });
+
+        test('an unknown zone reads as UTC, not the device clock', () => {
+            jest.spyOn(Date.prototype, 'getHours').mockReturnValue(5);
+            jest.spyOn(Date.prototype, 'getMinutes').mockReturnValue(37);
+            expect(timeOfDayIn(utc(2026, 6, 15, 17, 10), 'Not/AZone')).toBe('17:10');
         });
     });
 });

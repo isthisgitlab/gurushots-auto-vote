@@ -2062,18 +2062,51 @@ describe('the cached listing, its preview and Refresh', () => {
         expect(await screen.findByText(line)).toBeTruthy();
     });
 
-    test('the “as of” line falls back to the device’s time for “local” and for a timezone that is not valid, and to Riga when none is set', async () => {
-        getLibrary().mockResolvedValue(listing([photo(1)], { readAtMs: 1_700_000_000_000 }));
-        const pattern = /^Photos as of \d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}$/;
-        for (const app of [{ timezone: 'local' }, { timezone: 'Not/AZone' }]) {
-            jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app }));
+    describe('the “as of” line against the device clock', () => {
+        afterEach(() => {
+            jest.restoreAllMocks();
+        });
+
+        // Without a timeZone option the date methods read the device clock. A sentinel makes that observable on any
+        // host (process.env.TZ does not reach Node under Jest); a call that names a zone goes through.
+        const pinDeviceClock = (): void => {
+            const realTime = Date.prototype.toLocaleTimeString;
+            const realDate = Date.prototype.toLocaleDateString;
+            jest.spyOn(Date.prototype, 'toLocaleTimeString').mockImplementation(function (
+                this: Date,
+                locales?: Intl.LocalesArgument,
+                options?: Intl.DateTimeFormatOptions,
+            ) {
+                return options?.timeZone ? realTime.call(this, locales, options) : '05:37';
+            });
+            jest.spyOn(Date.prototype, 'toLocaleDateString').mockImplementation(function (
+                this: Date,
+                locales?: Intl.LocalesArgument,
+                options?: Intl.DateTimeFormatOptions,
+            ) {
+                return options?.timeZone ? realDate.call(this, locales, options) : 'DEVICE-DATE';
+            });
+        };
+
+        test('a timezone that is not valid is read as UTC, and Riga when none is set', async () => {
+            pinDeviceClock();
+            getLibrary().mockResolvedValue(listing([photo(1)], { readAtMs: 1_700_000_000_000 }));
+            jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { timezone: 'Not/AZone' } }));
             const { unmount } = setup();
-            expect(await screen.findByText(pattern)).toBeTruthy();
+            expect(await screen.findByText(/^Photos as of 14\/11\/2023, 22:13$/)).toBeTruthy();
             unmount();
-        }
-        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: {} }));
-        setup();
-        expect(await screen.findByText(/^Photos as of 15\/11\/2023, 00:13$/)).toBeTruthy();
+            jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: {} }));
+            setup();
+            expect(await screen.findByText(/^Photos as of 15\/11\/2023, 00:13$/)).toBeTruthy();
+        });
+
+        test('“local” is written on the device’s clock', async () => {
+            pinDeviceClock();
+            getLibrary().mockResolvedValue(listing([photo(1)], { readAtMs: 1_700_000_000_000 }));
+            jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { timezone: 'local' } }));
+            setup();
+            expect(await screen.findByText('Photos as of 05:37')).toBeTruthy();
+        });
     });
 
     test.each([

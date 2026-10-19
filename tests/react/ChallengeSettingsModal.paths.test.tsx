@@ -553,12 +553,20 @@ describe('pre-boost fill hints', () => {
 });
 
 describe('window time formatting', () => {
-    test('an unknown app timezone falls back to a UTC HH:MM label', async () => {
+    test('an unknown app timezone is read as UTC, labelled UTC, with an HH:MM window', async () => {
         mockApi.getSettings.mockResolvedValue(invalid({ app: { timezone: 'Not/AZone', checkFrequencyMax: 0 } }));
         mockApi.getChallengeOverrides.mockResolvedValue({ useScheduledFill: true, scheduledFillBeforeEnd: [600] });
         renderModal();
         await loaded();
-        expect(body()).toMatch(new RegExp(`FILL-NEXT ${HHMM}-${HHMM} Not/AZone BEFORE`));
+        expect(body()).toMatch(new RegExp(`FILL-NEXT ${HHMM}-${HHMM} UTC BEFORE`));
+    });
+
+    test('the “local” app timezone is labelled local, with an HH:MM window', async () => {
+        mockApi.getSettings.mockResolvedValue(invalid({ app: { timezone: 'local', checkFrequencyMax: 0 } }));
+        mockApi.getChallengeOverrides.mockResolvedValue({ useScheduledFill: true, scheduledFillBeforeEnd: [600] });
+        renderModal();
+        await loaded();
+        expect(body()).toMatch(new RegExp(`FILL-NEXT ${HHMM}-${HHMM} local BEFORE`));
     });
 
     test('an out-of-range window start renders a dash instead of crashing', async () => {

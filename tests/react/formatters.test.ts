@@ -118,18 +118,49 @@ describe('formatEndTime', () => {
         expect(timeOfDayIn(sec, 'Europe/Riga')).toBe(card?.[1]);
     });
 
-    // 'local' and an unknown zone both read the device clock on each side, so this holds on any host.
-    test.each([['local'], ['Not/AZone']])('timeOfDayIn agrees with the card on the device clock (%s)', (zone) => {
+    // 'local' reads the device clock on each side, so this holds on any host.
+    test('timeOfDayIn agrees with the card on the device clock (local)', () => {
         for (const sec of [Date.UTC(2026, 5, 15, 14, 10, 59) / 1000, Date.UTC(2026, 5, 14, 21, 5, 30) / 1000]) {
-            const card = /\b(\d{2}:\d{2})\b/.exec(formatEndTime(sec, zone));
+            const card = /\b(\d{2}:\d{2})\b/.exec(formatEndTime(sec, 'local'));
             expect(card?.[1]).toBeDefined();
-            expect(timeOfDayIn(sec, zone)).toBe(card?.[1]);
+            expect(timeOfDayIn(sec, 'local')).toBe(card?.[1]);
         }
     });
 
-    test('an invalid timezone falls back to local instead of throwing', () => {
-        expect(() => formatEndTime(end, 'Not/AZone')).not.toThrow();
-        expect(formatEndTime(end, 'Not/AZone')).toBe(formatEndTime(end, 'local'));
+    // An unknown zone reads as UTC on each side; the device clock is pinned to a sentinel so UTC and the
+    // device cannot coincide on a UTC runner.
+    describe('an unknown timezone', () => {
+        afterEach(() => {
+            jest.restoreAllMocks();
+        });
+
+        const pinDeviceClock = (): void => {
+            const real = Date.prototype.toLocaleString;
+            jest.spyOn(Date.prototype, 'toLocaleString').mockImplementation(function (
+                this: Date,
+                locales?: Intl.LocalesArgument,
+                options?: Intl.DateTimeFormatOptions,
+            ) {
+                return options?.timeZone ? real.call(this, locales, options) : 'DEVICE';
+            });
+            jest.spyOn(Date.prototype, 'getHours').mockReturnValue(5);
+            jest.spyOn(Date.prototype, 'getMinutes').mockReturnValue(37);
+        };
+
+        test('timeOfDayIn agrees with the card, both reading UTC', () => {
+            pinDeviceClock();
+            const sec = Date.UTC(2026, 5, 15, 14, 10, 59) / 1000;
+            const card = /\b(\d{2}:\d{2})\b/.exec(formatEndTime(sec, 'Not/AZone'));
+            expect(card?.[1]).toBe('14:10');
+            expect(timeOfDayIn(sec, 'Not/AZone')).toBe('14:10');
+        });
+
+        test('formatEndTime reads as UTC instead of throwing', () => {
+            pinDeviceClock();
+            expect(() => formatEndTime(end, 'Not/AZone')).not.toThrow();
+            expect(formatEndTime(end, 'Not/AZone')).toBe(formatEndTime(end, 'UTC'));
+            expect(formatEndTime(end, 'Not/AZone')).not.toBe('DEVICE');
+        });
     });
 });
 

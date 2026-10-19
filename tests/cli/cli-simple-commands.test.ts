@@ -455,20 +455,28 @@ describe('discover', () => {
             // Without a timeZone option toLocaleString reads the device clock. A sentinel makes that branch observable
             // on any host (process.env.TZ does not reach Node under Jest); a call that names a zone goes through, so an
             // invalid one still throws its real RangeError into the fallback.
-            test.each([['local'], ['Not/AZone']])(
-                '“%s” is written on the device clock, in no named zone',
-                async (zone) => {
-                    const real = Date.prototype.toLocaleString;
-                    jest.spyOn(Date.prototype, 'toLocaleString').mockImplementation(function (
-                        this: Date,
-                        locales?: Intl.LocalesArgument,
-                        options?: Intl.DateTimeFormatOptions,
-                    ) {
-                        return options?.timeZone ? real.call(this, locales, options) : 'DEVICE';
-                    });
-                    expect(await lineOf({ close_time: CLOSE }, zone)).toBe('  • [1] A (flash) — free — ends DEVICE');
-                },
-            );
+            const pinDeviceClock = (): void => {
+                const real = Date.prototype.toLocaleString;
+                jest.spyOn(Date.prototype, 'toLocaleString').mockImplementation(function (
+                    this: Date,
+                    locales?: Intl.LocalesArgument,
+                    options?: Intl.DateTimeFormatOptions,
+                ) {
+                    return options?.timeZone ? real.call(this, locales, options) : 'DEVICE';
+                });
+            };
+
+            test('“local” is written on the device clock, in no named zone', async () => {
+                pinDeviceClock();
+                expect(await lineOf({ close_time: CLOSE }, 'local')).toBe('  • [1] A (flash) — free — ends DEVICE');
+            });
+
+            test('a zone that is not valid is written in UTC, not on the device clock', async () => {
+                pinDeviceClock();
+                expect(await lineOf({ close_time: CLOSE }, 'Not/AZone')).toBe(
+                    '  • [1] A (flash) — free — ends 14/11/2023, 22:13',
+                );
+            });
         });
 
         test.each([

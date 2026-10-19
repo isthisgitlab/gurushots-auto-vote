@@ -46,6 +46,8 @@ import type { Values } from './fixtures/types';
 type Case = {
     name: string;
     raw: string;
+    /** The file the oracle reads when it differs from `raw` (a deliberate difference in meaning); `raw` otherwise. */
+    oracleRaw?: string;
     challenges: MatchTarget[];
     offList: string[];
     candidates: MatchTarget[];

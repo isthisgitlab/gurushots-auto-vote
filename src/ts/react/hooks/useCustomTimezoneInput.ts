@@ -1,16 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { BUILT_IN_TIMEZONES, DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
+import { BUILT_IN_TIMEZONES, DEFAULT_TIMEZONE, isValidTimezone } from '../../settings/uiDefaults';
 
 import type { UiChangeHandler, UiValues } from '../../types/settingsEditor';
-
-const isValidTimezone = (tz: string) => {
-    try {
-        new Intl.DateTimeFormat(undefined, { timeZone: tz });
-        return true;
-    } catch {
-        return false;
-    }
-};
 
 /**
  * The custom-timezone "+" input: local UI state, never persisted, so it stays

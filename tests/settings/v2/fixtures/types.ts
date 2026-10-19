@@ -21,6 +21,8 @@ type Fixture = {
     candidates?: MatchTarget[];
     /** Left out of the golden output (the answer depends on the machine, not on the file). */
     golden?: false;
+    /** The zone the oracle is given in place of the file's, where v2 deliberately reads the file's zone differently. */
+    oracleTimezone?: string;
     /** What the fixture is meant to exercise, asserted on the oracle so a mistyped key cannot make it vacuous. */
     check?: (oracle: V1Oracle) => void;
 };

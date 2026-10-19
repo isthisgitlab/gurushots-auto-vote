@@ -7,7 +7,7 @@ import { effectiveTimezone } from '../../../settings/uiDefaults';
 
 /**
  * When the listing was read, as the line above the photos words it: the time, with the date when it is not
- * today, in the timezone the settings name ('local' for the device's; one that is not valid falls back to it).
+ * today, in the timezone the settings name ('local' for the device's).
  */
 const readAtText = (readAtMs: number, timezone: string, t: (key: string) => string): string => {
     const at = new Date(readAtMs);
@@ -18,11 +18,7 @@ const readAtText = (readAtMs: number, timezone: string, t: (key: string) => stri
         if (date === new Date().toLocaleDateString(locale, zone)) return interp(t('app.photoChooserAsOf'), { time });
         return interp(t('app.photoChooserAsOfDate'), { date, time });
     };
-    try {
-        return inZone(timezone === 'local' ? {} : { timeZone: timezone });
-    } catch {
-        return inZone({});
-    }
+    return inZone(timezone === 'local' ? {} : { timeZone: timezone });
 };
 
 /**

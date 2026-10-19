@@ -56,7 +56,7 @@ const loaded = (config: ConfigV2 | StoredConfigV2): unknown => {
 /**
  * `loaded`, with the timezone read through `effectiveTimezone`: the mirror writes a blank timezone as UTC on purpose (what
  * the configuration means by it), so a configuration → mirror → configuration round trip keeps the zone's meaning, not
- * its spelling.
+ * its spelling (an unknown zone folds to UTC the same way).
  */
 const loadedByMeaning = (config: ConfigV2 | StoredConfigV2): unknown => {
     const read = loaded(config) as { app: { timezone?: string } };

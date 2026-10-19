@@ -122,12 +122,13 @@ Deliberate semantics and caveats:
   decision path re-reads `settings.getSetting('timezone')` every evaluation —
   so it can be up to one full wait late, and a time-of-day fill window
   shorter than the remaining wait is skipped, the same as a CLI
-  `scheduledFillTime` edit. An empty `timezone` means UTC (a missing one,
+  `scheduledFillTime` edit. An empty or unknown `timezone` means UTC everywhere —
+  scheduling, close-time rules and end-time display (a missing one,
   Europe/Riga).
 - **Fail-soft**: corrupt persisted values (hand-edited settings.json)
   degrade that one challenge's scheduled fill to "off" — the string key is
   type-guarded, numeric corruption coerces to `NaN`-false, an unknown
-  timezone falls back to UTC inside `wallClock.ts`, and
+  timezone reads as UTC (`effectiveTimezone`, with a guard inside `wallClock.ts`), and
   `getScheduledFillState` is wrapped in try/catch so the per-challenge
   voting loop can never be aborted by one bad override.
 
