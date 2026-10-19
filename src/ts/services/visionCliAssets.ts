@@ -33,8 +33,8 @@ const readFileNoFollow = (file: string) => {
 const digestVisionRuntime = (root: string) => {
     const hash = crypto.createHash('sha256');
     const walk = (dir: string, name: string) => {
-        // Ordered by UTF-16 code units, never by locale: the order `.sort()` gave, the same on every host. The build and the
-        // runtime digest must agree on it.
+        // Ordered by UTF-16 code units, never by locale, the same on every host; the build and the runtime digest must
+        // agree on it.
         const entries = fs
             .readdirSync(dir, { withFileTypes: true })
             .sort((a, b) => Number(a.name > b.name) - Number(a.name < b.name));

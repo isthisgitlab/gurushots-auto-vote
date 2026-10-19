@@ -37,8 +37,10 @@ class AutoVotePluginTest {
     private lateinit var app: Application
     private lateinit var plugin: AutoVotePlugin
 
-    // The app's own factory, saved before any test swaps it, so tearDown puts back the real one.
-    private val defaultNewWebView = AutoVotePlugin.newWebView
+    private companion object {
+        // The app's own factory, saved once before any test swaps it, so tearDown puts back the real one.
+        val defaultNewWebView = AutoVotePlugin.newWebView
+    }
 
     @Before
     fun setUp() {

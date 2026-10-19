@@ -111,6 +111,16 @@ describe('htmlToText', () => {
         expect(htmlToText('x<b<i>r>y')).toBe('x — y');
         expect(htmlToText('a</<b>p>b')).toBe('a b');
         expect(htmlToText('a<<b>!-- x -->b')).toBe('ab');
+        expect(htmlToText('a<br </p>>b')).toBe('a — b');
+    });
+
+    test('a break formed in a later round joins the break beside it', () => {
+        expect(htmlToText('a<br><b<i>r>b')).toBe('a — b');
+    });
+
+    test('only a real block end becomes a space: a longer tag name or an attribute is a plain tag', () => {
+        expect(htmlToText('a</pre>b')).toBe('ab');
+        expect(htmlToText('a</p class=x>b')).toBe('ab');
     });
 
     test('an unknown entity is left as written', () => {

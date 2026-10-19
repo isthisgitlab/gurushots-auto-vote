@@ -11,9 +11,10 @@ import { stripTerminalControl } from './logSafe';
  * characters are dropped (`stripTerminalControl`, which keeps the two joiners) and whitespace is collapsed. Markup
  * the pattern does not recognise (an unterminated comment, a `<` not followed by a letter) stays as text, and the
  * result is not escaped: a caller that prints it must still treat it as text. The markup passes (comment, `<br>`, block
- * end, tag) repeat together until the text stops changing, so what one removal joins together (`<!<!---->-- x -->`,
- * `<scr<b>ipt>`, `x<b<i>r>y`) is read as the markup it has become on the next round. That is not linear in the
- * length of the input, so a caller must bound it first (library.ts cuts the message to 800 characters).
+ * end, tag) repeat together until the text stops changing, so what one pass forms for another (`<!<!---->-- x -->`,
+ * `<scr<b>ipt>`, `x<b<i>r>y`, `<br </p>>`) is read as the markup it has become on the next round, and breaks that only
+ * whitespace separates are one. That is not linear in the length of the input, so a caller must bound it first
+ * (library.ts cuts the message to 800 characters).
  */
 
 const ENTITIES = new Map<string, string>([
@@ -45,13 +46,15 @@ const ENTITY_SHAPE = /&#?\w+;/g;
 // Stands for a `<br>` until the entities are decoded, so a dash the server wrote itself is told from a break.
 const BREAK = '\uE000';
 const BREAKS_AND_SPACE = new RegExp(`^[\\s${BREAK}]+|[\\s${BREAK}]+$`, 'g');
+// Breaks that only whitespace separates are one: a `<br>` formed in a later round meets the one before it here.
+const ADJACENT_BREAKS = new RegExp(`${BREAK}(?:\\s*${BREAK})+`, 'g');
 
 // One removal can join the text around it into markup (`<!<!---->-- x -->`, `<scr<b>ipt>`, `x<b<i>r>y`). Each of the
 // comment and tag removals runs until its own text stops changing: that inner fixpoint is what CodeQL recognises as a
 // complete removal. The outer loop runs all the passes again until nothing changes, which covers markup that one pass
-// forms for another (a `<br>` or a block end made by the tag pass, a comment made by it). Every round that changes the
-// text makes it shorter (a comment, a tag, a `<br>` or a block end is at least three characters and leaves at most one),
-// so both loops end.
+// forms for another (a `<br>`, a block end, a comment or a tag that another pass leaves behind). Every round that
+// changes the text makes it shorter (a comment, a tag, a `<br>` or a block end is at least three characters and leaves
+// at most one), so both loops end.
 const removeAll = (text: string, pattern: RegExp): string => {
     let previous: string;
     do {
@@ -74,6 +77,7 @@ const removeMarkup = (text: string): string => {
 const htmlToText = (html: string): string =>
     stripTerminalControl(
         removeMarkup(html.replaceAll(BREAK, ''))
+            .replace(ADJACENT_BREAKS, BREAK)
             // A break at either end separates nothing.
             .replace(BREAKS_AND_SPACE, '')
             .replace(ENTITY_SHAPE, (entity) => ENTITIES.get(entity) ?? entity)
