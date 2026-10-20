@@ -219,6 +219,7 @@ describe('TitleTagRulesEditor', () => {
                 const onChange = jest.fn();
                 render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
                 fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
+                fireEvent.click(await screen.findByRole('button', { name: 'app.pickLoadAll' }));
                 fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserTileLabel' }));
                 fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
                 await waitFor(() =>

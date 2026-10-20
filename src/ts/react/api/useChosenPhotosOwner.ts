@@ -2,14 +2,15 @@ import { useSyncExternalStore } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 import * as ipc from './ipc';
 
-// The member id the library listing last reported — the signed-in account, as the
-// main process sees it. Held for the page's lifetime: a sign-out reloads the
-// renderer, so it never outlives the account it belongs to. Readers subscribe, so
-// what shows a list updates once a listing has told it whose account this is.
+// The member id the choosers last reported — the signed-in account, as the main process sees it. A
+// library listing names it, and the Chosen Photos chooser's member check (confirmAccount) hands the
+// member it finds to the same store. Held for the page's lifetime: a sign-out reloads the renderer,
+// so it never outlives the account it belongs to. Readers subscribe, so what shows a list updates
+// once the account has been told whose it is.
 let observedMemberId: string | null = null;
 const observers = new Set<() => void>();
 
-/** Record (or, with null, forget) the signed-in member the library listing reported. */
+/** Record (or, with null, forget) the signed-in member a listing or the member check reported. */
 export const rememberCurrentMember = (memberId: string | null): void => {
     if (memberId === observedMemberId) return;
     observedMemberId = memberId;
@@ -31,26 +32,42 @@ const fetchOwner = async (): Promise<string> => {
 };
 
 /**
- * The member who last saved a Chosen Photos list ('' = not recorded yet). Kept
+ * The member who last saved a Chosen Photos list ('' = not recorded yet), whether that has been
+ * read, and `refetch` to read it again: nothing may treat `owner === ''` as "no owner" until
+ * `known` (a read that has not landed, or one that failed — `failed` — leaves it unknown). Kept
  * current across settings writes, since saving a list stamps its owner.
  */
-export function useChosenPhotosOwner(): string {
-    const { data: owner } = useIpcQuery(fetchOwner, { initialData: '', subscribe: true });
-    return owner;
+export function useChosenPhotosOwner(): {
+    owner: string;
+    known: boolean;
+    failed: boolean;
+    loading: boolean;
+    refetch: () => Promise<void>;
+} {
+    const {
+        data: owner,
+        loading,
+        error,
+        refetch,
+    } = useIpcQuery(fetchOwner, {
+        initialData: '',
+        subscribe: true,
+    });
+    return { owner, known: !loading && error === null, failed: error !== null, loading, refetch };
 }
 
 /**
- * How the saved lists relate to the signed-in account, as far as a library
- * listing has shown which account that is (until then the renderer cannot tell,
- * so `otherAccount` is false and `thumbMember` null).
+ * How the saved lists relate to the signed-in account, as far as a listing or the chooser's member
+ * check has shown which account that is (until then the renderer cannot tell, so `otherAccount` is
+ * false and `thumbMember` null).
  *
  * `thumbMember` is the member id to build a chosen photo's thumbnail from: the
- * list's owner, once the listing has shown that owner IS the signed-in account.
+ * list's owner, once the account has been shown to BE the signed-in one.
  * `otherAccount` is true when the lists belong to a different account, whose
  * photos must be neither shown nor named.
  */
 export function useChosenListAccount(): { thumbMember: string | null; otherAccount: boolean } {
-    const owner = useChosenPhotosOwner();
+    const { owner } = useChosenPhotosOwner();
     const signedIn = useSyncExternalStore(subscribeToMember, readObservedMember);
     return {
         thumbMember: owner !== '' && owner === signedIn ? owner : null,

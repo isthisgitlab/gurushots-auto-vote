@@ -92,6 +92,42 @@ function RankBadge({ rank }: { rank: number | null }) {
     );
 }
 
+/**
+ * The square a tile is built on: the thumbnail once it loads, or the tile's fallback text while
+ * there is no URL to build one from, or the image failed to load. Only the square is dimmed, and
+ * the fallback carries it the same way.
+ */
+function TileImage({
+    show,
+    imageRef,
+    url,
+    dim,
+    fallback,
+}: {
+    show: boolean;
+    imageRef: (img: HTMLImageElement | null) => void;
+    url: string | null;
+    dim: string;
+    fallback: string;
+}) {
+    return show ? (
+        <img
+            ref={imageRef}
+            src={url as string}
+            alt=""
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            className={`aspect-square w-full rounded object-cover ${dim}`}
+        />
+    ) : (
+        <span
+            className={`bg-base-200 flex aspect-square w-full items-center justify-center rounded p-1 text-center text-xs break-words ${dim}`}
+        >
+            {fallback}
+        </span>
+    );
+}
+
 function PhotoTileBase({
     photo,
     memberId,
@@ -162,22 +198,7 @@ function PhotoTileBase({
         >
             <PositionBadge position={position} />
             <RankBadge rank={rank} />
-            {showImage ? (
-                <img
-                    ref={imageRef}
-                    src={url as string}
-                    alt=""
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
-                    className={`aspect-square w-full rounded object-cover ${dim}`}
-                />
-            ) : (
-                <span
-                    className={`bg-base-200 flex aspect-square w-full items-center justify-center rounded p-1 text-center text-xs break-words ${dim}`}
-                >
-                    {labels}
-                </span>
-            )}
+            <TileImage show={showImage} imageRef={imageRef} url={url} dim={dim} fallback={labels} />
             <span className={`truncate text-xs ${dim}`}>{showImage ? labels : shortId(photo.id)}</span>
             {reason &&
                 (!locked && !full && blockedReason !== null ? (
@@ -196,6 +217,68 @@ function PhotoTileBase({
 // Memoised: a toggle re-renders the grid, and with this only the tiles whose own props changed. Every prop
 // is a primitive or stable between renders (the listing's photo records, and `toggle`, a useCallback).
 export const PhotoTile = memo(PhotoTileBase);
+
+/**
+ * A saved pick while nothing has been read: its number, its thumbnail once the member check says
+ * whose photo it is (else its short id as text), and no claim about the photo itself — its tags are
+ * unread. A read that lands replaces it with the real tile or a missing one.
+ */
+export function SavedPickTile({
+    id,
+    memberId,
+    selected,
+    position,
+    atCap,
+    fullKey,
+    locked,
+    lockedKey,
+    onToggle,
+}: {
+    id: string;
+    memberId: string | null;
+    selected: boolean;
+    /** Where the photo stands in the list (1-based), for a selected tile; null otherwise. */
+    position: number | null;
+    atCap: boolean;
+    /** The translation key of what a tile that cannot be added because the selection is full says. */
+    fullKey: string;
+    locked: boolean;
+    /** The translation key of what a locked tile says. */
+    lockedKey: string;
+    onToggle: (id: string) => void;
+}) {
+    const { t } = useTranslation();
+    const url = memberId ? buildPhotoUrl(memberId, id, { size: TILE_PX }) : null;
+    const [showImage, imageRef] = useImageLoads(url);
+    // Like any tile: a pick stays removable, an unpicked one is offered no more at the cap, and a
+    // locked one is inert. The reason travels in the name too — the label replaces the visible text
+    // for readers, so it must carry what the tile says.
+    const unavailable = locked || (!selected && atCap);
+    const reason = locked ? t(lockedKey) : !selected && atCap ? t(fullKey) : t('app.photoChooserSavedTileNote');
+    const dim = unavailable ? 'opacity-50' : '';
+    const tone = selected ? 'border-base-content ring-2 ring-base-content' : 'border-base-300';
+    return (
+        <button
+            type="button"
+            aria-pressed={selected}
+            aria-label={withPosition(
+                interp(t('app.photoChooserSavedTileLabel'), { id: shortId(id), reason }),
+                t,
+                position,
+            )}
+            aria-disabled={unavailable}
+            className={`${TILE_BASE} ${tone}`}
+            onClick={() => {
+                if (!unavailable) onToggle(id);
+            }}
+        >
+            <PositionBadge position={position} />
+            <TileImage show={showImage} imageRef={imageRef} url={url} dim={dim} fallback={shortId(id)} />
+            <span className={`truncate text-xs ${dim}`}>{shortId(id)}</span>
+            <span className="text-xs text-base-content/70">{reason}</span>
+        </button>
+    );
+}
 
 /**
  * What a chosen photo the listing does not return most likely is. With a

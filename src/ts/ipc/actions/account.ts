@@ -222,14 +222,15 @@ const handleGetOpenChosenAnnotations = (async (event: unknown, ids: Array<string
     }
 }) satisfies IpcReplyFn;
 
-// The user's explicit "check the account again" (the chooser's Retry when it could not tell whose
-// account the saved list belongs to). It evicts the cached failed identity lookup for this token and
-// resolves the member only: no library walk, so a retry costs one profile request and repeats
-// nothing the listing on screen already read. `memberId` is the signed-in account, or the check
-// failed (`account-check-failed`) and may be tried again shortly, or there is no session
-// (`not-logged-in`). The eviction is rate-limited in memberIdentity: the first eviction always gets
-// through; later ones are spaced from the last eviction (presses inside the gap are answered from
-// the cache), so it never costs more than one request per gap.
+// The signed-in member, asked for on purpose: the Chosen Photos chooser calls this on opening (when
+// a list is on record somewhere, so the saved picks can show without reading the library) and on its
+// Retry when it could not tell whose account the saved list belongs to. It evicts the cached failed
+// identity lookup for this token and resolves the member only: no library walk, so a retry costs one
+// profile request and repeats nothing the listing on screen already read. `memberId` is the
+// signed-in account, or the check failed (`account-check-failed`) and may be tried again shortly, or
+// there is no session (`not-logged-in`). The eviction is rate-limited in memberIdentity: the first
+// eviction always gets through; later ones are spaced from the last eviction (presses inside the gap
+// are answered from the cache), so it never costs more than one request per gap.
 const handleConfirmAccount = (async () => {
     try {
         const guard = auth.requireAuthToken('account check');

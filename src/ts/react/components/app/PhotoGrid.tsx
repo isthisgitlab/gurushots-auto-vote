@@ -5,18 +5,20 @@ import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { interp } from '@/utils/interp';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { ListingHeader } from './ListingHeader';
-import { MissingTile, PendingTile, PhotoTile } from './PhotoTile';
+import { MissingTile, PendingTile, PhotoTile, SavedPickTile } from './PhotoTile';
 import { MAX_CHOSEN_PHOTOS } from '../../../settings/limits';
 
-import type { ReactNode } from 'react';
+import type { FocusEvent, ReactNode } from 'react';
 import type { LibraryPhoto, ListState } from '@/hooks/useLibraryListing';
 
 const TILE_GRID = 'grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4';
 
 /**
- * The library listing with its states: idle (the not-loaded line, plus the tiles Auto named that were picked in
- * this opening), loading, an error with Retry, the missing-challenge explanation, and the tiles (the picks the
- * listing does not return pinned first, the rest in the library's order). The defaults are the Chosen Photos list's: numbered, capped at MAX_CHOSEN_PHOTOS.
+ * The library listing with its states: idle (the not-loaded line, the saved picks the member check
+ * has shown to be this account's, plus the tiles Auto named that were picked in this opening),
+ * loading, an error with Retry, the missing-challenge explanation, and the tiles (the picks the
+ * listing does not return pinned first, the rest in the library's order). The defaults are the
+ * Chosen Photos list's: numbered, capped at MAX_CHOSEN_PHOTOS.
  *
  * The submit modal's grid (`submit`) leaves out the photos the challenge refuses once the listing says which it
  * accepts, and counts them in a line of their own. A photo is shown anyway when it is picked (a pick that a later
@@ -46,7 +48,10 @@ export function PhotoGrid({
     extraPhotos,
     idleMemberId = null,
     idleIds,
+    idleKey = 'app.pickIdle',
     idleWithPicksKey = 'app.pickIdleWithPicks',
+    checkingMember = false,
+    savedPicks = null,
     keepIds,
 }: {
     state: ListState;
@@ -87,8 +92,14 @@ export function PhotoGrid({
     idleMemberId?: string | null;
     /** The ids the idle grid shows, in place whether picked or not (default: the selected ones). */
     idleIds?: string[];
+    /** The translation key of the idle line shown while nothing is read. */
+    idleKey?: string;
     /** The translation key of the idle line shown while something is picked. */
     idleWithPicksKey?: string;
+    /** The chooser's member check is on its way: nothing of the picks can be shown until it answers. */
+    checkingMember?: boolean;
+    /** The saved picks may show as stubs (nothing is read), with this member for their thumbnails. */
+    savedPicks?: { memberId: string | null } | null;
     /** Photos the submit modal's grid keeps showing, with their reason, whatever the listing says (taken back during it). */
     keepIds?: ReadonlySet<string>;
 }) {
@@ -107,37 +118,83 @@ export function PhotoGrid({
         lastFocusedTile.current = null;
         hiddenLineRef.current?.focus();
     });
+    // The tile focus hand-off, shared by the idle and the ready grid: a tile that leaves the page
+    // takes the focus to <body>, so when that was a tile of this grid and the user had not moved the
+    // focus off it (see onBlurCapture), the focus goes to the status line (if it is shown) instead
+    // of being lost.
+    const keepTileFocus = {
+        onFocusCapture: () => {
+            // The focus event's target is typed as a bare EventTarget; the focused element is the same node.
+            lastFocusedTile.current = document.activeElement;
+        },
+        onBlurCapture: (event: FocusEvent<HTMLDivElement>) => {
+            // The focus moving to another tile of the grid keeps the hand-off. Moving anywhere else ends it, if
+            // the user did it: a tile that was removed (a browser may report a blur for it) keeps the hand-off.
+            const next = event.relatedTarget;
+            if (next instanceof Node && event.currentTarget.contains(next)) return;
+            queueMicrotask(() => {
+                if (lastFocusedTile.current?.isConnected) lastFocusedTile.current = null;
+            });
+        },
+    };
     const render = (): { status: ReactNode; body: ReactNode } => {
         if (state.status === 'idle') {
-            // Nothing is read yet: only the photos Auto named that were picked are shown, from the records it brought,
-            // so a pick never goes invisible. An unpicked one keeps its place, so it can be picked again.
+            // The member check on open is on its way: no pick can be shown until it says whose it is.
+            if (checkingMember)
+                return { status: null, body: <InlineLoader text={t('app.photoChooserCheckingMember')} /> };
+            // Nothing is read yet: the saved picks the member check has cleared show as numbered stubs, and the
+            // photos Auto named keep their tiles from the records it brought, so a pick never goes invisible. An
+            // unpicked one keeps its place, so it can be picked again.
             const chosenIdle = new Set(selected);
-            const shownIdle = (idleIds ?? selected).flatMap((id) => extraPhotos?.get(id) ?? []);
+            const shownIdleIds = idleIds ?? selected;
+            const numberOf = new Map(selected.map((id, index) => [id, index + 1]));
+            const position = (id: string): number | null => (numbered ? (numberOf.get(id) ?? null) : null);
+            const atCap = selected.length >= max;
+            const tiles = shownIdleIds.map((id) => {
+                const record = extraPhotos?.get(id);
+                if (record)
+                    return (
+                        <PhotoTile
+                            key={id}
+                            photo={record}
+                            memberId={idleMemberId}
+                            selected={chosenIdle.has(id)}
+                            position={position(id)}
+                            blockedReason={null}
+                            atCap={atCap}
+                            fullKey={fullKey}
+                            allowedKnown={false}
+                            locked={locked}
+                            lockedKey={lockedKey}
+                            onToggle={onToggle}
+                        />
+                    );
+                if (!savedPicks) return null;
+                return (
+                    <SavedPickTile
+                        key={id}
+                        id={id}
+                        memberId={savedPicks.memberId}
+                        selected={chosenIdle.has(id)}
+                        position={position(id)}
+                        atCap={atCap}
+                        fullKey={fullKey}
+                        locked={locked}
+                        lockedKey={lockedKey}
+                        onToggle={onToggle}
+                    />
+                );
+            });
             return {
                 status: null,
                 body: (
                     <>
                         <p className="text-base-content/70 text-sm" role="status">
-                            {t(selected.length > 0 ? idleWithPicksKey : 'app.pickIdle')}
+                            {t(selected.length > 0 ? idleWithPicksKey : idleKey)}
                         </p>
-                        {shownIdle.length > 0 && (
-                            <div className={TILE_GRID}>
-                                {shownIdle.map((photo) => (
-                                    <PhotoTile
-                                        key={photo.id}
-                                        photo={photo}
-                                        memberId={idleMemberId}
-                                        selected={chosenIdle.has(photo.id)}
-                                        position={null}
-                                        blockedReason={null}
-                                        atCap={selected.length >= max}
-                                        fullKey={fullKey}
-                                        allowedKnown={false}
-                                        locked={locked}
-                                        lockedKey={lockedKey}
-                                        onToggle={onToggle}
-                                    />
-                                ))}
+                        {tiles.some((tile) => tile !== null) && (
+                            <div className={TILE_GRID} {...keepTileFocus}>
+                                {tiles}
                             </div>
                         )}
                     </>
@@ -291,22 +348,7 @@ export function PhotoGrid({
                             )}
                         </p>
                     )}
-                    <div
-                        className={TILE_GRID}
-                        onFocusCapture={() => {
-                            // The focus event's target is typed as a bare EventTarget; the focused element is the same node.
-                            lastFocusedTile.current = document.activeElement;
-                        }}
-                        onBlurCapture={(event) => {
-                            // The focus moving to another tile of the grid keeps the hand-off. Moving anywhere else ends it, if
-                            // the user did it: a tile that was removed (a browser may report a blur for it) keeps the hand-off.
-                            const next = event.relatedTarget;
-                            if (next instanceof Node && event.currentTarget.contains(next)) return;
-                            queueMicrotask(() => {
-                                if (lastFocusedTile.current?.isConnected) lastFocusedTile.current = null;
-                            });
-                        }}
-                    >
+                    <div className={TILE_GRID} {...keepTileFocus}>
                         {/* The picks the listing does not return stay pinned first, in pick order. */}
                         {selected
                             .filter((id) => !listed.has(id))

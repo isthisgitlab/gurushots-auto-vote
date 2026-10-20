@@ -461,8 +461,10 @@ describe('SettingsModal — title-tag-rules save', () => {
         // A rule whose only content was its list goes with it, as it does where the lists are removed.
         const lonely = { title: 'Lonely', mustIncludeTags: [], shouldIncludeTags: [], chosenPhotos: [PHOTO] };
         jest.mocked(window.api.getTitleRules).mockResolvedValueOnce([rule, lonely]);
-        // A list saved under another account: the chooser's notice offers to remove every list.
+        // A list saved under another account: the chooser's member check names the signed-in one,
+        // and its notice offers to remove every list.
         jest.mocked(window.api.getSetting).mockResolvedValue('d'.repeat(32));
+        jest.mocked(window.api.confirmAccount).mockResolvedValue({ success: true, memberId: 'c'.repeat(32) });
         jest.mocked(window.api.getLibraryPhotos).mockResolvedValue(
             invalid({
                 success: true,

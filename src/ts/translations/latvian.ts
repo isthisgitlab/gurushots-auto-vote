@@ -824,8 +824,12 @@ export const app = {
     chosenPhotosOnlyReachHint:
         'Tas attiecas uz katru izaicinājumu, ko aptver: automātiskā pievienošanās un iesniegšana izlaiž katru izaicinājumu, kuram nav derīga izvēlētā foto.',
     photoChooserTitle: 'Izvēlēties foto',
-    photoChooserHelp:
-        'Lietotne šos foto izmanto pirmos, un tiem joprojām jāiztur tavi tagu filtri. Tos kārto tāpat, kā kārto savas automātiskās izvēles, vai arī izmanto tos šeit redzamo numuru secībā, ja ir ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos” (uzstādījumi „Automātiskā iesniegšana”: globālie noklusējumi, izaicinājuma noteikums vai paša izaicinājuma uzstādījumi pēc pievienošanās).',
+    photoChooserHelpAuto:
+        'Lietotne šos foto izmanto pirmos, un tiem joprojām jāiztur tavi tagu filtri. Tos kārto tāpat, kā kārto savas automātiskās izvēles, vai arī izmanto šeit redzamos numurus, ja ir ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos” (uzstādījumi „Automātiskā iesniegšana”: globālie noklusējumi, izaicinājuma noteikums vai paša izaicinājuma uzstādījumi). Nekas netiek nolasīts, iekams neielādē, nemeklē vai nespied pogu „Automātiski”.',
+    photoChooserHelpChallenge:
+        'Lietotne šos foto izmanto pirmos, un tiem joprojām jāiztur tavi tagu filtri. Tos kārto tāpat, kā kārto savas automātiskās izvēles, vai arī izmanto šeit redzamos numurus, ja ir ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos” (uzstādījumi „Automātiskā iesniegšana”: globālie noklusējumi, izaicinājuma noteikums vai paša izaicinājuma uzstādījumi pēc pievienošanās). Nekas netiek nolasīts, iekams neielādē vai nemeklē.',
+    photoChooserHelpNoChallenge:
+        'Lietotne šos foto izmanto pirmos, un tiem joprojām jāiztur tavi tagu filtri. Tos kārto tāpat, kā kārto savas automātiskās izvēles, vai arī izmanto šeit redzamos numurus, ja ir ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos” (uzstādījumi „Automātiskā iesniegšana”: globālie noklusējumi vai izaicinājuma noteikums). Kurus foto izaicinājums pieņem, to pārbauda tos iesniedzot. Nekas netiek nolasīts, iekams neielādē vai nemeklē.',
     photoChooserSearchLabel: 'Meklēt savus foto pēc taga',
     photoChooserSearchPlaceholder: 'piem., saulriets…',
     photoChooserSearch: 'Meklēt',
@@ -896,10 +900,18 @@ export const app = {
     chosenPhotosOtherAccountCount: 'Citā kontā saglabātie foto: {count}',
     photoChooserInheritNote:
         'Ja saglabāsi, neko neizvēloties, šim izaicinājumam paredzētais saraksts tiks izņemts, un izaicinājums atkal izmantos sarakstu no taviem uzstādījumiem vai noteikumiem.',
-    photoChooserSaveWaits:
-        'Saglabāšana gaida, līdz tavi foto ir ielādēti, lai lietotne varētu pārbaudīt, kuram kontam saraksts pieder.',
-    photoChooserSaveWaitsError:
-        'Saglabāšana tiek aizturēta, līdz tavi foto ir ielādēti, lai lietotne varētu pārbaudīt, kuram kontam saraksts pieder. Spied „Mēģināt vēlreiz” augstāk.',
+    photoChooserIdle: 'Tavi foto vēl nav ielādēti. Ielādē visus vai meklē.',
+    photoChooserIdleAuto: 'Tavi foto vēl nav ielādēti. Ielādē visus, meklē vai spied „Automātiski”.',
+    photoChooserIdlePicks:
+        'Tavi izvēlētie foto paliek izvēlēti. Ielādē visus foto vai meklē, lai redzētu pārējo bibliotēku un pārbaudītu tos.',
+    photoChooserIdlePicksAuto:
+        'Tavi izvēlētie foto paliek izvēlēti. Ielādē visus foto, meklē vai spied „Automātiski”, lai redzētu vairāk.',
+    photoChooserAutoHelp:
+        '„Automātiski” sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem un, ja tava versija to atbalsta, arī ar vietējo attēlu pārbaudi. Nekas netiek saglabāts. Nospiežot vēlreiz, redzēsi nākamos ieteikumus.',
+    photoChooserAutoRunning: 'Foto tiek sarindoti… tas var aizņemt minūti. Nekas netiek saglabāts.',
+    photoChooserCheckingMember: 'Pārbauda, kuram kontam pieder šie foto…',
+    photoChooserSavedTileLabel: 'Izvēlētais foto {id}: {reason}',
+    photoChooserSavedTileNote: 'Vēl nav ielādēts',
     photoChooserSaveChecking: 'Pārbauda, kuram kontam šis saraksts pieder…',
     photoChooserSaveCheckFailed:
         'Konta pārbaude neizdevās, tāpēc saglabāšana ir aizturēta, lai pasargātu tavu sarakstu. Pēc brīža vēlreiz spied „Mēģināt vēlreiz”.',
@@ -911,14 +923,12 @@ export const app = {
         'Saglabātā saraksta nolasīšana atkal neizdevās, tāpēc saglabāšana joprojām ir aizturēta, lai to pasargātu. Pēc brīža vēlreiz spied „Mēģināt vēlreiz”.',
     photoChooserSaveNotLoggedIn:
         'Tu esi izrakstījies, tāpēc kontu nevar pārbaudīt. Piesakies vēlreiz, aizver logu „Izvēlēties foto” un atver to vēlreiz.',
-    photoChooserSaveNoContextHeld:
-        'Saglabāšana ir aizturēta: bez aktīva vai atvērta izaicinājuma lietotne nevar pārbaudīt, kuram kontam šis saraksts pieder. Aizver logu „Izvēlēties foto” un vispirms pievienojies izaicinājumam.',
+    photoChooserSaveOwnerReadFailed:
+        'Neizdevās nolasīt, kurš konts saglabāja šo sarakstu, tāpēc saglabāšana ir aizturēta, lai to pasargātu. Spied „Mēģināt vēlreiz”.',
     photoChooserClearHeld:
         'Notīrīšana nav pieejama, kamēr tavs saglabātais saraksts nav nolasīts, lai vēlāka nolasīšana neatceltu notīrīšanu.',
     photoChooserSaveUnconfirmed:
-        'Neizdevās pārliecināties, kuram kontam šis saraksts pieder, tāpēc saglabāšana ir aizturēta, lai to pasargātu. Spied „Mēģināt vēlreiz” vai aizver logu „Izvēlēties foto” un atver to vēlreiz.',
-    photoChooserSaveNoContext:
-        'Saglabāšana ir bloķēta: bez aktīva vai atvērta izaicinājuma lietotne nevar pārbaudīt, kuram kontam šis saraksts pieder. Notīri sarakstu, lai saglabātu, vai vispirms pievienojies izaicinājumam.',
+        'Nav zināms, kurš konts saglabāja šo sarakstu, tāpēc saglabāšana ir aizturēta, lai to pasargātu. Spied „Mēģināt vēlreiz” vai aizver logu „Izvēlēties foto” un atver to vēlreiz.',
     photoChooserSaveError: 'Izvēlētos foto neizdevās saglabāt, jo uzstādījumu nevarēja ierakstīt. Mēģini vēlreiz.',
     photoChooserDiscardTitle: 'Atmest izmaiņas?',
     photoChooserDiscardText:

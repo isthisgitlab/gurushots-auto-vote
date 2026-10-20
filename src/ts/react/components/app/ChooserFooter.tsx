@@ -1,48 +1,40 @@
 /**
- * The chooser's controls around the photo grid: the search box, and the footer with Clear, Cancel and
- * Save — Save and Clear held back, with the reason as a live region and a Retry where a retry can
- * lift the hold.
+ * The chooser's footer with Clear, Cancel and Save — Save and Clear held back, with the reason as a
+ * live region and a Retry where a retry can lift the hold. The picker's own controls (search, Load
+ * all, Auto) live in PhotoPickerToolbar.
  */
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 import type { ReactNode, RefObject } from 'react';
 import type { useSavedListReread } from '@/hooks/usePhotoChooser';
-import type { ListState } from '@/hooks/useLibraryListing';
 
-// What Save being held says, by the listing's state: loading will resolve by itself, an error needs
-// Retry, and no context will not load at all, so it names the way out instead of a wait.
+// What Save being held says, by what holds it: a check or read under way will resolve by itself;
+// the rest name their own way out (Retry where one can lift the hold, signing in again).
 const SAVE_HOLD_HINT: Record<
-    | ListState['status']
-    | 'unconfirmed'
     | 'checking'
+    | 'unconfirmed'
     | 'check-failed'
     | 'not-logged-in'
     | 'read-failed'
     | 'read-failed-again'
-    | 'no-context-held',
+    | 'owner-read-failed',
     string
 > = {
+    checking: 'app.photoChooserSaveChecking',
+    // No owner is on record for a withheld list, so whose it is cannot be judged yet.
     unconfirmed: 'app.photoChooserSaveUnconfirmed',
+    // The member check failed: its own words, and a repeat's.
+    'check-failed': 'app.photoChooserSaveCheckFailed',
+    // Signed out: Retry cannot help.
+    'not-logged-in': 'app.photoChooserSaveNotLoggedIn',
     // The account is known but the saved list could not be read: its own words, and a repeat's.
     'read-failed': 'app.photoChooserSaveReadFailed',
     'read-failed-again': 'app.photoChooserSaveReadFailedAgain',
-    // Signed out: Retry cannot help.
-    'not-logged-in': 'app.photoChooserSaveNotLoggedIn',
-    // No challenge to read the library through while the saved list is unread: Clear is held too, so
-    // the hint names only the ways out that exist.
-    'no-context-held': 'app.photoChooserSaveNoContextHeld',
-    // The listing is ready and the saved list is being read: the photos have loaded, so say what is awaited.
-    checking: 'app.photoChooserSaveChecking',
-    'check-failed': 'app.photoChooserSaveCheckFailed',
-    loading: 'app.photoChooserSaveWaits',
-    // The chooser reads on open and never starts idle; the entry completes the record.
-    idle: 'app.photoChooserSaveWaits',
-    ready: 'app.photoChooserSaveWaits',
-    error: 'app.photoChooserSaveWaitsError',
-    'no-context': 'app.photoChooserSaveNoContext',
+    // Which account saved the list could not be read at all: its Retry re-reads the record.
+    'owner-read-failed': 'app.photoChooserSaveOwnerReadFailed',
 };
 
 // The holds a Retry can lift.
@@ -51,6 +43,7 @@ const RETRYABLE_HOLDS: ReadonlyArray<keyof typeof SAVE_HOLD_HINT> = [
     'check-failed',
     'read-failed',
     'read-failed-again',
+    'owner-read-failed',
 ];
 
 /**
@@ -288,48 +281,11 @@ export function ChooserFooter({
     );
 }
 
-/** The search box: submitting reads the listing again for the (trimmed) term. */
-export function SearchForm({ onSearch }: { onSearch: (term: string) => void }) {
-    const { t } = useTranslation();
-    const [text, setText] = useState('');
-    return (
-        <form
-            className="flex flex-wrap items-center gap-2"
-            onSubmit={(event) => {
-                event.preventDefault();
-                onSearch(text.trim());
-            }}
-        >
-            <input
-                type="search"
-                name="photo-search"
-                className="input input-sm min-w-40 flex-1"
-                autoComplete="off"
-                spellcheck={false}
-                enterKeyHint="search"
-                aria-label={t('app.photoChooserSearchLabel')}
-                placeholder={t('app.photoChooserSearchPlaceholder')}
-                value={text}
-                onChange={(event) => setText(event.currentTarget.value)}
-            />
-            <button type="submit" className="btn btn-outline btn-sm">
-                {t('app.photoChooserSearch')}
-            </button>
-        </form>
-    );
-}
-
 /**
- * What the hold on Save says: a retry or a read under way is "checking"; with no challenge to read
- * the library through while the saved list is unread, the way out that exists (Clear is held too);
- * a list that could not be read for this account says which failure it was; otherwise it is the
- * listing's state.
+ * What the hold on Save says: a check or a read under way is "checking"; a list that could not be
+ * read for this account says which failure it was; otherwise it is the waiting state.
  */
-export const holdReasonOf = (
-    saved: ReturnType<typeof useSavedListReread>,
-    listState: ListState['status'],
-): keyof typeof SAVE_HOLD_HINT => {
+export const holdReasonOf = (saved: ReturnType<typeof useSavedListReread>): keyof typeof SAVE_HOLD_HINT => {
     if (saved.busy || saved.checking) return 'checking';
-    if (listState === 'no-context' && saved.status !== 'ok') return 'no-context-held';
-    return saved.failure ?? listState;
+    return saved.failure ?? 'unconfirmed';
 };

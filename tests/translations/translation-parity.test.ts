@@ -93,11 +93,7 @@ describe('a chip whose accessible name starts with the text it shows (WCAG 2.5.3
 });
 
 describe('the chooser is named as the chooser, not as "this window" (the app has other windows)', () => {
-    const keys = [
-        'photoChooserSaveNoContextHeld',
-        'photoChooserSaveNotLoggedIn',
-        'photoChooserSaveUnconfirmed',
-    ] as const;
+    const keys = ['photoChooserSaveNotLoggedIn', 'photoChooserSaveUnconfirmed'] as const;
     test.each(keys)('%s: English says "the chooser", Latvian names the dialog by its title', (key) => {
         expect(english.app[key]).not.toMatch(/this window/i);
         expect(english.app[key]).toMatch(/the chooser/);

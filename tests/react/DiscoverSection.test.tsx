@@ -1362,6 +1362,9 @@ describe('chosen photos', () => {
                 ),
             })),
             joinChallenge: spendLater({ success: true, status: 'joined' }),
+            confirmAccount: jest
+                .fn<ReturnType<WindowApi['confirmAccount']>, Parameters<WindowApi['confirmAccount']>>()
+                .mockResolvedValue(invalid({ success: true, memberId: 'c'.repeat(32) })),
             setChallengeOverride: jest.fn(async (_key: string, id: string, value: string[]) => {
                 own[id] = value;
                 return true;
@@ -1396,10 +1399,15 @@ describe('chosen photos', () => {
         expect(screen.getAllByText('app.choosePhotos')).toHaveLength(2);
     });
 
-    test('Choose photos opens the chooser for that challenge and saves its own list', async () => {
+    test('Choose photos opens the chooser idle (no Auto on a row), and saving its own list works', async () => {
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
+        // Nothing is read on open, and a row's challenge is not joined, so there is no Auto.
+        await screen.findByRole('dialog');
+        expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
+        expect(screen.queryByRole('button', { name: 'app.pickAuto' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
         await waitFor(() =>
             expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(900001, undefined, 'cached', 'submit'),
         );
@@ -1420,9 +1428,9 @@ describe('chosen photos', () => {
         own['900001'] = [PHOTO];
         renderSection();
         fireEvent.click(await screen.findByText('app.discoverChosenChip'));
-        const tile = await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ });
-        expect(tile.getAttribute('aria-pressed')).toBe('true');
-        fireEvent.click(tile);
+        const stub = await screen.findByRole('button', { name: /^app\.photoChooserSavedTileLabel/ });
+        expect(stub.getAttribute('aria-pressed')).toBe('true');
+        fireEvent.click(stub);
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
         await waitFor(() => expect(window.api.removeChallengeOverride).toHaveBeenCalledWith('chosenPhotos', '900001'));
         await waitFor(() => expect(screen.queryByText('app.discoverChosenChip')).toBeNull());
@@ -1433,7 +1441,7 @@ describe('chosen photos', () => {
         let memberKnown: boolean;
         let release: () => void;
 
-        // The listing becomes ready, and the chooser then asks again for its own list: wait for that ask.
+        // The member check answers, and the chooser then asks again for its own list: wait for that ask.
         const releaseAndWaitForReread = async () => {
             jest.mocked(window.api.getOpenChosenAnnotations).mockClear();
             release();
@@ -1445,7 +1453,7 @@ describe('chosen photos', () => {
             memberKnown = false;
             const gate = new Promise<void>((resolve) => (release = resolve));
             jest.mocked(window.api.getSetting).mockResolvedValue(OWNER);
-            // The main process withholds the ids until the listing has resolved the member.
+            // The main process withholds the ids until the member has been resolved.
             jest.mocked(window.api.getOpenChosenAnnotations).mockImplementation(async () => ({
                 success: true,
                 annotations: Object.fromEntries(
@@ -1455,20 +1463,10 @@ describe('chosen photos', () => {
                     ]),
                 ),
             }));
-            jest.mocked(window.api.getLibraryPhotos).mockImplementation(async () => {
+            jest.mocked(window.api.confirmAccount).mockImplementation(async () => {
                 await gate;
                 memberKnown = true;
-                return {
-                    success: true as const,
-                    photos: [{ id: PHOTO, labels: ['sea'], allowed: true, message: null, uploadDate: 1 }],
-                    memberId: OWNER,
-                    truncated: false,
-                    wonIds: [],
-                    wonCount: 0,
-                    preview: false,
-                    readAtMs: 1_700_000_000_000,
-                    allowedKnown: true,
-                };
+                return invalid({ success: true, memberId: OWNER });
             });
             renderSection();
             fireEvent.click(await screen.findByText('app.discoverChosenChip'));
@@ -1481,11 +1479,15 @@ describe('chosen photos', () => {
             fireEvent.click(use);
             expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
             expect(window.api.setChallengeOverride).not.toHaveBeenCalled();
+            // No library read happened: the member check, not a listing, names the account.
+            expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
 
             release();
             await waitFor(() =>
                 expect(
-                    screen.getByRole('button', { name: /^app\.photoChooserTileLabel/ }).getAttribute('aria-pressed'),
+                    screen
+                        .getByRole('button', { name: /^app\.photoChooserSavedTileLabel/ })
+                        .getAttribute('aria-pressed'),
                 ).toBe('true'),
             );
             await waitFor(() => expect(use.getAttribute('aria-disabled')).toBe('false'));
@@ -1557,7 +1559,7 @@ describe('chosen photos', () => {
             const use = await open();
             jest.mocked(window.api.getOpenChosenAnnotations).mockResolvedValue(invalid({ success: true, annotations }));
             await releaseAndWaitForReread();
-            await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ });
+            await screen.findByText('app.photoChooserSaveReadFailed');
             expect(use.getAttribute('aria-disabled')).toBe('true');
             fireEvent.click(use);
             expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
@@ -1567,7 +1569,7 @@ describe('chosen photos', () => {
             const use = await open();
             jest.mocked(window.api.getOpenChosenAnnotations).mockRejectedValue(new Error('gone'));
             await releaseAndWaitForReread();
-            await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ });
+            await screen.findByText('app.photoChooserSaveReadFailed');
             expect(use.getAttribute('aria-disabled')).toBe('true');
         });
 
@@ -1579,7 +1581,7 @@ describe('chosen photos', () => {
                 annotations: {},
             });
             await releaseAndWaitForReread();
-            await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ });
+            await screen.findByText('app.photoChooserSaveReadFailed');
             expect(use.getAttribute('aria-disabled')).toBe('true');
             fireEvent.click(use);
             expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
@@ -1612,6 +1614,7 @@ describe('chosen photos', () => {
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
         fireEvent.click(await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ }));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
         expect((await screen.findByRole('alert')).textContent).toContain('app.photoChooserSaveError');
@@ -1623,6 +1626,7 @@ describe('chosen photos', () => {
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
         fireEvent.click(await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ }));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
         expect((await screen.findByRole('alert')).textContent).toContain('app.photoChooserSaveError');

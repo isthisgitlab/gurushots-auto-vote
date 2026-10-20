@@ -184,8 +184,8 @@ function RowPhotoChooser({
     onSaved: () => Promise<void>;
 }) {
     // The row may have opened before the main process knew whose account this is, and then it came
-    // without its ids. Once the chooser's listing has said, ask again: the ids come through if the
-    // list is this account's, and not otherwise (null).
+    // without its ids. Once the chooser's member check has said, ask again: the ids come through if
+    // the list is this account's, and not otherwise (null).
     const challengeId = challenge?.id;
     // Keyed on the challenge so a re-render does not look like a new function, and a new IPC call.
     const reloadSaved = useCallback(async (): Promise<string[] | null> => {
@@ -214,6 +214,9 @@ function RowPhotoChooser({
             value={challenge?.chosenOwn ?? []}
             savedCount={challenge?.chosenOwnCount}
             challengeId={challenge?.id ?? null}
+            // The row's challenge is not joined, so Auto cannot rank for it (it would answer
+            // challenge-ended); the chooser hides the button.
+            canSuggest={false}
             clearMeansInherit
             reloadSaved={reloadSaved}
             onSave={save}

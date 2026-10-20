@@ -40,6 +40,7 @@ beforeEach(() => {
     rememberCurrentMember(null);
     window.api.getSetting = jest.fn().mockResolvedValue('');
     window.api.getLibraryPhotos = jest.fn().mockResolvedValue(libraryOf(1, 2));
+    window.api.confirmAccount = jest.fn().mockResolvedValue({ success: true, memberId: MEMBER });
 });
 
 describe('the photos setting input', () => {
@@ -149,9 +150,13 @@ describe('the photos setting input', () => {
         expect(document.querySelector('img')).toBeNull();
     });
 
-    test('Choose photos opens the chooser; using the selection reports the new list', async () => {
+    test('Choose photos opens the chooser idle, and using the selection reports the new list', async () => {
         const { onChange } = renderInput([]);
         fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
+        // Nothing is read on open: the library is asked for only by Load all.
+        await screen.findByRole('dialog');
+        expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
         // Translations echo their key here, so every tile has the same name; the second is photo 2.
         await screen.findAllByRole('button', { name: 'app.photoChooserTileLabel' });
         fireEvent.click(screen.getAllByRole('button', { name: 'app.photoChooserTileLabel' })[1]);
@@ -183,13 +188,16 @@ describe('the photos setting input', () => {
 });
 
 describe('challenge context', () => {
-    test('inside a per-challenge editor the chooser reads the library through that challenge', async () => {
+    test('inside a per-challenge editor the chooser reads the library through that challenge, on demand', async () => {
         render(
             <SettingsChallengeProvider value={77}>
                 <SettingInput settingKey="chosenPhotos" config={config} value={[]} onChange={jest.fn()} />
             </SettingsChallengeProvider>,
         );
         fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
+        await screen.findByRole('dialog');
+        expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
         await waitFor(() =>
             expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(77, undefined, 'cached', 'submit'),
         );
@@ -216,9 +224,12 @@ describe('challenge context', () => {
         expect(screen.queryByText('app.photosUseNoneHint')).toBeNull();
     });
 
-    test('outside one it asks with no challenge', async () => {
+    test('outside one it asks with no challenge, again only on demand', async () => {
         renderInput([]);
         fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
+        await screen.findByRole('dialog');
+        expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
         await waitFor(() =>
             expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined, 'cached', 'submit'),
         );

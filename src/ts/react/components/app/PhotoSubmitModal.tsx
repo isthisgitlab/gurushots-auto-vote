@@ -4,13 +4,9 @@ import { Modal, ModalActions } from '@/components/ui/Modal';
 import { StickyModalFooter, STICKY_FOOTER_SCROLL_PADDING } from '@/components/ui/StickyModalFooter';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
 import { interp } from '@/utils/interp';
-import { suggestErrorText } from '@/api/ipcErrorText';
-import { useSuggestPhotos } from '@/api/useSuggestPhotos';
-import { useLibraryListing } from '@/hooks/useLibraryListing';
-import { SearchForm } from './ChooserFooter';
+import { usePhotoPicker } from '@/hooks/usePhotoPicker';
+import { PhotoPickerToolbar } from './PhotoPicker';
 import { PhotoGrid } from './PhotoGrid';
-import { SuggestedStrip } from './SuggestedStrip';
-import { MAX_SUGGEST_EXCLUDE } from '../../../settings/limits';
 
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
 import type { LibraryUsage } from '../../../types/photoPicker';
@@ -55,9 +51,6 @@ export const PICK_TEXTS: PickTexts = {
     autoRunning: 'app.pickAutoRunning',
     idleWithPicks: 'app.pickIdleWithPicks',
 };
-
-/** What Auto ranked: the photos best first, the member that owns them, and whether stats were partly skipped. */
-type Suggested = { photos: LibraryPhoto[]; rankOffset: number; memberId: string | null; statsLimited: boolean };
 
 /**
  * Cancel and Submit: Submit names how many are picked and is held with none, while the pick cannot be sent
@@ -133,55 +126,18 @@ function PhotoSubmitBody({
     const [selected, setSelected] = useState<string[]>([]);
     // Marks read before an action of this window (a join, a submit) are not to be trusted: a cached listing
     // always comes back as a preview, and picking waits for the fresh read.
-    const { state, known, generation, revalidating, recheckFailed, load, refresh, retry } = useLibraryListing(
-        challengeId,
-        { alwaysFresh: true, onDemand: true, usage },
-    );
+    const picker = usePhotoPicker({ challengeId, usage, alwaysFresh: true, selected });
+    const { state, known, retry, refresh, resetLoadAll } = picker;
     const preview = state.status === 'ready' && state.listing.preview;
     // Once a listing is shown, until the app has checked which photos the challenge accepts, none can be picked or
     // sent. An idle one shows none: Auto's picks are ranked against the live challenge's eligible photos.
-    const checking = preview || recheckFailed;
-    const reading = state.status === 'loading' || revalidating;
-    // Whether the read on screen is one Load all started: only that one shows Load all as busy.
-    const [loadAllReading, setLoadAllReading] = useState(false);
-    // Bumped by Load all to remount the search box empty, so it never shows a term the grid is not filtered by.
-    const [searchKey, setSearchKey] = useState(0);
+    const checking = preview || picker.recheckFailed;
 
     // The generation of the read a failed submit asked for (or a Refresh): once a listing of that generation (or
     // later) is in, photos it says can no longer be entered leave the pick. Load all and Search do not set it, so a
     // pick that one of those reads marks refused stays on screen with its reason (the grid shows a pick whatever its
     // mark). Null when nothing is waiting.
     const pruneFromRef = useRef<number | null>(null);
-
-    // Auto: the ranking on screen, the records of every photo it has named (a picked suggestion keeps its tile
-    // when the strip clears), and the failure of the last press. An answer is kept only while the epoch it
-    // was asked in is current: a Refresh, a refreshed submit or closing the modal ends it.
-    const { suggest: runSuggest, loading: suggesting } = useSuggestPhotos();
-    const [suggested, setSuggested] = useState<Suggested | null>(null);
-    const [suggestedKnown, setSuggestedKnown] = useState<ReadonlyMap<string, LibraryPhoto>>(new Map());
-    // The member of the last answer that named one: it survives the strip clearing, so picks keep their thumbnails.
-    const [suggestedMemberId, setSuggestedMemberId] = useState<string | null>(null);
-    const [suggestFailure, setSuggestFailure] = useState<string | null>(null);
-    // The ids Auto has named since the last listing read, in order: the next press asks for the ones after them.
-    const [shownIds, setShownIds] = useState<string[]>([]);
-    // Every id picked in this opening, in first-pick order: while idle the grid keeps each one's tile in place
-    // when it is unpicked, so the tile (and the focus on it) stays and the pick can be made again. The state
-    // remembers the ids once they are unpicked; a pick is shown in the render that makes it.
-    const [idleSeen, setIdleSeen] = useState<string[]>([]);
-    useEffect(() => {
-        setIdleSeen((prev) => {
-            const added = selected.filter((id) => !prev.includes(id));
-            return added.length > 0 ? [...prev, ...added] : prev;
-        });
-    }, [selected]);
-    const idleShown = [...idleSeen, ...selected.filter((id) => !idleSeen.includes(id))];
-    const suggestEpoch = useRef(0);
-    useEffect(
-        () => () => {
-            suggestEpoch.current += 1;
-        },
-        [],
-    );
 
     // Photos taken out of the pick stay on screen with their reason until the next listing replaces this one.
     const onScreen = state.status === 'ready' ? state.listing : null;
@@ -227,7 +183,8 @@ function PhotoSubmitBody({
         // `generation < from`: a guard for a read that has not landed yet (defence in depth). A preview, or a
         // listing still being read again, says nothing about what the challenge accepts yet, and the pick is what
         // is being sent while a submit is in flight.
-        if (from === null || state.status !== 'ready' || generation < from || checking || revalidating) return;
+        if (from === null || state.status !== 'ready' || picker.generation < from || checking || picker.revalidating)
+            return;
         if (submitting) return;
         pruneFromRef.current = null;
         if (!state.listing.allowedKnown) return;
@@ -237,54 +194,21 @@ function PhotoSubmitBody({
             const kept = prev.filter((id) => known.get(id)?.allowed !== false && !won.has(id));
             return kept.length === prev.length ? prev : kept;
         });
-    }, [state, known, generation, checking, revalidating, submitting]);
-
-    // The suggestions are of the listing they were ranked beside: a new read drops them, and an answer still on
-    // its way.
-    const clearSuggestions = () => {
-        suggestEpoch.current += 1;
-        setSuggested(null);
-        setSuggestFailure(null);
-        setShownIds([]);
-    };
+    }, [state, known, picker.generation, checking, picker.revalidating, submitting]);
 
     // After a Refresh answers, the pick is checked against the listing it brought, as after a refused submit.
     const refreshListing = () => {
-        setLoadAllReading(false);
-        clearSuggestions();
+        resetLoadAll();
         pruneFromRef.current = refresh();
     };
 
     const submit = () => {
         void (async () => {
             if ((await onSubmit(selected)) === 'refreshed') {
-                setLoadAllReading(false);
-                clearSuggestions();
+                resetLoadAll();
                 pruneFromRef.current = retry();
             }
         })();
-    };
-
-    const autoSuggest = async () => {
-        const epoch = suggestEpoch.current;
-        setSuggestFailure(null);
-        const result = await runSuggest(challengeId, usage, shownIds);
-        if (epoch !== suggestEpoch.current) return;
-        if (!result.success) {
-            setSuggested(null);
-            setSuggestFailure(result.error);
-            // Every photo that fits has been shown: the next press starts again from the best.
-            if (result.error === 'no-more-suggestions') setShownIds([]);
-            return;
-        }
-        // At the cap the list is dropped, as at the end of the photos: a longer one would be refused.
-        const shown = [...shownIds, ...result.photos.map((photo) => photo.id)];
-        setShownIds(shown.length >= MAX_SUGGEST_EXCLUDE ? [] : shown);
-        setSuggested({ ...result, rankOffset: shownIds.length });
-        if (result.memberId !== null) setSuggestedMemberId(result.memberId);
-        setSuggestedKnown(
-            (prev) => new Map([...prev, ...result.photos.map((photo): [string, LibraryPhoto] => [photo.id, photo])]),
-        );
     };
 
     // Adds the best suggestions not picked yet to the free slots, never taking a hand pick out. With one slot
@@ -324,32 +248,8 @@ function PhotoSubmitBody({
     const locked = checking || submitting;
     const lockedKey = submitting ? 'app.pickTileSubmitting' : 'app.pickTileLocked';
     const over = selected.length > max;
-    // Add suggestions has nothing to do when every suggestion is picked already; with one slot it swaps in #1,
-    // so it has nothing to do only when #1 is the whole pick.
-    const nothingToAdd =
-        suggested !== null &&
-        (max === 1
-            ? selected.length === 1 && selected[0] === suggested.photos[0]?.id
-            : suggested.photos.every((photo) => selected.includes(photo.id)));
     // With one slot the modal swaps the pick, so nothing is ever "full".
     const full = max !== 1 && selected.length >= max;
-    // Once a set has been shown, the button pages on to the next-best ones.
-    const autoKey = shownIds.length > 0 ? 'app.pickAutoNext' : 'app.pickAuto';
-    let autoStatus = '';
-    if (suggesting) autoStatus = t(texts.autoRunning);
-    else if (suggested) autoStatus = interp(t('app.pickSuggestedCount'), { count: suggested.photos.length });
-    // Load all waits for any read, and for a submit, as Refresh does.
-    const loadAllHeld = reading || submitting;
-    const loadAllBusy = reading && loadAllReading;
-    const search = (
-        <SearchForm
-            key={searchKey}
-            onSearch={(term) => {
-                setLoadAllReading(false);
-                void load(term);
-            }}
-        />
-    );
     return (
         <div className="space-y-3">
             {notice && (
@@ -357,73 +257,26 @@ function PhotoSubmitBody({
                     <span>{notice}</span>
                 </div>
             )}
-            <p className="text-base-content/70 text-xs">{t(texts.help)}</p>
-            <div className="space-y-1">
-                <div className="flex flex-wrap items-start gap-2">
-                    <div className="min-w-48 flex-1">{search}</div>
-                    <button
-                        type="button"
-                        className={`btn btn-outline btn-sm ${loadAllHeld ? 'btn-disabled' : ''}`}
-                        // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body>.
-                        aria-disabled={loadAllHeld}
-                        aria-busy={loadAllBusy}
-                        onClick={() => {
-                            if (loadAllHeld) return;
-                            setLoadAllReading(true);
-                            setSearchKey((key) => key + 1);
-                            void load('');
-                        }}
-                    >
-                        <BusyContent busy={loadAllBusy} label={t('app.pickLoadAll')}>
-                            {t('app.pickLoadAll')}
-                        </BusyContent>
-                    </button>
-                    <button
-                        type="button"
-                        className={`btn btn-sm ${suggesting ? 'btn-disabled' : ''}`}
-                        // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body>.
-                        aria-disabled={suggesting}
-                        aria-busy={suggesting}
-                        onClick={() => {
-                            if (!suggesting) void autoSuggest();
-                        }}
-                    >
-                        <BusyContent busy={suggesting} label={t(autoKey)}>
-                            {t(autoKey)}
-                        </BusyContent>
-                    </button>
-                </div>
-                <p className="text-base-content/70 text-xs">{t(texts.autoHelp)}</p>
-            </div>
-            <p className="text-xs" role="status">
-                {interp(t(over ? texts.overCap : texts.count), { count: selected.length, max })}
-            </p>
-            {/* Always mounted, so a screen reader announces the text that arrives in it. The count of a finished
-                ranking is read out only: the strip shows it. */}
-            <p role="status" aria-live="polite" className={suggesting || !suggested ? 'text-xs' : 'sr-only'}>
-                {autoStatus}
-            </p>
-            {suggestFailure && (
-                <div role="alert" className="alert alert-error py-2 text-sm">
-                    <span>{suggestErrorText(suggestFailure, t)}</span>
-                </div>
-            )}
-            {suggested && (
-                <SuggestedStrip
-                    photos={suggested.photos}
-                    rankOffset={suggested.rankOffset}
-                    memberId={suggested.memberId}
-                    statsLimited={suggested.statsLimited}
-                    selected={selected}
-                    atCap={full}
-                    fullKey={texts.full}
-                    locked={locked}
-                    lockedKey={lockedKey}
-                    addDisabled={submitting || checking || full || nothingToAdd}
-                    onToggle={toggle}
-                    onAdd={() => addSuggestions(suggested.photos)}
-                />
-            )}
+            <PhotoPickerToolbar
+                picker={picker}
+                selected={selected}
+                canSuggest
+                held={submitting}
+                locked={locked}
+                lockedKey={lockedKey}
+                fullKey={texts.full}
+                helpKey={texts.help}
+                autoHelpKey={texts.autoHelp}
+                autoRunningKey={texts.autoRunning}
+                atCap={full}
+                addPolicy={max === 1 ? 'swap-one' : 'append'}
+                onAdd={addSuggestions}
+                onToggle={toggle}
+            >
+                <p className="text-xs" role="status">
+                    {interp(t(over ? texts.overCap : texts.count), { count: selected.length, max })}
+                </p>
+            </PhotoPickerToolbar>
             <PhotoGrid
                 state={state}
                 known={known}
@@ -432,8 +285,8 @@ function PhotoSubmitBody({
                 locked={locked}
                 lockedKey={lockedKey}
                 hasChallenge
-                revalidating={revalidating}
-                recheckFailed={recheckFailed}
+                revalidating={picker.revalidating}
+                recheckFailed={picker.recheckFailed}
                 submit
                 refreshDisabled={submitting}
                 onToggle={toggle}
@@ -445,9 +298,9 @@ function PhotoSubmitBody({
                 blockedIds={blocked?.ids}
                 blockedKey={blocked?.reasonKey}
                 numbered={false}
-                extraPhotos={suggestedKnown}
-                idleMemberId={suggestedMemberId}
-                idleIds={idleShown}
+                extraPhotos={picker.suggestedKnown}
+                idleMemberId={picker.suggestedMemberId}
+                idleIds={picker.idleShown}
                 idleWithPicksKey={texts.idleWithPicks}
                 keepIds={keepIds}
             />

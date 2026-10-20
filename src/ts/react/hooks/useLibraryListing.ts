@@ -170,8 +170,8 @@ export function useLibraryListing(
         return generationRef.current + 1;
     }, [refreshRead]);
 
-    // A member the listing could not name but a later check did: put it in the listing on screen,
-    // without reading the library again.
+    // A member the listing could not name but a later check did (the chooser's Retry, or the member check on
+    // its opening): put it in the listing on screen, without reading the library again.
     const setMember = useCallback((memberId: string) => {
         memberRef.current = memberId;
         rememberCurrentMember(memberId);

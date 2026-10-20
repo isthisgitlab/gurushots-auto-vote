@@ -818,8 +818,12 @@ export const app = {
     chosenPhotosOnlyReachHint:
         'This applies to every challenge it covers: auto-join and auto-submit skip each challenge that has no usable chosen photo.',
     photoChooserTitle: 'Choose photos',
-    photoChooserHelp:
-        "The app uses these first, and they must still pass your tag filters. It ranks them the way it ranks its own picks, or goes by the numbers shown here when “Use Chosen Photos in the order I picked them” is on (Auto-Submit settings: the global defaults, a challenge rule, or the challenge's own settings once it is joined).",
+    photoChooserHelpAuto:
+        "The app uses these photos first, and they must still pass your tag filters. It ranks them the way it ranks its own picks, or goes by the numbers shown here when “Use Chosen Photos in the order I picked them” is on (Auto-Submit settings: the global defaults, a challenge rule, or this challenge's own settings). Nothing is read until you load, search or press Auto.",
+    photoChooserHelpChallenge:
+        "The app uses these photos first, and they must still pass your tag filters. It ranks them the way it ranks its own picks, or goes by the numbers shown here when “Use Chosen Photos in the order I picked them” is on (Auto-Submit settings: the global defaults, a challenge rule, or this challenge's own settings once it is joined). Nothing is read until you load or search.",
+    photoChooserHelpNoChallenge:
+        'The app uses these photos first, and they must still pass your tag filters. It ranks them the way it ranks its own picks, or goes by the numbers shown here when “Use Chosen Photos in the order I picked them” is on (Auto-Submit settings: the global defaults or a challenge rule). Which photos a challenge accepts is checked when they are entered. Nothing is read until you load or search.',
     photoChooserSearchLabel: 'Search your photos by tag',
     photoChooserSearchPlaceholder: 'e.g. sunset…',
     photoChooserSearch: 'Search',
@@ -886,10 +890,18 @@ export const app = {
     chosenPhotosOtherAccountCount: '{count} photo(s) saved under another account',
     photoChooserInheritNote:
         "Saving with nothing chosen removes this challenge's own list, so it uses the list from your settings or rules again.",
-    photoChooserSaveWaits:
-        'Saving waits until your photos have loaded, so the app can check which account the list belongs to.',
-    photoChooserSaveWaitsError:
-        'Saving is held until your photos load, so the app can check which account the list belongs to. Press Retry above.',
+    photoChooserIdle: 'Your photos are not loaded yet. Load them all or search.',
+    photoChooserIdleAuto: 'Your photos are not loaded yet. Load them all, search, or press Auto.',
+    photoChooserIdlePicks:
+        'Your chosen photos stay picked. Load all photos or search to see the rest of your library and check them.',
+    photoChooserIdlePicksAuto:
+        'Your chosen photos stay picked. Load all photos, search, or press Auto to see more of your library.',
+    photoChooserAutoHelp:
+        'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is saved. Press it again for the next ones.',
+    photoChooserAutoRunning: 'Ranking your photos… this can take a minute. Nothing is saved.',
+    photoChooserCheckingMember: 'Checking which account these photos belong to…',
+    photoChooserSavedTileLabel: 'Chosen photo {id}: {reason}',
+    photoChooserSavedTileNote: 'Not loaded yet',
     photoChooserSaveChecking: 'Checking which account this list belongs to…',
     photoChooserSaveCheckFailed:
         'The account check failed, so saving is held to protect your list. Press Retry again shortly.',
@@ -901,13 +913,11 @@ export const app = {
         'Reading your saved list failed again, so saving stays held to protect it. Press Retry again shortly.',
     photoChooserSaveNotLoggedIn:
         "You're signed out, so the account can't be checked. Log in again, then reopen the chooser.",
-    photoChooserSaveNoContextHeld:
-        "Saving is held: without an active or open challenge the app can't check which account this list belongs to. Close the chooser and join a challenge first.",
+    photoChooserSaveOwnerReadFailed:
+        'Which account saved this list could not be read, so saving is held to protect it. Press Retry to read it again.',
     photoChooserClearHeld: "Clear is unavailable until your saved list has been read, so a late read can't undo it.",
     photoChooserSaveUnconfirmed:
-        "Couldn't confirm which account this list belongs to, so saving is held to protect it. Press Retry, or close and reopen the chooser.",
-    photoChooserSaveNoContext:
-        "Saving is blocked: without an active or open challenge the app can't check which account this list belongs to. Clear the list to save, or join a challenge first.",
+        'The account that saved this list is not on record, so saving is held to protect it. Press Retry, or close and reopen the chooser.',
     photoChooserSaveError: "The chosen photos weren't saved because the setting couldn't be written. Try again.",
     photoChooserDiscardTitle: 'Discard your changes?',
     photoChooserDiscardText:

@@ -38,6 +38,7 @@ beforeEach(() => {
     mockApi.getTitleProfile.mockReset().mockResolvedValue(null);
     mockApi.getChallengeOverrides.mockResolvedValue({});
     mockApi.getSetting.mockResolvedValue('');
+    mockApi.confirmAccount.mockReset().mockResolvedValue({ success: true, memberId: 'c'.repeat(32) });
     mockApi.getLibraryPhotos.mockResolvedValue(
         invalid({
             success: true,
@@ -53,9 +54,13 @@ beforeEach(() => {
     );
 });
 
-test('the chooser reads the library through the challenge being edited, and the pick becomes an override', async () => {
+test('the chooser reads the library through the challenge being edited, on demand, and the pick becomes an override', async () => {
     render(<ChallengeSettingsModal isOpen onClose={jest.fn()} challengeId="123" challengeTitle="Sea" />);
     fireEvent.click(await screen.findByRole('button', { name: 'app.choosePhotos' }));
+    // Nothing is read on open: Load all asks.
+    await screen.findByRole('button', { name: 'app.pickLoadAll' });
+    expect(mockApi.getLibraryPhotos).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
     await waitFor(() => expect(mockApi.getLibraryPhotos).toHaveBeenCalledWith('123', undefined, 'cached', 'submit'));
     fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserTileLabel' }));
     fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
