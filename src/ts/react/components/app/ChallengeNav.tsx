@@ -26,7 +26,7 @@ function ChipDot({ ringed, children }: { ringed: boolean; children: ComponentChi
     return <span className="inline-flex rounded-selector ring-2 ring-base-100">{children}</span>;
 }
 
-/** One challenge's chip: its title, the status dots and the marker of what customizes it. */
+/** One challenge's chip: its title, the status dots, a "T" badge on a team match and the marker of what customizes it. */
 function NavChip({
     challenge: c,
     kind,
@@ -39,6 +39,7 @@ function NavChip({
     const { t } = useTranslation();
     const { manual, automatic, byRule } = customizationOf(kind);
     const hint = [
+        c?.teamMatch && t('app.teamChallenge'),
         manual && t('app.customSettingsHint'),
         automatic && t('app.titleRuleProfile'),
         byRule && t('app.ruleSettingsHint'),
@@ -60,12 +61,18 @@ function NavChip({
                     <PulseDot variant="error" pulse={false} size="status-sm" />
                 </ChipDot>
             )}
+            {c?.teamMatch && (
+                <span aria-hidden="true" className="badge badge-xs badge-primary mr-1">
+                    T
+                </span>
+            )}
             {manual && <span aria-hidden="true">⚙️ </span>}
             {automatic && <span aria-hidden="true">🔄 </span>}
             {byRule && <span aria-hidden="true">📏 </span>}
             <ChipTitle hint={hint}>{c?.title}</ChipTitle>
             {boostOpen && <span className="sr-only"> ({t('app.boostOpenBadge')})</span>}
             {lowExposure && <span className="sr-only"> ({t('app.lowExposure')})</span>}
+            {c?.teamMatch && <span className="sr-only"> ({t('app.teamChallenge')})</span>}
             {hint && <span className="sr-only"> ({hint})</span>}
         </ChallengeChip>
     );
@@ -82,6 +89,9 @@ function NavChip({
  * (a challenge with both shows both icons on the info fill). Values a rule sets directly
  * that matter after the join (and nothing else) get a secondary fill and 📏. The icons and
  * tooltip identify the source without relying on colour alone (utils/customizationTone).
+ *
+ * A team-match challenge (challenge.teamMatch, the same field behind ChallengeBadgeRow's
+ * 👥 badges) carries a small "T" badge before the title.
  *
  * Each chip also leads with a status dot — pulsing blue for an open boost
  * window, red for low exposure (utils/challengeAlerts) — so the whole

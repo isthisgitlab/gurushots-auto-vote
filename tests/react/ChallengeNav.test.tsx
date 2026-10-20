@@ -7,6 +7,7 @@
  *   - clicking an entry scrolls the matching challenge-<id> element into view
  *   - challenges with a per-challenge override are marked, others are not
  *   - the marker refreshes when a settings-changed event fires
+ *   - a team-match challenge carries the T badge with sr-only text, others do not
  */
 
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
@@ -151,6 +152,30 @@ describe('ChallengeNav', () => {
         expect(joinOnly.textContent).not.toMatch(/📏/);
         expect(ruled.className).toContain('btn-secondary');
         expect(joinOnly.className).not.toMatch(/btn-(info|accent|secondary)/);
+    });
+
+    test('marks a team-match challenge with the T badge and sr-only text, and others not', () => {
+        const team = (id: number, title: string) =>
+            invalid<Challenge>({
+                id,
+                title,
+                teamMatch: { us: { name: 'Us', votes: 3 }, them: { name: 'Them', votes: 1 } },
+            });
+        render(<ChallengeNav challenges={[team(11, 'Team'), challenge(12, 'Solo')]} />);
+
+        const teamChip = screen.getByRole('button', { name: /Team/ });
+        const soloChip = screen.getByRole('button', { name: /Solo/ });
+
+        const badge = teamChip.querySelector('.badge');
+        expect(badge).not.toBeNull();
+        expect(badge!.getAttribute('aria-hidden')).toBe('true');
+        expect(badge!.textContent).toBe('T');
+        expect(badge!.className).toContain('badge-primary');
+        expect(teamChip.textContent).toContain('app.teamChallenge');
+        expect(teamChip.querySelector('.truncate')!.getAttribute('title')).toContain('app.teamChallenge');
+
+        expect(soloChip.querySelector('.badge')).toBeNull();
+        expect(soloChip.textContent).not.toContain('app.teamChallenge');
     });
 
     test('rings the low-exposure dot on a coloured chip, not on a plain one', async () => {

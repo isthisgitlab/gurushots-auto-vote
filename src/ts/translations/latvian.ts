@@ -788,6 +788,7 @@ export const app = {
     teamMatchAhead: 'vadībā',
     teamMatchBehind: 'atpaliek',
     teamMatchTied: 'neizšķirts',
+    teamChallenge: 'Komandu mačs',
     customBadge: 'pielāgots',
     customSettingsHint: 'Ir pielāgoti uzstādījumi',
     mustIncludeTags: 'Obligātie tagi',

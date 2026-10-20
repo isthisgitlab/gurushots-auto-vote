@@ -782,6 +782,7 @@ export const app = {
     teamMatchAhead: 'ahead',
     teamMatchBehind: 'behind',
     teamMatchTied: 'tied',
+    teamChallenge: 'Team match',
     customBadge: 'custom',
     customSettingsHint: 'Has custom settings',
     mustIncludeTags: 'Must Include Tags',
