@@ -72,7 +72,6 @@ function NavChip({
             <ChipTitle hint={hint}>{c?.title}</ChipTitle>
             {boostOpen && <span className="sr-only"> ({t('app.boostOpenBadge')})</span>}
             {lowExposure && <span className="sr-only"> ({t('app.lowExposure')})</span>}
-            {c?.teamMatch && <span className="sr-only"> ({t('app.teamChallenge')})</span>}
             {hint && <span className="sr-only"> ({hint})</span>}
         </ChallengeChip>
     );

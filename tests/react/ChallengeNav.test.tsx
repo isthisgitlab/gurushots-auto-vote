@@ -171,7 +171,8 @@ describe('ChallengeNav', () => {
         expect(badge!.getAttribute('aria-hidden')).toBe('true');
         expect(badge!.textContent).toBe('T');
         expect(badge!.className).toContain('badge-primary');
-        expect(teamChip.textContent).toContain('app.teamChallenge');
+        // The label reaches screen readers once, through the hint's sr-only span.
+        expect(teamChip.textContent?.match(/app\.teamChallenge/g)).toHaveLength(1);
         expect(teamChip.querySelector('.truncate')!.getAttribute('title')).toContain('app.teamChallenge');
 
         expect(soloChip.querySelector('.badge')).toBeNull();
