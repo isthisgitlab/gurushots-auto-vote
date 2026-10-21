@@ -7,6 +7,7 @@ import * as logger from '../../logger';
 import { simulateApiResponse, mockMethod } from '../simulate';
 import { HOUR, DAY } from '../time';
 import { SUGGESTED_PHOTO_IDS, hexPhotoId } from '../photoLibrary';
+import { LIBRARY_ID_RE, MAX_PER_CHALLENGE } from '../../strategies/real/suggestedPhotos';
 import type * as joinModule from '../../api/join';
 import type { Prize } from '../../types/gurushots';
 
@@ -240,10 +241,6 @@ const SUGGESTED_IDS_BY_CHALLENGE: Record<string, string[]> = {
     ],
 };
 
-// The shape a real photo id answers to, and how many suggestions one challenge carries.
-const PHOTO_ID_SHAPE = /^[0-9a-f]{32}$/;
-const MAX_SUGGESTED_PHOTOS = 20;
-
 /** The mock counterpart's signature, mirroring the real getSuggestedPhotoIds. */
 type GetSuggestedPhotoIds = (token: string, challengeId: string | number) => Promise<string[]>;
 
@@ -261,7 +258,7 @@ const getSuggestedPhotoIds: GetSuggestedPhotoIds = mockMethod(
     async (_token, challengeId) => {
         await simulateApiResponse({}, 150);
         const pool = SUGGESTED_IDS_BY_CHALLENGE[String(challengeId)] ?? [];
-        return pool.filter((id) => PHOTO_ID_SHAPE.test(id)).slice(0, MAX_SUGGESTED_PHOTOS);
+        return pool.filter((id) => LIBRARY_ID_RE.test(id)).slice(0, MAX_PER_CHALLENGE);
     },
 );
 

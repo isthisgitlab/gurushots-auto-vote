@@ -479,6 +479,37 @@ describe('challenges', () => {
                 expect(challenge.member?.turbo).toBeUndefined();
             });
 
+            test('a tier whose prizes are not an array of plain objects loses the field; so does a non-array first_prizes', async () => {
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [{ id: 1, title: 'A' }],
+                });
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        {
+                            id: 1,
+                            first_prizes: {},
+                            achievements_and_prizes: [
+                                { title: 'NoPrizes', rank: null, prizes: {} },
+                                { title: 'JunkPrize', prizes: ['bad'] },
+                                { title: 'Ok', prizes: [{ type: 'COINS', amount: 5 }] },
+                            ],
+                        },
+                    ],
+                });
+
+                const result = await getActiveChallenges(mockToken);
+
+                const challenge = result.challenges[0];
+                expect(challenge.first_prizes).toBeUndefined();
+                expect(challenge.achievements_and_prizes).toEqual([
+                    { title: 'NoPrizes', rank: null },
+                    { title: 'JunkPrize' },
+                    { title: 'Ok', prizes: [{ type: 'COINS', amount: 5 }] },
+                ]);
+                expect(challenge.achievements_and_prizes?.[0]).not.toHaveProperty('prizes');
+                expect(challenge.achievements_and_prizes?.[1]).not.toHaveProperty('prizes');
+            });
+
             test('the benchmark merge creates member / ranking / total when the mobile read lacks them', async () => {
                 const benchmark = [{ benchmark: '1', score: '' }];
                 const webBenchmark = { id: 0, member: { ranking: { total: { benchmark } } } };

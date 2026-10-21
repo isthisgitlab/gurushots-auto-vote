@@ -1,8 +1,9 @@
 /**
  * Benchmark-challenge formatting shared by the detailed card and the CLI status: the ranking
- * total's benchmark rows — the server sends `[{ benchmark: "1" | "10" | "100", score: "<votes>" }]`
- * — parsed to integers, and the gap the member still has to the next group. Every field is read
- * from a server payload, so each one is checked and a malformed one shows nothing.
+ * total's benchmark rows — the server sends `[{ benchmark: "1" | "10" | "100", score: "<votes>" }]`,
+ * where `score` is the vote count AT that rank — parsed to integers, and the gap of votes still
+ * needed to PASS it. Every field is read from a server payload, so each one is checked and a
+ * malformed one shows nothing.
  */
 
 /** One benchmark row of a ranking total, as the API types it. */
@@ -30,16 +31,23 @@ const parseBenchmarkScores = (rows: BenchmarkRow[] | undefined): BenchmarkScores
 };
 
 /**
- * The gap under the benchmark scores: to the top 100 while the rank sits outside it, else to the
- * next closer group (a rank of 10 or better chases "1", of 100 or better "10"). At rank 1, when the
- * votes already reach the score, or when its row was unreadable, there is no gap to chase.
+ * The benchmark group a rank sits under: the top 100 while the rank sits outside it, else the next
+ * closer group (a rank of 10 or better chases "1", of 100 or better "10"). Rank 1 has none.
+ */
+const benchmarkTarget = (rank: number): 1 | 10 | 100 | null =>
+    rank > 100 ? 100 : rank > 10 ? 10 : rank > 1 ? 1 : null;
+
+/**
+ * The gap under the benchmark scores: to the group `benchmarkTarget` names, where the score is the
+ * vote count AT that rank — so the gap counts the votes needed to PASS it, `score − votes + 1`.
+ * No gap at rank 1, none once the votes are already past the score, none when the row was unreadable.
  */
 const benchmarkGap = (
     rank: number,
     votes: number,
     scores: BenchmarkScores,
 ): { target: 1 | 10 | 100; n: number } | null => {
-    const target = rank > 100 ? 100 : rank > 10 ? 10 : rank > 1 ? 1 : null;
+    const target = benchmarkTarget(rank);
     if (target === null) return null;
     const score = scores[target];
     if (score === undefined) return null;
@@ -47,4 +55,4 @@ const benchmarkGap = (
     return n > 0 ? { target, n } : null;
 };
 
-export { benchmarkGap, parseBenchmarkScores };
+export { benchmarkGap, benchmarkTarget, parseBenchmarkScores };

@@ -42,8 +42,9 @@ export interface JoinDeps {
     rankVisually?: typeof rankVisually;
     /**
      * The library photos GuruShots itself suggests for an UN-joined challenge (suggestions exist only for
-     * challenges the member has not joined). Optional: absent, or a read that fails, means no suggestions and
-     * leaves the photo pick unaffected.
+     * challenges the member has not joined). The cache behind it is filled only by an active-challenge read
+     * in the same process, so a CLI `join` or a headless pass with no prior read gets no tiebreak.
+     * Optional: absent, or a read that fails, means no suggestions and leaves the photo pick unaffected.
      */
     getSuggestedPhotoIds?: (token: string, challengeId: string | number) => Promise<string[]>;
 }

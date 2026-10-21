@@ -71,6 +71,17 @@ const isMemberTurbo = (value: unknown): value is MemberTurbo => isPlainObject(va
 const isObjectArray = <T extends object>(value: unknown): value is T[] =>
     Array.isArray(value) && value.every((element) => isPlainObject(element));
 
+/**
+ * The tier with its `prizes` kept only when that, too, is an array of plain objects — a tier whose
+ * `prizes` is anything else drops the field, so a `{}` never reaches the renderer's `.map`.
+ */
+const readPrizeTier = (tier: PrizeTier): PrizeTier => {
+    if (isObjectArray<Prize>(tier.prizes)) return tier;
+    const narrowed: PrizeTier = { ...tier };
+    delete narrowed.prizes;
+    return narrowed;
+};
+
 /** One benchmark row, as `RankingTotal.benchmark` carries it; scores stay strings, parsed at display time. */
 type BenchmarkRow = NonNullable<RankingTotal['benchmark']>[number];
 
@@ -119,7 +130,7 @@ const readOverlay = (element: Record<string, unknown>): WebChallengeOverlay => {
     if (typeof element.new_ranking_enable === 'boolean') overlay.new_ranking_enable = element.new_ranking_enable;
     if (isObjectArray<Prize>(element.first_prizes)) overlay.first_prizes = element.first_prizes;
     if (isObjectArray<PrizeTier>(element.achievements_and_prizes))
-        overlay.achievements_and_prizes = element.achievements_and_prizes;
+        overlay.achievements_and_prizes = element.achievements_and_prizes.map(readPrizeTier);
     return overlay;
 };
 

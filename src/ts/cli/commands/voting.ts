@@ -15,7 +15,7 @@ import { getMiddleware } from '../../apiFactory';
 import { createScheduler } from '../../scheduling/runScheduler';
 import { formatDateTime } from '../../dateFormat';
 import { formatDuration } from '../../format/duration';
-import { benchmarkGap, parseBenchmarkScores } from '../../format/benchmark';
+import { benchmarkGap, benchmarkTarget, parseBenchmarkScores } from '../../format/benchmark';
 import { stripTerminalControl } from '../../format/logSafe';
 import { isInteger } from '../../numbers';
 import { printableChallengeId } from './pin';
@@ -243,21 +243,23 @@ const logPinnedEntries = (userSettings: ReturnType<typeof settings.loadSettings>
 
 /**
  * One challenge's tail in the Standing section: `rank <n>`, plus — when they can be read — the
- * benchmark its rank sits under and the votes still missing toward it (`top <n> needs <gap> votes`).
- * Benchmark scores arrive as strings and count only when they parse to whole numbers. No gap at
- * rank 1, none once the benchmark is reached; with the votes unreadable, the benchmark's own score
- * is all that can be said.
+ * benchmark its rank sits under (the group the format helper names) and the votes still missing
+ * to PASS it (`top <n> needs <gap> votes`). Benchmark scores arrive as strings and count only
+ * when they parse to whole numbers; a zero vote count is as readable as any other. No gap at
+ * rank 1, none once the votes are already past the benchmark; with the votes unreadable, the
+ * benchmark's own score is all that can be said.
  */
 const rankingTail = (total: RankingTotal): string | null => {
     const rank = total.rank;
     if (!isInteger(rank) || rank <= 0) return null;
     const scores = parseBenchmarkScores(total.benchmark);
-    const benchmark = rank <= 10 ? 1 : rank <= 100 ? 10 : 100;
-    const score = scores[benchmark];
-    if (!isInteger(score) || rank === 1) return `rank ${rank}`;
+    const target = benchmarkTarget(rank);
+    if (target === null) return `rank ${rank}`;
+    const score = scores[target];
+    if (!isInteger(score)) return `rank ${rank}`;
     const votes = total.votes;
-    if (!isInteger(votes) || votes <= 0) {
-        return `rank ${rank} — top ${benchmark} at ${score} votes`;
+    if (!isInteger(votes)) {
+        return `rank ${rank} — top ${target} at ${score} votes`;
     }
     const gap = benchmarkGap(rank, votes, scores);
     return gap !== null ? `rank ${rank} — top ${gap.target} needs ${gap.n} votes` : `rank ${rank}`;

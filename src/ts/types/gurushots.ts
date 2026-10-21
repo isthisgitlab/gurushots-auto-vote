@@ -52,9 +52,10 @@ export interface RankingTotal {
     guru_picks?: number;
     next_message?: string;
     /**
-     * The member's rows in a benchmark challenge: the vote count needed for top
-     * 1/10/100, keyed by `benchmark` `"1" | "10" | "100"`; `score` is a string,
-     * `""` when there is none.
+     * The member's rows in a benchmark challenge: for each of the top 1/10/100, the vote count AT
+     * that rank — `score` is what the rank's holder has, not a target to reach; the gap to it
+     * counts the votes needed to PASS it — keyed by `benchmark` `"1" | "10" | "100"`; `score` is
+     * a string, `""` when there is none.
      */
     benchmark?: Array<{ benchmark?: string; score?: string }>;
 }

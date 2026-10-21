@@ -170,7 +170,9 @@ const readMatch = (
         teamMatch: {
             us: { name: us.name, votes: us.votes },
             them: { name: them.name, votes: them.votes },
-            running: statusString === RUNNING_STATUS,
+            // Absent or non-string status is no answer: the flag stays absent ("absent means
+            // running") instead of reading as an explicit "not running".
+            ...(statusString === null ? {} : { running: statusString === RUNNING_STATUS }),
             me: teamStanding(us, them, meId),
         },
     };

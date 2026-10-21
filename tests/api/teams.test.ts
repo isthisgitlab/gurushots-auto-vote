@@ -80,13 +80,13 @@ describe('fetchActiveTeamMatch', () => {
     test('maps a joined team and its match, with us/them told apart by our team id', async () => {
         const result = await readWith(joined(), match([team(222, 'Poland Gurus', 8258), team(111, 'Home Team', 7514)]));
 
+        // No state in the body: no `running` key — unknown, not "not running" (the strict toEqual pins that).
         expect(result).toEqual({
             kind: 'match',
             challengeId: '135938',
             teamMatch: {
                 us: { name: 'Home Team', votes: 7514 },
                 them: { name: 'Poland Gurus', votes: 8258 },
-                running: false,
                 me: null,
             },
         });
@@ -101,7 +101,6 @@ describe('fetchActiveTeamMatch', () => {
             teamMatch: {
                 us: { name: 'Home Team', votes: 1 },
                 them: { name: 'Poland Gurus', votes: 2 },
-                running: false,
                 me: null,
             },
         });
@@ -310,6 +309,12 @@ describe('match status', () => {
 
         expect(teamMatch.running).toBe(true);
         expect(logger.__mockDebugFn).not.toHaveBeenCalled();
+    });
+
+    test('a body with no state leaves the running flag absent, never an explicit false', async () => {
+        const teamMatch = await teamMatchOf(joined(111, 'a1'), rosterMatch(usFive, themFour));
+
+        expect(teamMatch).not.toHaveProperty('running');
     });
 
     test('a non-RUNNING status is logged once per change, never per read', async () => {

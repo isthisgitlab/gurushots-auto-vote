@@ -1,7 +1,7 @@
 /**
  * format/benchmark: the ranking total's benchmark rows in the shape the server sends
- * (`benchmark: "1" | "10" | "100"`, `score` the votes to reach it, as text), and the gap
- * still missing to the next group.
+ * (`benchmark: "1" | "10" | "100"`, `score` the vote count AT that rank, as text), and the gap
+ * of votes still needed to PASS it.
  */
 
 import { benchmarkGap, parseBenchmarkScores } from '../../src/ts/format/benchmark';
@@ -51,9 +51,13 @@ describe('benchmarkGap', () => {
         expect(benchmarkGap(rank, 99, scores)).toEqual(expected);
     });
 
+    test('votes equal to the score sit AT the rank: one more vote passes it', () => {
+        expect(benchmarkGap(42, 120, { 10: 120 })).toEqual({ target: 10, n: 1 });
+    });
+
     test.each([
-        ['rank 1 has nothing left to reach', 1, 50, { 1: 300 }],
-        ['a benchmark already reached is no gap', 42, 200, { 10: 120 }],
+        ['rank 1 has no group left to chase', 1, 50, { 1: 300 }],
+        ['a benchmark already passed is no gap', 42, 200, { 10: 120 }],
         ['the benchmark row was unreadable', 42, 99, {}],
         ['the votes past the score', 214, 500, { 100: 312 }],
     ])('%s', (_name, rank, votes, scores) => {

@@ -10,9 +10,9 @@
  */
 
 // A library photo id is a 32-character lowercase hex string.
-const LIBRARY_ID_RE = /^[0-9a-f]{32}$/;
+export const LIBRARY_ID_RE = /^[0-9a-f]{32}$/;
 // The suggestion list can be long; the join's photo pick only needs a handful.
-const MAX_PER_CHALLENGE = 20;
+export const MAX_PER_CHALLENGE = 20;
 
 interface Slot {
     token: string;

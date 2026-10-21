@@ -227,12 +227,12 @@ describe('CLI status — Standing section', () => {
 
     test.each([
         [
-            'rank 1 has nothing left to reach',
+            'rank 1 has no group left to chase',
             { rank: 1, votes: 500, benchmark: [{ benchmark: '1', score: '50' }] },
             'rank 1',
         ],
         [
-            'a benchmark already reached shows no gap',
+            'a benchmark already passed shows no gap',
             { rank: 42, votes: 200, benchmark: [{ benchmark: '10', score: '120' }] },
             'rank 42',
         ],
@@ -259,20 +259,21 @@ describe('CLI status — Standing section', () => {
     });
 
     test('with the votes unreadable, the benchmark score is shown without a gap', async () => {
-        const lines = await withChallenges(
-            {
-                id: 1,
-                title: 'NoVotes',
-                member: { ranking: { total: { rank: 214, benchmark: [{ benchmark: '100', score: '312' }] } } },
-            },
-            {
-                id: 2,
-                title: 'ZeroVotes',
-                member: { ranking: { total: { rank: 30, votes: 0, benchmark: [{ benchmark: '10', score: '120' }] } } },
-            },
-        );
+        const lines = await withChallenges({
+            id: 1,
+            title: 'NoVotes',
+            member: { ranking: { total: { rank: 214, benchmark: [{ benchmark: '100', score: '312' }] } } },
+        });
         expect(lines).toContain('  • NoVotes — rank 214 — top 100 at 312 votes');
-        expect(lines).toContain('  • ZeroVotes — rank 30 — top 10 at 120 votes');
+    });
+
+    test('zero votes is a real count: the gap counts the votes to pass the benchmark', async () => {
+        const lines = await withChallenges({
+            id: 1,
+            title: 'ZeroVotes',
+            member: { ranking: { total: { rank: 30, votes: 0, benchmark: [{ benchmark: '10', score: '300' }] } } },
+        });
+        expect(lines).toContain('  • ZeroVotes — rank 30 — top 10 needs 301 votes');
     });
 
     test('a challenge with no readable rank, and one with no ranking at all, print no line', async () => {
