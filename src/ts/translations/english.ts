@@ -1302,7 +1302,7 @@ export const app = {
     prize: 'Prize',
     rank: 'Rank',
     // Challenge detail: benchmark scores, prize tiers, track badges
-    benchmarkScores: 'Top 1 / 10 / 100: {scores}',
+    benchmarkScore: 'Top {target}: {score}',
     benchmarkGap: '+{n} to top {target}',
     prizeTierTopPhotographer: 'Top photographer #{min}–{max}',
     prizeTierTopPhoto: 'Top photo #{min}–{max}',

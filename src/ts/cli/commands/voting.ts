@@ -15,6 +15,8 @@ import { getMiddleware } from '../../apiFactory';
 import { createScheduler } from '../../scheduling/runScheduler';
 import { formatDateTime } from '../../dateFormat';
 import { formatDuration } from '../../format/duration';
+import { benchmarkGap, parseBenchmarkScores } from '../../format/benchmark';
+import { stripTerminalControl } from '../../format/logSafe';
 import { isInteger } from '../../numbers';
 import { printableChallengeId } from './pin';
 import { openBoostWindows } from '../../voting/boostWindow';
@@ -249,17 +251,16 @@ const logPinnedEntries = (userSettings: ReturnType<typeof settings.loadSettings>
 const rankingTail = (total: RankingTotal): string | null => {
     const rank = total.rank;
     if (!isInteger(rank) || rank <= 0) return null;
-    const benchmark = rank <= 10 ? '1' : rank <= 100 ? '10' : '100';
-    const row = total.benchmark?.find((entry) => entry?.benchmark === benchmark);
-    // A number, whatever the server sent — an empty string would parse as 0, so it is refused first.
-    const score = typeof row?.score === 'string' && row.score !== '' ? Number(row.score) : Number.NaN;
+    const scores = parseBenchmarkScores(total.benchmark);
+    const benchmark = rank <= 10 ? 1 : rank <= 100 ? 10 : 100;
+    const score = scores[benchmark];
     if (!isInteger(score) || rank === 1) return `rank ${rank}`;
     const votes = total.votes;
     if (!isInteger(votes) || votes <= 0) {
         return `rank ${rank} — top ${benchmark} at ${score} votes`;
     }
-    const gap = score - votes + 1;
-    return gap > 0 ? `rank ${rank} — top ${benchmark} needs ${gap} votes` : `rank ${rank}`;
+    const gap = benchmarkGap(rank, votes, scores);
+    return gap !== null ? `rank ${rank} — top ${gap.target} needs ${gap.n} votes` : `rank ${rank}`;
 };
 
 /**
@@ -270,7 +271,7 @@ const rankingTail = (total: RankingTotal): string | null => {
 const teamMatchLine = (challenge: Challenge): string | null => {
     const match = challenge?.teamMatch;
     if (!match) return null;
-    const base = `  • ${challenge.title} — us ${match.us.votes}, them ${match.them.votes}`;
+    const base = `  • ${stripTerminalControl(challenge.title)} — us ${match.us.votes}, them ${match.them.votes}`;
     // Absent means running; an explicit false says the match is over.
     if (match.running === false) return `${base} — not running`;
     if (!match.me) return base;
@@ -369,9 +370,10 @@ const showStatus = async () => {
             const lines = challenges.flatMap((challenge) => {
                 const total = challenge?.member?.ranking?.total;
                 const tail = total ? rankingTail(total) : null;
-                return [tail === null ? null : `  • ${challenge.title} — ${tail}`, teamMatchLine(challenge)].filter(
-                    (line): line is string => line !== null,
-                );
+                return [
+                    tail === null ? null : `  • ${stripTerminalControl(challenge.title)} — ${tail}`,
+                    teamMatchLine(challenge),
+                ].filter((line): line is string => line !== null);
             });
             if (lines.length === 0) {
                 logger.withCategory('ui').info('  None');

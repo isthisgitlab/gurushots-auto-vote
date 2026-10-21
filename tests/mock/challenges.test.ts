@@ -34,9 +34,9 @@ describe('the benchmark, prize and flag fixtures', () => {
         const challenge = challenges.find((c) => c.title === 'Ultimate Exposure');
 
         expect(challenge?.member?.ranking?.total?.benchmark).toEqual([
-            { benchmark: 'Top 1', score: '1' },
-            { benchmark: 'Top 10', score: '10' },
-            { benchmark: 'Top 100', score: '100' },
+            { benchmark: '1', score: '1437' },
+            { benchmark: '10', score: '1187' },
+            { benchmark: '100', score: '782' },
         ]);
         expect(challenge?.guru_pick_enable).toBe(true);
         expect(challenge?.top_photographer_enable).toBe(true);
@@ -54,7 +54,7 @@ describe('the benchmark, prize and flag fixtures', () => {
         expect(challenge?.turbo_enable).toBe(false);
         expect(challenge?.member?.turbo).toBeUndefined();
         // A benchmark row whose score the server left empty.
-        expect(challenge?.member?.ranking?.total?.benchmark).toEqual([{ benchmark: 'Top 10', score: '' }]);
+        expect(challenge?.member?.ranking?.total?.benchmark).toEqual([{ benchmark: '10', score: '' }]);
         // A MEMBER-rank tier, an IMAGE-rank tier, a tier with no rank window, and a prize type nothing knows.
         const tiers = challenge?.achievements_and_prizes ?? [];
         expect(tiers.slice(0, 3).map((tier) => tier.rank?.type ?? null)).toEqual(['MEMBER', 'IMAGE', null]);

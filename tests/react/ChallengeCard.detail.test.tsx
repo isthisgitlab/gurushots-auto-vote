@@ -1059,9 +1059,9 @@ describe('benchmark scores and the gap to chase', () => {
     const rows = (over: Partial<Record<'one' | 'ten' | 'hundred', string>> = {}) =>
         (
             [
-                ['Top 1', over.one ?? '300'],
-                ['Top 10', over.ten ?? '200'],
-                ['Top 100', over.hundred ?? '100'],
+                ['1', over.one ?? '300'],
+                ['10', over.ten ?? '200'],
+                ['100', over.hundred ?? '100'],
             ] as const
         ).map(([benchmark, score]) => ({ benchmark, score }));
     const withBench = (total: RankingTotal, challenge = {}) =>
@@ -1077,40 +1077,42 @@ describe('benchmark scores and the gap to chase', () => {
         renderCard(withBench({ benchmark: rows() }));
 
         expect(
-            screen.getByText(`Top 1 / 10 / 100: 300 / 200 / 100 · +${(51).toLocaleString()} to top 100`),
+            screen.getByText(`Top 1: 300 · Top 10: 200 · Top 100: 100 · +${(51).toLocaleString()} to top 100`),
         ).toBeTruthy();
     });
 
     test('a score the server left empty or garbled drops out of the line', () => {
         const { unmount } = renderCard(
             withBench({
-                // A blank score, a garbled one, a group the card does not read, a row without a
-                // group, a row without a score, and a row that is not a row at all.
+                // A blank score, a garbled one, a group the card does not read, a "Top N" label the
+                // server never sends, a row without a group, a row without a score, and a row that
+                // is not a row at all.
                 benchmark: invalid<RankingTotal['benchmark']>([
                     ...rows({ one: '', ten: 'garbage' }),
                     { benchmark: 'Top 5', score: '9' },
-                    { benchmark: 'Top 10' },
+                    { benchmark: 'Top 10', score: '9' },
+                    { benchmark: '10' },
                     { score: '7' },
                     null,
                 ]),
             }),
         );
-        expect(screen.getByText(`Top 1 / 10 / 100: 100 · +${(51).toLocaleString()} to top 100`)).toBeTruthy();
+        expect(screen.getByText(`Top 100: 100 · +${(51).toLocaleString()} to top 100`)).toBeTruthy();
         unmount();
 
         // A benchmark block that is not a list is no benchmark block at all.
         renderCard(withBench({ benchmark: invalid<RankingTotal['benchmark']>(5) }));
-        expect(screen.queryByText(/Top 1 \/ 10 \/ 100/)).toBeNull();
+        expect(screen.queryByText(/Top \d+:/)).toBeNull();
     });
 
     test('a rank the panel cannot chase with (missing, or not a positive integer) shows the scores alone', () => {
         const noRank = renderCard(withBench({ rank: undefined, benchmark: rows() }));
-        expect(screen.getByText('Top 1 / 10 / 100: 300 / 200 / 100')).toBeTruthy();
+        expect(screen.getByText('Top 1: 300 · Top 10: 200 · Top 100: 100')).toBeTruthy();
         expect(screen.queryByText(/to top/)).toBeNull();
         noRank.unmount();
 
         renderCard(withBench({ votes: 50.5, benchmark: rows() }));
-        expect(screen.getByText('Top 1 / 10 / 100: 300 / 200 / 100')).toBeTruthy();
+        expect(screen.getByText('Top 1: 300 · Top 10: 200 · Top 100: 100')).toBeTruthy();
         expect(screen.queryByText(/to top/)).toBeNull();
     });
 
@@ -1120,7 +1122,7 @@ describe('benchmark scores and the gap to chase', () => {
     ])('%s', (_name, rank, expected) => {
         renderCard(withBench({ rank, benchmark: rows() }));
 
-        expect(screen.getByText(`Top 1 / 10 / 100: 300 / 200 / 100 · ${expected}`)).toBeTruthy();
+        expect(screen.getByText(`Top 1: 300 · Top 10: 200 · Top 100: 100 · ${expected}`)).toBeTruthy();
     });
 
     test.each([
@@ -1129,7 +1131,7 @@ describe('benchmark scores and the gap to chase', () => {
     ] as Array<[string, number, number]>)('%s: no gap', (_name, rank, votes) => {
         renderCard(withBench({ rank, votes, benchmark: rows() }));
 
-        expect(screen.getByText('Top 1 / 10 / 100: 300 / 200 / 100')).toBeTruthy();
+        expect(screen.getByText('Top 1: 300 · Top 10: 200 · Top 100: 100')).toBeTruthy();
         expect(screen.queryByText(/to top/)).toBeNull();
     });
 });

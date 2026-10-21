@@ -304,6 +304,17 @@ describe('CLI status — Standing section', () => {
         expect(lines).toContain('  • Both — us 1200, them 1100 — #2 of 5 active (+1 over standby)');
     });
 
+    test('a title carrying terminal control prints stripped, on the rank and the team-match lines', async () => {
+        const lines = await withChallenges({
+            id: 1,
+            title: 'Evil\u001b[31m\nShaw',
+            member: { ranking: { total: { rank: 214, votes: 99, benchmark: [{ benchmark: '100', score: '312' }] } } },
+            teamMatch: { us: { name: 'Ours', votes: 1 }, them: { name: 'Theirs', votes: 2 } },
+        });
+        expect(lines).toContain('  • Evil Shaw — rank 214 — top 100 needs 214 votes');
+        expect(lines).toContain('  • Evil Shaw — us 1, them 2');
+    });
+
     test.each([
         [
             'active with a cushion over standby',

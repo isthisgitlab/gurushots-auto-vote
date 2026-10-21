@@ -42,11 +42,12 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '18 votes to next level',
         },
-        // Benchmark challenge: a row per group, scores "1" / "10" / "100".
+        // Benchmark challenge: a row per group, the groups named as the server names them and the
+        // scores descending vote counts (the top 1 needs more votes than the top 10, and so on).
         benchmark: [
-            { benchmark: 'Top 1', score: '1' },
-            { benchmark: 'Top 10', score: '10' },
-            { benchmark: 'Top 100', score: '100' },
+            { benchmark: '1', score: '1437' },
+            { benchmark: '10', score: '1187' },
+            { benchmark: '100', score: '782' },
         ],
         guruPickEnable: true,
         topPhotographerEnable: true,
@@ -310,7 +311,7 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
             next_message: '1 vote to next level',
         },
         // A benchmark row whose score the server left empty.
-        benchmark: [{ benchmark: 'Top 10', score: '' }],
+        benchmark: [{ benchmark: '10', score: '' }],
         firstPrizes: [
             { type: 'CAMERA', amount: 1 },
             { type: 'EXPOSURE', amount: 500 },

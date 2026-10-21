@@ -13,6 +13,7 @@ import { EntryBadge } from './EntryBadge';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
 import { ChallengeTagBadges } from './ChallengeKindBadges';
 import { stringTags } from '../../../format/challengeListing';
+import { benchmarkGap, parseBenchmarkScores } from '../../../format/benchmark';
 import { CardDensityToggle } from './CardDensityToggle';
 import { FillButtons } from './ChallengeCardActions';
 import { InlineError } from '@/components/ui/InlineError';
@@ -39,44 +40,6 @@ export type EntryPinsState = ReturnType<typeof useEntryPinsModule.useEntryPins>;
 
 // The value line of a stat cell; Ends alone drops to text-xs, since a long date string needs the room.
 const STAT_VALUE = 'text-sm font-semibold tabular-nums';
-
-/** The benchmark groups the card reads, keyed by their "Top n" rank. */
-type BenchmarkScores = { 1?: number; 10?: number; 100?: number };
-
-/**
- * The benchmark scores of a ranking total as integers, keyed 1 / 10 / 100. A row the server left
- * blank or garbled — or a group the card does not read — drops out.
- */
-const benchmarkScores = (rows: RankingTotal['benchmark']): BenchmarkScores => {
-    const scores: BenchmarkScores = {};
-    for (const row of Array.isArray(rows) ? rows : []) {
-        const group = /^top\s*(\d+)$/i.exec(String(row?.benchmark ?? '').trim());
-        // Number('') is 0: a score the server left blank is unreadable, not zero.
-        const scoreText = String(row?.score ?? '').trim();
-        const score = scoreText === '' ? Number.NaN : Number(scoreText);
-        if (!group || !Number.isInteger(score)) continue;
-        if (group[1] === '1' || group[1] === '10' || group[1] === '100') scores[group[1]] = score;
-    }
-    return scores;
-};
-
-/**
- * The gap under the benchmark scores: to the top 100 while we are outside it, else to the next closer
- * group (rank 10 and better chases "1", rank 100 and better "10"). At rank 1, when the votes already
- * reach the score, or when its row was unreadable, there is no gap to chase.
- */
-const benchmarkGap = (
-    rank: number,
-    votes: number,
-    scores: BenchmarkScores,
-): { target: 1 | 10 | 100; n: number } | null => {
-    const target = rank > 100 ? 100 : rank > 10 ? 10 : rank > 1 ? 1 : null;
-    if (target === null) return null;
-    const score = scores[target];
-    if (score === undefined) return null;
-    const n = score - votes + 1;
-    return n > 0 ? { target, n } : null;
-};
 
 /**
  * One labelled cell of the detailed card's stat grids.
@@ -159,9 +122,9 @@ function DetailHeader({
 /**
  * User progress — full bar + level + next-level info. Rendered only once the
  * member has votes in the challenge. A benchmark challenge also reads the scores
- * to chase (`Top 1 / 10 / 100`) and, when the rank and votes can name one, the
- * gap to the next group. `levels_rank_enable: false` hides the level lines alone:
- * the rank, the votes and the bar are not level ranking.
+ * to chase (each "Top n" group labelled on its own) and, when the rank and votes
+ * can name one, the gap to the next group. `levels_rank_enable: false` hides the
+ * level lines alone: the rank, the votes and the bar are not level ranking.
  */
 function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; userProgress: RankingTotal }) {
     const { t } = useTranslation();
@@ -172,11 +135,14 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
         userProgress.level_name as string,
     );
     const showLevels = challenge.levels_rank_enable !== false;
-    const scores = benchmarkScores(userProgress.benchmark);
-    const listed = ([1, 10, 100] as const)
-        .map((group) => scores[group])
-        .filter((score) => score !== undefined)
-        .map((score) => score.toLocaleString());
+    const scores = parseBenchmarkScores(userProgress.benchmark);
+    const listed = ([1, 10, 100] as const).flatMap((group) => {
+        const score = scores[group];
+        // Each present group is labelled on its own, so one missing score cannot shift the rest under wrong labels.
+        return score === undefined
+            ? []
+            : [interp(t('app.benchmarkScore'), { target: group, score: score.toLocaleString() })];
+    });
     // The gap names a positive integer rank and vote count: anything else the server sends drops it.
     const rank = userProgress.rank;
     const votes = userProgress.votes;
@@ -212,7 +178,7 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
             </div>
             {(listed.length > 0 || gap !== null) && (
                 <div className="text-xs text-base-content/70 mb-1">
-                    {listed.length > 0 && interp(t('app.benchmarkScores'), { scores: listed.join(' / ') })}
+                    {listed.length > 0 && listed.join(' · ')}
                     {listed.length > 0 && gap !== null && ' · '}
                     {gap !== null && interp(t('app.benchmarkGap'), { n: gap.n.toLocaleString(), target: gap.target })}
                 </div>

@@ -70,16 +70,16 @@
                         "next_message": "18 votes to next level",
                         "benchmark": [
                             {
-                                "benchmark": "Top 1",
-                                "score": "1"
+                                "benchmark": "1",
+                                "score": "1437"
                             },
                             {
-                                "benchmark": "Top 10",
-                                "score": "10"
+                                "benchmark": "10",
+                                "score": "1187"
                             },
                             {
-                                "benchmark": "Top 100",
-                                "score": "100"
+                                "benchmark": "100",
+                                "score": "782"
                             }
                         ]
                     },
@@ -610,7 +610,7 @@
                         "next_message": "1 vote to next level",
                         "benchmark": [
                             {
-                                "benchmark": "Top 10",
+                                "benchmark": "10",
                                 "score": ""
                             }
                         ]
