@@ -36,7 +36,6 @@ export const logMessages = {
     m0dceb51716aa: 'Updated metadata for {0}: original exposure {1}%',
     m0fc649a6905e: 'emergencySubmit: submitted {0} entr{1} for {2} near deadline',
     m109401cd242b: 'Please specify a challenge',
-    m110c228a275f: 'Started with default settings; a copy of settings.json was kept at {0}.',
     m111666f74c7e:
         'Coins were charged for {0} but the join did not complete. Re-run "join {1} --yes" to retry the submit — you will NOT be charged again.',
     m112a7ffc5ce9: 'Error getting settings schema:',
@@ -125,7 +124,7 @@ export const logMessages = {
     m29a4a27aabbd:
         '⏰ Approaching pre-final-window top-up for "{0}" — next cycle in {1}s (capped to the {2}m pre-final-window boundary)',
     m29dd239731c5:
-        'settings.json could not be read; the import retries by itself, so start-fresh is not offered. Run "settings-recovery retry" now, or "settings-recovery start-fresh --force" for defaults anyway.',
+        'settings.json could not be read, so start-fresh is not offered. Run "settings-recovery retry" now, or "settings-recovery start-fresh --force" for defaults anyway.',
     m29e6f639d64d: 'Error handling preview-swap-photo request:',
     m2a0067d71800: 'To spend the swap, re-run: swap-back --challenge={0} --image={1} --yes',
     m2ab1aff25c5d: '{0} (submitted {1}, skipped {2})',
@@ -211,8 +210,6 @@ export const logMessages = {
     m4f653f002d6c: 'retrieved {0} images',
     m4fbfc26aa499: 'Main() call error details:',
     m4fd075672867: '=== API Factory Debug ===',
-    m5015fe021abd:
-        'Started with default settings; settings.json could not be read, so it was left as it is and no copy was kept.',
     m508c16d160a0: 'No version to skip',
     m50a824cabfb6: 'Unlock challenge ID: {0}',
     m50ad0ce53100: 'Please specify a profile name',
@@ -221,8 +218,6 @@ export const logMessages = {
     m5227d0d02e0e: 'Received SIGINT signal. Exiting...',
     m52a7d2a250a6: 'Token received: {0}',
     m532adbd169db: 'Could not save the title pins:',
-    m533f45aaffc8:
-        'The re-import did not work: {0} is missing, could not be read or converted, or the settings could not be saved. Nothing was changed; see the log for why (logs --settings)',
     m5353dba0a2a1: 'Headless {0} read failed:',
     m54885b4ee6c8: 'CLI Voting Process{0}',
     m54a0e8c17ebb: 'Error',
@@ -456,7 +451,6 @@ export const logMessages = {
     ma3ec8b21dab6: 'Applying boost to specific entry successfully',
     ma4a849154f5e: "Refused IPC 'logout' from untrusted frame",
     ma4cc2c7b75fe: 'Refused open-external-url for non-https URL: {0}',
-    ma4e5138b9a68: 'Started with default settings; there was no settings.json, so no copy was kept.',
     ma55da53ffbe9: '  (unavailable — {0})',
     ma60994855a5b: '❌ No token found for voting',
     ma630257923b5: 'stopForegroundService failed',

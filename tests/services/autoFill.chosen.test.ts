@@ -930,7 +930,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
         const skips = lines.warning.filter((m) => m.includes('skipped [Challenge c1]'));
         expect(skips).toHaveLength(1);
-        expect(skips[0]).toContain('Some of them are no longer in your library');
+        expect(skips[0]).toContain('Some left your library');
     });
 
     test('a skip for a photo that is in the library but not allowed there has no such hint', async () => {
@@ -954,7 +954,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
         logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
         expect(lines.warning).toHaveLength(1);
-        expect(lines.warning[0]).not.toContain('no longer in your library');
+        expect(lines.warning[0]).not.toContain('left your library');
         // A walk then finds the chosen photo missing from the library.
         await resolveMissingChosen({
             challenge,
@@ -972,7 +972,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
         logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
         expect(lines.warning).toHaveLength(2);
-        expect(lines.warning[1]).toContain('no longer in your library');
+        expect(lines.warning[1]).toContain('left your library');
     });
 
     test('scores for a found photo are merged into scores that already exist, or stand alone', async () => {
@@ -1263,8 +1263,8 @@ describe('Submit Only Chosen Photos', () => {
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
         const skips = lines.warning.filter((m) => m.includes('skipped [Challenge c1]'));
         expect(skips).toHaveLength(1);
-        expect(skips[0]).toContain('none of your chosen photos can be submitted there');
-        expect(skips[0]).toContain('turn Emergency Submit off for this challenge to keep the slot empty');
+        expect(skips[0]).toContain('none of your chosen photos can go in there');
+        expect(skips[0]).toContain('Some left your library — remove them from the list');
 
         // A usable chosen photo appears: submitted, and the skip state is cleared...
         deps.settings.getEffectiveSetting.mockImplementation(

@@ -2,6 +2,11 @@ import { logMessages as englishLogMessages } from '../../src/ts/translations/log
 import { logMessages as latvianLogMessages } from '../../src/ts/translations/logLatvian';
 import { localizeLogMessage } from '../../src/ts/react/components/logs/localizeLogMessage';
 import { sentenceCaseLogMessage } from '../../src/ts/format/logSafe';
+import { formatOversleptMessage } from '../../src/ts/scheduling/cadenceChain/oversleep';
+import { formatChosenSkipMessage } from '../../src/ts/services/autoFill/chosenPhotos';
+import { formatTagSearchFallbackMessage } from '../../src/ts/services/autoFill/candidates';
+import { formatOffThemePickMessage } from '../../src/ts/services/autoFill/fillLogging';
+import { START_FRESH_BLOCKED } from '../../src/ts/cli/commands/settingsRecovery';
 
 const slots = /\{(\d+)\}/g;
 const noAutomaticIcon = /^(?:$|\s|[=-]|\p{Extended_Pictographic})/u;
@@ -132,11 +137,17 @@ describe('Latvian log messages', () => {
         ).toBe(
             'ℹ️ Iesniegšana: 2 foto vienlīdz labi atbilst tēmai izaicinājumā [Izaicinājums 42: Sunset]. Pēc iepriekšējiem rezultātiem atlasīto foto skaits: 1 — image1 (balsis: 3, sasniegumi: 1, skatījumi: 9); līdz šim iepriekšējie rezultāti pārbaudīti 1 no 2 foto, pārējos pārbauda pa daļai katrā iesniegšanas reizē.',
         );
-        expect(
-            localizeLogMessage(
-                '⚠️ autoSubmit: nothing in [Challenge 42: Sunset] matched the theme, so 2 entries were chosen on past performance — image1 (past performance not looked up yet — ranked below any photo that was) of 3 equally off-theme candidates. Set a Per-Title Tag Rule for this title in Settings to steer which photos fit.',
-            ),
-        ).toBe(
+        // The input is built by the same formatter the emitter calls, so a
+        // catalog/emitter drift shows up here as an untranslated line.
+        const offTheme = formatOffThemePickMessage({
+            prefix: 'autoSubmit',
+            tag: '[Challenge 42: Sunset]',
+            subject: '2 entries were',
+            described: 'image1 (past performance not looked up yet — ranked below any photo that was)',
+            contestedCount: 3,
+            coverage: '',
+        });
+        expect(localizeLogMessage(`⚠️ ${offTheme}`)).toBe(
             '⚠️ Automātiskā iesniegšana: izaicinājumā [Izaicinājums 42: Sunset] nekas neatbilda tēmai. Pēc iepriekšējiem rezultātiem atlasīti: 2 — image1 (iepriekšējie rezultāti vēl nav pārbaudīti — sarindots aiz visiem foto, kuru rezultāti ir pārbaudīti) no 3 vienlīdz neatbilstošiem kandidātiem. Sadaļā Uzstādījumi pievieno nosaukumam tagu noteikumu.',
         );
     });
@@ -158,7 +169,6 @@ describe('Latvian log messages', () => {
 
     test('translates the chosen-photos lines, including the fill label they start with', () => {
         const tag = '[Challenge 42: Sunset]';
-        const text = `skipped ${tag} — every chosen photo is already entered there, and Submit Only Chosen Photos is on. Choose other photos or turn it off (Emergency Submit ignores it near the deadline)`;
         for (const [label, lv] of [
             ['autoSubmit', 'Automātiskā iesniegšana'],
             ['fillNew', 'Jauna foto iesniegšana'],
@@ -166,9 +176,15 @@ describe('Latvian log messages', () => {
             ['manualFill', 'Manuālā iesniegšana'],
             ['join', 'Pievienošanās'],
         ]) {
-            const translated = localizeLogMessage(`⚠️ ${label}: ${text}`);
+            // Built by the same formatter the emitter calls, so a catalog/emitter
+            // drift shows up here as an untranslated line.
+            const translated = localizeLogMessage(`⚠️ ${formatChosenSkipMessage(label, tag, 'all-entered', false)}`);
             expect(translated.startsWith(`⚠️ ${lv}: izaicinājums [Izaicinājums 42: Sunset] izlaists`)).toBe(true);
         }
+        const withoutMissing = formatChosenSkipMessage('join', tag, 'none-usable', false);
+        expect(localizeLogMessage(`⚠️ ${withoutMissing}`)).not.toBe(`⚠️ ${withoutMissing}`);
+        const withMissing = formatChosenSkipMessage('fillNew', tag, 'none-usable', true);
+        expect(localizeLogMessage(`⚠️ ${withMissing}`)).not.toBe(`⚠️ ${withMissing}`);
         expect(
             localizeLogMessage(
                 'ℹ️ join: looked for your chosen photos outside the themed search for [Challenge 42: Sunset] — 1 found, 0 not allowed here, 2 not in your library, 0 not reached',
@@ -176,6 +192,23 @@ describe('Latvian log messages', () => {
         ).toBe(
             'ℹ️ Pievienošanās: izvēlētie foto meklēti arī ārpus tēmas meklēšanas izaicinājumam [Izaicinājums 42: Sunset] — atrasti 1, šeit nav atļauti 0, tavā bibliotēkā nav 2, nesasniegti 0',
         );
+    });
+
+    test('translates the other reworded emitters, built by their real formatters', () => {
+        const tag = '[Challenge 42: Sunset]';
+        for (const line of [
+            formatOversleptMessage(93_000, 4 * 60_000),
+            formatTagSearchFallbackMessage(
+                'autoSubmit',
+                tag,
+                ['stair', 'step'],
+                'Review the selected photo; the existing labels did not identify a themed match.',
+            ),
+            START_FRESH_BLOCKED,
+        ]) {
+            // A catalog/emitter drift leaves the line untranslated.
+            expect(localizeLogMessage(line)).not.toBe(line);
+        }
     });
 
     test('leaves unknown technical text intact and handles unmatched icons', () => {

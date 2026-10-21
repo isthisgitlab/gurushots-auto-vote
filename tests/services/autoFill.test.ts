@@ -2378,7 +2378,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
                 { getEligiblePhotos: emptySearch(), logger },
             );
             expect(category.warning).toHaveBeenCalledWith(
-                expect.stringContaining('nothing found by tag search for [Challenge c1]'),
+                expect.stringContaining('tag search found nothing for [Challenge c1]'),
                 null,
             );
             expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('Review the selected photo'), null);
@@ -3433,7 +3433,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         // coverage. enrichCandidates returns COPIES, so counting statsKnown on
         // the objects selectEnrichmentSet handed out reports 0 every time —
         // coverage has to be read off the patched scored entries.
-        expect(explanation).toContain('out of 2 equally off-theme candidates');
+        expect(explanation).toContain('of 2 equally off-theme candidates');
         expect(explanation).not.toContain('looked up for 0 of');
     });
 
@@ -3467,7 +3467,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
             submitToChallenge,
         });
 
-        // Warning "nothing matched the challenge theme" here and telling the user
+        // Warning "nothing matched the theme" here and telling the user
         // to add a Per-Title Tag Rule would be advice to repair a fill that
         // worked. That claim must not appear at any level.
         const allMessages = [
@@ -3475,7 +3475,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
             ...logger.__level.info.mock.calls,
             ...logger.__level.success.mock.calls,
         ].map(([msg]) => msg);
-        expect(allMessages.some((m) => m.includes('matched the challenge theme'))).toBe(false);
+        expect(allMessages.some((m) => m.includes('matched the theme, so'))).toBe(false);
         expect(allMessages.some((m) => m.includes('equally off-theme'))).toBe(false);
         expect(allMessages.some((m) => m.includes('Per-Title Tag Rule'))).toBe(false);
 
@@ -3543,7 +3543,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
             ...logger.__level.info.mock.calls,
             ...logger.__level.success.mock.calls,
         ].map(([msg]) => msg);
-        expect(allMessages.some((m) => m.includes('matched the challenge theme'))).toBe(false);
+        expect(allMessages.some((m) => m.includes('matched the theme, so'))).toBe(false);
         expect(allMessages.some((m) => m.includes('Per-Title Tag Rule'))).toBe(false);
         const explanation = logger.__level.info.mock.calls
             .map(([msg]) => msg)

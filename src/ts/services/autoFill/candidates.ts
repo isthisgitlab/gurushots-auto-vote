@@ -39,6 +39,16 @@ const resolveSemanticScores = async (
 };
 
 /**
+ * The one wording for the tag-search-missed warning — the log catalog's English
+ * template matches against exactly this text, so the two drift together. The
+ * terms are the STEMMED forms ("stair" for a challenge titled "Stairs").
+ */
+const formatTagSearchFallbackMessage = (label: string, tag: string, terms: string[], next: string): string =>
+    `${label}: tag search found nothing for ${tag} — ` +
+    `${terms.map((t) => `"${t}"`).join(' or ')} (as word stems) and related tags ` +
+    `returned no eligible photo, so the whole library is ranked semantically; popularity breaks ties. ${next}`;
+
+/**
  * The user's ignore-words list for this challenge, or null.
  *
  * Resolved HERE rather than threaded from each caller: mustIncludeTags and
@@ -398,12 +408,7 @@ const fetchCandidatesForChallenge = async (
             : 'Review the selected photo; the existing labels did not identify a themed match.';
         logger
             .withCategory(logLabel)
-            .warning(
-                `${logLabel}: nothing found by tag search for ${logger.challengeTag(challenge)} — searches for ` +
-                    `${terms.map((t) => `"${t}"`).join(' or ')} (matched as word stems) and related tags ` +
-                    `returned no eligible photo, so the whole library will be ranked semantically; popularity breaks ties when nothing matches. ${next}`,
-                null,
-            );
+            .warning(formatTagSearchFallbackMessage(logLabel, logger.challengeTag(challenge), terms, next), null);
     }
     // paginate: a single page is the 100 most recently uploaded eligible photos,
     // which would silently exclude a user's older, strongest work from ever being
@@ -417,4 +422,4 @@ const fetchCandidatesForChallenge = async (
     return readUnfilteredLibrary(challengeId, token, getEligiblePhotos, { logLabel, usageOpt, trace });
 };
 
-export { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge };
+export { resolveSemanticScores, resolveIgnoreWords, formatTagSearchFallbackMessage, fetchCandidatesForChallenge };

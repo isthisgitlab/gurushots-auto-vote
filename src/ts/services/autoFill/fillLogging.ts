@@ -234,14 +234,41 @@ const logPopularityPick = (
     }
 
     log.warning(
-        `${prefix}: nothing in ${logger.challengeTag(challenge)} matched the challenge theme, so ` +
-            `${subject} chosen on past performance — ` +
-            `${explained.map(describe).join('; ')} ` +
-            `out of ${contestedEntries.length} equally off-theme candidates${coverage}. ` +
-            `Set a Per-Title Tag Rule for this challenge title in Settings to steer which photos qualify.`,
+        formatOffThemePickMessage({
+            prefix,
+            tag: logger.challengeTag(challenge),
+            subject,
+            described: explained.map(describe).join('; '),
+            contestedCount: contestedEntries.length,
+            coverage,
+        }),
         null,
     );
 };
+
+/**
+ * The one wording for the off-theme pick warning — the log catalog's English
+ * template matches against exactly this text, so the two drift together.
+ */
+const formatOffThemePickMessage = ({
+    prefix,
+    tag,
+    subject,
+    described,
+    contestedCount,
+    coverage,
+}: {
+    prefix: string;
+    tag: string;
+    subject: string;
+    described: string;
+    contestedCount: number;
+    coverage: string;
+}): string =>
+    `${prefix}: nothing in ${tag} matched the theme, so ` +
+    `${subject} chosen on past performance — ` +
+    `${described} of ${contestedCount} equally off-theme candidates${coverage}. ` +
+    `Set a Per-Title Tag Rule for this title in Settings to steer which photos fit.`;
 
 /**
  * logPopularityPick for a pick that may hold the user's chosen photos: each
@@ -274,4 +301,11 @@ const logPopularityPicks = ({
     }
 };
 
-export { describeSubmitFailure, makeFallbackLogger, logPopularityPick, logPopularityPicks, logSelectionDetails };
+export {
+    describeSubmitFailure,
+    makeFallbackLogger,
+    formatOffThemePickMessage,
+    logPopularityPick,
+    logPopularityPicks,
+    logSelectionDetails,
+};

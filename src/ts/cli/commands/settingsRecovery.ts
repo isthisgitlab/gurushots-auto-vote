@@ -15,6 +15,13 @@ import type { SettingsRecovery } from '../../settings';
 const SETTINGS_RECOVERY_USAGE = 'Usage: settings-recovery retry | start-fresh [--force] | report | acknowledge';
 
 /**
+ * Why `start-fresh` is refused while the import of settings.json may still pass — the log
+ * catalog's English template matches against exactly this text, so the two drift together.
+ */
+const START_FRESH_BLOCKED =
+    'settings.json could not be read, so start-fresh is not offered. Run "settings-recovery retry" now, or "settings-recovery start-fresh --force" for defaults anyway.';
+
+/**
  * The notice for one recovery state: what happened, why, and what comes next.
  */
 const describeSettingsRecovery = ({
@@ -119,11 +126,7 @@ const settingsRecoveryCmd = async (argv: string[]): Promise<number> => {
         settings.loadSettings();
         const recovery = settings.getSettingsRecovery();
         if (extra.length === 0 && recovery?.code === 'settings-import-failed' && recovery.blocking) {
-            logger
-                .withCategory('settings')
-                .error(
-                    'settings.json could not be read just now, so starting fresh is not offered. Run "settings-recovery retry" to try now, or "settings-recovery start-fresh --force" to start with default settings anyway.',
-                );
+            logger.withCategory('settings').error(START_FRESH_BLOCKED);
             return 1;
         }
         return finish(startFresh());
@@ -141,4 +144,10 @@ const settingsRecoveryCmd = async (argv: string[]): Promise<number> => {
     return finish({ ok: run(), done: done() });
 };
 
-export { describeSettingsRecovery, reportSettingsRecovery, settingsRecoveryCmd, SETTINGS_RECOVERY_USAGE };
+export {
+    describeSettingsRecovery,
+    reportSettingsRecovery,
+    settingsRecoveryCmd,
+    SETTINGS_RECOVERY_USAGE,
+    START_FRESH_BLOCKED,
+};

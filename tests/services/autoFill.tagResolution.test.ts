@@ -172,7 +172,7 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
             },
         );
         expect(result).toEqual(LIBRARY);
-        expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('nothing found by tag search'), null);
+        expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('tag search found nothing'), null);
     });
 
     test('logs how the theme was read, with the description it was read from', async () => {

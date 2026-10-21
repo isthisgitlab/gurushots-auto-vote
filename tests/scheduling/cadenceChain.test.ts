@@ -864,10 +864,10 @@ describe('formatOversleptMessage', () => {
         expect(message).toContain('51.0 min');
         expect(message).toContain('3.0 min');
         expect(message).toMatch(/suspended|throttled/);
-        expect(message).toMatch(/did not happen/);
+        expect(message).toMatch(/was skipped/);
         // The remediation half — without it the user is told they lost a fill
         // and given nothing to do about it.
-        expect(message).toMatch(/keep the app window open/i);
+        expect(message).toMatch(/keep the app open/i);
         expect(message).toMatch(/cli/i);
     });
 
