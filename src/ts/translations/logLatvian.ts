@@ -463,8 +463,6 @@ export const logMessages = {
     ma3387d8a60e8: 'Nav foto, kam izmantot Boost',
     ma339b8f75974: 'izspēlēti={0}, pareizi={1}, apgriezti={2}, dubultā kļūda={3}, uzvarēts={4}',
     ma3ec8b21dab6: 'Boost veiksmīgi izmantots izvēlētajam foto',
-    ma4297961a891:
-        '\n=== Uzstādījumu pārvaldības palīdzība ===\nPalaid „help-settings”, lai redzētu pilnu ceļvedi: komandas, individuālās vērtības un profilus.',
     ma4a849154f5e: 'Noraidīts IPC "logout" pieprasījums no neuzticama loga ietvara',
     ma4cc2c7b75fe: 'Noraidīts open-external-url izsaukums URL bez HTTPS: {0}',
     ma4e5138b9a68: 'Sākts ar noklusētajiem uzstādījumiem; faila settings.json nebija, tāpēc kopija netika paturēta.',
@@ -691,8 +689,6 @@ export const logMessages = {
     mf101e4cf2b93: '{0} Neizdevās iesniegt balsis',
     mf16298520924: '❌ Neizdevās izmantot Turbo',
     mf18ef698110d: '⚡ Pieprasījums izmantot Turbo foto: izaicinājums={0}, foto={1}',
-    mf192e5ea48a2:
-        '\nGuruShots Auto Voter — komandrinda {0}\nPalaid „help” komandu sarakstam vai „help-settings” uzstādījumu palīdzībai. Pašreizējais režīms: {1}\n    ',
     mf1b3d05d74d7:
         '{0}: {1} foto vienlīdz labi atbilst tēmai izaicinājumā {2}. Pēc iepriekšējiem rezultātiem atlasīto foto skaits: {3} — {4}{5}.',
     mf1e4b9cf14d7:

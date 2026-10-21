@@ -454,8 +454,6 @@ export const logMessages = {
     ma3387d8a60e8: 'No entries available for boosting',
     ma339b8f75974: 'played={0} correct={1} flipped={2} doubleFailed={3} won={4}',
     ma3ec8b21dab6: 'Applying boost to specific entry successfully',
-    ma4297961a891:
-        '\n=== Settings Management Help ===\nRun "help-settings" for the full settings guide: commands, per-challenge overrides and profiles.',
     ma4a849154f5e: "Refused IPC 'logout' from untrusted frame",
     ma4cc2c7b75fe: 'Refused open-external-url for non-https URL: {0}',
     ma4e5138b9a68: 'Started with default settings; there was no settings.json, so no copy was kept.',
@@ -674,8 +672,6 @@ export const logMessages = {
     mf101e4cf2b93: '{0} Vote submission failed',
     mf16298520924: '❌ Failed to apply turbo',
     mf18ef698110d: '⚡ Apply turbo to entry request: Challenge={0}, Image={1}',
-    mf192e5ea48a2:
-        '\nGuruShots Auto Voter - CLI {0}\nRun "help" for the command list, "help-settings" for settings help. Current mode: {1}\n    ',
     mf1b3d05d74d7:
         '{0}: {1} photos matched the theme equally well for {2}, so {3} chosen on past performance — {4}{5}.',
     mf1e4b9cf14d7:
