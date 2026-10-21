@@ -15,7 +15,6 @@ jest.mock('../../src/ts/settings', () => ({
     exportScenarioWithNotes: jest.fn(),
     getEffectiveSetting: jest.fn(() => false),
 }));
-jest.mock('../../src/ts/ipc/chosenPhotosOwner', () => ({ stampChosenPhotosOwner: jest.fn() }));
 jest.mock('../../src/ts/services/scenarioStatus', () => {
     const ledger = { remove: jest.fn(async () => 'removed'), removeAll: jest.fn(async () => 'removed') };
     const release = jest.fn();
@@ -56,7 +55,6 @@ const auth = jest.mocked(authModule);
 import apiFactoryModule = require('../../src/ts/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
-import type * as chosenPhotosOwnerModule from '../../src/ts/ipc/chosenPhotosOwner';
 import type * as templatesModule from '../../src/ts/scenarios/templates';
 import type * as scenarios_handlersModule from '../../src/ts/ipc/scenarios.handlers';
 const { SCENARIO_TEMPLATES } = require('../../src/ts/scenarios/templates') as typeof templatesModule;
@@ -103,19 +101,6 @@ describe('save / rename / delete', () => {
             issues: [issue],
         });
         expect(settings.saveScenario).toHaveBeenLastCalledWith(scenario, { overwrite: false });
-    });
-
-    test('a saved scenario is stamped with its account; a refused one is not', async () => {
-        const { stampChosenPhotosOwner } = jest.mocked(
-            require('../../src/ts/ipc/chosenPhotosOwner') as typeof chosenPhotosOwnerModule,
-        );
-        stampChosenPhotosOwner.mockClear();
-        settings.saveScenario.mockReturnValueOnce({ ok: false, issues: [issue] });
-        await handlers['save-scenario'](null, scenario);
-        expect(stampChosenPhotosOwner).not.toHaveBeenCalled();
-        settings.saveScenario.mockReturnValueOnce({ ok: true, name: 'Plan' });
-        await handlers['save-scenario'](null, scenario);
-        expect(stampChosenPhotosOwner).toHaveBeenCalledWith([scenario]);
     });
 
     test('an issue list without entries still yields an error', async () => {

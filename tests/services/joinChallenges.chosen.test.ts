@@ -379,19 +379,6 @@ describe('a photo library that cannot be read is not an empty one (the real read
     });
 });
 
-describe('the list belongs to one account', () => {
-    test('another account ignores it on a join, with one line', async () => {
-        withSettings({ chosenPhotos: ['car'], chosenPhotosOnly: true });
-        settings.getSetting.mockReturnValue(invalid('member-2'));
-        const deps = makeDeps();
-        const res = await performJoin(challenge(), 'tok', deps, 0);
-        // Ignored, so Only has nothing to enforce.
-        expect(res.status).toBe('joined');
-        expect(res.imageId).not.toBe('car');
-        expect(lines.warning.filter((m) => m.includes('saved while another account was logged in'))).toHaveLength(1);
-    });
-});
-
 describe("resolveJoinSetting reads the candidate's own override for the chosen keys only", () => {
     test('a per-id override wins, including an explicit empty list and an off flag', () => {
         settings.getChallengeOverride.mockImplementation((key: string) =>

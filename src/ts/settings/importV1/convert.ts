@@ -23,21 +23,26 @@ import type { V1Blob, V1Values } from './types';
 type ConvertedV1 = { config: StoredConfigV2; titlePins: Record<string, string>; report: ImportReportV2 };
 
 // The top-level keys that become `auth`.
-const AUTH_KEYS = ['token', 'apiHeaders', 'lastUsername', 'chosenPhotosMemberId'];
+const AUTH_KEYS = ['token', 'apiHeaders', 'lastUsername'];
+
+// The keys a settings.json written by 1.13.x holds (top level, the frozen schema knew them) that this
+// build removed from the shape: they convert to nothing, wherever the file holds them.
+const DROPPED_KEYS: ReadonlySet<string> = new Set(['chosenPhotosMemberId', 'chosenPhotosClearedAt']);
 
 // The schema keys of the app-state flags: format 1 kept them at the top level and read them from there only (a copy among
-// the global defaults was never read), so they are `app` values, and `chosenPhotosMemberId` an `auth` one.
+// the global defaults was never read), so they are `app` values.
 const TOP_LEVEL_ONLY_KEYS = new Set([
     'autovoteRunning',
     'autovoteStartedLaunch',
     'skipUpdateVersion',
-    'chosenPhotosMemberId',
-    'chosenPhotosClearedAt',
     'noticeAcknowledgedVersion',
 ]);
 
 const withoutKeys = (values: V1Values, dropped: ReadonlySet<string>): V1Values =>
     Object.fromEntries(Object.entries(values).filter(([key]) => !dropped.has(key)));
+
+/** What never sits among the global defaults: the app-state flags, and the keys this build dropped. */
+const NOT_DEFAULT_KEYS: ReadonlySet<string> = new Set([...TOP_LEVEL_ONLY_KEYS, ...DROPPED_KEYS]);
 
 const stringOrEmpty = (value: unknown): string => (typeof value === 'string' ? value : '');
 
@@ -168,7 +173,13 @@ const unresolvedRefs = (config: StoredConfigV2, titles: Readonly<Record<string, 
  */
 const convertV1Blob = (blob: V1Blob, { mockStored }: { mockStored: boolean }): ConvertedV1 => {
     const { challengeSettings } = blob;
-    const moved = new Set(['challengeSettings', ...AUTH_KEYS, ...V1_MIGRATION_FLAGS, ...(mockStored ? [] : ['mock'])]);
+    const moved = new Set([
+        'challengeSettings',
+        ...AUTH_KEYS,
+        ...DROPPED_KEYS,
+        ...V1_MIGRATION_FLAGS,
+        ...(mockStored ? [] : ['mock']),
+    ]);
     const config: StoredConfigV2 = {
         version: 2,
         app: renameV1Keys(Object.fromEntries(Object.entries(blob).filter(([key]) => !moved.has(key))), 'drop-targets'),
@@ -176,9 +187,8 @@ const convertV1Blob = (blob: V1Blob, { mockStored }: { mockStored: boolean }): C
             token: stringOrEmpty(blob.token),
             apiHeaders: Object.fromEntries(stringEntries(blob.apiHeaders)),
             lastUsername: stringOrEmpty(blob.lastUsername),
-            chosenPhotosMemberId: stringOrEmpty(blob.chosenPhotosMemberId),
         },
-        defaults: renameV1Keys(withoutKeys(challengeSettings.globalDefaults, TOP_LEVEL_ONLY_KEYS), 'drop-targets'),
+        defaults: renameV1Keys(withoutKeys(challengeSettings.globalDefaults, NOT_DEFAULT_KEYS), 'drop-targets'),
         profiles: mapValues(challengeSettings.profiles, (values) => renameV1Value(values, 'drop-targets')),
         seededProfiles: Array.isArray(challengeSettings.seededProfiles)
             ? challengeSettings.seededProfiles.filter((name): name is string => typeof name === 'string')

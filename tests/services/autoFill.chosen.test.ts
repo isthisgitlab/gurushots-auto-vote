@@ -103,7 +103,6 @@ type SettingsSpec = {
     chosen?: unknown;
     only?: boolean;
     inOrder?: boolean;
-    savedBy?: unknown;
     must?: string[];
     submitWithoutTagMatch?: boolean;
     emergencySubmit?: number;
@@ -114,7 +113,6 @@ const makeSettings = ({
     chosen = [],
     only = false,
     inOrder = false,
-    savedBy = '',
     must = [],
     submitWithoutTagMatch = true,
     emergencySubmit = 300,
@@ -144,7 +142,6 @@ const makeSettings = ({
                     return null;
             }
         }),
-        getSetting: jest.fn((key: string) => (key === 'chosenPhotosMemberId' ? savedBy : undefined)),
         getEffectiveTagSetting: jest.fn((key: string) => (key === 'mustIncludeTags' ? must : [])),
         getEffectiveIgnoreTitleWords: jest.fn(() => null),
     });
@@ -926,15 +923,14 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         expect(walkDeps.getEligiblePhotosWalk).toHaveBeenCalledTimes(66);
     });
 
-    test('a skip that follows a walk finding chosen photos missing from the library points at another account’s list', async () => {
+    test('a skip that follows a walk finding chosen photos missing from the library says so', async () => {
         const { logger, lines } = makeLog();
         // The list names a photo this library does not hold.
         const deps = makeDeps({ logger, library: [photo('theme-a')], settings: { chosen: ['car'], only: true } });
         await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
         const skips = lines.warning.filter((m) => m.includes('skipped [Challenge c1]'));
         expect(skips).toHaveLength(1);
-        expect(skips[0]).toContain('Some of them are not in your library');
-        expect(skips[0]).toContain('clear-chosen-photos');
+        expect(skips[0]).toContain('Some of them are no longer in your library');
     });
 
     test('a skip for a photo that is in the library but not allowed there has no such hint', async () => {
@@ -949,7 +945,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
         const skips = lines.warning.filter((m) => m.includes('skipped [Challenge c1]'));
         expect(skips).toHaveLength(1);
-        expect(skips[0]).not.toContain('clear-chosen-photos');
+        expect(skips[0]).not.toContain('no longer in your library');
     });
 
     test('a skip with no walk behind it has no hint, and one that gains it is explained again', async () => {
@@ -958,7 +954,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
         logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
         expect(lines.warning).toHaveLength(1);
-        expect(lines.warning[0]).not.toContain('clear-chosen-photos');
+        expect(lines.warning[0]).not.toContain('no longer in your library');
         // A walk then finds the chosen photo missing from the library.
         await resolveMissingChosen({
             challenge,
@@ -976,7 +972,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
         logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
         expect(lines.warning).toHaveLength(2);
-        expect(lines.warning[1]).toContain('clear-chosen-photos');
+        expect(lines.warning[1]).toContain('no longer in your library');
     });
 
     test('scores for a found photo are merged into scores that already exist, or stand alone', async () => {
@@ -1472,38 +1468,7 @@ describe('emergency fill', () => {
     });
 });
 
-describe('the list belongs to the account that saved it', () => {
-    test('another account ignores it, with one line however many fills', async () => {
-        const { logger, lines } = makeLog();
-        const deps = makeDeps({
-            logger,
-            member: 'member-2',
-            settings: { chosen: ['theme-b'], savedBy: 'member-1', only: true },
-        });
-        // Ignored, so Only has nothing to enforce and the automatic pick is made.
-        expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('submitted');
-        expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('submitted');
-        expect(submittedIds(deps)[0]).toEqual(['theme-a']);
-        expect(lines.warning.filter((m) => m.includes('saved while another account was logged in'))).toHaveLength(1);
-    });
-
-    test.each([
-        ['the same account', 'member-1', 'member-1'],
-        ['no recorded account', 'member-1', ''],
-        ['an account that cannot be told', null, 'member-9'],
-    ])('applies for %s', async (_name, member, savedBy) => {
-        const deps = makeDeps({ member, settings: { chosen: ['theme-b'], savedBy } });
-        expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('submitted');
-        expect(submittedIds(deps)).toEqual([['theme-b']]);
-    });
-
-    test('an identity lookup that finds nobody leaves the list in force', async () => {
-        const deps = makeDeps({ settings: { chosen: ['theme-b'], savedBy: 'member-1' } });
-        deps.getCurrentMemberProfile = invalid(jest.fn(async () => null));
-        expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('submitted');
-        expect(submittedIds(deps)).toEqual([['theme-b']]);
-    });
-
+describe('the list applies as it is saved', () => {
     test('settings that cannot be read leave no list', async () => {
         const deps = makeDeps();
         deps.settings = invalid(undefined);
@@ -1513,7 +1478,7 @@ describe('the list belongs to the account that saved it', () => {
 });
 
 describe('forgetChosenPhotosMemory (a logout)', () => {
-    test('the walk memo is dropped: the next account looks the photo up again', async () => {
+    test('the walk memo is dropped: the photo is looked up again', async () => {
         const deps = makeDeps({ library: [photo('theme-a')], settings: { chosen: ['car'], only: true } });
         const challenge = makeChallenge();
         await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
@@ -1525,7 +1490,7 @@ describe('forgetChosenPhotosMemory (a logout)', () => {
         expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(2);
     });
 
-    test('the explained skip and the owner-mismatch warning are given again to the next account', async () => {
+    test('the explained skip is given again', async () => {
         const skipLog = makeLog();
         const deps = makeDeps({
             logger: skipLog.logger,
@@ -1538,19 +1503,6 @@ describe('forgetChosenPhotosMemory (a logout)', () => {
         forgetChosenPhotosMemory();
         await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
         expect(skipLog.lines.warning.filter((m) => m.includes('skipped'))).toHaveLength(2);
-
-        const mismatchLog = makeLog();
-        const other = makeDeps({
-            logger: mismatchLog.logger,
-            member: 'member-2',
-            settings: { chosen: ['theme-b'], savedBy: 'member-1', only: true },
-        });
-        await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, other);
-        forgetChosenPhotosMemory();
-        await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, other);
-        expect(
-            mismatchLog.lines.warning.filter((m) => m.includes('saved while another account was logged in')),
-        ).toHaveLength(2);
     });
 });
 

@@ -20,7 +20,6 @@ import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
 import type * as libraryModule from '../../src/ts/ipc/actions/library';
 import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
-import type * as accountScopeModule from '../../src/ts/services/accountScope';
 import type { LibraryPhoto } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 import { logCategories } from '../helpers/logCategories';
@@ -30,7 +29,6 @@ const { handleGetLibraryPhotos, hasWonChallenge, __resetLibraryThrottle, MIN_WAL
     require('../../src/ts/ipc/actions/library') as typeof libraryModule;
 const { clearLibraryCache, dropContext, LIBRARY_FRESH_MS, readLatest } =
     require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
-const { bumpAccountGeneration } = require('../../src/ts/services/accountScope') as typeof accountScopeModule;
 
 // The handler is invoked the way ipcMain does: the event first.
 const call = (...args: unknown[]) =>
@@ -91,6 +89,7 @@ beforeEach(() => {
     auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'tok', settings: {} });
     autoFill.resolveMemberId = jest.fn().mockResolvedValue('member-1');
     settings.getOpenChallengeIds = jest.fn().mockReturnValue(null);
+    settings.getSetting = jest.fn().mockReturnValue('tok');
 });
 
 describe('validation', () => {
@@ -453,7 +452,7 @@ describe('paged reads (start and keep)', () => {
         // Another challenge's cached request previews it as the newest listing instead of walking.
         await expect(next('9', undefined, 'cached')).resolves.toMatchObject({ preview: true, nextStart });
         expect(walk).toHaveBeenCalledTimes(1);
-        expect(readLatest('tok')?.nextStart).toBe(nextStart);
+        expect(readLatest()?.nextStart).toBe(nextStart);
     });
 
     test('a wider re-read from the top replaces the kept listing: a cached request answers the newer one, not the older', async () => {
@@ -760,32 +759,19 @@ describe('the library cache', () => {
         expect(second.photos).toEqual([expect.objectContaining({ id: 'a', labels: ['tag-a'] })]);
     });
 
-    test('a walk in flight when the account leaves writes nothing and answers account-changed, never the old photos', async () => {
+    test('a walk whose token the stored sign-in no longer is answers its read but writes nothing', async () => {
         const slow = deferred<WalkResult>();
         const walk = newWalk();
         walk.mockReturnValueOnce(slow.promise);
         stubStrategy({ getEligiblePhotosWalk: walk });
         const running = call('5');
-        bumpAccountGeneration();
-        slow.resolve(listed('old-account-photo'));
-        await expect(running).resolves.toEqual({ success: false, error: 'account-changed' });
-        // The same for a search: no account's photos reach a signed-out view.
+        // A login replaced the token while the walk ran.
+        settings.getSetting = jest.fn().mockReturnValue('tok-2');
+        slow.resolve(listed('old-token-photo'));
+        await expect(running).resolves.toMatchObject({ success: true });
+        // Nothing was kept, so a cached request walks again.
         await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: false });
         expect(walk).toHaveBeenCalledTimes(2);
-    });
-
-    test('a read with no challenge to read through answers no-challenge-context even when the account left meanwhile: the context is judged first', async () => {
-        const challenges = deferred<unknown>();
-        const walk = newWalk();
-        stubStrategy({
-            getEligiblePhotosWalk: walk,
-            getActiveChallenges: jest.fn<Promise<unknown>, [string]>(() => challenges.promise),
-        });
-        const running = call(undefined, null);
-        bumpAccountGeneration();
-        challenges.resolve({ challenges: [] });
-        await expect(running).resolves.toEqual({ success: false, error: 'no-challenge-context' });
-        expect(walk).not.toHaveBeenCalled();
     });
 
     test('any drop during a walk, whichever challenge it names, keeps that walk from writing', async () => {
@@ -794,7 +780,7 @@ describe('the library cache', () => {
         walk.mockReturnValueOnce(slow.promise);
         stubStrategy({ getEligiblePhotosWalk: walk });
         const running = call('5');
-        dropContext('tok', '99');
+        dropContext('99');
         slow.resolve(listed('a'));
         await running;
         await next('5', undefined, 'cached');
@@ -807,7 +793,7 @@ describe('the library cache', () => {
         walk.mockReturnValueOnce(slow.promise);
         stubStrategy({ getEligiblePhotosWalk: walk });
         const running = call('5');
-        dropContext('tok', '5');
+        dropContext('5');
         slow.resolve(listed('a'));
         await expect(running).resolves.toMatchObject({ success: true });
         // Nothing was kept, so a cached request walks again.
@@ -861,10 +847,13 @@ describe('the library cache', () => {
         await expect(call('5', undefined, 'cached')).resolves.toEqual({ success: false, error: 'No token' });
     });
 
-    test('a cached answer differs per account: another token is never shown this one’s listing', async () => {
+    test('a login that replaced the token empties the cache: the next cached answer is a fresh walk', async () => {
         stubStrategy({ getEligiblePhotosWalk: newWalk(listed('a')) });
         await call('5');
+        // A login that replaced the token forgets what the previous one read (forgetAccountMemory).
+        clearLibraryCache();
         auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'other', settings: {} });
+        settings.getSetting = jest.fn().mockReturnValue('other');
         const walk = newWalk(listed('b'));
         stubStrategy({ getEligiblePhotosWalk: walk });
         const result = await next('5', undefined, 'cached');

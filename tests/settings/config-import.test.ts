@@ -131,7 +131,6 @@ describe('the import of a settings.json (real fs)', () => {
                 token: 'tok-secret',
                 apiHeaders: { 'x-a': 'b' },
                 lastUsername: 'me@example.com',
-                chosenPhotosMemberId: 'm-1',
             });
             expect(loaded.defaults).toMatchObject({ autoSubmit: true, exposure: 80 });
             expect(loaded.defaults).not.toHaveProperty('autovoteRunning');
@@ -168,7 +167,6 @@ describe('the import of a settings.json (real fs)', () => {
                 token: 'tok-secret',
                 apiHeaders: { 'x-a': 'b' },
                 lastUsername: 'me@example.com',
-                chosenPhotosMemberId: 'm-1',
                 challengeSettings: {
                     globalDefaults: { autoFill: true, exposure: 80 },
                     perChallenge: { '101': { emergencyFill: 600 } },

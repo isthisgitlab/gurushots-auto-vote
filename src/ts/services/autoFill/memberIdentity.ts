@@ -36,15 +36,7 @@ const MAX_MEMBER_ID_CACHE = 4;
 // session — reverting to the off-theme fills this feature exists to stop, with
 // nothing in the UI to explain it. Expiring the negative keeps the retry cheap
 // (one call a minute at worst) without hammering a genuinely broken endpoint.
-// Ordinary callers retry no sooner than that; only a user's explicit retry
-// (forgetFailedMemberId) may evict a failure early: the first eviction always
-// gets through, and later ones are spaced (MIN_EXPLICIT_RETRY_GAP_MS) from the
-// last eviction, not from the failure. Presses inside the gap share the cached
-// failure.
 const NEGATIVE_IDENTITY_TTL_MS = 60_000;
-const MIN_EXPLICIT_RETRY_GAP_MS = 5_000;
-// When each token last had an explicit retry let through (bounded like the cache).
-const explicitRetryAt: Map<string, number> = new Map();
 
 /**
  * The member id tag resolution needs, or null when it cannot be determined.
@@ -101,35 +93,14 @@ const resolveMemberId = async (
 
 /**
  * The member id for this token if an earlier lookup already resolved it, else
- * null — never starts a lookup. For synchronous callers (the settings IPC
- * stamping which account saved a list) that must not wait on the network.
+ * null — never starts a lookup. For synchronous callers (the Discover annotator
+ * naming a row's effective chosen photos) that must not wait on the network.
  */
 const peekMemberId = (token: string): string | null => memberIdCache.get(token)?.id ?? null;
-
-/**
- * Evict a cached FAILED lookup for this token, so the next `resolveMemberId` asks again instead of
- * waiting out NEGATIVE_IDENTITY_TTL_MS. Only for a user's explicit retry. The first eviction always
- * gets through, however recent the failure; after that the gap is counted from the last eviction:
- * presses (or a script) inside MIN_EXPLICIT_RETRY_GAP_MS of it get the cached failure back, so the
- * profile endpoint sees at most one explicit request per gap. Only an actual eviction is recorded:
- * a press while a lookup is in flight (callers share it), or with nothing cached, evicts nothing and
- * uses up none of the allowance. A resolved id stays (it cannot change under a token).
- */
-const forgetFailedMemberId = (token: string): void => {
-    const entry = memberIdCache.get(token);
-    if (!entry || entry.id !== null || entry.expiresAt === null) return;
-    const now = Date.now();
-    const last = explicitRetryAt.get(token);
-    if (last !== undefined && now - last < MIN_EXPLICIT_RETRY_GAP_MS) return;
-    if (explicitRetryAt.size >= MAX_MEMBER_ID_CACHE) explicitRetryAt.clear();
-    explicitRetryAt.set(token, now);
-    memberIdCache.delete(token);
-};
 
 // Test-only: drop the memoised identity between cases.
 const __resetMemberIdCache = () => {
     memberIdCache.clear();
-    explicitRetryAt.clear();
 };
 
-export { resolveMemberId, peekMemberId, forgetFailedMemberId, __resetMemberIdCache };
+export { resolveMemberId, peekMemberId, NEGATIVE_IDENTITY_TTL_MS, __resetMemberIdCache };

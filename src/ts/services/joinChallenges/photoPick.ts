@@ -74,14 +74,9 @@ const loadJoinCandidates = async (
  * id in the settings cache, so they resolve by rule and per-id override like
  * every other join setting.
  */
-const resolveJoinChosen = (challenge: Challenge, token: string, deps: JoinDeps) =>
+const resolveJoinChosen = (challenge: Challenge) =>
     resolveChosenPhotos({
-        read: (key) =>
-            key === 'chosenPhotosMemberId' ? settings.getSetting?.(key) : resolveJoinSetting(key, challenge),
-        token,
-        getCurrentMemberProfile: deps.getCurrentMemberProfile,
-        logger,
-        label: 'join',
+        read: (key) => resolveJoinSetting(key, challenge),
     });
 
 /**
@@ -130,7 +125,7 @@ const pickJoinPhoto = async (
     // partial settings stub (or facade) must degrade to "no
     // list", never throw mid-join.
     const ignoreWords = settings.getEffectiveIgnoreTitleWords?.(challenge) ?? null;
-    const chosenSettings = await resolveJoinChosen(challenge, token, deps);
+    const chosenSettings = resolveJoinChosen(challenge);
     const enforceOnly = chosenSettings.only && !ignoreChosenOnly;
 
     const loaded = await loadJoinCandidates(challenge, token, deps, {

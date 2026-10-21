@@ -42,19 +42,6 @@ test('a ranking asked for with no challenge to rank for is refused at the door',
     expect(result.current.suggested).toBeNull();
 });
 
-test('forgetIdle drops what the idle grid was keeping in place, beside a selection replaced wholesale', async () => {
-    const { result, rerender } = renderHook(
-        (props: { selected: string[] }) =>
-            usePhotoPicker({ challengeId: 7, usage: 'submit', alwaysFresh: false, ...props }),
-        { initialProps: { selected: ['a'] } },
-    );
-    await waitFor(() => expect(result.current.idleShown).toEqual(['a']));
-    // The other-account reset: the selection goes empty and the kept tiles go with it.
-    rerender({ selected: [] });
-    act(() => result.current.forgetIdle());
-    expect(result.current.idleShown).toEqual([]);
-});
-
 describe('the listing side, passed through', () => {
     beforeEach(() => {
         mockApi.getLibraryPhotos.mockReset();

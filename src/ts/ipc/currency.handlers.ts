@@ -78,7 +78,7 @@ const droppingListing = async <T>(token: string, challengeId: string | number, s
     try {
         return await spend();
     } finally {
-        dropContext(token, challengeId);
+        dropContext(challengeId);
     }
 };
 

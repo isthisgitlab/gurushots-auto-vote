@@ -25,7 +25,6 @@ import {
 } from '../../settings/limits';
 import { htmlToText } from '../../format/htmlToText';
 import { asPreview } from '../../libraryPreview';
-import { accountGeneration } from '../../services/accountScope';
 import { dropEpoch, readFresh, readLatest, writeListing } from '../../services/libraryCache';
 import { errorResult } from '../errorResult';
 import { isIdArg } from '../isIdArg';
@@ -152,10 +151,10 @@ const borrowChallengeId = async (strategy: apiFactory.ApiStrategy, token: string
  * fresh, else the newest one read for any challenge or usage as a preview (its marks withheld). Null when
  * nothing is cached.
  */
-const answerFromCache = (token: string, contextId: string | number | null, usage: LibraryUsage) => {
-    const fresh = readFresh(token, contextId, usage);
+const answerFromCache = (contextId: string | number | null, usage: LibraryUsage) => {
+    const fresh = readFresh(contextId, usage);
     if (fresh) return { success: true as const, ...fresh, preview: false };
-    const latest = readLatest(token);
+    const latest = readLatest();
     return latest ? { success: true as const, ...asPreview(latest), preview: true } : null;
 };
 
@@ -212,11 +211,10 @@ const handleGetLibraryPhotos = (async (
         const contextId = challengeId ?? null;
         const readUsage = usage ?? 'submit';
         if (mode === 'cached' && term === undefined) {
-            const cached = answerFromCache(token, contextId, readUsage);
+            const cached = answerFromCache(contextId, readUsage);
             if (cached) return cached;
         }
-        // Compared after the walk: an account that left, or an entry dropped by an action of this window, meanwhile.
-        const generation = accountGeneration();
+        // Compared after the walk: an entry dropped by an action of this window meanwhile.
         const epoch = dropEpoch();
         const strategy = apiFactory.getApiStrategy();
 
@@ -258,8 +256,6 @@ const handleGetLibraryPhotos = (async (
         });
         if (outcome === SUPERSEDED) return { success: false as const, error: 'superseded' as const };
         if (outcome === null) return { success: false as const, error: 'no-challenge-context' as const };
-        // The account left while the walk ran: what it read is not the signed-in account's to be shown.
-        if (generation !== accountGeneration()) return { success: false as const, error: 'account-changed' as const };
         // A batch whose first page failed has nothing to continue from; a full read keeps today's behavior
         // (the empty listing the walk returned, marked truncated).
         if (hasStart && readState.firstPageFailed)
@@ -283,12 +279,16 @@ const handleGetLibraryPhotos = (async (
         // failed read), nor one an action of this window outdated while it ran — and never a continuation,
         // which the cache cannot answer for (it only holds reads from offset 0). Every read from offset 0 is
         // kept, whatever its batch size: it is a valid listing from the top with its own nextStart, and it
-        // replaces the older entry, so a later `'cached'` answer never shows an older, smaller listing.
+        // replaces the older entry, so a later `'cached'` answer never shows an older, smaller listing. A read
+        // whose token the stored sign-in no longer is (a login replaced it while the walk ran) writes nothing:
+        // a request still in flight must not refill what a logout or account switch emptied.
         const keepCached =
             term === undefined &&
             (listing.photos.length > 0 || listing.wonCount > 0 || !listing.truncated) &&
             (!hasStart || start === 0);
-        if (keepCached && epoch === dropEpoch()) writeListing(token, contextId, listing, readUsage);
+        if (keepCached && epoch === dropEpoch() && token === settings.getSetting('token')) {
+            writeListing(contextId, listing, readUsage);
+        }
         return { success: true as const, ...listing, preview: false };
     } catch (error) {
         logger.withCategory('autoSubmit').error('Error handling get-library-photos request:', error);

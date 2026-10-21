@@ -45,16 +45,9 @@ type PlanParams = ChosenParams & { ignoreOnly?: boolean };
  * whether Submit Only applies on this path, the chosen photos not yet entered,
  * and the pick options the scorer takes (null when no list is set).
  */
-const planChosen = async ({ label, challenge, token, deps, ignoreOnly = false }: PlanParams) => {
-    const settings = await resolveChosenPhotos({
-        read: (key) =>
-            key === 'chosenPhotosMemberId'
-                ? deps.settings?.getSetting?.(key)
-                : deps.settings?.getEffectiveSetting(key, String(challenge.id)),
-        token,
-        getCurrentMemberProfile: deps.getCurrentMemberProfile,
-        logger: deps.logger,
-        label,
+const planChosen = ({ label, challenge, deps, ignoreOnly = false }: PlanParams) => {
+    const settings = resolveChosenPhotos({
+        read: (key) => deps.settings?.getEffectiveSetting(key, String(challenge.id)),
     });
     const enforceOnly = settings.only && ONLY_LABELS.has(label) && !ignoreOnly;
     const entered = enteredIds(challenge);
@@ -208,12 +201,7 @@ const runFillAttempt = async ({
     onRefreshed = null,
 }: FillAttemptParams): Promise<FillAttemptResult> => {
     const { logger, submitToChallenge } = deps;
-    const {
-        settings: chosenSettings,
-        enforceOnly,
-        unentered,
-        chosen,
-    } = await planChosen({ label, challenge, token, deps });
+    const { settings: chosenSettings, enforceOnly, unentered, chosen } = planChosen({ label, challenge, token, deps });
     // Every chosen photo is already an entry here: nothing is left to choose,
     // so there is nothing to fetch either.
     if (enforceOnly && unentered.length === 0) {

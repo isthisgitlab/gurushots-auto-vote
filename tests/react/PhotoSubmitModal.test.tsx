@@ -7,7 +7,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
 import { PICK_TEXTS, PhotoSubmitModal } from '@/components/app/PhotoSubmitModal';
 import type { PickOutcome } from '@/components/app/PhotoSubmitModal';
-import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
 import { mockTranslator } from './helpers/setup';
 import { app, errors } from '../../src/ts/translations/english';
 import { invalid } from '../helpers/invalid';
@@ -114,7 +113,6 @@ const setupLoaded = (over: Partial<Props> = {}) => {
 beforeEach(() => {
     mockTranslator.t.mockImplementation(english);
     pickers.length = 0;
-    rememberCurrentMember(null);
     getLibrary().mockResolvedValue(listing([photo(1), photo(2), photo(3), photo(4)]));
 });
 
@@ -1216,10 +1214,6 @@ describe('Auto suggestions', () => {
         ],
         ['no-eligible', /^Nothing to suggest\. Your library has no photo this challenge accepts right now/],
         ['suggest-busy', /^The photos were not ranked\. Another ranking is still running/],
-        [
-            'account-changed',
-            /^The photos were not ranked\. You switched accounts while it ran\. Close this dialog and open it again\.$/,
-        ],
         ['challenge-ended', /^The photos were not ranked\. This challenge has ended or could not be read/],
         ['fetch-failed', /^The photos were not ranked\. GuruShots did not answer/],
         ['suggest-failed', /^The photos were not ranked\. GuruShots did not answer/],

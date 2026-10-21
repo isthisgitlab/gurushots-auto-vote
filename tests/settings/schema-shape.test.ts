@@ -131,8 +131,6 @@ describe('settings schema shape', () => {
             'autovoteRunning',
             'autovoteStartedLaunch',
             'skipUpdateVersion',
-            'chosenPhotosMemberId',
-            'chosenPhotosClearedAt',
             'noticeAcknowledgedVersion',
         ]);
     });

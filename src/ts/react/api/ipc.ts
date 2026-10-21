@@ -118,7 +118,6 @@ export const saveChallengeProfile = forward('saveChallengeProfile');
 export const deleteChallengeProfile = forward('deleteChallengeProfile');
 export const getTitleRules = forward('getTitleRules');
 export const setTitleRules = forward('setTitleRules');
-export const clearChosenPhotos = forward('clearChosenPhotos');
 
 // User-defined scenarios
 export const getScenarios = forward('getScenarios');
@@ -141,7 +140,6 @@ export const getDeadlineActions = forward('getDeadlineActions');
 export const joinChallenge = forward('joinChallenge');
 export const forgetUnconfirmedPayment = forward('forgetUnconfirmedPayment');
 export const getOpenChosenAnnotations = forward('getOpenChosenAnnotations');
-export const confirmAccount = forward('confirmAccount');
 export const getLibraryPhotos = forward('getLibraryPhotos');
 export const runVotingCycle = forward('runVotingCycle');
 export const runVotingCycleForChallenge = forward('runVotingCycleForChallenge');

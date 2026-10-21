@@ -86,16 +86,12 @@ export const errors = {
     suggestNoMore:
         'No more suggestions. Every photo that fits has been shown. Press Auto to start again from the best.',
     suggestBusy: 'The photos were not ranked. Another ranking is still running. Wait for it to finish, then try again.',
-    suggestAccountChanged:
-        'The photos were not ranked. You switched accounts while it ran. Close this dialog and open it again.',
     suggestChallengeEnded:
         'The photos were not ranked. This challenge has ended or could not be read. Close this dialog and reopen the card.',
     suggestFailed:
         'The photos were not ranked. GuruShots did not answer, or the ranking did not finish. Try again in a moment.',
     fetchChallengesFailed: 'The challenges could not be loaded. GuruShots did not answer. Try again in a moment.',
     libraryReadFailed: 'Your photos could not be read. The library read failed before it finished. Try again.',
-    accountChanged: 'The account changed while the list was loading, so the result was dropped. Open the list again.',
-    accountCheckFailed: 'The account could not be checked. GuruShots did not answer. Try again in a moment.',
     joinRefusedFull:
         'Could not join: the challenge is full, so no player slot is left. Nothing was charged. Refresh the list, and join if a slot frees up.',
     joinRefusedPriceUnknown:
@@ -816,19 +812,12 @@ export const app = {
     chosenPhotosOnly: 'Submit Only Chosen Photos',
     chosenPhotosOnlyDesc:
         'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically (Pick photos… on a challenge card submits photos you choose, once), Emergency Submit ignores this setting (set Emergency Submit to 0 for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted (unless Manual Only is on: then, in Discover, choose the photo for that challenge and press Join, or Retry submit when its coins are already spent). Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your must-include tags, they can still be entered. With an empty list this does nothing.',
-    chosenPhotosMemberId: 'Chosen Photos Account',
-    chosenPhotosClearedAt: 'Chosen Photos Cleared At',
-    chosenPhotosClearedAtDesc:
-        'Internal — when every saved Chosen Photos list was last removed; open editors use it to drop their copy of the lists',
-    chosenPhotosMemberIdDesc:
-        'Internal — the member who last saved a Chosen Photos list; the list is ignored when a different member is logged in',
     chosenPhotosCount: 'Chosen photos: {count}',
     choosePhotos: 'Choose photos',
     photosClear: 'Clear',
     photosUseNone: 'Use none',
     photosUseNoneHint:
         'This challenge uses no chosen photos, even if your global defaults or a rule have a list. The reset button next to this field brings that inherited list back.',
-    chosenPhotoThumbAlt: 'Chosen photo {n}: {id}',
     chosenPhotosScenarioHint:
         "A scenario's chosen photos apply only after the challenge is joined; joining never uses them.",
     chosenPhotosOnlyReachHint:
@@ -898,14 +887,6 @@ export const app = {
     photoChooserTileLabel: 'Photo {id}: {labels}. {reason}',
     photoChooserPosition: 'Number {n} in your list.',
     photoChooserNoTags: 'No tags',
-    photoChooserOtherAccount:
-        'These lists were saved under another account, so the app ignores them. Saving a list here makes them apply to this account too, unless you remove them first.',
-    photoChooserOtherAccountClear: 'Remove those lists',
-    photoChooserOtherAccountConfirm:
-        "Remove the chosen-photo lists saved under the other account, in every setting, profile, rule and scenario? This can't be undone. Submit Only Chosen Photos is kept.",
-    photoChooserOtherAccountClearError:
-        "The lists weren't removed because the settings couldn't be written. Try again.",
-    chosenPhotosOtherAccountCount: '{count} photo(s) saved under another account',
     photoChooserInheritNote:
         "Saving with nothing chosen removes this challenge's own list, so it uses the list from your settings or rules again.",
     photoChooserIdle: 'Your photos are not loaded yet. Load photos or search.',
@@ -917,7 +898,6 @@ export const app = {
     photoChooserAutoHelp:
         'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is saved. Press it again for the next ones.',
     photoChooserAutoRunning: 'Ranking your photos… this can take a minute. Nothing is saved.',
-    photoChooserCheckingMember: 'Checking which account these photos belong to…',
     photoChooserSavedTileLabel: 'Chosen photo {id}: {reason}',
     photoChooserSavedTileNote: 'Not loaded yet',
     photoChooserUnreachedTileNote: 'Not in the photos loaded yet; press Load more photos to look for it.',
@@ -925,22 +905,7 @@ export const app = {
         'Not in the search results loaded so far. Load more photos finds it if it carries this tag; Load photos reads from the top of your whole library, so it may need Load more after it.',
     photoChooserLoadMoreFailed:
         "Couldn't load more photos. The read was interrupted. Press Load more photos to try again.",
-    photoChooserSaveChecking: 'Checking which account this list belongs to…',
-    photoChooserSaveCheckFailed:
-        'The account check failed, so saving is held to protect your list. Press Retry again shortly.',
     photoChooserTileLocked: 'Locked until your saved list is read',
-    photoChooserSaveConfirmed: 'Account confirmed — your saved list is loaded.',
-    photoChooserSaveReadFailed:
-        "Couldn't read your saved list for this challenge, so saving is held to protect it. Press Retry.",
-    photoChooserSaveReadFailedAgain:
-        'Reading your saved list failed again, so saving stays held to protect it. Press Retry again shortly.',
-    photoChooserSaveNotLoggedIn:
-        "You're signed out, so the account can't be checked. Log in again, then reopen the chooser.",
-    photoChooserSaveOwnerReadFailed:
-        'Which account saved this list could not be read, so saving is held to protect it. Press Retry to read it again.',
-    photoChooserClearHeld: "Clear is unavailable until your saved list has been read, so a late read can't undo it.",
-    photoChooserSaveUnconfirmed:
-        'The account that saved this list is not on record, so saving is held to protect it. Press Retry, or close and reopen the chooser.',
     photoChooserSaveError: "The chosen photos weren't saved because the setting couldn't be written. Try again.",
     photoChooserDiscardTitle: 'Discard your changes?',
     photoChooserDiscardText:
@@ -1009,15 +974,11 @@ export const app = {
     discoverChosenChip: 'Chosen',
     discoverChosenChipHint: 'This challenge has chosen photos. Click to change them.',
     discoverChosenChipLabel: 'Chosen photos for {title}: change them',
-    discoverChosenForeignChip: 'Other account: {count} photo(s)',
-    discoverChosenForeignLabel: 'Other account: {count} photo(s) for {title}, review them',
-    discoverChosenForeignHint:
-        "These photos were saved under another account and aren't used here. Click to review them.",
     discoverChoosePhotosLabel: 'Choose photos for {title}',
     discoverChosenInherited: 'Inherited chosen photos: {count} (from your settings or rules)',
     discoverConfirmChosen: "Your chosen photo if it's eligible, otherwise an automatic pick.",
     scenarioFlagged:
-        'Review before importing: {settings}. Chosen photos belong to one account and are ignored on another; Submit Only Chosen Photos makes joins and fills skip a challenge with no usable chosen photo.',
+        'Review before importing: {settings}. Submit Only Chosen Photos makes joins and fills skip a challenge with no usable chosen photo.',
     scenarioExportOmitted: 'Left out of this export because it belongs to your account: {settings}.',
     ignoreTitleWords: 'Ignore These Words in Challenge Titles',
     ignoreTitleWordsDesc:

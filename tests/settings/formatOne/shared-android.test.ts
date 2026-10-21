@@ -62,7 +62,7 @@ const USER_FILE = JSON.stringify({ theme: 'dark', token: 'tok-secret', lastUsern
 const STORED_CONFIG = JSON.stringify({
     version: 2,
     app: { theme: 'dark' },
-    auth: { token: 'tok-secret', apiHeaders: {}, lastUsername: 'me', chosenPhotosMemberId: '' },
+    auth: { token: 'tok-secret', apiHeaders: {}, lastUsername: 'me' },
 });
 
 let cat: CatDouble;
@@ -449,7 +449,7 @@ describe('the sign-in an older build changed in settings.json, on Android', () =
         // The window confirmed its own; the service's pending one is still there.
         expect(stored(MARKER).signInConfirmed).not.toBe(before);
         expect(stored(MARKER).signInPending).toBe('service-out.a.b.c');
-        expect(stored(MARKER).signInConfirmed).toEqual(expect.stringMatching(/^[0-9a-f]+(\.[0-9a-f]+){3}$/));
+        expect(stored(MARKER).signInConfirmed).toEqual(expect.stringMatching(/^[0-9a-f]+(\.[0-9a-f]+){2}$/));
     });
 
     test('in the app window: a mirror write whose pending record could not be made is not made', async () => {
@@ -503,7 +503,7 @@ describe('a logout in the Android app window clears the sign-in out of the set-a
                 [MARKER]: MARKER_TEXT,
                 [CONFIG_COPY]: JSON.stringify({
                     version: 2,
-                    auth: { token: 'tok-old', apiHeaders: { a: 'b' }, lastUsername: 'me', chosenPhotosMemberId: '' },
+                    auth: { token: 'tok-old', apiHeaders: { a: 'b' }, lastUsername: 'me' },
                 }),
                 [SETTINGS_COPY]: JSON.stringify({ token: 'tok-u', apiHeaders: { a: 'b' }, theme: 'dark' }),
                 [OLD_COPY]: JSON.stringify({ token: 'tok-o', apiHeaders: {} }),
@@ -1515,7 +1515,7 @@ describe('the copies set aside more than two weeks ago, in the Android app windo
             JSON.stringify({
                 version: 2,
                 app: { theme: 'light' },
-                auth: { token, apiHeaders: { a: 'b' }, lastUsername: 'me', chosenPhotosMemberId: '' },
+                auth: { token, apiHeaders: { a: 'b' }, lastUsername: 'me' },
             });
         const window = await appWindow(
             {

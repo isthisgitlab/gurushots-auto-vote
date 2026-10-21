@@ -8,7 +8,6 @@
 
 import { renderHook, act, waitFor } from '@testing-library/preact';
 import { useSettingsForm, DEFAULT_UI_VALUES } from '@/hooks/useSettingsForm';
-import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { invalid } from '../helpers/invalid';
 
 type FormProps = Parameters<typeof useSettingsForm>[0];
@@ -355,36 +354,6 @@ describe('useSettingsForm — commit and revert', () => {
     });
 });
 
-describe('useSettingsForm — every chosen-photos list removed while the modal is open', () => {
-    const photosSchema = { ...schema, chosenPhotos: { type: 'photos', default: [] } };
-
-    test('the field reads empty, and neither commit nor revert writes the old list back', async () => {
-        const props = baseProps({ schema: photosSchema, defaults: { exposure: 70, chosenPhotos: ['a', 'b'] } });
-        const { result } = renderForm(props);
-        jest.mocked(window.api.setGlobalDefault).mockClear().mockResolvedValue(true);
-
-        act(() => announceChosenPhotosCleared());
-        expect(result.current.formValues).toEqual({ exposure: 70, chosenPhotos: [] });
-
-        await act(async () => {
-            await result.current.commit();
-        });
-        // Nothing differs from what is on disk now, so nothing is written, the list least of all.
-        expect(window.api.setGlobalDefault).not.toHaveBeenCalled();
-        act(() => result.current.revert());
-        expect(result.current.formValues.chosenPhotos).toEqual([]);
-    });
-
-    test('a form that holds no list, or none loaded yet, is left alone', () => {
-        const { result } = renderForm(baseProps());
-        act(() => announceChosenPhotosCleared());
-        expect(result.current.formValues).toEqual({ exposure: 70, autoBoost: true });
-        const closed = renderForm(baseProps({ isOpen: false }));
-        act(() => announceChosenPhotosCleared());
-        expect(closed.result.current.formValues).toEqual({});
-    });
-});
-
 describe('useSettingsForm — a UI write the handler refuses', () => {
     test('joins the rejected keys, stays unpersisted, and the later keys are still written', async () => {
         // The set-setting handler answers false instead of throwing.
@@ -470,17 +439,6 @@ describe('useSettingsForm — isDirty', () => {
         expect(result.current.isDirty()).toBe(true);
 
         act(() => result.current.handleFormChange('autoBoost', true));
-        expect(result.current.isDirty()).toBe(false);
-    });
-
-    test('a chosen-photos clear is not an unsaved edit', () => {
-        const { result } = renderForm(
-            baseProps({
-                schema: { ...schema, chosenPhotos: { type: 'photos', default: [] } },
-                defaults: { exposure: 70, chosenPhotos: ['a'] },
-            }),
-        );
-        act(() => announceChosenPhotosCleared());
         expect(result.current.isDirty()).toBe(false);
     });
 });

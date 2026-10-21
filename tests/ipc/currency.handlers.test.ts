@@ -343,10 +343,10 @@ describe('the library listing a swap outdates', () => {
             allowedKnown: true,
             readAtMs: Date.now(),
         };
-        writeListing('tok', '10', listing);
-        writeListing('tok', '11', listing);
+        writeListing('10', listing);
+        writeListing('11', listing);
     };
-    const kept = (id: string) => readFresh('tok', id) !== null;
+    const kept = (id: string) => readFresh(id) !== null;
     const swap = async () => {
         await handlers['preview-swap-photo'](null, 10, 'old');
         return handlers['swap-entry-photo'](null, 10, 'old', 'new1', true);

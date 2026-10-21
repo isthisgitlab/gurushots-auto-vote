@@ -81,7 +81,6 @@ const invokeChannels = [
     'cleanup-stale-metadata',
     'get-settings-schema',
     'get-validation-error',
-    'clear-chosen-photos',
     // Resets
     'reset-setting',
     'reset-global-default',
@@ -101,7 +100,6 @@ const invokeChannels = [
     'get-bankroll',
     'get-member-challenges',
     'get-open-chosen-annotations',
-    'confirm-account',
     'join-challenge',
     'forget-unconfirmed-payment',
     'get-library-photos',

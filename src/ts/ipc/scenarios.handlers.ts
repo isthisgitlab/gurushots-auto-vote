@@ -29,7 +29,6 @@ import * as auth from '../services/auth';
 import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 import { isIdArg } from './isIdArg';
-import { stampChosenPhotosOwner } from './chosenPhotosOwner';
 import { getScenarioStatus, ledgerForMode, stepLockForMode } from '../services/scenarioStatus';
 import { findActiveChallenge } from '../services/findActiveChallenge';
 import { evaluateScenario, startState } from '../scenarios/evaluate';
@@ -233,12 +232,9 @@ const buildHandlers = () =>
             }),
 
         'save-scenario': async (event: unknown, doc: unknown, options?: { overwrite?: boolean } | null) =>
-            safely('save-scenario', () => {
-                const saved = fromResult(settings.saveScenario(doc, { overwrite: options?.overwrite !== false }));
-                // A phase's chosen photos belong to the account that just saved them.
-                if (saved.success) stampChosenPhotosOwner([doc]);
-                return saved;
-            }),
+            safely('save-scenario', () =>
+                fromResult(settings.saveScenario(doc, { overwrite: options?.overwrite !== false })),
+            ),
 
         'rename-scenario': async (event: unknown, oldName: string, newName: string) => {
             if (!isName(oldName) || typeof newName !== 'string') return invalidArgs;

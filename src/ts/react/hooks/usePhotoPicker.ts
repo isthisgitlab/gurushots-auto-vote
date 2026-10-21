@@ -39,7 +39,6 @@ export function usePhotoPicker({
         load,
         refresh,
         retry,
-        setMember,
         loadMore,
         loadingMore,
         loadMoreFailed,
@@ -111,9 +110,6 @@ export function usePhotoPicker({
         clearSuggestions();
     }, [clearSuggestions]);
 
-    /** Forgets the tiles the idle grid was keeping in place, for a selection replaced wholesale. */
-    const forgetIdle = useCallback(() => setIdleSeen([]), []);
-
     const autoSuggest = useCallback(async () => {
         // Auto ranks for a challenge; the control that calls this is shown only where there is one.
         if (challengeId === null) return;
@@ -147,7 +143,6 @@ export function usePhotoPicker({
         shown,
         refresh,
         retry,
-        setMember,
         loadMore,
         loadingMore,
         loadMoreFailed,
@@ -165,6 +160,5 @@ export function usePhotoPicker({
         shownIds,
         idleShown,
         autoSuggest,
-        forgetIdle,
     };
 }

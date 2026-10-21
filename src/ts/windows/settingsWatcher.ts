@@ -40,7 +40,7 @@ const stringify = (value: unknown) => {
 };
 
 // A change anywhere under `auth`, under a credential key (token, ...), anywhere in apiHeaders, or in a setting that
-// names the account (lastUsername, chosenPhotosMemberId) is logged masked on both sides: the
+// names the account (lastUsername) is logged masked on both sides: the
 // log line's own redaction only scrubs the first value after `key:`, which would leave the
 // new credential in clear.
 const isSensitivePath = (path: string) =>

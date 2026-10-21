@@ -165,8 +165,6 @@ jest.mock('../../src/ts/cli/commands/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
     setGlobalDefault: jest.fn(),
-    beforeChosenPhotosWrite: jest.fn(async () => () => undefined),
-    clearChosenPhotos: jest.fn(() => true),
     listSettings: jest.fn(),
     resetSetting: jest.fn(),
     resetAllSettings: jest.fn(),
@@ -446,8 +444,7 @@ describe('help and unknown commands', () => {
         expect(text).toContain('\nCommands:\n  login    - Authenticate with GuruShots and save token\n  logout ');
         expect(text).toContain('GuruShots Auto Voter - CLI (REAL MODE)');
         expect(text).toContain('Current mode: REAL (live API calls)');
-        // clear-chosen-photos clears every list; a single challenge's list goes with reset-setting.
-        expect(text).toContain('clear-chosen-photos');
+        // A single challenge's chosen-photos list goes with reset-setting.
         expect(text).toContain('reset-setting chosenPhotos --challenge=<id>');
         expect(text).toContain(
             "To use no chosen photos for that challenge (overriding rules / global):\n             set-setting chosenPhotos '[]' --challenge=<id>",
@@ -842,24 +839,6 @@ describe('settings commands', () => {
     });
 
     test.each([
-        [true, 1],
-        [false, 0],
-    ])('set-setting stamps the chosen-photos owner only after a saved write (%p)', async (saved, stamped) => {
-        const stamp = jest.fn<void, []>();
-        const m = await run(['set-setting', 'chosenPhotos', '["a"]', '--challenge=5'], (mods) => {
-            mods.cmd.beforeChosenPhotosWrite.mockResolvedValue(stamp);
-            mods.cmd.setSetting.mockReturnValue(saved);
-        });
-        expect(m.cmd.beforeChosenPhotosWrite).toHaveBeenCalledWith('chosenPhotos', '["a"]');
-        // The check (and its warning) comes before the write; the stamp after it.
-        expect(m.cmd.beforeChosenPhotosWrite.mock.invocationCallOrder[0]).toBeLessThan(
-            m.cmd.setSetting.mock.invocationCallOrder[0],
-        );
-        expect(stamp).toHaveBeenCalledTimes(stamped);
-        expect(m.exitCodes).toEqual([saved ? 0 : 1]);
-    });
-
-    test.each([
         [true, 0],
         [false, 1],
     ])(
@@ -871,26 +850,6 @@ describe('settings commands', () => {
             expect(m.exitCodes).toEqual([code]);
         },
     );
-
-    test.each([[['--challenge=5']], [['5']], [['--yes']]])(
-        'clear-chosen-photos %p is refused, since it clears every list',
-        async (tail) => {
-            const m = await run(['clear-chosen-photos', ...tail]);
-            expect(m.cmd.clearChosenPhotos).not.toHaveBeenCalled();
-            expect(m.msgs('error')).toEqual([`Unexpected arguments: ${tail.join(' ')}`]);
-            expect(m.msgs('info')).toEqual(['Usage: clear-chosen-photos']);
-            expect(m.exitCodes[0]).toBe(1);
-        },
-    );
-
-    test.each([
-        [true, 0],
-        [false, 1],
-    ])('clear-chosen-photos exit code follows the result (%p → %p)', async (ok, code) => {
-        const m = await run(['clear-chosen-photos'], (mods) => mods.cmd.clearChosenPhotos.mockReturnValue(ok));
-        expect(m.cmd.clearChosenPhotos).toHaveBeenCalledTimes(1);
-        expect(m.exitCodes).toEqual([code]);
-    });
 
     test.each([[[]], [['exposure']]])('set-setting %p missing key/value exits 1', async (tail) => {
         const m = await run(['set-setting', ...tail]);
@@ -932,21 +891,6 @@ describe('settings commands', () => {
             mods.cmd.setGlobalDefault.mockReturnValue(false),
         );
         expect(m.exitCodes).toEqual([1]);
-    });
-
-    test.each([
-        [true, 1],
-        [false, 0],
-    ])('set-global-default stamps the chosen-photos owner only after a saved write (%p)', async (saved, stamped) => {
-        const stamp = jest.fn<void, []>();
-        const m = await run(['set-global-default', 'chosenPhotos', '["a"]'], (mods) => {
-            mods.cmd.beforeChosenPhotosWrite.mockResolvedValue(stamp);
-            mods.cmd.setGlobalDefault.mockReturnValue(saved);
-        });
-        expect(m.cmd.beforeChosenPhotosWrite.mock.invocationCallOrder[0]).toBeLessThan(
-            m.cmd.setGlobalDefault.mock.invocationCallOrder[0],
-        );
-        expect(stamp).toHaveBeenCalledTimes(stamped);
     });
 
     test.each([[[]], [['exposure']]])('set-global-default %p missing args exits 1', async (tail) => {

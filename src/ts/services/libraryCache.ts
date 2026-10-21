@@ -2,12 +2,11 @@
  * The photo-library listing the photo choosers open with, kept in memory only (never written to disk) so a
  * chooser opened again does not wait for a walk of the whole library.
  *
- * Each listing is kept per account (by a hash of the token, never the token), per challenge and per usage
- * (submit or swap): its eligibility marks are that challenge's own for that usage, and so is what the
- * challenge's rules accept. A challenge's entry answers a chooser for that challenge and usage only while it is
- * under LIBRARY_FRESH_MS old; anything else is answered from `latest`, the newest listing read for any
- * challenge or usage, which is only ever shown as a preview with its marks withheld. Entries are frozen and
- * every answer is a copy, so nothing a caller does to an answer reaches the cache.
+ * Each listing is kept per challenge and per usage (submit or swap): its eligibility marks are that challenge's
+ * own for that usage, and so is what the challenge's rules accept. A challenge's entry answers a chooser for that
+ * challenge and usage only while it is under LIBRARY_FRESH_MS old; anything else is answered from `latest`, the
+ * newest listing read for any challenge or usage, which is only ever shown as a preview with its marks withheld.
+ * Entries are frozen and every answer is a copy, so nothing a caller does to an answer reaches the cache.
  *
  * The account's own actions in this window (a submit, a fill, a join, a swap) drop a challenge's entries, of
  * every usage (`dropContext`), and so do the automatic ones (a new entry reflected on the pass's challenge, a
@@ -17,7 +16,6 @@
  */
 
 import * as logger from '../logger';
-import { tokenKey } from './accountScope';
 
 import type { LibraryUsage } from '../types/photoPicker';
 
@@ -53,7 +51,7 @@ const LIBRARY_FRESH_MS = 5 * 60_000;
 const MAX_LIBRARY_ENTRIES = 12;
 
 const entries = new Map<string, Entry>();
-let latest: { account: string; listing: Readonly<TimedListing> } | null = null;
+let latest: Readonly<TimedListing> | null = null;
 // Counts every drop: a read compares it before and after its walk.
 let dropCount = 0;
 
@@ -61,12 +59,9 @@ const log = (kind: string): void => logger.withCategory('autoSubmit').debug(`Lib
 
 const USAGES: readonly LibraryUsage[] = ['submit', 'swap'];
 
-/**
- * The key of one challenge's entry for a usage (null: the settings and rules choosers, which name none) for an
- * account. The challenge comes last, which `dropChallenge` matches.
- */
-const keyOf = (token: string, contextId: string | number | null, usage: LibraryUsage): string =>
-    `${tokenKey(token)}:${usage}:${contextId === null ? 'none' : `id:${contextId}`}`;
+/** The key of one challenge's entry for a usage (null: the settings and rules choosers, which name none). The challenge comes last, which `dropChallenge` matches. */
+const keyOf = (contextId: string | number | null, usage: LibraryUsage): string =>
+    `${usage}:${contextId === null ? 'none' : `id:${contextId}`}`;
 
 const copyPhoto = (photo: ListedPhoto): ListedPhoto => ({ ...photo, labels: [...photo.labels] });
 
@@ -97,19 +92,17 @@ const evictExpired = (now: number): void => {
 
 /** The challenge's listing for the usage when it was read less than LIBRARY_FRESH_MS ago, as a copy; else null. */
 const readFresh = (
-    token: string,
     contextId: string | number | null,
     usage: LibraryUsage = 'submit',
     now: number = Date.now(),
 ): TimedListing | null => {
     evictExpired(now);
-    const entry = entries.get(keyOf(token, contextId, usage));
+    const entry = entries.get(keyOf(contextId, usage));
     return entry ? copyOf(entry.listing) : null;
 };
 
-/** The newest listing the account has read for any challenge or usage, as a copy, however old; else null. */
-const readLatest = (token: string): TimedListing | null =>
-    latest && latest.account === tokenKey(token) ? copyOf(latest.listing) : null;
+/** The newest listing read for any challenge or usage, as a copy, however old; else null. */
+const readLatest = (): TimedListing | null => (latest ? copyOf(latest) : null);
 
 const oldestKey = (): string => {
     let oldest = '';
@@ -125,22 +118,18 @@ const oldestKey = (): string => {
 
 /** Keeps a challenge's listing for a usage (and as the newest, when it is), evicting what has expired and what is over the cap. */
 const writeListing = (
-    token: string,
     contextId: string | number | null,
     listing: TimedListing,
     usage: LibraryUsage = 'submit',
     now: number = Date.now(),
 ): void => {
     evictExpired(now);
-    const key = keyOf(token, contextId, usage);
+    const key = keyOf(contextId, usage);
     const kept = frozen(listing);
     entries.delete(key);
     entries.set(key, { readAtMs: kept.readAtMs, listing: kept });
     while (entries.size > MAX_LIBRARY_ENTRIES) entries.delete(oldestKey());
-    const account = tokenKey(token);
-    if (latest === null || latest.account !== account || kept.readAtMs >= latest.listing.readAtMs) {
-        latest = { account, listing: kept };
-    }
+    if (latest === null || kept.readAtMs >= latest.readAtMs) latest = kept;
     log('stored');
 };
 
@@ -149,13 +138,13 @@ const writeListing = (
  * usage, so the next opening reads again, and make a read that is in flight write nothing. `latest` stays: it
  * is only ever shown as a preview, with its marks withheld.
  */
-const dropContext = (token: string, contextId: string | number | null): void => {
-    for (const usage of USAGES) entries.delete(keyOf(token, contextId, usage));
+const dropContext = (contextId: string | number | null): void => {
+    for (const usage of USAGES) entries.delete(keyOf(contextId, usage));
     dropCount += 1;
     log('dropped');
 };
 
-/** Same as `dropContext`, for the code that has the challenge but not the token: every account's entries of it go. */
+/** Same as `dropContext`, for the code that names the challenge only: its entries go. */
 const dropChallenge = (contextId: string | number): void => {
     const suffix = `:id:${contextId}`;
     for (const key of entries.keys()) {

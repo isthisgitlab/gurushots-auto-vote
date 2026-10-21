@@ -32,9 +32,9 @@ const getDefaultSettings = (): ConfigV2 => ({
             main: { x: undefined, y: undefined, width: 800, height: 960 },
         },
     },
-    // The sign-in state: the token, the API headers for randomization (random per user installation) and the account
-    // the saved lists and the login form belong to.
-    auth: { token: '', apiHeaders: {}, lastUsername: '', chosenPhotosMemberId: '' },
+    // The sign-in state: the token, the API headers for randomization (random per user installation) and the
+    // account name the login form is prefilled with.
+    auth: { token: '', apiHeaders: {}, lastUsername: '' },
     // Global defaults of the schema-based challenge settings; a key left out is the schema default.
     defaults: {},
     profiles: {},

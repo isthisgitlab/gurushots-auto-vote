@@ -58,7 +58,6 @@ const baseProps = (over: Partial<Props> = {}): Props => ({
     } as ListState,
     known: new Map<string, LibraryPhoto>(),
     selected: [],
-    hideUnlisted: false,
     locked: false,
     hasChallenge: true,
     search: false,

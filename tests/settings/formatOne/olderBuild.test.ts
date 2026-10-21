@@ -88,9 +88,7 @@ describe('the 1.12.2 build that loads the mirror', () => {
 
     test('prunes exactly the settings added after it, of the keys the mirror carries', () => {
         // The keys that sit in the global defaults: all but the app state and the sign-in state.
-        const defaultKeys = SCHEMA_KEYS.filter(
-            (key) => !APP_STATE_KEYS.includes(key) && key !== 'chosenPhotosMemberId',
-        );
+        const defaultKeys = SCHEMA_KEYS.filter((key) => !APP_STATE_KEYS.includes(key));
         const everyKey = Object.fromEntries(defaultKeys.map((key) => [key, 1]));
         const config = randomLiveConfig(1).config;
         config.defaults = everyKey;

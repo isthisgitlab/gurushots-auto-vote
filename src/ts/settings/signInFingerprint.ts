@@ -1,5 +1,5 @@
 /**
- * A fingerprint of the sign-in (`token`, `apiHeaders`, `lastUsername`, `chosenPhotosMemberId`) the mirror last wrote to
+ * A fingerprint of the sign-in (`token`, `apiHeaders`, `lastUsername`) the mirror last wrote to
  * `settings.json`, and the reading of what an older build did to it since. The marker keeps the fingerprint, never the
  * sign-in itself. A sign-in is the user's decision (a sign-out, another account), not something an older build's schema
  * can get wrong, so a sign-in that changed in `settings.json` while an older build ran is taken over; nothing else in
@@ -11,7 +11,7 @@ import { AUTH_KEYS, authValueAllowed } from './loadValidation';
 
 import type { ConfigAuthV2 } from '../types/config';
 
-const emptySignIn: ConfigAuthV2 = { token: '', apiHeaders: {}, lastUsername: '', chosenPhotosMemberId: '' };
+const emptySignIn: ConfigAuthV2 = { token: '', apiHeaders: {}, lastUsername: '' };
 
 // A 53-bit non-cryptographic hash (cyrb53 by bryc, public domain; https://github.com/bryc/code/blob/master/jshash/experimental/cyrb53.js): it tells two values apart. It is not a secret: a
 // low-entropy value (a user name) can be found by brute force, which is why the marker sits beside files that hold the
@@ -40,7 +40,7 @@ const fieldHash = (key: (typeof AUTH_KEYS)[number], value: unknown): string =>
     );
 
 /**
- * The fingerprint of a sign-in: the hashes of its four fields, each of its own, so that a file that holds only some of
+ * The fingerprint of a sign-in: the hashes of its fields, each of its own, so that a file that holds only some of
  * the fields (an older build drops the keys it does not know) can be compared field by field.
  */
 const signInFingerprint = (auth: ConfigAuthV2): string => AUTH_KEYS.map((key) => fieldHash(key, auth[key])).join('.');
@@ -101,7 +101,7 @@ const tokenInSignIns = (recorded: readonly string[], token: string): boolean => 
 };
 
 /**
- * The fingerprint of the sign-in `settings.json` holds when it holds all four fields and they are one this build wrote
+ * The fingerprint of the sign-in `settings.json` holds when it holds every field and they are one this build wrote
  * (it matches a recorded fingerprint), else null.
  */
 const signInWrittenHere = (legacyText: string | null, recorded: readonly string[]): string | null => {

@@ -7,7 +7,6 @@
 
 export { formatSettingForLog } from './settings/shared';
 export { getSetting, setSetting, setGlobalDefault } from './settings/access';
-export { beforeChosenPhotosWrite, clearChosenPhotos } from './settings/chosenPhotos';
 export { listSettings, dumpSchema, listGlobalDefaults } from './settings/listing';
 export { resetSetting, resetGlobalDefault, resetAllSettings, resetWindows } from './settings/resetCommands';
 export { listProfiles, saveProfileFromChallenge, applyProfile, deleteProfile } from './settings/profileCommands';

@@ -8,7 +8,6 @@
 import { render, screen, fireEvent, waitFor, within } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { buildChallenge } from '../helpers/challengeFixtures';
-import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
 import { mockTranslator } from './helpers/setup';
 import { app, errors } from '../../src/ts/translations/english';
 import { invalid } from '../helpers/invalid';
@@ -150,7 +149,6 @@ const useThisPhoto = () => screen.getByRole('button', { name: /^Use this photo/ 
 
 beforeEach(() => {
     mockTranslator.t.mockImplementation(english);
-    rememberCurrentMember(null);
     onCurrencySpent.mockClear();
     window.api.getLibraryPhotos = jest.fn().mockResolvedValue(library());
     window.api.previewSwapPhoto = jest.fn(

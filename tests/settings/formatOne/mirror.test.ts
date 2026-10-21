@@ -426,7 +426,7 @@ describe('the mirror of the configuration in settings.json (real fs)', () => {
             token: '',
             apiHeaders: {},
             lastUsername: '',
-            chosenPhotosMemberId: '',
+
             challengeSettings: { globalDefaults: { exposure: 50 } },
         };
         const arrange = () => {
@@ -444,7 +444,6 @@ describe('the mirror of the configuration in settings.json (real fs)', () => {
                         token: 'tok-secret',
                         apiHeaders: { 'x-a': 'b' },
                         lastUsername: 'me',
-                        chosenPhotosMemberId: '',
                     },
                     defaults: { exposure: 80 },
                 }),

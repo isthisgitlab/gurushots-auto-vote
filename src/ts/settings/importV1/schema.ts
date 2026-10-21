@@ -210,8 +210,6 @@ const V1_SETTINGS_SCHEMA = {
     autovoteRunning: { default: false, validation: zBool, perChallenge: false },
     autovoteStartedLaunch: { default: 0, validation: nonNegInt, perChallenge: false },
     skipUpdateVersion: { default: '', validation: zString, perChallenge: false },
-    chosenPhotosMemberId: { default: '', validation: zString, perChallenge: false },
-    chosenPhotosClearedAt: { default: '', validation: zString, perChallenge: false },
     noticeAcknowledgedVersion: { default: 0, validation: nonNegInt, perChallenge: false },
 } satisfies Record<string, V1SchemaEntry>;
 

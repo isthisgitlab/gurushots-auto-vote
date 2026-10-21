@@ -43,7 +43,7 @@ import { fillChallengeNow, submitPickedPhotos } from './autoFill/manualFill';
 import { submitNewEntryForAction } from './autoFill/fillNew';
 import { rankCandidatesForChallenge, suggestFillPhotos } from './autoFill/pipeline';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './autoFill/candidates';
-import { resolveMemberId, peekMemberId, forgetFailedMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
+import { resolveMemberId, peekMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
 import {
     resolveChosenPhotos,
     resolveMissingChosen,
@@ -75,7 +75,6 @@ export {
     suggestFillPhotos,
     resolveMemberId,
     peekMemberId,
-    forgetFailedMemberId,
     __resetMemberIdCache,
     resolveSemanticScores,
     resolveIgnoreWords,

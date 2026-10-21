@@ -13,8 +13,8 @@ import type { LibraryPhoto, ListState } from '@/hooks/useLibraryListing';
 const TILE_GRID = 'grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4';
 
 /**
- * The library listing with its states: idle (the not-loaded line, the saved picks the member check
- * has shown to be this account's, plus the tiles Auto named that were picked in this opening),
+ * The library listing with its states: idle (the not-loaded line, the saved picks as stubs, plus the
+ * tiles Auto named that were picked in this opening),
  * loading, an error with Retry, the missing-challenge explanation, and the tiles (the picks the
  * listing does not return pinned first, the rest in the library's order). The defaults are the
  * Chosen Photos list's: numbered, capped at MAX_CHOSEN_PHOTOS.
@@ -33,7 +33,6 @@ export function PhotoGrid({
     state,
     known,
     selected,
-    hideUnlisted,
     locked,
     lockedKey = 'app.photoChooserTileLocked',
     hasChallenge,
@@ -58,7 +57,6 @@ export function PhotoGrid({
     idleIds,
     idleKey = 'app.pickIdle',
     idleWithPicksKey = 'app.pickIdleWithPicks',
-    checkingMember = false,
     savedPicks = null,
     keepIds,
     recommendedIds,
@@ -66,9 +64,7 @@ export function PhotoGrid({
     state: ListState;
     known: Map<string, LibraryPhoto>;
     selected: string[];
-    /** Selected ids the listing does not return are not shown (they belong to another account). */
-    hideUnlisted: boolean;
-    /** The saved list is not read yet: the tiles are inert, so a late read cannot overwrite a pick. */
+    /** The tiles are inert (the submit modal holds picking while it works). */
     locked: boolean;
     /** The translation key of what a locked tile says. */
     lockedKey?: string;
@@ -113,8 +109,6 @@ export function PhotoGrid({
     idleKey?: string;
     /** The translation key of the idle line shown while something is picked. */
     idleWithPicksKey?: string;
-    /** The chooser's member check is on its way: nothing of the picks can be shown until it answers. */
-    checkingMember?: boolean;
     /** The saved picks may show as stubs (nothing is read), with this member for their thumbnails. */
     savedPicks?: { memberId: string | null } | null;
     /** Photos the submit modal's grid keeps showing, with their reason, whatever the listing says (taken back during it). */
@@ -163,10 +157,7 @@ export function PhotoGrid({
     };
     const render = (): { status: ReactNode; body: ReactNode } => {
         if (state.status === 'idle') {
-            // The member check on open is on its way: no pick can be shown until it says whose it is.
-            if (checkingMember)
-                return { status: null, body: <InlineLoader text={t('app.photoChooserCheckingMember')} /> };
-            // Nothing is read yet: the saved picks the member check has cleared show as numbered stubs, and the
+            // Nothing is read yet: the saved picks show as numbered stubs, and the
             // photos Auto named keep their tiles from the records it brought, so a pick never goes invisible. An
             // unpicked one keeps its place, so it can be picked again.
             const chosenIdle = new Set(selected);
@@ -286,12 +277,12 @@ export function PhotoGrid({
             listing.photos.length > 0 &&
             selected.length === 0 &&
             shownPhotos.every((photo) => blockedIds?.has(photo.id));
-        // A pick's number is its index in `selected` (the order it is saved in) among the picks that are shown: a photo
-        // left out (another account's) leaves no gap. The listed picks keep their place in the library's order.
-        const listed = new Set(listing.photos.map((photo) => photo.id));
+        // A pick's number is its index in `selected` (the order it is saved in): a photo the listing
+        // does not return keeps its number, so it holds its place in the list. The listed picks keep
+        // their place in the library's order.
         const numberOf = new Map<string, number>();
         for (const id of selected) {
-            if (listed.has(id) || lookup(id) || !hideUnlisted) numberOf.set(id, numberOf.size + 1);
+            numberOf.set(id, numberOf.size + 1);
         }
         const shown = (id: string): number | null => (numbered ? (numberOf.get(id) ?? null) : null);
         const tile = (photo: LibraryPhoto, position: number | null) => (
@@ -420,11 +411,10 @@ export function PhotoGrid({
                     <div className={TILE_GRID} {...keepFocus}>
                         {/* The picks the listing does not return stay pinned first, in pick order. */}
                         {selected
-                            .filter((id) => !listed.has(id))
+                            .filter((id) => !listing.photos.some((photo) => photo.id === id))
                             .map((id) => {
                                 const photo = lookup(id);
                                 if (photo) return tile(photo, shown(id));
-                                if (hideUnlisted) return null;
                                 if (listing.preview && !won.has(id)) {
                                     return (
                                         <PendingTile

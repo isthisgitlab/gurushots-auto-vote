@@ -62,7 +62,6 @@ describe('settings facade — resetAllSettings', () => {
                 token: 'secret-token',
                 apiHeaders: { 'X-Test': '1' },
                 lastUsername: 'me',
-                chosenPhotosMemberId: 'm1',
             },
             app: {
                 mock: true,
@@ -88,7 +87,6 @@ describe('settings facade — resetAllSettings', () => {
             token: 'secret-token',
             apiHeaders: { 'X-Test': '1' },
             lastUsername: 'me',
-            chosenPhotosMemberId: 'm1',
         });
         expect(after.app.mock).toBe(true);
         // Everything else returns to its default.

@@ -95,8 +95,6 @@ export interface EntryAgeRecord {
     uncertain?: string[];
     /** Ids whose `entered` time is the app's own submit time (exact), not the time a fetch first showed them. */
     exact: string[];
-    /** The account the entries belong to (from the entries' `member_id`); null until a listing says. */
-    memberId: string | null;
     /** False for a record a submit created before any fetch had seen the challenge. */
     observed: boolean;
     /**

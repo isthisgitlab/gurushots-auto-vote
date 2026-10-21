@@ -12,7 +12,6 @@
 import { invalid } from '../helpers/invalid';
 import type { Challenge, DiscoverChallenge } from '../../src/ts/types/gurushots';
 import type * as discoverChallengesModule from '../../src/ts/services/discoverChallenges';
-import type * as accountScopeModule from '../../src/ts/services/accountScope';
 import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
 
 // The simulated write-behind store the settings mock exposes as __state.
@@ -73,20 +72,6 @@ describe('clearAuthToken', () => {
         expect(settings.forgetOpenChallengeIds).toHaveBeenCalledTimes(1);
     });
 
-    it('moves the account generation once, so a request begun before the logout writes nothing', async () => {
-        const { accountGeneration } = require('../../src/ts/services/accountScope') as typeof accountScopeModule;
-        const before = accountGeneration();
-        await clearAuthToken();
-        expect(accountGeneration()).toBe(before + 1);
-        const afterLogout = accountGeneration();
-        switchAccountToken('another-token');
-        expect(accountGeneration()).toBe(afterLogout + 1);
-        // The same token again is the same account.
-        const same = accountGeneration();
-        switchAccountToken('another-token');
-        expect(accountGeneration()).toBe(same);
-    });
-
     it('forgets the photo-library listings, so the next account is never shown the previous one’s', async () => {
         const { writeListing, readFresh, readLatest } =
             require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
@@ -100,18 +85,16 @@ describe('clearAuthToken', () => {
             allowedKnown: false,
             readAtMs: Date.now(),
         };
-        writeListing('old-token', null, listing);
-        expect(readFresh('old-token', null)).not.toBeNull();
+        writeListing(null, listing);
+        expect(readFresh(null)).not.toBeNull();
         await clearAuthToken();
-        expect(readFresh('old-token', null)).toBeNull();
-        expect(readLatest('old-token')).toBeNull();
-        switchAccountToken('old-token');
-        writeListing('old-token', null, listing);
-        switchAccountToken('old-token');
-        // The same token again is the same account: its listings stay.
-        expect(readFresh('old-token', null)).not.toBeNull();
+        expect(readFresh(null)).toBeNull();
+        expect(readLatest()).toBeNull();
+        switchAccountToken('another-token');
+        // A login that replaces a different token forgets it too.
+        writeListing(null, listing);
         switchAccountToken('a-third-token');
-        expect(readFresh('old-token', null)).toBeNull();
+        expect(readFresh(null)).toBeNull();
     });
 
     it("forgets the cached upcoming list, so the next account is never shown the previous one's", async () => {
@@ -174,12 +157,9 @@ describe('clearAuthToken', () => {
 
     it('reports a logout the settings refused, never takes it for one, and keeps what is remembered of the account that is still logged in', async () => {
         settings.setSetting.mockReturnValueOnce(false);
-        const { accountGeneration } = require('../../src/ts/services/accountScope') as typeof accountScopeModule;
-        const before = accountGeneration();
 
         await expect(clearAuthToken()).rejects.toThrow('logout-not-saved');
 
-        expect(accountGeneration()).toBe(before);
         expect(settings.forgetOpenChallengeIds).not.toHaveBeenCalled();
         expect(settings.flushPendingWrites).toHaveBeenCalledTimes(1);
     });

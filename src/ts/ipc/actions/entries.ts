@@ -5,7 +5,6 @@ import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import * as autoFill from '../../services/autoFill';
-import { accountGeneration } from '../../services/accountScope';
 import { dropContext } from '../../services/libraryCache';
 import { CHOSEN_PHOTO_ID_RE, MAX_CHOSEN_PHOTOS, MAX_SUGGEST_EXCLUDE } from '../../settings/limits';
 import { sanitizeForLog, refuseInvalidArgs, isUsageArg, fetchLiveChallenge } from './shared';
@@ -63,7 +62,7 @@ const handleFillChallengeNow = (async (event: unknown, challengeId: string | num
             return fillResponse(result);
         } finally {
             // Whatever the fill came to, which photos this challenge accepts may have changed.
-            dropContext(guard.token, challengeId);
+            dropContext(challengeId);
         }
     } catch (error) {
         logger.withCategory('autoSubmit').error('Error handling fill-challenge-now request:', error);
@@ -133,7 +132,7 @@ const handleSubmitPickedPhotos = (async (event: unknown, challengeId: string | n
             });
         } finally {
             // Whatever the submit came to (even an unclear answer), which photos this challenge accepts may have changed.
-            dropContext(guard.token, challengeId);
+            dropContext(challengeId);
         }
     } catch (error) {
         logger.withCategory('autoSubmit').error('Error handling submit-picked-photos request:', error);
@@ -185,8 +184,6 @@ const handleSuggestPhotos = (async (
         const guard = auth.requireAuthToken('photo suggestions');
         if (!guard.ok) return guard.response;
 
-        // Compared after the work: an account that left meanwhile.
-        const generation = accountGeneration();
         const strategy = apiFactory.getApiStrategy();
         const liveChallenge = await fetchLiveChallenge(strategy, guard.token, challengeId);
         if (!liveChallenge) return { success: false as const, error: 'challenge-ended' as const };
@@ -220,9 +217,7 @@ const handleSuggestPhotos = (async (
             logger,
             'suggest',
         );
-        const answer = { memberId, photos, statsLimited: result.statsLimited };
-        if (generation !== accountGeneration()) return { success: false as const, error: 'account-changed' as const };
-        return { success: true as const, ...answer };
+        return { success: true as const, memberId, photos, statsLimited: result.statsLimited };
     } catch (error) {
         // The reply is a fixed code: what went wrong goes to the log only.
         log.error('Error handling suggest-photos request:', error);

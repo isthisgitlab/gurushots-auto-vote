@@ -7,7 +7,6 @@ import * as settings from '../settings';
 import type { IpcHandler } from './registerHandlers';
 import { isRendererHiddenKey, toRendererSettings } from './rendererSettings';
 import * as logger from '../logger';
-import { stampChosenPhotosOwner } from './chosenPhotosOwner';
 import { isIdArg } from './isIdArg';
 import { refuseInvalidArgs } from './actions/shared';
 
@@ -111,17 +110,6 @@ const CHANGE_BROADCAST_CHANNELS = new Set([
     'reset-all-settings',
 ]);
 
-// The writes that can carry a Chosen Photos list, after which the saving
-// account is recorded (see chosenPhotosOwner.ts).
-const CHOSEN_LIST_CHANNELS = new Set([
-    'set-global-default',
-    'set-challenge-override',
-    'set-challenge-overrides',
-    'replace-challenge-overrides',
-    'set-title-rules',
-    'save-challenge-profile',
-]);
-
 const buildThinHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChange?: BroadcastSettingsChange }) => {
     const handlers: Record<string, IpcHandler> = {};
     thinRows().forEach(([channel, lookup, fallback, verb]) => {
@@ -141,7 +129,6 @@ const buildThinHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChang
             }
             try {
                 const result = (lookup() as (...a: unknown[]) => unknown)(...args);
-                if (result && CHOSEN_LIST_CHANNELS.has(channel)) stampChosenPhotosOwner(args);
                 if (result && CHANGE_BROADCAST_CHANNELS.has(channel) && typeof broadcastSettingsChange === 'function') {
                     broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
                 }

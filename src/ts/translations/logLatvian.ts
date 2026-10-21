@@ -124,7 +124,7 @@ export const logMessages = {
     m2826e41438c8: 'Turbo izmantots foto {0}',
     m289db73f62af: '  🧩 Uzpildes: {0}',
     m2978b51fd54e:
-        '{0}: izaicinājums {1} izlaists — neviens no taviem izvēlētajiem foto tur nav iesniedzams (izaicinājumam nav piedāvāts, jau izmantots citā izaicinājumā vai neatbilst taviem tagu uzstādījumiem), un ir ieslēgts „Iesniegt tikai izvēlētos foto”. Izvēlies citus foto vai izslēdz šo uzstādījumu; ārkārtas iesniegšana to pirms termiņa neņem vērā, tāpēc izslēdz ārkārtas iesniegšanu šim izaicinājumam, lai vieta paliktu tukša. Daži no tiem nav tavā bibliotēkā — saraksts var saturēt cita konta foto: izņem tos (atlasītājā „Izņemt šos sarakstus” vai ar komandu clear-chosen-photos)',
+        '{0}: izaicinājums {1} izlaists — neviens no taviem izvēlētajiem foto tur nav iesniedzams (izaicinājumam nav piedāvāts, jau izmantots citā izaicinājumā vai neatbilst taviem tagu uzstādījumiem), un ir ieslēgts „Iesniegt tikai izvēlētos foto”. Izvēlies citus foto vai izslēdz šo uzstādījumu; ārkārtas iesniegšana to pirms termiņa neņem vērā, tāpēc izslēdz ārkārtas iesniegšanu šim izaicinājumam, lai vieta paliktu tukša. Daži no tiem vairs nav tavā bibliotēkā — izņem tos no saraksta',
     m29a4a27aabbd:
         '⏰ Tuvojas redzamības uzpilde pirms beigu loga izaicinājumā "{0}" — nākamais cikls pēc {1} s (ne vēlāk kā {2} min pirms beigu loga)',
     m29dd239731c5:
@@ -201,8 +201,6 @@ export const logMessages = {
     m4833e4ffe6a9: 'Kļūda, atiestatot logu pozīcijas',
     m48e2f0b7864c:
         '{0}: neizdevās atsvaidzināt izaicinājuma {1} pašreizējo stāvokli; izmanto cikla sākuma datus — manuāli iesniegtu foto var neredzēt un iesniegt atkārtoti',
-    m4a0943c199c8:
-        '{0}: tavi izvēlētie foto saglabāti, kamēr bija pieteicies cits konts, tāpēc tie tiek ignorēti — izņem tos (atlasītājā „Izņemt šos sarakstus” vai ar komandu clear-chosen-photos) un tad izvēlies foto šim kontam',
     m4a0bb479e56d: '⏰ Tuvojas plānotā balsošana izaicinājumā "{0}" ({1}) — nākamais cikls pēc {2} s',
     m4a23eeb4693a:
         '{0} Jauna foto iesniegšana Turbo izmantošanai: izaicinājums vairs nav aktīvo sarakstā — Turbo izlaists',

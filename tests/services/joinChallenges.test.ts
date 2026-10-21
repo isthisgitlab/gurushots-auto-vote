@@ -196,7 +196,7 @@ describe('performJoin — ordering & idempotency', () => {
     test('a join drops the photo chooser’s cached listing of the challenge; one that fails leaves it', async () => {
         const cache =
             require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
-        cache.writeListing('tok', 1, {
+        cache.writeListing(1, {
             photos: [],
             memberId: null,
             wonIds: [],
@@ -206,7 +206,7 @@ describe('performJoin — ordering & idempotency', () => {
             allowedKnown: true,
             readAtMs: Date.now(),
         });
-        cache.writeListing('tok', 2, {
+        cache.writeListing(2, {
             photos: [],
             memberId: null,
             wonIds: [],
@@ -220,10 +220,10 @@ describe('performJoin — ordering & idempotency', () => {
             submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false, raw: null })),
         });
         await performJoin(invalid({ id: 1 }), 'tok', failing, 0);
-        expect(cache.readFresh('tok', 1)).not.toBeNull();
+        expect(cache.readFresh(1)).not.toBeNull();
         await performJoin(invalid({ id: 1 }), 'tok', makeDeps(), 0);
-        expect(cache.readFresh('tok', 1)).toBeNull();
-        expect(cache.readFresh('tok', 2)).not.toBeNull();
+        expect(cache.readFresh(1)).toBeNull();
+        expect(cache.readFresh(2)).not.toBeNull();
         cache.clearLibraryCache();
     });
 

@@ -75,7 +75,7 @@ const suggestFillPhotos = async (
         enforceOnly,
         unentered,
         chosen,
-    } = await planChosen({
+    } = planChosen({
         label,
         challenge,
         token,

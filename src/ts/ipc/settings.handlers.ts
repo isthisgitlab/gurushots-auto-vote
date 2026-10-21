@@ -100,21 +100,6 @@ const handleSetSetting = async (
     }
 };
 
-// A user-initiated removal of every saved Chosen Photos list (see settings/chosenPhotosClear.ts).
-const handleClearChosenPhotos = async (broadcastSettingsChange: BroadcastSettingsChange | undefined) => {
-    try {
-        const removed = settings.clearChosenPhotos();
-        if (removed === null) return { success: false as const, error: 'The settings file could not be saved' };
-        if (typeof broadcastSettingsChange === 'function') {
-            broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
-        }
-        return { success: true as const, removed };
-    } catch (error) {
-        logger.withCategory('settings').error('Error handling clear-chosen-photos request:', error);
-        return errorResult(error, 'Failed to clear chosen photos');
-    }
-};
-
 // The machine code per way a pin save fails (ipcErrorText words each); a refused argument is 'invalid-args', like the checks above.
 const PIN_FAILURE_CODE = {
     invalid: 'invalid-args',
@@ -162,8 +147,6 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: SettingsHandlerOptio
         handleSetSetting(broadcastSettingsChange, key, value),
 
     'cleanup-stale-challenge-setting': handleCleanupStaleChallengeSetting,
-
-    'clear-chosen-photos': async () => handleClearChosenPhotos(broadcastSettingsChange),
 
     'set-entry-pin': (event: unknown, kind: EntryPinKind, challengeId: string | number, imageId: string | null) =>
         handleSetEntryPin(broadcastSettingsChange, kind, challengeId, imageId),

@@ -32,9 +32,6 @@ const KNOWN_ERRORS: Record<string, string> = {
     'Failed to fetch challenges': 'errors.fetchChallengesFailed',
     'Could not list challenges': 'errors.fetchChallengesFailed',
     'Could not read your balance right now': 'errors.fetchChallengesFailed',
-    'The account changed while listing challenges': 'errors.accountChanged',
-    'account-changed': 'errors.accountChanged',
-    'account-check-failed': 'errors.accountCheckFailed',
     'token-not-saved': 'errors.tokenNotSaved',
     'web-shell-token': 'errors.webShellToken',
 };
@@ -78,7 +75,6 @@ const SUGGEST_ERRORS: Record<string, string> = {
     'no-eligible': 'errors.suggestNoEligible',
     'no-more-suggestions': 'errors.suggestNoMore',
     'suggest-busy': 'errors.suggestBusy',
-    'account-changed': 'errors.suggestAccountChanged',
     'challenge-ended': 'errors.suggestChallengeEnded',
 };
 

@@ -61,22 +61,25 @@ const idList = (value: unknown): string[] => (Array.isArray(value) ? value.slice
 /**
  * The ledger's state from its text. An unreadable or corrupt file reads as empty — every entry's
  * age is then unknown, which only means a boost is not held; it never blocks one. A record from a
- * file written before the exact times gets the fields it lacks, and a pending id that is not a non-empty string reads
- * as none.
+ * file written before the exact times gets the fields it lacks, a pending id that is not a non-empty string reads
+ * as none, and a field the shape no longer holds (a file written by an older build) is dropped, so the next write
+ * stores the record without it.
  */
 const parseState = (raw: string | null): State => {
     try {
         const parsed: unknown = JSON.parse(raw || '{}');
         if (!isPlainObject(parsed)) return {};
         const state: State = {};
-        for (const [id, record] of Object.entries(parsed)) {
-            if (isRecord(record)) {
+        for (const [id, stored] of Object.entries(parsed)) {
+            if (isRecord(stored)) {
+                const record: LegacyEntryAgeRecord = { ...stored };
+                // A field the record type no longer holds rides in the spread otherwise.
+                delete (record as Record<string, unknown>).memberId;
                 state[id] = {
                     ...record,
                     pending: isString(record.pending) && record.pending !== '' ? record.pending : null,
                     uncertain: idList(record.uncertain),
                     exact: idList(record.exact),
-                    memberId: typeof record.memberId === 'string' ? record.memberId : null,
                     observed: record.observed !== false,
                     firstSeen: Math.max(finiteOr(record.firstSeen, 0), 0),
                 };

@@ -43,7 +43,7 @@ import * as persistence from './settings/persistence';
 import * as challengeOverrides from './settings/challengeOverrides';
 import * as staleChallengeCleanup from './settings/staleChallengeCleanup';
 import * as openChallenges from './settings/openChallenges';
-import * as chosenPhotosClear from './settings/chosenPhotosClear';
+
 import { rememberChallengeTitles } from './settings/challengeFacts';
 import { importMarkerStore } from './settings/importMarker';
 import { originalStore } from './settings/formatOneMirror';
@@ -151,8 +151,6 @@ export const getOpenChallengeIds = openChallenges.getOpenChallengeIds;
 export const rememberUpcomingChallenges = openChallenges.rememberUpcomingChallenges;
 export const getUpcomingChallengeIds = openChallenges.getUpcomingChallengeIds;
 export const forgetOpenChallengeIds = openChallenges.forgetOpenChallengeIds;
-// Every saved Chosen Photos list removed in one go (the lists belong to one account)
-export const clearChosenPhotos = chosenPhotosClear.clearChosenPhotos;
 // Reset functions
 export const resetSetting = reset.resetSetting;
 export const resetGlobalDefault = reset.resetGlobalDefault;

@@ -1,8 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useMemberChallenges } from '@/api/useMemberChallenges';
 import { useOpenChosenAnnotations } from '@/api/useOpenChosenAnnotations';
-import { useOnChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { useDiscoverRows } from '@/hooks/useDiscoverRows';
 import { useDiscoverJoins } from '@/hooks/useDiscoverJoins';
 import type { JoinPhase } from '@/hooks/useDiscoverJoins';
@@ -55,55 +54,31 @@ const TEXT_CLASS: Record<Exclude<OutcomeVariant, 'warning' | 'error'>, string> =
 const rowName = (c: Challenge, untitled: string): string => c.title || c.url || untitled;
 
 /**
- * Marks a row that has a list of its own; clicking it reopens the chooser. A list
- * saved under another account (`foreignCount`, which the join does not use) is
- * counted instead of described as chosen photos.
+ * Marks a row that has a list of its own; clicking it reopens the chooser.
  */
-function ChosenChip({
-    name,
-    foreignCount,
-    onClick,
-}: {
-    name: string;
-    foreignCount: number | null;
-    onClick: () => void;
-}) {
+function ChosenChip({ name, onClick }: { name: string; onClick: () => void }) {
     const { t } = useTranslation();
-    const foreign = foreignCount !== null;
-    const text = foreign
-        ? interp(t('app.discoverChosenForeignChip'), { count: foreignCount })
-        : t('app.discoverChosenChip');
     return (
         <button
             type="button"
             className="badge badge-outline badge-sm mt-0.5 min-h-6"
-            title={t(foreign ? 'app.discoverChosenForeignHint' : 'app.discoverChosenChipHint')}
-            aria-label={interp(t(foreign ? 'app.discoverChosenForeignLabel' : 'app.discoverChosenChipLabel'), {
-                title: name,
-                count: foreignCount ?? 0,
-            })}
+            title={t('app.discoverChosenChipHint')}
+            aria-label={interp(t('app.discoverChosenChipLabel'), { title: name })}
             onClick={onClick}
         >
-            {text}
+            {t('app.discoverChosenChip')}
         </button>
     );
 }
 
 /**
- * What a row says about chosen photos: the chip when it has a list of its own (a list
- * saved under another account is counted instead), else a line for one that reaches it
- * through a rule or the global default.
+ * What a row says about chosen photos: the chip when it has a list of its own, else a line for one that
+ * reaches it through a rule or the global default.
  */
 function ChosenMarks({ c, name, onChoose }: { c: OpenChallenge; name: string; onChoose: () => void }) {
     const { t } = useTranslation();
     if (c.chosenOwnCount > 0) {
-        return (
-            <ChosenChip
-                name={name}
-                foreignCount={c.chosenEffectiveCount === 0 ? c.chosenOwnCount : null}
-                onClick={onChoose}
-            />
-        );
+        return <ChosenChip name={name} onClick={onChoose} />;
     }
     if (c.chosenEffectiveCount === 0) return null;
     return (
@@ -196,17 +171,6 @@ function RowPhotoChooser({
     onClose: () => void;
     onSaved: () => Promise<void>;
 }) {
-    // The row may have opened before the main process knew whose account this is, and then it came
-    // without its ids. Once the chooser's member check has said, ask again: the ids come through if
-    // the list is this account's, and not otherwise (null).
-    const challengeId = challenge?.id;
-    // Keyed on the challenge so a re-render does not look like a new function, and a new IPC call.
-    const reloadSaved = useCallback(async (): Promise<string[] | null> => {
-        const id = String(challengeId);
-        const result = await ipc.callOrNull(() => ipc.getOpenChosenAnnotations([id]));
-        const annotation = result?.success ? result.annotations[id] : undefined;
-        return annotation && annotation.chosenOwn.length === annotation.chosenOwnCount ? annotation.chosenOwn : null;
-    }, [challengeId]);
     const save = async (ids: string[]): Promise<boolean> => {
         // Only reachable from the chooser, which renders only while a challenge is being chosen for.
         const id = String((challenge as Challenge).id);
@@ -225,7 +189,6 @@ function RowPhotoChooser({
             isOpen={!!challenge}
             onClose={onClose}
             value={challenge?.chosenOwn ?? []}
-            savedCount={challenge?.chosenOwnCount}
             challengeId={challenge?.id ?? null}
             // GuruShots' suggested photos for this challenge, from the listing: their tiles say so.
             recommendedIds={challenge?.suggestedPhotoIds}
@@ -233,7 +196,6 @@ function RowPhotoChooser({
             // challenge-ended); the chooser hides the button.
             canSuggest={false}
             clearMeansInherit
-            reloadSaved={reloadSaved}
             onSave={save}
         />
     );
@@ -486,12 +448,10 @@ export function DiscoverSection({
     // The rows follow the settings without another trip to GuruShots: what the list carried is
     // only the starting point, the settings-only read replaces it as soon as it answers.
     const chosen = useOpenChosenAnnotations(rows.map((c) => String(c.id)));
-    useOnChosenPhotosCleared(() => void chosen.refetch());
     const [choosing, setChoosing] = useState<OpenChallenge | null>(null); // challenge whose photos are being chosen
     const [forgetting, setForgetting] = useState<OpenChallenge | null>(null); // challenge whose payment is being forgotten
     const { confirm, results, busy, withAnswerCost, ask, onConfirm, dismiss, clearResult } = useDiscoverJoins({
         items,
-        isLoggedIn,
         refetch,
         onJoined,
     });

@@ -277,7 +277,7 @@ describe('the mirror in format 1', () => {
     test('has every format-1 name back, the sign-in state at the top level, and every migration marked done', () => {
         const { config, titlePins } = randomLiveConfig(3);
         config.defaults = { autoSubmit: true, emergencySubmit: 600, exposure: 80 };
-        config.auth = { token: 't', apiHeaders: { h: 'v' }, lastUsername: 'u', chosenPhotosMemberId: 'm' };
+        config.auth = { token: 't', apiHeaders: { h: 'v' }, lastUsername: 'u' };
 
         const mirror = parseJsonObject(JSON.stringify(toFormatOne(config, titlePins)));
 
@@ -285,8 +285,8 @@ describe('the mirror in format 1', () => {
             token: 't',
             apiHeaders: { h: 'v' },
             lastUsername: 'u',
-            chosenPhotosMemberId: 'm',
         });
+        expect(mirror).not.toHaveProperty('chosenPhotosMemberId');
         for (const flag of V1_MIGRATION_FLAGS) expect(mirror[flag]).toBe(true);
         expect(mirror).not.toHaveProperty('version');
         expect(mirror).not.toHaveProperty('imported');

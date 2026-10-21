@@ -182,7 +182,7 @@ const mirrorTextOf = (
 ): string | null => mirrorOf(configText, titlePins)?.text ?? null;
 
 // A settings object with its sign-in state cleared, at the top level (a settings.json) and in `auth` (a config.json): the
-// token, the API headers, the last user name and the chosen-photos account (a copy kept of a file is not where the login
+// token, the API headers and the last user name (a copy kept of a file is not where the login
 // form is prefilled from); null when it holds none (or is not a JSON object). With `only` (the fingerprints of recorded
 // sign-ins) a part is cleared only where its token is one of those: the sign-in of any other login stays.
 const withoutSignIn = (kept: string, only?: readonly string[]): string | null => {
@@ -193,7 +193,7 @@ const withoutSignIn = (kept: string, only?: readonly string[]): string | null =>
         return null;
     }
     if (!isPlainObject(parsed)) return null;
-    const identity = ['lastUsername', 'chosenPhotosMemberId'] as const;
+    const identity = ['lastUsername'] as const;
     const holdsSignIn = (values: Record<string, unknown>): boolean =>
         only === undefined
             ? (typeof values.token === 'string' && values.token !== '') ||

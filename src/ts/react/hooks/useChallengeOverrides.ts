@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSessionLoad } from './useSessionLoad';
 import { useLatestRef } from './useLatestRef';
 import * as ipc from '@/api/ipc';
-import { useOnChosenPhotosCleared, withoutChosenPhotos } from '@/api/chosenPhotosCleared';
 import { valuesEqual } from '@/utils/valuesEqual';
 
 import type { Dispatch, SetStateAction } from 'react';
@@ -189,14 +188,6 @@ function useOverridesSave({
 
     return { saving, saveError, save };
 }
-
-/** The rules' contribution without any chosen photos list: in the profile and in both value layers. */
-const rulesWithoutChosenPhotos = (rules: TitleRuleInfo): TitleRuleInfo => ({
-    ...rules,
-    profile: rules.profile && { ...rules.profile, values: withoutChosenPhotos(rules.profile.values) },
-    ruleValues: withoutChosenPhotos(rules.ruleValues),
-    inlineValues: withoutChosenPhotos(rules.inlineValues),
-});
 
 /**
  * The rule behind a value the rules' active layer takes from a rule's own inline values, for the
@@ -404,15 +395,6 @@ export function useChallengeOverrides({
         setOverrides,
     });
     const baselineRef = useRef<OverridesBaseline | null>(null);
-    // Saving writes the whole override map: lists removed meanwhile must not come back with it.
-    useOnChosenPhotosCleared(() => {
-        setOverrides(withoutChosenPhotos);
-        // The removal is what is on disk now, so it is not an unsaved edit.
-        const baseline = baselineRef.current;
-        if (baseline) baselineRef.current = { ...baseline, overrides: withoutChosenPhotos(baseline.overrides) };
-        // From both rule layers and the matched profile, so none of them shows (or saves) a removed list.
-        setTitleRules((current) => current && rulesWithoutChosenPhotos(current));
-    });
     const { loading, loadFailed } = useOverridesLoad({
         isOpen,
         challengeId,

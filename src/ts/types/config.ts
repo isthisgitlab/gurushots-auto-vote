@@ -19,7 +19,6 @@ export interface ConfigAuthV2 {
     token: string;
     apiHeaders: Record<string, string>;
     lastUsername: string;
-    chosenPhotosMemberId: string;
 }
 
 /** The photos one challenge pins for Boost and Turbo (entry ids); a missing key is no pin. */

@@ -18,14 +18,8 @@ import type { ConfigV2 } from '../../src/ts/types/config';
 type Rng = ReturnType<typeof makeRng>;
 type Values = Record<string, unknown>;
 
-// The keys format 1 kept at the top level (app state), not among the global defaults; `chosenPhotosMemberId` is sign-in state.
-const APP_STATE_KEYS = [
-    'autovoteRunning',
-    'autovoteStartedLaunch',
-    'skipUpdateVersion',
-    'chosenPhotosClearedAt',
-    'noticeAcknowledgedVersion',
-];
+// The keys format 1 kept at the top level (app state), not among the global defaults.
+const APP_STATE_KEYS = ['autovoteRunning', 'autovoteStartedLaunch', 'skipUpdateVersion', 'noticeAcknowledgedVersion'];
 
 const SCHEMA_KEYS = Object.keys(SETTINGS_SCHEMA);
 
@@ -158,10 +152,9 @@ const randomLiveConfig = (seed: number): { config: ConfigV2; titlePins: Record<s
         token: `tok-${seed}`,
         apiHeaders: { 'x-a': `h-${seed}` },
         lastUsername: `user${seed}@example.com`,
-        chosenPhotosMemberId: rng.pick(['', 'member-1']),
     };
     // Each key lands in the defaults, and a second place when it can sit per challenge.
-    const defaultKeys = SCHEMA_KEYS.filter((key) => !APP_STATE_KEYS.includes(key) && key !== 'chosenPhotosMemberId');
+    const defaultKeys = SCHEMA_KEYS.filter((key) => !APP_STATE_KEYS.includes(key));
     config.defaults = valuesAmong(
         rng,
         defaultKeys.filter(() => rng.chance(0.7)),
@@ -216,17 +209,13 @@ const randomLiveConfig = (seed: number): { config: ConfigV2; titlePins: Record<s
 };
 
 /**
- * A configuration that holds one schema key, in every place the key may sit: the sign-in state or the app state for the
- * keys that are (`chosenPhotosMemberId`, `autovoteRunning`, ...); the global defaults, a profile, a rule's inline values, a scenario phase and a challenge's own values otherwise.
+ * A configuration that holds one schema key, in every place the key may sit: the app state for the
+ * keys that are (`autovoteRunning`, ...); the global defaults, a profile, a rule's inline values, a scenario phase and a challenge's own values otherwise.
  */
 const configWithKey = (key: string): ConfigV2 => {
     const config = getDefaultSettings();
     const [value] = valuesFor(key).filter((candidate) => validInSet(key, candidate, {}));
     if (value === undefined) throw new Error(`liveConfig has no value of ${key} that is valid on its own: add one`);
-    if (key === 'chosenPhotosMemberId') {
-        config.auth.chosenPhotosMemberId = String(value);
-        return config;
-    }
     if (APP_STATE_KEYS.includes(key)) {
         config.app[key] = value;
         return config;

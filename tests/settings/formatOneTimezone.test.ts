@@ -10,7 +10,7 @@ import type { StoredConfigV2 } from '../../src/ts/types/config';
 const configWith = (app: Record<string, unknown>): StoredConfigV2 => ({
     version: 2,
     app,
-    auth: { token: '', apiHeaders: {}, lastUsername: '', chosenPhotosMemberId: '' },
+    auth: { token: '', apiHeaders: {}, lastUsername: '' },
     defaults: {},
     profiles: {},
     seededProfiles: [],

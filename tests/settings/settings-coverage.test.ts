@@ -700,7 +700,7 @@ describe('settings facade — edge cases', () => {
 
         test('resetAllSettings keeps the sign-in state and the mock mode, and resets everything else', () => {
             seed({
-                auth: { token: 'tok', apiHeaders: { a: '1' }, lastUsername: 'me', chosenPhotosMemberId: 'm' },
+                auth: { token: 'tok', apiHeaders: { a: '1' }, lastUsername: 'me' },
                 app: { mock: true, theme: 'weird-theme' },
             });
             expect(settings.resetAllSettings()).toBe(true);
@@ -709,7 +709,6 @@ describe('settings facade — edge cases', () => {
                 token: 'tok',
                 apiHeaders: { a: '1' },
                 lastUsername: 'me',
-                chosenPhotosMemberId: 'm',
             });
             expect(out.app.mock).toBe(true);
             expect(out.app.theme).toBe(settings.getDefaultSettings().app.theme);

@@ -43,7 +43,6 @@ const SUGGEST_REFUSALS: Record<string, string> = {
     'no-match': 'Nothing matches your Must Include tags. Loosen them, or choose photos by hand (list-photos).',
     'no-eligible': 'Your library has no photo this challenge accepts right now. Upload one, then try again.',
     'suggest-busy': 'Another ranking is still running. Wait for it, then run the command again.',
-    'account-changed': 'You switched accounts while it ran. Run the command again.',
     'challenge-ended': "This challenge has ended or couldn't be read. Check it with: status",
     'fetch-failed': 'Ranking failed. Try again in a moment.',
     'suggest-failed': 'Ranking failed. Try again in a moment.',

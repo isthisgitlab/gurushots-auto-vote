@@ -2065,7 +2065,7 @@ describe('reflectNewEntry — same-cycle slot accounting', () => {
         const cache =
             require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
         const challenge: Partial<Challenge> = { id: 'c1', max_photo_submits: 4, member: { ranking: { entries: [] } } };
-        cache.writeListing('tok', 'c1', {
+        cache.writeListing('c1', {
             photos: [],
             memberId: null,
             wonIds: [],
@@ -2075,7 +2075,7 @@ describe('reflectNewEntry — same-cycle slot accounting', () => {
             allowedKnown: true,
             readAtMs: Date.now(),
         });
-        cache.writeListing('tok', 'c2', {
+        cache.writeListing('c2', {
             photos: [],
             memberId: null,
             wonIds: [],
@@ -2086,8 +2086,8 @@ describe('reflectNewEntry — same-cycle slot accounting', () => {
             readAtMs: Date.now(),
         });
         reflectNewEntry(challenge, 'new-1');
-        expect(cache.readFresh('tok', 'c1')).toBeNull();
-        expect(cache.readFresh('tok', 'c2')).not.toBeNull();
+        expect(cache.readFresh('c1')).toBeNull();
+        expect(cache.readFresh('c2')).not.toBeNull();
         cache.clearLibraryCache();
     });
 

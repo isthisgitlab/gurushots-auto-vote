@@ -4,7 +4,6 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { getIntentByName, intentValuesMatch } from '../../../settings/intentProfiles';
 import * as ipc from '@/api/ipc';
-import { useOnChosenPhotosCleared, withoutChosenPhotos } from '@/api/chosenPhotosCleared';
 import { SettingHintList, chosenPhotosOnlyReachHint } from './SettingHints';
 import { errorMessage } from '../../../errorMessage';
 
@@ -95,15 +94,6 @@ export function ChallengeProfilesBar({
     useEffect(() => {
         void refreshProfiles();
     }, [refreshProfiles]);
-
-    // Profiles loaded before every chosen-photos list was removed still hold lists, and applying
-    // one would put it back into the form: drop them at once, then read what is stored now.
-    useOnChosenPhotosCleared(() => {
-        setProfiles((current) =>
-            Object.fromEntries(Object.entries(current).map(([name, values]) => [name, withoutChosenPhotos(values)])),
-        );
-        void refreshProfiles();
-    });
 
     const names = Object.keys(profiles).sort((a, b) => a.localeCompare(b));
     const selectedProfile = selectedName && profiles[selectedName] ? profiles[selectedName] : null;

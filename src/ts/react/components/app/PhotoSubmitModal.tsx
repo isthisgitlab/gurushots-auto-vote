@@ -281,7 +281,6 @@ function PhotoSubmitBody({
                 state={state}
                 known={known}
                 selected={selected}
-                hideUnlisted={false}
                 locked={locked}
                 lockedKey={lockedKey}
                 hasChallenge

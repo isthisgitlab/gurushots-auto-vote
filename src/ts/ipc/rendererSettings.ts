@@ -1,7 +1,7 @@
 /**
  * The renderer-facing projection of the configuration. The `auth` block (the token, the API headers, the last user
- * name and the chosen-photos account) stays in the main process / settings store; a renderer only learns whether a
- * token exists. Dependency-free (types only) so the Capacitor renderer bundle can import it.
+ * name) stays in the main process / settings store; a renderer only learns whether a token exists. Dependency-free
+ * (types only) so the Capacitor renderer bundle can import it.
  */
 
 import type { ConfigApp, ConfigV2 } from '../types/config';
@@ -15,10 +15,10 @@ const isRendererHiddenKey = (key: string) =>
     key === 'auth' || key === 'token' || key === 'hasToken' || key === 'apiHeaders';
 
 /**
- * Sign-in keys a renderer may read one at a time but never write: the login form pre-fills the last user name, and the
- * chosen-photos editor compares its account with the signed-in one. Both are written by the main process alone.
+ * Sign-in keys a renderer may read one at a time but never write: the login form pre-fills the last user name.
+ * It is written by the main process alone.
  */
-const isRendererReadOnlyKey = (key: string) => key === 'lastUsername' || key === 'chosenPhotosMemberId';
+const isRendererReadOnlyKey = (key: string) => key === 'lastUsername';
 
 /**
  * @param stored - the full configuration as loaded from the store; `hasToken` is

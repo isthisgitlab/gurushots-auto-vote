@@ -5,11 +5,9 @@ import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import { isAutoJoinActive } from '../../services/joinChallenges';
-import { forgetFailedMemberId, resolveMemberId } from '../../services/autoFill';
 import { chosenAnnotator, annotateOpenIds, MAX_ANNOTATED_IDS } from './chosenAnnotations';
 import { rememberOpenChallenges } from '../../services/openChallengeCache';
 import { fetchUpcoming, mergeDiscoverLists } from '../../services/discoverChallenges';
-import { accountGeneration } from '../../services/accountScope';
 import { dropContext } from '../../services/libraryCache';
 import { getAutoClaimStatus } from '../../services/autoClaim';
 import { rememberChallenges } from '../../windows/quitGuard';
@@ -222,34 +220,33 @@ const handleGetMemberChallenges = (async () => {
         const guard = auth.requireAuthToken('member challenges');
         if (!guard.ok) return guard.response;
         const strategy = apiFactory.getApiStrategy();
-        const generation = accountGeneration();
         const [open, upcoming] = await Promise.all([
             strategy.getMemberChallenges(guard.token, 'open'),
             // Fetched whatever the window: every upcoming id is what keeps its chosen photos from cleanup.
             fetchUpcomingOrNull(guard.token, strategy),
         ]);
-        // The account logged out (or changed) while the lists were on their way: they are not this
-        // account's to remember.
-        if (generation !== accountGeneration()) {
-            return { success: false as const, error: 'The account changed while listing challenges', items: [] };
-        }
         if (open === null) return { success: false as const, error: 'Could not list challenges', items: [] };
-        // These lists keep a chosen-photos entry alive for a challenge that is not joined yet (see
-        // cleanupStaleChallengeSetting); the upcoming one is written only from a successful fetch.
-        settings.rememberOpenChallengeIds(idsOf(open));
-        if (upcoming !== null) settings.rememberUpcomingChallenges(upcoming);
         const merged = mergeDiscoverLists({
             open,
             upcoming: upcoming ?? [],
             hours: settings.getEffectiveSetting('discoverUpcomingHours', null),
             nowSec: Date.now() / 1000,
         });
-        // A challenge the upcoming feed dropped but the open one does not list yet stays in the
-        // cache, so its rules (by title or tags) still resolve while it is "starting now".
-        const fetched = new Set(idsOf(upcoming ?? []).map(String));
-        const lingering = Array.from(settings.getUpcomingChallengeIds() ?? []).filter((id) => !fetched.has(id));
-        rememberOpenChallenges(merged, lingering);
-        const annotate = await chosenAnnotator(guard.token);
+        // The lists belong to the token they were read under: a login that replaced it while they
+        // were on their way is still answered, but nothing is remembered for the account it replaced
+        // (a request still in flight must not refill what a logout or account switch emptied).
+        if (guard.token === settings.getSetting('token')) {
+            // These lists keep a chosen-photos entry alive for a challenge that is not joined yet (see
+            // cleanupStaleChallengeSetting); the upcoming one is written only from a successful fetch.
+            settings.rememberOpenChallengeIds(idsOf(open));
+            if (upcoming !== null) settings.rememberUpcomingChallenges(upcoming);
+            // A challenge the upcoming feed dropped but the open one does not list yet stays in the
+            // cache, so its rules (by title or tags) still resolve while it is "starting now".
+            const fetched = new Set(idsOf(upcoming ?? []).map(String));
+            const lingering = Array.from(settings.getUpcomingChallengeIds() ?? []).filter((id) => !fetched.has(id));
+            rememberOpenChallenges(merged, lingering);
+        }
+        const annotate = chosenAnnotator();
         return {
             success: true as const,
             items: await Promise.all(
@@ -265,9 +262,7 @@ const handleGetMemberChallenges = (async () => {
 }) satisfies IpcReplyFn;
 
 // The Chosen Photos annotations of open challenges, read from the settings: what the Discover
-// rows re-read when a setting changes, without fetching the challenge list again. The only request
-// it can make is the signed-in member's identity lookup, cached per token (retried at most every
-// 60 s after a failure) and skipped when already resolved.
+// rows re-read when a setting changes, without fetching the challenge list again.
 /**
  * @param ids - the open challenges' ids
  */
@@ -276,41 +271,10 @@ const handleGetOpenChosenAnnotations = (async (event: unknown, ids: Array<string
         return refuseInvalidArgs('join', 'get-open-chosen-annotations');
     }
     try {
-        const { token } = settings.loadSettings().auth;
-        return { success: true as const, annotations: await annotateOpenIds(ids, token) };
+        return { success: true as const, annotations: await annotateOpenIds(ids) };
     } catch (error) {
         logger.withCategory('join').error('Error handling get-open-chosen-annotations request:', error);
         return { ...errorResult(error, 'Failed to read the chosen photos'), annotations: {} };
-    }
-}) satisfies IpcReplyFn;
-
-// The signed-in member, asked for on purpose: the Chosen Photos chooser calls this on opening (when
-// a list is on record somewhere, so the saved picks can show without reading the library) and on its
-// Retry when it could not tell whose account the saved list belongs to. It evicts the cached failed
-// identity lookup for this token and resolves the member only: no library walk, so a retry costs one
-// profile request and repeats nothing the listing on screen already read. `memberId` is the
-// signed-in account, or the check failed (`account-check-failed`) and may be tried again shortly, or
-// there is no session (`not-logged-in`). The eviction is rate-limited in memberIdentity: the first
-// eviction always gets through; later ones are spaced from the last eviction (presses inside the gap
-// are answered from the cache), so it never costs more than one request per gap.
-const handleConfirmAccount = (async () => {
-    try {
-        const guard = auth.requireAuthToken('account check');
-        // Signed out is not a failed check: Retry cannot help, so the renderer says to log in again.
-        if (!guard.ok) return { success: false as const, error: 'not-logged-in' as const };
-        forgetFailedMemberId(guard.token);
-        const memberId = await resolveMemberId(
-            guard.token,
-            apiFactory.getApiStrategy().getCurrentMemberProfile,
-            logger,
-            'join',
-        );
-        return memberId === null
-            ? { success: false as const, error: 'account-check-failed' as const }
-            : { success: true as const, memberId };
-    } catch (error) {
-        logger.withCategory('join').error('Error handling confirm-account request:', error);
-        return errorResult(error, 'Failed to check the account');
     }
 }) satisfies IpcReplyFn;
 
@@ -354,7 +318,7 @@ const handleJoinChallenge = (async (
             ...(expectedCost === undefined ? [] : [expectedCost]),
         );
         // Joining enters photos, so which ones the challenge now accepts has changed.
-        if (outcome?.status === 'joined') dropContext(guard.token, challengeId);
+        if (outcome?.status === 'joined') dropContext(challengeId);
         return {
             success: outcome?.status === 'joined',
             status: outcome?.status,
@@ -406,6 +370,5 @@ export {
     handleGetAutoJoinActive,
     handleGetMemberChallenges,
     handleGetOpenChosenAnnotations,
-    handleConfirmAccount,
     handleJoinChallenge,
 };

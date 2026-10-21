@@ -4,7 +4,6 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
 import * as ipc from '@/api/ipc';
 
 import { asPreview } from '../../libraryPreview';
@@ -32,10 +31,12 @@ export type ListState =
 
 type ReadMode = 'cached' | 'fresh';
 
-const ACCOUNT_GONE = new Set(['account-changed', 'not-logged-in', 'No authentication token found']);
+// The failures that mean there is no session: what was shown clears, and a Retry is not offered —
+// signing in again is the way out.
+const SIGNED_OUT = new Set(['not-logged-in', 'No authentication token found']);
 
 const replacesListing = (error: string | undefined): boolean =>
-    error === 'no-challenge-context' || (error !== undefined && ACCOUNT_GONE.has(error));
+    error === 'no-challenge-context' || (error !== undefined && SIGNED_OUT.has(error));
 
 /**
  * How far a re-read of a listing goes: what the batch rule counts — the allowed photos once the marks are
@@ -70,8 +71,8 @@ export function useLibraryListing(
     // Every photo any fresh response has listed, by id: a selected photo that a narrower
     // search omits keeps its record and is not shown as a missing tile.
     const [known, setKnown] = useState<Map<string, LibraryPhoto>>(new Map());
-    // Which load the listing is on: a new search or load is a new generation, a member patched into
-    // the listing on screen (setMember) is not. What a Retry did belongs to the generation it ends
+    // Which load the listing is on: a new search or load is a new generation. What a Retry did
+    // belongs to the generation it ends
     // up on.
     const [generation, setGeneration] = useState(0);
     const [revalidating, setRevalidating] = useState(false);
@@ -83,15 +84,15 @@ export function useLibraryListing(
     const [loadMoreFailed, setLoadMoreFailed] = useState<string | null>(null);
     const loadingMoreRef = useRef<number | null>(null);
     // How many listings have been shown: a new read (a preview swapped for its fresh read included)
-    // is a new listing, an appended batch or a member patched in is not.
+    // is a new listing, an appended batch is not.
     const [shown, setShown] = useState(0);
     // The search term of the listing on screen, set when one is shown from the read that owns
-    // `lastSearchRef`: an appended batch and a member patch do not show, so they keep the term.
+    // `lastSearchRef`: an appended batch does not show, so it keeps the term.
     const [searchTerm, setSearchTerm] = useState('');
     const generationRef = useRef(0);
     const requestRef = useRef(0);
     const lastSearchRef = useRef('');
-    // The member on screen: the background re-check of a preview, which cannot name one, keeps it.
+    // The member of the listing on screen: the background re-check of a preview, which cannot name one, keeps it.
     const memberRef = useRef<string | null>(null);
     // The state of the newest render, for callbacks that must not depend on `state`.
     const latestState = useRef(state);
@@ -121,7 +122,6 @@ export function useLibraryListing(
         const memberId = listing.memberId ?? (keepMember ? previous : null);
         const switched = previous !== null && memberId !== previous;
         memberRef.current = memberId;
-        rememberCurrentMember(memberId);
         if (switched || !listing.preview) {
             setKnown((prev) => {
                 const base = switched ? new Map<string, LibraryPhoto>() : prev;
@@ -134,12 +134,12 @@ export function useLibraryListing(
         setState({ status: 'ready', listing: { ...listing, memberId } });
     }, []);
 
-    /** An answer that is not a listing: where it leaves the chooser (the account gone clears what was shown). */
+    /** An answer that is not a listing: where it leaves the chooser (signed out clears what was shown). */
     const showFailure = useCallback((result: LibraryFailure | null) => {
         setRevalidating(false);
         if (result?.error === 'no-challenge-context') {
             setState({ status: 'no-context' });
-        } else if (result?.error !== undefined && ACCOUNT_GONE.has(result.error)) {
+        } else if (result?.error !== undefined && SIGNED_OUT.has(result.error)) {
             setKnown(new Map());
             memberRef.current = null;
             setState({ status: 'error', error: result.error });
@@ -215,16 +215,6 @@ export function useLibraryListing(
         return generationRef.current + 1;
     }, [refreshRead]);
 
-    // A member the listing could not name but a later check did (the chooser's Retry, or the member check on
-    // its opening): put it in the listing on screen, without reading the library again.
-    const setMember = useCallback((memberId: string) => {
-        memberRef.current = memberId;
-        rememberCurrentMember(memberId);
-        setState((prev) =>
-            prev.status === 'ready' ? { status: 'ready', listing: { ...prev.listing, memberId } } : prev,
-        );
-    }, []);
-
     // Reads the listing again; answers the generation that read is, so a Retry can be recorded
     // against the listing it created rather than the one it replaced. The extent re-read is the one
     // on screen now, read before load takes the listing down.
@@ -238,7 +228,7 @@ export function useLibraryListing(
      * listing (`shown` stays). An answer to a request a newer read replaced, or that landed on another
      * generation, is dropped silently — that read has already cleared the flags. A `superseded` one that
      * survives the check (the newer read came from another window) is a `loadMoreFailed`, like every
-     * other failure that keeps the listing; an account answer replaces the listing, as for any read.
+     * other failure that keeps the listing; a signed-out one replaces the listing, as for any read.
      */
     const loadMore = useCallback(async () => {
         const current = latestState.current;
@@ -259,20 +249,13 @@ export function useLibraryListing(
             if (request !== requestRef.current || generation !== generationRef.current) return;
             if (result === null || !result.success) {
                 setLoadingMore(false);
-                // The listing is replaced only when the account is gone; anything else keeps it and says why.
+                // The listing is replaced only when the session is gone; anything else keeps it and says why.
                 if (replacesListing(result?.error)) showFailure(result);
                 else setLoadMoreFailed(result?.error ?? 'failed');
                 return;
             }
-            if (memberId !== null && result.memberId !== null && result.memberId !== memberId) {
-                setLoadingMore(false);
-                // The batch belongs to another account than the listing on screen: not this account's to append.
-                showFailure({ success: false, error: 'account-changed' });
-                return;
-            }
             if (memberId === null && result.memberId !== null) {
                 memberRef.current = result.memberId;
-                rememberCurrentMember(result.memberId);
             }
             // The batch joins the listing on screen. The request/generation guards rule out a newer
             // read — an older loadMore's answer included — and the re-entry guard a sibling loadMore
@@ -323,7 +306,6 @@ export function useLibraryListing(
         shown,
         load,
         refresh,
-        setMember,
         retry,
         loadMore,
         loadingMore,

@@ -20,7 +20,6 @@ import {
     handleGetAutoJoinActive,
     handleGetMemberChallenges,
     handleGetOpenChosenAnnotations,
-    handleConfirmAccount,
     handleJoinChallenge,
     handleForgetUnconfirmedPayment,
 } from './actions/account';
@@ -51,7 +50,6 @@ const buildHandlers = () =>
         'get-auto-join-active': handleGetAutoJoinActive,
         'get-member-challenges': handleGetMemberChallenges,
         'get-open-chosen-annotations': handleGetOpenChosenAnnotations,
-        'confirm-account': handleConfirmAccount,
         'join-challenge': handleJoinChallenge,
         'forget-unconfirmed-payment': handleForgetUnconfirmedPayment,
         'get-library-photos': handleGetLibraryPhotos,

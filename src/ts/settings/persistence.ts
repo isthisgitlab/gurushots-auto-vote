@@ -959,7 +959,7 @@ const saveAppSettings = (settings: Partial<ConfigApp>): boolean =>
     _saveChange((current) => ({ app: { ...current.app, ...settings } }));
 
 /**
- * Get a specific setting: an `auth` key (`token`, `apiHeaders`, `lastUsername`, `chosenPhotosMemberId`) from the
+ * Get a specific setting: an `auth` key (`token`, `apiHeaders`, `lastUsername`) from the
  * sign-in state, any other key from `app`.
  */
 const getSetting = <K extends string>(key: K): (ConfigApp & ConfigAuthV2)[K] => {

@@ -85,13 +85,10 @@ describe('formatSettingForLog', () => {
         expect(cmd.formatSettingForLog('chosenPhotos', 'oops')).toBe('"oops"');
     });
 
-    test('the account is masked: the login name, the owner record, and photo lists nested in other values', () => {
+    test('the account is masked: the login name, and photo lists nested in other values', () => {
         expect(cmd.formatSettingForLog('lastUsername', 'me@example.com')).toBe('[REDACTED]');
-        expect(cmd.formatSettingForLog('chosenPhotosMemberId', 'member-1')).toBe('[REDACTED]');
         // An unset private value reads as unset, not as a hidden one.
         expect(cmd.formatSettingForLog('lastUsername', '')).toBe('(not set)');
-        expect(cmd.formatSettingForLog('chosenPhotosMemberId', undefined)).toBe('(not set)');
-        expect(cmd.formatSettingForLog('chosenPhotosMemberId', null)).toBe('(not set)');
         const nested = {
             perChallenge: { '7': { chosenPhotos: ['secret1', 'secret2'], exposure: 50 } },
             titleRules: [{ title: 'Hats', chosenPhotos: ['secret3'] }],

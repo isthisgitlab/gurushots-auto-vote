@@ -45,7 +45,6 @@ const AUTH = {
     token: 'tok-1',
     apiHeaders: { 'x-a': 'b' },
     lastUsername: 'me@example.com',
-    chosenPhotosMemberId: 'm-1',
 };
 
 describe('the sign-in in the mirror (real fs)', () => {
@@ -195,7 +194,6 @@ describe('the sign-in in the mirror (real fs)', () => {
                 token: 'tok-2',
                 apiHeaders: { 'x-b': 'c' },
                 lastUsername: 'other@example.com',
-                chosenPhotosMemberId: 'm-2',
             }));
 
             loadFresh();
@@ -204,10 +202,9 @@ describe('the sign-in in the mirror (real fs)', () => {
                 token: 'tok-2',
                 apiHeaders: { 'x-b': 'c' },
                 lastUsername: 'other@example.com',
-                chosenPhotosMemberId: 'm-2',
             });
             expect(stored(configFile).auth).toMatchObject({ token: 'tok-2', lastUsername: 'other@example.com' });
-            expect(stored(legacyFile)).toMatchObject({ token: 'tok-2', chosenPhotosMemberId: 'm-2' });
+            expect(stored(legacyFile)).toMatchObject({ token: 'tok-2', lastUsername: 'other@example.com' });
         });
 
         test('a sign-in that did not change is not taken over: the configuration is not rewritten, whatever else changed', () => {
@@ -226,14 +223,14 @@ describe('the sign-in in the mirror (real fs)', () => {
 
         test('a key the older build dropped was not decided there: the configuration keeps its own', () => {
             signedIn();
-            // An older build prunes the keys it does not know (chosenPhotosMemberId) and writes the file back.
-            olderBuildChanges(({ chosenPhotosMemberId: _dropped, ...file }) => file);
+            // An older build prunes the keys it does not know (lastUsername) and writes the file back.
+            olderBuildChanges(({ lastUsername: _dropped, ...file }) => file);
 
             loadFresh();
 
             expect(settings.loadSettings().auth).toEqual(AUTH);
             expect(cat.info).not.toHaveBeenCalledWith(TAKEN_BACK);
-            expect(stored(legacyFile)).toMatchObject({ chosenPhotosMemberId: 'm-1' });
+            expect(stored(legacyFile)).toMatchObject({ lastUsername: 'me@example.com' });
         });
 
         test.each([
@@ -284,7 +281,7 @@ describe('the sign-in in the mirror (real fs)', () => {
 
             const marker = fs.readFileSync(markerFile, 'utf8');
 
-            expect(stored(markerFile).signInConfirmed).toEqual(expect.stringMatching(/^[0-9a-f]+(\.[0-9a-f]+){3}$/));
+            expect(stored(markerFile).signInConfirmed).toEqual(expect.stringMatching(/^[0-9a-f]+(\.[0-9a-f]+){2}$/));
             // (The one recorded before the write is cleared once it is the one confirmed.)
             expect(stored(markerFile)).not.toHaveProperty('signInPending');
             expect(marker).not.toContain('tok-1');
@@ -348,7 +345,7 @@ describe('the sign-in in the mirror (real fs)', () => {
         const COPY_CONFIG = JSON.stringify({
             version: 2,
             app: { theme: 'light' },
-            auth: { token: 'tok-old', apiHeaders: { 'x-o': 'p' }, lastUsername: 'me', chosenPhotosMemberId: 'm-9' },
+            auth: { token: 'tok-old', apiHeaders: { 'x-o': 'p' }, lastUsername: 'me' },
         });
         const COPY_SETTINGS = JSON.stringify({ theme: 'dark', token: 'tok-unimportable', apiHeaders: { 'x-u': 'v' } });
         const NO_SIGN_IN = JSON.stringify({ theme: 'dark', token: '', apiHeaders: {} });
@@ -369,7 +366,7 @@ describe('the sign-in in the mirror (real fs)', () => {
             expect(stored(setAside('config.json.corrupt-2026-10-16T08-00-00-000Z'))).toEqual({
                 version: 2,
                 app: { theme: 'light' },
-                auth: { token: '', apiHeaders: {}, lastUsername: '', chosenPhotosMemberId: '' },
+                auth: { token: '', apiHeaders: {}, lastUsername: '' },
             });
             expect(stored(setAside('settings.json.unimportable-2026-10-16T08-00-00-000Z'))).toEqual({
                 theme: 'dark',
@@ -389,11 +386,11 @@ describe('the sign-in in the mirror (real fs)', () => {
             }
         });
 
-        test('the user name and the chosen-photos account go out of the copies too, and stay in the configuration and the live mirror', () => {
+        test('the user name goes out of the copies too, and stays in the configuration and the live mirror', () => {
             signedIn();
             fs.writeFileSync(
                 setAside('settings.json.unimportable-2026-10-16T12-00-00-000Z'),
-                JSON.stringify({ theme: 'dark', lastUsername: 'me@example.com', chosenPhotosMemberId: 'm-7' }),
+                JSON.stringify({ theme: 'dark', lastUsername: 'me@example.com' }),
             );
 
             expect(settings.setSetting('token', '')).toBe(true);
@@ -403,13 +400,11 @@ describe('the sign-in in the mirror (real fs)', () => {
                 token: '',
                 apiHeaders: {},
                 lastUsername: '',
-                chosenPhotosMemberId: '',
             });
             expect(stored(configFile).auth).toMatchObject({
                 lastUsername: 'me@example.com',
-                chosenPhotosMemberId: 'm-1',
             });
-            expect(stored(legacyFile)).toMatchObject({ lastUsername: 'me@example.com', chosenPhotosMemberId: 'm-1' });
+            expect(stored(legacyFile)).toMatchObject({ lastUsername: 'me@example.com' });
         });
 
         test("a configuration that merely holds no token is no sign-out: starts and saves leave the copies' sign-in alone", () => {
@@ -1148,19 +1143,18 @@ describe('the sign-in in the mirror (real fs)', () => {
     });
 
     describe('compared field by field', () => {
-        test('an older build that dropped chosenPhotosMemberId, and then an account and member changed here before the next mirror landed: nothing older is adopted', () => {
+        test('an older build that dropped lastUsername, and then an account changed here before the next mirror landed: nothing older is adopted', () => {
             signedIn();
             // The older build prunes the key it does not know and writes the file back.
-            olderBuildChanges(({ chosenPhotosMemberId: _dropped, ...file }) => file);
+            olderBuildChanges(({ lastUsername: _dropped, ...file }) => file);
             loadFresh();
             const failing = failingWrites(LEGACY_TMP);
             settings.loadSettings();
-            // Another account here, and another member: none of it reaches settings.json.
+            // Another account here: none of it reaches settings.json.
             settings.setSetting('token', 'tok-2');
             settings.setSetting('lastUsername', 'other@example.com');
-            settings.setSetting('chosenPhotosMemberId', 'm-2');
-            expect(stored(legacyFile)).toMatchObject({ token: 'tok-1', lastUsername: 'me@example.com' });
-            expect(stored(legacyFile)).not.toHaveProperty('chosenPhotosMemberId');
+            expect(stored(legacyFile)).toMatchObject({ token: 'tok-1' });
+            expect(stored(legacyFile)).not.toHaveProperty('lastUsername');
             failing.failing = false;
 
             loadFresh();
@@ -1168,13 +1162,11 @@ describe('the sign-in in the mirror (real fs)', () => {
             expect(settings.loadSettings().auth).toMatchObject({
                 token: 'tok-2',
                 lastUsername: 'other@example.com',
-                chosenPhotosMemberId: 'm-2',
             });
             expect(cat.info).not.toHaveBeenCalledWith(TAKEN_BACK);
             expect(stored(legacyFile)).toMatchObject({
                 token: 'tok-2',
                 lastUsername: 'other@example.com',
-                chosenPhotosMemberId: 'm-2',
             });
         });
 
@@ -1559,7 +1551,7 @@ describe('the sign-in in the mirror (real fs)', () => {
             expect(stored(markerFile).signOutOwed).toEqual({
                 id: expect.any(String),
                 at: expect.any(String),
-                fingerprints: [expect.stringMatching(/^[0-9a-f]+(\.[0-9a-f]+){3}$/)],
+                fingerprints: [expect.stringMatching(/^[0-9a-f]+(\.[0-9a-f]+){2}$/)],
             });
             expect(fs.readFileSync(markerFile, 'utf8')).not.toContain('tok-1');
             // The process ends. The next one restores, and the sign-out holds.
@@ -2391,7 +2383,7 @@ describe('the sign-in in the mirror (real fs)', () => {
             signedIn();
             fs.writeFileSync(
                 path.join(userData, COPY),
-                JSON.stringify({ theme: 'dark', token: 'tok-copy', lastUsername: 'me', chosenPhotosMemberId: 'm-7' }),
+                JSON.stringify({ theme: 'dark', token: 'tok-copy', lastUsername: 'me' }),
             );
         };
 
@@ -2409,7 +2401,6 @@ describe('the sign-in in the mirror (real fs)', () => {
                 token: '',
                 apiHeaders: {},
                 lastUsername: '',
-                chosenPhotosMemberId: '',
             });
             // (settings.json itself is made again with the next save or start.)
             expect(stored(legacyFile)).toMatchObject({ token: 'tok-1' });

@@ -6,18 +6,11 @@
 
 import { act, renderHook, waitFor } from '@testing-library/preact';
 import { useLibraryListing } from '@/hooks/useLibraryListing';
-import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 import { MAX_WON_IDS } from '../../src/ts/settings/limits';
 
 import type { WindowApi } from '../../src/ts/types/ipc';
-
-jest.mock('@/api/useChosenPhotosOwner', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('@/api/useChosenPhotosOwner')>('@/api/useChosenPhotosOwner'),
-    rememberCurrentMember: jest.fn(),
-}));
 
 type Answer = Awaited<ReturnType<WindowApi['getLibraryPhotos']>>;
 type Listing = Extract<Answer, { success: true }>;
@@ -100,7 +93,6 @@ describe('a preview answer', () => {
         await waitFor(() => expect(result.current.revalidating).toBe(false));
         await waitFor(() => expect(result.current.state).toMatchObject({ listing: { preview: false } }));
         expect(result.current.state).toMatchObject({ listing: { memberId: 'member-1' } });
-        expect(rememberCurrentMember).toHaveBeenLastCalledWith('member-1');
     });
 
     test('a listing answered without a member on the first read has none: the member is kept only across a replacement', async () => {
@@ -135,7 +127,7 @@ describe('a preview answer', () => {
         expect(result.current.revalidating).toBe(false);
     });
 
-    test.each([['account-changed'], ['not-logged-in'], ['No authentication token found']])(
+    test.each([['not-logged-in'], ['No authentication token found']])(
         'the answer %s to the re-check clears the preview and what was known',
         async (error) => {
             getLibrary().mockResolvedValueOnce(answer()).mockResolvedValueOnce(failure(error));
@@ -146,14 +138,6 @@ describe('a preview answer', () => {
             expect(result.current.known.size).toBe(0);
         },
     );
-
-    test('the account leaving between the cached answer and its re-check clears what was shown', async () => {
-        getLibrary().mockResolvedValueOnce(previewAnswer()).mockResolvedValueOnce(failure('account-changed'));
-        const { result } = renderHook(() => useLibraryListing(7));
-        await waitFor(() => expect(result.current.state).toEqual({ status: 'error', error: 'account-changed' }));
-        expect(result.current.revalidating).toBe(false);
-        expect(result.current.known.size).toBe(0);
-    });
 
     test('a newer search drops a late re-check', async () => {
         const recheck = deferred();
@@ -177,11 +161,9 @@ describe('a preview answer', () => {
         getLibrary().mockResolvedValueOnce(previewAnswer()).mockReturnValueOnce(recheck.promise);
         const { result, unmount } = renderHook(() => useLibraryListing(7));
         await waitFor(() => expect(result.current.revalidating).toBe(true));
-        jest.mocked(rememberCurrentMember).mockClear();
         act(() => unmount());
         recheck.resolve(answer({ memberId: 'late-member' }));
         await act(async () => undefined);
-        expect(rememberCurrentMember).not.toHaveBeenCalled();
         expect(result.current.state).toMatchObject({ listing: { preview: true } });
     });
 });
@@ -337,19 +319,19 @@ describe('refresh', () => {
         expect(result.current.recheckFailed).toBe(false);
     });
 
-    test.each([
-        ['no-challenge-context', { status: 'no-context' }],
-        ['account-changed', { status: 'error', error: 'account-changed' }],
-    ])('%s replaces the listing with that state', async (error, expected) => {
-        getLibrary().mockResolvedValueOnce(answer()).mockResolvedValueOnce(failure(error));
-        const { result } = renderHook(() => useLibraryListing(7));
-        await waitFor(() => expect(result.current.state.status).toBe('ready'));
-        await act(async () => {
-            result.current.refresh();
-        });
-        await waitFor(() => expect(result.current.state).toEqual(expected));
-        expect(result.current.revalidating).toBe(false);
-    });
+    test.each([['no-challenge-context', { status: 'no-context' }]])(
+        '%s replaces the listing with that state',
+        async (error, expected) => {
+            getLibrary().mockResolvedValueOnce(answer()).mockResolvedValueOnce(failure(error));
+            const { result } = renderHook(() => useLibraryListing(7));
+            await waitFor(() => expect(result.current.state.status).toBe('ready'));
+            await act(async () => {
+                result.current.refresh();
+            });
+            await waitFor(() => expect(result.current.state).toEqual(expected));
+            expect(result.current.revalidating).toBe(false);
+        },
+    );
 
     test('a newer load drops a refresh still in flight', async () => {
         getLibrary().mockResolvedValueOnce(answer());
@@ -644,7 +626,6 @@ describe('loadMore', () => {
     });
 
     test.each([
-        ['account-changed', { status: 'error', error: 'account-changed' }],
         ['not-logged-in', { status: 'error', error: 'not-logged-in' }],
         ['no-challenge-context', { status: 'no-context' }],
     ])('%s replaces the listing, as for any read', async (error, expected) => {
@@ -659,27 +640,14 @@ describe('loadMore', () => {
         if (error !== 'no-challenge-context') expect(result.current.known.size).toBe(0);
     });
 
-    test('a batch naming another member than the listing is an account change, not an append', async () => {
-        getLibrary()
-            .mockResolvedValueOnce(batch(['a'], { nextStart: 1, truncated: true, memberId: 'member-1' }))
-            .mockResolvedValueOnce(batch(['b'], { memberId: 'member-2' }));
-        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
-        await act(async () => result.current.load(''));
-        await act(async () => result.current.loadMore());
-        expect(result.current.state).toEqual({ status: 'error', error: 'account-changed' });
-        expect(result.current.known.size).toBe(0);
-    });
-
     test('a batch naming a member the listing could not adopts it, as a read landing would', async () => {
         getLibrary()
             .mockResolvedValueOnce(batch(['a'], { nextStart: 1, truncated: true, memberId: null }))
             .mockResolvedValueOnce(batch(['b'], { memberId: 'member-9' }));
         const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
         await act(async () => result.current.load(''));
-        jest.mocked(rememberCurrentMember).mockClear();
         await act(async () => result.current.loadMore());
         expect(result.current.state).toMatchObject({ status: 'ready', listing: { memberId: 'member-9' } });
-        expect(rememberCurrentMember).toHaveBeenLastCalledWith('member-9');
         expect(result.current.known.size).toBe(2);
         expect(result.current.loadMoreFailed).toBeNull();
     });
@@ -971,7 +939,7 @@ describe('isSearch', () => {
 });
 
 describe('the shown counter', () => {
-    test('a load is a new listing and a preview’s fresh swap is another one; an append and a member patch are not', async () => {
+    test('a load is a new listing and a preview’s fresh swap is another one; an append is not', async () => {
         getLibrary()
             .mockResolvedValueOnce(previewAnswer())
             .mockResolvedValueOnce(answer({ memberId: null, photos: [photo('a')], nextStart: 1, truncated: true }))
@@ -984,8 +952,6 @@ describe('the shown counter', () => {
         await waitFor(() => expect(result.current.revalidating).toBe(false));
         expect(result.current.shown).toBe(2);
         await act(async () => result.current.loadMore());
-        expect(result.current.shown).toBe(2);
-        await act(async () => result.current.setMember('member-5'));
         expect(result.current.shown).toBe(2);
         await act(async () => result.current.load('pink'));
         expect(result.current.shown).toBe(3);

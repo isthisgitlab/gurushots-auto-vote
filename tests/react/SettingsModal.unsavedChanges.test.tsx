@@ -7,11 +7,8 @@
 import { act, fireEvent, pickOption, render, screen, waitFor } from './helpers/test-utils';
 import { SettingsModal } from '@/components/app/SettingsModal';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
-import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { fireSettingsChanged, mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
-
-const PHOTO = `00000001${'a'.repeat(24)}`;
 
 const APP_SETTINGS = { theme: 'light', language: 'en', timezone: 'Europe/Riga' };
 
@@ -142,18 +139,6 @@ describe('SettingsModal — dismissing', () => {
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(asked()).toBe(false);
         expect(onClose).toHaveBeenCalledTimes(1);
-    });
-
-    test('a chosen-photos list removed while the modal is open is not an unsaved edit', async () => {
-        mockApi.getTitleRules
-            .mockReset()
-            .mockResolvedValue(invalid([{ title: 'Tagged', mustIncludeTags: ['hat'], chosenPhotos: [PHOTO] }]));
-        await openSettings();
-        act(() => announceChosenPhotosCleared());
-
-        click('app.cancel');
-        expect(asked()).toBe(false);
-        expect(onClose).toHaveBeenCalled();
     });
 });
 

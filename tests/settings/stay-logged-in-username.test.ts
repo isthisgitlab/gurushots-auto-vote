@@ -36,7 +36,7 @@ describe('the saved user name and Stay Logged In', () => {
         store = installHeadlessStore();
         store.value = JSON.stringify({
             app: { stayLoggedIn: true },
-            auth: { token: 'tok', apiHeaders: {}, lastUsername: 'me@example.com', chosenPhotosMemberId: 'm1' },
+            auth: { token: 'tok', apiHeaders: {}, lastUsername: 'me@example.com' },
         });
     });
 
@@ -48,7 +48,7 @@ describe('the saved user name and Stay Logged In', () => {
         expect(settings.setSetting('stayLoggedIn', false)).toBe(true);
 
         expect(stored().app.stayLoggedIn).toBe(false);
-        expect(stored().auth).toEqual({ token: 'tok', apiHeaders: {}, lastUsername: '', chosenPhotosMemberId: 'm1' });
+        expect(stored().auth).toEqual({ token: 'tok', apiHeaders: {}, lastUsername: '' });
         expect(store.write).toHaveBeenCalledTimes(1);
     });
 

@@ -1,25 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSessionLoad } from './useSessionLoad';
 import * as ipc from '@/api/ipc';
-import { useOnChosenPhotosCleared, withoutChosenPhotos } from '@/api/chosenPhotosCleared';
 import { valuesEqual } from '@/utils/valuesEqual';
-import { ruleHasBehaviour } from '../../settings/ruleBehaviour';
 
 import type { ChallengeValues, TitleRule } from '../../types/settings';
 
 const fetchTitleRules = () => Promise.all([ipc.getTitleRules(), ipc.getChallengeProfiles()]);
-
-/**
- * The rules after every saved chosen-photos list was removed: each rule loses its list, and a rule whose only
- * content was its list goes too, as it does where the lists were removed.
- */
-const withoutClearedLists = (current: TitleRule[]): TitleRule[] =>
-    current.flatMap((rule) => {
-        const stripped = withoutChosenPhotos(rule);
-        // Only a rule that actually held a list can have lost its behaviour to the clear: a
-        // half-written rule (its list still '' = inherit) is the user's draft, kept as it is.
-        return Array.isArray(rule.chosenPhotos) && !ruleHasBehaviour(stripped) ? [] : [stripped];
-    });
 
 /**
  * Editor state for the challenge (title-tag) rules section of the global
@@ -70,14 +56,6 @@ export function useTitleRules(isOpen: boolean) {
         if (error) setError(false);
         setRules(next);
     };
-
-    // Saving the rules writes the whole list: lists removed meanwhile must not come back with it.
-    // A rule whose only content was its list goes too, as it does where the lists were removed.
-    // The baseline loses them too: the removal is what is on disk now.
-    useOnChosenPhotosCleared(() => {
-        setRules(withoutClearedLists);
-        savedRulesRef.current = savedRulesRef.current && withoutClearedLists(savedRulesRef.current);
-    });
 
     const persist = useCallback(async () => {
         if (loaded) {

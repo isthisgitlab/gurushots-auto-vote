@@ -282,10 +282,10 @@ describe('swapEntry', () => {
         expect(strategy.swapPhoto).toHaveBeenCalledWith(555, 'old', 'fresh', 'tok');
     });
 
-    test('drops the photo chooser’s cached listing of the challenge, for every account', async () => {
+    test('drops the photo chooser’s cached listing of the challenge', async () => {
         const cache =
             require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
-        cache.writeListing('tok', 555, {
+        const listing = () => ({
             photos: [],
             memberId: null,
             wonIds: [],
@@ -295,30 +295,11 @@ describe('swapEntry', () => {
             allowedKnown: true,
             readAtMs: Date.now(),
         });
-        cache.writeListing('other', 555, {
-            photos: [],
-            memberId: null,
-            wonIds: [],
-            wonCount: 0,
-            truncated: false,
-            nextStart: 0,
-            allowedKnown: true,
-            readAtMs: Date.now(),
-        });
-        cache.writeListing('tok', 556, {
-            photos: [],
-            memberId: null,
-            wonIds: [],
-            wonCount: 0,
-            truncated: false,
-            nextStart: 0,
-            allowedKnown: true,
-            readAtMs: Date.now(),
-        });
+        cache.writeListing(555, listing());
+        cache.writeListing(556, listing());
         await swapEntry(555, 'old', 'fresh', 'tok', { strategy: stubStrategy(), logger });
-        expect(cache.readFresh('tok', 555)).toBeNull();
-        expect(cache.readFresh('other', 555)).toBeNull();
-        expect(cache.readFresh('tok', 556)).not.toBeNull();
+        expect(cache.readFresh(555)).toBeNull();
+        expect(cache.readFresh(556)).not.toBeNull();
         cache.clearLibraryCache();
     });
 
@@ -442,7 +423,7 @@ describe('swap back', () => {
         const strategy = stubStrategy({ challenge: swappedChallenge() });
         const ledger = createMemoryLedger();
         ledger.onSwapped(555, { id: 'orig', member_id: 'mem1', boosted: true }, 'repl');
-        cache.writeListing('tok', 555, {
+        cache.writeListing(555, {
             photos: [],
             memberId: null,
             wonIds: [],
@@ -453,7 +434,7 @@ describe('swap back', () => {
             readAtMs: Date.now(),
         });
         await swapBack(555, 'repl', 'tok', { strategy, logger, ledger });
-        expect(cache.readFresh('tok', 555)).toBeNull();
+        expect(cache.readFresh(555)).toBeNull();
         cache.clearLibraryCache();
     });
 

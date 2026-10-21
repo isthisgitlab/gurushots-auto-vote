@@ -98,14 +98,11 @@ describe('get-setting', () => {
         expect(settings.getSetting).not.toHaveBeenCalled();
     });
 
-    test.each(['lastUsername', 'chosenPhotosMemberId'])(
-        'answers the account key %s: the renderer reads it',
-        async (key) => {
-            settings.getSetting = jest.fn().mockReturnValue('me');
-            await expect(handlers['get-setting']({}, key)).resolves.toBe('me');
-            expect(settings.getSetting).toHaveBeenCalledWith(key);
-        },
-    );
+    test('answers the account key lastUsername: the renderer reads it', async () => {
+        settings.getSetting = jest.fn().mockReturnValue('me');
+        await expect(handlers['get-setting']({}, 'lastUsername')).resolves.toBe('me');
+        expect(settings.getSetting).toHaveBeenCalledWith('lastUsername');
+    });
 
     test('rejects a non-string key and returns null (no default for it)', async () => {
         settings.getSetting = jest.fn();
@@ -131,7 +128,7 @@ describe('set-setting', () => {
         expect(settings.setSetting).toHaveBeenCalledWith('theme', 'dark');
     });
 
-    test.each(['auth', 'token', 'hasToken', 'apiHeaders', 'lastUsername', 'chosenPhotosMemberId'])(
+    test.each(['auth', 'token', 'hasToken', 'apiHeaders', 'lastUsername'])(
         'refuses to write the %s key and does not broadcast',
         async (key) => {
             const broadcastSettingsChange = jest.fn();
@@ -216,7 +213,6 @@ describe('save-settings', () => {
                 {
                     apiHeaders: { evil: '1' },
                     lastUsername: 'evil',
-                    chosenPhotosMemberId: 'evil',
                     auth: { token: 'evil' },
                     theme: 'dark',
                 },
@@ -774,41 +770,6 @@ describe('wipe-local-data', () => {
     test('never throws across IPC', async () => {
         localData.wipeLocalData.mockRejectedValue(new Error('boom'));
         await expect(handlers['wipe-local-data']()).resolves.toEqual({ success: false, error: 'boom' });
-    });
-});
-
-describe('clear-chosen-photos', () => {
-    test('removes the lists, broadcasts the change and reports how many went', async () => {
-        const broadcast = jest.fn();
-        jest.mocked(settings.clearChosenPhotos).mockReturnValue(4);
-        jest.mocked(settings.loadSettings).mockReturnValue(
-            invalid({ auth: { token: 'secret' }, app: { theme: 'dark' } }),
-        );
-        await expect(buildHandlers({ broadcastSettingsChange: broadcast })['clear-chosen-photos']()).resolves.toEqual({
-            success: true,
-            removed: 4,
-        });
-        expect(broadcast).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
-    });
-
-    test('works without a broadcast listener', async () => {
-        jest.mocked(settings.clearChosenPhotos).mockReturnValue(0);
-        await expect(handlers['clear-chosen-photos']()).resolves.toEqual({ success: true, removed: 0 });
-    });
-
-    test('a save that failed is an error result, with no broadcast', async () => {
-        const broadcast = jest.fn();
-        jest.mocked(settings.clearChosenPhotos).mockReturnValue(null);
-        await expect(buildHandlers({ broadcastSettingsChange: broadcast })['clear-chosen-photos']()).resolves.toEqual({
-            success: false,
-            error: 'The settings file could not be saved',
-        });
-        expect(broadcast).not.toHaveBeenCalled();
-    });
-
-    test('never throws across IPC', async () => {
-        settings.clearChosenPhotos = invalid(jest.fn(boom));
-        await expect(handlers['clear-chosen-photos']()).resolves.toEqual({ success: false, error: 'boom' });
     });
 });
 

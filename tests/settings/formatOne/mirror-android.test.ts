@@ -61,7 +61,7 @@ const USER_FILE = JSON.stringify({ theme: 'dark', token: 'tok-secret', lastUsern
 const STORED_CONFIG = JSON.stringify({
     version: 2,
     app: { theme: 'dark' },
-    auth: { token: 'tok-secret', apiHeaders: {}, lastUsername: 'me', chosenPhotosMemberId: '' },
+    auth: { token: 'tok-secret', apiHeaders: {}, lastUsername: 'me' },
 });
 
 let cat: CatDouble;

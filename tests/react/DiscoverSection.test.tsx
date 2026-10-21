@@ -426,71 +426,6 @@ describe('a paid row that was already charged', () => {
         });
     });
 
-    test("a different account sees none of the previous one's outcomes or dialogs", async () => {
-        window.api.joinChallenge = joinMock().mockResolvedValue(
-            invalid({ success: false, status: 'charged-pending-submit' }),
-        );
-        const view = render(
-            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
-        );
-        await screen.findByText('Paid One');
-        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
-        await screen.findByText('app.discoverChargedPending');
-        // Logged out, and in again as someone else.
-        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={jest.fn()} timezone="UTC" />);
-        view.rerender(
-            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
-        );
-        await screen.findByText('Paid One');
-        expect(screen.queryByText('app.discoverChargedPending')).toBeNull();
-        expect(screen.queryByText('app.discoverRetrySubmit')).toBeNull();
-    });
-
-    test('an answer from before the account changed is dropped: no dialog, no outcome line, no refetch, no onJoined', async () => {
-        let release!: (answer: Awaited<ReturnType<WindowApi['joinChallenge']>>) => void;
-        window.api.joinChallenge = joinMock().mockImplementation(() => new Promise((resolve) => (release = resolve)));
-        const onJoined = jest.fn();
-        const view = render(
-            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={onJoined} timezone="UTC" />,
-        );
-        await screen.findByText('Paid One');
-        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
-        await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledTimes(1));
-        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={onJoined} timezone="UTC" />);
-        view.rerender(
-            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={onJoined} timezone="UTC" />,
-        );
-        await screen.findByText('Paid One');
-        const reads = jest.mocked(window.api.getMemberChallenges).mock.calls.length;
-        // The previous account's join comes back saying coins were charged.
-        await act(async () => release(invalid({ success: false, status: 'charged-pending-submit', cost: 100 })));
-        expect(screen.queryByText('app.discoverChargedPending')).toBeNull();
-        expect(screen.queryByText('app.discoverRetrySubmit')).toBeNull();
-        expect(screen.queryByText('app.discoverConfirmTitle')).toBeNull();
-        expect(jest.mocked(window.api.getMemberChallenges).mock.calls).toHaveLength(reads);
-        expect(onJoined).not.toHaveBeenCalled();
-        // The new session's row is not left busy by the old one either.
-        expect(screen.getByText('app.discoverJoinPaid')).toBeTruthy();
-    });
-
-    test('an answer from before the account changed that asks for a price opens no dialog for the new account', async () => {
-        let release!: (answer: Awaited<ReturnType<WindowApi['joinChallenge']>>) => void;
-        window.api.joinChallenge = joinMock().mockImplementation(() => new Promise((resolve) => (release = resolve)));
-        const view = render(
-            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
-        );
-        await screen.findByText('Paid One');
-        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
-        await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledTimes(1));
-        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={jest.fn()} timezone="UTC" />);
-        view.rerender(
-            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
-        );
-        await screen.findByText('Paid One');
-        await act(async () => release(invalid(priceAsk(100))));
-        expect(screen.queryByText('app.discoverConfirmTitle')).toBeNull();
-    });
-
     test('a failed join that the old session threw is dropped too', async () => {
         let fail!: (error: Error) => void;
         window.api.joinChallenge = joinMock().mockImplementation(() => new Promise((_, reject) => (fail = reject)));
@@ -1344,9 +1279,6 @@ describe('chosen photos', () => {
         window.api = invalid({
             // The settings-only read subscribes to settings changes, as in the app.
             onSettingsChanged: mockApi.onSettingsChanged,
-            getSetting: jest
-                .fn<ReturnType<WindowApi['getSetting']>, Parameters<WindowApi['getSetting']>>()
-                .mockResolvedValue(invalid('')),
             // The list is read once; the rows then follow the settings through the settings-only read.
             getMemberChallenges: listMock().mockResolvedValue(invalid({ success: true, items })),
             getOpenChosenAnnotations: jest.fn<
@@ -1362,9 +1294,6 @@ describe('chosen photos', () => {
                 ),
             })),
             joinChallenge: spendLater({ success: true, status: 'joined' }),
-            confirmAccount: jest
-                .fn<ReturnType<WindowApi['confirmAccount']>, Parameters<WindowApi['confirmAccount']>>()
-                .mockResolvedValue(invalid({ success: true, memberId: 'c'.repeat(32) })),
             setChallengeOverride: jest.fn(async (_key: string, id: string, value: string[]) => {
                 own[id] = value;
                 return true;
@@ -1435,158 +1364,6 @@ describe('chosen photos', () => {
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
         await waitFor(() => expect(window.api.removeChallengeOverride).toHaveBeenCalledWith('chosenPhotos', '900001'));
         await waitFor(() => expect(screen.queryByText('app.discoverChosenChip')).toBeNull());
-    });
-
-    describe("the user's own list, withheld on a fresh launch", () => {
-        const OWNER = 'c'.repeat(32);
-        let memberKnown: boolean;
-        let release: () => void;
-
-        // The member check answers, and the chooser then asks again for its own list: wait for that ask.
-        const releaseAndWaitForReread = async () => {
-            jest.mocked(window.api.getOpenChosenAnnotations).mockClear();
-            release();
-            await waitFor(() => expect(window.api.getOpenChosenAnnotations).toHaveBeenCalledWith(['900001']));
-        };
-
-        const open = async () => {
-            own['900001'] = [PHOTO];
-            memberKnown = false;
-            const gate = new Promise<void>((resolve) => (release = resolve));
-            jest.mocked(window.api.getSetting).mockResolvedValue(OWNER);
-            // The main process withholds the ids until the member has been resolved.
-            jest.mocked(window.api.getOpenChosenAnnotations).mockImplementation(async () => ({
-                success: true,
-                annotations: Object.fromEntries(
-                    annotated().map(({ id, chosenOwn, chosenOwnCount, chosenEffectiveCount }) => [
-                        String(id),
-                        { chosenOwn: memberKnown ? chosenOwn : [], chosenOwnCount, chosenEffectiveCount },
-                    ]),
-                ),
-            }));
-            jest.mocked(window.api.confirmAccount).mockImplementation(async () => {
-                await gate;
-                memberKnown = true;
-                return invalid({ success: true, memberId: OWNER });
-            });
-            renderSection();
-            fireEvent.click(await screen.findByText('app.discoverChosenChip'));
-            return screen.findByRole('button', { name: 'app.photoChooserUse' });
-        };
-
-        test('Save is held, an empty one included, until the list has been read again; then it saves that list', async () => {
-            const use = await open();
-            expect(use.getAttribute('aria-disabled')).toBe('true');
-            fireEvent.click(use);
-            expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
-            expect(window.api.setChallengeOverride).not.toHaveBeenCalled();
-            // No library read happened: the member check, not a listing, names the account.
-            expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
-
-            release();
-            await waitFor(() =>
-                expect(
-                    screen
-                        .getByRole('button', { name: /^app\.photoChooserSavedTileLabel/ })
-                        .getAttribute('aria-pressed'),
-                ).toBe('true'),
-            );
-            await waitFor(() => expect(use.getAttribute('aria-disabled')).toBe('false'));
-            fireEvent.click(use);
-            await waitFor(() =>
-                expect(window.api.setChallengeOverride).toHaveBeenCalledWith('chosenPhotos', '900001', [PHOTO]),
-            );
-            expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
-        });
-
-        test('a failed first read is not repeated by the section re-rendering: only Retry asks again', async () => {
-            const use = await open();
-            // The chooser's own read (one id) fails, so the ids stay withheld; the rows' read still
-            // answers, with different data each time, so every settings broadcast really re-renders.
-            const rowsRead = jest.mocked(window.api.getOpenChosenAnnotations).getMockImplementation()!;
-            let rowReads = 0;
-            jest.mocked(window.api.getOpenChosenAnnotations).mockImplementation(async (ids) => {
-                if (ids.length === 1) return { success: false, error: 'down', annotations: {} };
-                rowReads += 1;
-                const answer = await rowsRead(ids);
-                return answer.success
-                    ? {
-                          ...answer,
-                          annotations: Object.fromEntries(
-                              Object.entries(answer.annotations).map(([id, row]) => [
-                                  id,
-                                  { ...row, chosenEffectiveCount: row.chosenEffectiveCount + (rowReads % 2) },
-                              ]),
-                          ),
-                      }
-                    : answer;
-            });
-            await releaseAndWaitForReread();
-            await screen.findByText('app.photoChooserSaveReadFailed');
-            const ownReads = () =>
-                jest.mocked(window.api.getOpenChosenAnnotations).mock.calls.filter(([ids]) => ids.length === 1);
-            expect(ownReads()).toHaveLength(1);
-
-            // Settings broadcasts re-render the section; the chooser's read is not asked again.
-            const before = rowReads;
-            act(() => fireSettingsChanged({ theme: 'dark' }));
-            await waitFor(() => expect(rowReads).toBe(before + 1));
-            act(() => fireSettingsChanged({ theme: 'light' }));
-            await waitFor(() => expect(rowReads).toBe(before + 2));
-            await act(async () => undefined);
-            expect(ownReads()).toHaveLength(1);
-            expect(screen.getByText('app.photoChooserSaveReadFailed')).toBeTruthy();
-            expect(use.getAttribute('aria-disabled')).toBe('true');
-        });
-
-        test('the list is removed only when the user really clears it', async () => {
-            const use = await open();
-            release();
-            await waitFor(() => expect(use.getAttribute('aria-disabled')).toBe('false'));
-            fireEvent.click(screen.getByRole('button', { name: 'app.photosClear' }));
-            fireEvent.click(use);
-            await waitFor(() =>
-                expect(window.api.removeChallengeOverride).toHaveBeenCalledWith('chosenPhotos', '900001'),
-            );
-        });
-
-        test.each([
-            ['an answer that does not hold the row', {}],
-            [
-                'an answer that still withholds the ids',
-                { '900001': { chosenOwn: [], chosenOwnCount: 1, chosenEffectiveCount: 1 } },
-            ],
-        ])('%s keeps Save held', async (_name, annotations) => {
-            const use = await open();
-            jest.mocked(window.api.getOpenChosenAnnotations).mockResolvedValue(invalid({ success: true, annotations }));
-            await releaseAndWaitForReread();
-            await screen.findByText('app.photoChooserSaveReadFailed');
-            expect(use.getAttribute('aria-disabled')).toBe('true');
-            fireEvent.click(use);
-            expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
-        });
-
-        test('a read that throws keeps Save held', async () => {
-            const use = await open();
-            jest.mocked(window.api.getOpenChosenAnnotations).mockRejectedValue(new Error('gone'));
-            await releaseAndWaitForReread();
-            await screen.findByText('app.photoChooserSaveReadFailed');
-            expect(use.getAttribute('aria-disabled')).toBe('true');
-        });
-
-        test('a read that fails keeps Save held', async () => {
-            const use = await open();
-            jest.mocked(window.api.getOpenChosenAnnotations).mockResolvedValue({
-                success: false,
-                error: 'down',
-                annotations: {},
-            });
-            await releaseAndWaitForReread();
-            await screen.findByText('app.photoChooserSaveReadFailed');
-            expect(use.getAttribute('aria-disabled')).toBe('true');
-            fireEvent.click(use);
-            expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
-        });
     });
 
     test('the Choose photos button and the Chosen chip are named by their challenge', async () => {
@@ -1669,63 +1446,6 @@ describe('chosen photos', () => {
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
         expect(await screen.findByText('app.photoChooserInheritNote')).toBeTruthy();
-    });
-
-    test("another account's list is only counted: remove, cancel, reopen, and its ids never appear", async () => {
-        // The main process withholds a foreign list's ids and counts them; the owner is on record.
-        let foreign = true;
-        own['900001'] = [PHOTO];
-        jest.mocked(window.api.getSetting).mockResolvedValue('d'.repeat(32));
-        jest.mocked(window.api.getOpenChosenAnnotations).mockImplementation(async () => ({
-            success: true,
-            annotations: Object.fromEntries(
-                annotated().map((row) => [
-                    String(row.id),
-                    {
-                        chosenOwn: foreign ? [] : row.chosenOwn,
-                        chosenOwnCount: row.chosenOwnCount,
-                        chosenEffectiveCount: foreign ? 0 : row.chosenEffectiveCount,
-                    },
-                ]),
-            ),
-        }));
-        window.api.clearChosenPhotos = jest.fn(async () => {
-            own = {};
-            foreign = false;
-            return { success: true as const, removed: 1 };
-        });
-        mockTranslator.t.mockImplementation((key) =>
-            key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key,
-        );
-        renderSection();
-        // The row counts another account's list instead of calling it chosen photos.
-        const chip = await screen.findByText('Other account: 1 photo(s)');
-        expect(screen.queryByText('app.discoverChosenChip')).toBeNull();
-        // A short chip text (the long sentence is its accessible name), so it stays one line in a narrow row.
-        expect(chip.textContent!.length).toBeLessThan(chip.getAttribute('aria-label')!.length / 2);
-        // Its own translated name and tooltip, not a string built in code.
-        expect(chip.getAttribute('aria-label')).toBe('Other account: 1 photo(s) for Free One, review them');
-        // WCAG 2.5.3: the accessible name starts with the text that is shown.
-        expect(chip.getAttribute('aria-label')!.startsWith(chip.textContent!)).toBe(true);
-        expect(chip.getAttribute('title')).toBe(app.discoverChosenForeignHint);
-        mockTranslator.t.mockImplementation((key) => key);
-        fireEvent.click(chip);
-        // The chooser opens empty, with the notice and a count — never the other account's id.
-        expect(await screen.findByText('app.photoChooserOtherAccount')).toBeTruthy();
-        expect(screen.getByText('app.chosenPhotosOtherAccountCount')).toBeTruthy();
-        expect(document.body.textContent).not.toContain(PHOTO.slice(0, 8));
-        fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserOtherAccountClear' }));
-        const confirm = (await screen.findAllByRole('button', { name: 'app.photoChooserOtherAccountClear' })).at(-1)!;
-        fireEvent.click(confirm);
-        await waitFor(() => expect(window.api.clearChosenPhotos).toHaveBeenCalledTimes(1));
-        fireEvent.click((await screen.findAllByRole('button', { name: 'app.cancel' })).at(-1)!);
-        await waitFor(() => expect(screen.queryByRole('button', { name: 'app.photoChooserUse' })).toBeNull());
-        // The row no longer carries the chip, and reopening shows a clean chooser.
-        await waitFor(() => expect(screen.queryByText('app.discoverChosenChip')).toBeNull());
-        fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
-        await screen.findByRole('button', { name: 'app.photoChooserUse' });
-        expect(screen.queryByText('app.photoChooserOtherAccount')).toBeNull();
-        expect(document.body.textContent).not.toContain(PHOTO.slice(0, 8));
     });
 
     test('a settings change updates the rows without asking GuruShots again', async () => {

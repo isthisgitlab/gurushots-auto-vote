@@ -87,22 +87,18 @@ export const errors = {
     suggestNoMore:
         'Vairāk ieteikumu nav. Visi piemērotie foto jau ir parādīti. Spied „Automātiski”, lai sāktu no jauna ar labākajiem.',
     suggestBusy: 'Foto netika sarindoti. Cita rindošana vēl turpinās. Pagaidi, kamēr tā beidzas, un mēģini vēlreiz.',
-    suggestAccountChanged:
-        'Foto netika sarindoti. Rindošanas laikā tu nomainīji kontu. Aizver šo dialoglodziņu un atver to vēlreiz.',
     suggestChallengeEnded:
         'Foto netika sarindoti. Izaicinājums ir beidzies vai to nevarēja nolasīt. Aizver šo dialoglodziņu un atver kartīti vēlreiz.',
     suggestFailed: 'Foto netika sarindoti. GuruShots neatbildēja vai rindošana nepabeidzās. Mēģini vēlreiz pēc brīža.',
     fetchChallengesFailed: 'Izaicinājumus neizdevās ielādēt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
     libraryReadFailed:
         'Tavus foto neizdevās nolasīt. Bibliotēkas nolasīšana pārtrūka, pirms tā tika pabeigta. Pamēģini vēlreiz.',
-    accountChanged: 'Saraksta ielādes laikā mainījās konts, tāpēc rezultāts tika atmests. Atver sarakstu vēlreiz.',
     tokenNotSaved:
         'Pieteikšanās tika pieņemta, bet to neizdevās saglabāt. Uzstādījumus neizdevās ierakstīt. Pārbaudi uzstādījumu faila atļaujas un brīvo vietu diskā (iemeslu var norādīt arī uzstādījumu paziņojums) un piesakies vēlreiz.',
     tokenNotSavedAndroid:
         'Pieteikšanās tika pieņemta, bet to neizdevās saglabāt. Ierīces uzstādījumu krātuve to nepieņēma. Restartē lietotni un piesakies vēlreiz.',
     webShellToken:
         'Šī lapa nevar sazināties ar tīmekļa serveri. Tā ir atvērta bez šīs palaišanas piekļuves tokena, vai serveris kopš tā laika ir restartēts. Atver adresi, ko izvadīja pnpm web.',
-    accountCheckFailed: 'Kontu neizdevās pārbaudīt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
     joinRefusedFull:
         'Neizdevās pievienoties: izaicinājums ir pilns, brīvu vietu vairs nav. Monētas netika norakstītas. Atsvaidzini sarakstu un pievienojies, tiklīdz atbrīvojas kāda vieta.',
     joinRefusedPriceUnknown:
@@ -823,19 +819,12 @@ export const app = {
     chosenPhotosOnly: 'Iesniegt tikai izvēlētos foto',
     chosenPhotosOnlyDesc:
         'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski (ar pogu „Izvēlēties foto…” izaicinājuma kartītē vienreiz iesniedz tevis izvēlētos foto), ārkārtas iesniegšana šo uzstādījumu neņem vērā (uzstādi izaicinājumam ārkārtas iesniegšanu uz 0, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā (ja vien nav ieslēgts „Tikai manuāli”: tad sadaļā „Atrast izaicinājumus” izvēlies šī izaicinājuma foto un nospied „Pievienoties” vai „Mēģināt iesniegt vēlreiz”, ja monētas jau iztērētas). Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem obligātajiem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
-    chosenPhotosMemberId: 'Izvēlēto foto konts',
-    chosenPhotosClearedAt: 'Izvēlēto foto notīrīšanas laiks',
-    chosenPhotosClearedAtDesc:
-        'Iekšējs — kad pēdējo reizi izņemti visi saglabātie izvēlēto foto saraksti; atvērtie redaktori pēc tā noņem savu sarakstu kopiju',
-    chosenPhotosMemberIdDesc:
-        'Iekšējs — dalībnieks, kas pēdējais saglabāja izvēlēto foto sarakstu; ja piesakās cits dalībnieks, saraksts tiek ignorēts',
     chosenPhotosCount: 'Izvēlēto foto: {count}',
     choosePhotos: 'Izvēlēties foto',
     photosClear: 'Notīrīt',
     photosUseNone: 'Neizmantot nevienu',
     photosUseNoneHint:
         'Šajā izaicinājumā netiek izmantoti izvēlētie foto, pat ja globālajos noklusējumos vai kādā noteikumā ir saraksts. Atiestatīšanas poga blakus šim laukam atgriež mantoto sarakstu.',
-    chosenPhotoThumbAlt: 'Izvēlētais foto {n}: {id}',
     chosenPhotosScenarioHint:
         'Scenārija izvēlētie foto tiek izmantoti tikai pēc pievienošanās izaicinājumam; pievienojoties tie netiek ņemti vērā.',
     chosenPhotosOnlyReachHint:
@@ -909,14 +898,6 @@ export const app = {
     photoChooserTileLabel: 'Foto {id}: {labels}. {reason}',
     photoChooserPosition: 'Numurs {n} tavā sarakstā.',
     photoChooserNoTags: 'Bez tagiem',
-    photoChooserOtherAccount:
-        'Šie saraksti tika saglabāti citā kontā, tāpēc lietotne tos ignorē. Ja šeit saglabāsi sarakstu, tie sāks attiekties arī uz šo kontu, ja vien tos iepriekš neizņemsi.',
-    photoChooserOtherAccountClear: 'Izņemt šos sarakstus',
-    photoChooserOtherAccountConfirm:
-        'Vai izņemt izvēlēto foto sarakstus, kas saglabāti citā kontā, visos uzstādījumos, profilos, noteikumos un scenārijos? To nevar atsaukt. Uzstādījums „Iesniegt tikai izvēlētos foto” paliek.',
-    photoChooserOtherAccountClearError:
-        'Sarakstus neizdevās izņemt, jo uzstādījumus nevarēja ierakstīt. Mēģini vēlreiz.',
-    chosenPhotosOtherAccountCount: 'Citā kontā saglabātie foto: {count}',
     photoChooserInheritNote:
         'Ja saglabāsi, neko neizvēloties, šim izaicinājumam paredzētais saraksts tiks izņemts, un izaicinājums atkal izmantos sarakstu no taviem uzstādījumiem vai noteikumiem.',
     photoChooserIdle: 'Tavi foto vēl nav ielādēti. Ielādē foto vai meklē.',
@@ -928,7 +909,6 @@ export const app = {
     photoChooserAutoHelp:
         '„Automātiski” sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem un, ja tava versija to atbalsta, arī ar vietējo attēlu pārbaudi. Nekas netiek saglabāts. Nospiežot vēlreiz, redzēsi nākamos ieteikumus.',
     photoChooserAutoRunning: 'Foto tiek sarindoti… tas var aizņemt minūti. Nekas netiek saglabāts.',
-    photoChooserCheckingMember: 'Pārbauda, kuram kontam pieder šie foto…',
     photoChooserSavedTileLabel: 'Izvēlētais foto {id}: {reason}',
     photoChooserSavedTileNote: 'Vēl nav ielādēts',
     photoChooserUnreachedTileNote: 'Vēl nav starp ielādētajiem foto; spied „Ielādēt vairāk foto”, lai to meklētu.',
@@ -936,23 +916,7 @@ export const app = {
         'Vēl nav starp meklēšanas rezultātiem. „Ielādēt vairāk foto” to atradīs, ja foto ir šis tags; „Ielādēt foto” nolasa tavu bibliotēku no sākuma, tāpēc pēc tam, iespējams, vajadzēs „Ielādēt vairāk foto”.',
     photoChooserLoadMoreFailed:
         'Neizdevās ielādēt vairāk foto. Nolasīšana tika pārtraukta. Spied „Ielādēt vairāk foto”, lai mēģinātu vēlreiz.',
-    photoChooserSaveChecking: 'Pārbauda, kuram kontam šis saraksts pieder…',
-    photoChooserSaveCheckFailed:
-        'Konta pārbaude neizdevās, tāpēc saglabāšana ir aizturēta, lai pasargātu tavu sarakstu. Pēc brīža vēlreiz spied „Mēģināt vēlreiz”.',
     photoChooserTileLocked: 'Aizslēgts, līdz tavs saglabātais saraksts ir nolasīts',
-    photoChooserSaveConfirmed: 'Konts apstiprināts — tavs saglabātais saraksts ir ielādēts.',
-    photoChooserSaveReadFailed:
-        'Neizdevās nolasīt tavu saglabāto sarakstu šim izaicinājumam, tāpēc saglabāšana ir aizturēta, lai to pasargātu. Spied „Mēģināt vēlreiz”.',
-    photoChooserSaveReadFailedAgain:
-        'Saglabātā saraksta nolasīšana atkal neizdevās, tāpēc saglabāšana joprojām ir aizturēta, lai to pasargātu. Pēc brīža vēlreiz spied „Mēģināt vēlreiz”.',
-    photoChooserSaveNotLoggedIn:
-        'Tu esi izrakstījies, tāpēc kontu nevar pārbaudīt. Piesakies vēlreiz, aizver logu „Izvēlēties foto” un atver to vēlreiz.',
-    photoChooserSaveOwnerReadFailed:
-        'Neizdevās nolasīt, kurš konts saglabāja šo sarakstu, tāpēc saglabāšana ir aizturēta, lai to pasargātu. Spied „Mēģināt vēlreiz”.',
-    photoChooserClearHeld:
-        'Notīrīšana nav pieejama, kamēr tavs saglabātais saraksts nav nolasīts, lai vēlāka nolasīšana neatceltu notīrīšanu.',
-    photoChooserSaveUnconfirmed:
-        'Nav zināms, kurš konts saglabāja šo sarakstu, tāpēc saglabāšana ir aizturēta, lai to pasargātu. Spied „Mēģināt vēlreiz” vai aizver logu „Izvēlēties foto” un atver to vēlreiz.',
     photoChooserSaveError: 'Izvēlētos foto neizdevās saglabāt, jo uzstādījumu nevarēja ierakstīt. Mēģini vēlreiz.',
     photoChooserDiscardTitle: 'Atmest izmaiņas?',
     photoChooserDiscardText:
@@ -1021,14 +985,11 @@ export const app = {
     discoverChosenChip: 'Izvēlētie foto',
     discoverChosenChipHint: 'Šim izaicinājumam ir izvēlēti foto. Spied, lai tos mainītu.',
     discoverChosenChipLabel: 'Izvēlētie foto izaicinājumam „{title}”: mainīt',
-    discoverChosenForeignChip: 'Citā kontā: {count} foto',
-    discoverChosenForeignLabel: 'Citā kontā: {count} foto izaicinājumam „{title}”, pārskatīt',
-    discoverChosenForeignHint: 'Šie foto ir saglabāti citā kontā un šeit netiek izmantoti. Spied, lai tos pārskatītu.',
     discoverChoosePhotosLabel: 'Izvēlēties foto izaicinājumam „{title}”',
     discoverChosenInherited: 'Mantotie izvēlētie foto: {count} (no taviem uzstādījumiem vai noteikumiem)',
     discoverConfirmChosen: 'Tavs izvēlētais foto, ja tas der, citādi automātiski izvēlēts foto.',
     scenarioFlagged:
-        'Pārskati pirms importa: {settings}. Izvēlētie foto pieder vienam kontam, un citā kontā tie tiek ignorēti; „Iesniegt tikai izvēlētos foto” liek izlaist izaicinājumu, kuram nav derīga izvēlētā foto.',
+        'Pārskati pirms importa: {settings}. „Iesniegt tikai izvēlētos foto” liek izlaist izaicinājumu, kuram nav derīga izvēlētā foto.',
     scenarioExportOmitted: 'Eksportā nav iekļauts, jo pieder tavam kontam: {settings}.',
     ignoreTitleWords: 'Ignorēt šos vārdus izaicinājumu nosaukumos',
     ignoreTitleWordsDesc:

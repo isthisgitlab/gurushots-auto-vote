@@ -50,31 +50,6 @@ export const internalSettings = {
         label: 'app.skipUpdateVersion',
         description: 'app.skipUpdateVersionDesc',
     },
-    // The member who last saved a chosen-photos list through the settings IPC.
-    // Photo ids belong to one account, so when the logged-in member differs both
-    // chosen settings are ignored (see services/autoFill/chosenPhotos.ts).
-    // Empty = never recorded (no member known when it was saved).
-    chosenPhotosMemberId: {
-        type: 'string',
-        default: '',
-        perChallenge: false,
-        validation: zString,
-        validationOrder: 1,
-        label: 'app.chosenPhotosMemberId',
-        description: 'app.chosenPhotosMemberIdDesc',
-    },
-    // When every saved chosen-photos list was last removed (an ISO time, '' = never). It rides along
-    // in every settings-changed broadcast, so an editor opened before a removal made elsewhere
-    // (the CLI, another window) learns of it and drops its draft copy of the lists.
-    chosenPhotosClearedAt: {
-        type: 'string',
-        default: '',
-        perChallenge: false,
-        validation: zString,
-        validationOrder: 1,
-        label: 'app.chosenPhotosClearedAt',
-        description: 'app.chosenPhotosClearedAtDesc',
-    },
     // The version of the "unofficial / not affiliated" notice the user acknowledged
     // (noticeVersion.ts holds the current one). The notice shows while this is below
     // it; 0 = never acknowledged.

@@ -33,12 +33,11 @@ type ScenarioImportPreview =
 
 const MAX_SCENARIOS = SCENARIO_CAPS.scenarios;
 
-// Phase settings the import preview points out: the photo ids belong to one
-// account (and may name private photos), and Only changes what a join and a fill
-// do when no chosen photo is usable.
+// Phase settings the import preview points out: Only changes what a join and a
+// fill do when no chosen photo is usable.
 const FLAGGED_PHASE_SETTINGS = ['chosenPhotos', 'chosenPhotosOnly'] as const;
-// Phase settings an export leaves out: photo ids belong to one account and may
-// point at private photos, so a shared file must not carry them.
+// Phase settings an export leaves out: photo ids may point at private photos,
+// so a shared file must not carry them.
 const EXPORT_OMITTED_SETTINGS: readonly string[] = ['chosenPhotos'];
 
 const log = () => logger.withCategory('settings');

@@ -404,7 +404,6 @@ describe('list-photos --suggest', () => {
         ['no-match', 'Nothing matches your Must Include tags.'],
         ['no-eligible', 'Your library has no photo this challenge accepts right now.'],
         ['suggest-busy', 'Another ranking is still running.'],
-        ['account-changed', 'You switched accounts while it ran.'],
         ['challenge-ended', "This challenge has ended or couldn't be read."],
         ['fetch-failed', 'Ranking failed. Try again in a moment.'],
         ['suggest-failed', 'Ranking failed. Try again in a moment.'],

@@ -121,7 +121,7 @@ export const logMessages = {
     m2826e41438c8: 'Turbo applied to entry {0}',
     m289db73f62af: '  🧩 Fills: {0}',
     m2978b51fd54e:
-        '{0}: skipped {1} — none of your chosen photos can be submitted there (not offered for this challenge, already used in another one, or filtered out by your tag settings), and Submit Only Chosen Photos is on. Choose other photos or turn that setting off; Emergency Submit ignores it near the deadline, so turn Emergency Submit off for this challenge to keep the slot empty. Some of them are not in your library — the list may hold photos of another account: remove them (chooser → Remove those lists, or clear-chosen-photos)',
+        '{0}: skipped {1} — none of your chosen photos can be submitted there (not offered for this challenge, already used in another one, or filtered out by your tag settings), and Submit Only Chosen Photos is on. Choose other photos or turn that setting off; Emergency Submit ignores it near the deadline, so turn Emergency Submit off for this challenge to keep the slot empty. Some of them are no longer in your library — remove them from the list',
     m29a4a27aabbd:
         '⏰ Approaching pre-final-window top-up for "{0}" — next cycle in {1}s (capped to the {2}m pre-final-window boundary)',
     m29dd239731c5:
@@ -196,8 +196,6 @@ export const logMessages = {
     m4833e4ffe6a9: 'Error resetting window positions',
     m48e2f0b7864c:
         '{0}: could not refresh live challenge state for {1}; proceeding with pass-start data — a manually submitted entry may not be seen and could be duplicated',
-    m4a0943c199c8:
-        '{0}: your Chosen Photos were saved while another account was logged in, so they are ignored — remove them (chooser → Remove those lists, or clear-chosen-photos), then choose photos for this account',
     m4a0bb479e56d: '⏰ Approaching scheduled fill for "{0}" ({1}) — next cycle in {2}s',
     m4a23eeb4693a: '{0} turbo fill-new: challenge left the active list — turbo skipped',
     m4ab430d590b1: 'Capacitor preferences write failed:',

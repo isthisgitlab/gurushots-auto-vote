@@ -1,38 +1,13 @@
 /**
- * useTitleRules — what the rule editor's draft does when every saved chosen-photos list is removed
- * while it is open: a rule that held a list and has nothing else goes, a half-written rule stays.
+ * useTitleRules — the rule editor's dirty tracking against the saved rules.
  */
 
 import { act, renderHook, waitFor } from '@testing-library/preact';
 import { useTitleRules } from '@/hooks/useTitleRules';
-import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 
-test('a rule whose only content was its list is dropped; a half-written rule (list still empty text) is kept', async () => {
-    const PHOTO = `00000001${'a'.repeat(24)}`;
-    mockApi.getTitleRules.mockResolvedValueOnce(
-        invalid([
-            { title: 'Lonely', chosenPhotos: [PHOTO] },
-            { title: 'Draft', chosenPhotos: '' },
-            { title: 'Tagged', mustIncludeTags: ['hat'], chosenPhotos: [PHOTO] },
-            { title: 'Plain', mustIncludeTags: ['sea'] },
-        ]),
-    );
-    const { result } = renderHook(() => useTitleRules(true));
-    await waitFor(() => expect(result.current.rules).toHaveLength(4));
-
-    act(() => announceChosenPhotosCleared());
-
-    expect(result.current.rules).toEqual([
-        { title: 'Draft' },
-        { title: 'Tagged', mustIncludeTags: ['hat'] },
-        { title: 'Plain', mustIncludeTags: ['sea'] },
-    ]);
-});
-
 describe('isDirty', () => {
-    const PHOTO = `00000001${'a'.repeat(24)}`;
     const loaded = async (rules: unknown[] = [{ title: 'A', mustIncludeTags: ['x'] }]) => {
         mockApi.getTitleRules.mockResolvedValue(invalid(rules));
         const hook = renderHook(() => useTitleRules(true));
@@ -86,18 +61,5 @@ describe('isDirty', () => {
             await result.current.persist();
         });
         expect(result.current.isDirty()).toBe(false);
-    });
-
-    test('a chosen-photos clear moves the baseline with the rules', async () => {
-        const { result } = await loaded([{ title: 'Tagged', mustIncludeTags: ['hat'], chosenPhotos: [PHOTO] }]);
-        act(() => announceChosenPhotosCleared());
-        expect(result.current.rules).toEqual([{ title: 'Tagged', mustIncludeTags: ['hat'] }]);
-        expect(result.current.isDirty()).toBe(false);
-
-        // Cleared before the load landed: nothing to move.
-        mockApi.getTitleRules.mockReturnValue(new Promise(() => {}));
-        const early = renderHook(() => useTitleRules(true));
-        expect(() => act(() => announceChosenPhotosCleared())).not.toThrow();
-        expect(early.result.current.isDirty()).toBe(false);
     });
 });

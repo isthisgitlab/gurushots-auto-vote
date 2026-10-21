@@ -7,7 +7,6 @@ import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
 import { useLatestRef } from '@/hooks/useLatestRef';
 import { valuesEqual } from '@/utils/valuesEqual';
-import { useOnChosenPhotosCleared, scenarioWithoutChosenPhotos } from '@/api/chosenPhotosCleared';
 import { SettingInput } from '../SettingInput';
 import { ScenarioError, issuesOf } from '../ScenarioError';
 import { ConditionList, ActionList } from './ItemEditors';
@@ -508,17 +507,8 @@ export function ScenarioBuilder({
 }) {
     const { t } = useTranslation();
     const [draft, setDraft] = useState(initial);
-    const [baseline, setBaseline] = useState(initial);
+    const [baseline] = useState(initial);
     const [jsonDirty, setJsonDirty] = useState(false);
-    // Bumped when the lists are removed, so a JSON tab that is open starts again from the stripped draft.
-    const [textResync, setTextResync] = useState(0);
-    // Saving writes the whole scenario: lists removed meanwhile must not come back with it. The removal is what is
-    // stored now, so it is not an unsaved edit either.
-    useOnChosenPhotosCleared(() => {
-        setDraft(scenarioWithoutChosenPhotos);
-        setBaseline(scenarioWithoutChosenPhotos);
-        setTextResync((n) => n + 1);
-    });
     const dirty = jsonDirty || !valuesEqual(draft, baseline);
     const report = useLatestRef(onDirtyChange);
     useEffect(() => report.current(dirty), [dirty, report]);
@@ -596,7 +586,7 @@ export function ScenarioBuilder({
             </div>
             <div role="tabpanel" id={panelId} aria-labelledby={tabId(tab)}>
                 {tab === 'json' ? (
-                    <JsonTab key={textResync} draft={draft} onDraft={setDraft} onTextDirty={setJsonDirty} />
+                    <JsonTab draft={draft} onDraft={setDraft} onTextDirty={setJsonDirty} />
                 ) : (
                     <div className="space-y-3">
                         <ScenarioHeader draft={draft} onDraft={setDraft} phases={phases} />

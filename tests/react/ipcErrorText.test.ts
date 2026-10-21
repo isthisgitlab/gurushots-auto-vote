@@ -29,8 +29,6 @@ describe('ipcErrorText', () => {
         ['Failed to fetch challenges', 'errors.fetchChallengesFailed'],
         ['Could not list challenges', 'errors.fetchChallengesFailed'],
         ['Could not read your balance right now', 'errors.fetchChallengesFailed'],
-        ['The account changed while listing challenges', 'errors.accountChanged'],
-        ['account-check-failed', 'errors.accountCheckFailed'],
         ['token-not-saved', 'errors.tokenNotSaved'],
         ['web-shell-token', 'errors.webShellToken'],
     ])('words the known failure %j as %s', (error, key) => {
@@ -92,7 +90,6 @@ describe('suggestErrorText', () => {
         ['no-match', 'errors.suggestNoMatch'],
         ['no-eligible', 'errors.suggestNoEligible'],
         ['suggest-busy', 'errors.suggestBusy'],
-        ['account-changed', 'errors.suggestAccountChanged'],
         ['challenge-ended', 'errors.suggestChallengeEnded'],
         ['invalid-args', 'errors.actionInvalidArgs'],
         ['not-logged-in', 'errors.notLoggedIn'],
