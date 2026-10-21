@@ -199,6 +199,16 @@ const joinFreshRefusal = (
 };
 
 /**
+ * The human-readable why for a `joinFreshRefusal` reason, so every site that
+ * reports one (the auto pass's skip note, the manual join, the pre-unlock price
+ * check) words it identically in the log and the CLI.
+ *
+ * @param refusal a `joinFreshRefusal` reason
+ */
+const joinFreshRefusalWhy = (refusal: 'full' | 'price-unknown'): string =>
+    refusal === 'full' ? 'it is full (max players reached)' : 'it needs a paid unlock but its price could not be read';
+
+/**
  * @returns lowercase-trimmed type ('' = none) and string tags
  */
 const normalizeJoinFacets = (
@@ -348,4 +358,4 @@ const shouldJoinChallenge = ({
     return { join: true, needsCoins, reason: 'paid' };
 };
 
-export { shouldJoinChallenge, joinFreshRefusal };
+export { shouldJoinChallenge, joinFreshRefusal, joinFreshRefusalWhy };

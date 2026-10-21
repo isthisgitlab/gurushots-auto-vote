@@ -47,7 +47,7 @@
  *   9. Views             /   and nothing was suggested.
  *  10. Upload date      /
  *
- * NOTE on tier 5: get_photos_private returns votes=0 and no achievements for
+ * NOTE on tier 6: get_photos_private returns votes=0 and no achievements for
  * every library photo, so the real values are fetched per photo from
  * get_image_data by services/photoStats.ts, which marks each candidate
  * `statsKnown`. That fetch is budgeted, so a candidate set can be partially
@@ -172,8 +172,8 @@ const achievementCountOf = (photo: PickerPhoto): number => {
     return Array.isArray(photo.achievements) ? photo.achievements.length : 0;
 };
 
-// Tier 5. True only when photoStats.ts actually resolved this photo's real
-// numbers; see the "NOTE on tier 5" in the file header for why unknown must not
+// Tier 6. True only when photoStats.ts actually resolved this photo's real
+// numbers; see the "NOTE on tier 6" in the file header for why unknown must not
 // collapse into votes:0.
 const statsKnownOf = (photo: PickerPhoto): boolean => photo.statsKnown === true;
 

@@ -6,7 +6,7 @@
 import * as logger from '../../logger';
 import * as settings from '../../settings';
 import * as cancellation from '../../voting/cancellation';
-import { shouldJoinChallenge } from '../VotingLogic';
+import { shouldJoinChallenge, joinFreshRefusalWhy } from '../VotingLogic';
 import { isKnownTurboMode } from '../../voting/turboMode';
 import { consumeMission } from '../missions';
 import type { Bankroll, Challenge } from '../../types/gurushots';
@@ -167,10 +167,7 @@ const noteTimingRefusal = (challenge: Challenge, reason: string, pass: JoinPassS
 const noteJoinSafetySkip = (challenge: Challenge, reason: 'full' | 'price-unknown', hasProfileMatch: boolean) => {
     const chosen = resolveJoinSetting('chosenPhotos', challenge);
     const optedIn = hasProfileMatch || (Array.isArray(chosen) && chosen.length > 0);
-    const why =
-        reason === 'full'
-            ? 'it is full (max players reached)'
-            : 'it needs a paid unlock but its price could not be read';
+    const why = joinFreshRefusalWhy(reason);
     const message = `skipped ${logger.challengeTag(challenge)}: ${why} — nothing was joined`;
     if (optedIn) cat().info(message, null);
     else cat().debug(message, null);

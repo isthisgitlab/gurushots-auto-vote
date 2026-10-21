@@ -8,7 +8,7 @@ import * as cancellation from '../../voting/cancellation';
 import { errorMessage } from '../../errorMessage';
 import type { Challenge } from '../../types/gurushots';
 import { sanitizeLogString } from '../../logger/sanitize';
-import { joinFreshRefusal } from '../VotingLogic';
+import { joinFreshRefusal, joinFreshRefusalWhy } from '../VotingLogic';
 import { cat, lockFor } from './shared';
 import type { Claim, JoinDeps, JoinOutcome, UnlockState } from './shared';
 import {
@@ -122,8 +122,10 @@ const priceHolds = async (
     // price-unreadable live item refuses the spend outright — it only ever reduces spending.
     const freshRefusal = joinFreshRefusal(live);
     if (freshRefusal) {
-        const why = freshRefusal === 'full' ? 'it is full (max players reached)' : 'its unlock price could not be read';
-        cat().warning(`${tag}: ${why} since the join was decided — not spending coins`, null);
+        cat().warning(
+            `${tag}: ${joinFreshRefusalWhy(freshRefusal)} since the join was decided — not spending coins`,
+            null,
+        );
         return { holds: false, risenTo: null };
     }
     const cost = Number(live?.join_coins);

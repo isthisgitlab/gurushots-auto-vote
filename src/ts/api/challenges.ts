@@ -127,16 +127,13 @@ const readOverlay = (element: Record<string, unknown>): WebChallengeOverlay => {
  * Reads the top-level `suggested_challenges` — the member's own library photos
  * GuruShots suggests per challenge they have NOT joined — as each entry's id →
  * the raw `member.suggested_images` ids (the suggested-photos cache filters
- * them). The field is not on the declared response type (only each challenge's
- * id and turbo are), so it is read off the already-validated body through the
- * one-field intersection below and shape-checked here; a missing or malformed
- * field reads as an empty map.
+ * them). The field's elements are untrusted wire data, so they are
+ * shape-checked here; a missing or malformed field reads as an empty map.
  */
 const readSuggestions = (response: WebActiveChallengesResponse): Map<string, string[]> => {
     const suggestions = new Map<string, string[]>();
-    const body = response as WebActiveChallengesResponse & { suggested_challenges?: unknown };
-    if (!Array.isArray(body.suggested_challenges)) return suggestions;
-    const entries: unknown[] = body.suggested_challenges;
+    if (!Array.isArray(response.suggested_challenges)) return suggestions;
+    const entries: unknown[] = response.suggested_challenges;
     for (const entry of entries) {
         if (!isPlainObject(entry) || (typeof entry.id !== 'string' && typeof entry.id !== 'number')) continue;
         if (!isPlainObject(entry.member) || !Array.isArray(entry.member.suggested_images)) continue;

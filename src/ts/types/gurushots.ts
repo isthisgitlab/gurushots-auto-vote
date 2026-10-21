@@ -51,7 +51,11 @@ export interface RankingTotal {
     points?: number;
     guru_picks?: number;
     next_message?: string;
-    /** The member's rows in a benchmark challenge; `benchmark` names the group, `score` its label. */
+    /**
+     * The member's rows in a benchmark challenge: the vote count needed for top
+     * 1/10/100, keyed by `benchmark` `"1" | "10" | "100"`; `score` is a string,
+     * `""` when there is none.
+     */
     benchmark?: Array<{ benchmark?: string; score?: string }>;
 }
 
@@ -201,7 +205,7 @@ export interface TeamMatch {
 /** The WEB get_teams (limit=1): the member's team, only read when `state.status` is STATUS_JOINED. */
 export interface TeamsResponse {
     state?: { status?: string };
-    data?: { teams?: Array<{ id?: number; current_member?: { id?: unknown } }> };
+    data?: { teams?: Array<{ id?: number; current_member?: { id?: string } }> };
 }
 
 /** The WEB get_match: the challenge a team's match runs on, each side's total votes and the participants. */
@@ -214,7 +218,7 @@ export interface MatchResponse {
             name?: string;
             total_votes?: number;
             /** The match participants in server order; narrowed in api/teams.ts, which never trusts `rank`. */
-            members?: Array<{ id?: unknown; rank?: unknown; rank_data?: { total?: { votes?: unknown } } }>;
+            members?: Array<{ id?: string; rank?: number; rank_data?: { total?: { votes?: number } } }>;
         }>;
     };
 }
@@ -225,9 +229,28 @@ export interface ActiveChallengesResponse {
     fetchFailed?: boolean;
 }
 
-/** The WEB get_my_active_challenges: only each challenge's id and turbo are read. */
+/**
+ * The WEB get_my_active_challenges: each challenge's id, the member turbo (the
+ * only read that reports a `mode`) and the challenge-level fields the mobile
+ * read omits — every field is what may arrive, and api/challenges.ts
+ * shape-checks it before use.
+ */
 export interface WebActiveChallengesResponse {
-    challenges?: Array<{ id: number | string; member?: { turbo?: MemberTurbo | null } }>;
+    challenges?: Array<{
+        id: number | string;
+        guru_pick_enable?: boolean;
+        top_photographer_enable?: boolean;
+        levels_rank_enable?: boolean;
+        new_ranking_enable?: boolean;
+        first_prizes?: Prize[];
+        achievements_and_prizes?: PrizeTier[];
+        member?: {
+            turbo?: MemberTurbo | null;
+            ranking?: { total?: Pick<RankingTotal, 'benchmark'> };
+        };
+    }>;
+    /** Untrusted elements: the member's own suggested library photos per challenge they have NOT joined, narrowed by readSuggestions in api/challenges.ts. */
+    suggested_challenges?: unknown[];
 }
 
 /** One photo offered for voting. */

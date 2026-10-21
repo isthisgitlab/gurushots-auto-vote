@@ -12,7 +12,7 @@
 
 import { errorMessage } from '../../errorMessage';
 import type { Challenge } from '../../types/gurushots';
-import { joinFreshRefusal } from '../VotingLogic';
+import { joinFreshRefusal, joinFreshRefusalWhy } from '../VotingLogic';
 import { cat } from './shared';
 import type { JoinDeps, JoinSingleResult } from './shared';
 import { performJoin } from './performJoin';
@@ -143,11 +143,7 @@ const joinListed = async (
     if (!retryOnly) {
         const freshRefusal = joinFreshRefusal(challenge);
         if (freshRefusal) {
-            const why =
-                freshRefusal === 'full'
-                    ? 'it is full (max players reached)'
-                    : 'it needs a paid unlock but its price could not be read';
-            cat().warning(`challenge ${challengeId}: ${why} — not joining`, null);
+            cat().warning(`challenge ${challengeId}: ${joinFreshRefusalWhy(freshRefusal)} — not joining`, null);
             return { status: 'failed-no-charge', challengeId, cost, reason: freshRefusal };
         }
     }
