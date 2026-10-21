@@ -38,7 +38,7 @@ const describeSettingsRecovery = ({
         case 'settings-import-failed':
             return blocking
                 ? `The settings.json at ${path} could not be imported just now${detail === undefined ? '' : ` (${detail})`}, so nothing will be saved and the default settings are in use. Nothing was overwritten. The next start tries the import again; run "settings-recovery retry" to try now, or run "settings-recovery start-fresh" to begin with default settings.`
-                : `The settings.json at ${path} could not be imported (${detail === 'migration-failed' ? 'its settings cannot be converted to the current settings format' : 'it is not a readable settings file'}), so the default settings were saved in its place and the file was left as it is. To import it once it is fixed: quit the app, delete config.json and v2-import.json from the app data folder (keep settings.json), then start the app again; the next start imports the fixed file once.`;
+                : `The settings.json at ${path} could not be imported (${detail === 'migration-failed' ? 'its settings cannot be converted to the current settings format' : 'it is not a readable settings file'}), so the default settings were saved in its place and the file was left as it is. To import it once it is fixed: quit the app, then in the folder that holds settings.json delete config.json and v2-import.json, and move any config.json.corrupt-* copy out of that folder too (keep settings.json there); start the app again, and the next start imports the fixed file once. Importing replaces the settings in use until then — any changed since the defaults were written, and the current sign-in — with the imported ones.`;
     }
 };
 

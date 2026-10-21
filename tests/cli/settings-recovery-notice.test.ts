@@ -97,7 +97,7 @@ describe('describeSettingsRecovery', () => {
         expect(corrupt).toContain('the default settings were saved in its place');
         expect(corrupt).toContain('the file was left as it is');
         expect(corrupt).toContain('delete config.json and v2-import.json');
-        expect(corrupt).toContain('(keep settings.json)');
+        expect(corrupt).toContain('(keep settings.json there)');
         expect(corrupt).not.toContain('start-fresh');
         expect(corrupt).not.toContain('delete all local data');
 

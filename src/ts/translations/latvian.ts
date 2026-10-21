@@ -1701,7 +1701,7 @@ export const notice = {
     recoveryImportWhyMigration:
         'Tajā esošos uzstādījumus nevar pārveidot uz pašreizējo uzstādījumu formātu. Fails ir paturēts, kāds ir, un importēšana pēc savas iniciatīvas vairs netiek mēģināta.',
     recoveryImportSettledNext:
-        'Lai importētu settings.json, kad tas ir salabots: aizvēr lietotni, izdzēs failus config.json un v2-import.json no lietotnes datu mapes (paturi settings.json) un pēc tam atkal palaiž lietotni; nākamajā palaišanā salabotais fails tiek importēts vienreiz.',
+        'Lai importētu savus uzstādījumus, kad settings.json ir salabots: aizvēr lietotni un mapē, kurā atrodas settings.json ({path}), izdzēs failus config.json un v2-import.json, kā arī izņem no tās visas config.json.corrupt-… kopijas (paturi settings.json tajā). Atkal palaid lietotni; nākamajā palaišanā salabotais fails tiek importēts vienreiz, un līdz šim lietotie uzstādījumi — arī tas, ko mainīji pēc noklusēto uzstādījumu ierakstīšanas, un pašreizējā pieteikšanās — tiek aizstāti ar importētajiem.',
     recoveryImportSettledNextAndroid:
         'Lietotne izmanto noklusētos uzstādījumus. Iestati savus vēlreiz; jaunus uzstādījumus vari saglabāt kā parasti.',
     recoverySignInKept:

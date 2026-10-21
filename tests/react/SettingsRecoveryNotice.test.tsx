@@ -723,6 +723,20 @@ describe('SettingsRecoveryNotice actions', () => {
             ).toEqual(['errors.dismiss']);
         });
 
+        test('the settled advice says where the files are: it carries the path settings.json sits at', async () => {
+            mockTranslator.t.mockImplementation((text) =>
+                text === 'notice.recoveryImportSettledNext'
+                    ? 'delete config.json in the folder of settings.json ({path})'
+                    : text,
+            );
+            answer({ code: 'settings-import-failed', path: '/data/settings.json', blocking: false, detail: 'corrupt' });
+            render(<SettingsRecoveryNotice />);
+
+            expect((await screen.findByRole('alert')).textContent).toContain(
+                'delete config.json in the folder of settings.json (/data/settings.json)',
+            );
+        });
+
         test('a conversion that cannot be done is named as the reason', async () => {
             answer({
                 code: 'settings-import-failed',

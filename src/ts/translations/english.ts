@@ -1671,7 +1671,7 @@ export const notice = {
     recoveryImportWhyMigration:
         'The settings in it cannot be converted to the current settings format. The file was left as it is, and the import is not tried again by itself.',
     recoveryImportSettledNext:
-        'To import settings.json once it is fixed: quit the app, delete config.json and v2-import.json from the app data folder (keep settings.json), then start the app again; the next start imports the fixed file once.',
+        'To import your settings once settings.json is fixed: quit the app, then in the folder that holds settings.json ({path}) delete config.json and v2-import.json, and move any config.json.corrupt-… copy out of that folder too (keep settings.json there). Start the app again; the next start imports the fixed file once, and the settings in use until then — any you changed since the defaults were written, and the current sign-in — are replaced by the imported ones.',
     recoveryImportSettledNextAndroid:
         'The default settings are in use. Set your settings again; you can save new settings as usual.',
     recoverySignInKept:
