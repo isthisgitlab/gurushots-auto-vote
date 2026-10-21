@@ -1225,7 +1225,6 @@ describe('get-member-challenges', () => {
             const result = await listChallenges();
             expect(result.success).toBe(true);
             expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
-            expect(autoFill.peekMemberId).not.toHaveBeenCalled();
             expect(strategy.getCurrentMemberProfile).not.toHaveBeenCalled();
             expect(getMemberChallenges.mock.calls.map((call) => String(call.at(1)))).toEqual(['open', 'upcoming']);
         });

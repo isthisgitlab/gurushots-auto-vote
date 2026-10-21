@@ -1957,6 +1957,16 @@ describe('unlock claims', () => {
     const parsedOf = (stored: Record<string, unknown>) =>
         readUnlockedState({ readRaw: () => JSON.stringify(stored), writeRaw: () => {} }).state;
 
+    test('a claim stored under a prototype key changes nothing and does not reach the normalized map', () => {
+        const parsed = readUnlockedState({
+            readRaw: () => '{"__proto__":{"unlockedAt":1},"constructor":{"unlockedAt":2},"2":{"unlockedAt":3}}',
+            writeRaw: () => {},
+        });
+        expect(parsed).toEqual({ ok: true, state: { '2': { unlockedAt: 3 } } });
+        // A null-prototype map: an assignment of a stored "__proto__" key can never set its prototype.
+        expect(Object.getPrototypeOf(parsed.state)).toBe(null);
+    });
+
     test('records that collapse onto one id keep the most protective of themselves', () => {
         const unconfirmed = { unlockedAt: 1, unconfirmed: true, coinsBefore: 5 };
         const unjoined = { unlockedAt: 2 };

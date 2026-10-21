@@ -85,8 +85,8 @@ const causeOf = (err: unknown): SaveDroppedCause => {
 };
 
 // A change of the user's that is given up is a notice of its own, even when it repeats the cause of the one reported: the
-// window shows it again (`again`). A write the app issues itself (the restore of the configuration, which a read tries
-// again at once) reports a repeat once, or a store that refuses every write would make the window read, try and report in
+// window shows it again (`again`). A write the app issues itself (the import's, which a load with no configuration
+// makes) reports a repeat once, or a store that refuses every write would make the window read, try and report in
 // a loop.
 const setSaveDropped = (dropped: boolean, cause: SaveDroppedCause = 'storage', again = false) => {
     if (saveDropped === dropped && (!dropped || (droppedCause === cause && !again))) return;

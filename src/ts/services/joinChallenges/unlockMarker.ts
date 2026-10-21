@@ -23,6 +23,10 @@ const has = (state: Record<string, unknown>, key: string) => Object.prototype.ha
 
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
+// Whether a stored key addresses an Object.prototype member (`constructor`, `toString`, `__proto__`, ...) rather than a
+// claim: kept out of the normalized map, so it can never shadow a member of it.
+const isPrototypeKey = (key: string): boolean => key in Object.prototype;
+
 // How protective a stored record is, most first: an unconfirmed payment (the user can still be asked about it),
 // then one whose join has not landed, then a joined one.
 const protectiveness = (claim: unknown): number => {
@@ -34,8 +38,12 @@ const protectiveness = (claim: unknown): number => {
 // The claims as they are keyed now: every stored key is read as its challenge id, and records that collapse
 // onto one id keep the most protective of themselves.
 const byChallengeId = (stored: Record<string, unknown>): Record<string, unknown> => {
-    const claims: Record<string, unknown> = {};
+    // Object.create(null), not {}: an assignment of a "__proto__" key onto a plain literal would set the map's
+    // prototype instead of becoming a claim (photoStats keeps its id map for the same reason). A stored key that
+    // names an Object.prototype member is no claim: it is skipped, so it never reaches the map.
+    const claims: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
     for (const key of Object.keys(stored)) {
+        if (isPrototypeKey(key)) continue;
         const id = idOfKey(key);
         const claim = stored[key];
         if (!has(claims, id) || protectiveness(claim) > protectiveness(claims[id])) claims[id] = claim;

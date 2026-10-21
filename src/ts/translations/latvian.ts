@@ -93,6 +93,7 @@ export const errors = {
     fetchChallengesFailed: 'Izaicinājumus neizdevās ielādēt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
     libraryReadFailed:
         'Tavus foto neizdevās nolasīt. Bibliotēkas nolasīšana pārtrūka, pirms tā tika pabeigta. Pamēģini vēlreiz.',
+    superseded: 'Pieprasījums tika pārtraukts: jaunāks pieprasījums to aizstāja, pirms tas pabeidzās. Mēģini vēlreiz.',
     tokenNotSaved:
         'Pieteikšanās pieņemta, bet nesaglabāta: uzstādījumus neizdevās ierakstīt. Pārbaudi faila atļaujas un brīvo vietu diskā, tad piesakies vēlreiz.',
     tokenNotSavedAndroid:
@@ -1727,6 +1728,8 @@ export const notice = {
         'Importēšana neizdevās: saglabātos uzstādījumus neizdevās nolasīt vai pārveidot, vai saglabāt. Nekas netika mainīts. Izvēlies „Mēģināt vēlreiz” vai „Sākt no jauna”. Sīkāk žurnālā.',
     recoveryStartFreshDone:
         'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Fails settings.json ir paturēts, kāds ir.',
+    recoveryStartFreshDoneAndroid:
+        'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Saglabātie uzstādījumi ir paturēti, kādi ir.',
     recoveryStartFreshFailed:
         'Sākt ar noklusētajiem uzstādījumiem neizdevās: jaunos neizdevās saglabāt. Nekas netika mainīts. Mēģini vēlreiz; ja atkārtojas, pārbaudi, vai lietotne var rakstīt krātuvē. Sīkāk žurnālā.',
     importReportTitle: 'Uzstādījumi importēti',

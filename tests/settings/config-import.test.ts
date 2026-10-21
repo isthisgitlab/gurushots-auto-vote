@@ -544,6 +544,59 @@ describe('the import of a settings.json (real fs)', () => {
             expect(fs.readFileSync(legacyFile, 'utf8')).toBe(RAW);
         });
 
+        test('a configuration another process stores while the defaults are written is loaded, not overwritten', () => {
+            fs.writeFileSync(legacyFile, '{broken');
+            loadFresh();
+            // The race the compare-and-write answers: config.json is missing at the load's read and at the import's,
+            // and is there (another process saved its import) when the defaults are written. The third existence
+            // check of the file in this run is the defaults write's.
+            const realExists = fs.existsSync;
+            let configChecks = 0;
+            jest.spyOn(fs, 'existsSync').mockImplementation(
+                invalid<typeof fs.existsSync>((target: fs.PathLike, ...rest: unknown[]) => {
+                    if (target === configFile && ++configChecks === 3) {
+                        fs.writeFileSync(configFile, JSON.stringify({ app: { theme: 'dark' }, version: 2 }, null, 2));
+                        return true;
+                    }
+                    return (realExists as (...args: unknown[]) => boolean)(target, ...rest);
+                }),
+            );
+
+            const loaded = settings.loadSettings();
+
+            // The other process's configuration is the settings in use, and no settled failure stands.
+            expect(settings.getSettingsRecovery()).toBeNull();
+            expect(loaded.app).toMatchObject({ theme: 'dark' });
+            expect(stored(configFile)).toEqual({ app: { theme: 'dark' }, version: 2 });
+            expect(fs.existsSync(markerFile)).toBe(false);
+        });
+
+        test('an empty file planted in the same race cannot be adopted: the failure stays blocking', () => {
+            fs.writeFileSync(legacyFile, '{broken');
+            loadFresh();
+            const realExists = fs.existsSync;
+            let configChecks = 0;
+            jest.spyOn(fs, 'existsSync').mockImplementation(
+                invalid<typeof fs.existsSync>((target: fs.PathLike, ...rest: unknown[]) => {
+                    if (target === configFile && ++configChecks === 3) {
+                        fs.writeFileSync(configFile, '');
+                        return true;
+                    }
+                    return (realExists as (...args: unknown[]) => boolean)(target, ...rest);
+                }),
+            );
+
+            settings.loadSettings();
+
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-import-failed',
+                path: legacyFile,
+                blocking: true,
+            });
+            expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('could not be saved'));
+            expect(fs.existsSync(markerFile)).toBe(false);
+        });
+
         test('a failed import whose defaults cannot be written either blocks until it is tried again', () => {
             fs.writeFileSync(legacyFile, '{broken');
             loadFresh();

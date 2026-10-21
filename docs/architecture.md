@@ -597,7 +597,7 @@ repeated six times is one that gets forgotten at one of them.
   data" removes — and `tests/settings/localData.test.ts` fails for a `createJsonStore` call site missing there.
 - **The configuration (`config.json`, `ConfigV2` in `types/config.ts`, `version: 2`; the `gurushots-config` key on
   Android) is the app's settings blob and the only source of truth.** It holds `app` (preferences and app-state
-  flags), `auth` (token, API headers, last user name, chosen-photos account), `defaults` (the global per-challenge
+  flags), `auth` (token, API headers, last user name), `defaults` (the global per-challenge
   values), `profiles`, `seededProfiles`, `scenarios`, `rules`, `challenges` (per challenge id: its `values`, a
   `suppressRuleProfile` flag and its `pins`) and, once an import ran, `imported` (when, the unresolved references as
   structured entries — the rule number from 1 and its title, the profile name, or the challenge id and title where the
@@ -620,7 +620,7 @@ repeated six times is one that gets forgotten at one of them.
   `config.json`, so deleting or setting the configuration aside never makes the next start import unasked). The
   marker is the one fact — `importedAt` (or a `mirrorStartedAt` an older build wrote; one that cannot be read
   counts as done) — written fresh, so fields an older build kept there do not stay; a change of it that cannot be
-  made yet (the settings lock held, the write refused) is kept and made again with the next save or start while the
+  made yet (the settings lock held, the write refused) is kept and made again with the next save while the
   app runs (`changeMarker`, said in the log once). An import reads a `timezone` of exactly `''` as Europe/Riga, the
   meaning it had in format 1 (`withImportedTimezone`). The load order, in `loadSettings`:
     1. `config.json` reads and parses: it is used, validated and filled over the defaults (`loadValidation.ts`).
@@ -636,18 +636,19 @@ repeated six times is one that gets forgotten at one of them.
        did not land) blocks saves (`settings-import-failed`, `blocking`) until the import is retried: on Retry, or
        at the next start — never on each setting read (`importFailure`). A failure that cannot pass (`corrupt`,
        `migration-failed`) is settled: the defaults are written with the failure in their `imported` record
-       (`failure: { reason, detail }`), the marker is written, the file is left as it is, and a non-blocking
-       `settings-import-failed` notice names the reason (`detail`). Where even the defaults cannot be written
-       nothing is settled, and the next start tries the import again.
+       (`failure: { reason, detail }`) — under the import lock, and only while nothing is stored, so a
+       configuration another process saved meanwhile is loaded instead — the marker is written, the file is left as
+       it is, and a non-blocking `settings-import-failed` notice names the reason (`detail`). Where even the defaults
+       cannot be written nothing is settled, and the next start tries the import again.
     5. Missing otherwise (the marker done, a configuration set aside, or nothing to import): defaults, silently.
     6. On Android, stores not read yet (`not-loaded`): the defaults answer, nothing is blocked or logged as an
        error, and a save is refused until the stores are read.
        A load answers a recovery state, which a window shows as a notice and the CLI prints (`getSettingsRecovery`):
        `settings-unreadable`, `settings-corrupt` and `settings-import-failed`, and, instead of a recovery,
        `settings-save-dropped` (below). A damaged `config.json.corrupt-<time>` does not parse, so no sign-out can touch
-       it: the notice that names it says it may still hold the sign-in and advises deleting it. Each import attempt has
-       a number, and only the latest one hears how its write ends (`_beginImport`): the late failure of an attempt that
-       a later one has replaced says nothing of the state now. On Android a configuration the window only holds in its
+       it: the notice that names it says it may still hold the sign-in and advises deleting it. An import whose write
+       ends after a read answered already is a late failure (`_importFailedLater`): it puts the failure up as any
+       failed import does, and its defaults write saves nothing over a configuration that is stored by then. On Android a configuration the window only holds in its
        cache until the queued write lands (`storage.isPersisted` false) is no proof that anything works: the block and
        the failure stand until it is stored, and once a read finds it stored they are cleared — except a settled
        failure, whose notice stands for the rest of the process. The window is told (`onSettingsRecoveryChange`,

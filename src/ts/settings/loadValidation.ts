@@ -32,7 +32,8 @@ const dropRemovedStoredKeys = (config: ConfigV2): void => {
  * Fill a parsed configuration over the defaults so every container and every `app` key exists, and resolve the
  * environment-aware mock default. A container of the wrong kind is left for dropInvalidValues to replace.
  * The fields the stored shape no longer hold are dropped here, so every configuration built from stored
- * data — a load, a merge for a diff or a restore — holds none and the next write stores none.
+ * data — a load, the merge that rebases a save, or an import's report — holds none and the next write
+ * stores none.
  *
  * @param stored - the parsed persisted configuration
  */

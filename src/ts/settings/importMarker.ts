@@ -47,7 +47,7 @@ const readMarkerText = (): { text: string | null; unreadable: boolean } => {
             logger
                 .withCategory('settings')
                 .warning(
-                    `The import marker could not be read, so it counts as missing: ${fileErrorMessage(error) ?? 'unknown error'}`,
+                    `The import marker could not be read, so it counts as done: ${fileErrorMessage(error) ?? 'unknown error'}`,
                 );
         }
         return { text: null, unreadable: true };
@@ -56,7 +56,7 @@ const readMarkerText = (): { text: string | null; unreadable: boolean } => {
 
 const MARKER_LOCK_WAIT_MS = 2000;
 const MARKER_PENDING =
-    'A change to the import marker could not be made yet (another process holds it, or the write was refused); it is tried again with the next save or start while the app runs, and not kept if the app is closed first';
+    'A change to the import marker could not be made yet (another process holds it, or the write was refused); it is tried again with the next save while the app runs, and not kept if the app is closed first';
 
 /**
  * Runs a change of the marker. On a desktop, where two processes (the app and the CLI) share the file, it is made under
@@ -85,7 +85,7 @@ type MarkerChange = (marker: Record<string, unknown> | null) => Record<string, u
 type MarkerResult = 'done' | 'queued' | 'failed';
 
 // Changes that could not be made (the lock was held for the whole wait, the write was refused), in the order they were asked
-// for, made again by flushPendingMarkerChanges at the next save or start while the app runs (they are not kept if it is
+// for, made again by flushPendingMarkerChanges at the next save while the app runs (they are not kept if it is
 // closed first, which is said). Each one guards itself by the condition it served (it answers null, no change, when that
 // has gone), so a replay never undoes what has been decided since.
 const pendingChanges: MarkerChange[] = [];
@@ -119,12 +119,12 @@ const attempt = (change: MarkerChange, firstTime: boolean): MarkerResult => {
 /**
  * Saves the marker `change` makes of the one stored when the write is made (`change` may run more than once and makes
  * the same change each time; it answers null to write nothing), and says what became of it. A change that could not be
- * made is kept (the default) and made again with the next save or start while the app runs, and said so in the log.
+ * made is kept (the default) and made again with the next save while the app runs, and said so in the log.
  */
 const changeMarker = (change: MarkerChange): MarkerResult => attempt(change, true);
 
 /**
- * Makes the changes of the marker that could not be made before, in order. Asked at each save and at the start.
+ * Makes the changes of the marker that could not be made before, in order. Asked at each save.
  */
 const flushPendingMarkerChanges = (): void => {
     for (const change of pendingChanges.splice(0)) attempt(change, false);

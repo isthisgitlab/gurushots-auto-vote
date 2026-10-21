@@ -1,7 +1,7 @@
 /**
  * The import marker, against a real temp directory: when it says the import is done (including one that cannot be
  * read), and the changes of it that could not be made (another process held the settings lock for the whole wait, or
- * the write was refused) — they are made again with the next save or start while the app runs, once said in the log.
+ * the write was refused) — they are made again with the next save while the app runs, once said in the log.
  */
 
 jest.mock('node:fs', () => {
@@ -143,7 +143,7 @@ describe('the import marker (real fs)', () => {
             marker.isImportMarked();
 
             expect(cat.warning).toHaveBeenCalledWith(
-                expect.stringContaining('could not be read, so it counts as missing: unknown error'),
+                expect.stringContaining('could not be read, so it counts as done: unknown error'),
             );
         });
     });

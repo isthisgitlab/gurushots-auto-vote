@@ -173,7 +173,8 @@ const localDataPaths = (userData: string): string[] => {
             vision(userData),
         ]),
     ];
-    // The sources the settings are restored from go first and config.json last.
+    // The import sources go first and config.json last: a source that cannot be deleted leaves the configuration
+    // in place, so the next load does not import it once more.
     const first = RESTORE_SOURCES.map((file) => path.join(userData, file));
     const last = path.join(userData, CONFIG_FILE);
     return [...first, ...all.filter((target) => !first.includes(target) && target !== last), last];

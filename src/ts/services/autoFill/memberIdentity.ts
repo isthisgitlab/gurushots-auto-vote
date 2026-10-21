@@ -93,8 +93,8 @@ const resolveMemberId = async (
 
 /**
  * The member id for this token if an earlier lookup already resolved it, else
- * null — never starts a lookup. For synchronous callers (the Discover annotator
- * naming a row's effective chosen photos) that must not wait on the network.
+ * null — never starts a lookup, so a caller that must not wait on the network
+ * stays synchronous.
  */
 const peekMemberId = (token: string): string | null => memberIdCache.get(token)?.id ?? null;
 

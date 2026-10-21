@@ -390,7 +390,7 @@ const buildHandlers = (options: SettingsHandlerOptions = {}) => {
     if (broadcastSettingsChange) {
         const tell = () => broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
         settings.onSettingsSaveDroppedChange(tell);
-        // So does a block a read clears: a restore that had to wait came through, and the notice for it changes.
+        // So does a block a read clears: a state that had to wait came through, and the notice for it changes.
         settings.onSettingsRecoveryChange(tell);
     }
     const handlers = {

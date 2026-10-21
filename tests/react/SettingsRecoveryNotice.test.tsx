@@ -672,7 +672,7 @@ describe('SettingsRecoveryNotice actions', () => {
             answer(null);
             fireEvent.click(within(dialog).getByRole('button', { name: 'notice.recoveryStartFresh' }));
 
-            expect(await screen.findByText('notice.recoveryStartFreshDone')).toBeTruthy();
+            expect(await screen.findByText('notice.recoveryStartFreshDoneAndroid')).toBeTruthy();
         });
 
         test('Retry says it worked, or did not, in the no-file wording', async () => {
@@ -689,6 +689,21 @@ describe('SettingsRecoveryNotice actions', () => {
             answer(null);
             fireEvent.click(action('notice.recoveryRetry'));
             expect(await screen.findByText('notice.recoveryRetryDoneAndroid')).toBeTruthy();
+        });
+
+        test('a Start fresh that fails keeps its shared wording, which names no file', async () => {
+            jest.mocked(window.api.startFreshSettings).mockResolvedValue({ success: false, error: 'x' });
+            answer({ code: 'settings-import-failed', path: 'gurushots-settings', blocking: true });
+            render(<SettingsRecoveryNotice />);
+            await screen.findByRole('alert');
+
+            fireEvent.click(action('notice.recoveryStartFresh'));
+            const dialog = screen.getByRole('dialog');
+            answer(null);
+            fireEvent.click(within(dialog).getByRole('button', { name: 'notice.recoveryStartFresh' }));
+
+            await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+            expect(failureText()).toContain('notice.recoveryStartFreshFailed');
         });
     });
 

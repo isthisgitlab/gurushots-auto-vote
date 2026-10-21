@@ -29,6 +29,7 @@ import {
 } from './loadValidation';
 import { importWhenAbsent, retryLegacyImport, startFreshConfig } from './legacyImport';
 import type { ImportFailure, ImportOutcome } from './legacyImport';
+import { underSettingsLock } from './settingsLock';
 import { updateImported } from './importedRecord';
 import { flushPendingMarkerChanges, isImportMarked, markImportDone } from './importMarker';
 import { isPlainObject } from '../plainObject';
@@ -129,6 +130,10 @@ const _blockWrites = (
  */
 const _importIsPermanent = (failure: ImportFailure): boolean =>
     failure.reason === 'corrupt' || failure.reason === 'migration-failed';
+
+// The wait for the import lock while the defaults of a settled failure are written (the same wait the import itself
+// uses for it).
+const IMPORT_LOCK_WAIT_MS = 2000;
 
 /**
  * Clears the block a read had put up (see _blockWrites), and tells the listener, so that a window that was showing the
@@ -242,8 +247,10 @@ const _loadFromText = (settingsData: string, stored: boolean): ConfigV2 => {
  * What the persistence layer answers to a failed import: one the file itself cannot make up for (it is damaged, or the
  * frozen pipeline cannot convert it) is settled — the defaults are written with the failure in their import record and
  * the marker says the import is done, so no start tries it again; the file is left as it is, and the notice names the
- * reason. Where the defaults could not be written nothing is settled: the failure is treated as one that may pass, and
- * the next start tries the import again. The others block saves until the import is retried (Retry, or the next start).
+ * reason. The defaults are written under the import lock, and only while nothing is stored (`writeIfAbsent`, like
+ * every import-path write): a configuration another process stored meanwhile is loaded instead. Where the defaults
+ * could not be written nothing is settled: the failure is treated as one that may pass, and the next start tries the
+ * import again. The others block saves until the import is retried (Retry, or the next start).
  */
 const _importFailed = (failure: ImportFailure): ConfigV2 => {
     importFailure = failure;
@@ -265,19 +272,28 @@ const _importFailed = (failure: ImportFailure): ConfigV2 => {
         acknowledged: true,
         failure: { reason: failure.reason, detail: failure.detail },
     };
-    let written: ReturnType<typeof storage.write>;
-    try {
-        written = storage.write(JSON.stringify({ ...getDefaultSettings(), imported, version: 2 }, null, 2));
-    } catch (error) {
-        logger.withCategory('settings').error('The default settings could not be saved:', error);
-        written = { ok: false };
-    }
-    if (!written.ok) {
-        return _blockWrites(
+    const unwrittenDefaults = () =>
+        _blockWrites(
             'settings-import-failed',
             `settings.json could not be imported (${failure.reason}): ${failure.detail}, and the default settings could not be saved`,
             legacyStorage.location(),
         );
+    let written: ReturnType<typeof storage.writeIfAbsent> | 'busy';
+    try {
+        written = underSettingsLock<ReturnType<typeof storage.writeIfAbsent> | 'busy'>(
+            IMPORT_LOCK_WAIT_MS,
+            () => storage.writeIfAbsent(JSON.stringify({ ...getDefaultSettings(), imported, version: 2 }, null, 2)),
+            'busy',
+        );
+    } catch (error) {
+        logger.withCategory('settings').error('The default settings could not be saved:', error);
+        written = { outcome: 'failed' };
+    }
+    if (written === 'busy' || written.outcome === 'failed') return unwrittenDefaults();
+    if (written.outcome === 'exists') {
+        // A configuration another process stored while this one saw the failure is the settings in use now: the
+        // stored read clears the failure with it (no notice of this import stands).
+        return written.current ? _loadFromText(written.current, true) : unwrittenDefaults();
     }
     // The marker is written once the defaults are stored: a write that did not land stored nothing, and the next
     // start tries the import again.

@@ -92,6 +92,7 @@ export const errors = {
         'The photos were not ranked. GuruShots did not answer, or the ranking did not finish. Try again in a moment.',
     fetchChallengesFailed: 'The challenges could not be loaded. GuruShots did not answer. Try again in a moment.',
     libraryReadFailed: 'Your photos could not be read. The library read failed before it finished. Try again.',
+    superseded: 'The request was interrupted: a newer request replaced it before it finished. Try again.',
     joinRefusedFull:
         'Could not join: the challenge is full, so no player slot is left. Nothing was charged. Refresh the list, and join if a slot frees up.',
     joinRefusedPriceUnknown:
@@ -1695,6 +1696,8 @@ export const notice = {
     recoveryRetryFailedAndroid:
         'The import did not work: the stored settings could not be read or converted, or the settings could not be saved. Nothing was changed. Retry, or Start fresh. The log has details.',
     recoveryStartFreshDone: 'The app now uses default settings and saving works. settings.json was left as it is.',
+    recoveryStartFreshDoneAndroid:
+        'The app now uses default settings and saving works. The stored settings were left as they are.',
     recoveryStartFreshFailed:
         'Starting with default settings did not work: the new settings could not be saved. Nothing was changed. Try again; if it keeps failing, check that the app can write its storage. The log has details.',
     importReportTitle: 'Settings imported',

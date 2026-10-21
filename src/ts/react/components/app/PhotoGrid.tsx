@@ -270,6 +270,8 @@ export function PhotoGrid({
             refusedHere(photo);
         const refusedHidden = listing.photos.filter(hiddenFromGrid).length;
         const shownPhotos = listing.photos.filter((photo) => !hiddenFromGrid(photo));
+        // The ids the listing returns, as a set: a pick's "listed or not" is a lookup, not a scan per pick.
+        const listedIds = new Set(listing.photos.map((photo) => photo.id));
         // A non-empty listing with nothing in it to pick: every photo is hidden or blocked, and nothing is picked.
         const noneAccepted =
             submit &&
@@ -411,7 +413,7 @@ export function PhotoGrid({
                     <div className={TILE_GRID} {...keepFocus}>
                         {/* The picks the listing does not return stay pinned first, in pick order. */}
                         {selected
-                            .filter((id) => !listing.photos.some((photo) => photo.id === id))
+                            .filter((id) => !listedIds.has(id))
                             .map((id) => {
                                 const photo = lookup(id);
                                 if (photo) return tile(photo, shown(id));

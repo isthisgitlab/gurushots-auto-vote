@@ -60,9 +60,9 @@ Commands:
   list-settings [--challenge=<id>] - Show all settings (per-challenge view with --challenge)
   reset-setting <key> [--challenge=<id>] - Reset a setting to default (clear a challenge override with --challenge)
   reset-all-settings - Reset all settings to defaults
-  To remove one challenge's own chosen-photos list (it then inherits from rules / global):
+      To remove one challenge's own chosen-photos list (it then inherits from rules / global):
              reset-setting chosenPhotos --challenge=<id>
-  To use no chosen photos for that challenge (overriding rules / global):
+      To use no chosen photos for that challenge (overriding rules / global):
              set-setting chosenPhotos '[]' --challenge=<id>
   list-profiles - Show saved challenge-settings profiles
   save-profile "<name>" --challenge=<id> - Save a challenge's overrides as a named profile

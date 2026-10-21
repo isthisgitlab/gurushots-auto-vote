@@ -123,8 +123,8 @@ class LogoutNotSavedError extends Error {
  *
  * @returns true when a token was actually cleared.
  * @throws when the sign-out could not be saved (the settings refuse the write): a logout that did not hold is reported,
- *   never taken for one. (A sign-out made while a restore of the settings is on its way is saved: it holds when the
- *   restored settings come through.)
+ *   never taken for one. (One made while the stored settings have not been read yet is refused like any save then, and
+ *   reported the same way.)
  */
 const clearAuthToken = async (): Promise<boolean> => {
     const hadToken = !!settings.getSetting('token');

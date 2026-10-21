@@ -156,6 +156,7 @@ const actionsFor = (recovery: Recovery): ActionId[] =>
 const NO_FILE_TEXT = new Map([
     ['notice.recoveryRetryDone', 'notice.recoveryRetryDoneAndroid'],
     ['notice.recoveryRetryFailed', 'notice.recoveryRetryFailedAndroid'],
+    ['notice.recoveryStartFreshDone', 'notice.recoveryStartFreshDoneAndroid'],
 ]);
 
 const fetchRecovery = () => ipc.getSettingsRecovery();

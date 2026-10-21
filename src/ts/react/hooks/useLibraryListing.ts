@@ -89,8 +89,6 @@ export function useLibraryListing(
     // which a refresh bumps the moment it starts reading: the listing on screen, and with it the id the
     // pick-prune consumers hold, must change only when a new listing actually replaces it.
     const [shownRequestId, setShownRequestId] = useState(0);
-    // Whether a batch has been appended to the listing on screen since its read.
-    const [appendedSinceLoad, setAppendedSinceLoad] = useState(false);
     // The search term of the listing on screen, set when one is shown from the read that owns
     // `lastSearchRef`: an appended batch does not show, so it keeps the term.
     const [searchTerm, setSearchTerm] = useState('');
@@ -134,7 +132,6 @@ export function useLibraryListing(
                 return new Map([...base, ...listing.photos.map((photo): [string, LibraryPhoto] => [photo.id, photo])]);
             });
         }
-        setAppendedSinceLoad(false);
         setSearchTerm(lastSearchRef.current);
         setShownRequestId(requestIdRef.current);
         setState({ status: 'ready', listing: { ...listing, memberId } });
@@ -284,7 +281,6 @@ export function useLibraryListing(
                     },
                 };
             });
-            setAppendedSinceLoad(true);
             setLoadingMore(false);
         } finally {
             // A superseded read leaves the guard alone: it belongs to the read that replaced it.
@@ -303,7 +299,6 @@ export function useLibraryListing(
         requestId: shownRequestId,
         revalidating,
         recheckFailed,
-        appendedSinceLoad,
         load,
         refresh,
         retry,

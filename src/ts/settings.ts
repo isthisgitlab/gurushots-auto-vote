@@ -43,7 +43,6 @@ import * as persistence from './settings/persistence';
 import * as challengeOverrides from './settings/challengeOverrides';
 import * as staleChallengeCleanup from './settings/staleChallengeCleanup';
 import * as openChallenges from './settings/openChallenges';
-
 import { rememberChallengeTitles } from './settings/challengeFacts';
 import { importMarkerStore } from './settings/importMarker';
 import { TITLE_RULE_INLINE_KEYS, MAX_TITLE_LENGTH } from './settings/titleRuleSanitize';

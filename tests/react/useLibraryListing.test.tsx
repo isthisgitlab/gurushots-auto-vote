@@ -514,7 +514,6 @@ describe('loadMore', () => {
         expect([...result.current.known.keys()]).toEqual(['a', 'b', 'c']);
         // Not a new request — the same listing, with the batch appended.
         expect(result.current.requestId).toBe(1);
-        expect(result.current.appendedSinceLoad).toBe(true);
         expect(result.current.loadingMore).toBe(false);
         expect(result.current.loadMoreFailed).toBeNull();
     });
@@ -753,7 +752,6 @@ describe('loadMore', () => {
         expect(result.current.loadMoreFailed).toBeNull();
         expect(result.current.loadingMore).toBe(false);
         expect(result.current.requestId).toBe(1);
-        expect(result.current.appendedSinceLoad).toBe(true);
     });
 
     test('loadMore does nothing from idle and nothing on a preview', async () => {
@@ -945,7 +943,7 @@ describe('isSearch', () => {
     });
 });
 
-describe('the request id and the appended mark', () => {
+describe('the request id', () => {
     test('a load is a new request; its re-check and an appended batch are not; another load is', async () => {
         getLibrary()
             .mockResolvedValueOnce(previewAnswer())
@@ -954,16 +952,13 @@ describe('the request id and the appended mark', () => {
             .mockResolvedValueOnce(answer({ memberId: null, photos: [photo('c')] }));
         const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
         expect(result.current.requestId).toBe(0);
-        expect(result.current.appendedSinceLoad).toBe(false);
         await act(async () => result.current.load(''));
         // The preview and the fresh re-check behind it are one request; the batch read is the same too.
         await waitFor(() => expect(result.current.revalidating).toBe(false));
         expect(result.current.requestId).toBe(1);
         await act(async () => result.current.loadMore());
         expect(result.current.requestId).toBe(1);
-        expect(result.current.appendedSinceLoad).toBe(true);
         await act(async () => result.current.load('pink'));
         expect(result.current.requestId).toBe(2);
-        expect(result.current.appendedSinceLoad).toBe(false);
     });
 });

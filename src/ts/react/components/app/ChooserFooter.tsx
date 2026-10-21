@@ -3,7 +3,6 @@
  * own controls (search, Load all, Auto) live in PhotoPickerToolbar.
  */
 
-import { useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
@@ -24,7 +23,6 @@ export function ChooserFooter({
     onClose: () => void;
 }) {
     const { t } = useTranslation();
-    const saveRef = useRef<HTMLButtonElement>(null);
     return (
         <>
             {saveFailed && (
@@ -40,13 +38,7 @@ export function ChooserFooter({
                 <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
                     {t('app.cancel')}
                 </button>
-                <button
-                    type="button"
-                    ref={saveRef}
-                    className="btn btn-neutral btn-sm"
-                    disabled={saving}
-                    onClick={onSave}
-                >
+                <button type="button" className="btn btn-neutral btn-sm" disabled={saving} onClick={onSave}>
                     {saving && <LoadingSpinner size="xs" decorative />}
                     {t('app.photoChooserUse')}
                 </button>
