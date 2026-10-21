@@ -148,6 +148,7 @@ describe('generated mock payload guards', () => {
                 players: 25,
                 tags: ['Exhibition'],
                 max_photo_submits: 1,
+                member: { submit_state: 'join' },
             },
             {
                 id: 900002,
@@ -161,6 +162,7 @@ describe('generated mock payload guards', () => {
                 players: 50,
                 tags: ['No comm', '3 photos'],
                 max_photo_submits: 3,
+                member: { submit_state: 'join' },
             },
             {
                 id: 900003,
@@ -172,6 +174,7 @@ describe('generated mock payload guards', () => {
                 close_time: 1768910400,
                 entries: 120,
                 players: 75,
+                member: { submit_state: 'join' },
             },
             {
                 id: 900004,
@@ -183,6 +186,7 @@ describe('generated mock payload guards', () => {
                 close_time: 1768737600,
                 entries: 160,
                 players: 100,
+                member: { submit_state: 'join' },
             },
             {
                 id: 900005,
@@ -194,6 +198,7 @@ describe('generated mock payload guards', () => {
                 close_time: 1768824000,
                 entries: 200,
                 players: 125,
+                member: { submit_state: 'join' },
             },
             {
                 id: 900006,
@@ -208,7 +213,7 @@ describe('generated mock payload guards', () => {
                 tags: ['Exhibition'],
                 max_photo_submits: 1,
                 max_players: 150,
-                member: { submit_state: 'FULL' },
+                member: { submit_state: 'join' },
             },
             {
                 id: 900007,
@@ -222,8 +227,7 @@ describe('generated mock payload guards', () => {
                 players: 60,
                 tags: ['Comm'],
                 max_photo_submits: 2,
-                join_unlock: true,
-                member: { submit_state: 'OPEN' },
+                member: { submit_state: 'join_unlock' },
             },
             {
                 id: 900008,
@@ -236,8 +240,7 @@ describe('generated mock payload guards', () => {
                 players: 40,
                 tags: ['Comm'],
                 max_photo_submits: 2,
-                join_unlock: true,
-                member: { submit_state: 'OPEN' },
+                member: { submit_state: 'join_unlock' },
             },
         ]);
     });

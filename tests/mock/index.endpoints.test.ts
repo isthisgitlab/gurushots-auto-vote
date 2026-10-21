@@ -394,10 +394,6 @@ describe('submitToChallenge', () => {
     });
 });
 
-/** An open row as the mock data carries it, including the gating field the Challenge type does not name. */
-type GatedRow = Challenge & { join_unlock?: boolean };
-const gated = (row: Challenge | undefined): GatedRow | undefined => (row === undefined ? undefined : (row as GatedRow));
-
 describe('join endpoints', () => {
     test('getMemberChallenges returns the eight fixtures with epoch-second timing', async () => {
         const list = (await settle(mockApiClient.getMemberChallenges('tok', 'open'))) ?? [];
@@ -412,18 +408,18 @@ describe('join endpoints', () => {
 
     test('the open rows cover the full, unlock-priced and price-unknown gating trio', async () => {
         const list = (await settle(mockApiClient.getMemberChallenges('tok', 'open'))) ?? [];
-        // Full: players has reached max_players and the submit state says so.
+        // Full: players has reached max_players, and the submit state is the plain join one.
         const full = list.find((c) => c.id === 900006);
         expect(full?.max_players).toBeGreaterThan(0);
         expect(full?.players).toBeGreaterThanOrEqual(full?.max_players ?? 0);
-        expect(full?.member?.submit_state).toBe('FULL');
-        // Unlock-priced: the unlock requirement with a price the listing can show.
+        expect(full?.member?.submit_state).toBe('join');
+        // Unlock-priced: the unlock submit state with a price the listing can show.
         const priced = list.find((c) => c.id === 900007);
-        expect(gated(priced)?.join_unlock).toBe(true);
+        expect(priced?.member?.submit_state).toBe('join_unlock');
         expect(priced?.join_coins).toBeGreaterThan(0);
-        // Price-unknown: the unlock requirement with no usable join_coins on the item.
+        // Price-unknown: the unlock submit state with no usable join_coins on the item.
         const unknown = list.find((c) => c.id === 900008);
-        expect(gated(unknown)?.join_unlock).toBe(true);
+        expect(unknown?.member?.submit_state).toBe('join_unlock');
         expect(unknown && 'join_coins' in unknown).toBe(false);
     });
 

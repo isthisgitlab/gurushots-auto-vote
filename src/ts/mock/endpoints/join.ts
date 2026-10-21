@@ -25,8 +25,9 @@ type OpenChallengeRow = [
 
 /**
  * What a listing shows besides the title: the challenge's own tags and badge,
- * how many photos it takes, its join gating (`max_players` cap, the
- * unlock requirement) and the member's submit state on the item.
+ * how many photos it takes, and its join gating (`max_players` cap, the
+ * unlock requirement — which the item itself never carries raw; the member's
+ * submit state does, derived below).
  */
 type ListingExtras = {
     tags: string[];
@@ -34,12 +35,14 @@ type ListingExtras = {
     max_photo_submits: number;
     max_players?: number;
     join_unlock?: boolean;
-    member?: { submit_state: string };
 };
 
 /** An open challenge whose start and close are offsets (seconds) from `nowSec`. */
 const openChallenge = (nowSec: number, row: OpenChallengeRow) => {
     const [id, type, join_coins, title, url, startedAgo, closesIn, entries, players, extras] = row;
+    // Real items carry the member's submit state, not the raw unlock flag: 'join_unlock' on an
+    // unlock-gated one, 'join' otherwise.
+    const { join_unlock, ...listing } = extras ?? {};
     return {
         id,
         type,
@@ -50,7 +53,8 @@ const openChallenge = (nowSec: number, row: OpenChallengeRow) => {
         close_time: nowSec + closesIn,
         entries,
         players,
-        ...extras,
+        ...listing,
+        member: { submit_state: join_unlock === true ? 'join_unlock' : 'join' },
     };
 };
 
@@ -95,7 +99,7 @@ const OPEN_CHALLENGE_ROWS: OpenChallengeRow[] = [
         6 * DAY,
         150,
         150,
-        { tags: ['Exhibition'], max_photo_submits: 1, max_players: 150, member: { submit_state: 'FULL' } },
+        { tags: ['Exhibition'], max_photo_submits: 1, max_players: 150 },
     ],
     // 900007: unlock-gated with a price the listing can show.
     [
@@ -108,7 +112,7 @@ const OPEN_CHALLENGE_ROWS: OpenChallengeRow[] = [
         7 * DAY,
         90,
         60,
-        { tags: ['Comm'], max_photo_submits: 2, join_unlock: true, member: { submit_state: 'OPEN' } },
+        { tags: ['Comm'], max_photo_submits: 2, join_unlock: true },
     ],
     // 900008: unlock-gated but the item carries no join_coins at all — the price is unknown.
     [
@@ -121,7 +125,7 @@ const OPEN_CHALLENGE_ROWS: OpenChallengeRow[] = [
         8 * DAY,
         60,
         40,
-        { tags: ['Comm'], max_photo_submits: 2, join_unlock: true, member: { submit_state: 'OPEN' } },
+        { tags: ['Comm'], max_photo_submits: 2, join_unlock: true },
     ],
 ];
 
