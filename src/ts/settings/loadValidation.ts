@@ -185,7 +185,8 @@ const isImportRef = (value: unknown): boolean =>
         (value.invalid === undefined || value.invalid === true));
 
 /**
- * Whether a stored `imported` record has the shape the importer writes.
+ * Whether a stored `imported` record has the shape the importer writes. A `failure` the record may hold is typed
+ * like the one a failed import writes; a record with a malformed one is not a record.
  */
 const isImportedRecord = (value: unknown): value is ImportedV2 =>
     isPlainObject(value) &&
@@ -193,7 +194,11 @@ const isImportedRecord = (value: unknown): value is ImportedV2 =>
     typeof value.acknowledged === 'boolean' &&
     isPlainObject(value.report) &&
     Array.isArray(value.report.refsBlocked) &&
-    value.report.refsBlocked.every(isImportRef);
+    value.report.refsBlocked.every(isImportRef) &&
+    (value.failure === undefined ||
+        (isPlainObject(value.failure) &&
+            typeof value.failure.reason === 'string' &&
+            typeof value.failure.detail === 'string'));
 
 const dropInvalidContainers = (config: ConfigV2, dropped: string[]) => {
     const defaults = getDefaultSettings();

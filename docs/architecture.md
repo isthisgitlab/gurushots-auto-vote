@@ -349,7 +349,7 @@ repeated six times is one that gets forgotten at one of them.
 - **Discover rows.** `get-member-challenges` annotates each open item with `chosenOwn` (its own per-id list, as saved) and `chosenEffectiveCount` (resolved with `resolveJoinSetting`, the join's own resolution), so a row shows a list that reaches it through a rule or the global default as "Inherited". `get-open-chosen-annotations(ids)` answers the same shape from the settings, so the rows follow a settings change (the settings-changed broadcast, a save in the chooser) without fetching the challenge list again. Clearing a row's own list removes it, i.e. the row inherits again.
 - **Discover sources.** `get-member-challenges` takes no argument: the handler decides what to fetch. `getMemberChallenges(token, 'open' | 'upcoming')` returns **`null` on failure** (an empty list is a real answer), and every caller handles it: the join pass logs and does not run, manual join answers `fetch-failed`, and the handler answers `{ success: false }` for a failed open list. The handler fetches `open` and `upcoming` side by side. `upcoming` is fetched on **every** Discover load, even with `discoverUpcomingHours` at 0, because its ids are what keep chosen lists alive; the result is cached for about 60 s (`services/discoverChallenges.ts`: one slot; concurrent callers share one request; a failure is never cached; emptied by `forgetAccountMemory` at logout and account switch). `mergeDiscoverLists` builds the shown list against an injectable clock: the open copy wins when an id is in both; an upcoming item stays only while its `start_time` is a finite number after now and at most `discoverUpcomingHours` hours ahead (far end inclusive; one that has already started is dropped — the open feed shows it); open rows come first, then upcoming rows by `start_time` then id, at most 100. Upcoming rows carry `status: 'upcoming'` (the only marker; an open row carries none). A failed `upcoming` fetch leaves the open list as it is and logs the filter and the kind of failure only — never the token or a member. **The upcoming-id set** (`settings/openChallenges.ts`, through the facade) maps id → `start_time`, starts as `null`, is written only by this handler and only from a successful `upcoming` fetch (with **every** id the fetch returned — the window decides what is shown, not what is kept), and is never touched by the join pass. An id the feed drops is **carried over** — the feed drops a challenge the moment it starts, while the open feed may not list it yet — until it is in the open or active list or `UPCOMING_GRACE_SEC` (600 s) after its `start_time`. The set also records when it was fetched: older than five minutes it counts as unknown again, since another process (the CLI) may have chosen photos for a newly announced id since. `isKeptForJoin` keeps an entry whose id is in the open set or the upcoming set, or while **either** set is `null`/unknown, so a restart, a failed first fetch, a stale set or a race with Discover never prunes anything. A request still in flight when the account is forgotten answers, but writes none of this: each write compares the token captured at request start with the stored one and is skipped when they differ. `openChallengeCache` holds the **merged** list plus the previously cached items of the carried-over ids, so `get-open-chosen-annotations` resolves rules by title, tags and type for upcoming and "starting now" rows too (`MAX_ANNOTATED_IDS` is 300: the open list plus the 100 upcoming rows). A paid join spends no more than the cost the caller confirmed: `join-challenge` takes an optional `expectedCost` (a finite, non-negative number, else `invalid-args`), and `joinChallengeSingle` answers `needs-confirm` with the live cost — unlocking nothing — when the live cost is above it (the Discover confirmation passes the cost it showed; the CLI's `--yes --max-coins=N` does; `--yes` alone passes the cost `join` printed first). Joining stays tied to the **live open lookup**: the join pass asks for `open` only, and `joinChallengeSingle` joins only an id the live `open` list holds. For an id it does not hold it makes one **live** `upcoming` call — `not-started` if the id is in it (nothing unlocked or submitted), `unavailable` if it is not or the call fails — so the answer holds in a fresh CLI process and never calls a started or joined challenge "not started". The renderer keeps a row that was upcoming and whose start has passed as "Starting now" for up to 10 minutes while the open list lags (re-reading every minute), and re-reads the list at the soonest upcoming start (`useDiscoverRows`). The mock branches on the filter (`mock/endpoints/join.ts`: three upcoming fixtures, 900101–900103, the last beyond the default 24 h window).
 - **Library listing.** `get-library-photos(challengeId?, search?, mode?, usage?, start?, keep?)` (`ipc/actions/library.ts`) is a read-only listing for the chooser and `list-photos`. `get_photos_private` requires a challenge id, so a caller with none borrows an active (else open) challenge and the result says `allowedKnown: false`; with no challenge to borrow it answers `no-challenge-context`. Walks are throttled to one in flight per process with a minimum gap, and a newer request replaces a queued one (`superseded`). Only the mapped fields `id`, `labels`, `allowed`, `message`, `uploadDate` plus `memberId`, `truncated`, `nextStart`, `wonIds`/`wonCount`, `preview` and `readAtMs` are forwarded, and the renderer shows them as text only. A third argument `mode` (`'cached'`, or `'fresh'`, the default and the CLI's) lets the choosers open at once: `'cached'` answers the no-search listing from `services/libraryCache.ts` (memory only, per challenge and per usage, expiring after 5 minutes) before the throttle, as a preview with its marks withheld when only another challenge's or an expired listing is held. A `'cached'` answer is always a read from offset 0 — the cache holds only those — so `'cached'` with `start > 0` is refused as `invalid-args`; every no-search read from offset 0 is kept for the next `'cached'` request, whatever its `keep` — a wider re-read (a Refresh/Retry extent, e.g. `keep: 8` or `keep: 500`) replaces the entry, so a later `'cached'` answer never shows an older, smaller listing — while a continuation (`start > 0`) and a search are never cached. Actions of this window that change what a challenge accepts (submit, fill, join, swap) drop that challenge's entry, and a logout or account switch empties the cache (`forgetAccountMemory`); a walk that began before either writes nothing. A fourth argument `usage` (`'submit'`, the default and the CLI's, or `'swap'`, the swap picker's) says which eligibility the `allowed` flags describe, and a listing of one usage answers only that usage (the other's serves as a preview). A fifth argument `start` reads one batch from that offset instead of walking the library, and `keep` (given only with `start`) says how many photos the batch counts before it stops — 100 by default, at most one full walk (1000). The count is checked after each page, so the page that crosses `keep` is kept whole: a batch is 100–199 photos, or one page when nothing is left out. Won photos never count (they are skipped before the count), and when the read names a challenge only photos it accepts count — the submit grid gets ~100 pickable tiles per batch, with refused ones riding along. The page cap (10 pages, doubled under a `skip`) and the 20 s wall-clock budget still bound every batch, and every exit reports `nextStart`, the offset a continuation reads from; continuations run over a live, vote-ordered list, so they can repeat a row (the grid dedupes by id) or skip one. Any paged read whose first page fails answers `library-read-failed` (mapped to `errors.libraryReadFailed` in the renderer) instead of an empty batch — `start: 0` included, so Load photos, a search and Retry land in the error state with Retry, not only a continuation. In the renderer (`useLibraryListing`) the batch is **Load more** under the grid: it is held while any read is in flight (its own, one that replaces the listing, a preview's re-check), and Refresh re-reads the loaded extent (`keep` is the counted photos on screen, at most 1000, one batch from the error state; the preview's fresh re-check reads the same extent), so a press never loses what is shown — a cached answer never shrinks what is on screen.
-- **Rollback.** An older build drops the unknown keys from its settings, profiles and rules when it next saves, and rejects a scenario whose phase uses them. A rule with a close-time condition (`closesAt` / `closesAtTimes`) is left out of the `titleRules` of the `settings.json` mirror, since an older build would ignore the condition and match the rule more widely (an auto-join rule would pay for challenges it excluded). The mirror carries those rules in a top-level key of its own, `closeTimeRules` (each with the position it holds among all the rules), which an older build does not read; `config.json` keeps them as well, and a restore from the mirror (`settings/closeTimeRules.ts`) takes the key out before the frozen importer sees the text and puts the rules back at their positions, so a missing or damaged configuration loses none.
+- **Rollback.** An older build drops the unknown keys from its settings, profiles and rules when it next saves, and rejects a scenario whose phase uses them. A rule with a close-time condition (`closesAt` / `closesAtTimes`) matches more widely there, since an older build ignores the condition (an auto-join rule would pay for challenges it excluded); downgrades are not guarded, and going back is the user's choice.
 
 ## 4. Semantic / lexicon
 
@@ -620,206 +620,78 @@ repeated six times is one that gets forgotten at one of them.
   a window receives and answers only `hasToken`, derived from the stored token; `withoutRendererHiddenKeys` drops
   `auth`, `token`, `hasToken` and `apiHeaders` from a renderer's write, and `lastUsername`
   (which a renderer may read one at a time) as well. Only the main process writes the sign-in state.
-- **`settings.json` is a one-way mirror of the configuration, in settings format 1 (`settings/formatOneMirror.ts`).**
-  It exists so that an older build of the app (which applies its own schema, prunes the keys it does not know, resets
-  values it cannot validate and writes the whole file back even unchanged) that runs on the same data starts signed in
-  with the current settings. The invariant: **`config.json` is the only source of truth; `settings.json` is written
-  from it after every save that landed and is never read back, except by the import, the recovery of a missing or
-  damaged configuration, and the one exception for the sign-in below.** What an older build changes in it is
-  overwritten by the next save or start; nothing but the sign-in that the new build holds can be reset by an older one. `toFormatOne(config, titlePins)` derives the text: the renamed keys
-  (`V1_KEY_RENAMES`) under their format 1 names (where a key exists under both names the current one wins, so the same
-  configuration always mirrors to the same text), `auth` back among the top-level keys, `challenges` split into
-  `perChallenge`, `titleProfileSuppressions` and `entryPins`, `defaults` as `globalDefaults`, every one-time migration
-  flag set (an older build never migrates the values again) and no `version` or `imported`. An empty or blank `timezone` is written as `UTC` (the configuration's meaning of it; a format-1 build read `''` as Europe/Riga, so `settings/formatOneTimezone.ts` translates both ways). The mirror is written
-  after the configuration is stored, as an overwrite of the text it read, and skipped when it is unchanged:
-    - **Desktop and the CLI (`mirrorSync`)** read `settings.json` first, then the stored configuration, and write with
-      `overwriteIf(current, text)`; a mirror another process wrote in between makes the write a conflict, and it is
-      made again from the configuration as stored then (3 attempts). The compare and the write are made under the
-      settings lock (`settings/settingsLock.ts`, the lock the import runs under) with a short wait: a mirror that cannot
-      take it in time is given up quietly, and the next save or start makes it. Where nothing is stored to mirror no
-      lock is taken.
-    - **Android (`mirrorQueued`)** is chained on the configuration write's `landed` outcome: it waits on it (nothing is
-      mirrored from a write that did not land), then runs on the mirror store's own write chain, reads `settings.json`
-      and the stored configuration from Preferences, and writes with a compare-and-write (`casStored`), again up to 3
-      attempts. The background service makes the same overwrite through the native bridge's compare-and-write. The
-      title pins and the import marker the mirror carries and records are read from Preferences (`peekStored`), not
-      from the window's cache, which may be behind what the service saved.
-    - A failed or given-up mirror is logged (never its text) and made again by the next save and the next start
-      (`_verifyMirror`, once per process, once the stores are read); a title-pin change re-mirrors too. Nothing is
-      mirrored while the stored settings are unusable (`blocked`), so a file the user may need is never written over.
-    - The file the user had is kept once as `settings.json.original` (`gurushots-settings_original`, shared and atomic,
-      never replaced) before the first mirror write; `importMarker` records that the mirror has started, after which
-      `settings.json` is the app's own output. A logout clears the token and API headers from that copy as well, and
-      from every copy set aside of a settings file that parses (`config.json.corrupt-<time>`,
-      `settings.json.unimportable-<time>`, and the Android `gurushots-config_corrupt-…` /
-      `gurushots-settings_unimportable-…` keys): `scrubCopiesAfterSignOut`, run at once after a sign-out
-      was saved (a token that was stored and is cleared: a logout, the start that clears the token when Stay Logged In
-      is off and one is stored, a sign-out adopted from an older build), not whenever the mirror next runs, which it may
-      not, or may find busy; the Android window waits for the configuration's write to land and clears nothing when it
-      did not. Every sign-out is recorded (`signOutScrubPending`, a value of its own for each, in the import marker; a missing
-      marker is made for it) and the record is cleared only when every copy was rewritten (the rewrites report whether each
-      landed): a copy that could not be is tried again at the next start or save (`finishDeferredScrub`; a desktop looks
-      again at each save only after a rewrite failed). The background service can reach none of the copies in Preferences
-      it cannot list, so it leaves its record, and the app window clears them when it next starts
-      and again at each change it saves (`finishDeferredScrub`), since the service may sign out while the window is open; a look asked for while one runs is
-      made when it ends, and only the record a look has seen to is cleared, against what is stored (a sign-out recorded since stays owed). Never because the configuration merely holds no token, as the defaults of a damaged one do: the
-      sign-in in the copy the user is fixing is not theirs to lose. The last user
-      name and the chosen-photos account go out of the copies too (never out of the configuration or the live mirror: the
-      login form is prefilled from them). A copy that does not parse is left as it is.
-      At each start (`scrubOldCopies`) the copies set aside more than 14 days ago (the time is in their name; one without a
-      time counts as old; not `settings.json.original`) also lose the sign-in they hold, every one that can be read (a damaged copy cannot), a logout that never came
-      having left it there, and keep their settings for recovery.
-    - **The one thing taken back is the sign-in, at every mirror write.** The marker keeps two fingerprints of the sign-in
-      this build wrote — the hashes of the token, the API headers, the last user name and the chosen-photos account, each
-      of its own (53-bit non-cryptographic hashes, not secrets: a low-entropy field such as the user name can be found
-      by brute force, and the marker sits beside files that hold the same values in plain text): `signInPending`, recorded right before a mirror write (the write is not made when the
-      record fails), and `signInConfirmed`, once it landed. Recording a pending one also keeps the fingerprint of what
-      `settings.json` holds then, when it is this build's, as the confirmed one; confirming clears the pending record only
-      when it is the one confirmed, so the other Android context's pending record is not dropped by this one's
-      confirmation (there is still one pending record, shared by the Android window and the service, and recording a
-      new one replaces the other's). Before every write — inside the settings lock, on the start and on each save, in the window's queued
-      path and in the service's synchronous one — the sign-in fields a `settings.json` that parses holds are compared
-      field by field with the recorded ones: a field whose hash is none a recorded fingerprint has for that field was
-      changed by an older build (a sign-out, or another account, before the start or while the app ran), and those
-      fields, only them, are adopted into `auth` first, the configuration saved before the mirror is made from it
-      (`_adoptSignIn`, answered to the mirror through its hooks). A field the file does not hold, or holds as the wrong
-      kind, was not decided there (an older build drops the keys it does not know), and a field this build changed
-      since it last wrote is not taken for the older build's. If that save fails nothing is written and nothing is
-      recorded until a later attempt adopts it; one line, without values, is logged once it is stored. A sign-in is a
-      decision of the user, not something an older schema can get wrong. Nothing is adopted without a recorded
-      fingerprint, from a file that does not parse, or while the configuration in use is the defaults of a damaged one.
-    - **A `settings.json` that does not import is never mirrored over.** In the `settings-corrupt` state the first save
-      sets it aside as `settings.json.unimportable-<time>` (the Android key `gurushots-settings_unimportable-<time>`)
-      first, then mirrors; the notice says where it went (`settingsSetAside`; in the Android window only once the queued
-      set-aside has landed). If it cannot be set aside nothing is written over it, and the next save tries again. The
-      background service cannot set a file aside and leaves it as it is, quietly, for the window to do. That copy is
-      the file the user fixes in place, so a Re-import imports from that copy, or from `settings.json` until there is one. The copy
-      is the one of the last episode only (`legacySetAside`; never an older one in the folder), and where it was set
-      aside is recorded in the import marker (`unimportableCopy`, written when the set-aside lands, by compare-and-write
-      like the rest of it; the Android key on Android), so that a re-import in another process (the CLI) or after a
-      restart of the app finds it again; the marker is a file the user can edit, so the path is taken only if it is beside
-      settings.json and named as such. It is forgotten when a re-import, Start fresh or a retry succeeds, when another
-      episode begins, and when the copy is gone (settings.json is imported then). A save never forgets it, in any process
-      (a CLI vote that saves while the GUI's episode runs leaves it), and a recorded copy older than 14 days is no
-      longer used: a much later re-import reads settings.json. The notice and the CLI name the
-      file a Re-import would read (`reimportSource`; the IPC answer of a re-import says which it read), and the
-      guidance says "fix settings.json" before a set-aside and "fix the file at {path}" after it.
-- **Import and recovery (`settings/legacyImport.ts`, `persistence.ts`).** With no `config.json`, the first load imports
-  `settings.json` under the import lock (Android has none: the native compare-and-write of the configuration decides
-  which context is first) and writes the marker (`v2-import.json`, kept outside `config.json`, so setting the
-  configuration aside never makes the next start import unasked). An import reads a `timezone` of exactly `''` as
-  Europe/Riga, the meaning it had in format 1 (`withImportedTimezone`). A damaged `config.json` is set aside
-  (`config.json.corrupt-<time>`; `gurushots-config_corrupt-<time>` on Android) and the configuration is restored from
-  `settings.json`; a missing one, once the import has run and the mirror has started, is restored silently with a log
-  line. A restore keeps the `imported` record the marker holds, so the import report is not shown again. The load
-  answers a recovery state, which a window shows as a notice and the CLI prints (`getSettingsRecovery`):
-  `settings-restored` and `settings-corrupt` (notices; saves work), `settings-unreadable` (`config.json` cannot be read
-  or set aside), `settings-import-failed` (no `config.json`, and `settings.json` cannot be imported) and
-  `settings-import-retrying` (the same, for a reason that may pass: see below) block saves until fixed. A damaged `config.json` that `settings.json` cannot restore because the file itself cannot be imported
-  (`corrupt`, `migration-failed`, or `inaccessible`: a read error that retrying does not cure, such as no permission, as
-  against the transient EBUSY, EAGAIN, EINTR, EMFILE, ENFILE, ETIMEDOUT and EIO) is `settings-corrupt` for the rest of the process, however often it is read: the
-  failed restore is remembered (`importFailure`), so a later read does not turn it into the blocking
-  `settings-import-failed`. A new process that finds the configuration still missing and the mirror unimportable reports
-  `settings-import-failed`. A restore that could not be tried just now (the import lock held by another process, a read
-  or a write that failed once) says nothing of the file: it is the retrying state (`settings-import-retrying`, blocking;
-  `damagedAt` is where the damaged `config.json` went, when there was one) with wording of its own in the GUI (both
-  languages, an Android variant), the CLI and the usage docs (the file could not be read just now, the app tries again by
-  itself, nothing was overwritten) and Retry as its only action, not Start fresh; saves are refused, nothing is mirrored over it, and a later read tries again after a wait that doubles from one second up to five minutes
-  (`retryNotBefore`), the failure logged once per distinct failure, with no title-pin rewrite in between. While a window listens for recoveries
-  (`onRecoveryChange`) the read that tries again is made by a timer once the wait is over (`_scheduleRetry`, unref'd), so
-  the user is told when it comes through; a restore that still fails 8.5 minutes after the first failure (counted in time, not in tries, so that pressing
-  Retry does not bring it nearer; the wait is at its ceiling by then) is given up as one that will not pass: `_settleUnusable`, the same state as a damaged `settings.json`
-  (`settings-corrupt`, saves allowed, the file set aside before the first save mirrors over it, or left as it is when it
-  cannot be read). A file that
-  turns out damaged on a retry settles like one found damaged at the first try (`settings-corrupt`, not blocking). On
-  Android a configuration the window only holds in its cache until the queued write lands (`storage.isPersisted`
-  false) is no proof of anything: a read of it leaves the block, the wait, the log and the notice as they are and
-  mirrors nothing; once a read finds it stored they are cleared, and `settings.json` is brought up to date. A restore
-  counts as one when its own write has landed (`_awaitRestore`): while it is in flight the notice has nothing to say
-  (`getSettingsRecovery` answers null unless an earlier try left its block), and when it lands the block of an earlier
-  try is lifted and the window is told, so the notice says restored. Each import attempt has a number, and only the
-  latest one hears how its write ends (`_beginImport`): the late failure of an attempt that a later one has
-  replaced (the read a dropped save causes begins the next attempt before the failure is reported) says nothing of the
-  state now. A restore that fails late is a restore that did not happen, and is tried again like any other, so a
-  `settings.json` found unusable then settles like a first-try failure (`restoreRetryPending`, which only a restore
-  still to be retried sets, never a Start fresh or a re-import that fails late: a configuration that goes missing
-  later, with an unimportable `settings.json`, is a blocked import). Retry, and Start fresh that finds the configuration restored meanwhile, end the episode as the
-  automatic path does (`_finishRestore`: the restore they put in place counts as restored once it has landed, so a later
-  sign-out an older build made is adopted again), and so does a retried restore that finds another process restored it
-  (`adopted`). A restore whose `settings.json` holds no sign-in (a sign-out an older build made) clears the sign-in out of
-  the copies kept of the settings files, as after any sign-out. A sign-out made while a restore is on its way or waiting
-  is recorded in the import marker (`signOutOwed`, a missing marker made for it) as `{ id, at, fingerprints }`: the
-  fingerprints (`signInFingerprint`, one hash per field, never a value) are those of the sign-in the mirror last wrote to
-  `settings.json` and of the sign-in `settings.json` holds when the logout is made. The record signs out that sign-in and
-  no other: `_applyOwedSignOut` (looked at when a process starts and when a restore lands) blanks the token and the API
-  headers only where the token in use is one of the named (`tokenInSignIns`), in the configuration and the mirror, and
-  clears the copies kept of the settings files by the same match (`scrubCopiesAfterSignOut(…, fingerprints)`). A later
-  login has another token and never matches, so no login path touches the record, and the order in which the stores land
-  (the Android window's separate queues, another process) cannot make the record undo it. A logout made when no sign-in can
-  be named is refused while `settings.json` cannot be read, and recorded as nothing to sign out otherwise. The record is
-  removed (`_settleOwedSignOut`) once nothing that holds the sign-in remains to be cleared: not while a `settings.json` is
-  still to be set aside (a copy to come, cleared at the moment it is set aside by `_scrubAsideIfOwed`), and at the latest
-  after the 14 days the copies set aside keep their sign-in (`scrubOldCopies`). A removal that is refused or fails is
-  harmless and is not replayed: the record applies to nothing once the sign-in it names is gone. A damaged `config.json.corrupt-<time>`
-  does not parse, so no sign-out or age rewrite can touch it: the notice that names it says it may still hold the
-  sign-in and advises deleting it, and never says a logout cleared it. A record the Android window queued and could not store is logged and shown as a change not saved, and
-  still holds in that process (`owedMemory`) until it is applied.
-  On a desktop the marker is changed under the settings lock (`underSettingsLock`, re-entrant within a process, so the
-  mirror's and the import's own changes do not wait for themselves; `writeNow` also reads again before it writes, as a
-  second guard). Every change of the marker has one contract (`changeMarker`): it waits for the lock, answers
-  `done`, `queued` or `failed`, and a change that failed is kept in memory and made again with the next save or start
-  while the app runs (said in the log once per change; it is not kept if the app is closed first). A replayed change
-  guards itself by the condition it served and makes no change once that has gone (a copy is forgotten only while it is
-  still the one recorded, a set-aside owed is cleared only while it is still the same record, the time the copies were
-  cleared is the time of the clearing). A change a caller is refused is never kept: an owed sign-out that cannot be
-  recorded is refused, and one that cannot be removed stays, harmless. A refused sign-out makes `clearAuthToken` throw
-  `LogoutNotSavedError`, and each shell tells the user truthfully (the CLI exits 1 saying they are still logged in, or
-  prints that the logout is recorded; Electron's main process shows a dialog and keeps the window; the web shell answers
-  `logout-not-saved` and Capacitor rethrows, and the App shows an alert instead of the login screen, saying whether the settings refused it or something else failed, and that
-  auto-vote is stopped and to start it again; the Electron dialog says the same, and when the main window went away meanwhile it is opened again,
-  not the login form, since the sign-in was not changed). A record the Android window could not store is told as its
-  own notice (`logout-lost`: not recorded, holds only while the app stays open, log out again if it closes first). A marker made only
-  for such a record has no `importedAt` and does not stand for the import (`isImportMarked`); `configFrom` records what
-  made the stored configuration (`import`, `restore`, `fresh`), and a configuration found there that another process's
-  Start fresh wrote is not a restore: it is reported as what it is and strips no sign-in from the copies. Start fresh with a `settings.json` that cannot be read
-  keeps nothing and writes the defaults, saying that the file could not be read and was left as it is (`kept:
-unreadable`; the mirror never writes over a file it cannot read, and `legacyAsideOwed` in the marker has it set aside, in any
-  process, before the first mirror write once it can be read; Start fresh is refused when that cannot be recorded). The CLI refuses `start-fresh` while the retrying state
-  stands, unless `--force` is added. A damaged configuration the window could not move aside (the copy in Preferences was refused) is handled as a failed
-  move is on a desktop: it is still what is stored, so nothing restored over it counts as restored (the restore queued
-  behind the move would only be declined), saves are refused (`settings-unreadable`, blocking, announced to the window)
-  and `settings.json` is not mirrored over; the cache shows what Preferences holds (and nothing is told of the restore
-  the move was queued with), the move is tried again by a later read after a wait that doubles (`moveRetryNotBefore`),
-  and the copy the move would have made is not counted (`hasBackupKey`). A restore's late failure is announced
-  too (a dropped save reports only once), and only an import that has started takes the place of an attempt in flight:
-  Retry, Start fresh or Re-import that fail at once, or find the configuration there, leave a restore's landing alone. The window is told (`onSettingsRecoveryChange`,
-  broadcast by the handlers) when a block ends or the state changes, so an open notice refetches and shows the
-  restored notice. The notice is a named region only while it has something in it; a dismissed outcome returns focus to the
-  button that ran the action, else the notice's heading, else the element the page gives it (`returnFocusTo`: the
-  Login heading, the App `main`, named by what it holds; the page makes it focusable), never an empty element. A session
-  that is stored while the Login page shows, without a login made there (the restore that was waiting came through),
-  moves on to the app as a login does: the page asks the shell for it (`window.api.login()`, which Electron's main
-  process answers by swapping the windows and the web shell and Capacitor by mounting the app) when the settings change
-  and say a session is kept. A read before the Android window has hydrated its stores (`not-loaded`) is not a recovery state: the
-  defaults answer, nothing is blocked or logged as an error, and a save is refused until the stores are read.
-  `retryImport`, `startFresh` (the file is set aside as `settings.json.original`, or as `settings.json.unimportable-<time>`
-  when that is taken, before anything is mirrored over it) and `reimportFromV1` (the configuration in use is set aside)
-  are the explicit ways out (`settings-recovery` in the CLI). A re-import takes everything from `settings.json`, the
-  sign-in included, and sets the configuration it replaces aside with its sign-in (the notice and the CLI say where);
-  it is not offered on Android, where there is no file the user can fix. Start fresh keeps `settings.json` beside it
-  and says where (`startFreshDetailed`; the IPC answer carries `kept`: `path` with the path, `stored` for the Android
-  copy in the app's own storage, `pending` when that copy could not be written yet, `none`, or `adopted` when a
-  configuration was in place already, such as a restore that came through meanwhile: nothing is reset and nothing kept), or that there was none.
+- **`settings.json` is read once, for the import.** It is the settings blob of a 1.x install (`gurushots-settings`
+  on Android), read as text by the one-time import (`settings/legacyImport.ts`) and never written by the app: no
+  mirror keeps it current, and nothing is restored from it — a configuration that is lost or damaged is the user's
+  to recover, and an older release a user goes back to uses whatever it finds. Files older builds left
+  (`settings.json.original`, `settings.json.unimportable-<time>`, and their Android keys) are only wiped with the
+  rest ("Delete all local data").
+- **Import and recovery (`settings/legacyImport.ts`, `persistence.ts`).** With no `config.json`, the first load
+  imports `settings.json` once, under the import lock (Android has none: the native compare-and-write of the
+  configuration decides which context is first) and writes the marker (`v2-import.json`, kept outside
+  `config.json`, so deleting or setting the configuration aside never makes the next start import unasked). The
+  marker is the one fact — `importedAt` (or a `mirrorStartedAt` an older build wrote; one that cannot be read
+  counts as done) — written fresh, so fields an older build kept there do not stay; a change of it that cannot be
+  made yet (the settings lock held, the write refused) is kept and made again with the next save or start while the
+  app runs (`changeMarker`, said in the log once). An import reads a `timezone` of exactly `''` as Europe/Riga, the
+  meaning it had in format 1 (`withImportedTimezone`). The load order, in `loadSettings`:
+    1. `config.json` reads and parses: it is used, validated and filled over the defaults (`loadValidation.ts`).
+    2. The read fails: `settings-unreadable`, blocking — the defaults answer and saves are refused; every read
+       tries again.
+    3. Damaged (the text is not a JSON object): it is set aside once (`config.json.corrupt-<time>`;
+       `gurushots-config_corrupt-<time>` on Android), the defaults apply, saves work, and the notice says where the
+       copy is (`settings-corrupt`; the state stays for the rest of the process). Where it cannot be set aside it
+       is left as it is and saves are refused, and the next read tries the move again.
+    4. Missing, the marker not done, and `settings.json` there: imported once. A failure that may pass by itself
+       (the import lock held, a read that failed — the transient `EBUSY`, `EAGAIN`, `EINTR`, `EMFILE`, `ENFILE`,
+       `ETIMEDOUT`, `EIO` or an error with no code, `inaccessible`: no permission and the like — or a write that
+       did not land) blocks saves (`settings-import-failed`, `blocking`) until the import is retried: on Retry, or
+       at the next start — never on each setting read (`importFailure`). A failure that cannot pass (`corrupt`,
+       `migration-failed`) is settled: the defaults are written with the failure in their `imported` record
+       (`failure: { reason, detail }`), the marker is written, the file is left as it is, and a non-blocking
+       `settings-import-failed` notice names the reason (`detail`). Where even the defaults cannot be written
+       nothing is settled, and the next start tries the import again.
+    5. Missing otherwise (the marker done, a configuration set aside, or nothing to import): defaults, silently.
+    6. On Android, stores not read yet (`not-loaded`): the defaults answer, nothing is blocked or logged as an
+       error, and a save is refused until the stores are read.
+       A load answers a recovery state, which a window shows as a notice and the CLI prints (`getSettingsRecovery`):
+       `settings-unreadable`, `settings-corrupt` and `settings-import-failed`, and, instead of a recovery,
+       `settings-save-dropped` (below). A damaged `config.json.corrupt-<time>` does not parse, so no sign-out can touch
+       it: the notice that names it says it may still hold the sign-in and advises deleting it. Each import attempt has
+       a number, and only the latest one hears how its write ends (`_beginImport`): the late failure of an attempt that
+       a later one has replaced says nothing of the state now. On Android a configuration the window only holds in its
+       cache until the queued write lands (`storage.isPersisted` false) is no proof that anything works: the block and
+       the failure stand until it is stored, and once a read finds it stored they are cleared — except a settled
+       failure, whose notice stands for the rest of the process. The window is told (`onSettingsRecoveryChange`,
+       broadcast by the handlers) when a block ends or the state changes, so an open notice refetches and shows what
+       stands now. The notice is a named region only while it has something in it; a dismissed outcome returns focus to
+       the button that ran the action, else the notice's heading, else the element the page gives it (`returnFocusTo`:
+       the Login heading, the App `main`, named by what it holds; the page makes it focusable), never an empty element.
+       A session that is stored while the Login page shows, without a login made there, moves on to the app as a login
+       does: the page asks the shell for it (`window.api.login()`, which Electron's main process answers by swapping the
+       windows and the web shell and Capacitor by mounting the app) when the settings change and say a session is kept.
+       `retryImport` and `startFresh` are the explicit ways out (`settings-recovery` in the CLI). Retry imports
+       `settings.json` again as the explicit import it is; a configuration another process saved meanwhile is adopted,
+       not imported over (`retryImportDetailed`: `adopted`). Start fresh writes the defaults and the marker, and leaves
+       `settings.json` as it is — nothing imports it again unasked once the marker says the import ran. The CLI refuses
+       `start-fresh` while the import may pass by itself (the blocking `settings-import-failed`), unless `--force` is
+       added.
+       A sign-out is `setSetting('token', '')`: where the stored settings are not in use it is refused, and
+       `clearAuthToken` throws `LogoutNotSavedError`, and each shell tells the user truthfully (the CLI exits 1 saying
+       they are still logged in; Electron's main process shows a dialog and keeps the window; the web shell answers
+       `logout-not-saved` and Capacitor rethrows, and the App shows an alert instead of the login screen, saying whether
+       the settings refused it or something else failed, and that auto-vote is stopped and to start it again; the
+       Electron dialog says the same, and when the main window went away meanwhile it is opened again, not the login
+       form, since the sign-in was not changed). The settings files an older build left (a `settings.json`, its kept
+       copy, a set-aside copy) are not touched by a logout; "Delete all local data" removes them.
 - **The importer is frozen (`settings/importV1/`).** The format 1 load pipeline lives there as a copy (schema,
   merge over the defaults, the eight one-time migrations, load validation, prune, key renames, conversion to a
   configuration), so a later change to the live settings cannot change what an older file imports as; it runs in
-  memory and writes nothing. It keeps every key the live schema defines (the file may be the app's own mirror). Proofs,
+  memory and writes nothing. It keeps every key the live schema defines (the file holds what this app wrote). Proofs,
   all under `tests/settings/`: the oracle (`tests/helpers/v1Oracle`, a frozen copy of the format 1 resolver) and the
   equivalence harness (`v2/equivalence.test.ts`) ask the oracle and the live code the same questions for every fixture
-  and seeded random file, with `v2/golden.test.ts` pinning the oracle's own answers (`__golden__/oracle.json`);
-  `formatOne/roundTrip.test.ts` generates configurations from the live schema, so a setting the importer would drop
-  fails CI; `formatOne/olderBuild.test.ts` loads the mirror with the 1.12.2 build's key set and load frozen from
-  `master` (`tests/helpers/olderBuild/master1122.ts`), and it must stay signed in with every key that build knows.
+  and seeded random file, with `v2/golden.test.ts` pinning the oracle's own answers (`__golden__/oracle.json`); the
+  import itself is covered by `importV1/` and `config-import.test.ts`.
 - **The title pins and the import marker are shared stores (`createJsonStore({ shared: true })`).** The Android
   service writes them too, so every change is made against what is stored when the write is made — never the app
   window's cache written whole: `updateThrough` (the window) re-reads and saves by the native compare-and-write, made
@@ -839,8 +711,8 @@ unreadable`; the mirror never writes over a file it cannot read, and `legacyAsid
   the writer's text is not a change the writer made. A blob that cannot be read is
   never overwritten, and a save that is not made is logged and leaves the window cache showing what is stored.
   A window save given up (5 conflicting attempts, a refused save, or a plugin error) is not silent: the window's
-  `get-settings-recovery` answers the recovery of the stored settings first (`{ code, path, blocking }`, and `settingsSetAside` once an unusable `settings.json` was set aside; one of the
-  four codes in the import-and-recovery bullet above) and else `{ code: 'settings-save-dropped', path, cause }`
+  `get-settings-recovery` answers the recovery of the stored settings first (`{ code, path, blocking, detail }`; one
+  of the four codes in the import-and-recovery bullet above) and else `{ code: 'settings-save-dropped', path, cause }`
   (`getSettingsSaveDropped`), the same `settings-changed` signal a write sends is emitted so
   `SettingsRecoveryNotice` re-reads, and it tells the user in what / why / next terms that the change was not saved
   and the setting shows its stored value again. `cause` is why the save was given up and words the _why_:
@@ -884,9 +756,10 @@ unreadable`; the mirror never writes over a file it cannot read, and `legacyAsid
   the wait is refused too. A saved "auto-vote running" flag is only a wish to resume at the next start and does not
   block. The delete modal words each code with its own next step (stop the CLI session in its terminal / quit the
   desktop app / stop the web server / stop auto-vote); any other failure reads as the generic "not everything was
-  deleted". The wipe deletes the files the settings are restored from (`settings.json`, `settings.json.original`,
-  `v2-import.json`) before `config.json`, and keeps `config.json` when one of them cannot be removed, so the next load
-  never restores a sign-in from a mirror that was left behind; a removal that fails on a busy file is retried. On
+  deleted". The wipe deletes the legacy settings files existing installs still have (`settings.json`, `settings.json.original`,
+  `v2-import.json`) before `config.json`, and keeps `config.json` when one of them cannot be removed, so a file left
+  behind cannot bring an import of it back (the marker goes with them); a removal that fails on a busy file is
+  retried. On
   Electron it clears the storage and cache of the app's windows and of Electron's default session (its files sit at
   the user-data root). After a successful wipe Electron and Android relaunch; the web shell's server stops, so its text says to
   start `pnpm web` again (`usePlatformCapabilities().relaunchesAfterWipe`, read from the flag the web bridge sets).
@@ -1011,7 +884,7 @@ unreadable`; the mirror never writes over a file it cannot read, and `legacyAsid
   main process). The Android pages (the Capacitor page and `headless.html`) run network code in the WebView,
   so their `connect-src` also allows `https://api.github.com` and the photo CDN, and their `script-src`
   adds `'wasm-unsafe-eval'` for the vision runtime.
-- The settings files (`config.json`, its mirror `settings.json` and the copy `settings.json.original`) are written
+- The settings file `config.json` is written
   mode `0o600` — but **only at creation. A pre-existing or backup-restored file keeps whatever mode it already
   had** (the source says as much); don't state 0600 as an always-guarantee. The renderer never receives the `auth`
   block of the configuration, only `hasToken` (§7).
@@ -1035,20 +908,18 @@ unreadable`; the mirror never writes over a file it cannot read, and `legacyAsid
 
 These are known and deliberate; don't describe the app as stronger than this.
 
-- **The login token is stored in plaintext in the settings store, in two places.** On desktop and the CLI it is in
-  the `auth` block of `config.json` and, because `settings.json` mirrors the configuration for older builds (§7), a
-  field of `settings.json`, both in the app data folder, files created owner-only (`0o600`); on Android they are
-  `@capacitor/preferences` entries (`gurushots-config`, `gurushots-settings`) in app-private storage, excluded from
-  cloud backup and device transfer (`data_extraction_rules.xml`). `settings.json.original` (the file the user had
-  before the first mirror write) and the copies set aside of a settings file (`config.json.corrupt-<time>`,
-  `settings.json.unimportable-<time>`) can hold a token as well until the next logout, which clears it from every one
-  that parses (one that does not parse is left as it is). A sign-out made in an older build is taken over at the
-  next start (§7), so an older build cannot leave the sign-in in the mirror either. It
+- **The login token is stored in plaintext in the settings store.** On desktop and the CLI it is in
+  the `auth` block of `config.json`, in the app data folder, a file created owner-only (`0o600`); on Android it is
+  the `@capacitor/preferences` entry `gurushots-config` in app-private storage, excluded from
+  cloud backup and device transfer (`data_extraction_rules.xml`). The settings files older builds left
+  (`settings.json`, `settings.json.original`, `settings.json.unimportable-<time>` and the copies set aside of a
+  settings file, `config.json.corrupt-<time>`) can hold a token as well; a logout does not touch them, and "Delete
+  all local data" removes them. The damaged copy the app sets aside cannot be read as settings, so a logout cannot
+  clear it: the notice that names it says it may still hold the sign-in and advises deleting it. It
   is not encrypted because the Node CLI shares the files with the GUI and cannot read Electron `safeStorage`, and
   macOS runs Chromium on a mock keychain on purpose (`use-mock-keychain`, `index.ts`), so `safeStorage` would add no
   real protection there. Anything that can read the owner's files, or run as that user, can read the token; logging
-  out removes it from all of them (a mirror write that fails is retried, and the next save or start makes it), and
-  so does "Delete all local data".
+  out removes it from `config.json`, and so does "Delete all local data".
 - **Desktop builds are not signed by a publisher** (no Developer ID or notarization on macOS, no publisher
   certificate on Windows). The update trust root is therefore write access to the project's GitHub releases: the
   update check and download go to `api.github.com` and GitHub release downloads, branches and tags are

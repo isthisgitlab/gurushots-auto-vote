@@ -178,7 +178,7 @@ class AutoVotePluginTest {
             every { it.getString("value") } returns value
             plugin.compareAndWrite(it)
         }
-        for (key in listOf("gurushots-config", "gurushots-settings", "gurushots-settings_original", "gs_v2_import", "gs_title_pins")) {
+        for (key in listOf("gurushots-config", "gurushots-settings", "gs_v2_import", "gs_title_pins")) {
             assertTrue(key, write(key, """{"a":1}""").getBoolean("saved"))
         }
         // The window sets a corrupt copy aside through Preferences itself; the plugin is not a way to write one.

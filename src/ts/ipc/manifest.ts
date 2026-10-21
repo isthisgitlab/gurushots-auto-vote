@@ -33,7 +33,6 @@ const invokeChannels = [
     'get-settings-recovery',
     'retry-settings-import',
     'start-fresh-settings',
-    'reimport-settings-from-v1',
     'get-import-report',
     'acknowledge-import-report',
     'get-third-party-notices',

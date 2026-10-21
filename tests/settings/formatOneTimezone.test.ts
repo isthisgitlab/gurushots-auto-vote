@@ -1,9 +1,9 @@
 /**
  * What an empty `timezone` means across the settings format 1 boundary: the import reads exactly `''` as Europe/Riga
- * (what format 1 meant by it), the mirror writes a blank one as UTC (what the configuration means by it).
+ * (what format 1 meant by it).
  */
 
-import { mirroredTimezone, withImportedTimezone } from '../../src/ts/settings/formatOneTimezone';
+import { withImportedTimezone } from '../../src/ts/settings/formatOneTimezone';
 
 import type { StoredConfigV2 } from '../../src/ts/types/config';
 
@@ -34,20 +34,5 @@ describe('withImportedTimezone', () => {
         const config = configWith({ timezone });
 
         expect(withImportedTimezone(config)).toBe(config);
-    });
-});
-
-describe('mirroredTimezone', () => {
-    test.each([[''], ['  ']])('writes %j as UTC, leaving the rest as it is', (timezone) => {
-        const app = { timezone, theme: 'dark' };
-
-        expect(mirroredTimezone(app)).toEqual({ timezone: 'UTC', theme: 'dark' });
-        expect(app.timezone).toBe(timezone);
-    });
-
-    test.each([['Asia/Tokyo'], [' Asia/Tokyo '], ['local'], [undefined], [5]])('leaves %j as it is', (timezone) => {
-        const app = { timezone };
-
-        expect(mirroredTimezone(app)).toBe(app);
     });
 });

@@ -122,13 +122,17 @@ describe('the local-data registry', () => {
         },
     );
 
-    test('the registry holds nothing the source does not create', () => {
+    test('the registry holds nothing the source does not create, but the legacy files existing installs have', () => {
         const created = callSites.map((site) => `${site.fileName}|${site.prefKey}`);
         const listed = LOCAL_DATA_STORES.map((store) => `${store.fileName}|${store.prefKey}`);
-        expect(listed.filter((entry) => !created.includes(entry))).toEqual([]);
+        // `settings.json.original` is the copy older builds kept of the settings.json blob: nothing creates it any
+        // more, and "Delete all local data" still removes it.
+        expect(listed.filter((entry) => !created.includes(entry))).toEqual([
+            'settings.json.original|gurushots-settings_original',
+        ]);
     });
 
-    test('the configuration, settings.json and the copy kept of it, the import marker and the title pins are in it', () => {
+    test('the configuration, settings.json, the copy of it older builds kept, the import marker and the title pins are in it', () => {
         expect(LOCAL_DATA_STORES).toEqual(
             expect.arrayContaining([
                 { fileName: 'config.json', prefKey: 'gurushots-config' },

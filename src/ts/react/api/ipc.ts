@@ -95,7 +95,6 @@ export const getEnvironmentInfo = forward('getEnvironmentInfo');
 export const getSettingsRecovery = forward('getSettingsRecovery');
 export const retrySettingsImport = forward('retrySettingsImport');
 export const startFreshSettings = forward('startFreshSettings');
-export const reimportSettingsFromV1 = forward('reimportSettingsFromV1');
 export const getImportReport = forward('getImportReport');
 export const acknowledgeImportReport = forward('acknowledgeImportReport');
 

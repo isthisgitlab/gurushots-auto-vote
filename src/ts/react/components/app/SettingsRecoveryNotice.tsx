@@ -11,69 +11,55 @@ import { BusyContent } from '@/components/ui/LoadingSpinner';
 
 import type { IpcQueryTools } from '@/api/useIpcQuery';
 
-type RecoveryCode =
-    | 'settings-restored'
-    | 'settings-corrupt'
-    | 'settings-unreadable'
-    | 'settings-import-failed'
-    | 'settings-import-retrying'
-    | 'settings-save-dropped';
+type RecoveryCode = 'settings-unreadable' | 'settings-corrupt' | 'settings-import-failed' | 'settings-save-dropped';
 // `cause` (a save the window gave up only): why the change was dropped — `conflict` (the background service wrote at
 // the same time), `too-large` (past the size the store takes) or `storage` (the store refused it). Any other value,
-// or none, is worded neutrally. `settingsSetAside` (a damaged configuration only): where the unusable settings.json
-// was kept once a save mirrored over it (a path where there are files, a storage key where there are none). `serial`
-// (a save the window gave up only): which of the saves given up this was, so that a repeat of the same cause is a
-// notice of its own.
-// `reimportSource` (the same, where there are files): the file a Re-import would read. `damagedAt` (a settings.json that
-// cannot be read just now, behind a damaged configuration): where the damaged configuration was kept.
+// or none, is worded neutrally. `serial` (a save the window gave up only): which of the saves given up this was, so
+// that a repeat of the same cause is a notice of its own. `blocking` (an import failure only): true while saves are
+// refused (the file could not be tried just now), false once the defaults were stored in its place (`detail` is the
+// reason the file itself cannot be imported).
 type Recovery = {
     code: RecoveryCode;
     path: string;
+    blocking?: boolean;
+    detail?: string;
     cause?: string;
-    settingsSetAside?: string;
-    reimportSource?: string;
-    damagedAt?: string;
     serial?: number;
-    logoutLost?: true;
 };
 
 // What makes a notice the same notice: a dismissal holds for it and for no other (another code, another place, another
 // cause, or another save given up).
-const noticeKey = ({ code, path, cause, settingsSetAside, damagedAt, serial, logoutLost }: Recovery): string =>
-    JSON.stringify([code, path, cause, settingsSetAside, damagedAt, serial, logoutLost]);
+const noticeKey = ({ code, path, cause, detail, serial }: Recovery): string =>
+    JSON.stringify([code, path, cause, detail, serial]);
 
 // The translation keys of each code's what happened / why / what next text.
 const RECOVERY_KEYS: Record<RecoveryCode, { what: string; why: string; next: string }> = {
-    'settings-restored': {
-        what: 'notice.recoveryRestoredWhat',
-        why: 'notice.recoveryRestoredWhy',
-        next: 'notice.recoveryRestoredNext',
+    'settings-unreadable': {
+        what: 'notice.recoveryUnreadableWhat',
+        why: 'notice.recoveryUnreadableWhy',
+        next: 'notice.recoveryUnreadableNext',
     },
     'settings-corrupt': {
         what: 'notice.recoveryCorruptWhat',
         why: 'notice.recoveryCorruptWhy',
         next: 'notice.recoveryCorruptNext',
     },
-    'settings-unreadable': {
-        what: 'notice.recoveryUnreadableWhat',
-        why: 'notice.recoveryUnreadableWhy',
-        next: 'notice.recoveryUnreadableNext',
-    },
     'settings-import-failed': {
         what: 'notice.recoveryImportWhat',
         why: 'notice.recoveryImportWhy',
         next: 'notice.recoveryImportNext',
-    },
-    'settings-import-retrying': {
-        what: 'notice.recoveryRetryingWhat',
-        why: 'notice.recoveryRetryingWhy',
-        next: 'notice.recoveryRetryingNext',
     },
     'settings-save-dropped': {
         what: 'notice.recoveryDroppedWhat',
         why: 'notice.recoveryDroppedWhyUnknown',
         next: 'notice.recoveryDroppedNext',
     },
+};
+
+// The settled import failure (the defaults were stored in its place) has its own words, and names the reason.
+const SETTLED_IMPORT_KEYS = {
+    what: 'notice.recoveryImportSettledWhat',
+    next: 'notice.recoveryImportSettledNext',
 };
 
 const DROPPED_WHY = new Map([
@@ -85,74 +71,48 @@ const DROPPED_WHY = new Map([
 // Where the settings are not a file the user can open (Android: app-private storage), the notice names no file and
 // asks for no step on one.
 const NO_FILE_KEYS: Partial<Record<RecoveryCode, { what?: string; why: string; next: string }>> = {
-    'settings-restored': {
-        what: 'notice.recoveryRestoredWhatAndroid',
-        why: 'notice.recoveryRestoredWhyAndroid',
-        next: 'notice.recoveryRestoredNextAndroid',
-    },
+    'settings-unreadable': { why: 'notice.recoveryUnreadableWhyAndroid', next: 'notice.recoveryUnreadableNextAndroid' },
     'settings-corrupt': {
         what: 'notice.recoveryCorruptWhatAndroid',
         why: 'notice.recoveryCorruptWhyAndroid',
         next: 'notice.recoveryCorruptNextAndroid',
     },
-    'settings-unreadable': { why: 'notice.recoveryUnreadableWhyAndroid', next: 'notice.recoveryUnreadableNextAndroid' },
     'settings-import-failed': {
         what: 'notice.recoveryImportWhatAndroid',
         why: 'notice.recoveryImportWhyAndroid',
         next: 'notice.recoveryImportNextAndroid',
     },
-    'settings-import-retrying': { why: 'notice.recoveryRetryingWhyAndroid', next: 'notice.recoveryRetryingNext' },
 };
 
-// The outcome and question texts that name settings.json, and the wording used where there is no file to name.
-const NO_FILE_TEXT = new Map([
-    ['notice.recoveryRetryDone', 'notice.recoveryRetryDoneAndroid'],
-    ['notice.recoveryRetryFailed', 'notice.recoveryRetryFailedAndroid'],
-    ['notice.recoveryStartFreshBody', 'notice.recoveryStartFreshBodyAndroid'],
-    ['notice.recoveryStartFreshDone', 'notice.recoveryStartFreshDoneAndroid'],
-]);
-
-// The text keys of a notice: its code's, refined by what the platform and the cause make true. A dropped save is
+// The text keys of a notice: its code's, refined by what the platform and the state make true. A dropped save is
 // worded by why it was dropped.
 const keysFor = (recovery: Recovery, settingsFile: boolean) => {
     const keys = { ...RECOVERY_KEYS[recovery.code] };
     if (!settingsFile) Object.assign(keys, NO_FILE_KEYS[recovery.code]);
-    // Once the unusable settings.json was set aside, the guidance names where it went (it is the file to fix).
-    if (recovery.settingsSetAside !== undefined) {
-        keys.next = settingsFile ? 'notice.recoveryCorruptNextAside' : 'notice.recoveryCorruptNextAsideAndroid';
-    }
-    // With no damaged configuration behind it, a settings.json that cannot be read just now is all there is to say.
-    if (recovery.code === 'settings-import-retrying' && recovery.damagedAt === undefined) {
-        keys.why = settingsFile ? 'notice.recoveryRetryingWhyNoCopy' : 'notice.recoveryRetryingWhyNoCopyAndroid';
+    if (recovery.code === 'settings-import-failed' && recovery.blocking === false) {
+        // The defaults were stored in its place: saving works, and the notice names the reason.
+        keys.what = settingsFile ? SETTLED_IMPORT_KEYS.what : 'notice.recoveryImportSettledWhatAndroid';
+        keys.why =
+            recovery.detail === 'migration-failed'
+                ? 'notice.recoveryImportWhyMigration'
+                : 'notice.recoveryImportWhyCorrupt';
+        keys.next = settingsFile ? SETTLED_IMPORT_KEYS.next : 'notice.recoveryImportSettledNextAndroid';
     }
     if (recovery.code === 'settings-save-dropped') {
         keys.why = DROPPED_WHY.get(recovery.cause ?? '') ?? 'notice.recoveryDroppedWhyUnknown';
         if (recovery.cause === 'too-large') keys.next = 'notice.recoveryDroppedNextTooLarge';
-        // A logout that was not recorded is not a setting that reverts: it has its own words.
-        if (recovery.cause === 'logout-lost') {
-            keys.what = 'notice.recoveryLogoutLostWhat';
-            keys.why = 'notice.recoveryLogoutLostWhy';
-            keys.next = 'notice.recoveryLogoutLostNext';
-        }
     }
     return keys;
 };
 
-type ActionId = 'retry' | 'start-fresh' | 'reimport';
+type ActionId = 'retry' | 'start-fresh';
 
 // What each action does and says: `done` and `failed` are the outcome texts (what happened, why, what next).
 const ACTIONS: Record<
     ActionId,
     {
         label: string;
-        run: () => Promise<{
-            success: boolean;
-            error?: string;
-            kept?: StartFreshKept;
-            source?: string;
-            adopted?: boolean;
-            setAside?: string | null;
-        }>;
+        run: () => Promise<{ success: boolean; error?: string; adopted?: boolean }>;
         done: string;
         failed: string;
         primary?: true;
@@ -171,61 +131,32 @@ const ACTIONS: Record<
         done: 'notice.recoveryStartFreshDone',
         failed: 'notice.recoveryStartFreshFailed',
     },
-    reimport: {
-        label: 'notice.recoveryReimport',
-        run: () => ipc.reimportSettingsFromV1(),
-        done: 'notice.recoveryReimportDone',
-        failed: 'notice.recoveryReimportFailed',
-        primary: true,
-    },
 };
 
-// The actions that set the current state aside or give up the import ask first: the question's title, text and button.
+// Start fresh gives up the import, so it is asked for first — and offered only while the import is what is blocked.
 const CONFIRMS = {
     'start-fresh': {
         title: 'notice.recoveryStartFreshTitle',
         body: 'notice.recoveryStartFreshBody',
         button: 'notice.recoveryStartFresh',
     },
-    reimport: {
-        title: 'notice.recoveryReimportTitle',
-        body: 'notice.recoveryReimportBody',
-        button: 'notice.recoveryReimportConfirm',
-    },
 } as const;
 type ConfirmedAction = keyof typeof CONFIRMS;
 const needsConfirm = (action: ActionId): action is ConfirmedAction => Object.hasOwn(CONFIRMS, action);
 
-// The actions each code offers, in order.
-const ACTIONS_FOR: Partial<Record<RecoveryCode, ActionId[]>> = {
-    'settings-import-failed': ['retry', 'start-fresh'],
-    // While it may pass by itself, giving up the import is not offered.
-    'settings-import-retrying': ['retry'],
-    'settings-corrupt': ['reimport'],
-};
+// What an action came to: `adopted` when the settings were already in place, so nothing was imported or reset.
+type Outcome = { action: ActionId; ok: boolean; adopted?: boolean };
 
-// Re-import takes the settings from a settings.json the user fixes; where there is no file they can open, it is not offered.
-const actionsFor = (code: RecoveryCode, settingsFile: boolean): ActionId[] =>
-    (ACTIONS_FOR[code] ?? []).filter((action) => settingsFile || action !== 'reimport');
+// The actions a notice offers, in order: Retry and Start fresh for an import that blocks saves, nothing for the rest
+// (a read that blocks saves tries again on its own, a settled import is told as it is).
+const actionsFor = (recovery: Recovery): ActionId[] =>
+    recovery.code === 'settings-import-failed' && recovery.blocking === true ? ['retry', 'start-fresh'] : [];
 
-// What became of settings.json at a fresh start, as the main process answers it (see 'start-fresh-settings': kept at a
-// path, kept in the app's own storage, to be kept as soon as it can be written, or there was none).
-type StartFreshKept = Extract<
-    NonNullable<Awaited<ReturnType<typeof ipc.startFreshSettings>>>,
-    { success: true }
->['kept'];
-
-// `kept` (Start fresh only), `adopted` (Retry: the settings were in place already, so nothing was imported) and `source`
-// and `setAside` (Re-import: the file it read, or would have read when it failed, and where the settings in use went,
-// null when none were).
-type Outcome = {
-    action: ActionId;
-    ok: boolean;
-    kept?: StartFreshKept;
-    source?: string;
-    adopted?: boolean;
-    setAside?: string | null;
-};
+// The outcome texts that name settings.json have a no-file wording where it is not one the user can open.
+const NO_FILE_TEXT = new Map([
+    ['notice.recoveryRetryDone', 'notice.recoveryRetryDoneAndroid'],
+    ['notice.recoveryRetryFailed', 'notice.recoveryRetryFailedAndroid'],
+]);
 
 const fetchRecovery = () => ipc.getSettingsRecovery();
 
@@ -240,12 +171,11 @@ const applyRecovery = (
 };
 
 /**
- * Tells the user when their stored settings are not in use or were restored: a damaged file moved aside (with where
- * the copy went) and the settings restored from settings.json, or, when there was none to restore from, defaults in
- * their place; a file that cannot be read; a settings.json that could not be imported (saving is off until it can
- * be); or a change the window could not save. What happened, why, what next; dismissable until the notice goes away.
- * The notices that have a way forward offer it: Retry or Start fresh for an import that failed, Re-import for a
- * damaged configuration with nothing to restore it from. `returnFocusTo` is the page's own element that takes focus when
+ * Tells the user when their stored settings are not in use or were set aside: a damaged file moved aside (with where
+ * the copy went) and the defaults in its place; a file that cannot be read; a settings.json that could not be imported
+ * (saving is off until it can be, or the defaults were stored in its place); or a change the window could not save.
+ * What happened, why, what next; dismissable until the notice goes away. The notices that have a way forward offer it:
+ * Retry or Start fresh for an import that failed. `returnFocusTo` is the page's own element that takes focus when
  * a dismissed outcome has no button or heading of the notice left to return it to (the page makes it focusable). An action shows that it is working, then says inline what
  * came of it. It reads again on every settings
  * change, which is how a save given up later (or one that lands after) reaches it.
@@ -276,52 +206,34 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
         setBusy(action);
         setOutcome(null);
         let ok = false;
-        let kept: StartFreshKept | undefined;
         let adopted: boolean | undefined;
-        let setAside: string | null | undefined;
-        let source = recovery?.reimportSource;
         try {
             const result = await ACTIONS[action].run();
             ok = result?.success === true;
-            if (ok) {
-                kept = result.kept;
-                adopted = result.adopted;
-                setAside = result.setAside;
-                source = result.source ?? source;
-            }
+            if (ok) adopted = result.adopted;
             if (!ok)
                 void ipc.logRendererWarning(`Settings recovery "${action}" failed: ${result?.error ?? 'no answer'}`);
         } catch (error) {
             void ipc.logRendererError(`Settings recovery "${action}" threw: ${errorMessage(error) || error}`);
         }
-        setOutcome({ action, ok, kept, source, adopted, setAside });
+        setOutcome({ action, ok, adopted });
         setConfirming(null);
         setBusy(null);
         if (ok) await refetch();
     };
 
-    const offered = recovery ? actionsFor(recovery.code, settingsFile) : [];
-    // The text of an outcome or question, in the wording of this platform.
-    // (A text with no no-file wording is one of Re-import, which is not offered where there is no file.)
-    const worded = (key: string) =>
-        t(settingsFile ? key : (NO_FILE_TEXT.get(key) ?? /* istanbul ignore next -- see above */ key));
-    // What an outcome says: Start fresh names where settings.json was kept (or that it is not yet, or there was none);
-    // Re-import names the file it read.
-    const outcomeText = ({ action, ok, kept, source, adopted, setAside }: Outcome): string => {
-        if (!ok) return interp(worded(ACTIONS[action].failed), { path: source });
-        if (action === 'retry' && adopted) return t('notice.recoveryRetryDoneAdopted');
-        if (action === 'reimport' && setAside === null) {
-            return interp(t('notice.recoveryReimportDoneNothingAside'), { path: source });
+    const offered = recovery ? actionsFor(recovery) : [];
+    // The text of an outcome, in the wording of this platform.
+    const worded = (key: string) => t(settingsFile ? key : (NO_FILE_TEXT.get(key) ?? key));
+    // What an outcome says: either action found the settings already in place (saved by another writer meanwhile).
+    const outcomeText = ({ action, ok, adopted }: Outcome): string => {
+        if (!ok) return worded(ACTIONS[action].failed);
+        if (adopted) {
+            return t(
+                action === 'start-fresh' ? 'notice.recoveryStartFreshDoneAdopted' : 'notice.recoveryRetryDoneAdopted',
+            );
         }
-        if (action === 'start-fresh' && kept?.kind === 'none') {
-            return t(settingsFile ? 'notice.recoveryStartFreshDoneNone' : 'notice.recoveryStartFreshDoneNoneAndroid');
-        }
-        if (action === 'start-fresh' && kept?.kind === 'adopted') return t('notice.recoveryStartFreshDoneAdopted');
-        if (action === 'start-fresh' && kept?.kind === 'unreadable')
-            return t('notice.recoveryStartFreshDoneUnreadable');
-        if (action === 'start-fresh' && kept?.kind === 'pending')
-            return t('notice.recoveryStartFreshDonePendingAndroid');
-        return interp(worded(ACTIONS[action].done), { path: kept?.kind === 'path' ? kept.path : source });
+        return worded(ACTIONS[action].done);
     };
     const dismissOutcome = () => {
         const target =
@@ -335,11 +247,7 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
     };
     const keys = recovery && !dismissed ? keysFor(recovery, settingsFile) : null;
     // The damaged copy cannot be read as settings, so a logout cannot take the sign-in out of it: it may still hold it.
-    const keepsSignIn =
-        recovery !== null &&
-        (recovery.code === 'settings-restored' ||
-            recovery.code === 'settings-corrupt' ||
-            (recovery.code === 'settings-import-retrying' && recovery.damagedAt !== undefined));
+    const keepsSignIn = recovery !== null && recovery.code === 'settings-corrupt';
     // A landmark only while there is something in it: an empty one is noise for a screen reader.
     const hasContent = Boolean(recovery && keys) || Boolean(outcome) || Boolean(busy);
     return (
@@ -350,21 +258,13 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
                         <p ref={heading} tabIndex={-1} className="font-semibold">
                             {t(keys.what)}
                         </p>
-                        <p className="break-words">
-                            {interp(t(keys.why), { path: recovery.damagedAt ?? recovery.path })}
-                        </p>
+                        <p className="break-words">{interp(t(keys.why), { path: recovery.path })}</p>
                         {keepsSignIn && (
                             <p className="break-words">
                                 {t(settingsFile ? 'notice.recoverySignInKept' : 'notice.recoverySignInKeptAndroid')}
                             </p>
                         )}
-                        {recovery.logoutLost && (
-                            <p className="break-words font-semibold">
-                                {t('notice.recoveryLogoutLostWhat')} {t('notice.recoveryLogoutLostWhy')}{' '}
-                                {t('notice.recoveryLogoutLostNext')}
-                            </p>
-                        )}
-                        <p className="break-words">{interp(t(keys.next), { path: recovery.settingsSetAside })}</p>
+                        <p className="break-words">{t(keys.next)}</p>
                         {offered.length > 0 && (
                             <div className="flex flex-wrap gap-2 pt-1">
                                 {offered.map((action) => (
@@ -431,7 +331,7 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
                     workingLabel="notice.recoveryWorking"
                 >
                     <p className="break-words">
-                        {interp(worded(CONFIRMS[confirming].body), { path: recovery?.reimportSource })}
+                        {t(settingsFile ? CONFIRMS[confirming].body : 'notice.recoveryStartFreshBodyAndroid')}
                     </p>
                 </ConfirmModal>
             )}

@@ -5,7 +5,7 @@
  *   schema.ts             keys, defaults, validation, groups/tiers (entries in schema/)
  *   storage.ts            persistence transport (config.json, and settings.json) + runtime/environment detection
  *   defaults.ts           default configuration and shared challenge-value helpers
- *   persistence.ts        load (fill + validate, the import of settings.json) / save + mirror,
+ *   persistence.ts        load (fill + validate, the one-time import of settings.json) / save,
  *                         app and auth keys, window bounds, recovery actions
  *   legacyImport.ts       the import of settings.json (the conversion is importV1/)
  *   challengeOverrides.ts global defaults, per-challenge overrides, effective values
@@ -46,7 +46,6 @@ import * as openChallenges from './settings/openChallenges';
 
 import { rememberChallengeTitles } from './settings/challengeFacts';
 import { importMarkerStore } from './settings/importMarker';
-import { originalStore } from './settings/formatOneMirror';
 import { TITLE_RULE_INLINE_KEYS, MAX_TITLE_LENGTH } from './settings/titleRuleSanitize';
 import * as titleRules from './settings/titleRules';
 import * as profiles from './settings/profiles';
@@ -56,14 +55,13 @@ import * as scenarios from './settings/scenarios';
 import * as reset from './settings/reset';
 
 /**
- * Hydrates every store the settings read on Capacitor (the configuration, `settings.json` and the copy kept of it, the
- * import marker and the title pins) before the window mounts. No-op elsewhere.
+ * Hydrates every store the settings read on Capacitor (the configuration, `settings.json`, the import marker and the
+ * title pins) before the window mounts. No-op elsewhere.
  */
 const initializeAsync = async (): Promise<void> => {
     await Promise.all([
         initializeStorageAsync(),
         importMarkerStore.initializeAsync(),
-        originalStore.initializeAsync(),
         titlePins.titlePinStore.initializeAsync(),
     ]);
 };
@@ -74,14 +72,11 @@ export const saveAppSettings = persistence.saveAppSettings;
 export const getSetting = persistence.getSetting;
 export const setSetting = persistence.setSetting;
 export const getSettingsRecovery = persistence.getSettingsRecovery;
-export const isSignOutOwed = persistence.isSignOutOwed;
 // Recovery of a configuration that could not be imported or read (see persistence.ts)
 export const retryImport = persistence.retryImport;
 export const retryImportDetailed = persistence.retryImportDetailed;
 export const startFresh = persistence.startFresh;
 export const startFreshDetailed = persistence.startFreshDetailed;
-export const reimportFromV1 = persistence.reimportFromV1;
-export const reimportFromV1Detailed = persistence.reimportFromV1Detailed;
 // What the import left unresolved
 export const getImportReport = persistence.getImportReport;
 export const acknowledgeImportReport = persistence.acknowledgeImportReport;

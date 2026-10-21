@@ -84,6 +84,8 @@ export interface ImportedV2 {
     at: string;
     report: ImportReportV2;
     acknowledged: boolean;
+    /** Set when nothing was imported: why the file could not be, the defaults having been stored in its place. */
+    failure?: { reason: string; detail: string };
 }
 
 /** The configuration document, over the shape of its `app` block and of a rule. */

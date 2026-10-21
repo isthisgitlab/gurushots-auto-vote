@@ -100,14 +100,9 @@ const handleLogout = async (): Promise<boolean> => {
             );
         return false;
     }
-    // A logout made while the saved settings could not be loaded just now is recorded, and holds when they are.
-    if (settings.isSignOutOwed()) {
-        logger
-            .withCategory('authentication')
-            .warning(
-                'Logout recorded, but the saved settings could not be loaded just now, so the login may still be stored; it is cleared as soon as they are loaded (the next run, or settings-recovery retry)',
-            );
-    } else if (hadToken) {
+    // The sign-out is refused while the saved settings are not in use (clearAuthToken throws then), so a saved token
+    // is gone exactly when this answers true.
+    if (hadToken) {
         logger.withCategory('authentication').success('Logged out — token cleared');
     } else {
         logger.withCategory('ui').info('Already logged out — no token was set');

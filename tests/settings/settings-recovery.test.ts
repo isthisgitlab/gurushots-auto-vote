@@ -1,8 +1,8 @@
 /**
  * Corrupt and unreadable configuration files, against a real temp directory: a file that does not parse is set aside
- * once and defaults apply (saves then work), and a settings.json beside it that the mirror has not written is never
- * imported over that (the restore from one it has written is in formatOne/mirror.test.ts); a file that cannot be read
- * is never overwritten while that lasts. Saves replace the file atomically.
+ * once and defaults apply (saves then work), and a settings.json beside it is not imported over that (the one-time
+ * import is in config-import.test.ts); a file that cannot be read is never overwritten while that lasts. Saves replace
+ * the file atomically.
  */
 
 // A partial mock of the real fs (a builtin's exports are not spy-able as is), so
@@ -100,8 +100,6 @@ describe('settings recovery (real fs)', () => {
                 code: 'settings-corrupt',
                 path: path.join(userData, backup),
                 blocking: false,
-                // (What a Re-import would read: settings.json, there being no copy of an unusable one.)
-                reimportSource: legacyFile,
             });
 
             // Saves work normally, including the token write a login makes.
@@ -250,6 +248,32 @@ describe('settings recovery (real fs)', () => {
         });
     });
 
+    describe('a window listening for recoveries', () => {
+        test('is told when a read clears the block it had put up', async () => {
+            fs.writeFileSync(settingsFile, JSON.stringify({ app: { theme: 'dark' }, auth: { token: 'keep-me' } }));
+            loadFresh();
+            const realRead = fs.readFileSync;
+            const failing = jest.spyOn(fs, 'readFileSync').mockImplementation(
+                invalid<typeof fs.readFileSync>((file: fs.PathOrFileDescriptor) => {
+                    if (file === settingsFile) throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+                    return realRead(file, 'utf8');
+                }),
+            );
+            const told: string[] = [];
+            settings.onSettingsRecoveryChange(() => {
+                told.push(settings.getSettingsRecovery()?.code ?? 'none');
+            });
+            expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
+
+            failing.mockRestore();
+            expect(settings.loadSettings().auth.token).toBe('keep-me');
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            // (A block is not announced as it is set — a window learns of it by its own read; it is told when it goes.)
+            expect(told).toEqual(['none']);
+        });
+    });
+
     describe('a login saved by the CLI', () => {
         test('survives the next process reading the settings, with Stay Logged In off (login, then status)', () => {
             loadFresh();
@@ -275,7 +299,7 @@ describe('settings recovery (real fs)', () => {
             fs.linkSync(settingsFile, before);
             expect(settings.setSetting('theme', 'light')).toBe(true);
 
-            expect(fs.readdirSync(userData).sort()).toEqual(['config.json', 'settings.json', 'v2-import.json']);
+            expect(fs.readdirSync(userData).sort()).toEqual(['config.json', 'v2-import.json']);
             expect(parseJsonObject(fs.readFileSync(before, 'utf8')).app).toEqual(
                 expect.objectContaining({ theme: 'dark' }),
             );

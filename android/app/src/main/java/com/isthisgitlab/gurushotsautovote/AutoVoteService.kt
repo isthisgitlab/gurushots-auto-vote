@@ -730,11 +730,8 @@ internal object SideStores {
     /** The configuration (what `@capacitor/preferences` stores for the JS settings module: `config.json` on a desktop). */
     const val CONFIG_KEY = "gurushots-config"
 
-    /** The settings blob in settings format 1, kept current as a mirror of the configuration, sign-in state included (`settings.json` on a desktop). */
+    /** The settings blob the one-time import reads (`settings.json` on a desktop). */
     const val LEGACY_SETTINGS_KEY = "gurushots-settings"
-
-    /** The copy kept, once, of the blob the user had before the mirror first wrote over it (`settings.json.original` on a desktop). */
-    const val ORIGINAL_SETTINGS_KEY = "gurushots-settings_original"
 
     /** The most the configuration and the settings.json blobs may hold: every challenge's overrides and profiles live in them, so they dwarf a side store. */
     const val MAX_SETTINGS_BYTES = 2 * 1024 * 1024
@@ -743,14 +740,12 @@ internal object SideStores {
     // autoExposureFillMax counts against: a service that started from an empty one after every restart would spend
     // past the cap) and the swap-back offers; the paid-join claims (an unlock that was charged and not yet submitted:
     // forgotten on a restart, it would be charged again); the marker that the settings import has run (the service reads
-    // it to know not to import again, and it records what the mirror of settings.json last wrote) and the title pins
-    // (the import seeds them, and both contexts pin titles); the entry-age ledger (when each entry went into a
-    // challenge: the window records the photos it submits, the service the ones it submits and what it first sees, and
-    // the boost hold and the fill-new `pending` photo must outlast a cycle).
+    // it to know not to import again) and the title pins (the import seeds them, and both contexts pin titles); the
+    // entry-age ledger (when each entry went into a challenge: the window records the photos it submits, the service the
+    // ones it submits and what it first sees, and the boost hold and the fill-new `pending` photo must outlast a cycle).
     private val names = mapOf(
         CONFIG_KEY to "config",
         LEGACY_SETTINGS_KEY to "settings",
-        ORIGINAL_SETTINGS_KEY to "settings copy",
         "gs_v2_import" to "import marker",
         "gs_title_pins" to "title pins",
         "gs_lexicon_diagnostics" to "lexicon diagnostics",
@@ -772,8 +767,8 @@ internal object SideStores {
 
     fun isAllowed(key: String): Boolean = key in names
 
-    // The configuration and the two settings.json blobs hold every challenge's overrides and profiles: the settings cap.
-    private val settingsKeys = setOf(CONFIG_KEY, LEGACY_SETTINGS_KEY, ORIGINAL_SETTINGS_KEY)
+    // The configuration and the settings.json blob hold every challenge's overrides and profiles: the settings cap.
+    private val settingsKeys = setOf(CONFIG_KEY, LEGACY_SETTINGS_KEY)
 
     private fun maxBytes(key: String): Int = if (key in settingsKeys) MAX_SETTINGS_BYTES else MAX_BYTES
 
@@ -813,8 +808,8 @@ internal object SideStores {
 
     // Stores that are changed only by `compareAndSet`: a plain write would replace what another context saved (a spend
     // or a claim that one context recorded and the other, writing from an older read, then lost; a setting one context
-    // toggled and the other, writing the whole blob from an older read, then undid; a title pin or the marker's record
-    // of the mirror that one context saved and the other, writing from the cache it hydrated at start, then dropped).
+    // toggled and the other, writing the whole blob from an older read, then undid; a title pin or the marker that one
+    // context saved and the other, writing from the cache it hydrated at start, then dropped).
     private val compareAndSetOnly =
         setOf(
             "gs_join_state",
@@ -823,8 +818,7 @@ internal object SideStores {
             "gs_v2_import",
             "gs_title_pins",
             CONFIG_KEY,
-            LEGACY_SETTINGS_KEY,
-            ORIGINAL_SETTINGS_KEY
+            LEGACY_SETTINGS_KEY
         )
 
     // Set by [wipe], cleared by [resume] (the service's next start): while set, the background service's bridge cannot

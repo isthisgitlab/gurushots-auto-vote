@@ -1,8 +1,8 @@
 /**
- * The import of a `settings.json` into `config.json`, against a real temp directory: when it runs (and when it must
- * not), what it writes (the configuration owner-only, the title pins, the marker) and what the mirror leaves in
- * `settings.json` (the sign-in state kept, the file as the user had it kept as `settings.json.original`), how it fails
- * (nothing written, saves refused, a recovery code), and the explicit ways out (retry, start fresh, import again).
+ * The import of a `settings.json` into `config.json`, against a real temp directory: when it runs (once — the marker),
+ * what it writes (the configuration owner-only, the title pins, the marker), how it fails (nothing settled and saves
+ * refused while it may pass, the defaults stored and the file left as it is when it cannot), and the explicit ways out
+ * (retry, start fresh).
  */
 
 // A partial mock of the real fs (a builtin's exports are not spy-able as is), so a failure can be injected while every
@@ -33,7 +33,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type * as runtimeModule from '../../src/ts/runtime';
 import type * as settingsModule from '../../src/ts/settings';
-import type * as storageModule from '../../src/ts/settings/storage';
 import type * as loggerModule from '../../src/ts/logger';
 import type * as joinStateModule from '../../src/ts/joinStateStore';
 import type { CategoryLogger } from '../../src/ts/logger';
@@ -51,7 +50,6 @@ const ONE_X = {
     token: 'tok-secret',
     apiHeaders: { 'x-a': 'b' },
     lastUsername: 'me@example.com',
-    chosenPhotosMemberId: 'm-1',
     autovoteRunning: true,
     challengeSettings: {
         globalDefaults: { autoFill: true, exposure: 80, autovoteRunning: true },
@@ -71,9 +69,7 @@ describe('the import of a settings.json (real fs)', () => {
     let legacyFile: string;
     let markerFile: string;
     let pinsFile: string;
-    let originalFile: string;
     let settings: typeof settingsModule;
-    let storage: typeof storageModule;
     let cat: CatDouble;
 
     // Each test gets its own module graph: the recovery state lives in the settings module.
@@ -88,7 +84,6 @@ describe('the import of a settings.json (real fs)', () => {
             }));
             setup?.();
             settings = require('../../src/ts/settings') as typeof settingsModule;
-            storage = require('../../src/ts/settings/storage') as typeof storageModule;
             cat = invalid<typeof loggerModule & { __cat: CatDouble }>(
                 require('../../src/ts/logger') as typeof loggerModule,
             ).__cat;
@@ -105,7 +100,6 @@ describe('the import of a settings.json (real fs)', () => {
         legacyFile = path.join(userData, 'settings.json');
         markerFile = path.join(userData, 'v2-import.json');
         pinsFile = path.join(userData, 'titlePins.json');
-        originalFile = path.join(userData, 'settings.json.original');
     });
 
     afterEach(() => {
@@ -119,7 +113,7 @@ describe('the import of a settings.json (real fs)', () => {
     });
 
     describe('what the first load without a configuration does', () => {
-        test("writes config.json owner-only, the pins and the marker; settings.json becomes the mirror, the user's file is kept", () => {
+        test('writes config.json owner-only, the pins and the marker; settings.json is left as the user had it', () => {
             fs.writeFileSync(legacyFile, RAW);
             loadFresh();
 
@@ -152,33 +146,14 @@ describe('the import of a settings.json (real fs)', () => {
             expect(stored(configFile)).toMatchObject({ version: 2, imported: { acknowledged: false } });
             if (process.platform !== 'win32') expect(fs.statSync(configFile).mode & 0o777).toBe(0o600);
             expect(stored(pinsFile)).toEqual({ '101': 'Macro World' });
-            // The marker keeps a copy of the import record, so a restored configuration has its report back.
-            expect(stored(markerFile)).toEqual({
-                configFrom: 'import',
-                importedAt: expect.any(String),
-                importedRecord: stored(configFile).imported,
-                mirrorStartedAt: expect.any(String),
-                signInConfirmed: expect.any(String),
-            });
+            // The marker says the import is done, and nothing else.
+            expect(stored(markerFile)).toEqual({ importedAt: expect.any(String) });
 
-            // settings.json is the mirror: the sign-in state is still in it, under the format-1 names.
-            expect(stored(legacyFile)).toMatchObject({
-                theme: 'dark',
-                token: 'tok-secret',
-                apiHeaders: { 'x-a': 'b' },
-                lastUsername: 'me@example.com',
-                challengeSettings: {
-                    globalDefaults: { autoFill: true, exposure: 80 },
-                    perChallenge: { '101': { emergencyFill: 600 } },
-                    titleRules: [{ title: 'Macro', profile: 'Gone', autoFill: true }],
-                    titleProfileSuppressions: { '101': true },
-                    entryPins: { '101': { boost: 'e1' } },
-                    titlePins: { '101': 'Macro World' },
-                },
-            });
-            // The file the user had is kept as it was, owner-only.
-            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW);
-            if (process.platform !== 'win32') expect(fs.statSync(originalFile).mode & 0o777).toBe(0o600);
+            // settings.json is not written to: it stays the file the user had.
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(RAW);
+            expect(fs.readdirSync(userData).filter((name) => name.startsWith('settings.json'))).toEqual([
+                'settings.json',
+            ]);
         });
 
         test.each([
@@ -197,14 +172,14 @@ describe('the import of a settings.json (real fs)', () => {
             loadFresh();
             settings.loadSettings();
             const importedAt = settings.loadSettings().imported?.at;
-            // A setting an older build changed after the import is not imported again: it is written over by the mirror.
+            // A settings.json an older build wrote since is not read again: the configuration is the only source.
             fs.writeFileSync(legacyFile, JSON.stringify({ ...ONE_X, theme: 'light' }));
 
             loadFresh();
 
             expect(settings.loadSettings().app.theme).toBe('dark');
             expect(settings.loadSettings().imported?.at).toBe(importedAt);
-            expect(stored(legacyFile)).toMatchObject({ theme: 'dark', token: 'tok-secret' });
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(JSON.stringify({ ...ONE_X, theme: 'light' }));
         });
 
         test('carries the mock mode only when the file held one; the build default applies otherwise', () => {
@@ -216,8 +191,35 @@ describe('the import of a settings.json (real fs)', () => {
         });
     });
 
-    describe('a marker made only to record a sign-out', () => {
-        test('does not stand for the import: a never-imported install still imports settings.json', () => {
+    describe('the marker that says the import is done', () => {
+        test.each([
+            ['holds importedAt', '{"importedAt":"2026-01-01T00:00:00.000Z"}'],
+            ['holds mirrorStartedAt', '{"mirrorStartedAt":"2026-01-01T00:00:01.000Z"}'],
+            ['holds both', '{"importedAt":"2026-01-01T00:00:00.000Z","mirrorStartedAt":"2026-01-01T00:00:01.000Z"}'],
+            ['is not a JSON object', '{garbage'],
+        ])('%s: settings.json is not imported', (_name, marker) => {
+            fs.writeFileSync(legacyFile, RAW);
+            fs.writeFileSync(markerFile, marker);
+            loadFresh();
+
+            expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
+
+            expect(fs.existsSync(configFile)).toBe(false);
+            expect(settings.getSettingsRecovery()).toBeNull();
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(RAW);
+        });
+
+        test('a marker that cannot be read is still the mark it was: settings.json is not imported unasked', () => {
+            fs.writeFileSync(legacyFile, RAW);
+            fs.mkdirSync(markerFile);
+            loadFresh();
+
+            settings.loadSettings();
+
+            expect(fs.existsSync(configFile)).toBe(false);
+        });
+
+        test('a marker holding only a field an older build wrote says nothing of the import: settings.json imports', () => {
             fs.writeFileSync(legacyFile, RAW);
             fs.writeFileSync(markerFile, JSON.stringify({ signOutScrubPending: 'a-sign-out' }));
             loadFresh();
@@ -225,24 +227,13 @@ describe('the import of a settings.json (real fs)', () => {
             settings.loadSettings();
 
             expect(stored(configFile)).toMatchObject({ version: 2 });
-            // The import is marked, and the record was worked off at the start (there were no copies to clear).
-            expect(stored(markerFile)).toMatchObject({ importedAt: expect.any(String) });
-            expect(stored(markerFile)).not.toHaveProperty('signOutScrubPending');
-        });
-
-        test('an unreadable marker is still the mark it was: settings.json is not imported unasked', () => {
-            fs.writeFileSync(legacyFile, RAW);
-            fs.writeFileSync(markerFile, '{garbage');
-            loadFresh();
-
-            settings.loadSettings();
-
-            expect(fs.existsSync(configFile)).toBe(false);
+            // The marker is written fresh: the import is the one fact it keeps.
+            expect(stored(markerFile)).toEqual({ importedAt: expect.any(String) });
         });
     });
 
     describe('when it must not run', () => {
-        test('with a configuration already there: settings.json is not imported, and becomes its mirror', () => {
+        test('with a configuration already there: settings.json is not imported and is left as it is', () => {
             fs.writeFileSync(configFile, JSON.stringify({ app: { theme: 'light' } }));
             fs.writeFileSync(legacyFile, RAW);
             loadFresh();
@@ -251,11 +242,10 @@ describe('the import of a settings.json (real fs)', () => {
 
             expect(fs.existsSync(markerFile)).toBe(false);
             expect(fs.existsSync(pinsFile)).toBe(false);
-            expect(stored(legacyFile)).toMatchObject({ theme: 'light', token: '' });
-            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW);
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(RAW);
         });
 
-        test('with the marker there and no configuration, before the mirror has written: defaults, and settings.json stays as it is', () => {
+        test('with the marker there and no configuration: defaults, and settings.json stays as it is', () => {
             fs.writeFileSync(markerFile, '{"importedAt":"2026-01-01T00:00:00.000Z"}');
             fs.writeFileSync(legacyFile, RAW);
             loadFresh();
@@ -265,56 +255,6 @@ describe('the import of a settings.json (real fs)', () => {
 
             expect(fs.existsSync(configFile)).toBe(false);
             expect(fs.readFileSync(legacyFile, 'utf8')).toBe(RAW);
-        });
-
-        test('with the marker there, the mirror started and no configuration: restored from settings.json, without a report', () => {
-            fs.writeFileSync(
-                markerFile,
-                '{"importedAt":"2026-01-01T00:00:00.000Z","mirrorStartedAt":"2026-01-01T00:00:01.000Z"}',
-            );
-            fs.writeFileSync(legacyFile, RAW);
-            loadFresh();
-
-            const loaded = settings.loadSettings();
-
-            expect(loaded.app.theme).toBe('dark');
-            expect(loaded.auth.token).toBe('tok-secret');
-            expect(loaded.imported).toBeUndefined();
-            expect(settings.getSettingsRecovery()).toBeNull();
-            expect(stored(configFile)).not.toHaveProperty('imported');
-            expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('restored from settings.json'));
-        });
-
-        test('with the mirror started and neither a configuration nor a settings.json: defaults, nothing to restore from', () => {
-            fs.writeFileSync(
-                markerFile,
-                '{"importedAt":"2026-01-01T00:00:00.000Z","mirrorStartedAt":"2026-01-01T00:00:01.000Z"}',
-            );
-            loadFresh();
-
-            expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
-
-            expect(fs.existsSync(configFile)).toBe(false);
-            expect(settings.getSettingsRecovery()).toBeNull();
-        });
-
-        test('with the mirror started and a settings.json that cannot be imported: the import failed notice, nothing written', () => {
-            fs.writeFileSync(
-                markerFile,
-                '{"importedAt":"2026-01-01T00:00:00.000Z","mirrorStartedAt":"2026-01-01T00:00:01.000Z"}',
-            );
-            fs.writeFileSync(legacyFile, '{broken');
-            loadFresh();
-
-            settings.loadSettings();
-
-            expect(settings.getSettingsRecovery()).toEqual({
-                code: 'settings-import-failed',
-                path: legacyFile,
-                blocking: true,
-            });
-            expect(fs.existsSync(configFile)).toBe(false);
-            expect(fs.readFileSync(legacyFile, 'utf8')).toBe('{broken');
         });
 
         test('with a set-aside configuration (config.json.corrupt-*) and no configuration', () => {
@@ -366,34 +306,123 @@ describe('the import of a settings.json (real fs)', () => {
     });
 
     describe('when it fails', () => {
-        const expectNothingWritten = () => {
-            expect(fs.existsSync(configFile)).toBe(false);
-            expect(fs.existsSync(markerFile)).toBe(false);
-            expect(fs.existsSync(pinsFile)).toBe(false);
-            expect(backups()).toEqual([]);
-        };
-
         test.each([
-            ['a settings.json that is not JSON', '{"theme":"dark"', 'corrupt'],
-            ['a settings.json whose root is not an object', '[1,2]', 'corrupt'],
-        ])('%s writes nothing, refuses saves and says so', (_name, text, reason) => {
+            ['a settings.json that is not JSON', '{"theme":"dark"'],
+            ['a settings.json whose root is not an object', '[1,2]'],
+        ])('%s settles as failed: the defaults are stored, the file is left as it is', (_name, text) => {
             fs.writeFileSync(legacyFile, text);
             loadFresh();
 
             expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
 
+            // The failure is a notice, not a block: the defaults were stored, so saving works.
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-import-failed',
+                path: legacyFile,
+                blocking: false,
+                detail: 'corrupt',
+            });
+            expect(stored(configFile)).toMatchObject({
+                version: 2,
+                imported: { acknowledged: true, failure: { reason: 'corrupt' } },
+            });
+            expect(stored(markerFile)).toEqual({ importedAt: expect.any(String) });
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(text);
+            // The parser's message can quote the text, the token among it: the log says only that it is not JSON.
+            expect(JSON.stringify(cat.error.mock.calls)).not.toContain('Unexpected');
+            expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('(corrupt)'));
+            expect(settings.saveAppSettings({ theme: 'dark' })).toBe(true);
+            expect(settings.setSetting('token', 'new-token')).toBe(true);
+        });
+
+        test('the next start after a failure that cannot pass is silent defaults, with no re-import', () => {
+            fs.writeFileSync(legacyFile, '{broken');
+            loadFresh();
+            settings.loadSettings();
+            expect(stored(configFile)).toMatchObject({ imported: { failure: { reason: 'corrupt' } } });
+
+            loadFresh();
+
+            expect(settings.loadSettings()).toEqual({
+                ...settings.getDefaultSettings(),
+                imported: {
+                    at: expect.any(String),
+                    report: { refsBlocked: [] },
+                    acknowledged: true,
+                    failure: { reason: 'corrupt', detail: 'it is not valid JSON' },
+                },
+            });
+            expect(settings.getSettingsRecovery()).toBeNull();
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe('{broken');
+        });
+
+        test('a failed import is attempted once, however often the settings are read', () => {
+            fs.writeFileSync(legacyFile, '{broken');
+            let attempts = 0;
+            loadFresh(() => {
+                const actual = jest.requireActual<typeof import('../../src/ts/settings/importV1')>(
+                    '../../src/ts/settings/importV1',
+                );
+                jest.doMock('../../src/ts/settings/importV1', () => ({
+                    ...actual,
+                    importV1Settings: (...args: unknown[]) => {
+                        attempts += 1;
+                        return (
+                            actual.importV1Settings as (...a: unknown[]) => ReturnType<typeof actual.importV1Settings>
+                        )(...args);
+                    },
+                }));
+            });
+
+            settings.loadSettings();
+            settings.getSetting('theme');
+            settings.loadSettings();
+            settings.getEffectiveSetting('exposure', '7');
+
+            expect(attempts).toBe(1);
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-import-failed',
+                path: legacyFile,
+                blocking: false,
+                detail: 'corrupt',
+            });
+            // The defaults are in place: an explicit Retry finds them there and imports nothing.
+            expect(settings.retryImportDetailed()).toEqual({ ok: true, adopted: true });
+            expect(attempts).toBe(1);
+        });
+
+        test('a blocked import is attempted once over N reads, and Retry imports once the file can be read', () => {
+            fs.writeFileSync(legacyFile, RAW);
+            let reads = 0;
+            loadFresh();
+            const realRead = fs.readFileSync;
+            const failing = jest.spyOn(fs, 'readFileSync').mockImplementation(
+                invalid<typeof fs.readFileSync>((file: fs.PathOrFileDescriptor, ...rest: unknown[]) => {
+                    if (file === legacyFile) {
+                        reads += 1;
+                        throw Object.assign(new Error('EBUSY: busy'), { code: 'EBUSY' });
+                    }
+                    return (realRead as (...args: unknown[]) => unknown)(file, ...rest);
+                }),
+            );
+
+            // Many reads of the settings: the import is attempted once, never per read.
+            settings.loadSettings();
+            settings.getSetting('theme');
+            settings.loadSettings();
+            expect(reads).toBe(1);
             expect(settings.getSettingsRecovery()).toEqual({
                 code: 'settings-import-failed',
                 path: legacyFile,
                 blocking: true,
             });
-            expectNothingWritten();
-            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(text);
-            expect(cat.error).toHaveBeenCalledWith(expect.stringContaining(`(${reason})`));
-            // The parser's message can quote the text, the token among it: the log says only that it is not JSON.
-            expect(JSON.stringify(cat.error.mock.calls)).not.toContain('Unexpected');
-            expect(settings.saveAppSettings({ theme: 'dark' })).toBe(false);
-            expect(settings.setSetting('token', 'planted')).toBe(false);
+
+            // Readable again: Retry is the explicit import that stores it.
+            failing.mockRestore();
+            expect(settings.retryImport()).toBe(true);
+
+            expect(settings.getSettingsRecovery()).toBeNull();
+            expect(settings.loadSettings().app.theme).toBe('dark');
         });
 
         test.each([
@@ -402,50 +431,52 @@ describe('the import of a settings.json (real fs)', () => {
                 () => Object.assign(new Error('EACCES: denied'), { code: 'EACCES' }),
                 'EACCES',
                 'inaccessible',
-                'settings-import-failed',
             ],
             [
                 'an Error that may pass (busy)',
                 () => Object.assign(new Error('EBUSY: busy'), { code: 'EBUSY' }),
                 'EBUSY',
                 'unreadable',
-                'settings-import-retrying',
             ],
-            [
-                'a value that carries no message',
-                () => 'weird',
-                'unknown error',
-                'unreadable',
-                'settings-import-retrying',
-            ],
-        ])('a settings.json that cannot be read (%s): %s, nothing written', (_name, thrown, said, reason, code) => {
-            fs.writeFileSync(legacyFile, RAW);
-            loadFresh();
-            const realRead = fs.readFileSync;
-            jest.spyOn(fs, 'readFileSync').mockImplementation(
-                invalid<typeof fs.readFileSync>((file: fs.PathOrFileDescriptor, ...rest: unknown[]) => {
-                    if (file === legacyFile) throw thrown();
-                    return (realRead as (...args: unknown[]) => unknown)(file, ...rest);
-                }),
-            );
+            ['a value that carries no message', () => 'weird', 'unknown error', 'unreadable'],
+        ])(
+            'a settings.json that cannot be read (%s) blocks saves until it is tried again',
+            (_name, thrown, said, reason) => {
+                fs.writeFileSync(legacyFile, RAW);
+                loadFresh();
+                const realRead = fs.readFileSync;
+                jest.spyOn(fs, 'readFileSync').mockImplementation(
+                    invalid<typeof fs.readFileSync>((file: fs.PathOrFileDescriptor, ...rest: unknown[]) => {
+                        if (file === legacyFile) throw thrown();
+                        return (realRead as (...args: unknown[]) => unknown)(file, ...rest);
+                    }),
+                );
 
-            expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
+                expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
 
-            expect(settings.getSettingsRecovery()).toEqual({ code, path: legacyFile, blocking: true });
-            expect(cat.error).toHaveBeenCalledWith(expect.stringContaining(`(${reason})`));
-            expect(cat.error).toHaveBeenCalledWith(expect.stringContaining(said));
-            jest.restoreAllMocks();
-            expectNothingWritten();
-        });
+                expect(settings.getSettingsRecovery()).toEqual({
+                    code: 'settings-import-failed',
+                    path: legacyFile,
+                    blocking: true,
+                });
+                expect(cat.error).toHaveBeenCalledWith(expect.stringContaining(`(${reason})`));
+                expect(cat.error).toHaveBeenCalledWith(expect.stringContaining(said));
+                expect(settings.saveAppSettings({ theme: 'dark' })).toBe(false);
+                expect(settings.setSetting('token', 'planted')).toBe(false);
+                jest.restoreAllMocks();
+                expect(fs.existsSync(configFile)).toBe(false);
+                expect(fs.existsSync(markerFile)).toBe(false);
+                expect(fs.existsSync(pinsFile)).toBe(false);
+                expect(backups()).toEqual([]);
+            },
+        );
 
         test.each([
             ...['EBUSY', 'EAGAIN', 'EINTR', 'EMFILE', 'ENFILE', 'ETIMEDOUT', 'EIO'].map(
-                (code) => [code, 'unreadable', 'settings-import-retrying'] as const,
+                (code) => [code, 'unreadable'] as const,
             ),
-            ...['EACCES', 'EPERM', 'EISDIR', 'ENOTDIR', 'ELOOP'].map(
-                (code) => [code, 'inaccessible', 'settings-import-failed'] as const,
-            ),
-        ])('a read of settings.json that fails with %s is %s: %s', (errno, reason, code) => {
+            ...['EACCES', 'EPERM', 'EISDIR', 'ENOTDIR', 'ELOOP'].map((code) => [code, 'inaccessible'] as const),
+        ])('a read of settings.json that fails with %s blocks as %s', (errno, reason) => {
             fs.writeFileSync(legacyFile, RAW);
             loadFresh();
             const realRead = fs.readFileSync;
@@ -458,11 +489,15 @@ describe('the import of a settings.json (real fs)', () => {
 
             settings.loadSettings();
 
-            expect(settings.getSettingsRecovery()?.code).toBe(code);
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-import-failed',
+                path: legacyFile,
+                blocking: true,
+            });
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining(`(${reason})`));
         });
 
-        test('a file the frozen pipeline cannot handle: migration-failed, nothing written', () => {
+        test('a file the frozen pipeline cannot handle: the defaults are stored with the failure, and the file stays', () => {
             fs.writeFileSync(legacyFile, RAW);
             loadFresh(() => {
                 jest.doMock('../../src/ts/settings/importV1', () => ({
@@ -475,14 +510,38 @@ describe('the import of a settings.json (real fs)', () => {
             expect(settings.getSettingsRecovery()).toEqual({
                 code: 'settings-import-failed',
                 path: legacyFile,
-                blocking: true,
+                blocking: false,
+                detail: 'migration-failed',
             });
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('(migration-failed): a pass exploded'));
-            expectNothingWritten();
+            expect(stored(configFile)).toMatchObject({
+                imported: { acknowledged: true, failure: { reason: 'migration-failed', detail: 'a pass exploded' } },
+            });
+            expect(stored(markerFile)).toEqual({ importedAt: expect.any(String) });
             expect(fs.readFileSync(legacyFile, 'utf8')).toBe(RAW);
         });
 
-        test('a configuration that cannot be written: write-failed, and settings.json is not touched', () => {
+        test('a failed import whose defaults cannot be written either blocks until it is tried again', () => {
+            fs.writeFileSync(legacyFile, '{broken');
+            loadFresh();
+            const realOpen = fs.openSync;
+            jest.spyOn(fs, 'openSync').mockImplementation(((file: fs.PathLike, ...rest: unknown[]) => {
+                if (String(file).includes('config.json')) throw new Error('EROFS: read-only file system');
+                return (realOpen as (...args: unknown[]) => unknown)(file, ...rest);
+            }) as typeof fs.openSync);
+
+            expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
+
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-import-failed',
+                path: legacyFile,
+                blocking: true,
+            });
+            expect(fs.existsSync(configFile)).toBe(false);
+            expect(fs.existsSync(markerFile)).toBe(false);
+        });
+
+        test('a configuration that cannot be written: blocked until it is tried again', () => {
             fs.writeFileSync(legacyFile, RAW);
             loadFresh();
             const realOpen = fs.openSync;
@@ -494,7 +553,7 @@ describe('the import of a settings.json (real fs)', () => {
             settings.loadSettings();
 
             expect(settings.getSettingsRecovery()).toEqual({
-                code: 'settings-import-retrying',
+                code: 'settings-import-failed',
                 path: legacyFile,
                 blocking: true,
             });
@@ -519,25 +578,11 @@ describe('the import of a settings.json (real fs)', () => {
 
             settings.loadSettings();
 
-            expect(settings.getSettingsRecovery()?.code).toBe('settings-import-retrying');
+            expect(settings.getSettingsRecovery()?.code).toBe('settings-import-failed');
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('the title pins could not be saved'));
             jest.restoreAllMocks();
             expect(fs.existsSync(configFile)).toBe(false);
             expect(fs.existsSync(markerFile)).toBe(false);
-        });
-
-        test('is not tried again on every read: the damaged file is read and converted once', () => {
-            fs.writeFileSync(legacyFile, '{broken');
-            loadFresh();
-            const read = jest.spyOn(fs, 'readFileSync');
-
-            settings.loadSettings();
-            const reads = read.mock.calls.filter(([file]) => file === legacyFile).length;
-            settings.loadSettings();
-            settings.getEffectiveSetting('exposure', '7');
-
-            expect(read.mock.calls.filter(([file]) => file === legacyFile).length).toBe(reads);
-            expect(cat.error).toHaveBeenCalledTimes(1);
         });
 
         test('another process holding the import lock: busy, nothing written, said in the log', () => {
@@ -549,12 +594,14 @@ describe('the import of a settings.json (real fs)', () => {
             settings.loadSettings();
 
             expect(settings.getSettingsRecovery()).toEqual({
-                code: 'settings-import-retrying',
+                code: 'settings-import-failed',
                 path: legacyFile,
                 blocking: true,
             });
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('another process is importing'));
-            expectNothingWritten();
+            expect(fs.existsSync(configFile)).toBe(false);
+            expect(fs.existsSync(markerFile)).toBe(false);
+            expect(backups()).toEqual([]);
         });
 
         test('an import lock that cannot be taken at all fails closed too', () => {
@@ -566,26 +613,24 @@ describe('the import of a settings.json (real fs)', () => {
             settings.loadSettings();
 
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('the import lock cannot be taken'));
-            expectNothingWritten();
+            expect(fs.existsSync(configFile)).toBe(false);
+            expect(fs.existsSync(markerFile)).toBe(false);
         });
 
         test.each([
             ['an Error', () => new Error('marker store exploded'), 'marker store exploded'],
             ['a value that carries no message', () => 'weird', 'unknown error'],
         ])(
-            'an unexpected throw (%s) while it runs is a failure, not a crash, and the lock is released',
+            'an unexpected throw (%s) while the marker is looked at is a failure, not a crash',
             (_name, thrown, said) => {
                 fs.writeFileSync(legacyFile, RAW);
-                const release = jest.fn();
                 loadFresh(() => {
-                    jest.doMock('../../src/ts/lockWait', () => ({ acquireWithin: () => ({ ok: true, release }) }));
                     jest.doMock('../../src/ts/settings/importMarker', () => ({
                         isImportMarked: () => {
                             throw thrown();
                         },
-                        isMirrorStarted: () => false,
                         markImportDone: jest.fn(),
-                        markMirrorStarted: jest.fn(),
+                        flushPendingMarkerChanges: jest.fn(),
                         importMarkerStore: { initializeAsync: jest.fn() },
                     }));
                 });
@@ -593,7 +638,7 @@ describe('the import of a settings.json (real fs)', () => {
                 expect(() => settings.loadSettings()).not.toThrow();
 
                 expect(cat.error).toHaveBeenCalledWith(expect.stringContaining(said));
-                expect(release).toHaveBeenCalledTimes(1);
+                expect(fs.existsSync(configFile)).toBe(false);
             },
         );
     });
@@ -623,27 +668,28 @@ describe('the import of a settings.json (real fs)', () => {
 
             settings.loadSettings();
 
-            // The import, then the mirror of the imported configuration.
             const lock = { id: 'config-import', options: { category: 'settings', internal: true } };
-            expect(acquired).toEqual([lock, lock]);
-            expect(released).toBe(2);
+            expect(acquired).toEqual([lock]);
+            expect(released).toBe(1);
             expect(fs.readdirSync(userData).filter((name) => name.endsWith('.lock'))).toEqual([]);
             // A load that finds the configuration takes no lock.
             settings.loadSettings();
-            expect(acquired).toHaveLength(2);
+            expect(acquired).toHaveLength(1);
         });
 
         test.each([
-            ['a fresh install (no settings.json)', () => undefined],
+            ['a fresh install (no settings.json)', () => undefined, 1],
             [
                 'a marker with no configuration',
                 () => fs.writeFileSync(markerFile, '{"importedAt":"2026-01-01T00:00:00.000Z"}'),
+                0,
             ],
             [
                 'a set-aside configuration',
                 () => fs.writeFileSync(path.join(userData, 'config.json.corrupt-2026-01-01T00-00-00-000Z'), '{'),
+                1,
             ],
-        ])('%s takes the lock once, not on every read', (_name, arrange) => {
+        ])('%s takes the lock once, not on every read', (_name, arrange, takenOnce) => {
             arrange();
             let taken = 0;
             loadFresh(() => {
@@ -661,7 +707,7 @@ describe('the import of a settings.json (real fs)', () => {
             settings.getSetting('theme');
             settings.loadSettings();
 
-            expect(taken).toBe(1);
+            expect(taken).toBe(takenOnce);
         });
 
         test('a configuration another process saved while this one waited is adopted, not imported over', () => {
@@ -678,8 +724,8 @@ describe('the import of a settings.json (real fs)', () => {
 
             expect(settings.loadSettings().app.theme).toBe('light');
 
-            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW);
             expect(fs.existsSync(markerFile)).toBe(false);
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(RAW);
         });
 
         test('the marker another process wrote while this one waited stands the import down', () => {
@@ -724,7 +770,7 @@ describe('the import of a settings.json (real fs)', () => {
 
             expect(settings.getSettingsRecovery()).toBeNull();
             expect(fs.existsSync(markerFile)).toBe(false);
-            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW);
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(RAW);
         });
 
         test('that is empty cannot be adopted: the import fails and says so', () => {
@@ -734,7 +780,7 @@ describe('the import of a settings.json (real fs)', () => {
             settings.loadSettings();
 
             expect(settings.getSettingsRecovery()).toEqual({
-                code: 'settings-import-retrying',
+                code: 'settings-import-failed',
                 path: legacyFile,
                 blocking: true,
             });
@@ -744,75 +790,52 @@ describe('the import of a settings.json (real fs)', () => {
     });
 
     describe('the explicit ways out', () => {
-        test('retryImport imports once the file is fixed', () => {
-            fs.writeFileSync(legacyFile, '{broken');
-            loadFresh();
-            settings.loadSettings();
-            expect(settings.getSettingsRecovery()?.code).toBe('settings-import-failed');
-
+        test('retryImport while the import lock is held fails again, and is said again', () => {
             fs.writeFileSync(legacyFile, RAW);
-            expect(settings.retryImport()).toBe(true);
-
-            expect(settings.getSettingsRecovery()).toBeNull();
-            expect(settings.loadSettings().app.theme).toBe('dark');
-            expect(fs.existsSync(configFile)).toBe(true);
-            expect(settings.saveAppSettings({ theme: 'light' })).toBe(true);
-        });
-
-        test('retryImport on a file that is still broken fails again, and is said again', () => {
-            fs.writeFileSync(legacyFile, '{broken');
-            loadFresh();
+            loadFresh(() => {
+                jest.doMock('../../src/ts/lockWait', () => ({ acquireWithin: () => 'busy' }));
+            });
             settings.loadSettings();
+            expect(settings.getSettingsRecovery()?.blocking).toBe(true);
 
             expect(settings.retryImport()).toBe(false);
 
             expect(settings.getSettingsRecovery()?.code).toBe('settings-import-failed');
             expect(cat.error).toHaveBeenCalledWith(
-                expect.stringContaining('settings.json could not be imported (corrupt)'),
+                expect.stringContaining('settings.json could not be imported (busy)'),
             );
+            expect(fs.existsSync(configFile)).toBe(false);
         });
 
-        test('startFresh writes a default configuration and the marker; the unimportable file is set aside before the mirror writes over it', () => {
+        test('startFresh writes a default configuration and the marker, and leaves settings.json as it is', () => {
             fs.writeFileSync(legacyFile, '{broken');
             loadFresh();
+            const realRead = fs.readFileSync;
+            const failing = jest.spyOn(fs, 'readFileSync').mockImplementation(
+                invalid<typeof fs.readFileSync>((file: fs.PathOrFileDescriptor, ...rest: unknown[]) => {
+                    if (file === legacyFile) throw Object.assign(new Error('EBUSY: busy'), { code: 'EBUSY' });
+                    return (realRead as (...args: unknown[]) => unknown)(file, ...rest);
+                }),
+            );
             settings.loadSettings();
+            expect(settings.getSettingsRecovery()?.blocking).toBe(true);
 
+            // Nothing was written while the import was blocked; Start fresh gives it up.
+            failing.mockRestore();
             expect(settings.startFresh()).toBe(true);
 
             expect(settings.getSettingsRecovery()).toBeNull();
             expect(stored(configFile)).toMatchObject({ version: 2 });
             expect(stored(configFile)).not.toHaveProperty('imported');
-            expect(fs.existsSync(markerFile)).toBe(true);
+            expect(stored(markerFile)).toEqual({ importedAt: expect.any(String) });
             expect(settings.saveAppSettings({ theme: 'light' })).toBe(true);
-            expect(fs.readFileSync(originalFile, 'utf8')).toBe('{broken');
-            expect(stored(legacyFile)).toMatchObject({ theme: 'light' });
-            // A later start does not import the copy.
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe('{broken');
+            // A later start does not import the file.
             loadFresh();
             expect(settings.loadSettings().app.theme).toBe('light');
         });
 
-        test('startFresh that cannot set settings.json aside writes nothing and says so; once it can, it does', () => {
-            fs.writeFileSync(legacyFile, '{broken');
-            loadFresh();
-            settings.loadSettings();
-            const realOpen = fs.openSync;
-            jest.spyOn(fs, 'openSync').mockImplementation(((file: fs.PathLike, ...rest: unknown[]) => {
-                if (String(file).includes('settings.json.')) throw new Error('ENOSPC');
-                return (realOpen as (...args: unknown[]) => unknown)(file, ...rest);
-            }) as typeof fs.openSync);
-
-            expect(settings.startFresh()).toBe(false);
-
-            expect(fs.existsSync(configFile)).toBe(false);
-            expect(fs.readFileSync(legacyFile, 'utf8')).toBe('{broken');
-            expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('could not be set aside'));
-            expect(settings.getSettingsRecovery()?.code).toBe('settings-import-retrying');
-            jest.restoreAllMocks();
-            expect(settings.startFresh()).toBe(true);
-            expect(fs.readFileSync(originalFile, 'utf8')).toBe('{broken');
-        });
-
-        test('startFresh with nothing to set aside (no settings.json) just starts', () => {
+        test('startFresh with no settings.json just starts', () => {
             loadFresh();
 
             expect(settings.startFresh()).toBe(true);
@@ -821,73 +844,54 @@ describe('the import of a settings.json (real fs)', () => {
             expect(fs.existsSync(configFile)).toBe(true);
         });
 
-        test('startFresh keeps a copy of its own when the original cannot be written but another file can', () => {
-            fs.writeFileSync(legacyFile, '{broken');
+        test('startFresh adopting a configuration another writer saved while it wrote', () => {
             loadFresh();
-            settings.loadSettings();
-            const realOpen = fs.openSync;
-            jest.spyOn(fs, 'openSync').mockImplementation(((file: fs.PathLike, ...rest: unknown[]) => {
-                if (String(file).includes('settings.json.original')) throw new Error('EROFS');
-                return (realOpen as (...args: unknown[]) => unknown)(file, ...rest);
-            }) as typeof fs.openSync);
-
-            expect(settings.startFresh()).toBe(true);
-
-            jest.restoreAllMocks();
-            const copies = fs.readdirSync(userData).filter((name) => name.startsWith('settings.json.unimportable-'));
-            expect(copies).toHaveLength(1);
-            expect(fs.readFileSync(path.join(userData, copies[0]), 'utf8')).toBe('{broken');
-            expect(fs.existsSync(originalFile)).toBe(false);
-        });
-
-        test('the mirror does not write over the file the user had while the copy of it cannot be kept; it does once it can', () => {
-            fs.writeFileSync(legacyFile, RAW);
+            const realExists = fs.existsSync;
+            let existsCalls = 0;
+            jest.spyOn(fs, 'existsSync').mockImplementation(((file: fs.PathLike) => {
+                if (String(file).includes('config.json')) {
+                    existsCalls += 1;
+                    // The read saw nothing; by the write, another process's configuration is there.
+                    return existsCalls > 1 ? true : false;
+                }
+                return (realExists as (f: fs.PathLike) => boolean)(file);
+            }) as typeof fs.existsSync);
             fs.writeFileSync(configFile, JSON.stringify({ app: { theme: 'light' } }));
-            loadFresh();
-            const realOpen = fs.openSync;
-            jest.spyOn(fs, 'openSync').mockImplementation(((file: fs.PathLike, ...rest: unknown[]) => {
-                if (String(file).includes('settings.json.original')) throw new Error('EROFS');
-                return (realOpen as (...args: unknown[]) => unknown)(file, ...rest);
-            }) as typeof fs.openSync);
 
-            settings.loadSettings();
+            expect(settings.startFreshDetailed()).toEqual({ ok: true, adopted: true });
 
-            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(RAW);
-            jest.restoreAllMocks();
-            expect(settings.saveAppSettings({ theme: 'dark' })).toBe(true);
-            // (A configuration that merely holds no login is no sign-out: the copy keeps the file as it was.)
-            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW);
-            expect(stored(legacyFile)).toMatchObject({ theme: 'dark' });
+            expect(settings.loadSettings().app.theme).toBe('light');
+            expect(fs.existsSync(markerFile)).toBe(false);
         });
 
-        test('startFresh sets settings.json aside as a copy of its own when settings.json.original is taken, whatever the mirror started', () => {
-            fs.writeFileSync(legacyFile, RAW);
+        test('startFresh adopting a configuration another writer saved while it wrote', () => {
             loadFresh();
-            settings.loadSettings();
-            // The mirror has started and the user's first file is kept; an older build later wrote a file the import cannot read.
-            fs.writeFileSync(legacyFile, '{broken');
-            fs.rmSync(configFile);
-            fs.writeFileSync(
-                markerFile,
-                '{"importedAt":"2026-01-01T00:00:00.000Z","mirrorStartedAt":"2026-01-01T00:00:01.000Z"}',
-            );
+            const realExists = fs.existsSync;
+            let existsCalls = 0;
+            jest.spyOn(fs, 'existsSync').mockImplementation(((file: fs.PathLike) => {
+                if (String(file).includes('config.json')) {
+                    existsCalls += 1;
+                    // The read saw nothing; by the write, another process's configuration is there.
+                    return existsCalls > 1;
+                }
+                return (realExists as (f: fs.PathLike) => boolean)(file);
+            }) as typeof fs.existsSync);
+            fs.writeFileSync(configFile, JSON.stringify({ app: { theme: 'light' } }));
+
+            expect(settings.startFreshDetailed()).toEqual({ ok: true, adopted: true });
+
+            expect(settings.loadSettings().app.theme).toBe('light');
+            expect(fs.existsSync(markerFile)).toBe(false);
+        });
+
+        test('startFresh racing an empty configuration file imports nothing and says so', () => {
+            fs.writeFileSync(configFile, '');
             loadFresh();
-            settings.loadSettings();
-            expect(settings.getSettingsRecovery()?.code).toBe('settings-import-failed');
 
-            expect(settings.startFresh()).toBe(true);
-            expect(settings.saveAppSettings({ theme: 'light' })).toBe(true);
+            expect(settings.startFresh()).toBe(false);
 
-            const copies = fs.readdirSync(userData).filter((name) => name.startsWith('settings.json.unimportable-'));
-            expect(copies).toHaveLength(1);
-            expect(fs.readFileSync(path.join(userData, copies[0]), 'utf8')).toBe('{broken');
-            if (process.platform !== 'win32') {
-                expect(fs.statSync(path.join(userData, copies[0])).mode & 0o777).toBe(0o600);
-            }
-            // The first file the user had is still the one kept as the original (the default configuration holds no login,
-            // so the copy holds none); the mirror has written over the other.
-            expect(fs.readFileSync(originalFile, 'utf8')).toBe(RAW);
-            expect(stored(legacyFile)).toMatchObject({ theme: 'light' });
+            expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('config.json could not be read'));
+            expect(fs.existsSync(markerFile)).toBe(false);
         });
 
         test('startFresh leaves a configuration that is already there as it is', () => {
@@ -900,8 +904,17 @@ describe('the import of a settings.json (real fs)', () => {
             expect(fs.existsSync(markerFile)).toBe(false);
         });
 
+        test('startFreshDetailed says nothing was reset when a configuration is there already', () => {
+            fs.writeFileSync(configFile, JSON.stringify({ app: { theme: 'light' } }));
+            fs.writeFileSync(legacyFile, RAW);
+            loadFresh();
+
+            expect(settings.startFreshDetailed()).toEqual({ ok: true, adopted: true });
+            expect(settings.loadSettings().app.theme).toBe('light');
+            expect(fs.readFileSync(legacyFile, 'utf8')).toBe(RAW);
+        });
+
         test('startFresh that cannot write the configuration says so and changes nothing', () => {
-            fs.writeFileSync(legacyFile, '{broken');
             loadFresh();
             settings.loadSettings();
             const realOpen = fs.openSync;
@@ -914,177 +927,7 @@ describe('the import of a settings.json (real fs)', () => {
 
             jest.restoreAllMocks();
             expect(fs.existsSync(configFile)).toBe(false);
-            expect(settings.getSettingsRecovery()?.code).toBe('settings-import-retrying');
-        });
-
-        test('Start fresh over a settings.json that could not be read keeps its word once it can be read: it is set aside before any mirror write', () => {
-            fs.writeFileSync(legacyFile, '{broken');
-            loadFresh();
-            settings.loadSettings();
-            const unreadable = jest.spyOn(storage.legacyStorage, 'readRaw').mockImplementation(() => {
-                throw Object.assign(new Error('EACCES: denied'), { code: 'EACCES' });
-            });
-            expect(settings.startFresh()).toBe(true);
-            expect(stored(markerFile)).toMatchObject({ legacyAsideOwed: expect.any(String) });
-            // Still unreadable: a save is not mirrored over it.
-            expect(settings.setSetting('theme', 'light')).toBe(true);
-            unreadable.mockRestore();
-            expect(fs.readFileSync(legacyFile, 'utf8')).toBe('{broken');
-
-            // Readable again: the next save sets it aside as a copy first, then mirrors.
-            expect(settings.setSetting('theme', 'dark')).toBe(true);
-
-            const copies = fs.readdirSync(userData).filter((name) => name.startsWith('settings.json.unimportable-'));
-            expect(copies).toHaveLength(1);
-            expect(fs.readFileSync(path.join(userData, copies[0]), 'utf8')).toBe('{broken');
-            expect(stored(legacyFile)).toMatchObject({ theme: 'dark' });
-            expect(stored(markerFile)).not.toHaveProperty('legacyAsideOwed');
-        });
-
-        test('the same in another process: the record in the marker has it set aside before that process mirrors over it', () => {
-            fs.writeFileSync(legacyFile, '{broken');
-            loadFresh();
-            settings.loadSettings();
-            const unreadable = jest.spyOn(storage.legacyStorage, 'readRaw').mockImplementation(() => {
-                throw Object.assign(new Error('EACCES: denied'), { code: 'EACCES' });
-            });
-            expect(settings.startFresh()).toBe(true);
-            unreadable.mockRestore();
-
-            // The process ends; the next one finds the file readable and saves.
-            loadFresh();
-            settings.loadSettings();
-            expect(settings.setSetting('theme', 'dark')).toBe(true);
-
-            const copies = fs.readdirSync(userData).filter((name) => name.startsWith('settings.json.unimportable-'));
-            expect(copies).toHaveLength(1);
-            expect(fs.readFileSync(path.join(userData, copies[0]), 'utf8')).toBe('{broken');
-            expect(stored(legacyFile)).toMatchObject({ theme: 'dark' });
-        });
-
-        test.each([
-            ['an Error', () => new Error('EIO'), 'EIO'],
-            ['a value that carries no message', () => 'weird', 'unknown error'],
-        ])(
-            'startFresh whose settings.json cannot be looked at (%s) keeps nothing, and writes the defaults',
-            (_name, thrown, _said) => {
-                fs.writeFileSync(legacyFile, '{broken');
-                loadFresh();
-                settings.loadSettings();
-                jest.spyOn(storage.legacyStorage, 'readRaw').mockImplementation(() => {
-                    throw thrown();
-                });
-
-                expect(settings.startFreshDetailed()).toEqual({ ok: true, keptAt: null, unreadable: true });
-
-                // (Nothing to keep that can be read; the mirror never writes over a file it cannot read.)
-                expect(fs.existsSync(configFile)).toBe(true);
-                expect(fs.existsSync(originalFile)).toBe(false);
-                expect(fs.readFileSync(legacyFile, 'utf8')).toBe('{broken');
-            },
-        );
-
-        test('reimportFromV1 sets the configuration in use aside the way a damaged one is, then imports settings.json', () => {
-            fs.writeFileSync(legacyFile, RAW);
-            loadFresh();
-            settings.loadSettings();
-            expect(settings.saveAppSettings({ theme: 'light' })).toBe(true);
-            const before = fs.readFileSync(configFile, 'utf8');
-            // The file as an older build left it: another theme, another login.
-            fs.writeFileSync(legacyFile, JSON.stringify({ ...ONE_X, theme: 'dracula', token: 'other' }, null, 2));
-
-            expect(settings.reimportFromV1()).toBe(true);
-
-            expect(settings.loadSettings().app.theme).toBe('dracula');
-            // It imports the file as it is, sign-in state included: settings.json is where that state is kept.
-            expect(settings.loadSettings().auth.token).toBe('other');
-            const [backup] = backups();
-            expect(backups()).toHaveLength(1);
-            expect(fs.readFileSync(path.join(userData, backup), 'utf8')).toBe(before);
-            expect(settings.getSettingsRecovery()).toBeNull();
-            // And the mirror writes it back in its own form at the next load.
-            settings.loadSettings();
-            expect(stored(legacyFile)).toMatchObject({ theme: 'dracula', token: 'other' });
-        });
-
-        test('reimportFromV1 forgets the notice about a damaged configuration it replaces', () => {
-            fs.writeFileSync(legacyFile, RAW);
-            fs.writeFileSync(configFile, '{broken');
-            loadFresh();
-            settings.loadSettings();
-            expect(settings.getSettingsRecovery()?.code).toBe('settings-corrupt');
-
-            expect(settings.reimportFromV1()).toBe(true);
-
-            expect(settings.getSettingsRecovery()).toBeNull();
-            expect(settings.loadSettings().app.theme).toBe('dark');
-        });
-
-        test.each([
-            ['is broken', '{broken'],
-            ['is gone', null],
-        ])('reimportFromV1 with a settings.json that %s changes nothing', (_name, text) => {
-            fs.writeFileSync(legacyFile, RAW);
-            loadFresh();
-            settings.loadSettings();
-            const config = fs.readFileSync(configFile, 'utf8');
-            if (text === null) fs.rmSync(legacyFile);
-            else fs.writeFileSync(legacyFile, text);
-
-            expect(settings.reimportFromV1()).toBe(false);
-
-            expect(fs.readFileSync(configFile, 'utf8')).toBe(config);
-            expect(backups()).toEqual([]);
-            expect(settings.getSettingsRecovery()).toBeNull();
-            expect(settings.saveAppSettings({ theme: 'light' })).toBe(true);
-        });
-
-        test('reimportFromV1 that cannot set the configuration aside changes nothing', () => {
-            fs.writeFileSync(legacyFile, RAW);
-            loadFresh();
-            settings.loadSettings();
-            const config = fs.readFileSync(configFile, 'utf8');
-            jest.spyOn(fs, 'renameSync').mockImplementation(() => {
-                throw new Error('EPERM');
-            });
-
-            expect(settings.reimportFromV1()).toBe(false);
-
-            expect(fs.readFileSync(configFile, 'utf8')).toBe(config);
-            expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('EPERM'));
-        });
-
-        test('reimportFromV1 that fails after the configuration was set aside blocks saves until retried, and the retry imports again', () => {
-            fs.writeFileSync(legacyFile, RAW);
-            loadFresh();
-            settings.loadSettings();
-            const realOpen = fs.openSync;
-            jest.spyOn(fs, 'openSync').mockImplementation(((file: fs.PathLike, ...rest: unknown[]) => {
-                if (String(file).includes('config.json')) throw new Error('EROFS');
-                return (realOpen as (...args: unknown[]) => unknown)(file, ...rest);
-            }) as typeof fs.openSync);
-
-            expect(settings.reimportFromV1()).toBe(false);
-
-            jest.restoreAllMocks();
-            expect(fs.existsSync(configFile)).toBe(false);
-            expect(backups()).toHaveLength(1);
-            expect(settings.getSettingsRecovery()).toEqual({
-                code: 'settings-import-retrying',
-                path: legacyFile,
-                blocking: true,
-            });
-            expect(settings.saveAppSettings({ theme: 'light' })).toBe(false);
-
-            // The marker and the set-aside configuration make the automatic import skip; the retry is the explicit
-            // import the failed operation was, and says it worked only because a configuration is stored now.
-            expect(settings.retryImport()).toBe(true);
-
-            expect(fs.existsSync(configFile)).toBe(true);
-            expect(settings.getSettingsRecovery()).toBeNull();
-            expect(settings.loadSettings().app.theme).toBe('dark');
-            expect(settings.loadSettings().auth.token).toBe('tok-secret');
-            expect(settings.saveAppSettings({ theme: 'light' })).toBe(true);
+            expect(settings.getSettingsRecovery()?.code).toBe('settings-import-failed');
         });
 
         test('retryImport with a configuration stored already leaves it as it is', () => {
@@ -1104,6 +947,7 @@ describe('the import of a settings.json (real fs)', () => {
             expect(settings.loadSettings().app.theme).toBe('light');
 
             fs.rmSync(configFile);
+            fs.rmSync(markerFile, { force: true });
             fs.writeFileSync(legacyFile, JSON.stringify(ONE_X));
             loadFresh();
 
@@ -1115,21 +959,12 @@ describe('the import of a settings.json (real fs)', () => {
 
             expect(settings.retryImport()).toBe(false);
 
-            expect(settings.getSettingsRecovery()?.code).toBe('settings-import-retrying');
+            expect(settings.getSettingsRecovery()?.code).toBe('settings-import-failed');
+            expect(settings.getSettingsRecovery()?.blocking).toBe(true);
             expect(fs.existsSync(configFile)).toBe(false);
         });
 
-        test('reimportFromV1 over a configuration that holds a login imports the file as it is, and carries nothing over', () => {
-            fs.writeFileSync(legacyFile, JSON.stringify({ ...ONE_X, token: 'from-file' }));
-            fs.writeFileSync(configFile, JSON.stringify({ auth: { token: 'mine' } }));
-            loadFresh();
-
-            expect(settings.reimportFromV1()).toBe(true);
-
-            expect(settings.loadSettings().auth.token).toBe('from-file');
-        });
-
-        test.each(['startFresh', 'reimportFromV1', 'retryImport'] as const)(
+        test.each(['startFresh', 'retryImport'] as const)(
             '%s never throws, even when the stored configuration cannot be looked at',
             (action) => {
                 fs.writeFileSync(legacyFile, RAW);
@@ -1145,8 +980,8 @@ describe('the import of a settings.json (real fs)', () => {
         );
 
         test('a recovery action that fails with a value that carries no message says so', () => {
-            fs.writeFileSync(legacyFile, RAW);
             loadFresh();
+            settings.loadSettings();
             jest.spyOn(fs, 'existsSync').mockImplementation(() => {
                 throw 'weird';
             });
@@ -1163,9 +998,11 @@ describe('the import of a settings.json (real fs)', () => {
             settings.mergeTitlePins({ '202': 'Seen Later' }, ['101']);
             settings.mergeTitlePins({ '101': 'Cached Rename' }, []);
             expect(settings.getTitlePins()).toEqual({ '101': 'Cached Rename', '202': 'Seen Later' });
-            fs.writeFileSync(legacyFile, RAW);
+            // The import runs again only once the configuration and the marker are gone.
+            fs.rmSync(configFile);
+            fs.rmSync(markerFile);
 
-            expect(settings.reimportFromV1()).toBe(true);
+            expect(settings.retryImport()).toBe(true);
 
             expect(settings.getTitlePins()).toEqual({ '101': 'Macro World', '202': 'Seen Later' });
         });

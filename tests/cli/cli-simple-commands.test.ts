@@ -32,7 +32,6 @@ jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
     loadSettings: jest.fn(() => ({ mock: false })),
     setSetting: jest.fn(),
-    isSignOutOwed: jest.fn(() => false),
 }));
 
 jest.mock('../../src/ts/apiFactory', () => {
@@ -235,17 +234,6 @@ describe('auth: logout', () => {
         clearAuthToken.mockResolvedValue(false);
         await handleLogout();
         expect(msgs('info')).toEqual(['Already logged out — no token was set']);
-    });
-
-    test('a logout recorded for settings that cannot be loaded just now says so, and not that the token was cleared', async () => {
-        clearAuthToken.mockResolvedValue(false);
-        settings.isSignOutOwed.mockReturnValueOnce(true);
-
-        await expect(handleLogout()).resolves.toBe(true);
-
-        expect(msgs('warning')).toEqual([expect.stringContaining('Logout recorded')]);
-        expect(msgs('success')).toEqual([]);
-        expect(msgs('info')).toEqual([]);
     });
 
     test('a logout the saved settings refused says so in words, not by its code', async () => {

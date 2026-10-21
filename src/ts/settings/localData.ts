@@ -33,15 +33,18 @@ import {
     isDesktopAppActive,
     isWebServerActive,
 } from './cliSessionLock';
-import { ORIGINAL_SETTINGS_KEY } from './formatOneMirror';
 
 import type { CapacitorGlobals } from '../types/capacitor';
 
 type LocalDataStore = { fileName: string; prefKey: string };
 
+// The Preferences key of the copy of the settings.json blob that older builds kept (what `settings.json.original` is
+// on a desktop): existing installs have it, and the wipe removes it.
+const ORIGINAL_SETTINGS_KEY = 'gurushots-settings_original';
+
 const LOCAL_DATA_STORES: readonly LocalDataStore[] = [
     { fileName: 'config.json', prefKey: CONFIG_KEY },
-    // The mirror of the configuration, sign-in state included, and the copy kept of the file the user had before it.
+    // The settings.json blob of the one-time import, the copy of it older builds kept, and the import marker.
     { fileName: 'settings.json', prefKey: LEGACY_SETTINGS_KEY },
     { fileName: 'settings.json.original', prefKey: ORIGINAL_SETTINGS_KEY },
     { fileName: 'v2-import.json', prefKey: 'gs_v2_import' },
@@ -70,8 +73,8 @@ const LOCK_FILE_RE = /^(?:statelock|joinlock)-.+\.lock(?:\.stale-.+)?$/;
 const isLockFile = (name: string) =>
     LOCK_FILE_RE.test(name) || MARKER_NAME_RE.test(name) || name === APP_LOCK_FILE_NAME;
 
-// What the settings are read back from when config.json is missing (the mirror, the kept copy of the user's file, the
-// import marker): deleted before config.json, so a file that cannot be removed never brings the sign-in back.
+// The legacy settings files existing installs still have (the one-time import's source and the copies older builds
+// kept): deleted before config.json, so a file that cannot be removed never brings a lost configuration's import back.
 const RESTORE_SOURCES = ['settings.json', 'settings.json.original', 'v2-import.json'] as const;
 const CONFIG_FILE = 'config.json';
 
@@ -224,7 +227,7 @@ const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeRes
             let restoreSourceFailed = false;
             for (const target of localDataPaths(userData)) {
                 if (!fs.existsSync(target)) continue;
-                // Without config.json the next load restores it, sign-in included, from a source left behind.
+                // Without config.json the next load imports a settings.json left behind once more.
                 if (restoreSourceFailed && target === path.join(userData, CONFIG_FILE)) continue;
                 try {
                     fs.rmSync(target, RM_OPTIONS);

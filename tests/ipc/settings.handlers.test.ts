@@ -471,38 +471,18 @@ describe('cleanup-stale-challenge-setting', () => {
 });
 
 describe('the recovery of the stored settings', () => {
-    // Start fresh and re-import are answered by their detailed forms, which also say what became of settings.json and which
-    // file was read.
     const channels = [
         ['retry-settings-import', 'retryImportDetailed'],
         ['start-fresh-settings', 'startFreshDetailed'],
-        ['reimport-settings-from-v1', 'reimportFromV1Detailed'],
         ['acknowledge-import-report', 'acknowledgeImportReport'],
     ] as const;
     type Method = (typeof channels)[number][1];
     // What each action answers when it worked: a boolean, or the detail the answer carries.
     const worked = (method: Method) =>
-        method === 'startFreshDetailed'
-            ? { ok: true, keptAt: '/data/settings.json.original' }
-            : method === 'reimportFromV1Detailed'
-              ? { ok: true, setAside: null, source: '/data/settings.json.unimportable-1' }
-              : method === 'retryImportDetailed'
-                ? { ok: true }
-                : true;
+        method === 'startFreshDetailed' ? { ok: true } : method === 'retryImportDetailed' ? { ok: true } : true;
     const didNot = (method: Method) =>
-        method === 'startFreshDetailed'
-            ? { ok: false, keptAt: null }
-            : method === 'reimportFromV1Detailed'
-              ? { ok: false, setAside: null, source: '/data/settings.json' }
-              : method === 'retryImportDetailed'
-                ? { ok: false }
-                : false;
-    const answerOf = (channel: (typeof channels)[number][0]) =>
-        channel === 'start-fresh-settings'
-            ? { success: true, kept: { kind: 'path', path: '/data/settings.json.original' } }
-            : channel === 'reimport-settings-from-v1'
-              ? { success: true, setAside: null, source: '/data/settings.json.unimportable-1' }
-              : { success: true };
+        method === 'startFreshDetailed' ? { ok: false } : method === 'retryImportDetailed' ? { ok: false } : false;
+    const answerOf = (): { success: true } => ({ success: true });
 
     test.each(channels)('%s runs %s, then announces the settings to every window', async (channel, method) => {
         const broadcastSettingsChange = jest.fn();
@@ -510,43 +490,16 @@ describe('the recovery of the stored settings', () => {
         settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 't' }, app: { theme: 'dark' } });
         const h = buildHandlers({ broadcastSettingsChange });
 
-        await expect(h[channel]()).resolves.toEqual(answerOf(channel));
+        await expect(h[channel]()).resolves.toEqual(answerOf());
 
         expect(settings[method]).toHaveBeenCalledTimes(1);
         expect(broadcastSettingsChange).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 
-    test.each([
-        ['a copy written under a key (the Android window)', Promise.resolve('gurushots-settings_original'), 'stored'],
-        ['a copy that could not be written yet', Promise.resolve(null), 'pending'],
-    ])('start-fresh-settings waits for %s and says %s', async (_name, landed, kind) => {
-        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null, landed });
+    test('start-fresh-settings says nothing was reset when a configuration was in place already', async () => {
+        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, adopted: true });
 
-        await expect(handlers['start-fresh-settings']()).resolves.toEqual({ success: true, kept: { kind } });
-    });
-
-    test('start-fresh-settings says nothing was reset when a configuration was in place already (a restore that came through)', async () => {
-        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null, adopted: true });
-
-        await expect(handlers['start-fresh-settings']()).resolves.toEqual({
-            success: true,
-            kept: { kind: 'adopted' },
-        });
-    });
-
-    test('start-fresh-settings says settings.json could not be read, so it was left as it is', async () => {
-        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null, unreadable: true });
-
-        await expect(handlers['start-fresh-settings']()).resolves.toEqual({
-            success: true,
-            kept: { kind: 'unreadable' },
-        });
-    });
-
-    test('start-fresh-settings says there was nothing to keep', async () => {
-        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null });
-
-        await expect(handlers['start-fresh-settings']()).resolves.toEqual({ success: true, kept: { kind: 'none' } });
+        await expect(handlers['start-fresh-settings']()).resolves.toEqual({ success: true, adopted: true });
     });
 
     test.each(channels)(
@@ -589,18 +542,6 @@ describe('the recovery of the stored settings', () => {
         settings.retryImportDetailed = jest.fn().mockReturnValue({ ok: true, adopted: true });
 
         await expect(handlers['retry-settings-import']()).resolves.toEqual({ success: true, adopted: true });
-    });
-
-    test('reimport-settings-from-v1 says where the settings that were in use went', async () => {
-        settings.reimportFromV1Detailed = jest
-            .fn()
-            .mockReturnValue({ ok: true, setAside: '/data/config.json.corrupt-1', source: '/data/settings.json' });
-
-        await expect(handlers['reimport-settings-from-v1']()).resolves.toEqual({
-            success: true,
-            setAside: '/data/config.json.corrupt-1',
-            source: '/data/settings.json',
-        });
     });
 });
 

@@ -1671,34 +1671,18 @@ export const notice = {
     recoveryCorruptWhy:
         'Failu config.json neizdevās nolasīt kā derīgus uzstādījumus. Bojātā kopija ir saglabāta šeit: {path}.',
     recoveryCorruptNext:
-        'Nav atrasts derīgs settings.json, no kura tos varētu atjaunot. Jaunus uzstādījumus vari saglabāt kā parasti. Lai atgūtu tā vērtības, salabo settings.json un izvēlies „Importēt failu vēlreiz”. Ja to nevar importēt, pirmā saglabāšana patur to kā kopiju blakus un tikai tad raksta jaunu settings.json; šis paziņojums tad norāda, kuru kopiju labot. Vari arī salabot bojāto kopiju un nolasīt vecās vērtības no tās.',
-    recoveryCorruptNextAside:
-        'Nav atrasts derīgs settings.json, no kura tos varētu atjaunot. Jaunus uzstādījumus vari saglabāt kā parasti. Nelietojamais settings.json ir paturēts šeit: {path}, un jauns settings.json ir uzrakstīts no taviem uzstādījumiem. Lai atgūtu tā vērtības, salabo failu {path} un izvēlies „Importēt failu vēlreiz”. Vari arī salabot bojāto kopiju un nolasīt vecās vērtības no tās.',
-    recoveryCorruptNextAsideAndroid:
-        'Uzstādījumi ir atiestatīti uz noklusētajiem, jo netika atrasta derīga kopija, ko lietotne uztur aktuālu un no kuras tos varētu atjaunot. Iestati tos vēlreiz; jaunus uzstādījumus vari saglabāt kā parasti. Nelietojamo kopiju lietotne paturēja savā krātuvē, kur tu to nevari atvērt.',
+        'Jaunus uzstādījumus vari saglabāt kā parasti. Bojātajā kopijā joprojām ir tavi iepriekšējie uzstādījumi, arī pieteikšanās; paturi to, ja vēlies no tās pa rokām nolasīt vecās vērtības, un izdzēs to, kad tā vairs nav vajadzīga.',
     recoveryCorruptWhatAndroid:
         'Tavi saglabātie uzstādījumi bija bojāti, tāpēc lietotne sāka darbu ar noklusētajiem uzstādījumiem.',
     recoveryCorruptWhyAndroid:
         'Saglabātos uzstādījumus neizdevās nolasīt kā derīgus. Lietotne bojāto kopiju paturēja savā krātuvē, kur tu to nevari atvērt.',
     recoveryCorruptNextAndroid:
-        'Uzstādījumi ir atiestatīti uz noklusētajiem, jo netika atrasta derīga kopija, ko lietotne uztur aktuālu un no kuras tos varētu atjaunot. Iestati tos vēlreiz; jaunus uzstādījumus vari saglabāt kā parasti.',
-    recoveryRestoredWhat:
-        'Tavs uzstādījumu fails config.json bija bojāts, tāpēc lietotne atjaunoja tavus uzstādījumus no settings.json.',
-    recoveryRestoredWhy:
-        'Failu config.json neizdevās nolasīt kā derīgus uzstādījumus. Bojātā kopija ir saglabāta šeit: {path}.',
-    recoveryRestoredNext:
-        'Tavi uzstādījumi un pieteikšanās ir tādi, kādi bija pēdējās saglabāšanas brīdī. Lietotni vari turpināt lietot kā parasti, bet bojāto kopiju izdzēst, kad tā vairs nav vajadzīga.',
-    recoveryRestoredWhatAndroid:
-        'Tavi saglabātie uzstādījumi bija bojāti, tāpēc lietotne tos atjaunoja no kopijas, ko uztur aktuālu.',
-    recoveryRestoredWhyAndroid:
-        'Saglabātos uzstādījumus neizdevās nolasīt kā derīgus. Lietotne bojāto kopiju paturēja savā krātuvē, kur tu to nevari atvērt.',
-    recoveryRestoredNextAndroid:
-        'Tavi uzstādījumi un pieteikšanās ir atjaunoti no kopijas, ko lietotne uztur aktuālu. Lietotni vari turpināt lietot kā parasti.',
+        'Uzstādījumi ir atiestatīti uz noklusētajiem. Iestati tos vēlreiz; jaunus uzstādījumus vari saglabāt kā parasti.',
     recoveryUnreadableWhat: 'Tavu uzstādījumu failu neizdevās nolasīt, tāpēc uzstādījumu saglabāšana ir izslēgta.',
     recoveryUnreadableWhy:
         'Lietotne nevarēja atvērt failu {path}. Iespējams, to bloķē cita programma vai piekļuvi liedz atļaujas.',
     recoveryUnreadableNext:
-        'Aizver citas programmas, kas to izmanto, vai salabo atļaujas un pēc tam restartē lietotni. Nekas netika pārrakstīts.',
+        'Aizver citas programmas, kas to izmanto, vai salabo atļaujas. Saglabāšana atkal darbojas, tiklīdz failu var nolasīt; nekas netika pārrakstīts.',
     recoveryUnreadableWhyAndroid:
         'Lietotne nevarēja nolasīt saglabātos uzstādījumus. Iespējams, ierīces krātuve ir aizņemta vai pilna.',
     recoveryUnreadableNextAndroid:
@@ -1707,69 +1691,51 @@ export const notice = {
         'Tavus uzstādījumus no settings.json neizdevās importēt, tāpēc uzstādījumu saglabāšana ir izslēgta un lietotne izmanto noklusētos uzstādījumus.',
     recoveryImportWhatAndroid:
         'Tavus saglabātos uzstādījumus neizdevās importēt, tāpēc uzstādījumu saglabāšana ir izslēgta un lietotne izmanto noklusētos uzstādījumus.',
-    recoveryImportWhy: 'Failu settings.json (šeit: {path}) neizdevās nolasīt vai pārveidot.',
+    recoveryImportWhy:
+        'Failu settings.json (šeit: {path}) šobrīd neizdevās nolasīt (iespējams, to izmanto cita programma, vai arī saglabāšana neizgāja).',
     recoveryImportNext:
-        'Salabo šo failu un izvēlies „Mēģināt vēlreiz” vai izvēlies „Sākt no jauna”, lai sāktu ar noklusētajiem uzstādījumiem. Nekas netika pārrakstīts, un „Sākt no jauna” paturēs settings.json kopiju blakus kā settings.json.original vai, ja šis nosaukums ir aizņemts, kā settings.json.unimportable- ar datumu un laiku beigās.',
-    recoveryImportWhyAndroid: 'Kopiju, ko lietotne uztur aktuālu, neizdevās nolasīt vai pārveidot.',
+        'Nekas netika pārrakstīts. Lietotne mēģina vēlreiz nākamajā palaišanā. Izvēlies „Mēģināt vēlreiz”, lai mēģinātu tagad, vai „Sākt no jauna”, lai sāktu ar noklusētajiem uzstādījumiem; fails settings.json tad paliek, kāds ir.',
+    recoveryImportWhyAndroid: 'Saglabātos uzstādījumus šobrīd neizdevās nolasīt.',
     recoveryImportNextAndroid:
-        'Izvēlies „Mēģināt vēlreiz” vai „Sākt no jauna”, lai sāktu ar noklusētajiem uzstādījumiem. Nekas netika pārrakstīts, un uzstādījumu saglabāšana paliek izslēgta, kamēr nav izdarīta kāda no šīm darbībām. „Sākt no jauna” paturēs saglabāto uzstādījumu kopiju.',
+        'Izvēlies „Mēģināt vēlreiz” vai „Sākt no jauna”, lai sāktu ar noklusētajiem uzstādījumiem. Nekas netika pārrakstīts, un uzstādījumu saglabāšana paliek izslēgta, kamēr nav izdarīta kāda no šīm darbībām.',
+    recoveryImportSettledWhat:
+        'Tavus uzstādījumus no settings.json neizdevās importēt, tāpēc lietotne to vietā saglabāja noklusētos uzstādījumus.',
+    recoveryImportSettledWhatAndroid:
+        'Tavus saglabātos uzstādījumus neizdevās importēt, tāpēc lietotne to vietā saglabāja noklusētos uzstādījumus.',
+    recoveryImportWhyCorrupt:
+        'Fails nav nolasāms uzstādījumu fails. Tas ir paturēts, kāds ir, un importēšana pēc savas iniciatīvas vairs netiek mēģināta.',
+    recoveryImportWhyMigration:
+        'Tajā esošos uzstādījumus nevar pārveidot uz pašreizējo uzstādījumu formātu. Fails ir paturēts, kāds ir, un importēšana pēc savas iniciatīvas vairs netiek mēģināta.',
+    recoveryImportSettledNext:
+        'Lai importētu settings.json, kad tas ir salabots, sadaļā „Par lietotni un datiem” izmanto „Dzēst visus vietējos datus” un pēc tam atkal palaiž lietotni.',
+    recoveryImportSettledNextAndroid:
+        'Lai importētu saglabātos uzstādījumus, kad tos atkal var nolasīt, sadaļā „Par lietotni un datiem” izmanto „Dzēst visus vietējos datus” un pēc tam atkal palaiž lietotni.',
     recoverySignInKept:
         'Bojātajā kopijā joprojām var būt pieteikšanās dati, arī pēc izrakstīšanās. Izdzēs to, kad tā vairs nav vajadzīga.',
     recoverySignInKeptAndroid: 'Bojātajā kopijā joprojām var būt pieteikšanās dati, arī pēc izrakstīšanās.',
-    recoveryRetryingWhat: 'Tavus uzstādījumus šobrīd neizdevās ielādēt, tāpēc uzstādījumu saglabāšana ir apturēta.',
-    recoveryRetryingWhy:
-        'Fails config.json bija bojāts un ir pārvietots uz {path}, bet failu settings.json, no kura atjaunot tavus uzstādījumus, šobrīd neizdevās nolasīt (iespējams, to izmanto cita programma). Nekas netika pārrakstīts.',
-    recoveryRetryingWhyNoCopy:
-        'Failu settings.json šobrīd neizdevās nolasīt (iespējams, to izmanto cita programma). Nekas netika pārrakstīts.',
-    recoveryRetryingWhyNoCopyAndroid: 'Saglabātos uzstādījumus šobrīd neizdevās nolasīt. Nekas netika pārrakstīts.',
-    recoveryRetryingWhyAndroid:
-        'Saglabātie uzstādījumi bija bojāti un ir paturēti lietotnes krātuvē, kur tu tos nevari atvērt, bet kopiju, no kuras tos atjaunot, šobrīd neizdevās nolasīt. Nekas netika pārrakstīts.',
-    recoveryRetryingNext:
-        'Lietotne mēģina vēlreiz pati un ielādē tavus uzstādījumus, tiklīdz failu var nolasīt. Vari arī izvēlēties „Mēģināt vēlreiz”.',
     recoveryRetry: 'Mēģināt vēlreiz',
     recoveryStartFresh: 'Sākt no jauna',
-    recoveryReimport: 'Importēt failu vēlreiz',
     recoveryWorking: 'Notiek darbība…',
     recoveryStartFreshTitle: 'Sākt ar noklusētajiem uzstādījumiem?',
     recoveryStartFreshBody:
-        'Lietotne sāks darbu ar noklusētajiem uzstādījumiem. Fails settings.json netiek importēts; tā kopija tiek paturēta blakus kā settings.json.original vai, ja šis nosaukums ir aizņemts, kā settings.json.unimportable- ar datumu un laiku beigās.',
+        'Lietotne sāks darbu ar noklusētajiem uzstādījumiem. Fails settings.json netiek importēts un paliek, kāds ir, arī vēlāk netiek importēts bez aicinājuma.',
     recoveryStartFreshBodyAndroid:
-        'Lietotne sāks darbu ar noklusētajiem uzstādījumiem. Saglabātā kopija netiek importēta; lietotne paturēs tās kopiju savā krātuvē.',
-    recoveryReimportTitle: 'Vēlreiz importēt failu?',
-    recoveryReimportBody:
-        'Tavi pašreizējie uzstādījumi un pieteikšanās tiek novietoti malā, un to vietā tiek importēti uzstādījumi un pieteikšanās no {path}. Ja šis fails ir vecs, iespējams, būs jāpiesakās vēlreiz.',
-    recoveryReimportConfirm: 'Importēt vēlreiz',
+        'Lietotne sāks darbu ar noklusētajiem uzstādījumiem. Saglabātie uzstādījumi netiek importēti un paliek, kādi ir, arī vēlāk netiek importēti bez aicinājuma.',
     recoveryRetryDone: 'Tavi uzstādījumi no settings.json ir importēti. Uzstādījumu saglabāšana atkal darbojas.',
     recoveryRetryDoneAndroid:
-        'Tavi uzstādījumi ir atjaunoti no saglabātās kopijas. Uzstādījumu saglabāšana atkal darbojas.',
+        'Tavi uzstādījumi ir importēti no saglabātajiem uzstādījumiem. Uzstādījumu saglabāšana atkal darbojas.',
     recoveryRetryDoneAdopted:
-        'Nekas netika importēts. Tavi uzstādījumi jau bija savā vietā (atjaunoti vai importēti, kamēr tu izvēlējies šo darbību), un lietotne tos izmanto. Uzstādījumu saglabāšana darbojas.',
+        'Nekas netika importēts. Tavi uzstādījumi jau bija savā vietā (saglabāti, kamēr tu izvēlējies šo darbību), un lietotne tos izmanto. Uzstādījumu saglabāšana darbojas.',
+    recoveryStartFreshDoneAdopted:
+        'Nekas netika atiestatīts. Uzstādījumi tika saglabāti, kamēr tu izvēlējies šo darbību, un lietotne tos izmanto. Saglabāšana darbojas.',
     recoveryRetryFailed:
         'Importēšana neizdevās. Failu settings.json neizdevās nolasīt vai pārveidot, vai arī uzstādījumus neizdevās saglabāt. Nekas netika mainīts. Salabo settings.json un mēģini vēlreiz vai izvēlies „Sākt no jauna”. Sīkāka informācija ir žurnālā.',
     recoveryRetryFailedAndroid:
-        'Importēšana neizdevās. Saglabāto kopiju neizdevās nolasīt vai pārveidot, vai arī uzstādījumus neizdevās saglabāt. Nekas netika mainīts. Izvēlies „Mēģināt vēlreiz” vai „Sākt no jauna”. Sīkāka informācija ir žurnālā.',
+        'Importēšana neizdevās. Saglabātos uzstādījumus neizdevās nolasīt vai pārveidot, vai arī uzstādījumus neizdevās saglabāt. Nekas netika mainīts. Izvēlies „Mēģināt vēlreiz” vai „Sākt no jauna”. Sīkāka informācija ir žurnālā.',
     recoveryStartFreshDone:
-        'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Faila settings.json kopija ir paturēta šeit: {path}.',
-    recoveryStartFreshDoneNone:
-        'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Faila settings.json nebija, tāpēc kopija netika paturēta.',
-    recoveryStartFreshDoneNoneAndroid:
-        'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Saglabātu uzstādījumu nebija, tāpēc kopija netika paturēta.',
-    recoveryStartFreshDonePendingAndroid:
-        'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Saglabāto uzstādījumu kopiju vēl neizdevās ierakstīt; tā tiks izveidota nākamajā saglabāšanā vai palaišanā, un līdz tam nekas netiek pārrakstīts pāri saglabātajiem uzstādījumiem.',
-    recoveryStartFreshDoneAdopted:
-        'Nekas netika atiestatīts. Saglabātie uzstādījumi tika atjaunoti vai importēti, kamēr tu izvēlējies šo darbību, un lietotne tos izmanto. Saglabāšana darbojas.',
-    recoveryStartFreshDoneUnreadable:
-        'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Saglabātos uzstādījumus neizdevās nolasīt, tāpēc tie palika, kādi bija, un kopija netika paturēta.',
-    recoveryStartFreshDoneAndroid:
-        'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Lietotne paturēja saglabāto uzstādījumu kopiju savā krātuvē.',
+        'Lietotne tagad izmanto noklusētos uzstādījumus, un saglabāšana darbojas. Fails settings.json ir paturēts, kāds ir.',
     recoveryStartFreshFailed:
         'Sākt ar noklusētajiem uzstādījumiem neizdevās. Jaunos uzstādījumus neizdevās saglabāt. Nekas netika mainīts. Mēģini vēlreiz, un, ja tas atkārtojas, pārbaudi, vai lietotne var rakstīt savā krātuvē. Sīkāka informācija ir žurnālā.',
-    recoveryReimportDone:
-        'Fails {path} ir importēts vēlreiz. Tavi iepriekšējie uzstādījumi un pieteikšanās ir novietoti malā, un tiek izmantoti tie, kas ir šajā failā.',
-    recoveryReimportDoneNothingAside:
-        'Fails {path} ir importēts vēlreiz. Iepriekšējo uzstādījumu, ko novietot malā, nebija, un tiek izmantoti tie, kas ir šajā failā.',
-    recoveryReimportFailed:
-        'Importēšana neizdevās. Faila {path} trūkst, to neizdevās nolasīt vai pārveidot, vai arī uzstādījumus neizdevās saglabāt. Salabo to un mēģini vēlreiz. Ja parādās jauns paziņojums, rīkojies pēc tā. Sīkāka informācija ir žurnālā.',
     importReportTitle: 'Uzstādījumi importēti',
     importReportIntro:
         'Tavi uzstādījumi no settings.json ir importēti. Šīs atsauces uz profiliem un scenārijiem ir paturētas, un tās joprojām netiek piemērotas, tāpat kā iepriekš. Izveido vai salabo profilu vai scenāriju, ko katra no tām nosauc.',
@@ -1795,11 +1761,6 @@ export const notice = {
     recoveryDroppedNext: 'Uzstādījums atkal rāda saglabāto vērtību. Ja vajag, nomaini to vēlreiz.',
     recoveryDroppedNextTooLarge:
         'Uzstādījums atkal rāda saglabāto vērtību. Noņem izaicinājumu atsevišķos uzstādījumus un scenārijus, kas vairs nav vajadzīgi, un nomaini to vēlreiz.',
-    recoveryLogoutLostWhat: 'Tava izrakstīšanās netika ierakstīta.',
-    recoveryLogoutLostWhy:
-        'Saglabātie uzstādījumi to nepieņēma, tāpēc tā spēkā ir tikai, kamēr lietotne paliek atvērta.',
-    recoveryLogoutLostNext:
-        'Ja lietotne tiek aizvērta, kamēr uzstādījumi vēl nav ielādēti, kopā ar tiem atgriežas arī tava pieteikšanās. Tad izraksties vēlreiz.',
 };
 // about
 export const about = {

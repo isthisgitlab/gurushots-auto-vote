@@ -1642,32 +1642,17 @@ export const notice = {
     recoveryCorruptWhat: 'Your settings file config.json was damaged, so the app started with default settings.',
     recoveryCorruptWhy: 'config.json could not be read as valid settings. The damaged copy was kept at {path}.',
     recoveryCorruptNext:
-        'No usable settings.json was found to restore them from. You can save new settings as usual. To bring its values back, fix settings.json, then choose Re-import file. If it cannot be imported, your first save keeps it as a copy beside it before a new settings.json is written; this notice then names the copy to fix. Or repair the damaged copy and read the old values from it.',
-    recoveryCorruptNextAside:
-        'No usable settings.json was found to restore them from. You can save new settings as usual. The unusable settings.json was kept at {path}, and a new settings.json was written from your settings. To bring its values back, fix the file at {path}, then choose Re-import file. Or repair the damaged copy and read the old values from it.',
-    recoveryCorruptNextAsideAndroid:
-        "Your settings were reset to the defaults, because no usable copy the app keeps up to date was found to restore them from. Set them again; you can save new settings as usual. The unusable copy was kept in the app's own storage, where you cannot open it.",
+        'You can save new settings as usual. The damaged copy still holds your old settings, including the sign-in; keep it if you want to read the old values from it by hand, and delete it once you no longer need it.',
     recoveryCorruptWhatAndroid: 'Your stored settings were damaged, so the app started with default settings.',
     recoveryCorruptWhyAndroid:
         'The stored settings could not be read as valid settings. The app kept the damaged copy in its own storage, where you cannot open it.',
     recoveryCorruptNextAndroid:
-        'Your settings were reset to the defaults, because no usable copy the app keeps up to date was found to restore them from. Set them again; you can save new settings as usual.',
-    recoveryRestoredWhat:
-        'Your settings file config.json was damaged, so the app restored your settings from settings.json.',
-    recoveryRestoredWhy: 'config.json could not be read as valid settings. The damaged copy was kept at {path}.',
-    recoveryRestoredNext:
-        'Your settings and login are as they were at the last save. You can keep using the app as usual, and delete the damaged copy when you no longer need it.',
-    recoveryRestoredWhatAndroid:
-        'Your stored settings were damaged, so the app restored them from the copy it keeps up to date.',
-    recoveryRestoredWhyAndroid:
-        'The stored settings could not be read as valid settings. The app kept the damaged copy in its own storage, where you cannot open it.',
-    recoveryRestoredNextAndroid:
-        'Your settings and login were restored from the copy the app keeps up to date. You can keep using the app as usual.',
+        'Your settings were reset to the defaults. Set them again; you can save new settings as usual.',
     recoveryUnreadableWhat: 'Your settings file could not be read, so saving settings is turned off.',
     recoveryUnreadableWhy:
         'The app could not open {path}. It may be locked by another program, or its permissions may block access.',
     recoveryUnreadableNext:
-        'Close other programs that use it, or fix its permissions, then restart the app. Nothing was overwritten.',
+        'Close other programs that use it, or fix its permissions. Saving works again as soon as the file can be read; nothing was overwritten.',
     recoveryUnreadableWhyAndroid:
         "The app could not read its stored settings. The device's storage may be busy or full.",
     recoveryUnreadableNextAndroid:
@@ -1676,68 +1661,49 @@ export const notice = {
         'Your settings in settings.json could not be imported, so saving settings is turned off and the app uses default settings.',
     recoveryImportWhatAndroid:
         'Your stored settings could not be imported, so saving settings is turned off and the app uses default settings.',
-    recoveryImportWhy: 'The file settings.json at {path} could not be read or converted.',
+    recoveryImportWhy:
+        'The file settings.json at {path} could not be read just now (another program may be using it, or a save did not go through).',
     recoveryImportNext:
-        'Fix that file, then choose Retry, or choose Start fresh to begin with default settings. Nothing was overwritten, and Start fresh keeps a copy of settings.json beside it (settings.json.original, or, when that name is taken, settings.json.unimportable- followed by the date and time).',
-    recoveryImportWhyAndroid: 'The copy of your settings the app keeps up to date could not be read or converted.',
+        'Nothing was overwritten. The app tries again the next time it starts. Choose Retry to try now, or Start fresh to begin with default settings; settings.json is then left as it is.',
+    recoveryImportWhyAndroid: 'The stored settings could not be read just now.',
     recoveryImportNextAndroid:
-        'Choose Retry to try again, or Start fresh to begin with default settings. Nothing was overwritten, and saving settings stays off until one of them is done. Start fresh keeps a copy of the stored settings.',
+        'Choose Retry to try again, or Start fresh to begin with default settings. Nothing was overwritten, and saving settings stays off until one of them is done.',
+    recoveryImportSettledWhat:
+        'Your settings in settings.json could not be imported, so the app saved default settings in their place.',
+    recoveryImportSettledWhatAndroid:
+        'Your stored settings could not be imported, so the app saved default settings in their place.',
+    recoveryImportWhyCorrupt:
+        'The file is not a readable settings file. It was left as it is, and the import is not tried again by itself.',
+    recoveryImportWhyMigration:
+        'The settings in it cannot be converted to the current settings format. The file was left as it is, and the import is not tried again by itself.',
+    recoveryImportSettledNext:
+        'To import settings.json once it is fixed, use "Delete all local data" under About and data, then start the app again.',
+    recoveryImportSettledNextAndroid:
+        'To import the stored settings once they work again, use "Delete all local data" under About and data, then start the app again.',
     recoverySignInKept:
         'The damaged copy may still hold the sign-in it had, even after you log out. Delete it once you no longer need it.',
     recoverySignInKeptAndroid: 'The damaged copy may still hold the sign-in it had, even after you log out.',
-    recoveryRetryingWhat: 'Your settings could not be loaded just now, so saving settings is paused.',
-    recoveryRetryingWhy:
-        'config.json was damaged and moved to {path}, and settings.json, the copy to restore your settings from, could not be read just now (another program may be using it). Nothing was overwritten.',
-    recoveryRetryingWhyNoCopy:
-        'settings.json could not be read just now (another program may be using the file). Nothing was overwritten.',
-    recoveryRetryingWhyNoCopyAndroid: 'The stored settings could not be read just now. Nothing was overwritten.',
-    recoveryRetryingWhyAndroid:
-        "The stored settings were damaged and kept in the app's own storage, where you cannot open them, and the copy to restore them from could not be read just now. Nothing was overwritten.",
-    recoveryRetryingNext:
-        'The app tries again by itself and loads your settings as soon as the file can be read. You can also choose Retry now.',
     recoveryRetry: 'Retry',
     recoveryStartFresh: 'Start fresh',
-    recoveryReimport: 'Re-import file',
     recoveryWorking: 'Working…',
     recoveryStartFreshTitle: 'Start with default settings?',
     recoveryStartFreshBody:
-        'The app begins with default settings. settings.json is not imported; a copy of it is kept beside it, as settings.json.original or, when that name is taken, as settings.json.unimportable- followed by the date and time.',
+        'The app begins with default settings. settings.json is not imported and is left as it is, and is not imported later unasked.',
     recoveryStartFreshBodyAndroid:
-        'The app begins with default settings. The stored copy is not imported; the app keeps a copy of it in its own storage.',
-    recoveryReimportTitle: 'Import the file again?',
-    recoveryReimportBody:
-        'Your current settings and login are set aside, and the settings and login in {path} are imported in their place. If that file is old, you may need to log in again.',
-    recoveryReimportConfirm: 'Import again',
+        'The app begins with default settings. The stored settings are not imported and are left as they are, and are not imported later unasked.',
     recoveryRetryDone: 'Your settings were imported from settings.json. Saving settings works again.',
-    recoveryRetryDoneAndroid: 'Your settings were restored from the stored copy. Saving settings works again.',
+    recoveryRetryDoneAndroid: 'Your settings were imported from the stored settings. Saving settings works again.',
     recoveryRetryDoneAdopted:
-        'Nothing was imported. Your settings were already in place (restored or imported while you chose this), and the app is using them. Saving settings works.',
+        'Nothing was imported. Your settings were already in place (saved while you chose this), and the app is using them. Saving settings works.',
+    recoveryStartFreshDoneAdopted:
+        'Nothing was reset. Settings were saved while you chose this, and the app is using them. Saving works.',
     recoveryRetryFailed:
         'The import did not work. settings.json could not be read or converted, or the settings could not be saved. Nothing was changed. Fix settings.json and choose Retry again, or choose Start fresh. The log has the details.',
     recoveryRetryFailedAndroid:
-        'The import did not work. The stored copy could not be read or converted, or the settings could not be saved. Nothing was changed. Choose Retry again, or choose Start fresh. The log has the details.',
-    recoveryStartFreshDone:
-        'The app now uses default settings and saving works. A copy of settings.json was kept at {path}.',
-    recoveryStartFreshDoneNone:
-        'The app now uses default settings and saving works. There was no settings.json, so no copy was kept.',
-    recoveryStartFreshDoneNoneAndroid:
-        'The app now uses default settings and saving works. There were no stored settings, so no copy was kept.',
-    recoveryStartFreshDonePendingAndroid:
-        'The app now uses default settings and saving works. The copy of the stored settings could not be written yet; it is made with the next save or start, and nothing is written over the stored settings before then.',
-    recoveryStartFreshDoneAdopted:
-        'Nothing was reset. Stored settings were restored or imported while you chose this, and the app is using them. Saving works.',
-    recoveryStartFreshDoneUnreadable:
-        'The app now uses default settings and saving works. The stored settings could not be read, so they were left as they are and no copy was kept.',
-    recoveryStartFreshDoneAndroid:
-        'The app now uses default settings and saving works. The app keeps a copy of the stored settings in its own storage.',
+        'The import did not work. The stored settings could not be read or converted, or the settings could not be saved. Nothing was changed. Choose Retry again, or choose Start fresh. The log has the details.',
+    recoveryStartFreshDone: 'The app now uses default settings and saving works. settings.json was left as it is.',
     recoveryStartFreshFailed:
         'Starting with default settings did not work. The new settings could not be saved. Nothing was changed. Try again, and if it keeps failing, check that the app can write to its storage. The log has the details.',
-    recoveryReimportDone:
-        '{path} was imported again. Your earlier settings and login were set aside, and the ones in that file are in use.',
-    recoveryReimportDoneNothingAside:
-        '{path} was imported again. There were no earlier settings to set aside, and the ones in that file are in use.',
-    recoveryReimportFailed:
-        'The import did not work. {path} is missing, could not be read or converted, or the settings could not be saved. Fix it and try again. If a new notice appears, follow it. The log has the details.',
     importReportTitle: 'Settings imported',
     importReportIntro:
         'Your settings were imported from settings.json. These references to profiles and scenarios were kept and still do not apply, as before; create or fix the profile or scenario each one names.',
@@ -1763,10 +1729,6 @@ export const notice = {
     recoveryDroppedNext: 'Your setting shows its saved value again. Change it again if needed.',
     recoveryDroppedNextTooLarge:
         'Your setting shows its saved value again. Remove per-challenge overrides and scenarios you no longer need, then change it again.',
-    recoveryLogoutLostWhat: 'Your logout was not recorded.',
-    recoveryLogoutLostWhy: 'The stored settings could not take it, so it holds only while the app stays open.',
-    recoveryLogoutLostNext:
-        'If the app is closed before the settings load, your sign-in comes back with them. Log out again then.',
 };
 // about
 export const about = {

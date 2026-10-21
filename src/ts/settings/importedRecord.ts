@@ -1,14 +1,12 @@
 /**
  * The record of the import kept in `config.json` (`imported`): the report of what the import left unresolved, and whether
  * the user has seen it. The record is read and changed in the stored text itself, so everything else in the
- * configuration stays as stored; the import marker keeps a copy, so a configuration restored from `settings.json` has
- * its report back.
+ * configuration stays as stored.
  */
 
 import * as logger from '../logger';
 import { errorMessage } from '../errorMessage';
 import { isPlainObject } from '../plainObject';
-import { keepImportedRecord } from './importMarker';
 import { isImportedRecord } from './loadValidation';
 import { storage } from './storage';
 
@@ -28,9 +26,7 @@ const updateImported = (change: (imported: ImportedV2) => ImportedV2 | null): bo
         if (!isPlainObject(parsed) || !isImportedRecord(parsed.imported)) return false;
         const next = change(parsed.imported);
         if (next === null) return true;
-        if (!storage.writeRaw(JSON.stringify({ ...parsed, imported: next }, null, 2))) return false;
-        keepImportedRecord(next);
-        return true;
+        return storage.writeRaw(JSON.stringify({ ...parsed, imported: next }, null, 2));
     } catch (error) {
         // The parser's message can quote the text (the token among it): a stored text that does not parse is said so.
         const reason = error instanceof SyntaxError ? 'the stored settings are not valid JSON' : errorMessage(error);

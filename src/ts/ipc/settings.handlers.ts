@@ -237,11 +237,6 @@ const buildEnvironmentHandlers = () => ({
     },
 });
 
-/** What became of settings.json when a fresh start was made (see 'start-fresh-settings'). */
-type StartFreshKept =
-    | { kind: 'path'; path: string }
-    | { kind: 'stored' | 'pending' | 'none' | 'adopted' | 'unreadable' };
-
 // A recovery action of the stored settings (see settings/persistence.ts): what it did is announced to the windows, and a
 // failure answers with its code, `settings-import-failed` unless the action says otherwise (what went wrong is
 // described in the log). The action answers whether it worked, and what else it has to tell, which a success carries.
@@ -275,44 +270,30 @@ const recoveryAction = <F extends string = 'settings-import-failed'>(
 ) => detailedRecoveryAction(broadcastSettingsChange, async () => ({ ok: await action() }), label, failure);
 
 const buildLocalDataHandlers = ({ afterWipe, broadcastSettingsChange }: SettingsHandlerOptions) => ({
-    // Why the stored settings are not in use or what a start found worth telling (config.json restored from settings.json
-    // or set aside, config.json that cannot be read, a settings.json that could not be imported), or else that the
-    // window's last change was not saved; null when none.
+    // Why the stored settings are not in use or what a start found worth telling (config.json set aside as damaged,
+    // config.json that cannot be read, a settings.json that could not be imported), or else that the window's last
+    // change was not saved; null when none.
     'get-settings-recovery': async () => ({
         success: true as const,
         recovery: settings.getSettingsRecovery() ?? settings.getSettingsSaveDropped(),
     }),
 
-    // Try the import of settings.json again; begin with default settings (settings.json is kept beside it);
-    // import settings.json again over the settings in use (which are set aside).
-    // `adopted`: a configuration was in place already (a restore that came through meanwhile), so nothing was imported.
+    // Try the import of settings.json again.
+    // `adopted`: a configuration was in place already, so nothing was imported.
     'retry-settings-import': detailedRecoveryAction(
         broadcastSettingsChange,
         () => settings.retryImportDetailed(),
         'retry-settings-import',
     ),
-    // `kept`: what became of settings.json — `path` (a copy kept at `path`), `stored` (a copy kept in the app's own
-    // storage, which has no path to show), `pending` (that copy could not be written yet and is made with the next save
-    // or start), `none` (there was no settings.json to keep) or `adopted` (a configuration was in place already, a
-    // restore that came through meanwhile: nothing was reset, and nothing was kept) or `unreadable` (settings.json could not be
-    // read: it was left as it is, and nothing was kept).
+    // Begin with default settings; `settings.json` is left as it is and is not imported later unasked.
+    // `adopted`: a configuration was in place already, so nothing was reset.
     'start-fresh-settings': detailedRecoveryAction(
         broadcastSettingsChange,
-        async (): Promise<{ ok: boolean; kept: StartFreshKept }> => {
-            const { ok, keptAt, landed, adopted, unreadable } = settings.startFreshDetailed();
-            if (adopted) return { ok, kept: { kind: 'adopted' } };
-            if (unreadable) return { ok, kept: { kind: 'unreadable' } };
-            if (landed !== undefined) return { ok, kept: { kind: (await landed) === null ? 'pending' : 'stored' } };
-            return { ok, kept: keptAt === null ? { kind: 'none' } : { kind: 'path', path: keptAt } };
+        () => {
+            const { ok, adopted } = settings.startFreshDetailed();
+            return { ok, ...(adopted ? { adopted: true as const } : {}) };
         },
         'start-fresh-settings',
-    ),
-    // `source`: the file that was read (the copy the user fixed, or settings.json); `setAside`: where the settings that
-    // were in use went, null when none were.
-    'reimport-settings-from-v1': detailedRecoveryAction(
-        broadcastSettingsChange,
-        () => settings.reimportFromV1Detailed(),
-        'reimport-settings-from-v1',
     ),
 
     // What the import left unresolved (names only), and the window's acknowledgement of it; the report stays
