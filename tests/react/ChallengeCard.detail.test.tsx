@@ -1286,6 +1286,31 @@ describe('prize tiers', () => {
         expect(screen.queryByText(/×/)).toBeNull();
     });
 
+    test('the tiers are a <details> disclosure, closed by default and shown when it opens', () => {
+        const { container } = renderCard(
+            makeChallenge({
+                achievements_and_prizes: [
+                    {
+                        title: 'Gold',
+                        rank: { min_rank: 1, max_rank: 10, type: 'MEMBER' },
+                        prizes: [{ type: 'KEY', amount: 1 }],
+                    },
+                ],
+            }),
+        );
+
+        const details = container.querySelector('details');
+        expect(details).not.toBeNull();
+        expect(details!.hasAttribute('open')).toBe(false);
+        expect(details!.querySelector('summary')!.textContent).toBe('Prize');
+        expect(screen.getByText('Gold')).toBeTruthy();
+
+        fireEvent.click(details!.querySelector('summary')!);
+
+        expect(details!.hasAttribute('open')).toBe(true);
+        expect(screen.getByText('Gold')).toBeTruthy();
+    });
+
     test('no prize section without tiers', () => {
         renderCard(makeChallenge({ achievements_and_prizes: [] }));
 

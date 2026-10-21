@@ -468,6 +468,7 @@ function EntryDetails({
  * top photos — a tier with no readable rank window shows its title alone), and its prizes as type × amount.
  * The parts are separated visually by the flex gap and for assistive technology by an sr-only comma.
  * Tier titles are the server's text: React text children only.
+ * A native <details> disclosure: collapsed by default, opened on demand.
  */
 function PrizesPanel({ tiers }: { tiers: PrizeTier[] }) {
     const { t } = useTranslation();
@@ -488,8 +489,8 @@ function PrizesPanel({ tiers }: { tiers: PrizeTier[] }) {
         return null;
     };
     return (
-        <div className="text-xs">
-            <div className="font-medium text-base-content/70">{t('app.prize')}</div>
+        <details className="text-xs">
+            <summary className="font-medium text-base-content/70 cursor-pointer select-none">{t('app.prize')}</summary>
             {tiers.map((tier, index) => {
                 const title = typeof tier.title === 'string' ? tier.title.trim() : '';
                 // The wire field is typed as an array but is not guaranteed one: read it only when it is.
@@ -507,7 +508,7 @@ function PrizesPanel({ tiers }: { tiers: PrizeTier[] }) {
                     </div>
                 );
             })}
-        </div>
+        </details>
     );
 }
 
