@@ -15,6 +15,7 @@ import { getMiddleware } from '../../apiFactory';
 import { createScheduler } from '../../scheduling/runScheduler';
 import { formatDateTime } from '../../dateFormat';
 import { formatDuration } from '../../format/duration';
+import { isInteger } from '../../numbers';
 import { printableChallengeId } from './pin';
 import { openBoostWindows } from '../../voting/boostWindow';
 import { findActiveChallenge } from '../../services/findActiveChallenge';
@@ -25,7 +26,7 @@ import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
 // status/scheduling commands doesn't construct the handler set; invoked with
 // a null event.
 import type { NullEventHandlers } from '../../types/cli';
-import type { Challenge } from '../../types/gurushots';
+import type { Challenge, RankingTotal } from '../../types/gurushots';
 import type * as voting_handlersModule from '../../ipc/voting.handlers';
 import { errorMessage } from '../../errorMessage';
 type VotingHandlers = NullEventHandlers<ReturnType<typeof voting_handlersModule.buildHandlers>>;
@@ -238,6 +239,48 @@ const logPinnedEntries = (userSettings: ReturnType<typeof settings.loadSettings>
     }
 };
 
+/**
+ * One challenge's tail in the Standing section: `rank <n>`, plus — when they can be read — the
+ * benchmark its rank sits under and the votes still missing toward it (`top <n> needs <gap> votes`).
+ * Benchmark scores arrive as strings and count only when they parse to whole numbers. No gap at
+ * rank 1, none once the benchmark is reached; with the votes unreadable, the benchmark's own score
+ * is all that can be said.
+ */
+const rankingTail = (total: RankingTotal): string | null => {
+    const rank = total.rank;
+    if (!isInteger(rank) || rank <= 0) return null;
+    const benchmark = rank <= 10 ? '1' : rank <= 100 ? '10' : '100';
+    const row = total.benchmark?.find((entry) => entry?.benchmark === benchmark);
+    // A number, whatever the server sent — an empty string would parse as 0, so it is refused first.
+    const score = typeof row?.score === 'string' && row.score !== '' ? Number(row.score) : Number.NaN;
+    if (!isInteger(score) || rank === 1) return `rank ${rank}`;
+    const votes = total.votes;
+    if (!isInteger(votes) || votes <= 0) {
+        return `rank ${rank} — top ${benchmark} at ${score} votes`;
+    }
+    const gap = score - votes + 1;
+    return gap > 0 ? `rank ${rank} — top ${benchmark} needs ${gap} votes` : `rank ${rank}`;
+};
+
+/**
+ * One challenge's team-match line in the Standing section: the two sides' vote totals, then the
+ * member's own standing among the match participants — or "not running" once the match is over.
+ * A standing that could not be read from the rosters prints the totals alone.
+ */
+const teamMatchLine = (challenge: Challenge): string | null => {
+    const match = challenge?.teamMatch;
+    if (!match) return null;
+    const base = `  • ${challenge.title} — us ${match.us.votes}, them ${match.them.votes}`;
+    // Absent means running; an explicit false says the match is over.
+    if (match.running === false) return `${base} — not running`;
+    if (!match.me) return base;
+    return match.me.kind === 'active'
+        ? `${base} — #${match.me.position} of ${match.me.activeSlots} active${
+              match.me.cushion === null ? '' : ` (+${match.me.cushion} over standby)`
+          }`
+        : `${base} — standby, ${match.me.votesToActive} votes to active`;
+};
+
 const showStatus = async () => {
     const userSettings = settings.loadSettings();
     const isMockMode = userSettings.app.mock;
@@ -286,15 +329,26 @@ const showStatus = async () => {
 
     logPinnedEntries(userSettings);
 
-    // Boost-window status: the CLI parity of the GUI banner (no anchors —
-    // just the informational list). Best-effort fetch: a failed/offline call
-    // prints a note and never crashes status. Reuses the engine's own
-    // predicate so there is no duplicated boost-window logic.
+    // Boost-window status (the CLI parity of the GUI banner, no anchors) and the member's
+    // standing: both fed by ONE best-effort fetch of the active challenges — a failed/offline
+    // call prints a note under each section and never crashes status. The boost list reuses
+    // the engine's own predicate so there is no duplicated boost-window logic.
     if (isAuthenticated) {
-        logger.withCategory('ui').info('\nBoost Window Open:');
+        let challenges: Challenge[] | null = null;
+        let fetchError: unknown = null;
         try {
             const resp = await getMiddleware().getActiveChallenges();
-            const challenges = Array.isArray(resp?.challenges) ? resp.challenges : [];
+            challenges = Array.isArray(resp?.challenges) ? resp.challenges : [];
+        } catch (err) {
+            fetchError = err;
+        }
+        const noteUnavailable = () =>
+            logger.withCategory('ui').info(`  (unavailable — ${errorMessage(fetchError) || fetchError})`);
+
+        logger.withCategory('ui').info('\nBoost Window Open:');
+        if (challenges === null) {
+            noteUnavailable();
+        } else {
             const now = Math.floor(Date.now() / 1000);
             const open = openBoostWindows(challenges, now);
 
@@ -306,8 +360,24 @@ const showStatus = async () => {
                     logger.withCategory('ui').info(`  • ${title} — ${suffix}`);
                 });
             }
-        } catch (err) {
-            logger.withCategory('ui').info(`  (unavailable — ${errorMessage(err) || err})`);
+        }
+
+        logger.withCategory('ui').info('\nStanding:');
+        if (challenges === null) {
+            noteUnavailable();
+        } else {
+            const lines = challenges.flatMap((challenge) => {
+                const total = challenge?.member?.ranking?.total;
+                const tail = total ? rankingTail(total) : null;
+                return [tail === null ? null : `  • ${challenge.title} — ${tail}`, teamMatchLine(challenge)].filter(
+                    (line): line is string => line !== null,
+                );
+            });
+            if (lines.length === 0) {
+                logger.withCategory('ui').info('  None');
+            } else {
+                lines.forEach((line) => logger.withCategory('ui').info(line));
+            }
         }
     }
 

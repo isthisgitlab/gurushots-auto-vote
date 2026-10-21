@@ -1,6 +1,7 @@
 /**
  * CLI join commands: `discover` lists un-joined challenges (the open ones, and the upcoming ones
- * starting within `discoverUpcomingHours`), and
+ * starting within `discoverUpcomingHours` — a capped one shows `players/max` (· Full when it is
+ * full), and a join-unlock price GuruShots did not send readably shows as `price unknown`), and
  * `join <id> [--yes]` joins one. Paid joins (join_coins > 0) print the coin
  * cost and require an explicit `--yes` — `join <id>` alone never spends coins.
  * Reuses the shared IPC handlers so the join safety model lives in one place.
@@ -14,6 +15,7 @@ import { challengeKind, challengePhotoCount, listedTags } from '../../format/cha
 import { endTimeOf, formatEndTimeIn } from '../../format/endTime';
 import * as settings from '../../settings';
 import { effectiveTimezone } from '../../settings/uiDefaults';
+import { joinFreshRefusal } from '../../services/VotingLogic';
 
 import type { NullEventHandlers } from '../../types/cli';
 import type { ForgetStatus } from '../../types/join';
@@ -39,13 +41,19 @@ type DiscoverItem = Pick<
     | 'join_coins'
     | 'start_time'
     | 'close_time'
+    | 'players'
+    | 'max_players'
+    | 'member'
 >;
 
 /** One row of the listing. Everything that came from the server is stripped of terminal control. */
 const discoverLine = (c: DiscoverItem, nowSec: number, timezone: string): string => {
+    // The join-safety read the auto-joiner also makes: what would stop this challenge from joining.
+    const refusal = joinFreshRefusal(c);
     // A number, whatever the server sent: it is printed as text.
     const coins = Number(c?.join_coins);
-    const cost = coins > 0 ? `${coins} coins` : 'free';
+    // A price GuruShots did not send readably is not implied to be free.
+    const cost = refusal === 'price-unknown' ? 'price unknown' : coins > 0 ? `${coins} coins` : 'free';
     const name = stripTerminalControl(c?.title || c?.url || 'untitled');
     const type = stripTerminalControl(challengeKind(c)?.label || '?');
     const photoCount = challengePhotoCount(c);
@@ -59,7 +67,14 @@ const discoverLine = (c: DiscoverItem, nowSec: number, timezone: string): string
     // The end time, as the challenge card shows it: in the app's timezone setting, not the device clock.
     const close = endTimeOf(c?.close_time);
     const ends = close === null ? '' : ` — ends ${formatEndTimeIn(close, timezone, 'en-GB')}`;
-    return `  • [${stripTerminalControl(String(c?.id))}] ${name} (${type})${photos} — ${cost}${tagList}${timing}${ends}`;
+    // Capacity, only when both sides of the fraction are readable: `players/max`, and · Full when nothing more can join.
+    const maxPlayers = Number(c?.max_players);
+    const players = Number(c?.players);
+    const capacity =
+        Number.isFinite(maxPlayers) && maxPlayers > 0 && Number.isFinite(players)
+            ? ` — ${players}/${maxPlayers}${refusal === 'full' ? ' · Full' : ''}`
+            : '';
+    return `  • [${stripTerminalControl(String(c?.id))}] ${name} (${type})${photos} — ${cost}${capacity}${tagList}${timing}${ends}`;
 };
 
 const showDiscover = async () => {
@@ -184,6 +199,18 @@ const joinLine = (
                 return {
                     level: 'info',
                     text: `This account has already joined ${challengeId}; nothing was spent.`,
+                };
+            }
+            if (result?.reason === 'full') {
+                return {
+                    level: 'error',
+                    text: `Challenge ${challengeId} is full, so this attempt to join it spent no coins. Join another one, or check it on gurushots.com.`,
+                };
+            }
+            if (result?.reason === 'price-unknown') {
+                return {
+                    level: 'error',
+                    text: `GuruShots did not send the price for ${challengeId}, so it is not known what joining costs — no coins were charged. Run "discover" again to refresh it, or join the challenge on gurushots.com.`,
                 };
             }
             return { level: 'error', text: `Could not join ${challengeId}. No coins were charged.` };

@@ -395,6 +395,48 @@ describe('discover', () => {
         expect(all()).not.toContain('\r');
     });
 
+    test('a capped challenge shows players/max — · Full when full — and an unreadable side of the fraction is left out', async () => {
+        handlers['get-member-challenges'].mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    { id: 1, title: 'Full', join_coins: 0, players: 120, max_players: 120 },
+                    { id: 2, title: 'Room', join_coins: 0, players: 119, max_players: 120 },
+                    { id: 3, title: 'Uncapped', join_coins: 0 },
+                    { id: 4, title: 'ZeroCap', join_coins: 0, players: 5, max_players: 0 },
+                    { id: 5, title: 'NoCount', join_coins: 0, max_players: 120 },
+                ],
+            }),
+        );
+        await showDiscover();
+        const info = msgs('info');
+        expect(info).toContain('  • [1] Full (?) — free — 120/120 · Full');
+        expect(info).toContain('  • [2] Room (?) — free — 119/120');
+        expect(info).toContain('  • [3] Uncapped (?) — free');
+        expect(info).toContain('  • [4] ZeroCap (?) — free');
+        expect(info).toContain('  • [5] NoCount (?) — free');
+    });
+
+    test('a join-unlock price GuruShots did not send readably shows as "price unknown", not "free"', async () => {
+        handlers['get-member-challenges'].mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    { id: 1, title: 'Zero', join_coins: 0, member: { submit_state: 'join_unlock' } },
+                    { id: 2, title: 'Absent', member: { submit_state: 'join_unlock' } },
+                    { id: 3, title: 'Priced', join_coins: 40, member: { submit_state: 'join_unlock' } },
+                    { id: 4, title: 'Plain', join_coins: 0 },
+                ],
+            }),
+        );
+        await showDiscover();
+        const info = msgs('info');
+        expect(info).toContain('  • [1] Zero (?) — price unknown');
+        expect(info).toContain('  • [2] Absent (?) — price unknown');
+        expect(info).toContain('  • [3] Priced (?) — 40 coins');
+        expect(info).toContain('  • [4] Plain (?) — free');
+    });
+
     test('an upcoming challenge shows its tags before the start', async () => {
         handlers['get-member-challenges'].mockResolvedValue(
             invalid({
@@ -723,6 +765,22 @@ describe('join', () => {
         expect(await joinChallengeCmd('7')).toBe(1);
         expect(msgs('info')).toEqual(['This account has already joined 7; nothing was spent.']);
         expect(msgs('error')).toEqual([]);
+    });
+
+    test('a full challenge says so, and where to go instead', async () => {
+        handlers['join-challenge'].mockResolvedValue(invalid({ status: 'failed-no-charge', reason: 'full' }));
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([
+            'Challenge 7 is full, so this attempt to join it spent no coins. Join another one, or check it on gurushots.com.',
+        ]);
+    });
+
+    test('a price GuruShots did not send says so, and how to refresh it', async () => {
+        handlers['join-challenge'].mockResolvedValue(invalid({ status: 'failed-no-charge', reason: 'price-unknown' }));
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([
+            'GuruShots did not send the price for 7, so it is not known what joining costs — no coins were charged. Run "discover" again to refresh it, or join the challenge on gurushots.com.',
+        ]);
     });
 
     test('an invalid-args refusal prints the invalid-id text, not the retry fallback', async () => {
