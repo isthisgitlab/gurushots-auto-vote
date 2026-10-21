@@ -59,9 +59,12 @@ describe('the benchmark, prize and flag fixtures', () => {
         const tiers = challenge?.achievements_and_prizes ?? [];
         expect(tiers.slice(0, 3).map((tier) => tier.rank?.type ?? null)).toEqual(['MEMBER', 'IMAGE', null]);
         expect(tiers.some((tier) => tier.prizes?.some((prize) => prize.type === 'FREE_ENTRY'))).toBe(true);
+        // The real prize types, so the translated names are exercised in mock mode.
+        expect(tiers.some((tier) => tier.prizes?.some((prize) => prize.type === 'EXPOSURE_AUTOFILL'))).toBe(true);
+        expect(tiers.some((tier) => tier.prizes?.some((prize) => prize.type === 'PHOTO_SWAP'))).toBe(true);
         // The trailing tier is a rank window the server attached no prizes to.
         expect(tiers.at(-1)).toEqual({ title: 'First place', rank: { min_rank: 1, max_rank: 1, type: 'MEMBER' } });
-        expect(challenge?.first_prizes?.length).toBeGreaterThan(0);
+        expect(challenge?.first_prizes?.map((prize) => prize.type)).toEqual(['KEY', 'COINS']);
         // The one challenge where the levels rank is switched off.
         expect(challenge?.levels_rank_enable).toBe(false);
         expect(challenge?.guru_pick_enable).toBe(true);

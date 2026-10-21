@@ -1191,6 +1191,29 @@ describe('prize tiers', () => {
         expect(screen.getByText('Title only')).toBeTruthy();
     });
 
+    test('a single-rank window names the one rank, never a #n–n range', () => {
+        renderCard(
+            makeChallenge({
+                achievements_and_prizes: [
+                    {
+                        title: 'Champion',
+                        rank: { min_rank: 1, max_rank: 1, type: 'MEMBER' },
+                        prizes: [{ type: 'KEY', amount: 1 }],
+                    },
+                    {
+                        title: 'Shot of the day',
+                        rank: { min_rank: 3, max_rank: 3, type: 'IMAGE' },
+                        prizes: [],
+                    },
+                ],
+            }),
+        );
+
+        expect(screen.getByText('Top photographer #1')).toBeTruthy();
+        expect(screen.getByText('Top photo #3')).toBeTruthy();
+        expect(screen.queryByText(/#\d+–\d+/)).toBeNull();
+    });
+
     test('a prize type the app does not know is a generic label, never the raw code', () => {
         renderCard(
             makeChallenge({

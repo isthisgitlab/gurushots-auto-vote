@@ -8,6 +8,7 @@ import { simulateApiResponse, mockMethod } from '../simulate';
 import { HOUR, DAY } from '../time';
 import { SUGGESTED_PHOTO_IDS, hexPhotoId } from '../photoLibrary';
 import type * as joinModule from '../../api/join';
+import type { Prize } from '../../types/gurushots';
 
 type OpenChallengeRow = [
     id: number,
@@ -25,16 +26,17 @@ type OpenChallengeRow = [
 
 /**
  * What a listing shows besides the title: the challenge's own tags and badge,
- * how many photos it takes, and its join gating (`max_players` cap, the
- * unlock requirement — which the item itself never carries raw; the member's
- * submit state does, derived below).
+ * how many photos it takes, its first prizes, and its join gating (`max_players`
+ * cap, the unlock requirement — which the item itself never carries raw; the
+ * member's submit state does, derived below).
  */
 type ListingExtras = {
-    tags: string[];
+    tags?: string[];
     badge?: string;
-    max_photo_submits: number;
+    max_photo_submits?: number;
     max_players?: number;
     join_unlock?: boolean;
+    first_prizes?: Prize[];
 };
 
 /** An open challenge whose start and close are offsets (seconds) from `nowSec`. */
@@ -83,7 +85,24 @@ const OPEN_CHALLENGE_ROWS: OpenChallengeRow[] = [
         50,
         { tags: ['No comm', '3 photos'], max_photo_submits: 3 },
     ],
-    [900003, 'default', 250, 'Mock Paid Challenge', 'mock-paid', 2 * DAY, 5 * DAY, 120, 75],
+    // An ordinary paid one; with 900007 it carries first_prizes, so the Discover prize line renders in mock mode.
+    [
+        900003,
+        'default',
+        250,
+        'Mock Paid Challenge',
+        'mock-paid',
+        2 * DAY,
+        5 * DAY,
+        120,
+        75,
+        {
+            first_prizes: [
+                { type: 'KEY', amount: 1 },
+                { type: 'COINS', amount: 250 },
+            ],
+        },
+    ],
     [900004, 'flash', 100, 'Mock Unlock-Fails Challenge', 'mock-fail', 3 * DAY, 3 * DAY, 160, 100],
     // 900005: unlock succeeds but submit fails → exercises the
     // "coins charged but not joined" (charged-pending-submit) UI/CLI path.
@@ -101,7 +120,7 @@ const OPEN_CHALLENGE_ROWS: OpenChallengeRow[] = [
         150,
         { tags: ['Exhibition'], max_photo_submits: 1, max_players: 150 },
     ],
-    // 900007: unlock-gated with a price the listing can show.
+    // 900007: unlock-gated with a price the listing can show; with 900003 it carries first_prizes for the Discover prize line.
     [
         900007,
         'default',
@@ -112,7 +131,15 @@ const OPEN_CHALLENGE_ROWS: OpenChallengeRow[] = [
         7 * DAY,
         90,
         60,
-        { tags: ['Comm'], max_photo_submits: 2, join_unlock: true },
+        {
+            tags: ['Comm'],
+            max_photo_submits: 2,
+            join_unlock: true,
+            first_prizes: [
+                { type: 'PHOTO_SWAP', amount: 1 },
+                { type: 'EXPOSURE_AUTOFILL', amount: 50 },
+            ],
+        },
     ],
     // 900008: unlock-gated but the item carries no join_coins at all — the price is unknown.
     [

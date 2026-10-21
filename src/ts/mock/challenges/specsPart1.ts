@@ -313,20 +313,21 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
         // A benchmark row whose score the server left empty.
         benchmark: [{ benchmark: '10', score: '' }],
         firstPrizes: [
-            { type: 'CAMERA', amount: 1 },
-            { type: 'EXPOSURE', amount: 500 },
+            { type: 'KEY', amount: 1 },
+            { type: 'COINS', amount: 500 },
         ],
         achievementsAndPrizes: [
             {
                 title: 'Top 10 photographers',
                 rank: { min_rank: 1, max_rank: 10, type: 'MEMBER' },
-                prizes: [{ type: 'EXPOSURE', amount: 250 }],
+                prizes: [{ type: 'EXPOSURE_AUTOFILL', amount: 250 }],
             },
             {
                 title: 'Top 10 photos',
                 rank: { min_rank: 1, max_rank: 10, type: 'IMAGE' },
-                prizes: [{ type: 'RIBBON', amount: 1 }],
+                prizes: [{ type: 'PHOTO_SWAP', amount: 1 }],
             },
+            // The one unknown prize type, so the generic fallback stays covered.
             {
                 title: 'Every entrant',
                 rank: null,

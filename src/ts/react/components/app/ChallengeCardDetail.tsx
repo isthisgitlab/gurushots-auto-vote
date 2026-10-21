@@ -471,8 +471,17 @@ function PrizesPanel({ tiers }: { tiers: PrizeTier[] }) {
     const rankWindowOf = (tier: PrizeTier): string | null => {
         const { min_rank: min, max_rank: max, type } = tier.rank ?? {};
         if (typeof min !== 'number' || typeof max !== 'number') return null;
-        if (type === 'MEMBER') return interp(t('app.prizeTierTopPhotographer'), { min, max });
-        if (type === 'IMAGE') return interp(t('app.prizeTierTopPhoto'), { min, max });
+        // A one-rank window names the rank alone, never a "#n–n" range.
+        if (type === 'MEMBER') {
+            return min === max
+                ? interp(t('app.prizeTierTopPhotographerSingle'), { min })
+                : interp(t('app.prizeTierTopPhotographer'), { min, max });
+        }
+        if (type === 'IMAGE') {
+            return min === max
+                ? interp(t('app.prizeTierTopPhotoSingle'), { min })
+                : interp(t('app.prizeTierTopPhoto'), { min, max });
+        }
         return null;
     };
     return (

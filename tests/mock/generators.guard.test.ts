@@ -174,6 +174,10 @@ describe('generated mock payload guards', () => {
                 close_time: 1768910400,
                 entries: 120,
                 players: 75,
+                first_prizes: [
+                    { type: 'KEY', amount: 1 },
+                    { type: 'COINS', amount: 250 },
+                ],
                 member: { submit_state: 'join' },
             },
             {
@@ -227,6 +231,10 @@ describe('generated mock payload guards', () => {
                 players: 60,
                 tags: ['Comm'],
                 max_photo_submits: 2,
+                first_prizes: [
+                    { type: 'PHOTO_SWAP', amount: 1 },
+                    { type: 'EXPOSURE_AUTOFILL', amount: 50 },
+                ],
                 member: { submit_state: 'join_unlock' },
             },
             {

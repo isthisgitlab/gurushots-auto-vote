@@ -527,11 +527,11 @@
             "new_ranking_enable": true,
             "first_prizes": [
                 {
-                    "type": "CAMERA",
+                    "type": "KEY",
                     "amount": 1
                 },
                 {
-                    "type": "EXPOSURE",
+                    "type": "COINS",
                     "amount": 500
                 }
             ],
@@ -545,7 +545,7 @@
                     },
                     "prizes": [
                         {
-                            "type": "EXPOSURE",
+                            "type": "EXPOSURE_AUTOFILL",
                             "amount": 250
                         }
                     ]
@@ -559,7 +559,7 @@
                     },
                     "prizes": [
                         {
-                            "type": "RIBBON",
+                            "type": "PHOTO_SWAP",
                             "amount": 1
                         }
                     ]
