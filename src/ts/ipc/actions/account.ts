@@ -17,7 +17,14 @@ import { sanitizeForLog, refuseInvalidArgs } from './shared';
 
 import type { IpcReplyFn } from '../registerHandlers';
 import type { joinChallengeSingle } from '../../services/joinChallenges';
-import type { ActiveChallengesResponse, Bankroll, Challenge, OpenChallenge } from '../../types/gurushots';
+import type {
+    ActiveChallengesResponse,
+    Bankroll,
+    Challenge,
+    ChosenAnnotation,
+    DiscoverChallenge,
+    OpenChallenge,
+} from '../../types/gurushots';
 
 const handleGetAutoClaimStatus = (async () => {
     try {
@@ -139,6 +146,53 @@ const idsOf = (items: ReadonlyArray<Challenge | null>): Array<string | number> =
     items.flatMap((c) => (c?.id == null ? [] : [c.id]));
 
 /**
+ * The challenge's suggested photo ids from the strategy's in-memory cache — an enrichment, never a
+ * fetch: any failure (the cache being cold, a challenge without an id) resolves empty, and the
+ * listing always lands.
+ */
+const suggestedIds = async (
+    token: string,
+    strategy: apiFactory.ApiStrategy,
+    id: Challenge['id'] | null | undefined,
+): Promise<string[]> => {
+    if (id === null || id === undefined) return [];
+    try {
+        return await strategy.getSuggestedPhotoIds(token, String(id));
+    } catch {
+        return [];
+    }
+};
+
+/**
+ * What a Discover row (and the CLI's `discover`, and the join paths) reads off a listing item: an
+ * explicit pick, so no other field GuruShots carries — `guru_info`, ranking payloads, anything
+ * server-side — ever crosses IPC with the list. `member` is narrowed to the one field the join's
+ * fresh-join guard reads (`submit_state`). `suggestedPhotoIds` rides along only when there are any:
+ * the field stays absent, not empty, on a challenge GuruShots suggests nothing for.
+ */
+const pickDiscoverItem = (item: DiscoverChallenge, chosen: ChosenAnnotation, suggested: string[]): OpenChallenge => ({
+    id: item.id,
+    title: item.title,
+    url: item.url,
+    type: item.type,
+    badge: item.badge,
+    tags: item.tags,
+    status: item.status,
+    start_time: item.start_time,
+    close_time: item.close_time,
+    entries: item.entries,
+    players: item.players,
+    max_players: item.max_players,
+    votes: item.votes,
+    join_coins: item.join_coins,
+    max_photo_submits: item.max_photo_submits,
+    first_prizes: item.first_prizes,
+    member: item.member && { submit_state: item.member.submit_state },
+    ...(suggested.length > 0 ? { suggestedPhotoIds: suggested } : {}),
+    ...chosen,
+});
+
+/**
  * The upcoming list, or null when it could not be had: a failure never costs the open list its
  * place. The log line carries the filter and the kind of failure only — no token, no member.
  */
@@ -194,7 +248,11 @@ const handleGetMemberChallenges = (async () => {
         const annotate = await chosenAnnotator(guard.token);
         return {
             success: true as const,
-            items: merged.map((item): OpenChallenge => ({ ...item, ...annotate(item) })),
+            items: await Promise.all(
+                merged.map(async (item) =>
+                    pickDiscoverItem(item, annotate(item), await suggestedIds(guard.token, strategy, item.id)),
+                ),
+            ),
         };
     } catch (error) {
         logger.withCategory('api').error('Error handling get-member-challenges request:', error);

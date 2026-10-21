@@ -10,7 +10,7 @@ import { mockTranslator } from './helpers/setup';
 import { ChallengeBadgeRow } from '@/components/app/ChallengeBadgeRow';
 import { app } from '../../src/ts/translations/english';
 import { buildChallenge } from '../helpers/challengeFixtures';
-import type { TeamMatch } from '../../src/ts/types/gurushots';
+import type { TeamMatch, TeamStanding } from '../../src/ts/types/gurushots';
 
 const english = (key: string) =>
     key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
@@ -97,5 +97,63 @@ describe('ChallengeBadgeRow — team match', () => {
 
         expect(badges(container)).toHaveLength(0);
         expect(container.firstChild).toBeNull();
+    });
+});
+
+describe('ChallengeBadgeRow — team standing', () => {
+    const active = (over: Partial<Omit<Extract<TeamStanding, { kind: 'active' }>, 'kind'>> = {}): TeamStanding => ({
+        kind: 'active',
+        position: 3,
+        votes: 1200,
+        activeSlots: 5,
+        cushion: null,
+        ...over,
+    });
+    const renderStanding = (me: TeamStanding | null, running?: boolean) =>
+        renderRow({ ...teamMatch(7514, 8258), ...(running === undefined ? {} : { running }), me });
+
+    test('our place among the active players, and the lead over the best standby when there is one', () => {
+        const { container } = renderStanding(active({ cushion: 93 }));
+
+        const [, , , standing] = badges(container);
+        expect(badges(container)).toHaveLength(4);
+        expect(standing.textContent).toBe(`You #3 · active · +${(93).toLocaleString()} over standby`);
+    });
+
+    test.each([
+        ['no cushion recorded', active({ cushion: null }), 'You #3 · active'],
+        [
+            'a cushion of 0 stays visible',
+            active({ cushion: 0 }),
+            `You #3 · active · +${(0).toLocaleString()} over standby`,
+        ],
+        [
+            'a standby waiting for votes to move up',
+            { kind: 'standby', position: 9, votes: 640, activeSlots: 5, votesToActive: 107 },
+            `Standby · ${(107).toLocaleString()} to active`,
+        ],
+    ] as Array<[string, TeamStanding, string]>)('%s', (_name, me, expected) => {
+        const { container } = renderStanding(me);
+
+        expect(badges(container)).toHaveLength(4);
+        expect(badges(container)[3].textContent).toBe(expected);
+    });
+
+    test('no standing badge when the standing is missing or unreadable', () => {
+        const withNull = renderStanding(null);
+        expect(badges(withNull.container)).toHaveLength(3);
+        withNull.unmount();
+
+        // `me` absent altogether (an older shape) reads the same.
+        const absent = renderRow(teamMatch(7514, 8258));
+        expect(badges(absent.container)).toHaveLength(3);
+    });
+
+    test('a match that is no longer running says so in place of the standing', () => {
+        const { container } = renderStanding(active({ cushion: 93 }), false);
+
+        const all = badges(container);
+        expect(all).toHaveLength(4);
+        expect(all[3].textContent).toBe('Match not running');
     });
 });

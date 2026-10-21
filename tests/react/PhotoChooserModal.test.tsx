@@ -120,6 +120,7 @@ const setup = (
         challengeId: string | number | null;
         savedCount: number;
         canSuggest: boolean;
+        recommendedIds: string[];
         reloadSaved: jest.MockedFunction<() => Promise<string[] | null>>;
         onSave: jest.MockedFunction<(ids: string[]) => boolean | Promise<boolean>>;
         onClose: jest.MockedFunction<() => void>;
@@ -2922,5 +2923,31 @@ describe('Load more', () => {
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
         await waitFor(() => expect(getLibrary().mock.calls[1]).toEqual([7, undefined, 'fresh', 'submit', 0, 120]));
+    });
+});
+
+describe('recommended marks', () => {
+    // A marked tile's accessible name starts with the mark (WCAG 2.5.3), so it is found by that name.
+    const markedTile = (n: number) =>
+        screen.getByRole('button', { name: new RegExp(`^Recommended photo\\. Photo ${shortOf(n)}:`) });
+
+    test('the ids the Discover row handed in carry the mark, visible and in the name, and only they', async () => {
+        setup({ recommendedIds: [idOf(2)] });
+        await opened();
+
+        expect(within(markedTile(2)).getByText('Recommended photo')).toBeTruthy();
+        expect(markedTile(2).getAttribute('aria-label')).toMatch(
+            new RegExp(`^Recommended photo\\. Photo ${shortOf(2)}:`),
+        );
+        expect(within(tile(1)).queryByText('Recommended photo')).toBeNull();
+        expect(tile(1).getAttribute('aria-label')).not.toMatch(/^Recommended photo/);
+        expect(within(tile(3)).queryByText('Recommended photo')).toBeNull();
+    });
+
+    test('without the prop no tile is marked', async () => {
+        setup();
+        await opened();
+
+        for (const n of [1, 2, 3]) expect(within(tile(n)).queryByText('Recommended photo')).toBeNull();
     });
 });

@@ -46,6 +46,7 @@ function PhotoChooserBody({
     challengeId,
     clearMeansInherit,
     canSuggest,
+    recommendedIds,
     reloadSaved,
     onSave,
     onClose,
@@ -56,6 +57,8 @@ function PhotoChooserBody({
     challengeId: string | number | null;
     clearMeansInherit: boolean;
     canSuggest: boolean;
+    /** The photo ids GuruShots suggests for the challenge, marked on their tiles (a Discover row's chooser). */
+    recommendedIds?: ReadonlyArray<string>;
     reloadSaved?: () => Promise<string[] | null>;
     onSave: (ids: string[]) => boolean | Promise<boolean>;
     onClose: () => void;
@@ -252,6 +255,7 @@ function PhotoChooserBody({
                 extraPhotos={picker.suggestedKnown}
                 idleMemberId={picker.suggestedMemberId}
                 idleIds={picker.idleShown}
+                recommendedIds={recommendedIds}
             />
             <StickyModalFooter>
                 <ChooserFooter
@@ -301,6 +305,7 @@ export function PhotoChooserModal({
     challengeId = null,
     clearMeansInherit = false,
     canSuggest = true,
+    recommendedIds,
     reloadSaved,
     onSave,
 }: {
@@ -312,6 +317,8 @@ export function PhotoChooserModal({
     challengeId?: string | number | null;
     clearMeansInherit?: boolean;
     canSuggest?: boolean;
+    /** The photo ids GuruShots suggests for the challenge; their tiles carry the recommended mark. */
+    recommendedIds?: ReadonlyArray<string>;
     /** Read the saved list again, with its ids (null when it can't be): for a `value` that withheld them. */
     reloadSaved?: () => Promise<string[] | null>;
     onSave: (ids: string[]) => boolean | Promise<boolean>;
@@ -341,6 +348,7 @@ export function PhotoChooserModal({
                     challengeId={challengeId}
                     clearMeansInherit={clearMeansInherit}
                     canSuggest={canSuggest}
+                    recommendedIds={recommendedIds}
                     reloadSaved={reloadSaved}
                     onSave={onSave}
                     onClose={onClose}

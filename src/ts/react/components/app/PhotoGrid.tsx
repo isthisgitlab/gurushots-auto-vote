@@ -61,6 +61,7 @@ export function PhotoGrid({
     checkingMember = false,
     savedPicks = null,
     keepIds,
+    recommendedIds,
 }: {
     state: ListState;
     known: Map<string, LibraryPhoto>;
@@ -118,8 +119,11 @@ export function PhotoGrid({
     savedPicks?: { memberId: string | null } | null;
     /** Photos the submit modal's grid keeps showing, with their reason, whatever the listing says (taken back during it). */
     keepIds?: ReadonlySet<string>;
+    /** The photos GuruShots suggests for the challenge; their tiles carry the recommended mark. */
+    recommendedIds?: ReadonlyArray<string>;
 }) {
     const { t } = useTranslation();
+    const recommended = new Set(recommendedIds ?? []);
     // Every won id this chooser has been told of: a search that no longer lists a chosen photo still knows it has won.
     const everWon = useRef(new Set<string>());
     // The element that last had the keyboard focus, and the hidden-count line an element the fresh read
@@ -180,6 +184,7 @@ export function PhotoGrid({
                             memberId={idleMemberId}
                             selected={chosenIdle.has(id)}
                             position={position(id)}
+                            recommended={recommended.has(id)}
                             blockedReason={null}
                             atCap={atCap}
                             fullKey={fullKey}
@@ -296,6 +301,7 @@ export function PhotoGrid({
                 memberId={listing.memberId}
                 selected={chosen.has(photo.id)}
                 position={position}
+                recommended={recommended.has(photo.id)}
                 blockedReason={blockedReasonOf(photo)}
                 atCap={atCap}
                 fullKey={fullKey}

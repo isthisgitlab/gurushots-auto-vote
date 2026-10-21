@@ -1778,3 +1778,114 @@ describe('chosen photos', () => {
         expect(screen.queryByText('app.discoverChosenInherited')).toBeNull();
     });
 });
+
+describe('capacity and join safety on a row', () => {
+    const english = (key: string) =>
+        key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
+    // The full challenge: its head count has reached the cap the listing names.
+    const fullOne = invalid<OpenChallenge>({
+        ...items[0],
+        id: 900003,
+        title: 'Full One',
+        players: 150,
+        max_players: 150,
+        member: { submit_state: 'FULL' },
+    });
+    const rows = (...extra: OpenChallenge[]) =>
+        listMock().mockResolvedValue(invalid({ success: true, items: [...items, ...extra] }));
+
+    beforeEach(() => mockTranslator.t.mockImplementation(english));
+    afterEach(() => mockTranslator.t.mockImplementation((key) => key));
+
+    test('a capped row shows the head count and Full, and its Join is a disabled control named for the challenge', async () => {
+        window.api.getMemberChallenges = rows(fullOne);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Full One');
+
+        const row = screen.getByText('Full One').closest('li')!;
+        expect(row.textContent).toContain(`👥 ${(150).toLocaleString()}/${(150).toLocaleString()} · Full`);
+        const join = screen.getByRole<HTMLButtonElement>('button', { name: 'Join Full One — the challenge is full' });
+        expect(join.disabled).toBe(true);
+        expect(join.textContent).toBe('Full');
+    });
+
+    test('an uncapped row says nothing about capacity', async () => {
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Free One');
+
+        const row = screen.getByText('Free One').closest('li')!;
+        expect(row.textContent).not.toContain('150/150');
+        expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Join Free One' }).disabled).toBe(false);
+    });
+
+    test('a price GuruShots did not send: the row says so, hints at the next step, and the Join is disabled', async () => {
+        const mystery = invalid<OpenChallenge>({
+            ...items[0],
+            id: 900004,
+            title: 'Mystery',
+            join_coins: undefined,
+            member: { submit_state: 'join_unlock' },
+        });
+        window.api.getMemberChallenges = rows(mystery);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Mystery');
+
+        const row = screen.getByText('Mystery').closest('li')!;
+        expect(screen.getByText('Price unknown')).toBeTruthy();
+        expect(row.textContent).toContain(
+            'GuruShots did not send it, so the app cannot ask you to confirm a spend. Refresh the list, or join the challenge on gurushots.com.',
+        );
+        const join = screen.getByRole<HTMLButtonElement>('button', { name: 'Join Mystery — its price is unknown' });
+        expect(join.disabled).toBe(true);
+        expect(join.textContent).toBe('Join');
+    });
+
+    test('the first prizes read as one line of translated type × amount', async () => {
+        const prized = invalid<OpenChallenge>({
+            ...items[0],
+            id: 900005,
+            title: 'Prized',
+            first_prizes: [
+                { type: 'KEY', amount: 1 },
+                { type: 'COINS', amount: 250 },
+            ],
+        });
+        window.api.getMemberChallenges = rows(prized);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Prized');
+
+        const row = screen.getByText('Prized').closest('li')!;
+        expect(row.textContent).toContain(`Prize: Key × 1, Coins × ${(250).toLocaleString()}`);
+    });
+
+    test('a row with suggested photos is marked as recommended by GuruShots', async () => {
+        const suggested = invalid<OpenChallenge>({
+            ...items[0],
+            id: 900006,
+            title: 'Suggested',
+            suggestedPhotoIds: [`${'a'.repeat(32)}`],
+        });
+        window.api.getMemberChallenges = rows(suggested);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Suggested');
+
+        expect(screen.getByText('Recommended by GuruShots')).toBeTruthy();
+        expect(screen.getByText('Recommended by GuruShots').closest('li')!.textContent).toContain('Suggested');
+    });
+
+    test.each([
+        ['full', 'errors.joinRefusedFull'],
+        ['price-unknown', 'errors.joinRefusedPriceUnknown'],
+    ])('a join the live list refused as %s gets the refusal text, not the generic one', async (reason, key) => {
+        window.api.joinChallenge = joinMock().mockResolvedValue(
+            invalid({ success: false, status: 'failed-no-charge', reason }),
+        );
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Free One');
+        fireEvent.click(screen.getByRole('button', { name: 'Join Free One' }));
+
+        const line = await screen.findByText(key);
+        expect(line.closest('[role="alert"]')).not.toBeNull();
+        expect(screen.queryByText('app.discoverFailedNoCharge')).toBeNull();
+    });
+});

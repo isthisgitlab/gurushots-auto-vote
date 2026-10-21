@@ -134,6 +134,7 @@ function PhotoTileBase({
     selected,
     position,
     rank = null,
+    recommended = false,
     blockedReason,
     atCap,
     fullKey,
@@ -149,6 +150,8 @@ function PhotoTileBase({
     position: number | null;
     /** Where the photo stands in the suggestions (1-based), for a suggestion's tile; null otherwise. */
     rank?: number | null;
+    /** GuruShots suggests the photo for the challenge (a Discover row's chooser). */
+    recommended?: boolean;
     blockedReason: string | null;
     atCap: boolean;
     /** The translation key of what a tile that cannot be added because the selection is full says. */
@@ -177,7 +180,7 @@ function PhotoTileBase({
         <button
             type="button"
             aria-pressed={selected}
-            aria-label={withRank(
+            aria-label={`${recommended ? `${t('app.photoRecommended')}. ` : ''}${withRank(
                 withPosition(
                     interp(t('app.photoChooserTileLabel'), {
                         id: shortId(photo.id),
@@ -189,13 +192,16 @@ function PhotoTileBase({
                 ),
                 t,
                 rank,
-            )}
+            )}`}
             aria-disabled={unavailable}
             className={`${TILE_BASE} ${tone}`}
             onClick={() => {
                 if (!unavailable) onToggle(photo.id);
             }}
         >
+            {recommended && (
+                <span className="badge badge-outline badge-sm self-start">{t('app.photoRecommended')}</span>
+            )}
             <PositionBadge position={position} />
             <RankBadge rank={rank} />
             <TileImage show={showImage} imageRef={imageRef} url={url} dim={dim} fallback={labels} />

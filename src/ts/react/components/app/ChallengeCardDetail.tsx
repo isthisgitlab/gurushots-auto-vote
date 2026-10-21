@@ -4,6 +4,7 @@ import { formatEndTime, getLevelStatus, isBoostAvailable, statusText } from '@/u
 import { getNextLevelInfo } from '@/utils/challengeCardView';
 import { sanitizeWelcomeMessage } from '@/utils/sanitizeWelcomeMessage';
 import { statusBadgeClass, toneBadgeClass } from '@/utils/statTone';
+import { prizeItemsText } from '@/utils/prizeText';
 import { Countdown } from './Countdown';
 import type { TimeRemaining } from './Countdown';
 import { DeadlineTimeline } from './DeadlineTimeline';
@@ -22,7 +23,7 @@ import { canStillFire, livePinKindOf, unusablePins } from '../../../voting/entry
 import { challengePageUrl } from '@/utils/challengePageUrl';
 
 import type { ComponentChildren } from 'preact';
-import type { Bankroll, Challenge, RankingTotal } from '../../../types/gurushots';
+import type { Bankroll, Challenge, PrizeTier, RankingTotal } from '../../../types/gurushots';
 import type { ChallengeCardView } from './ChallengeCard';
 import type { ChallengeCardActionSet } from './ChallengeCardActions';
 import type { OpenSwapPick } from './SwapEntryButton';
@@ -38,6 +39,44 @@ export type EntryPinsState = ReturnType<typeof useEntryPinsModule.useEntryPins>;
 
 // The value line of a stat cell; Ends alone drops to text-xs, since a long date string needs the room.
 const STAT_VALUE = 'text-sm font-semibold tabular-nums';
+
+/** The benchmark groups the card reads, keyed by their "Top n" rank. */
+type BenchmarkScores = { 1?: number; 10?: number; 100?: number };
+
+/**
+ * The benchmark scores of a ranking total as integers, keyed 1 / 10 / 100. A row the server left
+ * blank or garbled — or a group the card does not read — drops out.
+ */
+const benchmarkScores = (rows: RankingTotal['benchmark']): BenchmarkScores => {
+    const scores: BenchmarkScores = {};
+    for (const row of Array.isArray(rows) ? rows : []) {
+        const group = /^top\s*(\d+)$/i.exec(String(row?.benchmark ?? '').trim());
+        // Number('') is 0: a score the server left blank is unreadable, not zero.
+        const scoreText = String(row?.score ?? '').trim();
+        const score = scoreText === '' ? Number.NaN : Number(scoreText);
+        if (!group || !Number.isInteger(score)) continue;
+        if (group[1] === '1' || group[1] === '10' || group[1] === '100') scores[group[1]] = score;
+    }
+    return scores;
+};
+
+/**
+ * The gap under the benchmark scores: to the top 100 while we are outside it, else to the next closer
+ * group (rank 10 and better chases "1", rank 100 and better "10"). At rank 1, when the votes already
+ * reach the score, or when its row was unreadable, there is no gap to chase.
+ */
+const benchmarkGap = (
+    rank: number,
+    votes: number,
+    scores: BenchmarkScores,
+): { target: 1 | 10 | 100; n: number } | null => {
+    const target = rank > 100 ? 100 : rank > 10 ? 10 : rank > 1 ? 1 : null;
+    if (target === null) return null;
+    const score = scores[target];
+    if (score === undefined) return null;
+    const n = score - votes + 1;
+    return n > 0 ? { target, n } : null;
+};
 
 /**
  * One labelled cell of the detailed card's stat grids.
@@ -119,7 +158,10 @@ function DetailHeader({
 
 /**
  * User progress — full bar + level + next-level info. Rendered only once the
- * member has votes in the challenge.
+ * member has votes in the challenge. A benchmark challenge also reads the scores
+ * to chase (`Top 1 / 10 / 100`) and, when the rank and votes can name one, the
+ * gap to the next group. `levels_rank_enable: false` hides the level lines alone:
+ * the rank, the votes and the bar are not level ranking.
  */
 function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; userProgress: RankingTotal }) {
     const { t } = useTranslation();
@@ -129,6 +171,24 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
         userProgress.level as number,
         userProgress.level_name as string,
     );
+    const showLevels = challenge.levels_rank_enable !== false;
+    const scores = benchmarkScores(userProgress.benchmark);
+    const listed = ([1, 10, 100] as const)
+        .map((group) => scores[group])
+        .filter((score) => score !== undefined)
+        .map((score) => score.toLocaleString());
+    // The gap names a positive integer rank and vote count: anything else the server sends drops it.
+    const rank = userProgress.rank;
+    const votes = userProgress.votes;
+    const gap =
+        typeof rank === 'number' &&
+        Number.isInteger(rank) &&
+        rank > 0 &&
+        typeof votes === 'number' &&
+        Number.isInteger(votes) &&
+        votes > 0
+            ? benchmarkGap(rank, votes, scores)
+            : null;
 
     return (
         <div className="bg-base-200 rounded p-2">
@@ -136,9 +196,11 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
                 <span id={progressLabelId} className="text-xs font-medium">
                     {t('app.yourProgress')}
                 </span>
-                <span className={`badge badge-sm ${colorClass}`}>
-                    {userProgress.level_name} {userProgress.level}
-                </span>
+                {showLevels && (
+                    <span className={`badge badge-sm ${colorClass}`}>
+                        {userProgress.level_name} {userProgress.level}
+                    </span>
+                )}
             </div>
             <div className="flex justify-between text-xs mb-1">
                 <span>
@@ -148,6 +210,13 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
                     {userProgress.votes} {t('app.votes')}
                 </span>
             </div>
+            {(listed.length > 0 || gap !== null) && (
+                <div className="text-xs text-base-content/70 mb-1">
+                    {listed.length > 0 && interp(t('app.benchmarkScores'), { scores: listed.join(' / ') })}
+                    {listed.length > 0 && gap !== null && ' · '}
+                    {gap !== null && interp(t('app.benchmarkGap'), { n: gap.n.toLocaleString(), target: gap.target })}
+                </div>
+            )}
             <div className="flex items-center gap-2">
                 <progress
                     className={`progress ${progressClass} w-full`}
@@ -162,7 +231,7 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
                     </span>
                 )}
             </div>
-            {challenge.type !== 'flash' && (
+            {showLevels && challenge.type !== 'flash' && (
                 <div className="text-xs text-base-content/70 mt-1">{userProgress.next_message}</div>
             )}
             {nextLevelInfo && (
@@ -427,6 +496,42 @@ function EntryDetails({
 }
 
 /**
+ * The challenge's achievement tiers: each with its title, the rank window it covers (top photographers or
+ * top photos — a tier with no readable rank window shows its title alone), and its prizes as type × amount.
+ * Tier titles are the server's text: React text children only.
+ */
+function PrizesPanel({ tiers }: { tiers: PrizeTier[] }) {
+    const { t } = useTranslation();
+    const rankWindowOf = (tier: PrizeTier): string | null => {
+        const { min_rank: min, max_rank: max, type } = tier.rank ?? {};
+        if (typeof min !== 'number' || typeof max !== 'number') return null;
+        if (type === 'MEMBER') return interp(t('app.prizeTierTopPhotographer'), { min, max });
+        if (type === 'IMAGE') return interp(t('app.prizeTierTopPhoto'), { min, max });
+        return null;
+    };
+    return (
+        <div className="text-xs">
+            <div className="font-medium text-base-content/70">{t('app.prize')}</div>
+            {tiers.map((tier, index) => {
+                const title = typeof tier.title === 'string' ? tier.title.trim() : '';
+                const prizes = tier.prizes ? prizeItemsText(tier.prizes, t) : '';
+                const parts = [title, rankWindowOf(tier), prizes].filter(Boolean);
+                if (parts.length === 0) return null;
+                return (
+                    <div key={index} className="mt-1 flex flex-wrap gap-x-2">
+                        {parts.map((part, partIndex) => (
+                            <span key={partIndex} className="wrap-anywhere">
+                                {part}
+                            </span>
+                        ))}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+/**
  * The detailed challenge card body: every stat and every action. All values
  * are derived by the parent ChallengeCard (see utils/challengeCardView) and
  * passed in, so this layout and the compact tile never disagree.
@@ -471,6 +576,11 @@ export function ChallengeCardDetail({
     const { t } = useTranslation();
     const { userProgress } = view;
     const cardTags = stringTags(challenge);
+    const prizeTiers = challenge.achievements_and_prizes ?? [];
+    const trackBadges: Array<[string, string]> = [];
+    if (challenge.top_photographer_enable) trackBadges.push(['🏆', 'app.trackTopPhotographer']);
+    if (challenge.top_photo_enable) trackBadges.push(['📷', 'app.trackTopPhoto']);
+    if (challenge.guru_pick_enable) trackBadges.push(['⭐', 'app.trackGurusPick']);
 
     return (
         <div className="space-y-2">
@@ -498,6 +608,8 @@ export function ChallengeCardDetail({
                 </StatCell>
             </div>
 
+            {prizeTiers.length > 0 && <PrizesPanel tiers={prizeTiers} />}
+
             {userProgress && (userProgress.votes ?? 0) > 0 && (
                 <UserProgressPanel challenge={challenge} userProgress={userProgress} />
             )}
@@ -510,10 +622,15 @@ export function ChallengeCardDetail({
                 actions={actions}
             />
 
-            {/* Challenge Tags */}
-            {cardTags.length > 0 && (
+            {/* Challenge tags, and what the challenge tracks (top photographer / top photo / Guru's pick). */}
+            {(cardTags.length > 0 || trackBadges.length > 0) && (
                 <div className="flex flex-wrap gap-1">
-                    <ChallengeTagBadges tags={cardTags} />
+                    {cardTags.length > 0 && <ChallengeTagBadges tags={cardTags} />}
+                    {trackBadges.map(([icon, key]) => (
+                        <span key={key} className="badge badge-ghost badge-sm">
+                            {icon} {t(key)}
+                        </span>
+                    ))}
                 </div>
             )}
 

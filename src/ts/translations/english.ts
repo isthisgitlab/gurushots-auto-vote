@@ -96,6 +96,10 @@ export const errors = {
     libraryReadFailed: 'Your photos could not be read. The library read failed before it finished. Try again.',
     accountChanged: 'The account changed while the list was loading, so the result was dropped. Open the list again.',
     accountCheckFailed: 'The account could not be checked. GuruShots did not answer. Try again in a moment.',
+    joinRefusedFull:
+        'Could not join: the challenge is full, so no player slot is left. Nothing was charged. Refresh the list, and join if a slot frees up.',
+    joinRefusedPriceUnknown:
+        "Could not join: the challenge's price is unknown — GuruShots did not send it, so the app could not confirm a spend. Nothing was charged. Refresh the list, or join the challenge on gurushots.com.",
     tokenNotSaved:
         "Your login was accepted, but it could not be saved. The settings could not be written. Check the settings file's permissions and the free disk space (a settings notice may say more), then log in again.",
     tokenNotSavedAndroid:
@@ -710,6 +714,13 @@ export const app = {
     discoverUntitled: 'Untitled challenge',
     discoverCostFree: 'free',
     discoverCostPaid: '{coins} coins',
+    discoverFull: 'Full',
+    discoverJoinFullLabel: 'Join {title} — the challenge is full',
+    discoverPriceUnknown: 'Price unknown',
+    discoverJoinPriceUnknownLabel: 'Join {title} — its price is unknown',
+    discoverPriceUnknownHint:
+        'The price of this challenge is unknown: GuruShots did not send it, so the app cannot ask you to confirm a spend. Refresh the list, or join the challenge on gurushots.com.',
+    discoverRecommended: 'Recommended by GuruShots',
     discoverJoin: 'Join',
     discoverJoinPaid: 'Join (paid)',
     discoverJoinLabel: 'Join {title}',
@@ -783,6 +794,10 @@ export const app = {
     teamMatchAhead: 'ahead',
     teamMatchBehind: 'behind',
     teamMatchTied: 'tied',
+    teamStandingActive: 'You #{position} · active',
+    teamStandingOverStandby: '+{votes} over standby',
+    teamStandingStandby: 'Standby · {votes} to active',
+    teamMatchNotRunning: 'Match not running',
     teamChallenge: 'Team match',
     customBadge: 'custom',
     customSettingsHint: 'Has custom settings',
@@ -819,6 +834,7 @@ export const app = {
     chosenPhotosOnlyReachHint:
         'This applies to every challenge it covers: auto-join and auto-submit skip each challenge that has no usable chosen photo.',
     photoChooserTitle: 'Choose photos',
+    photoRecommended: 'Recommended photo',
     photoChooserHelpAuto:
         "The app uses these photos first, and they must still pass your tag filters. It ranks them the way it ranks its own picks, or goes by the numbers shown here when “Use Chosen Photos in the order I picked them” is on (Auto-Submit settings: the global defaults, a challenge rule, or this challenge's own settings). Nothing is read until you load, search or press Auto.",
     photoChooserHelpChallenge:
@@ -1285,6 +1301,20 @@ export const app = {
     prerelease: 'Pre-release',
     prize: 'Prize',
     rank: 'Rank',
+    // Challenge detail: benchmark scores, prize tiers, track badges
+    benchmarkScores: 'Top 1 / 10 / 100: {scores}',
+    benchmarkGap: '+{n} to top {target}',
+    prizeTierTopPhotographer: 'Top photographer #{min}–{max}',
+    prizeTierTopPhoto: 'Top photo #{min}–{max}',
+    prizeKey: 'Key',
+    prizeCoins: 'Coins',
+    prizePhotoSwap: 'Photo swap',
+    prizeExposureAutofill: 'Exposure autofill',
+    prizeUnknown: 'Prize',
+    prizeAmount: '{name} × {amount}',
+    trackTopPhotographer: 'Top photographer',
+    trackTopPhoto: 'Top photo',
+    trackGurusPick: "Guru's pick",
     rememberLoginSession: 'Remember login session',
     remindMeLater: 'Remind Me Later',
     removeCurrentTimezone: 'Remove current timezone',

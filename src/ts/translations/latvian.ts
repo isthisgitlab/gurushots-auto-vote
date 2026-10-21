@@ -103,6 +103,10 @@ export const errors = {
     webShellToken:
         'Šī lapa nevar sazināties ar tīmekļa serveri. Tā ir atvērta bez šīs palaišanas piekļuves tokena, vai serveris kopš tā laika ir restartēts. Atver adresi, ko izvadīja pnpm web.',
     accountCheckFailed: 'Kontu neizdevās pārbaudīt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
+    joinRefusedFull:
+        'Neizdevās pievienoties: izaicinājums ir pilns, brīvu vietu vairs nav. Monētas netika norakstītas. Atsvaidzini sarakstu un pievienojies, tiklīdz atbrīvojas kāda vieta.',
+    joinRefusedPriceUnknown:
+        'Neizdevās pievienoties: šī izaicinājuma cena nav zināma — GuruShots to nenosūtīja, tāpēc lietotne nevarēja lūgt atļauju iztērēt monētas. Monētas netika norakstītas. Atsvaidzini sarakstu vai pievienojies izaicinājumam GuruShots vietnē.',
     boundaryBody:
         'Daļa lietotnes pārstāja darboties. Informācija ir saglabāta žurnālos. Pārlādē lietotni, lai turpinātu; ja tas atkārtojas, žurnālos redzams, kas neizdevās.',
     votingFailed:
@@ -715,6 +719,13 @@ export const app = {
     discoverUntitled: 'Izaicinājums bez nosaukuma',
     discoverCostFree: 'bezmaksas',
     discoverCostPaid: 'monētas: {coins}',
+    discoverFull: 'Pilns',
+    discoverJoinFullLabel: 'Pievienoties izaicinājumam „{title}” — tas ir pilns',
+    discoverPriceUnknown: 'Cena nav zināma',
+    discoverJoinPriceUnknownLabel: 'Pievienoties izaicinājumam „{title}” — cena nav zināma',
+    discoverPriceUnknownHint:
+        'Šī izaicinājuma cena nav zināma: GuruShots to nenosūtīja, tāpēc lietotne nevar lūgt atļauju iztērēt monētas. Atsvaidzini sarakstu vai pievienojies izaicinājumam GuruShots vietnē.',
+    discoverRecommended: 'GuruShots ieteikts',
     discoverJoin: 'Pievienoties',
     discoverJoinPaid: 'Pievienoties (maksas)',
     discoverJoinLabel: 'Pievienoties izaicinājumam „{title}”',
@@ -790,6 +801,10 @@ export const app = {
     teamMatchAhead: 'vadībā',
     teamMatchBehind: 'atpaliek',
     teamMatchTied: 'neizšķirts',
+    teamStandingActive: 'Tu #{position} · sastāvā',
+    teamStandingOverStandby: '+{votes} pārāk par rezervistu',
+    teamStandingStandby: 'Rezervists · {votes} līdz sastāvam',
+    teamMatchNotRunning: 'Mačs nenotiek',
     teamChallenge: 'Komandu mačs',
     customBadge: 'pielāgots',
     customSettingsHint: 'Ir pielāgoti uzstādījumi',
@@ -826,6 +841,7 @@ export const app = {
     chosenPhotosOnlyReachHint:
         'Tas attiecas uz katru izaicinājumu, ko aptver: automātiskā pievienošanās un iesniegšana izlaiž katru izaicinājumu, kuram nav derīga izvēlētā foto.',
     photoChooserTitle: 'Izvēlēties foto',
+    photoRecommended: 'Ieteiktais foto',
     photoChooserHelpAuto:
         'Lietotne šos foto izmanto pirmos, un tiem joprojām jāiztur tavi tagu filtri. Tos kārto tāpat, kā kārto savas automātiskās izvēles, vai arī izmanto šeit redzamos numurus, ja ir ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos” (uzstādījumi „Automātiskā iesniegšana”: globālie noklusējumi, izaicinājuma noteikums vai paša izaicinājuma uzstādījumi). Nekas netiek nolasīts, iekams neielādē, nemeklē vai nespied pogu „Automātiski”.',
     photoChooserHelpChallenge:
@@ -1305,6 +1321,20 @@ export const app = {
     prerelease: 'Testa (beta) versija',
     prize: 'Balva',
     rank: 'Vieta',
+    // Izaicinājuma detaļas: Top rezultāti, balvu pakāpes, treku nozīmītes
+    benchmarkScores: 'Top 1 / 10 / 100: {scores}',
+    benchmarkGap: '+{n} līdz top {target}',
+    prizeTierTopPhotographer: 'Top fotogrāfs #{min}–{max}',
+    prizeTierTopPhoto: 'Top foto #{min}–{max}',
+    prizeKey: 'Atslēga',
+    prizeCoins: 'Monētas',
+    prizePhotoSwap: 'Foto apmaiņa',
+    prizeExposureAutofill: 'Redzamības uzpilde',
+    prizeUnknown: 'Balva',
+    prizeAmount: '{name} × {amount}',
+    trackTopPhotographer: 'Top fotogrāfs',
+    trackTopPhoto: 'Top foto',
+    trackGurusPick: 'Gura izvēle',
     rememberLoginSession: 'Atcerēties pieteikšanās sesiju',
     remindMeLater: 'Atgādināt vēlāk',
     removeCurrentTimezone: 'Noņemt pašreizējo laika joslu',

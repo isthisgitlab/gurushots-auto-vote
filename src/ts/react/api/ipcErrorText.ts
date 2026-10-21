@@ -28,6 +28,10 @@ const KNOWN_ERRORS: Record<string, string> = {
     'pin-cap-reached': 'errors.pinCapReached',
     'pin-write-failed': 'errors.pinFailed',
     'library-read-failed': 'errors.libraryReadFailed',
+    // The join refusal reasons (a failed join answers `failed-no-charge` with its `reason`, which
+    // RowOutcome reads the same way as an error text).
+    full: 'errors.joinRefusedFull',
+    'price-unknown': 'errors.joinRefusedPriceUnknown',
     'Failed to apply boost': 'errors.boostFailed',
     'Failed to fetch challenges': 'errors.fetchChallengesFailed',
     'Could not list challenges': 'errors.fetchChallengesFailed',

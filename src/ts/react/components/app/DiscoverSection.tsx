@@ -17,7 +17,11 @@ import * as ipc from '@/api/ipc';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { listedTags } from '../../../format/challengeListing';
 import { endTimeOf } from '../../../format/endTime';
+// The pure fresh-join guard the facade re-exports (services/VotingLogic) — imported at its home
+// module, so the renderer bundle does not pull the whole voting-decision barrel in for one function.
+import { joinFreshRefusal } from '../../../services/decisions/joinDecision';
 import { ChallengeKindBadges, ChallengeTagBadges } from './ChallengeKindBadges';
+import { prizeItemsText } from '@/utils/prizeText';
 import { PhotoChooserModal } from './PhotoChooserModal';
 import { ForgetPaymentModal } from './ForgetPaymentModal';
 import { JoinConfirmModal } from './JoinConfirmModal';
@@ -116,7 +120,8 @@ function ChosenMarks({ c, name, onChoose }: { c: OpenChallenge; name: string; on
  * pressing it spends nothing.
  * A challenge that has not started cannot be joined, and neither can one that has only just started
  * and is not in the open list yet (a join would answer "no longer open"): the button is disabled and
- * its name says why.
+ * its name says why. The same for a join the listing itself refuses (`blocked`: a full challenge, or
+ * one whose unlock price GuruShots did not send) — though never a retry, which spends nothing.
  */
 function JoinButton({
     id,
@@ -125,6 +130,7 @@ function JoinButton({
     retry,
     busy,
     waiting,
+    blocked,
     onClick,
 }: {
     id: OpenChallenge['id'];
@@ -133,6 +139,7 @@ function JoinButton({
     retry: boolean;
     busy: JoinPhase | null;
     waiting: 'notStarted' | 'startingNow' | null;
+    blocked: 'full' | 'price-unknown' | null;
     onClick: () => void;
 }) {
     const { t } = useTranslation();
@@ -141,31 +148,38 @@ function JoinButton({
         t(
             retry
                 ? 'app.discoverRetrySubmitLabel'
-                : waiting === 'notStarted'
-                  ? 'app.discoverJoinNotStartedLabel'
-                  : waiting === 'startingNow'
-                    ? 'app.discoverJoinOpeningLabel'
-                    : paid
-                      ? 'app.discoverJoinPaidLabel'
-                      : 'app.discoverJoinLabel',
+                : blocked === 'full'
+                  ? 'app.discoverJoinFullLabel'
+                  : blocked === 'price-unknown'
+                    ? 'app.discoverJoinPriceUnknownLabel'
+                    : waiting === 'notStarted'
+                      ? 'app.discoverJoinNotStartedLabel'
+                      : waiting === 'startingNow'
+                        ? 'app.discoverJoinOpeningLabel'
+                        : paid
+                          ? 'app.discoverJoinPaidLabel'
+                          : 'app.discoverJoinLabel',
         ),
         { title: name, coins: cost },
     );
+    const held = blocked !== null && !retry;
     return (
         <button
             className={`btn btn-sm ${paid ? 'btn-latvian' : 'btn-neutral'}`}
             id={`discover-join-${id}`}
             aria-label={busy ? undefined : label}
             onClick={onClick}
-            disabled={busy !== null || waiting !== null}
+            disabled={busy !== null || waiting !== null || held}
         >
             {busy
                 ? t(busy === 'asking' ? 'app.discoverChecking' : 'app.discoverJoining')
                 : retry
                   ? t('app.discoverRetrySubmit')
-                  : paid
-                    ? t('app.discoverJoinPaid')
-                    : t('app.discoverJoin')}
+                  : blocked === 'full'
+                    ? t('app.discoverFull')
+                    : paid
+                      ? t('app.discoverJoinPaid')
+                      : t('app.discoverJoin')}
         </button>
     );
 }
@@ -214,6 +228,8 @@ function RowPhotoChooser({
             value={challenge?.chosenOwn ?? []}
             savedCount={challenge?.chosenOwnCount}
             challengeId={challenge?.id ?? null}
+            // GuruShots' suggested photos for this challenge, from the listing: their tiles say so.
+            recommendedIds={challenge?.suggestedPhotoIds}
             // The row's challenge is not joined, so Auto cannot rank for it (it would answer
             // challenge-ended); the chooser hides the button.
             canSuggest={false}
@@ -250,7 +266,8 @@ function StartLine({ c, nowSec }: { c: OpenChallenge; nowSec: number }) {
 /**
  * What a join left behind for its row, as a translated, coloured line. Any result without a mapped
  * status (auth-expiry, an unexpected handler error) still shows a message rather than failing
- * silently on a money-adjacent action.
+ * silently on a money-adjacent action. A join the live list refused as full or price-unreadable
+ * carries its reason, not an error: it gets the refusal's what → why → next text.
  */
 function RowOutcome({
     outcome,
@@ -268,11 +285,16 @@ function RowOutcome({
     const { t } = useTranslation();
     const meta = outcomeMeta(outcome);
     const { variant } = meta;
+    const refused =
+        outcome.status === 'failed-no-charge' && (outcome.reason === 'full' || outcome.reason === 'price-unknown')
+            ? ipcErrorText(outcome.reason, t)
+            : null;
     const content = (
         <>
-            {meta.key
-                ? interp(t(meta.key), { coins: outcome.cost ?? cost, have: outcome.coins })
-                : ipcErrorText(outcome.error, t) || t('app.discoverGenericError')}
+            {refused ??
+                (meta.key
+                    ? interp(t(meta.key), { coins: outcome.cost ?? cost, have: outcome.coins })
+                    : ipcErrorText(outcome.error, t) || t('app.discoverGenericError'))}
             {meta.forget && (
                 <button
                     className="btn btn-ghost btn-sm ml-1"
@@ -300,7 +322,7 @@ function RowOutcome({
     );
 }
 
-/** One challenge in the list: what it is, what it costs, when it starts, its chosen photos and its actions. */
+/** One challenge in the list: what it is, what it costs, its capacity, when it starts, its chosen photos, and its actions. */
 function DiscoverRow({
     c,
     outcome,
@@ -324,10 +346,18 @@ function DiscoverRow({
     const cost = costOf(c);
     // Coins already spent: the row resumes the submit rather than joining (and paying) again.
     const retry = outcome !== undefined && outcomeMeta(outcome).retry;
+    // Why the listing itself refuses a fresh join (a join still asks the live list): a full challenge,
+    // or one whose unlock price GuruShots did not send. Null when the row may go ahead.
+    const blocked = joinFreshRefusal(c);
     const closeTime = endTimeOf(c.close_time);
     const name = rowName(c, t('app.discoverUntitled'));
     // Upcoming rows wait: until the start, then until the open list shows the challenge.
     const waiting = c.status !== 'upcoming' ? null : secondsToStart(c, nowSec) !== null ? 'notStarted' : 'startingNow';
+    // The capacity line, on a challenge that names a cap: the head count, and "Full" when it is reached.
+    const maxPlayers = Number(c.max_players);
+    const capped = Number.isFinite(maxPlayers) && maxPlayers > 0;
+    const players = Number(c.players);
+    const prizes = c.first_prizes ? prizeItemsText(c.first_prizes, t) : '';
     return (
         <li className="flex flex-wrap items-center justify-between gap-2 rounded border border-base-200 px-2 py-1.5">
             <div className="min-w-0">
@@ -336,15 +366,42 @@ function DiscoverRow({
                     <ChallengeKindBadges challenge={c} />
                     <ChallengeTagBadges tags={listedTags(c)} />
                     <span>
-                        {cost > 0 ? interp(t('app.discoverCostPaid'), { coins: cost }) : t('app.discoverCostFree')}
+                        {cost > 0
+                            ? interp(t('app.discoverCostPaid'), { coins: cost })
+                            : blocked === 'price-unknown'
+                              ? t('app.discoverPriceUnknown')
+                              : t('app.discoverCostFree')}
                     </span>
+                    {capped && (
+                        <span>
+                            <span aria-hidden="true">· </span>
+                            👥 {players.toLocaleString()}/{maxPlayers.toLocaleString()}
+                            {blocked === 'full' && (
+                                <>
+                                    <span aria-hidden="true"> · </span>
+                                    {t('app.discoverFull')}
+                                </>
+                            )}
+                        </span>
+                    )}
                     {closeTime !== null && (
                         <span>
                             <span aria-hidden="true">· </span>
                             {t('app.ends')} {formatEndTime(closeTime, timezone)}
                         </span>
                     )}
+                    {(c.suggestedPhotoIds?.length ?? 0) > 0 && (
+                        <span className="badge badge-outline badge-sm">{t('app.discoverRecommended')}</span>
+                    )}
                 </div>
+                {blocked === 'price-unknown' && (
+                    <div className="text-xs text-base-content/70 mt-0.5">{t('app.discoverPriceUnknownHint')}</div>
+                )}
+                {prizes !== '' && (
+                    <div className="text-xs text-base-content/70 mt-0.5 wrap-anywhere">
+                        {t('app.prize')}: {prizes}
+                    </div>
+                )}
                 <StartLine c={c} nowSec={nowSec} />
                 <ChosenMarks c={c} name={name} onChoose={onChoose} />
                 {waiting !== null && c.chosenEffectiveCount > 0 && (
@@ -369,6 +426,7 @@ function DiscoverRow({
                     retry={retry}
                     busy={busy}
                     waiting={waiting}
+                    blocked={blocked}
                     onClick={onJoin}
                 />
             </div>
