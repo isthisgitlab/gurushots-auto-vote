@@ -2,7 +2,7 @@
  * Shape of one mock challenge as authored in the spec tables.
  */
 
-import type { TeamMatch } from '../../types/gurushots';
+import type { Prize, PrizeTier, TeamMatch } from '../../types/gurushots';
 
 /** Exposure drawn at generation time: min(cap, floor(random * spread) + base), i.e. base..base+spread-1 clamped to cap. */
 interface ExposureRange {
@@ -45,7 +45,8 @@ interface ChallengeSpec {
     boostEnabled: boolean;
     timeLeft: { days: number; hours: number; minutes: number; seconds: number };
     boost: { state: 'AVAILABLE' | 'AVAILABLE_KEY' | 'LOCKED' | 'UNAVAILABLE' | 'USED'; timeout: BoostTimeout };
-    turbo: { state: string; opensIn: number | null; mode?: 'classic' | 'snap' };
+    /** Absent = the challenge has no turbo (`member.turbo` null, `turbo_enable` false) — most real ones do not. */
+    turbo?: { state: string; opensIn: number | null; mode?: 'classic' | 'snap' };
     total: {
         votes: number;
         rank: number;
@@ -59,6 +60,14 @@ interface ChallengeSpec {
         guru_picks: number;
         next_message: string;
     };
+    /** Benchmark rows on `member.ranking.total`, when the challenge is a benchmark one; absent on the rest. */
+    benchmark?: Array<{ benchmark?: string; score?: string }>;
+    firstPrizes?: Prize[];
+    achievementsAndPrizes?: PrizeTier[];
+    guruPickEnable?: boolean;
+    topPhotographerEnable?: boolean;
+    levelsRankEnable?: boolean;
+    newRankingEnable?: boolean;
     /** `factor` 0 = no exposure yet; otherwise a random value of at most `cap`, drawn at generation time. */
     exposure: { factor: ExposureRange | 0; voteFactor: number; voteRatio: number };
     myEntries: RankedEntrySpec[];

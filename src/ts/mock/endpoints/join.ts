@@ -1,17 +1,19 @@
 /**
  * Mock counterpart to api/join.ts: open and upcoming (un-joined) challenges,
- * the bankroll, and the coin unlock.
+ * their suggested photos, the bankroll, and the coin unlock.
  */
 
 import * as logger from '../../logger';
 import { simulateApiResponse, mockMethod } from '../simulate';
 import { HOUR, DAY } from '../time';
+import { SUGGESTED_PHOTO_IDS, hexPhotoId } from '../photoLibrary';
 import type * as joinModule from '../../api/join';
 
 type OpenChallengeRow = [
     id: number,
     type: string,
-    join_coins: number,
+    /** The join price; absent when the item carries no usable one (price-unknown). */
+    join_coins: number | undefined,
     title: string,
     url: string,
     startedAgo: number,
@@ -21,8 +23,19 @@ type OpenChallengeRow = [
     extras?: ListingExtras,
 ];
 
-/** What a listing shows besides the title: the challenge's own tags and badge, and how many photos it takes. */
-type ListingExtras = { tags: string[]; badge?: string; max_photo_submits: number };
+/**
+ * What a listing shows besides the title: the challenge's own tags and badge,
+ * how many photos it takes, its join gating (`max_players` cap, the
+ * unlock requirement) and the member's submit state on the item.
+ */
+type ListingExtras = {
+    tags: string[];
+    badge?: string;
+    max_photo_submits: number;
+    max_players?: number;
+    join_unlock?: boolean;
+    member?: { submit_state: string };
+};
 
 /** An open challenge whose start and close are offsets (seconds) from `nowSec`. */
 const openChallenge = (nowSec: number, row: OpenChallengeRow) => {
@@ -30,7 +43,7 @@ const openChallenge = (nowSec: number, row: OpenChallengeRow) => {
     return {
         id,
         type,
-        join_coins,
+        ...(join_coins === undefined ? {} : { join_coins }),
         title,
         url,
         start_time: nowSec - startedAgo,
@@ -71,6 +84,45 @@ const OPEN_CHALLENGE_ROWS: OpenChallengeRow[] = [
     // 900005: unlock succeeds but submit fails → exercises the
     // "coins charged but not joined" (charged-pending-submit) UI/CLI path.
     [900005, 'flash', 100, 'Mock Submit-Fails Challenge', 'mock-submitfail', 4 * DAY, 4 * DAY, 200, 125],
+    // 900006: free but full — players has reached max_players, so no slot is left.
+    [
+        900006,
+        'default',
+        0,
+        'Mock Full Challenge',
+        'mock-full',
+        6 * DAY,
+        6 * DAY,
+        150,
+        150,
+        { tags: ['Exhibition'], max_photo_submits: 1, max_players: 150, member: { submit_state: 'FULL' } },
+    ],
+    // 900007: unlock-gated with a price the listing can show.
+    [
+        900007,
+        'default',
+        200,
+        'Mock Unlock Challenge',
+        'mock-unlock',
+        7 * DAY,
+        7 * DAY,
+        90,
+        60,
+        { tags: ['Comm'], max_photo_submits: 2, join_unlock: true, member: { submit_state: 'OPEN' } },
+    ],
+    // 900008: unlock-gated but the item carries no join_coins at all — the price is unknown.
+    [
+        900008,
+        'default',
+        undefined,
+        'Mock Price-Unknown Challenge',
+        'mock-price-unknown',
+        8 * DAY,
+        8 * DAY,
+        60,
+        40,
+        { tags: ['Comm'], max_photo_submits: 2, join_unlock: true, member: { submit_state: 'OPEN' } },
+    ],
 ];
 
 // Not started yet: `startedAgo` is negative, so start_time lies ahead. The ids stay clear of the
@@ -107,10 +159,13 @@ const UPCOMING_CHALLENGE_ROWS: OpenChallengeRow[] = [
 
 /**
  * Simulate /rest/get_member_challenges: the un-joined "open" challenges, or the "upcoming" ones
- * (not started yet, `status: 'upcoming'`, a future start_time). Open fixtures cover a free join, paid flash, paid normal, and a designated
+ * (not started yet, `status: 'upcoming'`, a future start_time). Open fixtures cover a free join, paid flash, paid normal, a designated
  * paid id (900004) whose coinsUnlock fails — so the "coins charged but
  * submit failed" / "unlock failed" paths are exercisable without a real
- * account. Id 900005 unlocks but its submit fails (see submitToChallenge).
+ * account — and id 900005, which unlocks but its submit fails (see
+ * submitToChallenge). The gating trio rides on 900006-900008: full
+ * (players at max_players), unlock-priced, and unlock-priced with no usable
+ * join_coins (price-unknown).
  */
 const getMemberChallenges: typeof joinModule.getMemberChallenges = mockMethod(
     {
@@ -133,8 +188,49 @@ const getMemberChallenges: typeof joinModule.getMemberChallenges = mockMethod(
         // alongside type/title/join_coins/tags/entries/players. Spread
         // across the join window so `autoJoinWithinHoursOfEnd` is
         // exercisable in mock mode: 900001 ends in 3h (inside any window),
-        // the rest end in 2-5 days (outside a 24h one).
+        // the rest end in 2-8 days (outside a 24h one).
         return OPEN_CHALLENGE_ROWS.map((row) => openChallenge(nowSec, row));
+    },
+);
+
+/**
+ * The one open challenge the suggestion fixture hangs off (900001, the free
+ * one), and its pool. The first three ids are library photos in the server's
+ * 32-hex shape, so a picker join can actually match them; `photo_pink_flower_001`
+ * exists in the library too but is not 32-hex, so the shape filter must drop it;
+ * the hex padding pushes the pool past the 20-per-challenge cap so the cap is
+ * exercisable (only the first three are matchable, which is all the picker needs).
+ */
+const SUGGESTED_IDS_BY_CHALLENGE: Record<string, string[]> = {
+    '900001': [
+        ...SUGGESTED_PHOTO_IDS,
+        'photo_pink_flower_001',
+        ...Array.from({ length: 18 }, (_, i) => hexPhotoId(i + 10)),
+    ],
+};
+
+// The shape a real photo id answers to, and how many suggestions one challenge carries.
+const PHOTO_ID_SHAPE = /^[0-9a-f]{32}$/;
+const MAX_SUGGESTED_PHOTOS = 20;
+
+/** The mock counterpart's signature, mirroring the real getSuggestedPhotoIds. */
+type GetSuggestedPhotoIds = (token: string, challengeId: string | number) => Promise<string[]>;
+
+/**
+ * Simulate the challenge's suggested-photo read: the pool for that challenge,
+ * through the same shape filter and per-challenge cap the real ids answer to.
+ * No token, or a challenge without suggestions, resolves an empty list.
+ */
+const getSuggestedPhotoIds: GetSuggestedPhotoIds = mockMethod(
+    {
+        name: 'getSuggestedPhotoIds',
+        tokenArg: 0,
+        onNoToken: () => [],
+    },
+    async (_token, challengeId) => {
+        await simulateApiResponse({}, 150);
+        const pool = SUGGESTED_IDS_BY_CHALLENGE[String(challengeId)] ?? [];
+        return pool.filter((id) => PHOTO_ID_SHAPE.test(id)).slice(0, MAX_SUGGESTED_PHOTOS);
     },
 );
 
@@ -176,4 +272,4 @@ const coinsUnlock: typeof joinModule.coinsUnlock = mockMethod(
     },
 );
 
-export { getMemberChallenges, getBankroll, coinsUnlock };
+export { getMemberChallenges, getSuggestedPhotoIds, getBankroll, coinsUnlock };

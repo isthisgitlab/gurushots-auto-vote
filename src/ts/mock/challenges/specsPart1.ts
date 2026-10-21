@@ -42,6 +42,16 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '18 votes to next level',
         },
+        // Benchmark challenge: a row per group, scores "1" / "10" / "100".
+        benchmark: [
+            { benchmark: 'Top 1', score: '1' },
+            { benchmark: 'Top 10', score: '10' },
+            { benchmark: 'Top 100', score: '100' },
+        ],
+        guruPickEnable: true,
+        topPhotographerEnable: true,
+        levelsRankEnable: true,
+        newRankingEnable: true,
         exposure: { factor: { cap: 85, spread: 20, base: 70 }, voteFactor: 40, voteRatio: 2.22 },
         myEntries: [
             {
@@ -199,9 +209,11 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
             },
         ],
         // The opponent is ahead (the red state) and its name is long, with spaces and one long unbroken word.
+        // The member scores in the second active slot, twelve votes clear of the cut.
         teamMatch: {
             us: { name: 'Mock Lens Collective', votes: 7514 },
             them: { name: 'Fictional Aperture Wanderers Of Supercalifragilisticexpialidocious Valley', votes: 8258 },
+            me: { kind: 'active', position: 2, votes: 78, activeSlots: 5, cushion: 12 },
         },
     },
     {
@@ -255,6 +267,12 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
                 boosted: false,
             },
         ],
+        // The member's team is ahead (the green state) with the member on the standby bench, three votes short of an active slot.
+        teamMatch: {
+            us: { name: 'Mock Shutter Society', votes: 9120 },
+            them: { name: 'Mock Aperture Guild', votes: 8455 },
+            me: { kind: 'standby', position: 7, votes: 34, activeSlots: 5, votesToActive: 3 },
+        },
     },
     {
         title: 'Architecture Photography',
@@ -270,13 +288,14 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
         maxPhotoSubmits: 1,
         badge: 'speed',
         type: 'speed',
-        tags: ['1 photo', 'Speed', 'No comm', 'Turbo'],
+        tags: ['1 photo', 'Speed', 'No comm'],
         prizesWorth: 120,
         rankingLevels: [20, 100, 400, 800, 1600],
         boostEnabled: true,
         timeLeft: { days: 0, hours: 2, minutes: 0, seconds: 0 },
         boost: { state: 'AVAILABLE', timeout: { availableFor: 10 * MINUTE } },
-        turbo: { state: 'IN_PROGRESS', opensIn: null },
+        // No turbo: most real challenges have none, and the benchmark rows,
+        // prizes and flags below must not depend on one being present.
         total: {
             votes: 12,
             rank: 456,
@@ -290,6 +309,38 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '1 vote to next level',
         },
+        // A benchmark row whose score the server left empty.
+        benchmark: [{ benchmark: 'Top 10', score: '' }],
+        firstPrizes: [
+            { type: 'CAMERA', amount: 1 },
+            { type: 'EXPOSURE', amount: 500 },
+        ],
+        achievementsAndPrizes: [
+            {
+                title: 'Top 10 photographers',
+                rank: { min_rank: 1, max_rank: 10, type: 'MEMBER' },
+                prizes: [{ type: 'EXPOSURE', amount: 250 }],
+            },
+            {
+                title: 'Top 10 photos',
+                rank: { min_rank: 1, max_rank: 10, type: 'IMAGE' },
+                prizes: [{ type: 'RIBBON', amount: 1 }],
+            },
+            {
+                title: 'Every entrant',
+                rank: null,
+                prizes: [{ type: 'FREE_ENTRY', amount: 1 }],
+            },
+            // A rank window the server attached no prizes to.
+            {
+                title: 'First place',
+                rank: { min_rank: 1, max_rank: 1, type: 'MEMBER' },
+            },
+        ],
+        guruPickEnable: true,
+        topPhotographerEnable: true,
+        levelsRankEnable: false,
+        newRankingEnable: true,
         exposure: { factor: { cap: 25, spread: 20, base: 5 }, voteFactor: 8, voteRatio: 0.85 },
         myEntries: [
             {

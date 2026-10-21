@@ -62,9 +62,9 @@ test('a Refresh re-read of the on-screen extent replaces the kept listing with t
     const { challenges } = await getApiStrategy().getActiveChallenges('smoke-token');
     const [first] = challenges.map((challenge) => String(challenge.id));
 
-    // The first opening walks the whole library and keeps it (9 rows, the mock's won photo left out).
+    // The first opening walks the whole library and keeps it (12 rows, the mock's won photo left out).
     const walked = await library(first, 'cached');
-    expect(walked).toMatchObject({ success: true, preview: false, truncated: false, nextStart: 9 });
+    expect(walked).toMatchObject({ success: true, preview: false, truncated: false, nextStart: 12 });
 
     // Refresh asks for the 8 photos on screen: the walk serves the extent (two mock pages of 4)…
     const extent = await library(first, 'fresh', 0, 8);

@@ -66,6 +66,11 @@ const SPECS_PART_2: readonly ChallengeSpec[] = [
                 boosted: false,
             },
         ],
+        // No `me`: this refresh did not yield a readable standing.
+        teamMatch: {
+            us: { name: 'Mock F-Stop Collective', votes: 5230 },
+            them: { name: 'Mock Bokeh Brigade', votes: 4875 },
+        },
     },
     {
         title: 'Street Art & Graffiti',
@@ -162,6 +167,14 @@ const SPECS_PART_2: readonly ChallengeSpec[] = [
                 boosted: false,
             },
         ],
+        // A match that has ended: `running: false` is kept, along with the final standing
+        // (first of four active slots, so the cushion does not apply and stays null).
+        teamMatch: {
+            us: { name: 'Mock Grain Collective', votes: 6310 },
+            them: { name: 'Mock Darkroom League', votes: 6105 },
+            running: false,
+            me: { kind: 'active', position: 1, votes: 34, activeSlots: 4, cushion: null },
+        },
     },
     {
         title: 'Golden Hour Magic',
@@ -220,6 +233,13 @@ const SPECS_PART_2: readonly ChallengeSpec[] = [
                 boosted: false,
             },
         ],
+        // `me: null` — the standing could not be read from the rosters (malformed roster, no
+        // scoring slots, or the member not listed).
+        teamMatch: {
+            us: { name: 'Mock Tripod Union', votes: 7777 },
+            them: { name: 'Mock Long-Exposure Club', votes: 7654 },
+            me: null,
+        },
     },
     {
         title: 'Minimalist Composition',

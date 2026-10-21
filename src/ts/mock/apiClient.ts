@@ -18,7 +18,7 @@ import {
     getImageData,
     submitToChallenge as submitToChallengeRaw,
 } from './endpoints/submissions';
-import { getMemberChallenges, getBankroll, coinsUnlock } from './endpoints/join';
+import { getMemberChallenges, getSuggestedPhotoIds, getBankroll, coinsUnlock } from './endpoints/join';
 import {
     getMyCompletedChallenges,
     claimChallengeResources,
@@ -60,6 +60,7 @@ const endpoints = {
     getImageData,
     submitToChallenge,
     getMemberChallenges,
+    getSuggestedPhotoIds,
     getBankroll,
     getMyCompletedChallenges,
     claimChallengeResources,

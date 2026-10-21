@@ -91,6 +91,9 @@ test('the upcoming mock challenges reach Discover: those inside the 24 h window,
         ['900003', undefined],
         ['900004', undefined],
         ['900005', undefined],
+        ['900006', undefined],
+        ['900007', undefined],
+        ['900008', undefined],
         [UPCOMING_FREE, 'upcoming'],
         [UPCOMING_PAID, 'upcoming'],
     ]);
@@ -167,7 +170,16 @@ test('with the first upcoming fetch failing, nothing is recorded and cleanup sti
         settings.setChallengeOverride('chosenPhotos', UPCOMING_FREE, [FIRST]);
         const result = await listChallenges();
         // The open list still shows, without the upcoming rows.
-        expect(result.items.map((c) => String(c.id))).toEqual(['900001', '900002', '900003', '900004', '900005']);
+        expect(result.items.map((c) => String(c.id))).toEqual([
+            '900001',
+            '900002',
+            '900003',
+            '900004',
+            '900005',
+            '900006',
+            '900007',
+            '900008',
+        ]);
         expect(settings.getUpcomingChallengeIds()).toBeNull();
         settings.setSetting('autoJoin', true);
         await joinPass();

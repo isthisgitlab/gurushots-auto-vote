@@ -78,6 +78,7 @@ const CURRENCY_ENDPOINTS = [
 // Endpoints the join flow uses (services/joinChallenges.ts).
 const JOIN_ENDPOINTS = [
     'getMemberChallenges',
+    'getSuggestedPhotoIds',
     'getBankroll',
     'coinsUnlock',
     'submitToChallenge',

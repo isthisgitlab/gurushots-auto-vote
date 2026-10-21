@@ -12,6 +12,23 @@ import type { LibraryPhoto } from '../types/gurushots';
 // be kept in sync is a list that eventually is not, and the whole point of the
 // mock is that searching "flow" finds no photos while autocomplete turns it
 // into "flower", which only holds while the two agree.
+/**
+ * A photo id in the server's own shape: 32 hex characters. The suggestion
+ * fixtures (SUGGESTED_PHOTO_IDS, and the cap-padding pool in
+ * mock/endpoints/join.ts) must carry this shape, because a suggested id is
+ * filtered by it before anything matches the picker against the library.
+ *
+ * @param n - distinguishing counter; `cafe` prefix keeps fixtures recognizable
+ */
+const hexPhotoId = (n: number): string => `cafe${String(n).padStart(28, '0')}`;
+
+/**
+ * The three library photos the suggestion fixture for the open challenge
+ * (900001 in mock/endpoints/join.ts) points at: a picker join must be able to
+ * match every suggested id it is handed against the library.
+ */
+const SUGGESTED_PHOTO_IDS = [hexPhotoId(1), hexPhotoId(2), hexPhotoId(3)];
+
 const MOCK_PHOTO_LABELS = {
     photo_pink_flower_001: ['Pink', 'Flower', 'Petal', 'Plant'],
     photo_nature_landscape_002: ['Nature', 'Landscape', 'Tree', 'Sky'],
@@ -22,6 +39,9 @@ const MOCK_PHOTO_LABELS = {
     photo_blocked_007: ['Pink', 'Flower'],
     photo_old_008: ['Misc'],
     photo_won_009: ['Trophy'],
+    [hexPhotoId(1)]: ['Sunset', 'Harbor'],
+    [hexPhotoId(2)]: ['Forest', 'Moss'],
+    [hexPhotoId(3)]: ['Neon', 'Night'],
 };
 
 // Every distinct tag the mock library carries, lowercased — what
@@ -35,12 +55,13 @@ const MOCK_LIBRARY_TAGS = Array.from(
 ).sort();
 
 /**
- * The library listing (/rest/get_photos_private items) as of `now`: nine
+ * The library listing (/rest/get_photos_private items) as of `now`: twelve
  * photos with the fields the picker uses (id, labels, votes, views,
  * upload_date, permission) and varied labels so the tag-match picker has
- * something to differentiate. (The live endpoint returns votes=0 for library
- * photos and a populated views count, so views carry per-photo varied values
- * here too.)
+ * something to differentiate. The three hex-id photos at the end are what the
+ * open challenge's suggestion fixture points at. (The live endpoint returns
+ * votes=0 for library photos and a populated views count, so views carry
+ * per-photo varied values here too.)
  *
  * @param now - epoch seconds the upload dates are relative to
  */
@@ -121,6 +142,30 @@ const buildLibraryPhotos = (now: number): Array<LibraryPhoto & { labels: string[
             message: "This image <b>has won a challenge</b><br/><span>it can't participate in another</span>",
         },
     },
+    {
+        id: SUGGESTED_PHOTO_IDS[0],
+        labels: MOCK_PHOTO_LABELS[SUGGESTED_PHOTO_IDS[0]],
+        votes: 210,
+        views: 1340,
+        upload_date: now - 86400 * 3,
+        permission: { allowed: true, message: null },
+    },
+    {
+        id: SUGGESTED_PHOTO_IDS[1],
+        labels: MOCK_PHOTO_LABELS[SUGGESTED_PHOTO_IDS[1]],
+        votes: 165,
+        views: 1020,
+        upload_date: now - 86400 * 6,
+        permission: { allowed: true, message: null },
+    },
+    {
+        id: SUGGESTED_PHOTO_IDS[2],
+        labels: MOCK_PHOTO_LABELS[SUGGESTED_PHOTO_IDS[2]],
+        votes: 96,
+        views: 730,
+        upload_date: now - 86400 * 9,
+        permission: { allowed: true, message: null },
+    },
 ];
 
 /**
@@ -144,6 +189,9 @@ const buildImageStats = (): Record<string, { votes: number; views: number; achie
     photo_blocked_007: { votes: 9990, views: 5000, achievements: ['elite'] },
     photo_old_008: { votes: 12400, views: 70, achievements: ['elite', 'top_30', 'top_50', 'top_100'] },
     photo_won_009: { votes: 6400, views: 3100, achievements: ['winner'] },
+    [SUGGESTED_PHOTO_IDS[0]]: { votes: 2100, views: 1340, achievements: ['top_100'] },
+    [SUGGESTED_PHOTO_IDS[1]]: { votes: 1650, views: 1020, achievements: [] },
+    [SUGGESTED_PHOTO_IDS[2]]: { votes: 960, views: 730, achievements: [] },
 });
 
-export { MOCK_LIBRARY_TAGS, buildLibraryPhotos, buildImageStats };
+export { MOCK_LIBRARY_TAGS, SUGGESTED_PHOTO_IDS, buildImageStats, buildLibraryPhotos, hexPhotoId };
