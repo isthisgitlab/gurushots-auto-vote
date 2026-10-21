@@ -51,6 +51,8 @@ export interface RankingTotal {
     points?: number;
     guru_picks?: number;
     next_message?: string;
+    /** The member's rows in a benchmark challenge; `benchmark` names the group, `score` its label. */
+    benchmark?: Array<{ benchmark?: string; score?: string }>;
 }
 
 export interface RankingExposure {
@@ -103,9 +105,23 @@ export interface RewardsBySection {
     sections?: Array<{ type?: string; name?: string; resources?: RewardResource[] }>;
 }
 
+/** One prize, as the wire carries it. */
+export interface Prize {
+    type?: string;
+    amount?: number;
+}
+
+/** One tier of a challenge's `achievements_and_prizes`, with the rank window it covers. */
+export interface PrizeTier {
+    title?: string;
+    rank?: { min_rank?: number; max_rank?: number; type?: string } | null;
+    prizes?: Prize[];
+}
+
 /** The member's own standing in a challenge. */
 export interface ChallengeMember {
     time_joined?: UnixSeconds;
+    submit_state?: string;
     boost?: MemberBoost;
     turbo?: MemberTurbo;
     ranking?: MemberRanking;
@@ -128,10 +144,13 @@ export interface Challenge {
     tags?: string[];
     entries: number;
     players: number;
+    max_players?: number;
     votes?: number;
     max_photo_submits?: number;
     vote_minimum_players?: number;
     prizes_worth?: number;
+    first_prizes?: Prize[];
+    achievements_and_prizes?: PrizeTier[];
     /** Keyed `level_0` … `level_5`: the vote threshold for each level. */
     ranking_levels?: Record<string, number>;
     /** Coins to join; 0 or absent when free. */
@@ -145,6 +164,10 @@ export interface Challenge {
     swap_enable?: boolean;
     swap_locked?: boolean;
     top_photo_enable?: boolean;
+    guru_pick_enable?: boolean;
+    top_photographer_enable?: boolean;
+    levels_rank_enable?: boolean;
+    new_ranking_enable?: boolean;
     member?: ChallengeMember;
     /**
      * App-set, never from the API: the instant (Unix seconds) a boost the voting
@@ -156,21 +179,44 @@ export interface Challenge {
     teamMatch?: TeamMatch;
 }
 
+/**
+ * The signed-in member's standing among their team's match participants, counted
+ * in sorted-vote positions over the top `activeSlots` (= `min(ourCount, theirCount)`)
+ * members who actually score. Numbers only — never another member's id or name.
+ */
+export type TeamStanding =
+    | { kind: 'active'; position: number; votes: number; activeSlots: number; cushion: number | null }
+    | { kind: 'standby'; position: number; votes: number; activeSlots: number; votesToActive: number };
+
 /** Both teams' vote totals in a team match, from our side (`us`) and the opponent's (`them`). */
 export interface TeamMatch {
     us: { name: string; votes: number };
     them: { name: string; votes: number };
+    /** Absent means running. */
+    running?: boolean;
+    /** null when the standing is unreadable: a malformed roster, no scoring slots, or the member not listed. */
+    me?: TeamStanding | null;
 }
 
 /** The WEB get_teams (limit=1): the member's team, only read when `state.status` is STATUS_JOINED. */
 export interface TeamsResponse {
     state?: { status?: string };
-    data?: { teams?: Array<{ id?: number }> };
+    data?: { teams?: Array<{ id?: number; current_member?: { id?: unknown } }> };
 }
 
-/** The WEB get_match: the challenge a team's match runs on and each side's total votes. */
+/** The WEB get_match: the challenge a team's match runs on, each side's total votes and the participants. */
 export interface MatchResponse {
-    data?: { challenge_id?: number; teams?: Array<{ id?: number; name?: string; total_votes?: number }> };
+    state?: { status?: string };
+    data?: {
+        challenge_id?: number;
+        teams?: Array<{
+            id?: number;
+            name?: string;
+            total_votes?: number;
+            /** The match participants in server order; narrowed in api/teams.ts, which never trusts `rank`. */
+            members?: Array<{ id?: unknown; rank?: unknown; rank_data?: { total?: { votes?: unknown } } }>;
+        }>;
+    };
 }
 
 /** get_my_active_challenges. `fetchFailed` marks a failed request (empty list). */
@@ -249,7 +295,10 @@ export interface DiscoverChallenge extends Omit<Challenge, 'status'> {
  * challenge alone; `chosenEffectiveCount` is how many photos the join would
  * actually use once every layer is resolved (0 under another account's list).
  */
-export interface OpenChallenge extends DiscoverChallenge, ChosenAnnotation {}
+export interface OpenChallenge extends DiscoverChallenge, ChosenAnnotation {
+    /** The challenge's suggested photo ids, when the API lists any. */
+    suggestedPhotoIds?: string[];
+}
 
 /**
  * What the Chosen Photos settings say about one open challenge. `chosenOwn` is the
