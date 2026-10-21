@@ -1,26 +1,51 @@
 import { useId, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsChallengeId } from '@/contexts/SettingsChallengeContext';
+import { useImageLoads } from '@/hooks/useImageLoads';
+import { useCurrentMember } from '@/hooks/currentMember';
+import { buildPhotoUrl } from '@/utils/formatters';
+import { interp } from '@/utils/interp';
 import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 import { SettingResetButton } from './SettingResetButton';
 import { PhotoChooserModal } from './PhotoChooserModal';
 
 import type { SettingFieldProps } from '../../../types/settingsEditor';
 
+// Edge length requested from the photo CDN for a chip; it renders at 32px.
+const THUMB_PX = 64;
+
 /** The photo ids a stored value holds (a hand-edited settings file may hold anything). */
 const photoIdsOf = (value: unknown): string[] =>
     Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
 
 /**
- * One chosen photo: a text chip with its position and its id's start.
+ * One chosen photo: its thumbnail once a library listing has named the member
+ * and the image loads, else its id's start as text.
  */
-function ChosenPhotoChip({ id, position }: { id: string; position: number }) {
+function ChosenPhotoChip({ id, position, memberId }: { id: string; position: number; memberId: string | null }) {
+    const { t } = useTranslation();
+    const url = memberId ? buildPhotoUrl(memberId, id, { size: THUMB_PX }) : null;
+    const [showImage, imageRef] = useImageLoads(url);
+    const showThumb = showImage && url !== null;
     const short = id.slice(0, 8);
     return (
         <li className="inline-flex items-center gap-0.5">
-            {/* The saved order, read as it is by a text chip. */}
-            <span className="badge badge-neutral badge-xs">{position}</span>
-            <span className="badge badge-ghost badge-sm">{short}</span>
+            {/* The saved order. The image says it in its alt text; a text chip reads it as it is. */}
+            <span aria-hidden={showThumb} className="badge badge-neutral badge-xs">
+                {position}
+            </span>
+            {showThumb ? (
+                <img
+                    ref={imageRef}
+                    src={url}
+                    alt={interp(t('app.chosenPhotoThumbAlt'), { n: position, id: short })}
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    className="h-8 w-8 rounded object-cover"
+                />
+            ) : (
+                <span className="badge badge-ghost badge-sm">{short}</span>
+            )}
         </li>
     );
 }
@@ -54,6 +79,7 @@ export function ChosenPhotosControl({
     challengeId?: string | number | null;
 }) {
     const { t } = useTranslation();
+    const memberId = useCurrentMember();
     const [open, setOpen] = useState(false);
     const hintId = useId();
     const ids = value ?? [];
@@ -66,7 +92,7 @@ export function ChosenPhotosControl({
             ) : (
                 <ul className="flex flex-wrap items-center gap-1" aria-label={t('app.chosenPhotos')}>
                     {ids.map((photoId, index) => (
-                        <ChosenPhotoChip key={photoId} id={photoId} position={index + 1} />
+                        <ChosenPhotoChip key={photoId} id={photoId} position={index + 1} memberId={memberId} />
                     ))}
                 </ul>
             )}

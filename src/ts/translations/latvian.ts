@@ -817,6 +817,7 @@ export const app = {
     photosUseNone: 'Neizmantot nevienu',
     photosUseNoneHint:
         'Šajā izaicinājumā netiek izmantoti izvēlētie foto, pat ja globālajos noklusējumos vai kādā noteikumā ir saraksts. Atiestatīšanas poga blakus šim laukam atgriež mantoto sarakstu.',
+    chosenPhotoThumbAlt: 'Izvēlētais foto {n}: {id}',
     chosenPhotosScenarioHint:
         'Scenārija izvēlētie foto tiek izmantoti tikai pēc pievienošanās izaicinājumam; pievienojoties tie netiek ņemti vērā.',
     chosenPhotosOnlyReachHint:

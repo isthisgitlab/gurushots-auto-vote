@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as ipc from '@/api/ipc';
+import { rememberCurrentMember } from './currentMember';
 
 import { asPreview } from '../../libraryPreview';
 import { LIBRARY_BATCH_PHOTOS, MAX_LIBRARY_KEEP_PHOTOS, MAX_WON_IDS } from '../../settings/limits';
@@ -120,6 +121,8 @@ export function useLibraryListing(
         const memberId = listing.memberId ?? (keepMember ? previous : null);
         const switched = previous !== null && memberId !== previous;
         memberRef.current = memberId;
+        // The chosen-photo chips build their thumbnails from the member a listing names.
+        if (memberId !== null) rememberCurrentMember(memberId);
         if (switched || !listing.preview) {
             setKnown((prev) => {
                 const base = switched ? new Map<string, LibraryPhoto>() : prev;

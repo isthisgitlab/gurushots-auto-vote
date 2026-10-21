@@ -9,6 +9,8 @@
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { SettingInput } from '@/components/app/SettingInput';
 import { ChosenPhotosControl } from '@/components/app/ChosenPhotosField';
+import { rememberCurrentMember } from '@/hooks/currentMember';
+import { buildPhotoUrl } from '@/utils/formatters';
 import { SettingsChallengeProvider } from '@/contexts/SettingsChallengeContext';
 import type { SerializableSchemaEntry } from '../../src/ts/ipc/settings.handlers';
 import { invalid } from '../helpers/invalid';
@@ -180,5 +182,41 @@ describe('ChosenPhotosControl as a rule row', () => {
         fireEvent.click(screen.getByRole('button', { name: 'app.titleRuleInherit' }));
         expect(onClear).toHaveBeenCalledTimes(1);
         await act(async () => undefined);
+    });
+});
+
+describe('thumbnails', () => {
+    test('a chip shows the photo once a listing has named the member', () => {
+        rememberCurrentMember(MEMBER);
+        renderInput([idOf(1)]);
+        const img = document.querySelector('img');
+        expect(img).not.toBeNull();
+        expect(img!.getAttribute('src')).toBe(buildPhotoUrl(MEMBER, idOf(1), { size: 64 }));
+        expect(img!.getAttribute('alt')).toBe('app.chosenPhotoThumbAlt');
+        expect(img!.getAttribute('loading')).toBe('lazy');
+        expect(img!.getAttribute('referrerpolicy')).toBe('no-referrer');
+        expect(img!.className).toBe('h-8 w-8 rounded object-cover');
+        expect(document.querySelector('span[aria-hidden="true"]')!.textContent).toBe('1');
+    });
+
+    test('a repeat report of the same member changes nothing', () => {
+        rememberCurrentMember(MEMBER);
+        renderInput([idOf(1), idOf(2)]);
+        expect(document.querySelectorAll('img')).toHaveLength(2);
+    });
+
+    test('with no known member a chip stays text', () => {
+        rememberCurrentMember(null);
+        renderInput([idOf(1)]);
+        expect(document.querySelector('img')).toBeNull();
+        expect(screen.getAllByRole('listitem')[0].textContent).toBe(`1${idOf(1).slice(0, 8)}`);
+    });
+
+    test('a member a later report brings updates the chips', () => {
+        rememberCurrentMember(null);
+        renderInput([idOf(1)]);
+        expect(document.querySelector('img')).toBeNull();
+        act(() => rememberCurrentMember(MEMBER));
+        expect(document.querySelectorAll('img')).toHaveLength(1);
     });
 });

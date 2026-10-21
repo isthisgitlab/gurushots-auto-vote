@@ -810,6 +810,7 @@ export const app = {
     photosUseNone: 'Use none',
     photosUseNoneHint:
         'This challenge uses no chosen photos, even if your global defaults or a rule have a list. The reset button next to this field brings that inherited list back.',
+    chosenPhotoThumbAlt: 'Chosen photo {n}: {id}',
     chosenPhotosScenarioHint:
         "A scenario's chosen photos apply only after the challenge is joined; joining never uses them.",
     chosenPhotosOnlyReachHint:
