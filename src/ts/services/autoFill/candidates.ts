@@ -4,7 +4,14 @@
  * ignore-words lookup, and the semantic scores the picker ranks with.
  */
 
-import { buildSearchTerms, detectLetterPrefix, parseNegation, readChallengeTheme, stripTags } from '../photoPicker';
+import {
+    buildSearchTerms,
+    detectLetterPrefix,
+    descriptionExclusions,
+    parseNegation,
+    readChallengeTheme,
+    stripTags,
+} from '../photoPicker';
 import { getSemanticScores } from '../semantic';
 import * as lexicon from '../semantic/lexicon';
 import { resolveTermsToTags } from '../tagResolver';
@@ -130,17 +137,21 @@ const THEMED_SEARCH_MIN_BUDGET_MS = 1500;
  * read from. The app keeps no copy of challenge descriptions, so these lines
  * are what a misread theme can be checked (and the rule measured) against.
  */
-const describeTheme = (theme: ChallengeTheme, challenge: Challenge): string => {
+const describeTheme = (theme: ChallengeTheme, challenge: Challenge, ignoreWords: IgnoreWords): string => {
     const verdict =
         theme.kind === 'open'
             ? 'reads as an open theme, so its title and description are not matched against your photos'
             : theme.kind === 'subject'
               ? `has the subject ${theme.subjects.map((s) => `"${s}"`).join(', ')} (its description repeats it)`
               : 'has no subject its description confirms, so its title is searched head-noun first';
+    // A description can rule a subject off-topic on its own. Only the
+    // fixed concept names go in the line, never matched description text.
+    const ruled = descriptionExclusions(challenge, ignoreWords);
+    const exclusion = ruled.length > 0 ? `; its description rules out ${ruled.join(', ')}` : '';
     const description = stripTags(String(challenge.welcome_message ?? ''))
         .replace(/\s+/g, ' ')
         .trim();
-    return `${verdict}. Description: "${description}"`;
+    return `${verdict}${exclusion}. Description: "${description}"`;
 };
 
 /** Whether a candidate list holds a photo the challenge allows. */
@@ -279,7 +290,7 @@ const fetchCandidatesForChallenge = async (
     const theme = readChallengeTheme(challenge, ignoreWords);
     logger
         .withCategory(logLabel)
-        .info(`${logLabel}: ${logger.challengeTag(challenge)} ${describeTheme(theme, challenge)}`, null);
+        .info(`${logLabel}: ${logger.challengeTag(challenge)} ${describeTheme(theme, challenge, ignoreWords)}`, null);
     // Shared deadline for the whole themed phase, so raw and related searches
     // and the tag-resolver retry that may follow them split ONE budget instead of
     // each taking a full one (see THEMED_SEARCH_BUDGET_MS). Floored rather than

@@ -30,6 +30,7 @@ const {
     buildThemeKeywords,
     buildThemeAlternatives,
     buildChallengeKeywords,
+    descriptionExclusions,
     visualSubjectWords,
     readChallengeTheme,
     pickPhotosForChallenge,
@@ -102,6 +103,10 @@ describe('title readers with the real lexicon', () => {
     };
 
     beforeEach(() => lexicon.__resetForTests());
+
+    test('the fixture description rules out people and animals', () => {
+        expect(descriptionExclusions(STILL_LIFE)).toEqual(['people', 'animals']);
+    });
 
     test('fall back to word order until the lexicon is loaded', () => {
         expect(buildSearchTerms(balloonFun)).toEqual(['fun', 'balloon']);
@@ -190,6 +195,121 @@ describe('title readers with the real lexicon', () => {
             expect(pickPhotosForChallenge(STILL_LIFE, photos, 1, { mustIncludeTags: ['still life'] })).toEqual([
                 'still-life',
             ]);
+        });
+
+        describe('description exclusions in the pick', () => {
+            // The full library the fixture's description judges: the fish dish
+            // carries the food exemption, the unlabelled photo cannot be judged.
+            const library = () => [
+                allowed('still-life', ['Still life', 'Vase'], 1000),
+                allowed('fish', ['Fish', 'Underwater'], 5000, { votes: 500 }),
+                allowed('portrait', ['Woman', 'Portrait'], 4000, { votes: 400 }),
+                allowed('dog', ['Dog', 'Vertebrate'], 3000, { votes: 300 }),
+                allowed('fish-dish', ['Fish', 'Seafood', 'Dish'], 2000, { votes: 200 }),
+                allowed('bare', [], 1500),
+            ];
+
+            test('photos showing people or animals drop, the food-exempt and unlabelled ones stay', () => {
+                expect(pickPhotosForChallenge(STILL_LIFE, library(), 6)).toEqual(['still-life', 'fish-dish', 'bare']);
+            });
+
+            test('labels that name an object rather than an animal stay', () => {
+                const photos = [
+                    allowed('teddy', ['Teddy bear'], 3000),
+                    allowed('duck', ['Rubber duck'], 2000),
+                    allowed('feather', ['Feather'], 1000),
+                ];
+                expect(pickPhotosForChallenge(STILL_LIFE, photos, 3)).toEqual(['teddy', 'duck', 'feather']);
+            });
+
+            test('word-level label costs still drop their photos', () => {
+                const photos = [
+                    allowed('clock', ['Clock face'], 3000),
+                    allowed('rod', ['Fishing rod'], 2000),
+                    allowed('birdseye', ["Bird's-eye view"], 1000),
+                ];
+                expect(pickPhotosForChallenge(STILL_LIFE, photos, 3, { submitWithoutTagMatch: false })).toEqual([]);
+            });
+
+            test('when every photo shows the excluded concepts it falls back and names them', () => {
+                const photos = [
+                    allowed('portrait', ['Woman', 'Portrait'], 3000),
+                    allowed('dog', ['Dog', 'Vertebrate'], 2000),
+                ];
+                const onFallback = jest.fn();
+                expect(pickPhotosForChallenge(STILL_LIFE, photos, 1, { onFallback })).toEqual(['portrait']);
+                expect(onFallback).toHaveBeenCalledWith({
+                    letterPrefix: null,
+                    mustStems: [],
+                    excludedStems: ['people', 'animal'],
+                });
+                expect(pickPhotosForChallenge(STILL_LIFE, photos, 1, { submitWithoutTagMatch: false })).toEqual([]);
+            });
+
+            test('the food exemption keeps an "Animal" + "Food" photo under the description-only exclusion', () => {
+                const plate = allowed('plate', ['Animal', 'Food'], 2000);
+                expect(pickPhotosForChallenge(STILL_LIFE, [plate], 1)).toEqual(['plate']);
+            });
+
+            test('a "Pet food" label counts as food', () => {
+                const kibble = allowed('kibble', ['Dog', 'Pet food'], 2000);
+                expect(pickPhotosForChallenge(STILL_LIFE, [kibble], 1)).toEqual(['kibble']);
+            });
+
+            test('title "No Animals" and "No Pets" now carry the whole animal concept', () => {
+                const dog = allowed('dog', ['Dog', 'Vertebrate'], 2000);
+                const vase = allowed('still-life', ['Vase'], 1000);
+                expect(pickPhotosForChallenge({ title: 'No Animals' }, [dog, vase], 2)).toEqual(['still-life']);
+                expect(pickPhotosForChallenge({ title: 'No Pets' }, [dog, vase], 2)).toEqual(['still-life']);
+            });
+
+            test('a specific-animal title stays stems-only, so the named subject stays', () => {
+                const cat = allowed('cat', ['Cat', 'Pet', 'Mammal'], 2000);
+                const dog = allowed('dog', ['Dog'], 3000);
+                expect(pickPhotosForChallenge({ title: 'Cats: No Dogs' }, [cat, dog], 2)).toEqual(['cat']);
+            });
+
+            test('a people title keeps its exact behaviour', () => {
+                const woman = allowed('woman', ['Woman', 'Portrait'], 2000);
+                expect(
+                    pickPhotosForChallenge({ title: 'Faces in Things: No People' }, [woman], 1, {
+                        submitWithoutTagMatch: false,
+                    }),
+                ).toEqual([]);
+            });
+
+            test('a title-only "No Humans" still reports its own stem', () => {
+                const onFallback = jest.fn();
+                pickPhotosForChallenge({ title: 'No Humans' }, [allowed('portrait', ['Portrait'], 3000)], 1, {
+                    onFallback,
+                });
+                expect(onFallback).toHaveBeenCalledWith({
+                    letterPrefix: null,
+                    mustStems: [],
+                    excludedStems: ['human'],
+                });
+            });
+
+            test('a concept named by both title and description reports both names once', () => {
+                const onFallback = jest.fn();
+                pickPhotosForChallenge(
+                    { title: 'No Humans', welcome_message: 'no people' },
+                    [allowed('portrait', ['Portrait'], 3000)],
+                    1,
+                    { onFallback },
+                );
+                expect(onFallback).toHaveBeenCalledWith({
+                    letterPrefix: null,
+                    mustStems: [],
+                    excludedStems: ['human', 'people'],
+                });
+            });
+
+            test('the fixture description words stop being keywords', () => {
+                const keywords = buildChallengeKeywords(STILL_LIFE);
+                expect(keywords).not.toContain('people');
+                expect(keywords).not.toContain('animal');
+            });
         });
     });
 });

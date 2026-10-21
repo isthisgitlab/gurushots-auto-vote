@@ -82,8 +82,9 @@ const notifyFallback = (opts: PickOptions, info: PickFallbackInfo) => {
  *   onFallback({letterPrefix, mustStems, excludedStems}) when a hard filter
  *   eliminated every photo and the picker relaxed to the unfiltered set (i.e. an
  *   off-theme photo is about to be picked). `excludedStems` is non-empty when
- *   the relaxed filter was a negated title ("No Humans": every candidate's
- *   labels showed the negated subject). Injected
+ *   the relaxed filter was a negated title or an excluded-subject description
+ *   ("No Humans": every candidate's labels showed the excluded subject).
+ *   Injected
  *   side-channel so this function stays pure — callers use it to log the
  *   fallback where a user can see it. Exceptions it throws are swallowed;
  *   omitting it changes nothing. Not called when submitWithoutTagMatch is false
@@ -137,9 +138,10 @@ const applyHardFilters = (
 };
 
 /**
- * A negated title ("No Humans") excludes photos whose labels show the negated
- * subject. Same all-or-nothing fallback as the hard filters: only when EVERY
- * remaining photo shows it does the picker relax (or return null under
+ * A negated title ("No Humans") or an excluded-subject description ("no
+ * people") drops photos whose labels show the excluded subject. Same
+ * all-or-nothing fallback as the hard filters: only when EVERY remaining photo
+ * shows it does the picker relax (or return null under
  * submitWithoutTagMatch:false). A photo with no labels cannot be judged and is kept.
  *
  * @returns the surviving stemmed photos, or null for "pick nothing"
@@ -154,7 +156,12 @@ const applyExcludedSubjectFilter = (
     const kept = filtered.filter(({ wordStems }) => !photoShowsExcluded(wordStems, excluded));
     if (kept.length > 0) return kept;
     if (opts.submitWithoutTagMatch === false) return null;
-    notifyFallback(opts, { letterPrefix: null, mustStems: [], excludedStems: excluded.stems });
+    // The names the fallback log shows: the title's own negated stems plus the
+    // nouns of the concepts the description supplied, deduped.
+    const excludedStems = Array.from(
+        new Set([...excluded.stems, ...excluded.concepts.flatMap((c) => (c.noun === null ? [] : [c.noun]))]),
+    );
+    notifyFallback(opts, { letterPrefix: null, mustStems: [], excludedStems });
     return filtered;
 };
 

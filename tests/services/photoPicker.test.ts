@@ -14,6 +14,7 @@ const {
     buildSearchTerms,
     detectLetterPrefix,
     parseNegation,
+    descriptionExclusions,
     tokenise,
     stem,
     matches,
@@ -1765,9 +1766,116 @@ describe('photoPicker', () => {
             );
         });
 
+        test('a description word the title negates stays a keyword when the description excludes nothing', () => {
+            // Title negation keeps dropNegated as its only keyword path: a body
+            // naming "faces" is evidence, not an exclusion, so it stays.
+            const challenge = { title: 'No Humans', url: 'no-humans', welcome_message: 'Faces tell the story.' };
+            expect(buildChallengeKeywords(challenge)).toContain('face');
+        });
+
         test('an unlabelled photo cannot be judged and is kept', () => {
             const photos = [allowed('portrait', ['Person'], 3000), allowed('bare', [], 1000)];
             expect(pickPhotosForChallenge({ title: 'No Humans' }, photos, 2)).toEqual(['bare']);
+        });
+    });
+
+    describe('description exclusions ("no people" in the description)', () => {
+        const excludes = (welcome_message: string, ignoreWords: Iterable<string> | null = null) =>
+            descriptionExclusions({ title: 'Color Hunt: Green', welcome_message }, ignoreWords);
+
+        test.each([
+            ['No people please.', ['people']],
+            ['Please avoid people in your photos', ['people']],
+            ['Without any humans or animals.', ['people', 'animals']],
+            ['no people, pets or animals', ['people', 'animals']],
+            ['Pets are not allowed', ['animals']],
+            ['Images of persons will be disqualified', ['people']],
+        ])('"%s" excludes %j', (text, expected) => {
+            expect(excludes(text)).toEqual(expected);
+        });
+
+        test.each([
+            'Share photos of people and animals',
+            'Not only people but also animals',
+            'No matter what people think',
+            'people are the main subject',
+            'Street scenes, with or without people',
+            'places where people are not allowed to enter',
+            'No animals were harmed',
+            'No humans or animals were harmed',
+            'No animals or people were harmed',
+            'No animals will be harmed in the making',
+            'no animals are harmed',
+            'Street scenes with and without people',
+            'Street scenes with/without people',
+            'Please, no animal cruelty',
+            'no human-made objects',
+            'No personal edits',
+            'no petals',
+            'carpets are not allowed',
+        ])('"%s" excludes nothing', (text) => {
+            expect(excludes(text)).toEqual([]);
+        });
+
+        test('an empty or missing description excludes nothing', () => {
+            expect(excludes('')).toEqual([]);
+            expect(descriptionExclusions({ title: 'Color Hunt: Green' })).toEqual([]);
+            expect(descriptionExclusions(undefined)).toEqual([]);
+        });
+
+        test.each([
+            // Pinned known limits: the follower check is strict (" are" is not a
+            // follower, so the comma-joined list is rejected whole), "should" is
+            // a follower, and a "/" after a noun is a separator rather than a
+            // follower (so only the second lead match counts).
+            ['No people, animals are welcome', []],
+            ['without people around', []],
+            ['no pet photos', []],
+            ['no animals should be harmed', ['animals']],
+            ['no pets/no people', ['people']],
+        ])('known limit: "%s" → %j', (text, expected) => {
+            expect(excludes(text)).toEqual(expected);
+        });
+
+        test.each([
+            ['no people in the frame', ['people']],
+            ['no people allowed', ['people']],
+            ['No people should be visible', ['people']],
+            ['No humans.', ['people']],
+            ['No people - animals only', ['people']],
+            ['no people (or animals)', ['people']],
+            ['No people/animals', ['people', 'animals']],
+        ])('what may follow the noun list: "%s" → %j', (text, expected) => {
+            expect(excludes(text)).toEqual(expected);
+        });
+
+        test('two matches for one concept are reported once', () => {
+            expect(excludes('no people in the frame, no humans in the shot')).toEqual(['people']);
+            expect(excludes('Pets are not allowed, and no animals in the frame.')).toEqual(['animals']);
+        });
+
+        test('the guard drops a concept the positive title asks for', () => {
+            expect(descriptionExclusions({ title: 'Pets and Their People', welcome_message: 'no animals' })).toEqual(
+                [],
+            );
+            expect(descriptionExclusions({ title: 'Dogs', welcome_message: 'no people' })).toEqual(['people']);
+            expect(descriptionExclusions({ title: 'No Pets', welcome_message: 'animals are not allowed' })).toEqual([
+                'animals',
+            ]);
+            expect(descriptionExclusions({ title: 'Dogs', welcome_message: 'no animals' }, ['dogs'])).toEqual([
+                'animals',
+            ]);
+        });
+
+        test('adversarial descriptions finish in bounded time', () => {
+            // A space run collapses to one space, and the verdict form's
+            // quadratic restarts stay bounded at the MAX_TOKENISE_CHARS cap.
+            const spaces = `no people${' '.repeat(4000)}zzz`;
+            const list = 'people and '.repeat(341);
+            const started = Date.now();
+            expect(excludes(spaces)).toEqual([]);
+            expect(excludes(list)).toEqual([]);
+            expect(Date.now() - started).toBeLessThan(200);
         });
     });
 

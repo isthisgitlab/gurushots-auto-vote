@@ -12,6 +12,9 @@ import {
     NEGATION_MARKER_STEMS,
     parseNegation,
     dropNegated,
+    ANIMAL_LABEL_STEMS,
+    PEOPLE_LABEL_STEMS,
+    descriptionExclusions,
     detectLetterPrefix,
     readChallengeTheme,
 } from './title';
@@ -24,6 +27,26 @@ import type { ChallengeText, IgnoreWords, TagOptions } from '../../types/photoPi
 // the number of entries but not the size of one. A challenge's real subject is a
 // few nouns; a welcome_message can be arbitrarily long prose.
 const MAX_CHALLENGE_KEYWORDS = 48;
+
+// The label stems each description concept catches, keyed by its noun.
+const CONCEPT_LABEL_STEMS: Record<'people' | 'animals', ReadonlySet<string>> = {
+    people: PEOPLE_LABEL_STEMS,
+    animals: ANIMAL_LABEL_STEMS,
+};
+
+// A description's exclusion words stop counting as keywords (the 136550 body
+// naming "people" and "animals" would otherwise score People- and
+// Animal-labelled photos UP for a challenge that rules them off-topic).
+// Title-negation keywords are untouched: dropNegated alone still handles those.
+const dropDescribedConcepts = (keywords: string[], described: Array<'people' | 'animals'>): string[] => {
+    if (described.length === 0) return keywords;
+    const excluded = new Set<string>();
+    for (const noun of described) {
+        excluded.add(noun);
+        for (const labelStem of CONCEPT_LABEL_STEMS[noun]) excluded.add(labelStem);
+    }
+    return keywords.filter((k) => !excluded.has(k));
+};
 
 const buildChallengeKeywords = (
     challenge: ChallengeText | null | undefined,
@@ -50,7 +73,10 @@ const buildChallengeKeywords = (
     // from every source: the slug and the prose repeat it, and here it would
     // score every photo vision-labelled "Fun" as on theme.
     const abstract = abstractTitleWords(fromTitle);
-    const all = dropNegated([...fromTitle, ...fromUrl, ...fromWelcome], negation).filter((s) => !abstract.has(s));
+    const all = dropDescribedConcepts(
+        dropNegated([...fromTitle, ...fromUrl, ...fromWelcome], negation),
+        descriptionExclusions(challenge, ignoreWords),
+    ).filter((s) => !abstract.has(s));
     // title + url first, so if the cap bites it is the long welcome_message prose
     // that gets dropped, never the title — which is where the subject actually is.
     return Array.from(new Set(all)).slice(0, MAX_CHALLENGE_KEYWORDS);

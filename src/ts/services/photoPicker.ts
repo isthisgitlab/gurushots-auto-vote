@@ -5,7 +5,13 @@
  */
 
 import { stem, stripTags, tokenise, matches, tokeniseTagList } from './photoPicker/stemming';
-import { abstractTitleWords, detectLetterPrefix, parseNegation, readChallengeTheme } from './photoPicker/title';
+import {
+    abstractTitleWords,
+    detectLetterPrefix,
+    descriptionExclusions,
+    parseNegation,
+    readChallengeTheme,
+} from './photoPicker/title';
 import {
     buildChallengeKeywords,
     buildThemeKeywords,
@@ -37,6 +43,7 @@ export {
     buildSearchTerms,
     detectLetterPrefix,
     parseNegation,
+    descriptionExclusions,
     readChallengeTheme,
     stripTags,
     labelWordStems,

@@ -119,11 +119,11 @@ const makeFallbackLogger = (
             reasons.push('no photo matched every Must Include Tag');
         }
         if (Array.isArray(excludedStems) && excludedStems.length > 0) {
-            reasons.push(`every eligible photo shows what the title excludes (${excludedStems.join(', ')})`);
+            reasons.push(`every eligible photo shows what the challenge excludes (${excludedStems.join(', ')})`);
         }
         // photoPicker only fires onFallback with at least one reason set (a
-        // must-tag / letter filter, or a negated title's stems), so `why` is
-        // never empty.
+        // must-tag / letter filter, or an excluded subject's stems (from the
+        // title or the description)), so `why` is never empty.
         const why = reasons.join('; ');
         logger
             .withCategory('autoSubmit')

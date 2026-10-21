@@ -247,6 +247,28 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         expect(line!.length).toBeLessThan(5000);
     });
 
+    test('a description exclusion is named in the theme line', async () => {
+        // 136550's wording: the concepts come from the fixed word lists, and the
+        // line never quotes matched description text.
+        const { logger, category } = makeLogger();
+        await fetchCandidatesForChallenge(
+            invalid({
+                id: 'c-still',
+                title: 'Beauty of Still Life',
+                welcome_message:
+                    'Remember: no living or moving objects, so people and animals will be considered ' +
+                    'off-topic for this challenge.',
+            }),
+            'tok',
+            {},
+            { getEligiblePhotos: makeGetEligiblePhotos(), logger },
+        );
+        expect(category.info).toHaveBeenCalledWith(
+            expect.stringContaining('its description rules out people, animals'),
+            null,
+        );
+    });
+
     test('a contest-cadence title reads as an open theme and says so', async () => {
         // "week" is a stopword, so "Guru of The Week" yields no search term at
         // all — a different case from a theme that was searched and missed, and

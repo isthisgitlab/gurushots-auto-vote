@@ -36,11 +36,23 @@ export interface ChallengeTheme {
     subjects: readonly string[];
 }
 
-/** A negated subject in the shape the exclusion filter reads. */
+/**
+ * One spelled-out subject concept (people, animals) a challenge rules out. The
+ * exclusion filter drops photos whose labels name it, compared by exact stem.
+ */
+export interface ExcludedConcept {
+    /** Label stems the concept drops. */
+    labels: Set<string>;
+    /** Label stems that keep a photo (food exempts the animal concept); null when none. */
+    unless: Set<string> | null;
+    /** The concept's name when the description supplied it, null when only the title did. Fallback-log only, never matched. */
+    noun: string | null;
+}
+
+/** What a challenge's title and description say to leave out, in the shape the exclusion filter reads. */
 export interface ExcludedSubject {
     stems: readonly string[];
-    /** The spelled-out people concept, when the negated subject is people. */
-    concept: Set<string> | null;
+    concepts: ExcludedConcept[];
 }
 
 /**

@@ -1,15 +1,23 @@
 /**
- * Photo picker — what a challenge title says about its subject: title words
- * that are abstract rather than the subject, the series subject segment,
- * negated subjects ("No Humans") and the exclusion filter they become, and
- * letter challenges ("Begins With L").
+ * Photo picker — what a challenge title and description say about its subject:
+ * title words that are abstract rather than the subject, the series subject
+ * segment, negated subjects ("No Humans") and description exclusions ("no
+ * people"), and the exclusion filter they become, and letter challenges
+ * ("Begins With L").
  */
 
-import { MAX_TOKENISE_CHARS, FIXED_PHRASE_TOKENS, stem, rawTokenise, tokenise, matches } from './stemming';
+import { MAX_TOKENISE_CHARS, FIXED_PHRASE_TOKENS, stem, rawTokenise, tokenise, matches, stripTags } from './stemming';
 import * as lexicon from '../semantic/lexicon';
 import { finiteOr } from '../../numbers';
 
-import type { ChallengeText, ChallengeTheme, ExcludedSubject, IgnoreWords, Negation } from '../../types/photoPicker';
+import type {
+    ChallengeText,
+    ChallengeTheme,
+    ExcludedConcept,
+    ExcludedSubject,
+    IgnoreWords,
+    Negation,
+} from '../../types/photoPicker';
 
 // Bounds for abstractTitleWords, on the lexicon's concreteness cosine. Pinned by
 // the `concreteness.cases` gate in scripts/validate-lexicon.ts (real titles, run
@@ -224,25 +232,203 @@ const PEOPLE_LABEL_STEMS = new Set(
     ].map((w) => stem(w)),
 );
 
+// The animal concept, spelled out for the same reason as the people one: the
+// vision labels on a photo of an animal rarely say "animal" — they say "Dog",
+// "Vertebrate", "Wildlife". Compared by EXACT stem, not matches(): "cat" must
+// not catch "catamaran". Deliberately left out are the words that name an
+// object as often as an animal — "bear" (teddy bear), "duck" (rubber duck),
+// "mouse" (computer mouse), "seal" (wax seal), "feather", "fur", "fin" (quill,
+// coat, surfboard), "wing" (aircraft) — dropping them would keep those photos
+// out of still-life and machine challenges.
+//
+// SCOPE: these sets only drop photos from automatic picks, by the photo's
+// existing labels. They must never grow into attributes of people (age,
+// gender, ethnicity).
+const ANIMAL_LABEL_STEMS = new Set(
+    [
+        'animal',
+        'pet',
+        'dog',
+        'puppy',
+        'cat',
+        'kitten',
+        'bird',
+        'fish',
+        'horse',
+        'pony',
+        'cow',
+        'cattle',
+        'sheep',
+        'goat',
+        'pig',
+        'chicken',
+        'insect',
+        'butterfly',
+        'bee',
+        'spider',
+        'snake',
+        'reptile',
+        'lizard',
+        'turtle',
+        'frog',
+        'amphibian',
+        'mammal',
+        'vertebrate',
+        'wildlife',
+        'fauna',
+        'deer',
+        'rabbit',
+        'squirrel',
+        'monkey',
+        'elephant',
+        'lion',
+        'tiger',
+        'wolf',
+        'fox',
+        'whale',
+        'dolphin',
+        'shark',
+        'owl',
+        'eagle',
+        'parrot',
+        'pigeon',
+        'gull',
+        'seagull',
+        'swan',
+        'beak',
+        'snout',
+        'paw',
+        'whiskers',
+    ].map((w) => stem(w)),
+);
+// A photo labelled as food does not count as showing an animal: fish, poultry
+// or game on a table is classic still life. The exemption applies to the
+// animal concept only, never to people.
+const FOOD_LABEL_STEMS = new Set(
+    ['food', 'dish', 'seafood', 'cuisine', 'ingredient', 'meat', 'meal', 'recipe'].map((w) => stem(w)),
+);
+// The head nouns that turn a negated TITLE ("No Animals", "No Pets") into the
+// whole animal concept, the way any people word turns a negated title into the
+// people concept. A specific animal ("Cats: No Dogs") stays stems-only, so the
+// cats keep their challenge.
+const ANIMAL_HEAD_NOUNS = new Set(['animal', 'pet'].map((w) => stem(w)));
+
 /**
- * What the challenge title says to leave out, in the shape the exclusion filter
- * reads, or null when the title negates nothing.
+ * Which concepts a challenge's description rules out, read from the two fixed
+ * forms below. A concept the positive title asks FOR is dropped (the conflict
+ * guard): a "Pets and Their People" challenge whose description says "no
+ * animals" would otherwise drop every photo its own title asks for. The guard
+ * reads the positive title only, so a negated "No Pets" does not cancel a
+ * description's animal exclusion.
+ */
+const descriptionExclusions = (
+    challenge: ChallengeText | null | undefined,
+    ignoreWords: IgnoreWords = null,
+): Array<'people' | 'animals'> => {
+    const message = challenge?.welcome_message;
+    if (typeof message !== 'string' || message === '') return [];
+    // Single spaces only, so every space in the patterns below is literal.
+    const text = stripTags(message).toLowerCase().replace(/\s+/g, ' ');
+    const found: Array<'people' | 'animals'> = [];
+    const add = (matched: string) => {
+        if (PEOPLE_NOUNS_RE.test(matched) && !found.includes('people')) found.push('people');
+        if (ANIMAL_NOUNS_RE.test(matched) && !found.includes('animals')) found.push('animals');
+    };
+    for (let m = DESCRIPTION_LEAD_RE.exec(text); m !== null; m = DESCRIPTION_LEAD_RE.exec(text)) {
+        const rest = text.slice(m.index + m[0].length);
+        if (rest === '' || DESCRIPTION_LEAD_FOLLOWER_RE.test(rest)) add(m[0]);
+    }
+    for (let m = DESCRIPTION_VERDICT_RE.exec(text); m !== null; m = DESCRIPTION_VERDICT_RE.exec(text)) add(m[0]);
+    if (found.length === 0) return [];
+    const titleWords = rawTokenise(parseNegation(challenge?.title, ignoreWords).positiveTitle, { ignoreWords }).map(
+        (word) => stem(word),
+    );
+    return found.filter((noun) => {
+        const labels = noun === 'people' ? PEOPLE_LABEL_STEMS : ANIMAL_LABEL_STEMS;
+        return !titleWords.some((word) => labels.has(word) || word === noun);
+    });
+};
+
+// What a DESCRIPTION says to leave out. GuruShots phrases its off-topic rules
+// two ways — a lead negation ("no people", "without any humans or animals")
+// and a verdict ("people and animals will be considered off-topic") — and the
+// scope is deliberately the two concepts only: parsing "no X" for any noun out
+// of prose is too error-prone.
+//
+// SECURITY: both patterns are built ONLY from the fixed word lists below,
+// never from challenge text. The text is stripped, lowercased and collapsed to
+// single spaces first, so every space in a pattern is literal and each split
+// is unique — no adjacent optional whitespace to backtrack over. The verdict
+// form can restart at each noun of a long list, which makes it quadratic in
+// the noun count; at the MAX_TOKENISE_CHARS cap that measured about 1.3 ms,
+// pinned by the timing test in tests/services/photoPicker.test.ts.
+const DESCRIPTION_NOUN = '(?:people|persons?|humans?|animals?|pets?)';
+// A bare comma joins too, so serial lists ("no people, pets or animals") read whole.
+const DESCRIPTION_SEP = '(?:, (?:and |or )?| and | or |\\/)';
+const DESCRIPTION_LIST = `${DESCRIPTION_NOUN}(?:${DESCRIPTION_SEP}${DESCRIPTION_NOUN})*`;
+// The lookbehind rejects "with or without people" (and "with and", "with/"):
+// those grant a freedom rather than excluding. "not" is deliberately not a
+// lead word, so "not only people but also animals" excludes nothing.
+const DESCRIPTION_LEAD_RE = new RegExp(
+    `\\b(?<!with or |with and |with\\/)(?:no|without|avoid|avoiding|excluding) (?:any |other |the )?${DESCRIPTION_LIST}\\b`,
+    'g',
+);
+// A lead match counts only when the text after the noun list is the end of the
+// text, punctuation, " -" or " (", or opens one of these words. The list is
+// greedy and there is no lookahead to backtrack into, so the match ends after
+// the full list and this code-side check sees exactly what follows it.
+// "will", "are", "is", "can" and "may" stay out — they would let "no animals
+// will be harmed" through — while "should" and "must" stay in, at the pinned
+// cost that "no animals should be harmed" counts too.
+const DESCRIPTION_LEAD_FOLLOWER_RE =
+    /^(?:[.,;:!?()]| -| \(| (?:in|on|at|please|allowed|permitted|visible|should|must)\b)/;
+// The trailing lookahead rejects "places where people are not allowed to enter".
+const DESCRIPTION_VERDICT_RE = new RegExp(
+    `\\b${DESCRIPTION_LIST}\\b (?:will be|would be|are|is) (?:considered )?(?:off[ -]?topic|not allowed|not permitted|disqualified|forbidden|prohibited|excluded)\\b(?! to\\b)`,
+    'g',
+);
+const PEOPLE_NOUNS_RE = /\b(?:people|persons?|humans?)\b/;
+const ANIMAL_NOUNS_RE = /\b(?:animals?|pets?)\b/;
+
+/**
+ * What the challenge's title and description say to leave out, in the shape the
+ * exclusion filter reads, or null when neither negates anything.
  */
 const excludedSubjectOf = (
     challenge: ChallengeText | null | undefined,
     ignoreWords: IgnoreWords,
 ): ExcludedSubject | null => {
     const { stems, active } = parseNegation(challenge?.title, ignoreWords);
-    if (!active) return null;
-    return { stems, concept: stems.some((s) => PEOPLE_LABEL_STEMS.has(s)) ? PEOPLE_LABEL_STEMS : null };
+    const described = descriptionExclusions(challenge, ignoreWords);
+    if (!active && described.length === 0) return null;
+    const wantsPeople = active && stems.some((s) => PEOPLE_LABEL_STEMS.has(s));
+    const wantsAnimals = active && stems.some((s) => ANIMAL_HEAD_NOUNS.has(s));
+    // One concept per family: a concept named by both the title and the
+    // description keeps the description's noun.
+    const concepts: ExcludedConcept[] = [];
+    if (wantsPeople || described.includes('people')) {
+        concepts.push({
+            labels: PEOPLE_LABEL_STEMS,
+            unless: null,
+            noun: described.includes('people') ? 'people' : null,
+        });
+    }
+    if (wantsAnimals || described.includes('animals')) {
+        concepts.push({
+            labels: ANIMAL_LABEL_STEMS,
+            unless: FOOD_LABEL_STEMS,
+            // The concept's noun, singular — the fallback log names it like a stem.
+            noun: described.includes('animals') ? 'animal' : null,
+        });
+    }
+    return { stems, concepts };
 };
 
 const photoShowsExcluded = (labelStems: string[], excluded: ExcludedSubject): boolean =>
-    labelStems.some(
-        (labelStem) =>
-            (excluded.concept !== null && excluded.concept.has(labelStem)) ||
-            excluded.stems.some((s) => matches(labelStem, s)),
-    );
+    excluded.concepts.some(({ labels, unless }) => {
+        if (!labelStems.some((s) => labels.has(s))) return false;
+        return unless === null || !labelStems.some((s) => unless.has(s));
+    }) || labelStems.some((labelStem) => excluded.stems.some((s) => matches(labelStem, s)));
 
 // Detect a "letter challenge" title — "Begins With L", "Starts with the letter A",
 // "Things That Start With B" (interior "Start With" matches via the leading \b),
@@ -384,6 +570,9 @@ export {
     NEGATION_MARKER_STEMS,
     parseNegation,
     dropNegated,
+    PEOPLE_LABEL_STEMS,
+    ANIMAL_LABEL_STEMS,
+    descriptionExclusions,
     excludedSubjectOf,
     photoShowsExcluded,
     detectLetterPrefix,

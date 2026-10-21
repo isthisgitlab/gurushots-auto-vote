@@ -330,7 +330,7 @@ describe('negated-title fallback warning', () => {
             submitToChallenge,
         });
         expect(result.success).toBe(true);
-        const warning = lines.warning.find((m) => m.includes('every eligible photo shows what the title excludes'));
+        const warning = lines.warning.find((m) => m.includes('every eligible photo shows what the challenge excludes'));
         expect(warning).toBeDefined();
         expect(warning).toContain('falling back to the full library');
     });
