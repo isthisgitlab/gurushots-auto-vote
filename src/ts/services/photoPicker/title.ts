@@ -5,7 +5,7 @@
  * letter challenges ("Begins With L").
  */
 
-import { MAX_TOKENISE_CHARS, stem, rawTokenise, tokenise, matches } from './stemming';
+import { MAX_TOKENISE_CHARS, FIXED_PHRASE_TOKENS, stem, rawTokenise, tokenise, matches } from './stemming';
 import * as lexicon from '../semantic/lexicon';
 import { finiteOr } from '../../numbers';
 
@@ -20,6 +20,18 @@ import type { ChallengeText, ChallengeTheme, ExcludedSubject, IgnoreWords, Negat
 // ("balloon" 0.37) — "Built Among Nature" stays exactly as it was.
 const CONCRETE_SUBJECT_MIN = 0.15;
 const ABSTRACT_WORD_MAX = -0.1;
+// With a fixed phrase ("still life") in the title, the phrase is the anchor —
+// by NAME, since the lexicon has no vector for it and it cannot anchor by
+// concreteness, and a real qualifier next to it ("beauty" 0.0065) falls
+// between ABSTRACT_WORD_MAX and CONCRETE_SUBJECT_MIN, where neither bound
+// above would act. Next to the phrase, every word the lexicon scores at or
+// under this ceiling is a qualifier of the phrase, not a second subject.
+// Pinned by the real-lexicon cases in tests/services/photoPicker.subject.test.ts
+// the same way the bounds above are pinned by the `concreteness.cases` gate:
+// real qualifiers sit above it ("food" 0.116, "black" 0.119, "fruit" 0.29),
+// mood words at or below it ("beauty" 0.0065, "art" 0.015, "minimalist"
+// 0.009).
+const PHRASE_QUALIFIER_MAX = 0.05;
 
 const lexiconConcreteness = (word: string) => lexicon.concreteness(word);
 
@@ -33,10 +45,15 @@ const lexiconConcreteness = (word: string) => lexicon.concreteness(word);
  * word, including ones nobody has seen in a title before.
  *
  * Returns the words to demote: those reading as abstract, but ONLY when another
- * word in the same title is clearly a thing. A title with no concrete anchor
+ * word in the same title is clearly a thing. A fixed phrase (FIXED_PHRASE_TOKENS,
+ * "still life") anchors too: the phrase itself has no lexicon vector, so it
+ * cannot anchor by concreteness — instead every OTHER word with a known score
+ * at or under PHRASE_QUALIFIER_MAX is demoted next to it ("beauty" in "Beauty
+ * of Still Life"). A title with no concrete anchor
  * ("Creative Focus", "People and Architecture") returns nothing, so every
  * caller keeps its existing behavior there — as it does whenever the lexicon is
- * not loaded or a word is out of vocabulary (null concreteness = no opinion).
+ * not loaded (every score null, nothing demoted) or a word is out of vocabulary
+ * (null concreteness = no opinion).
  *
  * @param words - title words (surface or stemmed, as the caller has them)
  * @returns a subset of `words`; never all of them
@@ -48,6 +65,16 @@ const abstractTitleWords = (
     const abstract: Set<string> = new Set();
     if (!Array.isArray(words) || words.length < 2) return abstract;
     const scores = words.map((word) => finiteOr(concretenessOf(word), null));
+    // The fixed phrase anchors by name, so this branch runs BEFORE the
+    // concrete-anchor early return below, which would otherwise exit first for
+    // "beauty still life" (no word there is remotely CONCRETE_SUBJECT_MIN).
+    if (words.some((word) => FIXED_PHRASE_TOKENS.has(word))) {
+        words.forEach((word, i) => {
+            const score = scores[i];
+            if (score !== null && score <= PHRASE_QUALIFIER_MAX) abstract.add(word);
+        });
+        return abstract;
+    }
     const known = scores.filter((score) => score !== null);
     if (!(Math.max(...known) >= CONCRETE_SUBJECT_MIN)) return abstract;
     words.forEach((word, i) => {

@@ -54,13 +54,15 @@ const wholeLabelStems = (photo: LabelledPhoto): string[] => {
 
 /**
  * Label word-stems: every label split into words, stemmed, deduped across the
- * whole photo ("Sea Life" -> ["sea", "life"]).
+ * whole photo ("Sea Life" -> ["sea", "life"]) — except a fixed phrase, which
+ * stemming.ts keeps whole ("Still Life" -> ["still life"]) because its head
+ * noun is a stopword and the pair names one genre.
  *
  * THIS IS THE MATCHING REPRESENTATION — used by scorePhoto, photoMatchesAllStems
  * and countShouldMatches. It puts labels in the same word-level space that user
- * tags use (tokeniseTagList already splits "golden hour" into
- * ["golden","hour"]); a whole-label representation would let a Farm Life
- * challenge pick a "Sea Life" photo.
+ * tags use (tokeniseTagList splits "golden hour" into ["golden","hour"] and
+ * likewise keeps a fixed-phrase tag whole); a whole-label representation would
+ * let a Farm Life challenge pick a "Sea Life" photo.
  *
  * Stopwords are KEPT: a label is not challenge boilerplate, and a user's
  * must-tag "sea life" has to be able to match the label "Sea Life" on both

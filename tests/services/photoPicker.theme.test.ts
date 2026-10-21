@@ -170,3 +170,16 @@ describe('the title readers follow the theme', () => {
         expect(buildSearchTerms(ROADS)).toEqual(['road', 'anywhere']);
     });
 });
+
+describe('the fixed phrase "Still Life" through the title readers', () => {
+    // This file runs with the lexicon unloaded, like the readers above: the
+    // phrase merge itself is pure tokenising, so the ignore-word rules show
+    // here without it.
+    test('the phrase merges, and a single-word ignore keeps it unmerged', () => {
+        expect(buildThemeKeywords({ title: 'Beauty of Still Life' })).toEqual(['beauty', 'still life']);
+        expect(buildThemeKeywords({ title: 'Beauty of Still Life' }, ['still'])).toEqual(['beauty']);
+        expect(buildThemeKeywords({ title: 'Beauty of Still Life' }, ['life'])).toEqual(['beauty', 'still']);
+        // The merged token is dropped when the ignore set holds the phrase.
+        expect(buildThemeKeywords({ title: 'Beauty of Still Life' }, ['still life'])).toEqual(['beauty']);
+    });
+});

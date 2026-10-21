@@ -183,7 +183,9 @@ const STOPWORDS = new Set([
     // noun carries none ("The Farm Life" is about farms; "Sea Life" is about
     // the sea). Left in, "life" would both drive a server-side search that
     // pulls in sea-life photos for a Farm Life challenge AND score those photos
-    // as a keyword match.
+    // as a keyword match. "Still Life" is the one exception: the pair names a
+    // genre, and FIXED_PHRASES below merges it back into one term before this
+    // filter runs.
     //
     // Only the challenge side strips these (tokenise filters before it stems,
     // so entries are raw words). A user who TYPES "sea life" as a tag means it
@@ -212,6 +214,33 @@ const STOPWORDS = new Set([
     'tale',
     'tales',
 ]);
+
+// Phrases that are ONE subject term even though their head noun is a stopword
+// above: "Still Life" names a genre, and stripping "life" leaves "still" to
+// stand for the whole thing. Merging keeps the "Farm Life" / "Sea Life" strip
+// intact for every other title while the phrase survives whole — into
+// the keywords, the theme, the search terms and the vision prompt. The merged
+// token has no lexicon vector and no longer matches a bare "Still" label or
+// tag, which is the point.
+//
+// The pair is merged across punctuation too ("hold it still. Life is…"), and
+// prose like that does falsely merge — accepted: challenge text rarely quotes
+// prose, and the cost there is one extra keyword, not a flipped subject.
+//
+// Single-word ignore words ("still" or "life" in a user's ignore list) keep
+// the pair from merging — see the ignore rules in the walk below. Lookups are
+// exact Map.get hits against this list, never a regex built from it: the text
+// is untrusted API data, and the walk runs on input already cut to
+// MAX_TOKENISE_CHARS.
+const FIXED_PHRASES: Map<string, string> = new Map([
+    ['still life', 'still life'],
+    ['still lifes', 'still life'],
+    ['still lives', 'still life'],
+    ['stilllife', 'still life'],
+]);
+// The canonical forms, for the readers that must treat the phrase as one term
+// (abstractTitleWords anchors a title on it — see title.ts).
+const FIXED_PHRASE_TOKENS: Set<string> = new Set(FIXED_PHRASES.values());
 
 const isPureDigit = (token: string) => /^\d+$/.test(token);
 
@@ -304,6 +333,31 @@ const toIgnoreSet = (words: Iterable<unknown> | null | undefined): Set<unknown> 
     return out.size > 0 ? out : null;
 };
 
+// The fixed-phrase merge, run on the raw words before the stopword filter: a
+// pair found in FIXED_PHRASES is emitted as its canonical token and the next
+// word consumed, a one-word spelling as its canonical token. A pair is left
+// unmerged when either of its words is in the ignore set, so the normal
+// filter then drops the ignored word — and the merged token is dropped by
+// that filter when the ignore set holds the canonical phrase itself.
+const mergeFixedPhrases = (words: string[], ignore: Set<unknown> | null): string[] => {
+    const ignored = (word: string) => ignore !== null && ignore.has(word);
+    const out: string[] = [];
+    for (let i = 0; i < words.length; i++) {
+        const pair =
+            i + 1 < words.length && !ignored(words[i]) && !ignored(words[i + 1])
+                ? FIXED_PHRASES.get(`${words[i]} ${words[i + 1]}`)
+                : undefined;
+        if (pair !== undefined) {
+            out.push(pair);
+            i++;
+            continue;
+        }
+        const single = FIXED_PHRASES.get(words[i]);
+        out.push(single !== undefined ? single : words[i]);
+    }
+    return out;
+};
+
 const rawTokenise = (
     text: string | null | undefined,
     { keepStopwords = false, ignoreWords = null }: TokeniseOptions = {},
@@ -313,19 +367,19 @@ const rawTokenise = (
     // user writing "captivating" catches it without having to know that the
     // stemmer turns it into "captivat".
     const ignore = toIgnoreSet(ignoreWords);
-    return text
+    const words = text
         .slice(0, MAX_TOKENISE_CHARS)
         .toLowerCase()
         .replace(/<[^>]*>/g, ' ')
         .split(/[^a-z0-9]+/)
-        .map((t) => t.replace(/\d+$/, ''))
-        .filter(
-            (t) =>
-                t.length > 1 &&
-                !isPureDigit(t) &&
-                (keepStopwords || !STOPWORDS.has(t)) &&
-                !(ignore !== null && ignore.has(t)),
-        );
+        .map((t) => t.replace(/\d+$/, ''));
+    return mergeFixedPhrases(words, ignore).filter(
+        (t) =>
+            t.length > 1 &&
+            !isPureDigit(t) &&
+            (keepStopwords || !STOPWORDS.has(t)) &&
+            !(ignore !== null && ignore.has(t)),
+    );
 };
 
 // The surface words above, stemmed. Split from rawTokenise because term
@@ -389,18 +443,25 @@ const MIN_USER_TAG_STEM_LENGTH = 3;
  * with like against `photo.labels`. Unlike the keyword path, stopwords are
  * kept (a user typing "shot" means it), but stems shorter than
  * MIN_USER_TAG_STEM_LENGTH are dropped to avoid spurious substring matches.
- * Empty/non-array input → [].
+ *
+ * Each tag is tokenised ON ITS OWN, never joined first: two separate tags
+ * "still" and "life" must stay two stems, while one tag "still life" merges
+ * into the fixed phrase. Per-tag work stays cheap — tags are capped at
+ * MAX_TAG_LENGTH (settings/limits.ts). Empty/non-array input → [].
  */
 const tokeniseTagList = (tags: readonly string[] | null | undefined): string[] => {
     if (!Array.isArray(tags) || tags.length === 0) return [];
-    const joined = tags.filter((t) => typeof t === 'string').join(' ');
-    const stems = tokenise(joined, { keepStopwords: true }).filter((s) => s.length >= MIN_USER_TAG_STEM_LENGTH);
+    const stems = tags
+        .filter((t) => typeof t === 'string')
+        .flatMap((tag) => tokenise(tag, { keepStopwords: true }))
+        .filter((s) => s.length >= MIN_USER_TAG_STEM_LENGTH);
     return Array.from(new Set(stems));
 };
 
 export {
     MAX_TOKENISE_CHARS,
     MIN_USER_TAG_STEM_LENGTH,
+    FIXED_PHRASE_TOKENS,
     stem,
     stripTags,
     rawTokenise,

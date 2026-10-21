@@ -139,6 +139,46 @@ describe('photoPicker', () => {
         });
     });
 
+    // The fixed-phrase merge keeps "Still Life" one term while every other
+    // title keeps its "life" strip.
+    describe('fixed phrases — "Still Life" stays one subject term', () => {
+        test('title, slug, quoted text, plurals and the hashtag spelling all give the phrase', () => {
+            expect(tokenise('Beauty of Still Life')).toEqual(['beauty', 'still life']);
+            expect(tokenise('beauty-of-still-life')).toEqual(['beauty', 'still life']);
+            expect(tokenise('"Still Life"')).toEqual(['still life']);
+            expect(tokenise('Still Lifes')).toEqual(['still life']);
+            expect(tokenise('still lives')).toEqual(['still life']);
+            expect(tokenise('stilllife')).toEqual(['still life']);
+        });
+
+        test('the "life" strip stays as it is for every other title', () => {
+            expect(tokenise('The Farm Life')).toEqual(['farm']);
+            expect(tokenise('still water')).toEqual(['still', 'water']);
+            expect(tokenise('hold it still')).toEqual(['hold', 'still']);
+        });
+
+        test('the merge joins words across punctuation', () => {
+            // Prose like this merges falsely — accepted: the cost there is one
+            // extra keyword, not a flipped subject.
+            expect(tokenise('hold it still. Life is good')).toEqual(['hold', 'still life']);
+        });
+
+        test('a single-word ignore keeps the pair unmerged — the ignored word wins', () => {
+            expect(tokenise('Beauty of Still Life', { ignoreWords: ['still'] })).toEqual(['beauty']);
+            expect(tokenise('Beauty of Still Life', { ignoreWords: ['life'] })).toEqual(['beauty', 'still']);
+            // The merged token is dropped when the ignore set holds the phrase.
+            expect(tokenise('Beauty of Still Life', { ignoreWords: ['still life'] })).toEqual(['beauty']);
+        });
+
+        test('a "Still Life" label is one stem, so a bare "life" tag no longer matches it', () => {
+            const stems = labelWordStems({ labels: ['Still Life'] });
+            expect(stems).toEqual(['still life']);
+            // The same comparison photoMatchesAllStems makes: "life" vs
+            // "still life" is far past MAX_STEM_PREFIX_DELTA.
+            expect(stems.some((labelStem) => matches(labelStem, 'life'))).toBe(false);
+        });
+    });
+
     describe('labelStemGroups', () => {
         test('keeps each label separate and collapses duplicates', () => {
             expect(labelStemGroups({ labels: ['Sea Life', 'Staircase', 'Staircase'] })).toEqual([
@@ -705,6 +745,13 @@ describe('photoPicker', () => {
             // but an explicit user tag must be honored.
             expect(tokeniseTagList(['shot'])).toEqual(['shot']);
             expect(tokeniseTagList(['winner'])).toEqual(['winner']);
+        });
+        test('each tag is tokenised on its own — separate tags never fuse into the phrase', () => {
+            // Joining the tags first would fuse "still" + "life" into the fixed
+            // phrase, which no single tag said.
+            expect(tokeniseTagList(['still', 'life'])).toEqual(['still', 'life']);
+            expect(tokeniseTagList(['still life'])).toEqual(['still life']);
+            expect(tokeniseTagList(['Still', 'still'])).toEqual(['still']);
         });
     });
 
