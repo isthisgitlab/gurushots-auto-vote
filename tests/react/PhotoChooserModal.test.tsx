@@ -163,7 +163,7 @@ describe('opening', () => {
         expect(screen.getByRole('button', { name: 'Search' })).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Auto' })).toBeNull();
         // The help names no Auto and no challenge where there is none.
-        expect(screen.getByText(/^The app uses these photos first/).textContent).not.toMatch(
+        expect(screen.getByText(/^Used first, but they must still pass/).textContent).not.toMatch(
             /press Auto|challenge's own settings/,
         );
     });
@@ -1435,11 +1435,10 @@ describe('a row that inherits', () => {
 
 test('explains how chosen photos are used: ranked, or in the picked order when that setting is on, and where it lives', async () => {
     setup();
-    const help = screen.getByText(/^The app uses these photos first/).textContent!;
+    const help = screen.getByText(/^Used first, but they must still pass/).textContent!;
     expect(help).toContain('must still pass your tag filters');
-    expect(help).toContain('ranks them the way it ranks its own picks');
-    expect(help).toContain('Use Chosen Photos in the order I picked them');
-    expect(help).toContain("this challenge's own settings");
+    expect(help).toContain("Ranked like the app's own picks");
+    expect(help).toContain('in your pick order if that setting is on');
     expect(help).toContain('Nothing is read until you load, search or press Auto');
 });
 

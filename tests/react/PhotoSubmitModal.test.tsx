@@ -689,7 +689,7 @@ describe('texts, notice and blocked photos (the swap picker)', () => {
         setupLoaded({ max: 1, texts: swapTexts });
         await opened();
         expect(screen.getByText('Choose the photo to swap in')).toBeTruthy();
-        expect(screen.getByText(/^The photo you pick replaces the current one\./)).toBeTruthy();
+        expect(screen.getByText(/^Picking replaces the current photo/)).toBeTruthy();
         expect(countLine().textContent).toBe('Picked: 0/1');
         const useButton = () => screen.getByRole('button', { name: /^Use this photo/ });
         expect(useButton().textContent).toBe('Use this photo');

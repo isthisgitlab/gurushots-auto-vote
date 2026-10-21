@@ -82,7 +82,7 @@ describe('Latvian log messages', () => {
                 `⚠️ Manual Only is on for ${tag}: the join was already paid for, but no photo is entered automatically — enter one from Discover: choose the photo for this challenge (Chosen Photos), then press Join`,
             ),
         ).toBe(
-            '⚠️ Izaicinājumam [Izaicinājums 42: Sunset] ir ieslēgts „Tikai manuāli”: pievienošanās jau ir apmaksāta, bet foto netiek iesniegts automātiski — iesniedz to sadaļā „Atrast izaicinājumus”: izvēlies šī izaicinājuma foto („Izvēlētie foto”) un nospied „Pievienoties”',
+            '⚠️ Izaicinājumam [Izaicinājums 42: Sunset] ieslēgts „Tikai manuāli”: pievienošanās apmaksāta, bet foto nav iesniegts automātiski — iesniedz to „Atrast izaicinājumos”: izvēlies foto („Izvēlētie foto”) un nospied „Pievienoties”',
         );
     });
 
@@ -134,10 +134,10 @@ describe('Latvian log messages', () => {
         );
         expect(
             localizeLogMessage(
-                '⚠️ autoSubmit: nothing in [Challenge 42: Sunset] matched the challenge theme, so 2 entries were chosen on past performance — image1 (past performance not looked up yet — ranked below any photo that was) out of 3 equally off-theme candidates. Set a Per-Title Tag Rule for this challenge title in Settings to steer which photos qualify.',
+                '⚠️ autoSubmit: nothing in [Challenge 42: Sunset] matched the theme, so 2 entries were chosen on past performance — image1 (past performance not looked up yet — ranked below any photo that was) of 3 equally off-theme candidates. Set a Per-Title Tag Rule for this title in Settings to steer which photos fit.',
             ),
         ).toBe(
-            '⚠️ Automātiskā iesniegšana: izaicinājumā [Izaicinājums 42: Sunset] nekas neatbilda tēmai. Pēc iepriekšējiem rezultātiem atlasīto foto skaits: 2 — image1 (iepriekšējie rezultāti vēl nav pārbaudīti — sarindots aiz visiem foto, kuru rezultāti ir pārbaudīti) no 3 vienlīdz neatbilstošiem kandidātiem. Uzstādījumos pievieno šī izaicinājuma nosaukumam tagu noteikumu, lai noteiktu, kuri foto ir piemēroti.',
+            '⚠️ Automātiskā iesniegšana: izaicinājumā [Izaicinājums 42: Sunset] nekas neatbilda tēmai. Pēc iepriekšējiem rezultātiem atlasīti: 2 — image1 (iepriekšējie rezultāti vēl nav pārbaudīti — sarindots aiz visiem foto, kuru rezultāti ir pārbaudīti) no 3 vienlīdz neatbilstošiem kandidātiem. Sadaļā Uzstādījumi pievieno nosaukumam tagu noteikumu.',
         );
     });
 
@@ -158,7 +158,7 @@ describe('Latvian log messages', () => {
 
     test('translates the chosen-photos lines, including the fill label they start with', () => {
         const tag = '[Challenge 42: Sunset]';
-        const text = `skipped ${tag} — every chosen photo is already entered there, and Submit Only Chosen Photos is on. Choose other photos or turn that setting off; Emergency Submit ignores it near the deadline, so turn Emergency Submit off for this challenge to keep the slot empty`;
+        const text = `skipped ${tag} — every chosen photo is already entered there, and Submit Only Chosen Photos is on. Choose other photos or turn it off (Emergency Submit ignores it near the deadline)`;
         for (const [label, lv] of [
             ['autoSubmit', 'Automātiskā iesniegšana'],
             ['fillNew', 'Jauna foto iesniegšana'],
