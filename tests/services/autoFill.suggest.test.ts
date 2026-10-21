@@ -166,7 +166,11 @@ const makeDeps = ({
         settings: settings === null ? null : makeSettings(settings),
         logger,
         getEligiblePhotos: makeLibrary(photos),
-        getEligiblePhotosWalk: jest.fn(async () => ({ items: walkItems, truncated: false })),
+        getEligiblePhotosWalk: jest.fn(async () => ({
+            items: walkItems,
+            truncated: false,
+            nextStart: walkItems.length,
+        })),
         getImageData,
         getSemanticScores: jest.fn(async () => null),
         rankVisually,

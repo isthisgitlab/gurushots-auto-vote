@@ -219,14 +219,14 @@ describe('TitleTagRulesEditor', () => {
                 const onChange = jest.fn();
                 render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
                 fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
-                fireEvent.click(await screen.findByRole('button', { name: 'app.pickLoadAll' }));
+                fireEvent.click(await screen.findByRole('button', { name: 'app.pickLoadPhotos' }));
                 fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserTileLabel' }));
                 fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
                 await waitFor(() =>
                     expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotos: [ID] })]),
                 );
                 // A rule has no challenge to read eligibility through.
-                expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined, 'cached', 'submit');
+                expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined, 'cached', 'submit', 0, 100);
             });
 
             test('an explicit empty list means none, and Inherit writes the empty sentinel', () => {

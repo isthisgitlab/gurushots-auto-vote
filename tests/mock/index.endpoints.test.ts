@@ -33,6 +33,7 @@ import type * as joinChallengesModule from '../../src/ts/services/joinChallenges
 import type * as missionsModule from '../../src/ts/services/missions';
 import type * as indexModule from '../../src/ts/mock/index';
 import type { Challenge } from '../../src/ts/types/gurushots';
+import { LIBRARY_BATCH_PHOTOS } from '../../src/ts/settings/limits';
 import { invalid } from '../helpers/invalid';
 
 /** The mock autocomplete called without a member id, as the no-token / term tests do. */
@@ -94,7 +95,7 @@ describe('no-token contract for every endpoint not covered elsewhere', () => {
         [
             'getEligiblePhotosWalk',
             () => mockApiClient.getEligiblePhotosWalk(1, invalid(null)),
-            { items: [], truncated: true },
+            { items: [], truncated: true, nextStart: 0 },
         ],
         ['getImageData', () => mockApiClient.getImageData('photo_old_008', invalid(null)), null],
         ['submitToChallenge', () => mockApiClient.submitToChallenge(1, ['a'], invalid(null)), { ok: false, raw: null }],
@@ -183,6 +184,8 @@ describe('getEligiblePhotosWalk', () => {
         expect(walk.truncated).toBe(false);
         // Without a `skip` nothing is reported as left out.
         expect(walk).not.toHaveProperty('skipped');
+        // All there was: a continuation from here re-reads nothing.
+        expect(walk.nextStart).toBe(9);
     });
 
     test('with a skip the photos it names are left out of the items and reported by id', async () => {
@@ -196,10 +199,13 @@ describe('getEligiblePhotosWalk', () => {
         expect(walk.items).toHaveLength(8);
         expect(walk.skipped).toEqual(['photo_won_009']);
         expect(walk.truncated).toBe(false);
+        // nextStart counts the rows read (9), not the kept ones (8): a full
+        // read consumed every row.
+        expect(walk.nextStart).toBe(9);
         const searched = await settle(
             mockApiClient.getEligiblePhotosWalk(1, 'tok', { search: 'Trophy', skip: () => true }),
         );
-        expect(searched).toEqual({ items: [], truncated: false, skipped: ['photo_won_009'] });
+        expect(searched).toEqual({ items: [], truncated: false, skipped: ['photo_won_009'], nextStart: 1 });
     });
 
     test('a search is the same exact tag match as the paged read; a non-string search is ignored', async () => {
@@ -207,6 +213,128 @@ describe('getEligiblePhotosWalk', () => {
         expect(exact.items.map((p) => p.id)).toEqual(['photo_pink_flower_001', 'photo_blocked_007']);
         const ignored = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', invalid({ search: 42 })));
         expect(ignored.items).toHaveLength(9);
+    });
+
+    const skipWon = (photo: { permission?: { allowed?: boolean; message?: string | null } }) =>
+        photo.permission?.allowed === false && /won a challenge/.test(String(photo.permission.message));
+
+    test('a maxKept extent keeps whole pages of four until the kept count reaches it', async () => {
+        const first = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 4, skip: skipWon }));
+        expect(first.items.map((p) => p.id)).toEqual([
+            'photo_pink_flower_001',
+            'photo_nature_landscape_002',
+            'photo_urban_003',
+            'photo_recent_004',
+        ]);
+        expect(first.skipped).toEqual([]);
+        expect(first.truncated).toBe(true);
+        expect(first.nextStart).toBe(4);
+        const second = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 4, skip: skipWon, start: first.nextStart }),
+        );
+        expect(second.items.map((p) => p.id)).toEqual([
+            'photo_pink_petal_005',
+            'photo_animal_006',
+            'photo_blocked_007',
+            'photo_old_008',
+        ]);
+        expect(second.truncated).toBe(true);
+        expect(second.nextStart).toBe(8);
+        // The short last page, the exact-multiple case: the won photo is skipped, nothing new is listed,
+        // and the rows have run out.
+        const third = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 4, skip: skipWon, start: second.nextStart }),
+        );
+        expect(third).toEqual({ items: [], skipped: ['photo_won_009'], truncated: false, nextStart: 12 });
+    });
+
+    test('the default batch (LIBRARY_BATCH_PHOTOS) is one page of four rows', async () => {
+        const walk = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: LIBRARY_BATCH_PHOTOS, skip: skipWon }),
+        );
+        expect(walk.items).toHaveLength(4);
+        expect(walk.skipped).toEqual([]);
+        expect(walk.truncated).toBe(true);
+        expect(walk.nextStart).toBe(4);
+        // Without a skip the page is kept whole and no skipped list is reported.
+        const plain = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: LIBRARY_BATCH_PHOTOS }));
+        expect(plain.items).toHaveLength(4);
+        expect(plain).not.toHaveProperty('skipped');
+        expect(plain.truncated).toBe(true);
+        expect(plain.nextStart).toBe(4);
+        // A default batch whose only row is the won photo: it rides along in skipped.
+        const won = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: LIBRARY_BATCH_PHOTOS, start: 8, skip: skipWon }),
+        );
+        expect(won).toEqual({ items: [], skipped: ['photo_won_009'], truncated: false, nextStart: 12 });
+    });
+
+    test('a Refresh extent (keep 8) reads two pages, and only photos on read pages are skipped', async () => {
+        const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 8, skip: skipWon }));
+        expect(walk.items).toHaveLength(8);
+        // The won photo sits beyond the two pages the extent needed: it was
+        // never read, so it is not reported as skipped either.
+        expect(walk.skipped).toEqual([]);
+        expect(walk.truncated).toBe(true);
+        expect(walk.nextStart).toBe(8);
+    });
+
+    test('an extent beyond the library reads every page; the short last page ends it untruncated', async () => {
+        const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 12, skip: skipWon }));
+        expect(walk.items).toHaveLength(8);
+        expect(walk.skipped).toEqual(['photo_won_009']);
+        expect(walk.truncated).toBe(false);
+        expect(walk.nextStart).toBe(12);
+        // A continuation past the end reads nothing and stays untruncated.
+        const over = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 12, skip: skipWon, start: walk.nextStart }),
+        );
+        expect(over).toEqual({ items: [], skipped: [], truncated: false, nextStart: 12 });
+    });
+
+    test('a short page wins over the extent, like the real walk', async () => {
+        // The last three rows: the extent (3 kept) is reached on the very page
+        // that runs out, and the rows having run out decides.
+        const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 3, start: 6 }));
+        expect(walk.items.map((p) => p.id)).toEqual(['photo_blocked_007', 'photo_old_008', 'photo_won_009']);
+        expect(walk.truncated).toBe(false);
+        expect(walk.nextStart).toBe(10);
+    });
+
+    test('a maxKept batch without a skip keeps the whole page and reports no skipped list', async () => {
+        const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 4 }));
+        expect(walk.items).toHaveLength(4);
+        expect(walk).not.toHaveProperty('skipped');
+        expect(walk.truncated).toBe(true);
+        expect(walk.nextStart).toBe(4);
+    });
+
+    test('a maxKept page is sliced from the search-filtered library', async () => {
+        const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 4, search: ' Pink ' }));
+        expect(walk.items.map((p) => p.id)).toEqual([
+            'photo_pink_flower_001',
+            'photo_pink_petal_005',
+            'photo_blocked_007',
+        ]);
+        // Three filtered rows are a short page: the batch is over.
+        expect(walk.truncated).toBe(false);
+        expect(walk.nextStart).toBe(4);
+    });
+
+    test('without a token nextStart is the normalized start: nothing was read', async () => {
+        await expect(mockApiClient.getEligiblePhotosWalk(1, invalid(null), { start: 12 })).resolves.toEqual({
+            items: [],
+            truncated: true,
+            nextStart: 12,
+        });
+        await expect(mockApiClient.getEligiblePhotosWalk(1, invalid(null), { start: -5 })).resolves.toEqual({
+            items: [],
+            truncated: true,
+            nextStart: 0,
+        });
+        await expect(
+            mockApiClient.getEligiblePhotosWalk(1, invalid(null), invalid({ start: 'later' })),
+        ).resolves.toEqual({ items: [], truncated: true, nextStart: 0 });
     });
 });
 

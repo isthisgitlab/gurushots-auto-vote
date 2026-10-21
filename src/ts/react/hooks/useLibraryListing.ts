@@ -8,6 +8,7 @@ import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
 import * as ipc from '@/api/ipc';
 
 import { asPreview } from '../../libraryPreview';
+import { LIBRARY_BATCH_PHOTOS, MAX_LIBRARY_KEEP_PHOTOS, MAX_WON_IDS } from '../../settings/limits';
 
 import type { WindowApi } from '../../types/ipc';
 import type { LibraryUsage } from '../../types/photoPicker';
@@ -37,6 +38,19 @@ const replacesListing = (error: string | undefined): boolean =>
     error === 'no-challenge-context' || (error !== undefined && ACCOUNT_GONE.has(error));
 
 /**
+ * How far a re-read of a listing goes: what the batch rule counts — the allowed photos once the marks are
+ * known, every photo before that — clamped to 1..MAX_LIBRARY_KEEP_PHOTOS. The handler and the mock serve
+ * exactly this many photos, so a Refresh, Retry or re-check re-reads what is on screen instead of
+ * shrinking it.
+ */
+const countedKeep = (listing: Listing): number => {
+    const counted = listing.allowedKnown
+        ? listing.photos.filter((photo) => photo.allowed).length
+        : listing.photos.length;
+    return Math.min(MAX_LIBRARY_KEEP_PHOTOS, Math.max(1, counted));
+};
+
+/**
  * The listing for a challenge. A no-search read may come from memory as a preview, which is read again in
  * the background; a search, Retry and Refresh read afresh. Answers to any but the newest request are dropped.
  * With `onDemand` nothing is read on mount: the listing is `idle` until `load` (or `retry`) is called.
@@ -62,17 +76,40 @@ export function useLibraryListing(
     const [generation, setGeneration] = useState(0);
     const [revalidating, setRevalidating] = useState(false);
     const [recheckFailed, setRecheckFailed] = useState(false);
+    // The read of the next batch after the listing on screen: whether it is on its way, and why it
+    // failed (the listing itself stays). `null` is no failure. The ref carries the generation the
+    // in-flight read started on, so a second loadMore on the same listing cannot start a sibling read.
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [loadMoreFailed, setLoadMoreFailed] = useState<string | null>(null);
+    const loadingMoreRef = useRef<number | null>(null);
+    // How many listings have been shown: a new read (a preview swapped for its fresh read included)
+    // is a new listing, an appended batch or a member patched in is not.
+    const [shown, setShown] = useState(0);
+    // The search term of the listing on screen, set when one is shown from the read that owns
+    // `lastSearchRef`: an appended batch and a member patch do not show, so they keep the term.
+    const [searchTerm, setSearchTerm] = useState('');
     const generationRef = useRef(0);
     const requestRef = useRef(0);
     const lastSearchRef = useRef('');
     // The member on screen: the background re-check of a preview, which cannot name one, keeps it.
     const memberRef = useRef<string | null>(null);
+    // The state of the newest render, for callbacks that must not depend on `state`.
+    const latestState = useRef(state);
+    latestState.current = state;
 
     const read = useCallback(
-        (search: string, mode: ReadMode) =>
-            ipc.callOrNull(() => ipc.getLibraryPhotos(challengeId, search || undefined, mode, usage)),
+        (search: string, mode: ReadMode, start: number, keep: number) =>
+            ipc.callOrNull(() => ipc.getLibraryPhotos(challengeId, search || undefined, mode, usage, start, keep)),
         [challengeId, usage],
     );
+
+    // How far a re-read of what is on screen goes: the counted extent of the listing on screen.
+    // From the error state there is no listing, so one batch.
+    const keepOnScreen = useCallback(() => {
+        const current = latestState.current;
+        if (current.status !== 'ready') return LIBRARY_BATCH_PHOTOS;
+        return countedKeep(current.listing);
+    }, []);
 
     /**
      * Puts a listing on screen and remembers the member it names; a fresh one feeds `known`, which a change of
@@ -92,6 +129,8 @@ export function useLibraryListing(
                 return new Map([...base, ...listing.photos.map((photo): [string, LibraryPhoto] => [photo.id, photo])]);
             });
         }
+        setShown((count) => count + 1);
+        setSearchTerm(lastSearchRef.current);
         setState({ status: 'ready', listing: { ...listing, memberId } });
     }, []);
 
@@ -112,16 +151,18 @@ export function useLibraryListing(
     }, []);
 
     const load = useCallback(
-        async (search: string, mode: ReadMode = search ? 'fresh' : 'cached') => {
+        async (search: string, mode: ReadMode = search ? 'fresh' : 'cached', keep: number = LIBRARY_BATCH_PHOTOS) => {
             const request = ++requestRef.current;
             lastSearchRef.current = search;
             generationRef.current += 1;
             setGeneration(generationRef.current);
             setRevalidating(false);
             setRecheckFailed(false);
+            setLoadingMore(false);
+            setLoadMoreFailed(null);
             setState({ status: 'loading' });
             const startedAt = Date.now();
-            const result = await read(search, mode);
+            const result = await read(search, mode, 0, keep);
             if (request !== requestRef.current) return;
             if (!result?.success) return showFailure(result);
             // A cached answer is a preview when it says so, or when the caller trusts no cached marks: unless
@@ -131,7 +172,9 @@ export function useLibraryListing(
             show(asShown);
             if (!asShown.preview) return;
             setRevalidating(true);
-            const fresh = await read(search, 'fresh');
+            // The re-check re-reads the extent of the preview just shown, so a cached answer read
+            // again in the background keeps what is on screen instead of shrinking it to one batch.
+            const fresh = await read(search, 'fresh', 0, countedKeep(asShown));
             if (request !== requestRef.current) return;
             setRevalidating(false);
             if (fresh?.success) show(fresh, true);
@@ -154,7 +197,9 @@ export function useLibraryListing(
         const request = ++requestRef.current;
         setRevalidating(true);
         setRecheckFailed(false);
-        const result = await read(lastSearchRef.current, 'fresh');
+        setLoadingMore(false);
+        setLoadMoreFailed(null);
+        const result = await read(lastSearchRef.current, 'fresh', 0, keepOnScreen());
         if (request !== requestRef.current) return;
         setRevalidating(false);
         if (result?.success) {
@@ -164,7 +209,7 @@ export function useLibraryListing(
         } else if (replacesListing(result?.error)) {
             showFailure(result);
         } else setRecheckFailed(true);
-    }, [read, show, showFailure]);
+    }, [read, show, showFailure, keepOnScreen]);
     const refresh = useCallback(() => {
         void refreshRead();
         return generationRef.current + 1;
@@ -181,11 +226,108 @@ export function useLibraryListing(
     }, []);
 
     // Reads the listing again; answers the generation that read is, so a Retry can be recorded
-    // against the listing it created rather than the one it replaced.
+    // against the listing it created rather than the one it replaced. The extent re-read is the one
+    // on screen now, read before load takes the listing down.
     const retry = () => {
-        void load(lastSearchRef.current, 'fresh');
+        void load(lastSearchRef.current, 'fresh', keepOnScreen());
         return generationRef.current;
     };
 
-    return { state, known, generation, revalidating, recheckFailed, load, refresh, setMember, retry };
+    /**
+     * Reads the batch after the listing on screen and appends it: not a new generation and not a new
+     * listing (`shown` stays). An answer to a request a newer read replaced, or that landed on another
+     * generation, is dropped silently — that read has already cleared the flags. A `superseded` one that
+     * survives the check (the newer read came from another window) is a `loadMoreFailed`, like every
+     * other failure that keeps the listing; an account answer replaces the listing, as for any read.
+     */
+    const loadMore = useCallback(async () => {
+        const current = latestState.current;
+        // One read of the next batch per listing: a second call on the same listing returns at once —
+        // it would read the same nextStart again, and the guards below must rule out every other
+        // reader for the updater's narrowing to hold. A newer listing is a new generation and reads
+        // freely; the superseded read's answer never reaches the updater (the generation guard drops it).
+        if (loadingMoreRef.current === generationRef.current) return;
+        if (current.status !== 'ready' || current.listing.preview) return;
+        const request = requestRef.current;
+        const generation = generationRef.current;
+        const { nextStart, memberId } = current.listing;
+        loadingMoreRef.current = generation;
+        try {
+            setLoadingMore(true);
+            setLoadMoreFailed(null);
+            const result = await read(lastSearchRef.current, 'fresh', nextStart, LIBRARY_BATCH_PHOTOS);
+            if (request !== requestRef.current || generation !== generationRef.current) return;
+            if (result === null || !result.success) {
+                setLoadingMore(false);
+                // The listing is replaced only when the account is gone; anything else keeps it and says why.
+                if (replacesListing(result?.error)) showFailure(result);
+                else setLoadMoreFailed(result?.error ?? 'failed');
+                return;
+            }
+            if (memberId !== null && result.memberId !== null && result.memberId !== memberId) {
+                setLoadingMore(false);
+                // The batch belongs to another account than the listing on screen: not this account's to append.
+                showFailure({ success: false, error: 'account-changed' });
+                return;
+            }
+            if (memberId === null && result.memberId !== null) {
+                memberRef.current = result.memberId;
+                rememberCurrentMember(result.memberId);
+            }
+            // The batch joins the listing on screen. The request/generation guards rule out a newer
+            // read — an older loadMore's answer included — and the re-entry guard a sibling loadMore
+            // on the same listing, so between the guards and this updater nothing else can move the
+            // state off `ready`; the remaining check exists only to narrow ListState for the typechecker.
+            setKnown(
+                (prev) =>
+                    new Map([...prev, ...result.photos.map((photo): [string, LibraryPhoto] => [photo.id, photo])]),
+            );
+            setState((prev) => {
+                /* istanbul ignore if */
+                if (prev.status !== 'ready') return prev;
+                const listed = new Set(prev.listing.photos.map((photo) => photo.id));
+                const added = result.photos.filter((photo) => !listed.has(photo.id));
+                const tracked = new Set(prev.listing.wonIds);
+                const overlap = result.wonIds.filter((id) => tracked.has(id)).length;
+                return {
+                    status: 'ready',
+                    listing: {
+                        ...prev.listing,
+                        photos: [...prev.listing.photos, ...added],
+                        wonIds: [...new Set([...prev.listing.wonIds, ...result.wonIds])].slice(0, MAX_WON_IDS),
+                        wonCount: prev.listing.wonCount + (result.wonCount - overlap),
+                        truncated: result.truncated,
+                        nextStart: result.nextStart,
+                        memberId: prev.listing.memberId ?? result.memberId,
+                    },
+                };
+            });
+            setLoadingMore(false);
+        } finally {
+            // A superseded read leaves the guard alone: it belongs to the read that replaced it.
+            if (loadingMoreRef.current === generation) loadingMoreRef.current = null;
+        }
+    }, [read, showFailure]);
+
+    // Whether the listing on screen came from a non-empty search term: true while a read of one is
+    // ready (a Refresh and a Retry re-read the same term and keep it; a `load('')` clears it). Every
+    // other state — idle, loading, error, no-context — is not a search listing.
+    const isSearch = state.status === 'ready' && searchTerm !== '';
+
+    return {
+        state,
+        known,
+        generation,
+        revalidating,
+        recheckFailed,
+        shown,
+        load,
+        refresh,
+        setMember,
+        retry,
+        loadMore,
+        loadingMore,
+        loadMoreFailed,
+        isSearch,
+    };
 }

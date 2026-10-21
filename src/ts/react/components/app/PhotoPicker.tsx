@@ -1,6 +1,6 @@
 /**
  * The picker's controls, shared by the submit picker and the Chosen Photos chooser: the help line,
- * Search with Load all (nothing is read until one of them asks), Auto with its ranking and the
+ * Search with Load photos (nothing is read until one of them asks), Auto with its ranking and the
  * suggestions strip (only where `canSuggest`). `children` renders between the help lines and Auto's
  * status — the caller's count line — so every chooser keeps its live regions in the same order.
  */
@@ -68,7 +68,7 @@ export function PhotoPickerToolbar({
     selected: string[];
     /** Whether Auto can rank here; without it the button, its help and the strip are not shown. */
     canSuggest: boolean;
-    /** Load all is held too (a submit is in flight). */
+    /** Load photos is held too (a submit is in flight). */
     held: boolean;
     /** The strip's tiles and Add suggestions are held (the app is checking eligibility, or the saved list is unread). */
     locked: boolean;
@@ -92,8 +92,9 @@ export function PhotoPickerToolbar({
 }) {
     const { t } = useTranslation();
     const reading = picker.state.status === 'loading' || picker.revalidating;
-    const loadAllHeld = reading || held;
-    const loadAllBusy = reading && picker.loadAllReading;
+    // A batch read of the grid's own holds Load photos too, so two reads never run at once.
+    const loadPhotosHeld = reading || held || picker.loadingMore;
+    const loadPhotosBusy = reading && picker.loadPhotosReading;
     // Once a set has been shown, the button pages on to the next-best ones.
     const autoKey = picker.shownIds.length > 0 ? 'app.pickAutoNext' : 'app.pickAuto';
     let autoStatus = '';
@@ -118,17 +119,17 @@ export function PhotoPickerToolbar({
                     </div>
                     <button
                         type="button"
-                        className={`btn btn-outline btn-sm ${loadAllHeld ? 'btn-disabled' : ''}`}
+                        className={`btn btn-outline btn-sm ${loadPhotosHeld ? 'btn-disabled' : ''}`}
                         // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body>.
-                        aria-disabled={loadAllHeld}
-                        aria-busy={loadAllBusy}
+                        aria-disabled={loadPhotosHeld}
+                        aria-busy={loadPhotosBusy}
                         onClick={() => {
-                            if (loadAllHeld) return;
-                            picker.loadAll();
+                            if (loadPhotosHeld) return;
+                            picker.loadPhotos();
                         }}
                     >
-                        <BusyContent busy={loadAllBusy} label={t('app.pickLoadAll')}>
-                            {t('app.pickLoadAll')}
+                        <BusyContent busy={loadPhotosBusy} label={t('app.pickLoadPhotos')}>
+                            {t('app.pickLoadPhotos')}
                         </BusyContent>
                     </button>
                     {canSuggest && (

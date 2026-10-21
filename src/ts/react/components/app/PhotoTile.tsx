@@ -221,7 +221,8 @@ export const PhotoTile = memo(PhotoTileBase);
 /**
  * A saved pick while nothing has been read: its number, its thumbnail once the member check says
  * whose photo it is (else its short id as text), and no claim about the photo itself — its tags are
- * unread. A read that lands replaces it with the real tile or a missing one.
+ * unread. A read that lands replaces it with the real tile or a missing one. The ready grid uses it
+ * too, with its own note (`noteKey`), for a chosen pick no batch read so far has shown.
  */
 export function SavedPickTile({
     id,
@@ -233,6 +234,7 @@ export function SavedPickTile({
     locked,
     lockedKey,
     onToggle,
+    noteKey = 'app.photoChooserSavedTileNote',
 }: {
     id: string;
     memberId: string | null;
@@ -246,6 +248,8 @@ export function SavedPickTile({
     /** The translation key of what a locked tile says. */
     lockedKey: string;
     onToggle: (id: string) => void;
+    /** The translation key of the note on an unlocked, uncapped tile: why the photo itself is not shown yet. */
+    noteKey?: string;
 }) {
     const { t } = useTranslation();
     const url = memberId ? buildPhotoUrl(memberId, id, { size: TILE_PX }) : null;
@@ -254,7 +258,7 @@ export function SavedPickTile({
     // locked one is inert. The reason travels in the name too — the label replaces the visible text
     // for readers, so it must carry what the tile says.
     const unavailable = locked || (!selected && atCap);
-    const reason = locked ? t(lockedKey) : !selected && atCap ? t(fullKey) : t('app.photoChooserSavedTileNote');
+    const reason = locked ? t(lockedKey) : !selected && atCap ? t(fullKey) : t(noteKey);
     const dim = unavailable ? 'opacity-50' : '';
     const tone = selected ? 'border-base-content ring-2 ring-base-content' : 'border-base-300';
     return (
@@ -283,16 +287,17 @@ export function SavedPickTile({
 /**
  * What a chosen photo the listing does not return most likely is. With a
  * challenge the usual cause is another challenge holding it; without one every
- * library photo is listed, so it was deleted. A cut-off listing adds that the
- * photo may lie beyond what was read.
+ * library photo is listed, so it was deleted. A listing read as a search
+ * claims only what a search can know: the photo does not match the term.
+ * (A cut-off listing does not reach this tile: its unreached picks show as
+ * saved-pick stubs, which point at Load more photos, and its won picks carry
+ * the won reason.)
  */
-const missingKey = (hasChallenge: boolean, truncated: boolean): string =>
-    hasChallenge
-        ? truncated
-            ? 'app.photoChooserMissingTruncated'
-            : 'app.photoChooserMissing'
-        : truncated
-          ? 'app.photoChooserMissingNoChallengeTruncated'
+const missingKey = (hasChallenge: boolean, search: boolean): string =>
+    search
+        ? 'app.photoChooserMissingSearch'
+        : hasChallenge
+          ? 'app.photoChooserMissing'
           : 'app.photoChooserMissingNoChallenge';
 
 /**
@@ -304,7 +309,7 @@ export function MissingTile({
     position,
     count,
     hasChallenge,
-    truncated,
+    search,
     won,
     onToggle,
 }: {
@@ -312,13 +317,14 @@ export function MissingTile({
     position: number | null;
     count: number;
     hasChallenge: boolean;
-    truncated: boolean;
+    /** The listing came from a search: the tile says only that the photo is not in these results. */
+    search: boolean;
     /** The listing left the photo out because it has won a challenge, which says why it is missing. */
     won: boolean;
     onToggle: (id: string) => void;
 }) {
     const { t } = useTranslation();
-    const text = won ? t('app.photoChooserWonInList') : interp(t(missingKey(hasChallenge, truncated)), { count });
+    const text = won ? t('app.photoChooserWonInList') : interp(t(missingKey(hasChallenge, search)), { count });
     return (
         <button
             type="button"

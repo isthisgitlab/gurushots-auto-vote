@@ -93,6 +93,7 @@ export const errors = {
     suggestFailed:
         'The photos were not ranked. GuruShots did not answer, or the ranking did not finish. Try again in a moment.',
     fetchChallengesFailed: 'The challenges could not be loaded. GuruShots did not answer. Try again in a moment.',
+    libraryReadFailed: 'Your photos could not be read. The library read failed before it finished. Try again.',
     accountChanged: 'The account changed while the list was loading, so the result was dropped. Open the list again.',
     accountCheckFailed: 'The account could not be checked. GuruShots did not answer. Try again in a moment.',
     tokenNotSaved:
@@ -836,15 +837,18 @@ export const app = {
         "Your photos can't be listed yet: the library is read through a challenge, and you have no active or joinable challenge right now. Join one or wait until one opens, then try again.",
     photoChooserEligibilityLater:
         'Eligibility is not checked here for any challenge; it is checked when the app submits.',
-    photoChooserTruncated: 'Showing the first {count} photos. Search by tag to find others.',
+    photoChooserShowing: 'Showing {count} photo(s).',
     photoChooserWonHidden:
         "Hidden: {count} photo(s) that have won a challenge. A winning photo can't be entered again.",
     photoChooserWonHiddenTruncated:
-        "Hidden: at least {count} photo(s) that have won a challenge. A winning photo can't be entered again.",
+        "Hidden: at least {count} photo(s) that have won a challenge. A winning photo can't be entered again. Press Load more photos to look for more.",
     photoChooserRefusedHidden: "Hidden: {count} photo(s) GuruShots won't take in this challenge.",
-    photoChooserRefusedHiddenTruncated: "Hidden: at least {count} photo(s) GuruShots won't take in this challenge.",
+    photoChooserRefusedHiddenTruncated:
+        "Hidden: at least {count} photo(s) GuruShots won't take in this challenge. Press Load more photos to look for others.",
     photoChooserNoneAccepted:
         "GuruShots won't take any of the listed photos in this challenge. Search by tag to find others, or upload new photos and press Refresh.",
+    photoChooserNoneAcceptedTruncated:
+        "GuruShots won't take any of the photos loaded so far in this challenge. Press Load more photos to look further, or search by tag. If nothing fits, upload new photos and press Refresh.",
     photoChooserWonInList: "Has won a challenge, so it can't be entered again. Click it to remove it from your list.",
     photoChooserEmpty:
         'No photos found. Try another tag, or upload photos to your GuruShots library and press Refresh.',
@@ -867,11 +871,9 @@ export const app = {
     photoChooserNotAsLoaded: 'Not among your photos as last loaded. Checking again…',
     photoChooserNotAsLoadedFailed: 'Not among your photos as last loaded. Press Refresh to check again.',
     photoChooserMissing: 'Not available for this challenge (in another challenge, or deleted)',
-    photoChooserMissingTruncated:
-        'Not available for this challenge (in another challenge, deleted, or beyond the first {count} photos)',
     photoChooserMissingNoChallenge: 'Not found in your library (it may have been deleted)',
-    photoChooserMissingNoChallengeTruncated:
-        'Not found in the photos listed (it may have been deleted, or be beyond the first {count} photos)',
+    photoChooserMissingSearch:
+        'Not in these search results. Try another tag, or press Load photos — it reads from the top of your library, so you may need Load more to find it.',
     photoChooserMissingTileLabel: 'Chosen photo {id}: {reason}',
     photoChooserListFull: 'List full',
     photoChooserLimitReached: 'Limit reached — remove one to add another.',
@@ -890,18 +892,23 @@ export const app = {
     chosenPhotosOtherAccountCount: '{count} photo(s) saved under another account',
     photoChooserInheritNote:
         "Saving with nothing chosen removes this challenge's own list, so it uses the list from your settings or rules again.",
-    photoChooserIdle: 'Your photos are not loaded yet. Load them all or search.',
-    photoChooserIdleAuto: 'Your photos are not loaded yet. Load them all, search, or press Auto.',
+    photoChooserIdle: 'Your photos are not loaded yet. Load photos or search.',
+    photoChooserIdleAuto: 'Your photos are not loaded yet. Load photos, search, or press Auto.',
     photoChooserIdlePicks:
-        'Your chosen photos stay picked. Load all photos or search to see the rest of your library and check them.',
+        'Your chosen photos stay picked. Load photos or search to see the rest of your library and check them.',
     photoChooserIdlePicksAuto:
-        'Your chosen photos stay picked. Load all photos, search, or press Auto to see more of your library.',
+        'Your chosen photos stay picked. Load photos, search, or press Auto to see more of your library.',
     photoChooserAutoHelp:
         'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is saved. Press it again for the next ones.',
     photoChooserAutoRunning: 'Ranking your photos… this can take a minute. Nothing is saved.',
     photoChooserCheckingMember: 'Checking which account these photos belong to…',
     photoChooserSavedTileLabel: 'Chosen photo {id}: {reason}',
     photoChooserSavedTileNote: 'Not loaded yet',
+    photoChooserUnreachedTileNote: 'Not in the photos loaded yet; press Load more photos to look for it.',
+    photoChooserUnreachedTileNoteSearch:
+        'Not in the search results loaded so far. Load more photos finds it if it carries this tag; Load photos reads from the top of your whole library, so it may need Load more after it.',
+    photoChooserLoadMoreFailed:
+        "Couldn't load more photos. The read was interrupted. Press Load more photos to try again.",
     photoChooserSaveChecking: 'Checking which account this list belongs to…',
     photoChooserSaveCheckFailed:
         'The account check failed, so saving is held to protect your list. Press Retry again shortly.',
@@ -957,10 +964,11 @@ export const app = {
     pickAutoNext: 'Next suggestions',
     pickAutoHelp:
         'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is submitted. Press it again for the next ones.',
-    pickLoadAll: 'Load all photos',
-    pickIdle: 'Photos are not loaded yet. Load them all, search, or press Auto.',
+    pickLoadPhotos: 'Load photos',
+    pickLoadMore: 'Load more photos',
+    pickIdle: 'Photos are not loaded yet. Load photos, search, or press Auto.',
     pickIdleWithPicks:
-        'Your picks can be submitted as they are. Load all photos or search to see the rest of your library.',
+        'Your picks can be submitted as they are. Load photos or search to see the rest of your library.',
     pickAutoRunning: 'Ranking your photos… this can take a minute. Nothing is submitted.',
     pickSuggestedTitle: 'Suggestions',
     pickSuggestedCount: 'Suggestions: {count}',
@@ -977,7 +985,7 @@ export const app = {
     swapPickAutoHelp:
         'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is swapped. Press it again for the next ones.',
     swapPickAutoRunning: 'Ranking your photos… this can take a minute. Nothing is spent.',
-    swapPickIdleWithPicks: 'Your pick can be used as it is. Load all photos or search to see the rest of your library.',
+    swapPickIdleWithPicks: 'Your pick can be used as it is. Load photos or search to see the rest of your library.',
     swapPickCount: 'Picked: {count}/1',
     swapPickSubmit: 'Use this photo',
     swapPickBlocked: 'Already in this challenge',

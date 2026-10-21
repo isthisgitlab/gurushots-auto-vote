@@ -1,8 +1,8 @@
 /**
- * The picker behind the photo choosers: the on-demand library listing with its Load all and Search,
- * the Auto ranking with its suggestions strip and paging, and the idle grid's memory of what has
- * been picked in this opening. The caller owns the selection (`selected`) and what it means (a
- * submit's pick, a saved list): this hook only reads and ranks.
+ * The picker behind the photo choosers: the on-demand library listing with its Load photos, Load more
+ * and Search, the Auto ranking with its suggestions strip and paging, and the idle grid's memory of
+ * what has been picked in this opening. The caller owns the selection (`selected`) and what it means
+ * (a submit's pick, a saved list): this hook only reads and ranks.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -29,11 +29,25 @@ export function usePhotoPicker({
     /** The caller's selection, in its own order: the idle grid keeps each id's tile in place once picked. */
     selected: string[];
 }) {
-    const { state, known, generation, revalidating, recheckFailed, load, refresh, retry, setMember } =
-        useLibraryListing(challengeId, { alwaysFresh, onDemand: true, usage });
-    // Whether the read on screen is one Load all started: only that one shows Load all as busy.
-    const [loadAllReading, setLoadAllReading] = useState(false);
-    // Bumped by Load all to remount the search box empty, so it never shows a term the grid is not filtered by.
+    const {
+        state,
+        known,
+        generation,
+        revalidating,
+        recheckFailed,
+        shown,
+        load,
+        refresh,
+        retry,
+        setMember,
+        loadMore,
+        loadingMore,
+        loadMoreFailed,
+        isSearch,
+    } = useLibraryListing(challengeId, { alwaysFresh, onDemand: true, usage });
+    // Whether the read on screen is one Load photos started: only that one shows Load photos as busy.
+    const [loadPhotosReading, setLoadPhotosReading] = useState(false);
+    // Bumped by Load photos to remount the search box empty, so it never shows a term the grid is not filtered by.
     const [searchKey, setSearchKey] = useState(0);
 
     // Auto: the ranking on screen, the records of every photo it has named (a picked suggestion keeps its tile
@@ -75,25 +89,25 @@ export function usePhotoPicker({
         setShownIds([]);
     }, []);
 
-    /** Load all: reads the whole library, and empties the search box (remounted through `searchKey`). */
-    const loadAll = useCallback(() => {
-        setLoadAllReading(true);
+    /** Load photos: reads one batch of the library, and empties the search box (remounted through `searchKey`). */
+    const loadPhotos = useCallback(() => {
+        setLoadPhotosReading(true);
         setSearchKey((key) => key + 1);
         void load('');
     }, [load]);
 
-    /** Search: reads the library for the term, and stops showing Load all as the read on screen. */
+    /** Search: reads the library for the term, and stops showing Load photos as the read on screen. */
     const search = useCallback(
         (term: string) => {
-            setLoadAllReading(false);
+            setLoadPhotosReading(false);
             void load(term);
         },
         [load],
     );
 
-    /** Ends a Load all (a Refresh, a refreshed submit) and drops the ranking on screen with it. */
-    const resetLoadAll = useCallback(() => {
-        setLoadAllReading(false);
+    /** Ends a Load photos read (a Refresh, a refreshed submit) and drops the ranking on screen with it. */
+    const resetLoadPhotos = useCallback(() => {
+        setLoadPhotosReading(false);
         clearSuggestions();
     }, [clearSuggestions]);
 
@@ -130,14 +144,19 @@ export function usePhotoPicker({
         generation,
         revalidating,
         recheckFailed,
+        shown,
         refresh,
         retry,
         setMember,
-        loadAllReading,
+        loadMore,
+        loadingMore,
+        loadMoreFailed,
+        isSearch,
+        loadPhotosReading,
         searchKey,
-        loadAll,
+        loadPhotos,
         search,
-        resetLoadAll,
+        resetLoadPhotos,
         suggesting,
         suggested,
         suggestedKnown,

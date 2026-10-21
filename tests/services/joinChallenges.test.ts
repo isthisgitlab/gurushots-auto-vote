@@ -202,6 +202,7 @@ describe('performJoin — ordering & idempotency', () => {
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         });
@@ -211,6 +212,7 @@ describe('performJoin — ordering & idempotency', () => {
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         });

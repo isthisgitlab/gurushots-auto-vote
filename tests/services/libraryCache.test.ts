@@ -33,6 +33,7 @@ const listingAt = (readAtMs: number, id = 'a'): libraryCacheModule.TimedListing 
     wonIds: ['w1'],
     wonCount: 1,
     truncated: false,
+    nextStart: 100,
     allowedKnown: true,
     readAtMs,
 });
@@ -267,6 +268,15 @@ describe('copies', () => {
             ]);
             expect(answer?.wonIds).toEqual(['w1']);
         }
+    });
+
+    test('nextStart round-trips through a write and a read, frozen against mutation', () => {
+        writeListing('t', '5', { ...listingAt(T0), nextStart: 250 }, 'submit', T0);
+        expect(readFresh('t', '5', 'submit', T0)?.nextStart).toBe(250);
+        expect(readLatest('t')?.nextStart).toBe(250);
+        const answer = readFresh('t', '5', 'submit', T0);
+        if (answer) answer.nextStart = 0;
+        expect(readFresh('t', '5', 'submit', T0)?.nextStart).toBe(250);
     });
 });
 

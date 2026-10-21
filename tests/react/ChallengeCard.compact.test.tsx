@@ -325,9 +325,9 @@ describe('compact ChallengeCard tile with compactActions', () => {
         expect(await screen.findByText('app.pickTitle')).toBeTruthy();
         // Opening reads nothing; Load all does.
         expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
-        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         await waitFor(() =>
-            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(202, undefined, 'cached', 'submit'),
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(202, undefined, 'cached', 'submit', 0, 100),
         );
     });
 
@@ -349,6 +349,7 @@ describe('compact ChallengeCard tile with compactActions', () => {
             photos: [{ id: 'a'.repeat(32), labels: ['harbour'], allowed: true, message: null, uploadDate: 1 }],
             memberId: 'm',
             truncated: false,
+            nextStart: 0,
             wonIds: [],
             wonCount: 0,
             preview: false,
@@ -358,7 +359,7 @@ describe('compact ChallengeCard tile with compactActions', () => {
         const { rerender } = render(<ChallengeCard {...props} />);
         fireEvent.click(screen.getByRole('button', { name: 'app.fillPick' }));
         await screen.findByText('app.pickTitle');
-        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(2));
         const dialog = screen.getByRole('dialog');
         mockChallengeSettings.isCompact = false;

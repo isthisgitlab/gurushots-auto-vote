@@ -156,7 +156,7 @@ describe('the photos setting input', () => {
         // Nothing is read on open: the library is asked for only by Load all.
         await screen.findByRole('dialog');
         expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
-        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         // Translations echo their key here, so every tile has the same name; the second is photo 2.
         await screen.findAllByRole('button', { name: 'app.photoChooserTileLabel' });
         fireEvent.click(screen.getAllByRole('button', { name: 'app.photoChooserTileLabel' })[1]);
@@ -197,9 +197,9 @@ describe('challenge context', () => {
         fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
         await screen.findByRole('dialog');
         expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
-        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         await waitFor(() =>
-            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(77, undefined, 'cached', 'submit'),
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(77, undefined, 'cached', 'submit', 0, 100),
         );
     });
 
@@ -229,9 +229,9 @@ describe('challenge context', () => {
         fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
         await screen.findByRole('dialog');
         expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
-        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         await waitFor(() =>
-            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined, 'cached', 'submit'),
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined, 'cached', 'submit', 0, 100),
         );
     });
 });

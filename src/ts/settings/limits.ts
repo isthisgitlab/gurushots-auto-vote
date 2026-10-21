@@ -52,6 +52,19 @@ const MAX_ANNOTATED_IDS = 300;
 // press). The modal starts over from the best when its list reaches this, so it never sends a longer one.
 const MAX_SUGGEST_EXCLUDE = 1000;
 
+// How many ids of photos left out of the listing (they have won a challenge) are reported with it.
+const MAX_WON_IDS = 1000;
+
+// The default batch a paged library read (get-library-photos with a `start`) counts before it stops:
+// one page of the server's own walk.
+const LIBRARY_BATCH_PHOTOS = 100;
+
+// The most photos any one library read may ask to keep: one full walk, i.e. the walk's page cap
+// (MAX_LIBRARY_PAGES in api/submissions.ts, 10 — doubled to 20 when the walk skips photos left out)
+// times this default page of 100. A literal, because limits stays dependency-free and cannot import
+// the page cap it is tied to; keep the two in step by hand.
+const MAX_LIBRARY_KEEP_PHOTOS = 1000;
+
 // The shape a photo id must have to be stored in a Chosen Photos list and to be
 // listed by the library read: ids are opaque server tokens, so only the safe
 // token characters (the mock ids fit) are accepted.
@@ -92,6 +105,9 @@ export {
     MAX_CHOSEN_PHOTOS,
     MAX_ANNOTATED_IDS,
     MAX_SUGGEST_EXCLUDE,
+    MAX_WON_IDS,
+    LIBRARY_BATCH_PHOTOS,
+    MAX_LIBRARY_KEEP_PHOTOS,
     CHOSEN_PHOTO_ID_RE,
     MAX_UPCOMING_HOURS,
 };

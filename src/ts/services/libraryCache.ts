@@ -30,13 +30,14 @@ type ListedPhoto = {
     uploadDate: number | null;
 };
 
-/** What a library read came to: the photos with what was said about them, and how far the read got. */
+/** What a library read came to: the photos with what was said about them, and where the read stopped (`nextStart`, the offset a continuation read starts at). */
 type LibraryListing = {
     photos: ListedPhoto[];
     memberId: string | null;
     wonIds: string[];
     wonCount: number;
     truncated: boolean;
+    nextStart: number;
     allowedKnown: boolean;
 };
 

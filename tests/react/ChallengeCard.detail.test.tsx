@@ -597,6 +597,7 @@ describe('pick', () => {
         })),
         memberId: 'c'.repeat(32),
         truncated: false,
+        nextStart: 0,
         wonIds: [],
         wonCount: 0,
         preview: false,
@@ -616,7 +617,7 @@ describe('pick', () => {
         fireEvent.click(pickButton());
         // Pick… opens with nothing loaded; Load all shows the library as last loaded with picking held, and the
         // fresh read unlocks it.
-        fireEvent.click(await screen.findByRole('button', { name: app.pickLoadAll }));
+        fireEvent.click(await screen.findByRole('button', { name: app.pickLoadPhotos }));
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         await waitFor(() => expect(tile(1).getAttribute('aria-disabled')).toBe('false'));
         fireEvent.click(tile(n));
@@ -724,7 +725,7 @@ describe('pick', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(screen.queryByRole('dialog')).toBeNull();
         fireEvent.click(pickButton());
-        await screen.findByRole('button', { name: app.pickLoadAll });
+        await screen.findByRole('button', { name: app.pickLoadPhotos });
         expect(screen.queryByRole('alert')).toBeNull();
     });
 

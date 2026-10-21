@@ -96,6 +96,7 @@ describe('clearAuthToken', () => {
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: false,
             readAtMs: Date.now(),
         };

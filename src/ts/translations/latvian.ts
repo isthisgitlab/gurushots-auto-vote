@@ -93,6 +93,8 @@ export const errors = {
         'Foto netika sarindoti. Izaicinājums ir beidzies vai to nevarēja nolasīt. Aizver šo dialoglodziņu un atver kartīti vēlreiz.',
     suggestFailed: 'Foto netika sarindoti. GuruShots neatbildēja vai rindošana nepabeidzās. Mēģini vēlreiz pēc brīža.',
     fetchChallengesFailed: 'Izaicinājumus neizdevās ielādēt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
+    libraryReadFailed:
+        'Tavus foto neizdevās nolasīt. Bibliotēkas nolasīšana pārtrūka, pirms tā tika pabeigta. Pamēģini vēlreiz.',
     accountChanged: 'Saraksta ielādes laikā mainījās konts, tāpēc rezultāts tika atmests. Atver sarakstu vēlreiz.',
     tokenNotSaved:
         'Pieteikšanās tika pieņemta, bet to neizdevās saglabāt. Uzstādījumus neizdevās ierakstīt. Pārbaudi uzstādījumu faila atļaujas un brīvo vietu diskā (iemeslu var norādīt arī uzstādījumu paziņojums) un piesakies vēlreiz.',
@@ -842,15 +844,18 @@ export const app = {
         'Tavus foto vēl nevar parādīt: bibliotēku nolasa caur izaicinājumu, bet tev šobrīd nav neviena aktīva vai pievienojama izaicinājuma. Pievienojies kādam vai uzgaidi, līdz tāds atveras, un mēģini vēlreiz.',
     photoChooserEligibilityLater:
         'Šeit netiek pārbaudīts, vai foto der kādam izaicinājumam; to pārbauda iesniegšanas brīdī.',
-    photoChooserTruncated: 'Rāda tikai pirmos {count} foto. Meklē pēc taga, lai atrastu citus.',
+    photoChooserShowing: 'Rāda {count} foto.',
     photoChooserWonHidden:
         'Paslēpti foto, kas uzvarējuši izaicinājumā: {count}. Uzvarējušo foto nevar iesniegt vēlreiz.',
     photoChooserWonHiddenTruncated:
-        'Paslēpti foto, kas uzvarējuši izaicinājumā: vismaz {count}. Uzvarējušo foto nevar iesniegt vēlreiz.',
+        'Paslēpti foto, kas uzvarējuši izaicinājumā: vismaz {count}. Uzvarējušo foto nevar iesniegt vēlreiz. Spied „Ielādēt vairāk foto”, lai meklētu vēl.',
     photoChooserRefusedHidden: 'Paslēpti foto, ko GuruShots šajā izaicinājumā nepieņem: {count}.',
-    photoChooserRefusedHiddenTruncated: 'Paslēpti foto, ko GuruShots šajā izaicinājumā nepieņem: vismaz {count}.',
+    photoChooserRefusedHiddenTruncated:
+        'Paslēpti foto, ko GuruShots šajā izaicinājumā nepieņem: vismaz {count}. Spied „Ielādēt vairāk foto”, lai meklētu citus.',
     photoChooserNoneAccepted:
         'GuruShots šajā izaicinājumā nepieņem nevienu no uzskaitītajiem foto. Meklē pēc taga, lai atrastu citus, vai augšupielādē jaunus foto un spied „Atsvaidzināt”.',
+    photoChooserNoneAcceptedTruncated:
+        'GuruShots šajā izaicinājumā nepieņem nevienu no līdz šim ielādētajiem foto. Spied „Ielādēt vairāk foto” vai meklē pēc taga. Ja nekas neder, augšupielādē jaunus foto un spied „Atsvaidzināt”.',
     photoChooserWonInList:
         'Uzvarējis izaicinājumā, tāpēc to nevar iesniegt vēlreiz. Noklikšķini uz tā, lai to noņemtu no saraksta.',
     photoChooserEmpty:
@@ -877,11 +882,9 @@ export const app = {
     photoChooserNotAsLoadedFailed:
         'Nav starp taviem foto, kā tie ielādēti iepriekš. Lai pārbaudītu vēlreiz, spied „Atsvaidzināt”.',
     photoChooserMissing: 'Nav pieejams šim izaicinājumam (atrodas citā izaicinājumā vai ir dzēsts)',
-    photoChooserMissingTruncated:
-        'Nav pieejams šim izaicinājumam (atrodas citā izaicinājumā, ir dzēsts vai ir tālāk par pirmajiem {count} foto)',
     photoChooserMissingNoChallenge: 'Tavā bibliotēkā nav atrasts (iespējams, tas ir dzēsts)',
-    photoChooserMissingNoChallengeTruncated:
-        'Rādīto foto vidū nav atrasts (iespējams, tas ir dzēsts vai ir tālāk par pirmajiem {count} foto)',
+    photoChooserMissingSearch:
+        'Nav starp šiem meklēšanas rezultātiem. Pamēģini citu tagu vai spied „Ielādēt foto” — tas nolasa bibliotēku no sākuma, tāpēc, iespējams, vajadzēs vēl „Ielādēt vairāk foto”, lai to atrastu.',
     photoChooserMissingTileLabel: 'Izvēlētais foto {id}: {reason}',
     photoChooserListFull: 'Saraksts ir pilns',
     photoChooserLimitReached: 'Sasniegts ierobežojums — noņem kādu, lai pievienotu citu.',
@@ -900,18 +903,23 @@ export const app = {
     chosenPhotosOtherAccountCount: 'Citā kontā saglabātie foto: {count}',
     photoChooserInheritNote:
         'Ja saglabāsi, neko neizvēloties, šim izaicinājumam paredzētais saraksts tiks izņemts, un izaicinājums atkal izmantos sarakstu no taviem uzstādījumiem vai noteikumiem.',
-    photoChooserIdle: 'Tavi foto vēl nav ielādēti. Ielādē visus vai meklē.',
-    photoChooserIdleAuto: 'Tavi foto vēl nav ielādēti. Ielādē visus, meklē vai spied „Automātiski”.',
+    photoChooserIdle: 'Tavi foto vēl nav ielādēti. Ielādē foto vai meklē.',
+    photoChooserIdleAuto: 'Tavi foto vēl nav ielādēti. Ielādē foto, meklē vai spied „Automātiski”.',
     photoChooserIdlePicks:
-        'Tavi izvēlētie foto paliek izvēlēti. Ielādē visus foto vai meklē, lai redzētu pārējo bibliotēku un pārbaudītu tos.',
+        'Tavi izvēlētie foto paliek izvēlēti. Ielādē foto vai meklē, lai redzētu pārējo bibliotēku un pārbaudītu tos.',
     photoChooserIdlePicksAuto:
-        'Tavi izvēlētie foto paliek izvēlēti. Ielādē visus foto, meklē vai spied „Automātiski”, lai redzētu vairāk.',
+        'Tavi izvēlētie foto paliek izvēlēti. Ielādē foto, meklē vai spied „Automātiski”, lai redzētu vairāk.',
     photoChooserAutoHelp:
         '„Automātiski” sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem un, ja tava versija to atbalsta, arī ar vietējo attēlu pārbaudi. Nekas netiek saglabāts. Nospiežot vēlreiz, redzēsi nākamos ieteikumus.',
     photoChooserAutoRunning: 'Foto tiek sarindoti… tas var aizņemt minūti. Nekas netiek saglabāts.',
     photoChooserCheckingMember: 'Pārbauda, kuram kontam pieder šie foto…',
     photoChooserSavedTileLabel: 'Izvēlētais foto {id}: {reason}',
     photoChooserSavedTileNote: 'Vēl nav ielādēts',
+    photoChooserUnreachedTileNote: 'Vēl nav starp ielādētajiem foto; spied „Ielādēt vairāk foto”, lai to meklētu.',
+    photoChooserUnreachedTileNoteSearch:
+        'Vēl nav starp meklēšanas rezultātiem. „Ielādēt vairāk foto” to atradīs, ja foto ir šis tags; „Ielādēt foto” nolasa tavu bibliotēku no sākuma, tāpēc pēc tam, iespējams, vajadzēs „Ielādēt vairāk foto”.',
+    photoChooserLoadMoreFailed:
+        'Neizdevās ielādēt vairāk foto. Nolasīšana tika pārtraukta. Spied „Ielādēt vairāk foto”, lai mēģinātu vēlreiz.',
     photoChooserSaveChecking: 'Pārbauda, kuram kontam šis saraksts pieder…',
     photoChooserSaveCheckFailed:
         'Konta pārbaude neizdevās, tāpēc saglabāšana ir aizturēta, lai pasargātu tavu sarakstu. Pēc brīža vēlreiz spied „Mēģināt vēlreiz”.',
@@ -968,10 +976,10 @@ export const app = {
     pickAutoNext: 'Nākamie ieteikumi',
     pickAutoHelp:
         'Šī poga sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem un, ja tava versija to atbalsta, arī ar vietējo attēlu pārbaudi. Nekas netiek iesniegts. Nospiežot vēlreiz, redzēsi nākamos ieteikumus.',
-    pickLoadAll: 'Ielādēt visus foto',
-    pickIdle: 'Foto vēl nav ielādēti. Ielādē visus, meklē vai izmanto pogu „Automātiski”.',
-    pickIdleWithPicks:
-        'Izvēlētos foto var iesniegt jau tagad. Ielādē visus foto vai meklē, lai redzētu pārējo bibliotēku.',
+    pickLoadPhotos: 'Ielādēt foto',
+    pickLoadMore: 'Ielādēt vairāk foto',
+    pickIdle: 'Foto vēl nav ielādēti. Ielādē foto, meklē vai izmanto pogu „Automātiski”.',
+    pickIdleWithPicks: 'Izvēlētos foto var iesniegt jau tagad. Ielādē foto vai meklē, lai redzētu pārējo bibliotēku.',
     pickAutoRunning: 'Foto tiek sarindoti… tas var aizņemt minūti. Nekas netiek iesniegts.',
     pickSuggestedTitle: 'Ieteikumi',
     pickSuggestedCount: 'Ieteikumi: {count}',
@@ -989,7 +997,7 @@ export const app = {
         'Šī poga sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem un, ja tava versija to atbalsta, arī ar vietējo attēlu pārbaudi. Nekas netiek apmainīts. Nospiežot vēlreiz, redzēsi nākamos ieteikumus.',
     swapPickAutoRunning: 'Foto tiek sarindoti… tas var aizņemt minūti. Nekas netiek tērēts.',
     swapPickIdleWithPicks:
-        'Izvēlēto foto var izmantot jau tagad. Ielādē visus foto vai meklē, lai redzētu pārējo bibliotēku.',
+        'Izvēlēto foto var izmantot jau tagad. Ielādē foto vai meklē, lai redzētu pārējo bibliotēku.',
     swapPickCount: 'Izvēlēts: {count}/1',
     swapPickSubmit: 'Izmantot šo foto',
     swapPickBlocked: 'Jau iesniegts šajā izaicinājumā',

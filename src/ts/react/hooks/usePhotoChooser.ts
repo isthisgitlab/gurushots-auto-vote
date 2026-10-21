@@ -70,20 +70,22 @@ type SavedListFailure =
  * The read itself: once the member shows the saved list is this account's (`ownersList`),
  * `reloadSaved` asks for it and `onRead` gets its ids. A read that gives nothing or rejects is
  * `failed` for that listing; a new listing is not a failed one, so it reads as pending at once
- * instead of flashing the unconfirmed state for a paint, and is read again. `again` retries
- * (`busy` until the read ends, either way); `retried` is true for the listing generation it was
- * pressed on only, so a repeat is never claimed for a different listing.
+ * instead of flashing the unconfirmed state for a paint, and is read again. Listings are told
+ * apart by `shown` (see useLibraryListing), so an appended batch is the same listing: it neither
+ * re-reads nor clears a failure. `again` retries (`busy` until the read ends, either way);
+ * `retried` is true for the listing generation it was pressed on only, so a repeat is never
+ * claimed for a different listing.
  */
 function useSavedListRead({
     ownersList,
-    state,
     generation,
+    shown,
     reloadSaved,
     onRead,
 }: {
     ownersList: boolean;
-    state: ListState;
     generation: number;
+    shown: number;
     reloadSaved?: () => Promise<string[] | null>;
     onRead: (ids: string[]) => void;
 }) {
@@ -94,11 +96,11 @@ function useSavedListRead({
     // A retry pressed for the read: it is under way (`busy`), and a failure after one is a repeat.
     const [busy, setBusy] = useState(false);
     const [retriedAt, setRetriedAt] = useState<number | null>(null);
-    const [failedAt, setFailedAt] = useState<ListState | null>(null);
+    const [failedAt, setFailedAt] = useState<number | null>(null);
     const [attempt, setAttempt] = useState(0);
     const inFlight = useRef(false);
-    const latestState = useRef(state);
-    latestState.current = state;
+    const latestShown = useRef(shown);
+    latestShown.current = shown;
     useEffect(() => {
         if (!ownersList || reloadedRef.current || !reloadSaved || inFlight.current) return;
         inFlight.current = true;
@@ -107,7 +109,7 @@ function useSavedListRead({
             // between them must not see the read as finished (and ask again).
             if (ids === null) {
                 setBusy(false);
-                setFailedAt(latestState.current);
+                setFailedAt(latestShown.current);
                 inFlight.current = false;
                 return;
             }
@@ -118,14 +120,14 @@ function useSavedListRead({
             inFlight.current = false;
         };
         reloadSaved().then(finish, () => finish(null));
-    }, [ownersList, reloaded, reloadSaved, onRead, attempt, state]);
+    }, [ownersList, reloaded, reloadSaved, onRead, attempt, shown]);
     const again = () => {
         setBusy(true);
         setRetriedAt(generation);
         setFailedAt(null);
         setAttempt((count) => count + 1);
     };
-    return { reloaded, failed: failedAt === state, busy, retried: retriedAt === generation, again };
+    return { reloaded, failed: failedAt === shown, busy, retried: retriedAt === generation, again };
 }
 
 /**
@@ -261,6 +263,7 @@ export function useSavedListReread({
     memberId,
     state,
     generation,
+    shown,
     reloadSaved,
     confirmAccount,
     retryListing,
@@ -279,6 +282,8 @@ export function useSavedListReread({
     state: ListState;
     /** Which load of the listing this is (see useLibraryListing): what a Retry did belongs to one. */
     generation: number;
+    /** Which listing is on screen (see useLibraryListing): an appended batch is the same one. */
+    shown: number;
     reloadSaved?: () => Promise<string[] | null>;
     confirmAccount: () => Promise<AccountCheck>;
     retryListing: () => number;
@@ -289,7 +294,7 @@ export function useSavedListReread({
 }) {
     const ownersList = withheld && owner !== '' && memberId === owner;
     const canRead = !!reloadSaved;
-    const read = useSavedListRead({ ownersList, state, generation, reloadSaved, onRead });
+    const read = useSavedListRead({ ownersList, generation, shown, reloadSaved, onRead });
     const retrying = useSavedListRetry({
         ownersList: ownersList && canRead,
         memberId,

@@ -58,10 +58,12 @@ test('the chooser reads the library through the challenge being edited, on deman
     render(<ChallengeSettingsModal isOpen onClose={jest.fn()} challengeId="123" challengeTitle="Sea" />);
     fireEvent.click(await screen.findByRole('button', { name: 'app.choosePhotos' }));
     // Nothing is read on open: Load all asks.
-    await screen.findByRole('button', { name: 'app.pickLoadAll' });
+    await screen.findByRole('button', { name: 'app.pickLoadPhotos' });
     expect(mockApi.getLibraryPhotos).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
-    await waitFor(() => expect(mockApi.getLibraryPhotos).toHaveBeenCalledWith('123', undefined, 'cached', 'submit'));
+    fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
+    await waitFor(() =>
+        expect(mockApi.getLibraryPhotos).toHaveBeenCalledWith('123', undefined, 'cached', 'submit', 0, 100),
+    );
     fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserTileLabel' }));
     fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
     // The edit is held in the form until the modal's own Save.

@@ -9,6 +9,7 @@ import { useLibraryListing } from '@/hooks/useLibraryListing';
 import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
+import { MAX_WON_IDS } from '../../src/ts/settings/limits';
 
 import type { WindowApi } from '../../src/ts/types/ipc';
 
@@ -35,6 +36,7 @@ const answer = (over: Partial<Listing> = {}): Listing => ({
     photos: [photo('a')],
     memberId: 'member-1',
     truncated: false,
+    nextStart: 0,
     wonIds: [],
     wonCount: 0,
     allowedKnown: true,
@@ -74,8 +76,8 @@ describe('a preview answer', () => {
         expect(result.current.state).toMatchObject({ status: 'ready', listing: { preview: true } });
         const generation = result.current.generation;
         expect(getLibrary().mock.calls).toEqual([
-            [7, undefined, 'cached', 'submit'],
-            [7, undefined, 'fresh', 'submit'],
+            [7, undefined, 'cached', 'submit', 0, 100],
+            [7, undefined, 'fresh', 'submit', 0, 1],
         ]);
         expect(result.current.known.size).toBe(0);
 
@@ -222,7 +224,7 @@ describe('alwaysFresh', () => {
         const { result } = renderHook(() => useLibraryListing(7, { alwaysFresh: true }));
         await waitFor(() => expect(result.current.revalidating).toBe(false));
         await act(async () => result.current.load('pink'));
-        expect(getLibrary().mock.calls.at(-1)).toEqual([7, 'pink', 'fresh', 'submit']);
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, 'pink', 'fresh', 'submit', 0, 100]);
         expect(result.current.state).toMatchObject({ listing: { preview: false } });
         expect(result.current.revalidating).toBe(false);
     });
@@ -243,7 +245,7 @@ describe('load and retry', () => {
         await act(async () => {
             result.current.retry();
         });
-        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit']);
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 1]);
     });
 
     test('Retry is a new generation with the loading state, as before', async () => {
@@ -308,7 +310,7 @@ describe('refresh', () => {
         expect(result.current.revalidating).toBe(true);
         expect(ids(result.current.state as never)).toEqual(['p']);
         expect(result.current.generation).toBe(generation);
-        expect(getLibrary().mock.calls.at(-1)).toEqual([7, 'pink', 'fresh', 'submit']);
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, 'pink', 'fresh', 'submit', 0, 1]);
         read.resolve(answer({ photos: [photo('p'), photo('q')], readAtMs: 1_700_000_100_000 }));
         await waitFor(() => expect(result.current.revalidating).toBe(false));
         expect(ids(result.current.state as never)).toEqual(['p', 'q']);
@@ -450,7 +452,7 @@ describe('onDemand', () => {
         const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
         await act(async () => result.current.load(''));
         expect(result.current.state).toMatchObject({ status: 'ready', listing: { preview: false } });
-        expect(getLibrary()).toHaveBeenCalledWith(7, undefined, 'cached', 'submit');
+        expect(getLibrary()).toHaveBeenCalledWith(7, undefined, 'cached', 'submit', 0, 100);
     });
 
     test('retry() from idle is a fresh full read', async () => {
@@ -460,7 +462,7 @@ describe('onDemand', () => {
             result.current.retry();
         });
         await waitFor(() => expect(result.current.state.status).toBe('ready'));
-        expect(getLibrary().mock.calls).toEqual([[7, undefined, 'fresh', 'submit']]);
+        expect(getLibrary().mock.calls).toEqual([[7, undefined, 'fresh', 'submit', 0, 100]]);
     });
 
     test('a usage change reads nothing, and the next load and retry send the new usage', async () => {
@@ -474,11 +476,11 @@ describe('onDemand', () => {
         expect(result.current.state).toEqual({ status: 'idle' });
         expect(getLibrary()).not.toHaveBeenCalled();
         await act(async () => result.current.load(''));
-        expect(getLibrary().mock.calls).toEqual([[7, undefined, 'cached', 'swap']]);
+        expect(getLibrary().mock.calls).toEqual([[7, undefined, 'cached', 'swap', 0, 100]]);
         await act(async () => {
             result.current.retry();
         });
-        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'swap']);
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'swap', 0, 1]);
     });
 
     test('a preview that lands after unmounting starts no re-check', async () => {
@@ -499,5 +501,493 @@ describe('onDemand', () => {
         expect(result.current.state).toEqual({ status: 'loading' });
         await waitFor(() => expect(result.current.state.status).toBe('ready'));
         expect(getLibrary()).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('loadMore', () => {
+    const batch = (ids: string[], over: Partial<Listing> = {}): Listing =>
+        answer({ photos: ids.map((id) => photo(id)), ...over });
+    const listingOf = (current: { status: string; listing?: Listing }) =>
+        current.status === 'ready' ? current.listing : null;
+    const photoIds = (current: { status: string; listing?: Listing }) => listingOf(current)?.photos.map((p) => p.id);
+
+    test('appends a batch, keeping the records and order of photos already listed', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(batch(['a', 'b'], { nextStart: 2, truncated: true }))
+            .mockResolvedValueOnce(batch(['b', 'c'], { nextStart: 4, truncated: false }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        const before = listingOf(result.current.state);
+        await act(async () => result.current.loadMore());
+        expect(result.current.state.status).toBe('ready');
+        const listing = listingOf(result.current.state);
+        expect(listing?.photos.map((p) => p.id)).toEqual(['a', 'b', 'c']);
+        expect(listing?.photos[0]).toBe(before?.photos[0]);
+        expect(listing?.truncated).toBe(false);
+        expect(listing?.nextStart).toBe(4);
+        expect([...result.current.known.keys()]).toEqual(['a', 'b', 'c']);
+        // Not a new generation and not a new listing.
+        expect(result.current.generation).toBe(1);
+        expect(result.current.shown).toBe(1);
+        expect(result.current.loadingMore).toBe(false);
+        expect(result.current.loadMoreFailed).toBeNull();
+    });
+
+    test('reads the batch fresh, from the listing’s nextStart and the last search, one batch kept', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(batch(['a'], { nextStart: 7, truncated: true }))
+            .mockResolvedValueOnce(batch(['b']));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load('pink'));
+        await act(async () => result.current.loadMore());
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, 'pink', 'fresh', 'submit', 7, 100]);
+    });
+
+    test('unions the won ids up to the cap and counts only the batch won ids not counted yet', async () => {
+        const won = Array.from({ length: MAX_WON_IDS + 200 }, (_, i) => `w${i}`);
+        getLibrary()
+            .mockResolvedValueOnce(
+                batch(['a'], { nextStart: 1, truncated: true, wonIds: won.slice(0, 600), wonCount: 600 }),
+            )
+            .mockResolvedValueOnce(
+                batch(['b'], {
+                    nextStart: 2,
+                    truncated: false,
+                    // 900 of the batch's 1400 ids are new; 500 were counted before, and 300 more overlap.
+                    wonIds: [...won.slice(300, MAX_WON_IDS + 200), ...won.slice(0, 500)],
+                    wonCount: MAX_WON_IDS + 100,
+                }),
+            );
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => result.current.loadMore());
+        const listing = listingOf(result.current.state);
+        expect(listing?.wonIds).toHaveLength(MAX_WON_IDS);
+        expect(listing?.wonIds[0]).toBe('w0');
+        expect(listing?.wonIds.at(-1)).toBe(`w${MAX_WON_IDS - 1}`);
+        // 600 counted before; the batch counts 1100, of which 800 were already in the union.
+        expect(listing?.wonCount).toBe(600 + 1100 - 800);
+        expect(result.current.loadMoreFailed).toBeNull();
+    });
+
+    test('a load that starts after loadMore resets its flags and drops the append', async () => {
+        const more = deferred();
+        getLibrary()
+            .mockResolvedValueOnce(batch(['a'], { nextStart: 1, truncated: true }))
+            .mockResolvedValueOnce(failure('library-read-failed'))
+            .mockReturnValueOnce(more.promise)
+            .mockResolvedValueOnce(batch(['searched']));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => result.current.loadMore());
+        expect(result.current.loadMoreFailed).toBe('library-read-failed');
+        await act(async () => {
+            void result.current.loadMore();
+        });
+        expect(result.current.loadingMore).toBe(true);
+        expect(result.current.loadMoreFailed).toBeNull();
+        // The newer load resets both flags and takes the request slot.
+        await act(async () => result.current.load('pink'));
+        expect(result.current.loadingMore).toBe(false);
+        expect(result.current.loadMoreFailed).toBeNull();
+        await act(async () => more.resolve(batch(['late'])));
+        await act(async () => undefined);
+        expect(photoIds(result.current.state)).toEqual(['searched']);
+    });
+
+    test('an answer that landed on another generation (a Refresh) is dropped silently too', async () => {
+        const more = deferred();
+        getLibrary()
+            .mockResolvedValueOnce(batch(['a'], { nextStart: 1, truncated: true }))
+            .mockReturnValueOnce(more.promise)
+            .mockResolvedValueOnce(batch(['refreshed']));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => {
+            void result.current.loadMore();
+        });
+        await act(async () => {
+            result.current.refresh();
+        });
+        await waitFor(() => expect(photoIds(result.current.state)).toEqual(['refreshed']));
+        await act(async () => more.resolve(batch(['late'])));
+        await act(async () => undefined);
+        expect(photoIds(result.current.state)).toEqual(['refreshed']);
+        expect(result.current.loadingMore).toBe(false);
+        expect(result.current.loadMoreFailed).toBeNull();
+    });
+
+    test.each([['superseded'], ['library-read-failed'], ['Failed to read your photo library']])(
+        'a %s answer keeps the listing and marks loadMoreFailed',
+        async (error) => {
+            getLibrary()
+                .mockResolvedValueOnce(batch(['a'], { nextStart: 1, truncated: true }))
+                .mockResolvedValueOnce(failure(error));
+            const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+            await act(async () => result.current.load(''));
+            await act(async () => result.current.loadMore());
+            expect(result.current.state).toMatchObject({ status: 'ready', listing: { photos: [{ id: 'a' }] } });
+            expect(result.current.loadMoreFailed).toBe(error);
+            expect(result.current.loadingMore).toBe(false);
+        },
+    );
+
+    test('an unanswered batch read (a rejection) marks the sentinel failure', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(batch(['a'], { nextStart: 1, truncated: true }))
+            .mockRejectedValueOnce(new Error('down'));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => result.current.loadMore());
+        expect(result.current.loadMoreFailed).toBe('failed');
+        expect(photoIds(result.current.state)).toEqual(['a']);
+    });
+
+    test.each([
+        ['account-changed', { status: 'error', error: 'account-changed' }],
+        ['not-logged-in', { status: 'error', error: 'not-logged-in' }],
+        ['no-challenge-context', { status: 'no-context' }],
+    ])('%s replaces the listing, as for any read', async (error, expected) => {
+        getLibrary()
+            .mockResolvedValueOnce(batch(['a'], { nextStart: 1, truncated: true }))
+            .mockResolvedValueOnce(failure(error));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => result.current.loadMore());
+        expect(result.current.state).toEqual(expected);
+        expect(result.current.loadMoreFailed).toBeNull();
+        if (error !== 'no-challenge-context') expect(result.current.known.size).toBe(0);
+    });
+
+    test('a batch naming another member than the listing is an account change, not an append', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(batch(['a'], { nextStart: 1, truncated: true, memberId: 'member-1' }))
+            .mockResolvedValueOnce(batch(['b'], { memberId: 'member-2' }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => result.current.loadMore());
+        expect(result.current.state).toEqual({ status: 'error', error: 'account-changed' });
+        expect(result.current.known.size).toBe(0);
+    });
+
+    test('a batch naming a member the listing could not adopts it, as a read landing would', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(batch(['a'], { nextStart: 1, truncated: true, memberId: null }))
+            .mockResolvedValueOnce(batch(['b'], { memberId: 'member-9' }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        jest.mocked(rememberCurrentMember).mockClear();
+        await act(async () => result.current.loadMore());
+        expect(result.current.state).toMatchObject({ status: 'ready', listing: { memberId: 'member-9' } });
+        expect(rememberCurrentMember).toHaveBeenLastCalledWith('member-9');
+        expect(result.current.known.size).toBe(2);
+        expect(result.current.loadMoreFailed).toBeNull();
+    });
+
+    test('a new loadMore clears the failure of the last one while it reads', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(batch(['a'], { nextStart: 1, truncated: true }))
+            .mockResolvedValueOnce(failure('library-read-failed'));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => result.current.loadMore());
+        expect(result.current.loadMoreFailed).toBe('library-read-failed');
+        const retry = deferred();
+        getLibrary().mockReturnValueOnce(retry.promise);
+        await act(async () => {
+            void result.current.loadMore();
+        });
+        expect(result.current.loadMoreFailed).toBeNull();
+        expect(result.current.loadingMore).toBe(true);
+        await act(async () => retry.resolve(batch(['b'], { nextStart: 2, truncated: false })));
+        await act(async () => undefined);
+        expect(result.current.loadMoreFailed).toBeNull();
+        expect(photoIds(result.current.state)).toEqual(['a', 'b']);
+    });
+
+    test('a second loadMore while one is in flight does nothing', async () => {
+        const first = deferred();
+        getLibrary()
+            .mockResolvedValueOnce(batch(['a'], { nextStart: 1, truncated: true }))
+            .mockReturnValueOnce(first.promise);
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => {
+            void result.current.loadMore();
+        });
+        await act(async () => {
+            void result.current.loadMore();
+        });
+        // One batch read in all: the second call returned at once and touched no flags.
+        expect(getLibrary()).toHaveBeenCalledTimes(2);
+        expect(result.current.loadingMore).toBe(true);
+        expect(result.current.loadMoreFailed).toBeNull();
+        first.resolve(batch(['b'], { nextStart: 2, truncated: false }));
+        await act(async () => undefined);
+        await act(async () => undefined);
+        // The in-flight read appends once; nothing queued a second read behind it.
+        expect(photoIds(result.current.state)).toEqual(['a', 'b']);
+        expect(result.current.loadingMore).toBe(false);
+    });
+
+    test('a loadMore on a newer listing reads while an older one is still in flight', async () => {
+        const stale = deferred();
+        const fresh = deferred();
+        getLibrary()
+            .mockResolvedValueOnce(batch(['a'], { nextStart: 1, truncated: true }))
+            .mockReturnValueOnce(stale.promise)
+            .mockResolvedValueOnce(batch(['searched'], { nextStart: 1, truncated: true }))
+            .mockReturnValueOnce(fresh.promise);
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        // The first listing's batch read is still on its way when a new load replaces the listing.
+        await act(async () => {
+            void result.current.loadMore();
+        });
+        await act(async () => result.current.load('pink'));
+        expect(photoIds(result.current.state)).toEqual(['searched']);
+        await act(async () => {
+            void result.current.loadMore();
+        });
+        // The press on the new listing makes its own read: the in-flight older one does not hold the guard.
+        expect(getLibrary()).toHaveBeenCalledTimes(4);
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, 'pink', 'fresh', 'submit', 1, 100]);
+        expect(result.current.loadingMore).toBe(true);
+        await act(async () => {
+            fresh.resolve(batch(['b'], { nextStart: 2, truncated: false }));
+        });
+        await act(async () => undefined);
+        // The new append landed; the stale answer is dropped and leaves nothing behind.
+        expect(photoIds(result.current.state)).toEqual(['searched', 'b']);
+        expect(result.current.loadingMore).toBe(false);
+        stale.resolve(batch(['late'], { nextStart: 2, truncated: false }));
+        await act(async () => undefined);
+        expect(photoIds(result.current.state)).toEqual(['searched', 'b']);
+        expect(result.current.loadMoreFailed).toBeNull();
+    });
+
+    test('a last empty batch is not a failure and not a new listing', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(batch(['a', 'b'], { nextStart: 2, truncated: true }))
+            .mockResolvedValueOnce(batch([], { nextStart: 2, truncated: false }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => result.current.loadMore());
+        expect(result.current.state).toMatchObject({ status: 'ready', listing: { truncated: false, nextStart: 2 } });
+        expect(photoIds(result.current.state)).toEqual(['a', 'b']);
+        expect(result.current.loadMoreFailed).toBeNull();
+        expect(result.current.loadingMore).toBe(false);
+        expect(result.current.generation).toBe(1);
+        expect(result.current.shown).toBe(1);
+    });
+
+    test('loadMore does nothing from idle and nothing on a preview', async () => {
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.loadMore());
+        expect(getLibrary()).not.toHaveBeenCalled();
+        getLibrary()
+            .mockResolvedValueOnce(previewAnswer())
+            .mockImplementation(() => new Promise(() => undefined));
+        // The load is not awaited: its background re-check never lands in this case.
+        await act(async () => {
+            void result.current.load('');
+        });
+        await waitFor(() =>
+            expect(result.current.state).toMatchObject({ status: 'ready', listing: { preview: true } }),
+        );
+        const reads = getLibrary().mock.calls.length;
+        await act(async () => result.current.loadMore());
+        expect(getLibrary().mock.calls.length).toBe(reads);
+        expect(result.current.loadingMore).toBe(false);
+    });
+});
+
+describe('re-reading the extent on screen', () => {
+    const many = (n: number, prefix = 'p') => Array.from({ length: n }, (_, i) => photo(`${prefix}${i}`));
+
+    test('Refresh re-counts what is on screen: the counted photos, with no batch floor, at most 1000', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(answer({ photos: many(8) }))
+            .mockResolvedValueOnce(answer({ photos: many(8), nextStart: 8, truncated: true }))
+            .mockResolvedValueOnce(answer({ photos: many(3), nextStart: 3, truncated: true }))
+            .mockResolvedValueOnce(answer({ photos: many(3, 'q'), nextStart: 3, truncated: true }))
+            .mockResolvedValueOnce(answer({ photos: many(1500), nextStart: 1500, truncated: true }))
+            .mockResolvedValueOnce(answer({ photos: many(1000, 'r'), nextStart: 1000, truncated: true }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => {
+            result.current.refresh();
+        });
+        // Eight counted photos: that many — the number the handler/mock slice on.
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 8]);
+        await act(async () => result.current.load('pink'));
+        await act(async () => {
+            result.current.refresh();
+        });
+        // A search listing of 3: that many too.
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, 'pink', 'fresh', 'submit', 0, 3]);
+        await act(async () => result.current.load(''));
+        await act(async () => {
+            result.current.refresh();
+        });
+        // 1500 counted: the 1000 cap.
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 1000]);
+    });
+
+    test('past the cap the older picks keep their last known marks', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(answer({ photos: many(1500), nextStart: 1500, truncated: true }))
+            .mockResolvedValueOnce(answer({ photos: many(1000, 'q'), nextStart: 1000, truncated: false }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => {
+            result.current.refresh();
+        });
+        await waitFor(() => expect(result.current.revalidating).toBe(false));
+        // The re-read counted at most 1000 of the 1500 on screen, and every photo ever listed stays known.
+        expect(result.current.known.size).toBe(2500);
+        expect([...result.current.known.keys()]).toContain('p0');
+        expect([...result.current.known.keys()]).toContain('q999');
+    });
+
+    test('Retry re-reads the extent on screen too, and one batch from the error state', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(answer({ photos: many(250), nextStart: 250, truncated: true }))
+            .mockResolvedValueOnce(failure('library-read-failed'));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => {
+            result.current.retry();
+        });
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 250]);
+        // That read failed: no listing is on screen, so the next Retry asks for one batch.
+        getLibrary().mockResolvedValueOnce(failure('Failed to read your photo library'));
+        await act(async () => {
+            result.current.retry();
+        });
+        getLibrary().mockResolvedValueOnce(answer({ photos: many(3) }));
+        await act(async () => {
+            result.current.retry();
+        });
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 100]);
+        await waitFor(() => expect(result.current.state.status).toBe('ready'));
+    });
+
+    test('a listing with known marks counts only the allowed photos, not every one listed', async () => {
+        const mixed = (allowed: number, refused = 0) => [
+            ...Array.from({ length: allowed }, (_, i) => photo(`a${i}`)),
+            ...Array.from({ length: refused }, (_, i) => photo(`r${i}`, { allowed: false })),
+        ];
+        getLibrary()
+            .mockResolvedValueOnce(answer({ photos: mixed(100, 4), nextStart: 104, truncated: true }))
+            .mockResolvedValueOnce(answer({ photos: mixed(1) }))
+            .mockResolvedValueOnce(answer({ photos: mixed(120, 30), nextStart: 150, truncated: true }))
+            .mockResolvedValueOnce(answer({ photos: mixed(1) }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => {
+            result.current.refresh();
+        });
+        // 100 allowed of the 104 on screen: the counted photos, not the 104 listed.
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 100]);
+        await act(async () => result.current.load(''));
+        await act(async () => {
+            result.current.refresh();
+        });
+        // 120 allowed of the 150 on screen: that many, not the 150 listed.
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 120]);
+    });
+
+    test('a listing with unknown marks counts every photo on screen', async () => {
+        const unmarked = [
+            ...Array.from({ length: 50 }, (_, i) => photo(`a${i}`)),
+            ...Array.from({ length: 80 }, (_, i) => photo(`r${i}`, { allowed: false })),
+        ];
+        getLibrary()
+            .mockResolvedValueOnce(answer({ photos: unmarked, nextStart: 130, truncated: true, allowedKnown: false }))
+            .mockResolvedValueOnce(answer({ photos: [photo('a')] }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => {
+            result.current.refresh();
+        });
+        // Without the marks, all 130 count — not the 50 allowed.
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 130]);
+    });
+
+    test('the fresh re-check of a preview re-reads the preview’s extent, not one batch', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(previewAnswer({ photos: many(8) }))
+            .mockResolvedValueOnce(answer({ photos: many(8), nextStart: 8, truncated: true }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await waitFor(() => expect(result.current.revalidating).toBe(false));
+        // The cached read keeps `load`'s batch; the re-check counts the preview's 8 photos (marks unknown).
+        expect(getLibrary().mock.calls).toEqual([
+            [7, undefined, 'cached', 'submit', 0, 100],
+            [7, undefined, 'fresh', 'submit', 0, 8],
+        ]);
+    });
+});
+
+describe('isSearch', () => {
+    test('a ready search listing is a search; loadMore keeps it, load("") clears it', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(answer({ nextStart: 1, truncated: true }))
+            .mockResolvedValueOnce(answer({ photos: [photo('b')] }))
+            .mockResolvedValue(answer());
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        expect(result.current.isSearch).toBe(false);
+        await act(async () => result.current.load('hat'));
+        expect(result.current.state.status).toBe('ready');
+        expect(result.current.isSearch).toBe(true);
+        await act(async () => result.current.loadMore());
+        // Still the search listing: the appended batch is not a new read.
+        expect(result.current.isSearch).toBe(true);
+        await act(async () => result.current.load(''));
+        expect(result.current.isSearch).toBe(false);
+    });
+
+    test('a Refresh of the search keeps it; a failed read (the error state) is not a search', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(answer())
+            .mockResolvedValueOnce(failure('superseded'))
+            .mockResolvedValueOnce(failure('Failed to read your photo library'));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load('hat'));
+        expect(result.current.isSearch).toBe(true);
+        // The refresh re-reads the same term: still a search listing, even when it failed and
+        // the listing stays on screen.
+        await act(async () => {
+            result.current.refresh();
+        });
+        await waitFor(() => expect(result.current.recheckFailed).toBe(true));
+        expect(result.current.isSearch).toBe(true);
+        // A search whose read fails leaves the error state: not a search listing.
+        await act(async () => result.current.load('dog'));
+        await waitFor(() => expect(result.current.state.status).toBe('error'));
+        expect(result.current.isSearch).toBe(false);
+    });
+});
+
+describe('the shown counter', () => {
+    test('a load is a new listing and a preview’s fresh swap is another one; an append and a member patch are not', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(previewAnswer())
+            .mockResolvedValueOnce(answer({ memberId: null, photos: [photo('a')], nextStart: 1, truncated: true }))
+            .mockResolvedValueOnce(answer({ memberId: null, photos: [photo('b')], nextStart: 2, truncated: false }))
+            .mockResolvedValueOnce(answer({ memberId: null, photos: [photo('c')] }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        expect(result.current.shown).toBe(0);
+        await act(async () => result.current.load(''));
+        // The preview is one listing; the fresh re-check behind it is another.
+        await waitFor(() => expect(result.current.revalidating).toBe(false));
+        expect(result.current.shown).toBe(2);
+        await act(async () => result.current.loadMore());
+        expect(result.current.shown).toBe(2);
+        await act(async () => result.current.setMember('member-5'));
+        expect(result.current.shown).toBe(2);
+        await act(async () => result.current.load('pink'));
+        expect(result.current.shown).toBe(3);
     });
 });

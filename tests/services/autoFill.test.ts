@@ -2071,6 +2071,7 @@ describe('reflectNewEntry — same-cycle slot accounting', () => {
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         });
@@ -2080,6 +2081,7 @@ describe('reflectNewEntry — same-cycle slot accounting', () => {
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         });

@@ -96,6 +96,7 @@ const library = (): Listing => ({
     ],
     memberId: MEMBER,
     truncated: false,
+    nextStart: 0,
     wonIds: [],
     wonCount: 0,
     preview: false,
@@ -136,12 +137,12 @@ const openPickerIdle = async () => {
     await screen.findByText('Choose the photo to swap in');
 };
 
-const loadAll = () => fireEvent.click(screen.getByRole('button', { name: 'Load all photos' }));
+const loadPhotos = () => fireEvent.click(screen.getByRole('button', { name: 'Load photos' }));
 
 // The picker, asked for the whole library, read and unlocked.
 const openPicker = async () => {
     await openPickerIdle();
-    loadAll();
+    loadPhotos();
     await waitFor(() => expect(tile(PICK_ID).textContent).toContain('Can be entered'));
 };
 
@@ -180,10 +181,10 @@ describe('choosing the replacement', () => {
         expect(window.api.previewSwapPhoto).toHaveBeenCalledTimes(1);
         expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: 'Auto' })).toBeTruthy();
-        loadAll();
+        loadPhotos();
         await waitFor(() => expect(tile(PICK_ID).textContent).toContain('Can be entered'));
-        expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(101, undefined, 'cached', 'swap');
-        expect(window.api.getLibraryPhotos).toHaveBeenLastCalledWith(101, undefined, 'fresh', 'swap');
+        expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(101, undefined, 'cached', 'swap', 0, 100);
+        expect(window.api.getLibraryPhotos).toHaveBeenLastCalledWith(101, undefined, 'fresh', 'swap', 0, 3);
         expect(screen.getByText('Picked: 0/1')).toBeTruthy();
         expect(tile(ENTRY_ID).textContent).toContain('Already in this challenge');
         expect(tile(ENTRY_ID).getAttribute('aria-disabled')).toBe('true');
@@ -330,7 +331,7 @@ describe('a refused pick or spend', () => {
         expect(screen.getByText(/^Photos are not loaded yet/)).toBeTruthy();
         expect(screen.queryByRole('button', { name: new RegExp(`^Photo ${PICK_ID.slice(0, 8)}:`) })).toBeNull();
         expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(readsBefore);
-        loadAll();
+        loadPhotos();
         await waitFor(() => expect(tile(OTHER_ID).textContent).toContain('Can be entered'));
         fireEvent.click(tile(OTHER_ID));
         fireEvent.click(useThisPhoto());
@@ -545,7 +546,7 @@ describe('Auto in the swap picker', () => {
         renderCard();
         fireEvent.click(swapButton());
         await screen.findByText(app.swapPickNoSuggestion);
-        loadAll();
+        loadPhotos();
         await waitFor(() => expect(tile(PICK_ID).textContent).toContain('Can be entered'));
         fireEvent.click(tile(PICK_ID));
         fireEvent.click(useThisPhoto());

@@ -1380,6 +1380,7 @@ describe('chosen photos', () => {
                     photos: [{ id: PHOTO, labels: ['sea'], allowed: true, message: null, uploadDate: 1 }],
                     memberId: 'c'.repeat(32),
                     truncated: false,
+                    nextStart: 0,
                     wonIds: [],
                     wonCount: 0,
                     preview: false,
@@ -1407,9 +1408,9 @@ describe('chosen photos', () => {
         await screen.findByRole('dialog');
         expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
         expect(screen.queryByRole('button', { name: 'app.pickAuto' })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         await waitFor(() =>
-            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(900001, undefined, 'cached', 'submit'),
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(900001, undefined, 'cached', 'submit', 0, 100),
         );
         fireEvent.click(await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ }));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
@@ -1614,7 +1615,7 @@ describe('chosen photos', () => {
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
-        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         fireEvent.click(await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ }));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
         expect((await screen.findByRole('alert')).textContent).toContain('app.photoChooserSaveError');
@@ -1626,7 +1627,7 @@ describe('chosen photos', () => {
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
-        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         fireEvent.click(await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ }));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
         expect((await screen.findByRole('alert')).textContent).toContain('app.photoChooserSaveError');

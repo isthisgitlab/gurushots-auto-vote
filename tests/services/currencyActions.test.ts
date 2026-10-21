@@ -291,6 +291,7 @@ describe('swapEntry', () => {
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         });
@@ -300,6 +301,7 @@ describe('swapEntry', () => {
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         });
@@ -309,6 +311,7 @@ describe('swapEntry', () => {
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         });
@@ -445,6 +448,7 @@ describe('swap back', () => {
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         });

@@ -102,18 +102,31 @@ type LibraryOptions = {
     readState?: { firstPageFailed: boolean };
     /**
      * A walk only (getEligiblePhotosWalk): photos this answers true for are left out of `items` and do not count
-     * toward the walk's cap (their ids are reported as `skipped`, up to 2 * MAX_LIBRARY_PAGES * limit of them). The
-     * walk then ends at MAX_LIBRARY_PAGES * limit kept photos, or at twice MAX_LIBRARY_PAGES pages, whichever comes
-     * first, besides the budget.
+     * toward the walk's cap or a `maxKept` batch (their ids are reported as `skipped`, up to 2 * MAX_LIBRARY_PAGES *
+     * limit of them). Without `maxKept` the walk then ends at MAX_LIBRARY_PAGES * limit kept photos, or at twice
+     * MAX_LIBRARY_PAGES pages, whichever comes first, besides the budget.
      */
     skip?: (photo: LibraryPhoto) => boolean;
+    /**
+     * A walk only (getEligiblePhotosWalk): stop once this many photos were counted — checked after each page, so the
+     * page that reaches it is kept whole — wherever `skip` left the counted photos, and report the stop as a routine
+     * batch end (`truncated: true`, no warning). `nextStart` says where a continuation walk reads from.
+     */
+    maxKept?: number;
+    /**
+     * A walk only (getEligiblePhotosWalk): which kept photos a `maxKept` batch counts (default: every kept photo).
+     * Counted or not, a kept photo stays in `items`; photos a `skip` leaves out never reach it.
+     */
+    counts?: (photo: LibraryPhoto) => boolean;
 };
 
 /**
  * A walk's photos, and whether it stopped before the library was exhausted. `skipped` (only when the walk was given a
- * `skip`) are the ids of the photos it left out.
+ * `skip`) are the ids of the photos it left out. `nextStart` is `start + (pages fully read) * limit` at every exit:
+ * the offset a continuation walk reads from, so a batch can resume where this one stopped and a page cut short by a
+ * failure or the budget is re-read rather than skipped.
  */
-type LibraryWalk = { items: LibraryPhoto[]; truncated: boolean; skipped?: string[] };
+type LibraryWalk = { items: LibraryPhoto[]; truncated: boolean; nextStart: number; skipped?: string[] };
 
 /**
  * The request shape every library read shares, normalized from caller options.
@@ -144,10 +157,15 @@ const markFirstPageFailed = (readState: LibraryOptions['readState'], page: numbe
  * MAX_LIBRARY_PAGES * limit photos are kept (checked after each page, so the page that crosses it is kept whole), or at
  * twice MAX_LIBRARY_PAGES pages. Rows the server repeats are kept once, so a walk can need more than MAX_LIBRARY_PAGES
  * pages to see that many distinct photos, but never reads past its page ceiling.
+ * Given a `maxKept`, the walk instead ends once that many photos were counted (a `counts` predicate picks which kept
+ * photos count, all of them by default), wherever `skip` left them and independent of it; `maxPages` and the budget
+ * are unchanged. A batch end is routine and logs no warning — unlike every other early stop.
  * `truncated` is true whenever it stopped for any reason other than reaching a
- * short page: the budget, a failed or unreadable page (the first included), or
- * the page cap. A caller that wants to conclude "this photo is not in the
- * library" may only do so from a walk that was not truncated.
+ * short page: the budget, a failed or unreadable page (the first included), the
+ * page cap, or a `maxKept` batch end. A caller that wants to conclude "this
+ * photo is not in the library" may only do so from a walk that was not
+ * truncated. Every exit reports `nextStart`, the offset a continuation walk
+ * reads from.
  */
 const walkLibrary = async (
     challengeId: string | number,
@@ -171,15 +189,21 @@ const walkLibrary = async (
         typeof options.logLabel === 'string' && options.logLabel.trim() ? options.logLabel.trim() : 'autoSubmit';
     const warn = (message: string) => logger.withCategory('api').warning(`${logLabel}: ${message}`, null);
     // With a `skip`, the photos left out do not use up the cap, so the walk may need more pages to keep as many.
-    const { skip } = options;
+    const { skip, counts, maxKept } = options;
     const maxPages = skip ? 2 * MAX_LIBRARY_PAGES : MAX_LIBRARY_PAGES;
     const keepCap = MAX_LIBRARY_PAGES * limit;
     // A bound on what a skipping walk records, however many photos the library holds.
     const skippedCap = 2 * MAX_LIBRARY_PAGES * limit;
     const skipped = new Set<string>();
+    // Photos a `maxKept` batch counts: kept (deduped, so a repeated row never counts twice) and passing `counts`.
+    let counted = 0;
+    // `start + (pages fully read) * limit`, so a continuation resumes here and a page cut short by a failure or the
+    // budget is re-read rather than skipped.
+    let nextStart = start;
     const result = (truncated: boolean): LibraryWalk => ({
         items: Array.from(byId.values()),
         truncated,
+        nextStart,
         ...(skip ? { skipped: Array.from(skipped) } : {}),
     });
     let page = 0;
@@ -229,11 +253,17 @@ const walkLibrary = async (
             } else if (!byId.has(item.id)) {
                 byId.set(item.id, item);
                 skipped.delete(String(item.id));
+                if (counts?.(item) ?? true) counted++;
             }
         }
+        nextStart = start + (page + 1) * limit;
         if (items.length < limit) {
             // Short page — the library is exhausted.
             return result(false);
+        }
+        if (maxKept !== undefined && counted >= maxKept) {
+            // A batch end is routine, not an early stop worth a warning about.
+            return result(true);
         }
         if (skip && byId.size >= keepCap) {
             warn(`stopped reading your photo library at ${byId.size} photo(s); less-voted photos were not considered`);

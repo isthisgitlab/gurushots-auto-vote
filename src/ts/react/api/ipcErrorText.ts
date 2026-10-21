@@ -27,6 +27,7 @@ const KNOWN_ERRORS: Record<string, string> = {
     'submit-busy': 'errors.pickBusy',
     'pin-cap-reached': 'errors.pinCapReached',
     'pin-write-failed': 'errors.pinFailed',
+    'library-read-failed': 'errors.libraryReadFailed',
     'Failed to apply boost': 'errors.boostFailed',
     'Failed to fetch challenges': 'errors.fetchChallengesFailed',
     'Could not list challenges': 'errors.fetchChallengesFailed',

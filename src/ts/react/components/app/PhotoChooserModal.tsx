@@ -36,7 +36,7 @@ const confirmAccount = async (): Promise<AccountCheck> => {
 
 /**
  * The modal's body. Mounted only while the modal is open, so every opening starts from the saved
- * value. Nothing is read until Load all, Search or a Retry asks for it: the saved picks show once
+ * value. Nothing is read until Load photos, Search or a Retry asks for it: the saved picks show once
  * the member check on open says they are this account's (the member only is asked for — never the
  * library), and Auto can rank and fill without a read.
  */
@@ -86,12 +86,13 @@ function PhotoChooserBody({
         state,
         known,
         generation,
+        shown,
         revalidating,
         recheckFailed,
         retry,
         setMember,
         refresh,
-        resetLoadAll,
+        resetLoadPhotos,
         forgetIdle,
     } = picker;
     const [listsRemoved, setListsRemoved] = useState(false);
@@ -149,6 +150,7 @@ function PhotoChooserBody({
         memberId: knownMember,
         state,
         generation,
+        shown,
         reloadSaved,
         confirmAccount,
         retryListing: retry,
@@ -193,9 +195,9 @@ function PhotoChooserBody({
     // Refresh reads the listing on screen again and drops the ranking with it (nothing is pruned here:
     // the chooser has no submit to retry).
     const refreshListing = useCallback(() => {
-        resetLoadAll();
+        resetLoadPhotos();
         refresh();
-    }, [resetLoadAll, refresh]);
+    }, [resetLoadPhotos, refresh]);
 
     return (
         <div className="space-y-3">
@@ -234,8 +236,12 @@ function PhotoChooserBody({
                 hideUnlisted={otherAccount}
                 locked={locked}
                 hasChallenge={challengeId !== null}
+                search={picker.isSearch}
                 revalidating={revalidating}
                 recheckFailed={recheckFailed}
+                loadMore={() => void picker.loadMore()}
+                loadingMore={picker.loadingMore}
+                loadMoreFailed={picker.loadMoreFailed}
                 onToggle={toggle}
                 onRetry={retry}
                 onRefresh={refreshListing}
@@ -279,7 +285,7 @@ function PhotoChooserBody({
  * order only when Use Chosen Photos in the order I picked them is on; otherwise photos
  * rank by the picker's own scorer), capped at MAX_CHOSEN_PHOTOS. Nothing is read on
  * opening: the saved picks show once the member check says they are this account's, and
- * Load all, Search and Auto ask for what they need. `challengeId` makes the listing say whether each
+ * Load photos, Search and Auto ask for what they need. `challengeId` makes the listing say whether each
  * photo can enter THAT challenge; without it eligibility is only known at submit
  * time, and Auto is not offered. `onSave` gets the chosen ids and answers whether they were stored: on
  * false (or a throw) the modal stays open on an error. `clearMeansInherit` says

@@ -16,7 +16,13 @@ import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import { resolveMemberId } from '../../services/autoFill';
-import { CHOSEN_PHOTO_ID_RE, MAX_TAG_LENGTH } from '../../settings/limits';
+import {
+    CHOSEN_PHOTO_ID_RE,
+    LIBRARY_BATCH_PHOTOS,
+    MAX_LIBRARY_KEEP_PHOTOS,
+    MAX_TAG_LENGTH,
+    MAX_WON_IDS,
+} from '../../settings/limits';
 import { htmlToText } from '../../format/htmlToText';
 import { asPreview } from '../../libraryPreview';
 import { accountGeneration } from '../../services/accountScope';
@@ -41,8 +47,6 @@ const MAX_LABEL_LENGTH = 80;
 const MAX_MESSAGE_LENGTH = 200;
 // How much of the raw HTML message is converted: markup makes the raw text longer than what it shows.
 const MAX_RAW_MESSAGE_LENGTH = 4 * MAX_MESSAGE_LENGTH;
-// How many ids of photos left out of the listing (they have won a challenge) are reported with it.
-const MAX_WON_IDS = 1000;
 
 /** What a throttled request resolves to when a newer request took its place in the queue. */
 const SUPERSEDED = Symbol('superseded');
@@ -165,6 +169,11 @@ const answerFromCache = (token: string, contextId: string | number | null, usage
  *   always walks, and a no-search walk is kept for the next `'cached'` request.
  * @param usage - what the `allowed` flags are read for, as the server filters them per usage: `'submit'` (the
  *   default) is entering the challenge, `'swap'` is replacing an entry's photo. Listings are cached per usage.
+ * @param start - read one batch from this offset into the library instead of walking it all; 0 reads from the top.
+ *   A batch from 0 (or an omitted start) is kept for the next `'cached'` request like a full walk, whatever its
+ *   batch size (a wider re-read replaces the older entry); a continuation (`start > 0`) never is, and `'cached'`
+ *   refuses one.
+ * @param keep - how many photos a `start` batch counts before it stops (default 100); given only with `start`.
  */
 const handleGetLibraryPhotos = (async (
     event: unknown,
@@ -172,14 +181,25 @@ const handleGetLibraryPhotos = (async (
     search?: string | null,
     mode?: 'cached' | 'fresh',
     usage?: LibraryUsage,
+    start?: number | null,
+    keep?: number | null,
 ) => {
     const hasChallenge = challengeId !== undefined && challengeId !== null;
     const hasSearch = search !== undefined && search !== null;
+    const hasStart = start !== undefined && start !== null;
+    const hasKeep = keep !== undefined && keep !== null;
     if (
         (hasChallenge && !isIdArg(challengeId)) ||
         (hasSearch && typeof search !== 'string') ||
         (mode !== undefined && mode !== 'cached' && mode !== 'fresh') ||
-        (usage !== undefined && !isUsageArg(usage))
+        (usage !== undefined && !isUsageArg(usage)) ||
+        // A batch read starts at a non-negative offset and keeps at most one full walk's worth of photos.
+        (hasStart && !(Number.isSafeInteger(start) && start >= 0)) ||
+        (hasKeep && !(Number.isSafeInteger(keep) && keep >= 1 && keep <= MAX_LIBRARY_KEEP_PHOTOS)) ||
+        // A batch size without an offset says nothing to read from.
+        (hasKeep && !hasStart) ||
+        // The cache only holds reads from offset 0, so a cached answer could not say where a continuation begins.
+        (mode === 'cached' && typeof start === 'number' && start > 0)
     ) {
         return refuseInvalidArgs('autoSubmit', 'get-library-photos');
     }
@@ -202,17 +222,37 @@ const handleGetLibraryPhotos = (async (
 
         // The borrowing lookup is a request of its own, so it runs inside the
         // throttled job like the walk it serves.
+        const readState = { firstPageFailed: false };
         const outcome = await throttled(async () => {
             const readAtMs = Date.now();
             const readThrough = challengeId ?? (await borrowChallengeId(strategy, token));
             // Nothing to read the library through: no active challenge and no open one seen yet.
             if (readThrough === null) return null;
-            const walk = await strategy.getEligiblePhotosWalk(readThrough, token, {
+            const walkOptions = {
                 search: term,
                 logLabel: 'library',
                 usage: readUsage,
                 skip: hasWonChallenge,
-            });
+            };
+            const walk = await strategy.getEligiblePhotosWalk(
+                readThrough,
+                token,
+                hasStart
+                    ? {
+                          ...walkOptions,
+                          start,
+                          maxKept: keep ?? LIBRARY_BATCH_PHOTOS,
+                          // Marks, for the return below, that page 0 of THIS walk failed: a continuation whose
+                          // first page comes back empty answers nothing rather than an empty batch.
+                          readState,
+                          // A named challenge's batch counts only photos it may enter; a borrowed read counts
+                          // every kept photo, since no challenge's flags are the point.
+                          ...(hasChallenge && {
+                              counts: (photo: LibraryPhoto) => photo.permission?.allowed === true,
+                          }),
+                      }
+                    : walkOptions,
+            );
             const memberId = await resolveMemberId(token, strategy.getCurrentMemberProfile, logger, 'library');
             return { walk, memberId, readAtMs };
         });
@@ -220,6 +260,10 @@ const handleGetLibraryPhotos = (async (
         if (outcome === null) return { success: false as const, error: 'no-challenge-context' as const };
         // The account left while the walk ran: what it read is not the signed-in account's to be shown.
         if (generation !== accountGeneration()) return { success: false as const, error: 'account-changed' as const };
+        // A batch whose first page failed has nothing to continue from; a full read keeps today's behavior
+        // (the empty listing the walk returned, marked truncated).
+        if (hasStart && readState.firstPageFailed)
+            return { success: false as const, error: 'library-read-failed' as const };
         const skipped = outcome.walk.skipped ?? [];
         const listing = {
             // An id that is not a safe token could never be stored in a list, so it is not offered.
@@ -230,13 +274,21 @@ const handleGetLibraryPhotos = (async (
             wonCount: skipped.length,
             wonIds: skipped.filter((id) => CHOSEN_PHOTO_ID_RE.test(id)).slice(0, MAX_WON_IDS),
             truncated: outcome.walk.truncated,
+            // Where the read stopped: the offset a continuation read starts from.
+            nextStart: outcome.walk.nextStart,
             allowedKnown: hasChallenge,
             readAtMs: outcome.readAtMs,
         };
         // Only the no-search listing is kept, and not a read that kept nothing and was cut short (it may be a
-        // failed read), nor one an action of this window outdated while it ran.
-        const keep = term === undefined && (listing.photos.length > 0 || listing.wonCount > 0 || !listing.truncated);
-        if (keep && epoch === dropEpoch()) writeListing(token, contextId, listing, readUsage);
+        // failed read), nor one an action of this window outdated while it ran — and never a continuation,
+        // which the cache cannot answer for (it only holds reads from offset 0). Every read from offset 0 is
+        // kept, whatever its batch size: it is a valid listing from the top with its own nextStart, and it
+        // replaces the older entry, so a later `'cached'` answer never shows an older, smaller listing.
+        const keepCached =
+            term === undefined &&
+            (listing.photos.length > 0 || listing.wonCount > 0 || !listing.truncated) &&
+            (!hasStart || start === 0);
+        if (keepCached && epoch === dropEpoch()) writeListing(token, contextId, listing, readUsage);
         return { success: true as const, ...listing, preview: false };
     } catch (error) {
         logger.withCategory('autoSubmit').error('Error handling get-library-photos request:', error);

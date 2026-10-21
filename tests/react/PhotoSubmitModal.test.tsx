@@ -12,7 +12,22 @@ import { mockTranslator } from './helpers/setup';
 import { app, errors } from '../../src/ts/translations/english';
 import { invalid } from '../helpers/invalid';
 import { MAX_SUGGEST_EXCLUDE } from '../../src/ts/settings/limits';
+import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
 import type { WindowApi } from '../../src/ts/types/ipc';
+
+// The live picker instances, so a test can press loadMore directly: the keepIds contract already
+// runs through the real component wiring.
+const pickers: ReturnType<typeof usePhotoPicker>[] = [];
+jest.mock('@/hooks/usePhotoPicker', () => ({
+    __esModule: true,
+    usePhotoPicker: (props: Parameters<typeof usePhotoPicker>[0]) => {
+        const picker = jest
+            .requireActual<typeof import('@/hooks/usePhotoPicker')>('@/hooks/usePhotoPicker')
+            .usePhotoPicker(props);
+        pickers.push(picker);
+        return picker;
+    },
+}));
 
 type Listing = Extract<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>, { success: true }>;
 type LibraryPhoto = Listing['photos'][number];
@@ -35,6 +50,7 @@ const listing = (photos: LibraryPhoto[], over: Partial<Listing> = {}): Listing =
     photos,
     memberId: MEMBER,
     truncated: false,
+    nextStart: 0,
     wonIds: [],
     wonCount: 0,
     preview: false,
@@ -58,10 +74,10 @@ const opened = async () => {
     await screen.findByRole('button', { name: /^Photo 00000001:/ });
     await waitFor(() => expect(tile(1).textContent).toContain('Can be entered'));
 };
-// Pick… opens with nothing loaded: Load all reads the library, then the same wait as above.
-const loadAll = () => fireEvent.click(screen.getByRole('button', { name: 'Load all photos' }));
+// Pick… opens with nothing loaded: Load photos reads the library, then the same wait as above.
+const loadPhotos = () => fireEvent.click(screen.getByRole('button', { name: 'Load photos' }));
 const loadedAll = async () => {
-    loadAll();
+    loadPhotos();
     await opened();
 };
 const submitButton = () => screen.getByRole('button', { name: /^Submit/ });
@@ -91,12 +107,13 @@ const setup = (over: Partial<Props> = {}) => {
 // Opened and asked for the whole library, as most of these cases start.
 const setupLoaded = (over: Partial<Props> = {}) => {
     const utils = setup(over);
-    loadAll();
+    loadPhotos();
     return utils;
 };
 
 beforeEach(() => {
     mockTranslator.t.mockImplementation(english);
+    pickers.length = 0;
     rememberCurrentMember(null);
     getLibrary().mockResolvedValue(listing([photo(1), photo(2), photo(3), photo(4)]));
 });
@@ -116,8 +133,8 @@ describe('opening', () => {
         setupLoaded();
         await opened();
         expect(getLibrary().mock.calls).toEqual([
-            [7, undefined, 'cached', 'submit'],
-            [7, undefined, 'fresh', 'submit'],
+            [7, undefined, 'cached', 'submit', 0, 100],
+            [7, undefined, 'fresh', 'submit', 0, 4],
         ]);
         expect(screen.getByText('Choose photos to submit')).toBeTruthy();
         expect(countLine().textContent).toBe('Picked: 0/3 open slots');
@@ -199,12 +216,12 @@ describe('picking and submitting', () => {
         await opened();
         fireEvent.change(screen.getByLabelText('Search your photos by tag'), { target: { value: 'sun' } });
         fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'sun', 'fresh', 'submit'));
+        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'sun', 'fresh', 'submit', 0, 100));
         await opened();
         fireEvent.click(tile(2));
         fireEvent.click(submitButton());
         await waitFor(() => expect(getLibrary()).toHaveBeenCalledTimes(4));
-        expect(getLibrary()).toHaveBeenLastCalledWith(7, 'sun', 'fresh', 'submit');
+        expect(getLibrary()).toHaveBeenLastCalledWith(7, 'sun', 'fresh', 'submit', 0, 4);
         await opened();
         expect(tile(2).getAttribute('aria-pressed')).toBe('true');
     });
@@ -905,7 +922,7 @@ describe('Auto suggestions', () => {
             .mockResolvedValueOnce(listing([photo(1), photo(2)]))
             .mockReturnValueOnce(fresh.promise);
         setup();
-        loadAll();
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         await press([photo(9)]);
         // Picking waits for the fresh read: the strip is held with the grid.
@@ -972,7 +989,7 @@ describe('Auto suggestions', () => {
     test('Submit stays held while the app checks, with suggestions picked', async () => {
         getLibrary().mockResolvedValue(listing([photo(1), photo(2)], { preview: true }));
         setup();
-        loadAll();
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         await press([photo(1)]);
         fireEvent.click(addButton());
@@ -1253,7 +1270,7 @@ describe('Pick… loads photos on demand', () => {
     };
     const failed = invalid<Answer>({ success: false, error: 'Failed to read your photo library' });
     const suggestPhotos = () => jest.mocked(window.api.suggestPhotos);
-    const loadAllButton = () => screen.getByRole('button', { name: 'Load all photos' });
+    const loadPhotosButton = () => screen.getByRole('button', { name: 'Load photos' });
     const autoButton = () => screen.getByRole('button', { name: /^(Auto|Next suggestions)$/ });
     const searchBox = () => screen.getByLabelText<HTMLInputElement>('Search your photos by tag');
     const idleLine = () => screen.queryByText(/^Photos are not loaded yet/);
@@ -1278,61 +1295,61 @@ describe('Pick… loads photos on demand', () => {
             }),
         );
 
-    test('opens with nothing read: an idle line and Load all, Search and Auto offered', () => {
+    test('opens with nothing read: an idle line and Load photos, Search and Auto offered', () => {
         setup();
         expect(getLibrary()).not.toHaveBeenCalled();
         expect(idleLine()?.getAttribute('role')).toBe('status');
-        expect(loadAllButton().getAttribute('aria-disabled')).toBe('false');
-        expect(idleLine()?.textContent).toBe('Photos are not loaded yet. Load them all, search, or press Auto.');
+        expect(loadPhotosButton().getAttribute('aria-disabled')).toBe('false');
+        expect(idleLine()?.textContent).toBe('Photos are not loaded yet. Load photos, search, or press Auto.');
         expect(screen.getByRole('button', { name: 'Search' })).toBeTruthy();
         expect(autoButton()).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Refresh photos' })).toBeNull();
     });
 
-    test('Load all reads the library and keeps the focus on its button', async () => {
+    test('Load photos reads the library and keeps the focus on its button', async () => {
         setup();
-        loadAllButton().focus();
-        loadAll();
+        loadPhotosButton().focus();
+        loadPhotos();
         await opened();
         expect(getLibrary().mock.calls).toEqual([
-            [7, undefined, 'cached', 'submit'],
-            [7, undefined, 'fresh', 'submit'],
+            [7, undefined, 'cached', 'submit', 0, 100],
+            [7, undefined, 'fresh', 'submit', 0, 4],
         ]);
         expect(idleLine()).toBeNull();
-        expect(document.activeElement).toBe(loadAllButton());
-        expect(loadAllButton().getAttribute('aria-busy')).toBe('false');
+        expect(document.activeElement).toBe(loadPhotosButton());
+        expect(loadPhotosButton().getAttribute('aria-busy')).toBe('false');
     });
 
-    test('while a read runs Load all is aria-disabled and busy, and a press sends no second read', async () => {
+    test('while a read runs Load photos is aria-disabled and busy, and a press sends no second read', async () => {
         const cached = deferred<Answer>();
         getLibrary().mockReturnValueOnce(cached.promise);
         setup();
-        loadAll();
-        await waitFor(() => expect(loadAllButton().getAttribute('aria-busy')).toBe('true'));
-        expect(loadAllButton().getAttribute('aria-disabled')).toBe('true');
-        expect(loadAllButton().hasAttribute('disabled')).toBe(false);
-        loadAll();
+        loadPhotos();
+        await waitFor(() => expect(loadPhotosButton().getAttribute('aria-busy')).toBe('true'));
+        expect(loadPhotosButton().getAttribute('aria-disabled')).toBe('true');
+        expect(loadPhotosButton().hasAttribute('disabled')).toBe(false);
+        loadPhotos();
         expect(getLibrary()).toHaveBeenCalledTimes(1);
         await act(async () => cached.resolve(listing([photo(1)])));
         await opened();
     });
 
-    test('while a preview is being re-checked a press of Load all sends no read', async () => {
+    test('while a preview is being re-checked a press of Load photos sends no read', async () => {
         const fresh = deferred<Answer>();
         getLibrary()
             .mockResolvedValueOnce(listing([photo(1)], { preview: true }))
             .mockReturnValueOnce(fresh.promise);
         setup();
-        loadAll();
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(loadAllButton().getAttribute('aria-busy')).toBe('true');
-        loadAll();
+        expect(loadPhotosButton().getAttribute('aria-busy')).toBe('true');
+        loadPhotos();
         expect(getLibrary()).toHaveBeenCalledTimes(2);
         await act(async () => fresh.resolve(listing([photo(1)])));
-        await waitFor(() => expect(loadAllButton().getAttribute('aria-busy')).toBe('false'));
+        await waitFor(() => expect(loadPhotosButton().getAttribute('aria-busy')).toBe('false'));
     });
 
-    test('during a Refresh a press of Load all sends no read', async () => {
+    test('during a Refresh a press of Load photos sends no read', async () => {
         setup();
         await loadedAll();
         const refreshed = deferred<Answer>();
@@ -1341,81 +1358,81 @@ describe('Pick… loads photos on demand', () => {
         await waitFor(() =>
             expect(screen.getByRole('button', { name: 'Refresh photos' }).getAttribute('aria-busy')).toBe('true'),
         );
-        expect(loadAllButton().getAttribute('aria-disabled')).toBe('true');
-        expect(loadAllButton().getAttribute('aria-busy')).toBe('false');
-        loadAll();
+        expect(loadPhotosButton().getAttribute('aria-disabled')).toBe('true');
+        expect(loadPhotosButton().getAttribute('aria-busy')).toBe('false');
+        loadPhotos();
         expect(getLibrary()).toHaveBeenCalledTimes(3);
         await act(async () => refreshed.resolve(listing([photo(1)])));
-        await waitFor(() => expect(loadAllButton().getAttribute('aria-busy')).toBe('false'));
+        await waitFor(() => expect(loadPhotosButton().getAttribute('aria-busy')).toBe('false'));
     });
 
-    test('Load all after a Search empties the search box and reads the whole library', async () => {
+    test('Load photos after a Search empties the search box and reads the whole library', async () => {
         setup();
         fireEvent.change(searchBox(), { target: { value: 'sun' } });
         fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'sun', 'fresh', 'submit'));
+        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'sun', 'fresh', 'submit', 0, 100));
         await opened();
         expect(searchBox().value).toBe('sun');
-        loadAll();
+        loadPhotos();
         expect(searchBox().value).toBe('');
-        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh', 'submit'));
-        expect(getLibrary()).toHaveBeenCalledWith(7, undefined, 'cached', 'submit');
+        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh', 'submit', 0, 4));
+        expect(getLibrary()).toHaveBeenCalledWith(7, undefined, 'cached', 'submit', 0, 100);
     });
 
-    test('Load all pressed while a Search is running keeps the term and reads nothing', async () => {
+    test('Load photos pressed while a Search is running keeps the term and reads nothing', async () => {
         const searching = deferred<Answer>();
         getLibrary().mockReturnValueOnce(searching.promise);
         setup();
         fireEvent.change(searchBox(), { target: { value: 'sun' } });
         fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-        await waitFor(() => expect(loadAllButton().getAttribute('aria-disabled')).toBe('true'));
-        // The read is the Search's, not Load all's: Load all is held but does not show itself busy.
-        expect(loadAllButton().getAttribute('aria-busy')).toBe('false');
-        loadAll();
+        await waitFor(() => expect(loadPhotosButton().getAttribute('aria-disabled')).toBe('true'));
+        // The read is the Search's, not Load photos's: Load photos is held but does not show itself busy.
+        expect(loadPhotosButton().getAttribute('aria-busy')).toBe('false');
+        loadPhotos();
         expect(searchBox().value).toBe('sun');
         expect(getLibrary()).toHaveBeenCalledTimes(1);
         await act(async () => searching.resolve(listing([photo(1)])));
         await opened();
     });
 
-    test('while a submit is in flight Load all is held and sends no read', async () => {
+    test('while a submit is in flight Load photos is held and sends no read', async () => {
         const { update } = setup();
         update({ submitting: true });
-        expect(loadAllButton().getAttribute('aria-disabled')).toBe('true');
-        loadAll();
+        expect(loadPhotosButton().getAttribute('aria-disabled')).toBe('true');
+        loadPhotos();
         expect(getLibrary()).not.toHaveBeenCalled();
         update({ submitting: false });
-        expect(loadAllButton().getAttribute('aria-disabled')).toBe('false');
-        loadAll();
+        expect(loadPhotosButton().getAttribute('aria-disabled')).toBe('false');
+        loadPhotos();
         await opened();
     });
 
-    test('after Load all landed, a later Search read leaves Load all held but not busy', async () => {
+    test('after Load photos landed, a later Search read leaves Load photos held but not busy', async () => {
         setup();
         await loadedAll();
         getLibrary().mockReturnValueOnce(deferred<Answer>().promise);
         fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-        await waitFor(() => expect(loadAllButton().getAttribute('aria-disabled')).toBe('true'));
-        expect(loadAllButton().getAttribute('aria-busy')).toBe('false');
+        await waitFor(() => expect(loadPhotosButton().getAttribute('aria-disabled')).toBe('true'));
+        expect(loadPhotosButton().getAttribute('aria-busy')).toBe('false');
     });
 
-    test('after Load all landed, the read of a refreshed submit leaves Load all held but not busy', async () => {
+    test('after Load photos landed, the read of a refreshed submit leaves Load photos held but not busy', async () => {
         const onSubmit = jest.fn<Promise<PickOutcome>, [string[]]>().mockResolvedValue('refreshed');
         setup({ onSubmit });
         await loadedAll();
         fireEvent.click(tile(1));
         getLibrary().mockReturnValueOnce(deferred<Answer>().promise);
         fireEvent.click(submitButton());
-        await waitFor(() => expect(loadAllButton().getAttribute('aria-disabled')).toBe('true'));
-        expect(loadAllButton().getAttribute('aria-busy')).toBe('false');
+        await waitFor(() => expect(loadPhotosButton().getAttribute('aria-disabled')).toBe('true'));
+        expect(loadPhotosButton().getAttribute('aria-busy')).toBe('false');
     });
 
-    test('Search reads the library without Load all', async () => {
+    test('Search reads the library without Load photos', async () => {
         setup();
         fireEvent.change(searchBox(), { target: { value: 'sun' } });
         fireEvent.click(screen.getByRole('button', { name: 'Search' }));
         await opened();
-        expect(getLibrary()).toHaveBeenCalledWith(7, 'sun', 'fresh', 'submit');
+        expect(getLibrary()).toHaveBeenCalledWith(7, 'sun', 'fresh', 'submit', 0, 100);
         expect(idleLine()).toBeNull();
     });
 
@@ -1441,7 +1458,7 @@ describe('Pick… loads photos on demand', () => {
         expect(
             screen
                 .getByText(
-                    'Your picks can be submitted as they are. Load all photos or search to see the rest of your library.',
+                    'Your picks can be submitted as they are. Load photos or search to see the rest of your library.',
                 )
                 .getAttribute('role'),
         ).toBe('status');
@@ -1510,29 +1527,29 @@ describe('Pick… loads photos on demand', () => {
         getLibrary().mockResolvedValue(listing([photo(1, { allowed: false }), photo(2)]));
         fireEvent.click(submitButton());
         await waitFor(() => expect(submitButton().textContent).toBe('Submit 1'));
-        expect(getLibrary().mock.calls).toEqual([[7, undefined, 'fresh', 'submit']]);
+        expect(getLibrary().mock.calls).toEqual([[7, undefined, 'fresh', 'submit', 0, 100]]);
         expect(screen.queryByRole('region', { name: 'Suggestions' })).toBeNull();
         expect(screen.getByRole('button', { name: /^Photo 00000009:/ }).getAttribute('aria-pressed')).toBe('true');
     });
 
-    test('an Auto pick followed by a Load all that fails holds Submit and offers Retry', async () => {
+    test('an Auto pick followed by a Load photos that fails holds Submit and offers Retry', async () => {
         setup();
         await auto([photo(9)]);
         pickFromStrip(9);
         expect(submitButton().hasAttribute('disabled')).toBe(false);
         getLibrary().mockResolvedValueOnce(failed);
-        loadAll();
+        loadPhotos();
         const retryButton = await screen.findByRole('button', { name: 'Retry' });
         expect(submitButton().hasAttribute('disabled')).toBe(true);
         fireEvent.click(retryButton);
         await opened();
         expect(getLibrary().mock.calls).toEqual([
-            [7, undefined, 'cached', 'submit'],
-            [7, undefined, 'fresh', 'submit'],
+            [7, undefined, 'cached', 'submit', 0, 100],
+            [7, undefined, 'fresh', 'submit', 0, 100],
         ]);
     });
 
-    test('the swap usage opens idle too, and Load all and Auto ask for swap eligibility', async () => {
+    test('the swap usage opens idle too, and Load photos and Auto ask for swap eligibility', async () => {
         setup({ max: 1, usage: 'swap' });
         expect(getLibrary()).not.toHaveBeenCalled();
         expect(idleLine()).toBeTruthy();
@@ -1540,21 +1557,21 @@ describe('Pick… loads photos on demand', () => {
         fireEvent.click(autoButton());
         await screen.findByRole('region', { name: 'Suggestions' });
         expect(suggestPhotos()).toHaveBeenCalledWith(7, 'swap', []);
-        fireEvent.click(loadAllButton());
+        fireEvent.click(loadPhotosButton());
         await waitFor(() => expect(getLibrary()).toHaveBeenCalledTimes(2));
         expect(getLibrary().mock.calls).toEqual([
-            [7, undefined, 'cached', 'swap'],
-            [7, undefined, 'fresh', 'swap'],
+            [7, undefined, 'cached', 'swap', 0, 100],
+            [7, undefined, 'fresh', 'swap', 0, 4],
         ]);
     });
 
-    test('a usage change reads nothing, and the next Load all sends the new usage', async () => {
+    test('a usage change reads nothing, and the next Load photos sends the new usage', async () => {
         const { update } = setup();
         update({ usage: 'swap' });
         expect(getLibrary()).not.toHaveBeenCalled();
-        fireEvent.click(loadAllButton());
+        fireEvent.click(loadPhotosButton());
         await opened();
-        expect(getLibrary()).toHaveBeenCalledWith(7, undefined, 'cached', 'swap');
+        expect(getLibrary()).toHaveBeenCalledWith(7, undefined, 'cached', 'swap', 0, 100);
     });
 });
 
@@ -1598,7 +1615,7 @@ describe('photos the challenge refuses', () => {
         expect(has(3)).toBe(false);
         expect(has(4)).toBe(true);
         expect(statusRegion()).toBe(region);
-        expect(region?.textContent).toBe(hiddenLine(2));
+        expect(region?.textContent).toBe(`Showing 2 photo(s).${hiddenLine(2)}`);
         expect(screen.queryByText(noneAccepted)).toBeNull();
     });
 
@@ -1610,13 +1627,13 @@ describe('photos the challenge refuses', () => {
             .mockReturnValueOnce(answer.promise);
         setup();
         const region = statusRegion();
-        loadAll();
+        loadPhotos();
         await screen.findByText('Loading your photos…');
         expect(statusRegion()).toBe(region);
         await act(async () => answer.resolve(listing([refused(1), refused(2)])));
         await screen.findByText(noneAccepted);
         expect(statusRegion()).toBe(region);
-        expect(region?.textContent).toBe(`${hiddenLine(2)}${noneAccepted}`);
+        expect(region?.textContent).toBe(`Showing 0 photo(s).${hiddenLine(2)}${noneAccepted}`);
     });
 
     test('the region is still the same one when the read fails', async () => {
@@ -1628,7 +1645,7 @@ describe('photos the challenge refuses', () => {
         );
         setup();
         const region = statusRegion();
-        loadAll();
+        loadPhotos();
         await screen.findByRole('button', { name: 'Retry' });
         expect(statusRegion()).toBe(region);
         expect(region?.textContent).toBe('');
@@ -1638,14 +1655,19 @@ describe('photos the challenge refuses', () => {
         getLibrary().mockResolvedValue(listing([photo(1), refused(2), photo(3)], { truncated: true }));
         setup();
         await loadedAll();
-        expect(screen.getByText("Hidden: at least 1 photo(s) GuruShots won't take in this challenge.")).toBeTruthy();
-        expect(screen.getByText('Showing the first 3 photos. Search by tag to find others.')).toBeTruthy();
+        expect(
+            screen.getByText(
+                "Hidden: at least 1 photo(s) GuruShots won't take in this challenge. Press Load more photos to look for others.",
+            ),
+        ).toBeTruthy();
+        expect(screen.getByText('Showing 2 photo(s).')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Load more photos' })).toBeTruthy();
     });
 
     test('nothing is hidden before the listing can say what the challenge accepts', async () => {
         getLibrary().mockResolvedValue(listing([photo(1), refused(2)], { allowedKnown: false }));
         setup();
-        loadAll();
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(has(2)).toBe(true);
         expect(screen.queryByText(/^Hidden: /)).toBeNull();
@@ -1656,7 +1678,7 @@ describe('photos the challenge refuses', () => {
         setup();
         await autoSuggesting([photo(2)]);
         fireEvent.click(stripTile(2));
-        loadAll();
+        loadPhotos();
         await waitFor(() => expect(gridTile(1).textContent).toContain('Can be entered'));
         expect(gridTile(2).getAttribute('aria-pressed')).toBe('true');
         expect(gridTile(2).textContent).toContain('No 2');
@@ -1672,7 +1694,7 @@ describe('photos the challenge refuses', () => {
         setup({ onSubmit });
         await autoSuggesting([photo(2)]);
         fireEvent.click(stripTile(2));
-        loadAll();
+        loadPhotos();
         await waitFor(() => expect(gridTile(1).textContent).toContain('Can be entered'));
         fireEvent.click(submitButton());
         await waitFor(() => expect(onSubmit).toHaveBeenCalledWith([idOf(2)]));
@@ -1695,7 +1717,7 @@ describe('photos the challenge refuses', () => {
     test('says so when every listed photo is refused', async () => {
         getLibrary().mockResolvedValue(listing([refused(1), refused(2)]));
         setup();
-        loadAll();
+        loadPhotos();
         expect(await screen.findByText(noneAccepted)).toBeTruthy();
         expect(screen.getByText(hiddenLine(2))).toBeTruthy();
         expect(screen.queryByText(/^No photos found/)).toBeNull();
@@ -1704,7 +1726,7 @@ describe('photos the challenge refuses', () => {
     test('says so when only blocked photos are left', async () => {
         getLibrary().mockResolvedValue(listing([photo(1), refused(2)]));
         setup({ blocked: { ids: new Set([idOf(1)]), reasonKey: 'app.swapPickBlocked' } });
-        loadAll();
+        loadPhotos();
         expect(await screen.findByText(noneAccepted)).toBeTruthy();
         expect(tile(1).textContent).toContain('Already in this challenge');
     });
@@ -1714,7 +1736,7 @@ describe('photos the challenge refuses', () => {
         setup();
         await autoSuggesting([photo(5)]);
         fireEvent.click(stripTile(5));
-        loadAll();
+        loadPhotos();
         await screen.findByText(hiddenLine(2));
         expect(screen.queryByText(noneAccepted)).toBeNull();
     });
@@ -1722,13 +1744,13 @@ describe('photos the challenge refuses', () => {
     test('a listing with no photos keeps its own texts and never says the others are refused', async () => {
         getLibrary().mockResolvedValue(listing([]));
         const { unmount } = setup();
-        loadAll();
+        loadPhotos();
         expect(await screen.findByText(/^No photos found\./)).toBeTruthy();
         expect(screen.queryByText(noneAccepted)).toBeNull();
         unmount();
         getLibrary().mockResolvedValue(listing([], { wonIds: [idOf(9)], wonCount: 1 }));
         setup();
-        loadAll();
+        loadPhotos();
         expect(await screen.findByText(/^No photos you can enter were found/)).toBeTruthy();
         expect(screen.queryByText(noneAccepted)).toBeNull();
     });
@@ -1739,14 +1761,14 @@ describe('photos the challenge refuses', () => {
             .mockResolvedValueOnce(listing([photo(1), photo(2), photo(3)], { allowedKnown: false, preview: true }))
             .mockReturnValueOnce(fresh.promise);
         setup();
-        loadAll();
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000002:/ });
         tile(2).focus();
         expect(document.activeElement).toBe(tile(2));
         await act(async () => fresh.resolve(listing([photo(1), refused(2), photo(3)])));
         await waitFor(() => expect(has(2)).toBe(false));
         expect(document.activeElement).toBe(document.querySelector('[role="status"][tabindex="-1"]'));
-        expect(document.activeElement?.textContent).toBe(hiddenLine(1));
+        expect(document.activeElement?.textContent).toBe(`Showing 2 photo(s).${hiddenLine(1)}`);
     });
 
     test('the focus is left alone when it has moved off the tile before the read hides it', async () => {
@@ -1755,7 +1777,7 @@ describe('photos the challenge refuses', () => {
             .mockResolvedValueOnce(listing([photo(1), photo(2), photo(3)], { allowedKnown: false, preview: true }))
             .mockReturnValueOnce(fresh.promise);
         setup();
-        loadAll();
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000002:/ });
         tile(2).focus();
         const search = screen.getByLabelText('Search your photos by tag');
@@ -1771,7 +1793,7 @@ describe('photos the challenge refuses', () => {
             .mockResolvedValueOnce(listing([photo(1), photo(2), photo(3)], { allowedKnown: false, preview: true }))
             .mockReturnValueOnce(fresh.promise);
         setup();
-        loadAll();
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000002:/ });
         tile(3).focus();
         await act(async () => fresh.resolve(listing([photo(1), refused(2), photo(3)])));
@@ -1785,7 +1807,7 @@ describe('photos the challenge refuses', () => {
             .mockResolvedValueOnce(listing([photo(1), photo(2), photo(3)], { allowedKnown: false, preview: true }))
             .mockReturnValueOnce(fresh.promise);
         setup();
-        loadAll();
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000002:/ });
         tile(2).focus();
         // A click on the page's blank space: the focus falls to <body>, and the tile stays.
@@ -1803,7 +1825,7 @@ describe('photos the challenge refuses', () => {
             .mockResolvedValueOnce(listing([photo(1), photo(2), photo(3)], { allowedKnown: false, preview: true }))
             .mockReturnValueOnce(fresh.promise);
         setup();
-        loadAll();
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000002:/ });
         tile(1).focus();
         fireEvent.blur(tile(1), { relatedTarget: tile(2) });
@@ -1820,7 +1842,7 @@ describe('photos the challenge refuses', () => {
             .mockResolvedValueOnce(listing([photo(1), photo(2), photo(3)], { allowedKnown: false, preview: true }))
             .mockReturnValueOnce(fresh.promise);
         setup();
-        loadAll();
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000002:/ });
         const focused = tile(2);
         focused.focus();
@@ -1840,7 +1862,7 @@ describe('photos the challenge refuses', () => {
         setup();
         await autoSuggesting([photo(2)]);
         fireEvent.click(stripTile(2));
-        loadAll();
+        loadPhotos();
         await waitFor(() => expect(gridTile(1).textContent).toContain('Can be entered'));
         fireEvent.click(gridTile(2));
         expect(gridTile(2).getAttribute('aria-pressed')).toBe('false');
@@ -1856,12 +1878,37 @@ describe('photos the challenge refuses', () => {
         expect(has(2)).toBe(false);
     });
 
+    test('a refused pick taken back stays on screen when Load more appends the same listing, and goes with the next one', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1), refused(2), photo(3)], { truncated: true, nextStart: 3 }));
+        setup();
+        await autoSuggesting([photo(2)]);
+        fireEvent.click(stripTile(2));
+        loadPhotos();
+        await waitFor(() => expect(gridTile(1).textContent).toContain('Can be entered'));
+        fireEvent.click(gridTile(2));
+        expect(gridTile(2).getAttribute('aria-pressed')).toBe('false');
+        expect(gridTile(2).textContent).toContain('No 2');
+        expect(screen.queryByText(/^Hidden: /)).toBeNull();
+        // The appended batch is the same listing: the taken-back photo keeps its reason and is not counted.
+        getLibrary().mockResolvedValueOnce(listing([photo(4)], { truncated: false, nextStart: 4 }));
+        await act(async () => pickers.at(-1)?.loadMore());
+        await waitFor(() => expect(gridTile(4)).toBeTruthy());
+        expect(gridTile(2).textContent).toContain('No 2');
+        expect(gridTile(2).getAttribute('aria-pressed')).toBe('false');
+        expect(screen.queryByText(/^Hidden: /)).toBeNull();
+        // The next read is another listing: the photo is hidden and counted again (the refreshed
+        // listing is cut short, so the count says "at least").
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
+        await screen.findByText(/^Hidden: at least 1 photo/);
+        expect(has(2)).toBe(false);
+    });
+
     test('a refused pick taken back from the strip stays on screen with its reason as well', async () => {
         getLibrary().mockResolvedValue(listing([photo(1), refused(2), photo(3)]));
         setup();
         await autoSuggesting([photo(2)]);
         fireEvent.click(stripTile(2));
-        loadAll();
+        loadPhotos();
         await waitFor(() => expect(gridTile(1).textContent).toContain('Can be entered'));
         fireEvent.click(stripTile(2));
         expect(gridTile(2).getAttribute('aria-pressed')).toBe('false');
@@ -1873,7 +1920,7 @@ describe('photos the challenge refuses', () => {
         setup({ max: 1 });
         await autoSuggesting([photo(2)]);
         fireEvent.click(stripTile(2));
-        loadAll();
+        loadPhotos();
         await waitFor(() => expect(gridTile(1).textContent).toContain('Can be entered'));
         fireEvent.click(gridTile(1));
         expect(gridTile(1).getAttribute('aria-pressed')).toBe('true');
@@ -1891,7 +1938,7 @@ describe('photos the challenge refuses', () => {
         setup({ max: 1 });
         await autoSuggesting([photo(3), photo(2)]);
         fireEvent.click(stripTile(2));
-        loadAll();
+        loadPhotos();
         await waitFor(() => expect(gridTile(1).textContent).toContain('Can be entered'));
         fireEvent.click(
             within(screen.getByRole('region', { name: 'Suggestions' })).getByRole('button', {
@@ -1902,5 +1949,89 @@ describe('photos the challenge refuses', () => {
         expect(gridTile(2).getAttribute('aria-pressed')).toBe('false');
         expect(gridTile(2).textContent).toContain('No 2');
         expect(screen.queryByText(/^Hidden: /)).toBeNull();
+    });
+});
+
+describe('Load more', () => {
+    const deferred = <T,>() => {
+        let resolve!: (value: T) => void;
+        const promise = new Promise<T>((res) => {
+            resolve = res;
+        });
+        return { promise, resolve };
+    };
+    const more = () => screen.getByRole('button', { name: 'Load more photos' });
+
+    test('Load photos reads one batch and Load more reads the next from nextStart, appending it', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(listing([photo(1), photo(2)], { truncated: true, nextStart: 2 }))
+            .mockResolvedValueOnce(listing([photo(1), photo(2)], { truncated: true, nextStart: 2 }))
+            .mockResolvedValueOnce(listing([photo(3)], { truncated: false, nextStart: 3 }));
+        setupLoaded();
+        await opened();
+        expect(getLibrary().mock.calls[0]).toEqual([7, undefined, 'cached', 'submit', 0, 100]);
+        expect(screen.getByText('Showing 2 photo(s).')).toBeTruthy();
+        fireEvent.click(more());
+        expect(await screen.findByRole('button', { name: /^Photo 00000003:/ })).toBeTruthy();
+        expect(getLibrary().mock.calls[2]).toEqual([7, undefined, 'fresh', 'submit', 2, 100]);
+        // The last batch says the listing is complete: the button is gone and nothing failed.
+        expect(screen.queryByRole('button', { name: 'Load more photos' })).toBeNull();
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.getByText('Showing 3 photo(s).')).toBeTruthy();
+    });
+
+    test('while the batch read is in flight, Load more, the toolbar Load photos and Refresh are held', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(listing([photo(1), photo(2)], { truncated: true, nextStart: 2 }))
+            .mockResolvedValueOnce(listing([photo(1), photo(2)], { truncated: true, nextStart: 2 }));
+        setup();
+        loadPhotos();
+        await opened();
+        const batch = deferred<Listing>();
+        getLibrary().mockReturnValueOnce(invalid(batch.promise));
+        fireEvent.click(more());
+        expect(more().getAttribute('aria-disabled')).toBe('true');
+        expect(more().getAttribute('aria-busy')).toBe('true');
+        expect(screen.getByRole('button', { name: 'Load photos' }).getAttribute('aria-disabled')).toBe('true');
+        expect(screen.getByRole('button', { name: 'Refresh photos' }).hasAttribute('disabled')).toBe(true);
+        await act(async () => batch.resolve(listing([photo(3)], { truncated: false, nextStart: 3 })));
+        await screen.findByRole('button', { name: /^Photo 00000003:/ });
+        expect(screen.queryByRole('button', { name: 'Load more photos' })).toBeNull();
+    });
+
+    test('the Showing line counts the tiles shown, and the appended batch joins the hidden count', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(
+                listing([photo(1, { allowed: false, message: 'In another challenge' }), photo(2)], {
+                    truncated: true,
+                    nextStart: 2,
+                }),
+            )
+            .mockResolvedValueOnce(
+                listing([photo(1, { allowed: false, message: 'In another challenge' }), photo(2)], {
+                    truncated: true,
+                    nextStart: 2,
+                }),
+            )
+            .mockResolvedValueOnce(
+                listing([photo(3, { allowed: false, message: 'In another challenge' })], {
+                    truncated: false,
+                    nextStart: 3,
+                }),
+            );
+        setup();
+        loadPhotos();
+        // Photo 1 is refused, so the grid hides it; photo 2 shows, and the hidden line proves the fresh read landed.
+        expect(await screen.findByRole('button', { name: /^Photo 00000002:/ })).toBeTruthy();
+        expect(
+            await screen.findByText(
+                "Hidden: at least 1 photo(s) GuruShots won't take in this challenge. Press Load more photos to look for others.",
+            ),
+        ).toBeTruthy();
+        expect(screen.getByText('Showing 1 photo(s).')).toBeTruthy();
+        fireEvent.click(more());
+        // Photo 3 is refused, so the grid hides it: the batch joins the hidden count, the shown count stays.
+        await screen.findByText("Hidden: 2 photo(s) GuruShots won't take in this challenge.");
+        expect(screen.getByText('Showing 1 photo(s).')).toBeTruthy();
     });
 });

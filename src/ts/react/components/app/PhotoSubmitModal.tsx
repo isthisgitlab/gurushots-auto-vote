@@ -95,7 +95,7 @@ function SubmitFooter({
 
 /**
  * The modal's body. Mounted only while the modal is open, so every opening starts with nothing picked.
- * No listing is read until Load all, Search or a Retry asks for one, and Auto's picks can be sent without it.
+ * No listing is read until Load photos, Search or a Retry asks for one, and Auto's picks can be sent without it.
  * `usage` is what the listing and Auto read eligibility for. `max` is the card's live count of open slots: it
  * can shrink while the modal is open.
  */
@@ -127,38 +127,38 @@ function PhotoSubmitBody({
     // Marks read before an action of this window (a join, a submit) are not to be trusted: a cached listing
     // always comes back as a preview, and picking waits for the fresh read.
     const picker = usePhotoPicker({ challengeId, usage, alwaysFresh: true, selected });
-    const { state, known, retry, refresh, resetLoadAll } = picker;
+    const { state, known, retry, refresh, resetLoadPhotos, shown } = picker;
     const preview = state.status === 'ready' && state.listing.preview;
     // Once a listing is shown, until the app has checked which photos the challenge accepts, none can be picked or
     // sent. An idle one shows none: Auto's picks are ranked against the live challenge's eligible photos.
     const checking = preview || picker.recheckFailed;
 
     // The generation of the read a failed submit asked for (or a Refresh): once a listing of that generation (or
-    // later) is in, photos it says can no longer be entered leave the pick. Load all and Search do not set it, so a
-    // pick that one of those reads marks refused stays on screen with its reason (the grid shows a pick whatever its
-    // mark). Null when nothing is waiting.
+    // later) is in, photos it says can no longer be entered leave the pick. Load photos and Search do not set it,
+    // so a pick that one of those reads marks refused stays on screen with its reason (the grid shows a pick
+    // whatever its mark). Null when nothing is waiting.
     const pruneFromRef = useRef<number | null>(null);
 
     // Photos taken out of the pick stay on screen with their reason until the next listing replaces this one.
-    const onScreen = state.status === 'ready' ? state.listing : null;
-    const [takenBack, setTakenBack] = useState<{ listing: typeof onScreen; ids: ReadonlySet<string> }>({
-        listing: null,
+    // Listings are told apart by `shown` (see useLibraryListing), so an appended batch keeps them.
+    const [takenBack, setTakenBack] = useState<{ shown: number; ids: ReadonlySet<string> }>({
+        shown: -1,
         ids: new Set(),
     });
-    const keepIds = takenBack.listing === onScreen ? takenBack.ids : undefined;
-    const current = useRef({ selected, onScreen });
+    const keepIds = takenBack.shown === shown ? takenBack.ids : undefined;
+    const current = useRef({ selected, shown });
     // The latest pick and listing, for `toggle`, which must stay the same function between renders.
     useLayoutEffect(() => {
-        current.current = { selected, onScreen };
+        current.current = { selected, shown };
     });
 
     // Records photos taken out of the pick (taken back, or replaced with one slot) for the listing on screen.
     const keepShown = useCallback((ids: readonly string[]) => {
         if (ids.length === 0) return;
-        const listing = current.current.onScreen;
+        const shown = current.current.shown;
         setTakenBack((prev) => ({
-            listing,
-            ids: new Set([...(prev.listing === listing ? prev.ids : []), ...ids]),
+            shown,
+            ids: new Set([...(prev.shown === shown ? prev.ids : []), ...ids]),
         }));
     }, []);
 
@@ -198,14 +198,14 @@ function PhotoSubmitBody({
 
     // After a Refresh answers, the pick is checked against the listing it brought, as after a refused submit.
     const refreshListing = () => {
-        resetLoadAll();
+        resetLoadPhotos();
         pruneFromRef.current = refresh();
     };
 
     const submit = () => {
         void (async () => {
             if ((await onSubmit(selected)) === 'refreshed') {
-                resetLoadAll();
+                resetLoadPhotos();
                 pruneFromRef.current = retry();
             }
         })();
@@ -285,8 +285,12 @@ function PhotoSubmitBody({
                 locked={locked}
                 lockedKey={lockedKey}
                 hasChallenge
+                search={picker.isSearch}
                 revalidating={picker.revalidating}
                 recheckFailed={picker.recheckFailed}
+                loadMore={() => void picker.loadMore()}
+                loadingMore={picker.loadingMore}
+                loadMoreFailed={picker.loadMoreFailed}
                 submit
                 refreshDisabled={submitting}
                 onToggle={toggle}
@@ -321,7 +325,7 @@ function PhotoSubmitBody({
 
 /**
  * Pick photos from the member's library and submit them to one challenge right away: the picker of the
- * Chosen Photos chooser, without saving anything. Nothing is read on opening: Load all, Search and Auto (which
+ * Chosen Photos chooser, without saving anything. Nothing is read on opening: Load photos, Search and Auto (which
  * ranks the photos under the auto-submit rules and shows the best) ask for what they need. Owned by the card's
  * actions (not by the buttons that open it), so a refresh that closes the buttons' gate cannot drop it or the
  * answer to a submit in flight. While a submit is in flight nothing can close it.

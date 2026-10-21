@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { ToneNote } from '@/components/ui/ToneNote';
-import { InlineLoader } from '@/components/ui/LoadingSpinner';
+import { BusyContent, InlineLoader } from '@/components/ui/LoadingSpinner';
 import { interp } from '@/utils/interp';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { ListingHeader } from './ListingHeader';
@@ -23,7 +22,12 @@ const TILE_GRID = 'grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4';
  * The submit modal's grid (`submit`) leaves out the photos the challenge refuses once the listing says which it
  * accepts, and counts them in a line of their own. A photo is shown anyway when it is picked (a pick that a later
  * read marks refused keeps its tile and its reason: the pick is pruned only after a Refresh or a refused submit,
- * not after Load all or Search) or when the caller lists it as blocked (it is shown blocked, not counted).
+ * not after Load photos or Search) or when the caller lists it as blocked (it is shown blocked, not counted).
+ *
+ * A cut-off listing carries Load more under its tiles: it reads the next batch and appends it, held while any
+ * read is in flight, with the failure of the last press in an alert of its own. Every non-preview listing says
+ * how many photos are shown in the live status line, so each appended batch is announced; an empty one puts
+ * its empty-listing text there instead, so nothing is announced twice.
  */
 export function PhotoGrid({
     state,
@@ -33,10 +37,14 @@ export function PhotoGrid({
     locked,
     lockedKey = 'app.photoChooserTileLocked',
     hasChallenge,
+    search,
     revalidating,
     recheckFailed,
     submit = false,
     refreshDisabled = false,
+    loadMore,
+    loadingMore,
+    loadMoreFailed,
     blockedIds,
     blockedKey = 'app.photoChooserNotEligible',
     onToggle,
@@ -65,6 +73,8 @@ export function PhotoGrid({
     lockedKey?: string;
     /** The listing is read for a challenge (and says which photos it accepts), not for the library alone. */
     hasChallenge: boolean;
+    /** The listing on screen came from a search: tiles say only what a search can know about a missing pick. */
+    search: boolean;
     /** The library is being read again (a preview's re-check, or a Refresh). */
     revalidating: boolean;
     /** The last re-read failed, so what is shown is the library as last loaded. */
@@ -73,6 +83,12 @@ export function PhotoGrid({
     submit?: boolean;
     /** Refresh cannot be pressed now (a submit is running). */
     refreshDisabled?: boolean;
+    /** Reads the batch after the listing on screen and appends it. */
+    loadMore: () => void;
+    /** The batch read is on its way: Load more is held, and so are the toolbar's Load photos and Refresh. */
+    loadingMore: boolean;
+    /** Why the last Load more failed (an error code, or `'failed'`); null when it did not. */
+    loadMoreFailed: string | null;
     /** Photos the caller already knows cannot be picked (the listing does not say), shown blocked. */
     blockedIds?: ReadonlySet<string>;
     /** The translation key of what a tile in `blockedIds` says. */
@@ -106,30 +122,34 @@ export function PhotoGrid({
     const { t } = useTranslation();
     // Every won id this chooser has been told of: a search that no longer lists a chosen photo still knows it has won.
     const everWon = useRef(new Set<string>());
-    // The tile that last had the keyboard focus, and the hidden-count line a tile the fresh read hides hands it to.
+    // The element that last had the keyboard focus, and the hidden-count line an element the fresh read
+    // hides hands it to.
     const lastFocusedTile = useRef<Element | null>(null);
     const hiddenLineRef = useRef<HTMLDivElement>(null);
-    // A tile that leaves the page takes the focus to <body>: when that was a tile of this grid and the user had not
-    // moved the focus off it (see onBlurCapture), the focus goes to the status line (if it is shown) instead of
-    // being lost.
+    // Load more waits while any read is in flight: its own batch, or a re-read of the listing on screen (a
+    // read that takes the listing down shows the loader, and the button is gone with it).
+    const loadMoreHeld = loadingMore || revalidating;
+    // An element that leaves the page takes the focus to <body>: when that was one of this grid's (a tile,
+    // or the Load more button its final batch took away) and the user had not moved the focus off it (see
+    // onBlurCapture), the focus goes to the status line (if it is shown) instead of being lost.
     useLayoutEffect(() => {
         const last = lastFocusedTile.current;
         if (last === null || last.isConnected) return;
         lastFocusedTile.current = null;
         hiddenLineRef.current?.focus();
     });
-    // The tile focus hand-off, shared by the idle and the ready grid: a tile that leaves the page
-    // takes the focus to <body>, so when that was a tile of this grid and the user had not moved the
-    // focus off it (see onBlurCapture), the focus goes to the status line (if it is shown) instead
-    // of being lost.
-    const keepTileFocus = {
+    // The focus hand-off, shared by the tiles and the Load more button, in the idle and the ready grid: an
+    // element that leaves the page takes the focus to <body>, so when that was one of this grid's and the
+    // user had not moved the focus off it (see onBlurCapture), the focus goes to the status line (if it is
+    // shown) instead of being lost.
+    const keepFocus = {
         onFocusCapture: () => {
             // The focus event's target is typed as a bare EventTarget; the focused element is the same node.
             lastFocusedTile.current = document.activeElement;
         },
-        onBlurCapture: (event: FocusEvent<HTMLDivElement>) => {
-            // The focus moving to another tile of the grid keeps the hand-off. Moving anywhere else ends it, if
-            // the user did it: a tile that was removed (a browser may report a blur for it) keeps the hand-off.
+        onBlurCapture: (event: FocusEvent<HTMLElement>) => {
+            // The focus moving to another element of the grid keeps the hand-off. Moving anywhere else ends it, if
+            // the user did it: an element that was removed (a browser may report a blur for it) keeps the hand-off.
             const next = event.relatedTarget;
             if (next instanceof Node && event.currentTarget.contains(next)) return;
             queueMicrotask(() => {
@@ -193,7 +213,7 @@ export function PhotoGrid({
                             {t(selected.length > 0 ? idleWithPicksKey : idleKey)}
                         </p>
                         {tiles.some((tile) => tile !== null) && (
-                            <div className={TILE_GRID} {...keepTileFocus}>
+                            <div className={TILE_GRID} {...keepFocus}>
                                 {tiles}
                             </div>
                         )}
@@ -285,9 +305,22 @@ export function PhotoGrid({
                 onToggle={onToggle}
             />
         );
-        // What the status line says about the listing: how many photos were left out, and that none of the rest can be picked.
+        // An empty listing's text. A non-preview listing puts it in the live region in place of the Showing
+        // line (so "Showing 0 photos" never doubles "No photos found"); a preview, which names no count,
+        // keeps it as a body paragraph.
+        const emptyKey =
+            listing.wonCount > 0 && !listing.truncated ? 'app.photoChooserEmptyAllWon' : 'app.photoChooserEmpty';
+        // What the status line says about the listing: how many photos are shown (a non-preview listing says so
+        // always, so each appended batch is announced), how many were left out, and that none of the rest can be picked.
         const statusLines = (
             <>
+                {!listing.preview && (
+                    <p className={`text-base-content/70 ${listing.photos.length === 0 ? 'text-sm' : 'text-xs'}`}>
+                        {listing.photos.length === 0
+                            ? t(emptyKey)
+                            : interp(t('app.photoChooserShowing'), { count: shownPhotos.length })}
+                    </p>
+                )}
                 {refusedHidden > 0 && (
                     <p className="text-base-content/70 text-xs">
                         {interp(
@@ -300,9 +333,50 @@ export function PhotoGrid({
                         )}
                     </p>
                 )}
-                {noneAccepted && <p className="text-base-content/70 text-sm">{t('app.photoChooserNoneAccepted')}</p>}
+                {noneAccepted && (
+                    <p className="text-base-content/70 text-sm">
+                        {t(
+                            listing.truncated
+                                ? 'app.photoChooserNoneAcceptedTruncated'
+                                : 'app.photoChooserNoneAccepted',
+                        )}
+                    </p>
+                )}
             </>
         );
+        // The batch read: its failure, then the button that reads on (and retries a failure). A preview has no
+        // continuation, and a complete listing has nothing more to read.
+        const loadMoreArea =
+            !listing.preview && listing.truncated ? (
+                <>
+                    {loadMoreFailed !== null && (
+                        <div role="alert" className="alert alert-error py-2 text-sm">
+                            {/* The library-read failure keeps the Load-more wording, not the neutral first-read
+                                text ipcErrorText maps it to: photos were read, only the next batch failed. */}
+                            <span>
+                                {loadMoreFailed === 'library-read-failed'
+                                    ? t('app.photoChooserLoadMoreFailed')
+                                    : ipcErrorText(loadMoreFailed, t, 'app.photoChooserLoadMoreFailed')}
+                            </span>
+                        </div>
+                    )}
+                    <button
+                        type="button"
+                        className={`btn btn-outline btn-sm self-start ${loadMoreHeld ? 'btn-disabled' : ''}`}
+                        // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body>.
+                        aria-disabled={loadMoreHeld}
+                        aria-busy={loadingMore}
+                        onClick={() => {
+                            if (!loadMoreHeld) loadMore();
+                        }}
+                        {...keepFocus}
+                    >
+                        <BusyContent busy={loadMoreHeld} label={t('app.pickLoadMore')}>
+                            {t('app.pickLoadMore')}
+                        </BusyContent>
+                    </button>
+                </>
+            ) : null;
         return {
             status: statusLines,
             body: (
@@ -310,7 +384,7 @@ export function PhotoGrid({
                     <ListingHeader
                         readAtMs={listing.readAtMs}
                         reading={revalidating}
-                        disabled={refreshDisabled}
+                        disabled={refreshDisabled || loadingMore}
                         preview={listing.preview}
                         recheckFailed={recheckFailed}
                         hasChallenge={hasChallenge}
@@ -334,21 +408,10 @@ export function PhotoGrid({
                             )}
                         </p>
                     )}
-                    {listing.truncated && (
-                        <ToneNote tone="warning" className="text-xs">
-                            {interp(t('app.photoChooserTruncated'), { count: listing.photos.length })}
-                        </ToneNote>
+                    {listing.preview && listing.photos.length === 0 && (
+                        <p className="text-base-content/70 text-sm">{t(emptyKey)}</p>
                     )}
-                    {listing.photos.length === 0 && (
-                        <p className="text-base-content/70 text-sm">
-                            {t(
-                                listing.wonCount > 0 && !listing.truncated
-                                    ? 'app.photoChooserEmptyAllWon'
-                                    : 'app.photoChooserEmpty',
-                            )}
-                        </p>
-                    )}
-                    <div className={TILE_GRID} {...keepTileFocus}>
+                    <div className={TILE_GRID} {...keepFocus}>
                         {/* The picks the listing does not return stay pinned first, in pick order. */}
                         {selected
                             .filter((id) => !listed.has(id))
@@ -367,6 +430,31 @@ export function PhotoGrid({
                                         />
                                     );
                                 }
+                                // No batch read so far has shown the pick: a stub keeps it visible (and removable)
+                                // without reading on — in a library listing it may lie beyond the batch, in a search
+                                // the note says reading on would not find it; a won pick keeps its missing tile,
+                                // which says why it is gone.
+                                if (listing.truncated && !won.has(id)) {
+                                    return (
+                                        <SavedPickTile
+                                            key={id}
+                                            id={id}
+                                            memberId={listing.memberId}
+                                            selected={chosen.has(id)}
+                                            position={shown(id)}
+                                            atCap={atCap}
+                                            fullKey={fullKey}
+                                            locked={locked}
+                                            lockedKey={lockedKey}
+                                            onToggle={onToggle}
+                                            noteKey={
+                                                search
+                                                    ? 'app.photoChooserUnreachedTileNoteSearch'
+                                                    : 'app.photoChooserUnreachedTileNote'
+                                            }
+                                        />
+                                    );
+                                }
                                 return (
                                     <MissingTile
                                         key={id}
@@ -374,7 +462,7 @@ export function PhotoGrid({
                                         position={shown(id)}
                                         count={listing.photos.length}
                                         hasChallenge={hasChallenge}
-                                        truncated={listing.truncated}
+                                        search={search}
                                         won={won.has(id)}
                                         onToggle={onToggle}
                                     />
@@ -382,6 +470,7 @@ export function PhotoGrid({
                             })}
                         {shownPhotos.map((photo) => tile(photo, shown(photo.id)))}
                     </div>
+                    {loadMoreArea}
                 </>
             ),
         };
