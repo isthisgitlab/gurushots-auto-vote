@@ -13,8 +13,6 @@ import { errorMessage } from '../../errorMessage';
 type MemberIdCacheEntry = {
     promise: Promise<string | null>;
     expiresAt: number | null;
-    /** The id once the lookup resolved to one (what peekMemberId reads without waiting). */
-    id: string | null;
 };
 
 // Member identity for tag resolution, memoised per token.
@@ -79,28 +77,20 @@ const resolveMemberId = async (
     })();
 
     if (memberIdCache.size >= MAX_MEMBER_ID_CACHE) memberIdCache.clear();
-    const entry: MemberIdCacheEntry = { promise, expiresAt: null, id: null };
+    const entry: MemberIdCacheEntry = { promise, expiresAt: null };
     memberIdCache.set(token, entry);
     // Fire-and-forget by design: the caller awaits `promise` itself, this only
     // stamps the expiry afterwards. `void` because the inner function catches
     // everything and resolves to null, so there is no rejection to handle.
     void promise.then((id) => {
-        entry.id = id;
         if (id === null) entry.expiresAt = Date.now() + NEGATIVE_IDENTITY_TTL_MS;
     });
     return promise;
 };
-
-/**
- * The member id for this token if an earlier lookup already resolved it, else
- * null — never starts a lookup, so a caller that must not wait on the network
- * stays synchronous.
- */
-const peekMemberId = (token: string): string | null => memberIdCache.get(token)?.id ?? null;
 
 // Test-only: drop the memoised identity between cases.
 const __resetMemberIdCache = () => {
     memberIdCache.clear();
 };
 
-export { resolveMemberId, peekMemberId, NEGATIVE_IDENTITY_TTL_MS, __resetMemberIdCache };
+export { resolveMemberId, NEGATIVE_IDENTITY_TTL_MS, __resetMemberIdCache };

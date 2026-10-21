@@ -17,14 +17,12 @@ import { invalid } from '../helpers/invalid';
 import settingsModule = require('../../src/ts/settings');
 import apiFactoryModule = require('../../src/ts/apiFactory');
 import authModule = require('../../src/ts/services/auth');
-import autoFillModule = require('../../src/ts/services/autoFill');
 import type { OpenChallenge } from '../../src/ts/types/gurushots';
 import type * as apiFactoryType from '../../src/ts/apiFactory';
 
 const settings = jest.mocked(settingsModule);
 const apiFactory = jest.mocked(apiFactoryModule);
 const auth = jest.mocked(authModule);
-const autoFill = jest.mocked(autoFillModule);
 
 const NOW = 1_800_000_000;
 
@@ -60,7 +58,6 @@ beforeEach(() => {
     settings.getChallengeOverride.mockReturnValue(invalid(null));
     settings.resolveRuleSetting.mockReturnValue(invalid(null));
     settings.getUpcomingChallengeIds.mockReturnValue(invalid([]));
-    autoFill.peekMemberId.mockReturnValue('member-1');
     jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
 });
 

@@ -31,6 +31,7 @@ describe('ipcErrorText', () => {
         ['Could not read your balance right now', 'errors.fetchChallengesFailed'],
         ['token-not-saved', 'errors.tokenNotSaved'],
         ['web-shell-token', 'errors.webShellToken'],
+        ['superseded', 'errors.superseded'],
     ])('words the known failure %j as %s', (error, key) => {
         expect(ipcErrorText(error, t)).toBe(`[${key}]`);
     });

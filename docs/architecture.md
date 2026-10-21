@@ -648,8 +648,8 @@ repeated six times is one that gets forgotten at one of them.
        `settings-save-dropped` (below). A damaged `config.json.corrupt-<time>` does not parse, so no sign-out can touch
        it: the notice that names it says it may still hold the sign-in and advises deleting it. An import whose write
        ends after a read answered already is a late failure (`_importFailedLater`): it puts the failure up as any
-       failed import does, and its defaults write saves nothing over a configuration that is stored by then. On Android a configuration the window only holds in its
-       cache until the queued write lands (`storage.isPersisted` false) is no proof that anything works: the block and
+       failed import does. On Android a configuration the window only holds in its cache until the queued write lands
+       (`storage.isPersisted` false) is no proof that anything works: the block and
        the failure stand until it is stored, and once a read finds it stored they are cleared — except a settled
        failure, whose notice stands for the rest of the process. The window is told (`onSettingsRecoveryChange`,
        broadcast by the handlers) when a block ends or the state changes, so an open notice refetches and shows what

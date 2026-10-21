@@ -27,7 +27,7 @@ import {
     isPrototypeKey,
     mergeWithDefaults,
 } from './loadValidation';
-import { importWhenAbsent, retryLegacyImport, startFreshConfig } from './legacyImport';
+import { IMPORT_LOCK_WAIT_MS, importWhenAbsent, retryLegacyImport, startFreshConfig } from './legacyImport';
 import type { ImportFailure, ImportOutcome } from './legacyImport';
 import { underSettingsLock } from './settingsLock';
 import { updateImported } from './importedRecord';
@@ -130,10 +130,6 @@ const _blockWrites = (
  */
 const _importIsPermanent = (failure: ImportFailure): boolean =>
     failure.reason === 'corrupt' || failure.reason === 'migration-failed';
-
-// The wait for the import lock while the defaults of a settled failure are written (the same wait the import itself
-// uses for it).
-const IMPORT_LOCK_WAIT_MS = 2000;
 
 /**
  * Clears the block a read had put up (see _blockWrites), and tells the listener, so that a window that was showing the
@@ -261,11 +257,7 @@ const _importFailed = (failure: ImportFailure): ConfigV2 => {
             legacyStorage.location(),
         );
     }
-    logger
-        .withCategory('settings')
-        .error(
-            `settings.json could not be imported (${failure.reason}): ${failure.detail}; the default settings were stored in its place and the file is left as it is`,
-        );
+    const failureSaid = `settings.json could not be imported (${failure.reason}): ${failure.detail}`;
     const imported = {
         at: new Date().toISOString(),
         report: { refsBlocked: [] as ImportRef[] },
@@ -293,8 +285,19 @@ const _importFailed = (failure: ImportFailure): ConfigV2 => {
     if (written.outcome === 'exists') {
         // A configuration another process stored while this one saw the failure is the settings in use now: the
         // stored read clears the failure with it (no notice of this import stands).
-        return written.current ? _loadFromText(written.current, true) : unwrittenDefaults();
+        if (written.current) {
+            logger
+                .withCategory('settings')
+                .error(
+                    `${failureSaid}; the configuration another process stored meanwhile is in use, and the file is left as it is`,
+                );
+            return _loadFromText(written.current, true);
+        }
+        return unwrittenDefaults();
     }
+    logger
+        .withCategory('settings')
+        .error(`${failureSaid}; the default settings were stored in its place and the file is left as it is`);
     // The marker is written once the defaults are stored: a write that did not land stored nothing, and the next
     // start tries the import again.
     if (written.landed) {

@@ -75,7 +75,7 @@ const isLockFile = (name: string) =>
 
 // The legacy settings files existing installs still have (the one-time import's source and the copies older builds
 // kept): deleted before config.json, so a file that cannot be removed never brings a lost configuration's import back.
-const RESTORE_SOURCES = ['settings.json', 'settings.json.original', 'v2-import.json'] as const;
+const LEGACY_SETTINGS_FILES = ['settings.json', 'settings.json.original', 'v2-import.json'] as const;
 const CONFIG_FILE = 'config.json';
 
 // A Windows file that antivirus or an indexer holds for a moment is retried rather than left behind.
@@ -173,9 +173,9 @@ const localDataPaths = (userData: string): string[] => {
             vision(userData),
         ]),
     ];
-    // The import sources go first and config.json last: a source that cannot be deleted leaves the configuration
+    // The legacy settings files go first and config.json last: one that cannot be deleted leaves the configuration
     // in place, so the next load does not import it once more.
-    const first = RESTORE_SOURCES.map((file) => path.join(userData, file));
+    const first = LEGACY_SETTINGS_FILES.map((file) => path.join(userData, file));
     const last = path.join(userData, CONFIG_FILE);
     return [...first, ...all.filter((target) => !first.includes(target) && target !== last), last];
 };
@@ -224,17 +224,17 @@ const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeRes
             removed.push(...keys);
         } else {
             const userData = getUserDataPath();
-            const restoreSources = new Set<string>(RESTORE_SOURCES.map((file) => path.join(userData, file)));
-            let restoreSourceFailed = false;
+            const legacySettingsFiles = new Set<string>(LEGACY_SETTINGS_FILES.map((file) => path.join(userData, file)));
+            let legacySettingsFileFailed = false;
             for (const target of localDataPaths(userData)) {
                 if (!fs.existsSync(target)) continue;
                 // Without config.json the next load imports a settings.json left behind once more.
-                if (restoreSourceFailed && target === path.join(userData, CONFIG_FILE)) continue;
+                if (legacySettingsFileFailed && target === path.join(userData, CONFIG_FILE)) continue;
                 try {
                     fs.rmSync(target, RM_OPTIONS);
                     removed.push(target);
                 } catch (err) {
-                    restoreSourceFailed ||= restoreSources.has(target);
+                    legacySettingsFileFailed ||= legacySettingsFiles.has(target);
                     failures.push(`${target} (${errorMessage(err) ?? 'unknown error'})`);
                 }
             }

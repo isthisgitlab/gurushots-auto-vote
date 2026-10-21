@@ -20,10 +20,11 @@ import { importTitlePins } from './titlePins';
 import type { ImportedV2 } from '../types/config';
 import type { QueuedWriteOutcome } from './storage';
 
-// The lock every import (and every start-fresh or retry) runs under: two processes sharing the user-data directory
-// (the app and the CLI) never import at once. Android has no file lock; there the native compare-and-write of the
-// configuration decides which context is first.
-const LOCK_WAIT_MS = 2000;
+// How long an import waits for the lock it runs under — and the defaults write of a settled failure waits the same
+// lock the same way (persistence.ts takes this constant): two processes sharing the user-data directory (the app and
+// the CLI) never import at once. Android has no file lock; there the native compare-and-write of the configuration
+// decides which context is first.
+const IMPORT_LOCK_WAIT_MS = 2000;
 
 /** Why the `settings.json` could not be put into a configuration. */
 type ImportFailureReason =
@@ -72,7 +73,7 @@ const readFailure = (error: unknown): ImportFailure => {
 };
 
 const underImportLock = (run: () => ImportOutcome): ImportOutcome => {
-    const lock = acquireSettingsLock(LOCK_WAIT_MS);
+    const lock = acquireSettingsLock(IMPORT_LOCK_WAIT_MS);
     if (lock === 'busy') return failure('busy', 'another process is importing the settings');
     if (lock === 'unavailable') return failure('busy', 'the import lock cannot be taken');
     try {
@@ -216,4 +217,4 @@ const retryLegacyImport = (onLateFailure: LateFailure): ImportOutcome =>
     });
 
 export type { ImportFailure, ImportOutcome };
-export { importWhenAbsent, retryLegacyImport, startFreshConfig };
+export { IMPORT_LOCK_WAIT_MS, importWhenAbsent, retryLegacyImport, startFreshConfig };

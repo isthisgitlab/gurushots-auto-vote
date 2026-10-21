@@ -35,6 +35,8 @@ import type * as runtimeModule from '../../src/ts/runtime';
 import type * as settingsModule from '../../src/ts/settings';
 import type * as loggerModule from '../../src/ts/logger';
 import type * as joinStateModule from '../../src/ts/joinStateStore';
+import type * as lockWaitModule from '../../src/ts/lockWait';
+import type * as storageModule from '../../src/ts/settings/storage';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 import { parseJsonObject } from '../helpers/parseJson';
@@ -109,6 +111,7 @@ describe('the import of a settings.json (real fs)', () => {
         jest.dontMock('../../src/ts/settings/importV1');
         jest.dontMock('../../src/ts/joinStateStore');
         jest.dontMock('../../src/ts/settings/importMarker');
+        jest.dontMock('../../src/ts/settings/storage');
         fs.rmSync(root, { recursive: true, force: true });
     });
 
@@ -546,21 +549,26 @@ describe('the import of a settings.json (real fs)', () => {
 
         test('a configuration another process stores while the defaults are written is loaded, not overwritten', () => {
             fs.writeFileSync(legacyFile, '{broken');
-            loadFresh();
-            // The race the compare-and-write answers: config.json is missing at the load's read and at the import's,
-            // and is there (another process saved its import) when the defaults are written. The third existence
-            // check of the file in this run is the defaults write's.
-            const realExists = fs.existsSync;
-            let configChecks = 0;
-            jest.spyOn(fs, 'existsSync').mockImplementation(
-                invalid<typeof fs.existsSync>((target: fs.PathLike, ...rest: unknown[]) => {
-                    if (target === configFile && ++configChecks === 3) {
-                        fs.writeFileSync(configFile, JSON.stringify({ app: { theme: 'dark' }, version: 2 }, null, 2));
-                        return true;
-                    }
-                    return (realExists as (...args: unknown[]) => boolean)(target, ...rest);
-                }),
-            );
+            loadFresh(() => {
+                // The race the compare-and-write answers: config.json is missing at the load's read and at the
+                // import's, and is there (another process saved its import) when the defaults are written — the only
+                // writeIfAbsent call this run makes, the import having failed at its conversion.
+                const actual = jest.requireActual<typeof storageModule>('../../src/ts/settings/storage');
+                jest.doMock('../../src/ts/settings/storage', () => ({
+                    __esModule: true,
+                    ...actual,
+                    storage: {
+                        ...actual.storage,
+                        writeIfAbsent: (data: string) => {
+                            fs.writeFileSync(
+                                configFile,
+                                JSON.stringify({ app: { theme: 'dark' }, version: 2 }, null, 2),
+                            );
+                            return actual.storage.writeIfAbsent(data);
+                        },
+                    },
+                }));
+            });
 
             const loaded = settings.loadSettings();
 
@@ -573,18 +581,20 @@ describe('the import of a settings.json (real fs)', () => {
 
         test('an empty file planted in the same race cannot be adopted: the failure stays blocking', () => {
             fs.writeFileSync(legacyFile, '{broken');
-            loadFresh();
-            const realExists = fs.existsSync;
-            let configChecks = 0;
-            jest.spyOn(fs, 'existsSync').mockImplementation(
-                invalid<typeof fs.existsSync>((target: fs.PathLike, ...rest: unknown[]) => {
-                    if (target === configFile && ++configChecks === 3) {
-                        fs.writeFileSync(configFile, '');
-                        return true;
-                    }
-                    return (realExists as (...args: unknown[]) => boolean)(target, ...rest);
-                }),
-            );
+            loadFresh(() => {
+                const actual = jest.requireActual<typeof storageModule>('../../src/ts/settings/storage');
+                jest.doMock('../../src/ts/settings/storage', () => ({
+                    __esModule: true,
+                    ...actual,
+                    storage: {
+                        ...actual.storage,
+                        writeIfAbsent: (data: string) => {
+                            fs.writeFileSync(configFile, '');
+                            return actual.storage.writeIfAbsent(data);
+                        },
+                    },
+                }));
+            });
 
             settings.loadSettings();
 
@@ -594,6 +604,33 @@ describe('the import of a settings.json (real fs)', () => {
                 blocking: true,
             });
             expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('could not be saved'));
+            expect(fs.existsSync(markerFile)).toBe(false);
+        });
+
+        test('a defaults write whose lock is busy blocks, and nothing is settled', () => {
+            fs.writeFileSync(legacyFile, '{broken');
+            loadFresh(() => {
+                // The import's own acquisition goes through; the settled defaults write that follows it finds the
+                // lock held (another process) for the whole wait.
+                const actual = jest.requireActual<typeof lockWaitModule>('../../src/ts/lockWait');
+                let acquisitions = 0;
+                jest.doMock('../../src/ts/lockWait', () => ({
+                    acquireWithin: (acquire: Parameters<typeof actual.acquireWithin>[0], waitMs: number) => {
+                        acquisitions += 1;
+                        return acquisitions === 1 ? actual.acquireWithin(acquire, waitMs) : ('busy' as const);
+                    },
+                }));
+            });
+
+            settings.loadSettings();
+
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-import-failed',
+                path: legacyFile,
+                blocking: true,
+            });
+            expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('could not be saved'));
+            expect(fs.existsSync(configFile)).toBe(false);
             expect(fs.existsSync(markerFile)).toBe(false);
         });
 

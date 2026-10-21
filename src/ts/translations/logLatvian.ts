@@ -123,7 +123,7 @@ export const logMessages = {
     m2826e41438c8: 'Turbo izmantots foto {0}',
     m289db73f62af: '  🧩 Uzpildes: {0}',
     m2978b51fd54e:
-        '{0}: izaicinājums {1} izlaists — izvēlētie foto nav iesniedzami (nav piedāvāti, citur izmantoti vai atfiltrēti), ieslēgts „Iesniegt tikai izvēlētos foto”. Daži vairs nav bibliotēkā — izņem no saraksta',
+        '{0}: izaicinājums {1} izlaists — izvēlētie foto nav iesniedzami (nav piedāvāti, citur izmantoti vai atfiltrēti), ieslēgts „Iesniegt tikai izvēlētos foto” (ārkārtas iesniegšana tomēr aizpilda vietu īsi pirms termiņa). Daži vairs nav bibliotēkā — izņem no saraksta',
     m29a4a27aabbd:
         '⏰ Tuvojas redzamības uzpilde pirms beigu loga izaicinājumā "{0}" — nākamais cikls pēc {1} s (ne vēlāk kā {2} min pirms beigu loga)',
     m29dd239731c5:
@@ -231,7 +231,7 @@ export const logMessages = {
     m5560911b6807: '🔄 Balsošanas pieprasījums: ID={0}, nosaukums="{1}"',
     m558e9823d7d7: 'Neizdevās importēt settings.json ({0}): {1}',
     m56207bf1d723:
-        '{0}: izaicinājums {1} izlaists — neviens izvēlētais foto nav iesniedzams (nav piedāvāts, citur izmantots vai atfiltrēts), ir ieslēgts „Iesniegt tikai izvēlētos foto”. Izvēlies citus vai izslēdz to',
+        '{0}: izaicinājums {1} izlaists — neviens izvēlētais foto nav iesniedzams (nav piedāvāts, citur izmantots vai atfiltrēts), ir ieslēgts „Iesniegt tikai izvēlētos foto” (ārkārtas iesniegšana tomēr aizpilda vietu īsi pirms termiņa). Izvēlies citus vai izslēdz to',
     m5626f1349a7d:
         'Interaktīvai pieteikšanai vajadzīgs terminālis. Palaid komandu `login` tieši terminālī — pāradresētu standarta ievadi neatbalsta, jo paroles ievades laikā nevar paslēpt rakstītās rakstzīmes.',
     m56b7b01fc0d4: 'Neizdevās novērtēt redzamības uzpildi pirms Boost izaicinājumam {0} — pieņem, ka tā ir izslēgta',

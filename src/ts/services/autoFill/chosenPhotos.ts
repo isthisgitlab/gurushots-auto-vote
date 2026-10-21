@@ -351,8 +351,8 @@ const formatChosenSkipMessage = (
         return `${label}: skipped ${tag} — every chosen photo is already entered there, and Submit Only Chosen Photos is on. Choose other photos or turn it off (Emergency Submit ignores it near the deadline)`;
     }
     return missingFromLibrary
-        ? `${label}: skipped ${tag} — none of your chosen photos can go in there (not offered, used elsewhere, or tag-filtered), and Submit Only Chosen Photos is on. Some left your library — remove them from the list`
-        : `${label}: skipped ${tag} — none of your chosen photos can be submitted there (not offered, used elsewhere, or filtered by your tags), and Submit Only Chosen Photos is on. Choose other photos or turn it off`;
+        ? `${label}: skipped ${tag} — none of your chosen photos can go in there (not offered, used elsewhere, or tag-filtered), and Submit Only Chosen Photos is on (Emergency Submit still fills a slot near the deadline). Some left your library — remove them from the list`
+        : `${label}: skipped ${tag} — none of your chosen photos can be submitted there (not offered, used elsewhere, or filtered by your tags), and Submit Only Chosen Photos is on (Emergency Submit still fills a slot near the deadline). Choose other photos or turn it off`;
 };
 
 const logChosenSkipOnce = (logger: FillLogger, challenge: Challenge, label: string, reason: ChosenSkipReason): void => {
@@ -368,8 +368,8 @@ const logChosenSkipOnce = (logger: FillLogger, challenge: Challenge, label: stri
     loggedSkips.set(key, logged);
     const log = logger.withCategory(label === 'join' ? 'join' : 'autoSubmit');
     const tag = logger.challengeTag(challenge);
-    // what happened -> why -> what next. The all-entered wording points out
-    // that Emergency Submit ignores the setting near the deadline.
+    // what happened -> why -> what next. Every wording points out that
+    // Emergency Submit still fills the slot near the deadline.
     log.warning(formatChosenSkipMessage(label, tag, reason, missingFromLibrary), null);
 };
 

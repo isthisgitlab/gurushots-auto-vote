@@ -120,7 +120,7 @@ export const logMessages = {
     m2826e41438c8: 'Turbo applied to entry {0}',
     m289db73f62af: '  🧩 Fills: {0}',
     m2978b51fd54e:
-        '{0}: skipped {1} — none of your chosen photos can go in there (not offered, used elsewhere, or tag-filtered), and Submit Only Chosen Photos is on. Some left your library — remove them from the list',
+        '{0}: skipped {1} — none of your chosen photos can go in there (not offered, used elsewhere, or tag-filtered), and Submit Only Chosen Photos is on (Emergency Submit still fills a slot near the deadline). Some left your library — remove them from the list',
     m29a4a27aabbd:
         '⏰ Approaching pre-final-window top-up for "{0}" — next cycle in {1}s (capped to the {2}m pre-final-window boundary)',
     m29dd239731c5:
@@ -225,7 +225,7 @@ export const logMessages = {
     m5560911b6807: '🔄 Vote on challenge request: ID={0}, Title="{1}"',
     m558e9823d7d7: 'settings.json could not be imported ({0}): {1}',
     m56207bf1d723:
-        '{0}: skipped {1} — none of your chosen photos can be submitted there (not offered, used elsewhere, or filtered by your tags), and Submit Only Chosen Photos is on. Choose other photos or turn it off',
+        '{0}: skipped {1} — none of your chosen photos can be submitted there (not offered, used elsewhere, or filtered by your tags), and Submit Only Chosen Photos is on (Emergency Submit still fills a slot near the deadline). Choose other photos or turn it off',
     m5626f1349a7d:
         'Interactive login requires a terminal. Run the `login` command directly in a terminal session — piped or redirected stdin is not supported because the password prompt cannot mute echo.',
     m56b7b01fc0d4: 'Pre-boost fill evaluation failed for challenge {0} — treating it as off',

@@ -182,9 +182,9 @@ describe('Latvian log messages', () => {
             expect(translated.startsWith(`⚠️ ${lv}: izaicinājums [Izaicinājums 42: Sunset] izlaists`)).toBe(true);
         }
         const withoutMissing = formatChosenSkipMessage('join', tag, 'none-usable', false);
-        expect(localizeLogMessage(`⚠️ ${withoutMissing}`)).not.toBe(`⚠️ ${withoutMissing}`);
+        expect(localizeLogMessage(`⚠️ ${withoutMissing}`)).toContain('neviens izvēlētais foto nav iesniedzams');
         const withMissing = formatChosenSkipMessage('fillNew', tag, 'none-usable', true);
-        expect(localizeLogMessage(`⚠️ ${withMissing}`)).not.toBe(`⚠️ ${withMissing}`);
+        expect(localizeLogMessage(`⚠️ ${withMissing}`)).toContain('Daži vairs nav bibliotēkā — izņem no saraksta');
         expect(
             localizeLogMessage(
                 'ℹ️ join: looked for your chosen photos outside the themed search for [Challenge 42: Sunset] — 1 found, 0 not allowed here, 2 not in your library, 0 not reached',
@@ -196,18 +196,21 @@ describe('Latvian log messages', () => {
 
     test('translates the other reworded emitters, built by their real formatters', () => {
         const tag = '[Challenge 42: Sunset]';
-        for (const line of [
-            formatOversleptMessage(93_000, 4 * 60_000),
-            formatTagSearchFallbackMessage(
-                'autoSubmit',
-                tag,
-                ['stair', 'step'],
-                'Review the selected photo; the existing labels did not identify a themed match.',
-            ),
-            START_FRESH_BLOCKED,
+        for (const [line, fragment] of [
+            [formatOversleptMessage(93_000, 4 * 60_000), 'Cikls sākās'] as const,
+            [
+                formatTagSearchFallbackMessage(
+                    'autoSubmit',
+                    tag,
+                    ['stair', 'step'],
+                    'Review the selected photo; the existing labels did not identify a themed match.',
+                ),
+                'bibliotēku sarindos semantiski',
+            ] as const,
+            [START_FRESH_BLOCKED, '„sākt no jauna” netiek piedāvāts'] as const,
         ]) {
             // A catalog/emitter drift leaves the line untranslated.
-            expect(localizeLogMessage(line)).not.toBe(line);
+            expect(localizeLogMessage(line)).toContain(fragment);
         }
     });
 
