@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef } from 'react';
+import { Fragment, useId, useMemo, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getLevelStatus, isBoostAvailable, statusText } from '@/utils/formatters';
 import { getNextLevelInfo } from '@/utils/challengeCardView';
@@ -20,6 +20,7 @@ import { InlineError } from '@/components/ui/InlineError';
 import * as ipc from '@/api/ipc';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { interp } from '@/utils/interp';
+import { useFocusRestore } from '@/hooks/useFocusRestore';
 import { canStillFire, livePinKindOf, unusablePins } from '../../../voting/entryPins';
 import { challengePageUrl } from '@/utils/challengePageUrl';
 
@@ -321,12 +322,6 @@ function DanglingPinNote({
     );
 }
 
-/** Focus is nowhere: on the page itself, or on an element that has just been removed. */
-const focusIsLost = (): boolean => {
-    const active = document.activeElement;
-    return active === null || active === document.body || !active.isConnected;
-};
-
 /**
  * Entry details — entry-level boost / turbo badges and actions, the pin toggles and the notes for pins that no
  * longer apply.
@@ -357,59 +352,12 @@ function EntryDetails({
     const canPin = { boost: canStillFire(challenge, 'boost'), turbo: canStillFire(challenge, 'turbo') };
     const detailsRef = useRef<HTMLDivElement>(null);
     const labelId = useId();
-    const clearedButtonRef = useRef<HTMLButtonElement | null>(null);
+    // A cleared pin's note unmounts with the focused button inside it: focus would drop to <body>, so it moves to
+    // the section instead.
+    const recordClearedTrigger = useFocusRestore(() => detailsRef.current);
 
-    // A cleared pin's note unmounts with the focused button inside it: focus would drop to <body>, so it moves to the
-    // section instead. The note can unmount well after the write resolves (a settings-changed read supersedes the
-    // write's own), hence the check runs after every render rather than after the write. Focus that has landed on
-    // another element since is never moved: a record is forgotten by a focusout from the button after which it no
-    // longer holds focus (while it is still in the page) or by a focusin on any other element, so a failed clear (the
-    // note, and focus, stay where they are) followed by the user moving on never acts later. A focusout from the
-    // button's own removal (some engines fire one) is left to the layout effect, which has already run by the time the
-    // deferred check sees the button gone. The record survives the window losing focus, and focus can move without a
-    // focusout from the button (a dialog focusing its first button while the window is unfocused): the focusin that
-    // follows when the window regains focus forgets the record, and the layout effect moves focus only if it is
-    // actually lost. One ordering can still act: only the two focus moves need to happen while the window is in the
-    // background (a silent move to another element, then focus to <body>); when the window regains focus with <body>
-    // active no element gets a focusin, so a later unmount — even in the foreground, while focus stays on <body> —
-    // moves focus to the section instead of nothing.
-    useEffect(() => {
-        const forgetOnBlur = (event: FocusEvent) => {
-            const button = clearedButtonRef.current;
-            if (!button || event.target !== button) return;
-            queueMicrotask(() => {
-                // Still focused and in the page: the whole window lost focus, not just the button. A newer record
-                // (another button) is not this microtask's to wipe — a race only script can produce (a focus() and a
-                // click() in one task, as tests do): a microtask checkpoint follows every listener the browser
-                // dispatches, so this microtask runs before any later click handler, and only a script-called
-                // focus() keeps the stack busy.
-                if (clearedButtonRef.current === button && button.isConnected && document.activeElement !== button) {
-                    clearedButtonRef.current = null;
-                }
-            });
-        };
-        const forgetOnFocusElsewhere = (event: FocusEvent) => {
-            if (clearedButtonRef.current && event.target !== clearedButtonRef.current) clearedButtonRef.current = null;
-        };
-        document.addEventListener('focusout', forgetOnBlur);
-        document.addEventListener('focusin', forgetOnFocusElsewhere);
-        return () => {
-            document.removeEventListener('focusout', forgetOnBlur);
-            document.removeEventListener('focusin', forgetOnFocusElsewhere);
-        };
-    }, []);
-
-    useLayoutEffect(() => {
-        const button = clearedButtonRef.current;
-        if (!button || button.isConnected) return;
-        clearedButtonRef.current = null;
-        if (focusIsLost()) detailsRef.current?.focus({ preventScroll: true });
-    });
-
-    // Some engines (WebKit, Firefox on macOS) do not focus a button on a mouse click: nothing to restore is
-    // recorded (in WebKit focus is already on the group).
     const clearPin = async (kind: EntryPinKind, button: HTMLButtonElement) => {
-        clearedButtonRef.current = document.activeElement === button ? button : null;
+        recordClearedTrigger(button);
         await setPin(kind, null);
     };
 

@@ -13,7 +13,7 @@ import {
     resolveCurrencyAuto,
     resolveScenarioWake,
 } from './autovoteScheduler';
-import { createDeadlineNotifier, resolveRendererDelivery } from '../notifications/deadlineNotifier';
+import { createDeadlineNotifier, deliverElectronNotification } from '../notifications/deadlineNotifier';
 import { createRendererScenarioNotifier } from '../notifications/scenarioNotifier';
 import { useLatestRef } from '../hooks/useLatestRef';
 import { rendererTranslator } from '../../translations/renderer';
@@ -205,7 +205,8 @@ async function runRendererVotingCycle({
  * would only be discarded). See deadlineNotifier.ts header.
  */
 function createRendererDeadlineNotifier(): CycleNotifier | null {
-    const deliver = resolveRendererDelivery(isNativePlatform());
+    // Native Android gets `null` — the native foreground service is authoritative there.
+    const deliver = isNativePlatform() ? null : deliverElectronNotification;
     if (!deliver) return null;
     const shared = {
         getSetting: (key: string) => ipc.getGlobalDefault(key),

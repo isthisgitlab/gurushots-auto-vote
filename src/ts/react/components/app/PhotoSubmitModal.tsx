@@ -127,38 +127,38 @@ function PhotoSubmitBody({
     // Marks read before an action of this window (a join, a submit) are not to be trusted: a cached listing
     // always comes back as a preview, and picking waits for the fresh read.
     const picker = usePhotoPicker({ challengeId, usage, alwaysFresh: true, selected });
-    const { state, known, retry, refresh, resetLoadPhotos, shown } = picker;
+    const { state, known, retry, refresh, resetLoadPhotos, requestId } = picker;
     const preview = state.status === 'ready' && state.listing.preview;
     // Once a listing is shown, until the app has checked which photos the challenge accepts, none can be picked or
     // sent. An idle one shows none: Auto's picks are ranked against the live challenge's eligible photos.
     const checking = preview || picker.recheckFailed;
 
-    // The generation of the read a failed submit asked for (or a Refresh): once a listing of that generation (or
-    // later) is in, photos it says can no longer be entered leave the pick. Load photos and Search do not set it,
-    // so a pick that one of those reads marks refused stays on screen with its reason (the grid shows a pick
-    // whatever its mark). Null when nothing is waiting.
+    // The id of the read a failed submit asked for (or a Refresh): once a listing of that read is in, photos it
+    // says can no longer be entered leave the pick. Load photos and Search do not set it, so a pick that one of
+    // those reads marks refused stays on screen with its reason (the grid shows a pick whatever its mark). Null
+    // when nothing is waiting.
     const pruneFromRef = useRef<number | null>(null);
 
     // Photos taken out of the pick stay on screen with their reason until the next listing replaces this one.
-    // Listings are told apart by `shown` (see useLibraryListing), so an appended batch keeps them.
-    const [takenBack, setTakenBack] = useState<{ shown: number; ids: ReadonlySet<string> }>({
-        shown: -1,
+    // Listings are told apart by the read's request id (see useLibraryListing): an appended batch keeps them.
+    const [takenBack, setTakenBack] = useState<{ requestId: number; ids: ReadonlySet<string> }>({
+        requestId: -1,
         ids: new Set(),
     });
-    const keepIds = takenBack.shown === shown ? takenBack.ids : undefined;
-    const current = useRef({ selected, shown });
+    const keepIds = takenBack.requestId === requestId ? takenBack.ids : undefined;
+    const current = useRef({ selected, requestId });
     // The latest pick and listing, for `toggle`, which must stay the same function between renders.
     useLayoutEffect(() => {
-        current.current = { selected, shown };
+        current.current = { selected, requestId };
     });
 
     // Records photos taken out of the pick (taken back, or replaced with one slot) for the listing on screen.
     const keepShown = useCallback((ids: readonly string[]) => {
         if (ids.length === 0) return;
-        const shown = current.current.shown;
+        const requestId = current.current.requestId;
         setTakenBack((prev) => ({
-            shown,
-            ids: new Set([...(prev.shown === shown ? prev.ids : []), ...ids]),
+            requestId,
+            ids: new Set([...(prev.requestId === requestId ? prev.ids : []), ...ids]),
         }));
     }, []);
 
@@ -180,11 +180,9 @@ function PhotoSubmitBody({
 
     useEffect(() => {
         const from = pruneFromRef.current;
-        // `generation < from`: a guard for a read that has not landed yet (defence in depth). A preview, or a
-        // listing still being read again, says nothing about what the challenge accepts yet, and the pick is what
-        // is being sent while a submit is in flight.
-        if (from === null || state.status !== 'ready' || picker.generation < from || checking || picker.revalidating)
-            return;
+        // A preview, or a listing still being read again, says nothing about what the challenge accepts yet,
+        // and the pick is what is being sent while a submit is in flight.
+        if (from === null || state.status !== 'ready' || checking || picker.revalidating) return;
         if (submitting) return;
         pruneFromRef.current = null;
         if (!state.listing.allowedKnown) return;
@@ -194,7 +192,7 @@ function PhotoSubmitBody({
             const kept = prev.filter((id) => known.get(id)?.allowed !== false && !won.has(id));
             return kept.length === prev.length ? prev : kept;
         });
-    }, [state, known, picker.generation, checking, picker.revalidating, submitting]);
+    }, [state, known, requestId, checking, picker.revalidating, submitting]);
 
     // After a Refresh answers, the pick is checked against the listing it brought, as after a refused submit.
     const refreshListing = () => {

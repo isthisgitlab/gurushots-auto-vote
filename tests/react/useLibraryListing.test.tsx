@@ -1,6 +1,6 @@
 /**
  * useLibraryListing — the chooser's library read: a cached answer that is a preview is shown at once and read
- * again in the background under the same generation, a Refresh reads the current search again without taking
+ * again in the background under the same request, a Refresh reads the current search again without taking
  * the listing off the screen, and a failed re-check leaves what is shown as last loaded.
  */
 
@@ -61,13 +61,13 @@ beforeEach(() => {
 });
 
 describe('a preview answer', () => {
-    test('is shown at once and read again in the background, which replaces it under the same generation', async () => {
+    test('is shown at once and read again in the background, which replaces it under the same request', async () => {
         const recheck = deferred();
         getLibrary().mockResolvedValueOnce(previewAnswer()).mockReturnValueOnce(recheck.promise);
         const { result } = renderHook(() => useLibraryListing(7));
         await waitFor(() => expect(result.current.revalidating).toBe(true));
         expect(result.current.state).toMatchObject({ status: 'ready', listing: { preview: true } });
-        const generation = result.current.generation;
+        const request = result.current.requestId;
         expect(getLibrary().mock.calls).toEqual([
             [7, undefined, 'cached', 'submit', 0, 100],
             [7, undefined, 'fresh', 'submit', 0, 1],
@@ -80,7 +80,7 @@ describe('a preview answer', () => {
             status: 'ready',
             listing: { preview: false, allowedKnown: true },
         });
-        expect(result.current.generation).toBe(generation);
+        expect(result.current.requestId).toBe(request);
         expect([...result.current.known.keys()]).toEqual(['a', 'b']);
         expect(result.current.recheckFailed).toBe(false);
     });
@@ -230,19 +230,19 @@ describe('load and retry', () => {
         expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 1]);
     });
 
-    test('Retry is a new generation with the loading state, as before', async () => {
+    test('Retry starts a new request, with the loading state', async () => {
         getLibrary().mockResolvedValue(answer());
         const { result } = renderHook(() => useLibraryListing(7));
         await waitFor(() => expect(result.current.state.status).toBe('ready'));
-        const before = result.current.generation;
+        const before = result.current.requestId;
         const retry = deferred();
         getLibrary().mockReturnValueOnce(retry.promise);
-        let generation = 0;
+        let landsOn = 0;
         act(() => {
-            generation = result.current.retry();
+            landsOn = result.current.retry();
         });
-        expect(generation).toBe(before + 1);
-        expect(result.current.generation).toBe(before + 1);
+        expect(landsOn).toBe(before + 1);
+        expect(result.current.requestId).toBe(before + 1);
         expect(result.current.state.status).toBe('loading');
         retry.resolve(answer());
         await waitFor(() => expect(result.current.state.status).toBe('ready'));
@@ -250,7 +250,7 @@ describe('load and retry', () => {
 
     test.each([
         ['an error', failure('Failed to read your photo library'), 'Failed to read your photo library'],
-        ['a superseded read, which offers Retry', failure('superseded'), null],
+        ['a superseded read', failure('superseded'), 'superseded'],
     ])('%s ends in the error state', async (_name, response, error) => {
         getLibrary().mockResolvedValue(response);
         const { result } = renderHook(() => useLibraryListing(7));
@@ -274,29 +274,29 @@ describe('load and retry', () => {
 });
 
 describe('refresh', () => {
-    test('reads the current search again, keeps the listing on screen while it does and starts a new generation when it lands', async () => {
+    test('reads the current search again, keeps the listing on screen while it does, and the read is a new request at once', async () => {
         getLibrary()
             .mockResolvedValueOnce(answer())
             .mockResolvedValueOnce(answer({ photos: [photo('p')] }));
         const { result } = renderHook(() => useLibraryListing(7));
         await waitFor(() => expect(result.current.state.status).toBe('ready'));
         await act(async () => result.current.load('pink'));
-        const generation = result.current.generation;
+        const request = result.current.requestId;
         const read = deferred();
         getLibrary().mockReturnValueOnce(read.promise);
         let landsOn = 0;
         act(() => {
             landsOn = result.current.refresh();
         });
-        expect(landsOn).toBe(generation + 1);
+        expect(landsOn).toBe(request + 1);
         expect(result.current.revalidating).toBe(true);
+        expect(result.current.requestId).toBe(request + 1);
         expect(ids(result.current.state as never)).toEqual(['p']);
-        expect(result.current.generation).toBe(generation);
         expect(getLibrary().mock.calls.at(-1)).toEqual([7, 'pink', 'fresh', 'submit', 0, 1]);
         read.resolve(answer({ photos: [photo('p'), photo('q')], readAtMs: 1_700_000_100_000 }));
         await waitFor(() => expect(result.current.revalidating).toBe(false));
         expect(ids(result.current.state as never)).toEqual(['p', 'q']);
-        expect(result.current.generation).toBe(generation + 1);
+        expect(result.current.requestId).toBe(request + 1);
         expect([...result.current.known.keys()]).toContain('q');
     });
 
@@ -345,11 +345,11 @@ describe('refresh', () => {
             result.current.refresh();
         });
         await act(async () => result.current.load('pink'));
-        const generation = result.current.generation;
+        const request = result.current.requestId;
         read.resolve(answer({ photos: [photo('late')] }));
         await act(async () => undefined);
         expect(ids(result.current.state as never)).toEqual(['searched']);
-        expect(result.current.generation).toBe(generation);
+        expect(result.current.requestId).toBe(request);
     });
 });
 
@@ -508,9 +508,9 @@ describe('loadMore', () => {
         expect(listing?.truncated).toBe(false);
         expect(listing?.nextStart).toBe(4);
         expect([...result.current.known.keys()]).toEqual(['a', 'b', 'c']);
-        // Not a new generation and not a new listing.
-        expect(result.current.generation).toBe(1);
-        expect(result.current.shown).toBe(1);
+        // Not a new request — the same listing, with the batch appended.
+        expect(result.current.requestId).toBe(1);
+        expect(result.current.appendedSinceLoad).toBe(true);
         expect(result.current.loadingMore).toBe(false);
         expect(result.current.loadMoreFailed).toBeNull();
     });
@@ -577,7 +577,7 @@ describe('loadMore', () => {
         expect(photoIds(result.current.state)).toEqual(['searched']);
     });
 
-    test('an answer that landed on another generation (a Refresh) is dropped silently too', async () => {
+    test('an answer that landed on another request (a Refresh) is dropped silently too', async () => {
         const more = deferred();
         getLibrary()
             .mockResolvedValueOnce(batch(['a'], { nextStart: 1, truncated: true }))
@@ -745,8 +745,8 @@ describe('loadMore', () => {
         expect(photoIds(result.current.state)).toEqual(['a', 'b']);
         expect(result.current.loadMoreFailed).toBeNull();
         expect(result.current.loadingMore).toBe(false);
-        expect(result.current.generation).toBe(1);
-        expect(result.current.shown).toBe(1);
+        expect(result.current.requestId).toBe(1);
+        expect(result.current.appendedSinceLoad).toBe(true);
     });
 
     test('loadMore does nothing from idle and nothing on a preview', async () => {
@@ -938,22 +938,25 @@ describe('isSearch', () => {
     });
 });
 
-describe('the shown counter', () => {
-    test('a load is a new listing and a preview’s fresh swap is another one; an append is not', async () => {
+describe('the request id and the appended mark', () => {
+    test('a load is a new request; its re-check and an appended batch are not; another load is', async () => {
         getLibrary()
             .mockResolvedValueOnce(previewAnswer())
             .mockResolvedValueOnce(answer({ memberId: null, photos: [photo('a')], nextStart: 1, truncated: true }))
             .mockResolvedValueOnce(answer({ memberId: null, photos: [photo('b')], nextStart: 2, truncated: false }))
             .mockResolvedValueOnce(answer({ memberId: null, photos: [photo('c')] }));
         const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
-        expect(result.current.shown).toBe(0);
+        expect(result.current.requestId).toBe(0);
+        expect(result.current.appendedSinceLoad).toBe(false);
         await act(async () => result.current.load(''));
-        // The preview is one listing; the fresh re-check behind it is another.
+        // The preview and the fresh re-check behind it are one request; the batch read is the same too.
         await waitFor(() => expect(result.current.revalidating).toBe(false));
-        expect(result.current.shown).toBe(2);
+        expect(result.current.requestId).toBe(1);
         await act(async () => result.current.loadMore());
-        expect(result.current.shown).toBe(2);
+        expect(result.current.requestId).toBe(1);
+        expect(result.current.appendedSinceLoad).toBe(true);
         await act(async () => result.current.load('pink'));
-        expect(result.current.shown).toBe(3);
+        expect(result.current.requestId).toBe(2);
+        expect(result.current.appendedSinceLoad).toBe(false);
     });
 });

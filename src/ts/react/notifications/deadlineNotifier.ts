@@ -12,17 +12,16 @@
  *
  * Fire-and-forget by contract: the chain calls this in its own isolated,
  * never-awaited wrapper, so a throw here cannot affect scheduling. It is also
- * self-contained — a re-entrancy guard, an early-exit when the feature is off,
- * and its own catch (mirroring the Node twin nodeNotify.ts) so it resolves
- * quietly even if the decision code throws, rather than relying on the caller's
- * outer .catch().
+ * self-contained — an early-exit when the feature is off, and its own catch
+ * (mirroring the Node twin nodeNotify.ts) so it resolves quietly even if the
+ * decision code throws, rather than relying on the caller's outer .catch().
  *
  * DELIVERY SCOPE: this is the SINGLE delivery source (Electron). On native
  * Android the app runs a native foreground voting service, so to avoid a
  * dual-loop double-fire the caller does NOT wire this notifier there at all
- * (resolveRendererDelivery → null → onCycleChallenges omitted), which also
- * avoids per-cycle IPC that would only be thrown away. If a native notifier is
- * ever added, keep that gate so the two paths never both fire.
+ * (its platform check picks no deliverer → onCycleChallenges omitted), which
+ * also avoids per-cycle IPC that would only be thrown away. If a native
+ * notifier is ever added, keep that gate so the two paths never both fire.
  */
 
 import type { Challenge } from '../../types/gurushots';
@@ -81,9 +80,10 @@ function logCycleFailure(log: ((message: string) => void) | undefined, error: un
 }
 
 /**
- * Build the per-cycle notifier. Holds the dedupe Set + a re-entrancy flag, so
- * create ONE instance and reuse it across cycles (a fresh instance every cycle
- * would never dedupe).
+ * Build the per-cycle notifier. Holds the dedupe Set, so create ONE instance
+ * and reuse it across cycles (a fresh instance every cycle would never dedupe;
+ * it also keeps overlapping cycles from double-firing, and a duplicate lost to
+ * such a race is a harmless missing toast).
  *
  * @param deps.getSetting - the getGlobalDefault IPC
  * @param deps.getDeadlineActions -
@@ -107,14 +107,8 @@ export function createDeadlineNotifier({
     log?: (message: string) => void;
 }): (challenges: readonly Challenge[], now: number) => Promise<void> {
     const dedupe = createDedupe();
-    // Re-entrancy guard: per-challenge IPC round trips make a cycle's run
-    // outlast a fast (last-minute) cadence tick; without this, two overlapping
-    // runs could race the dedupe Set around an await and double-fire.
-    let running = false;
 
     return async function onCycleChallenges(challenges, now) {
-        if (running) return;
-        running = true;
         try {
             const values = await Promise.all(NOTIFY_CONFIG_KEYS.map((key) => getSetting(key)));
             const byKey = Object.fromEntries(NOTIFY_CONFIG_KEYS.map((key, i) => [key, values[i]]));
@@ -132,8 +126,6 @@ export function createDeadlineNotifier({
             // Self-contained: swallow so a decision/IPC failure can neither reach
             // the scheduler nor vanish without a trace (mirrors nodeNotify.ts).
             logCycleFailure(log, error);
-        } finally {
-            running = false;
         }
     };
 }
@@ -173,17 +165,4 @@ export function deliverElectronNotification({ title, body }: { title: string; bo
     } catch {
         /* OS notifications unavailable/blocked — nothing else to do */
     }
-}
-
-/**
- * Pick the renderer delivery function for the current platform. Electron gets
- * the Web Notification deliverer; native Android gets `null`, the caller's
- * signal NOT to wire the notifier at all (the native service is authoritative
- * there — see the file header). Exported so the platform decision
- * is unit-testable rather than an inline ternary a future edit could invert.
- */
-export function resolveRendererDelivery(
-    isNativePlatform: boolean,
-): ((n: { title: string; body: string }) => void) | null {
-    return isNativePlatform ? null : deliverElectronNotification;
 }

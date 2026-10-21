@@ -32,10 +32,9 @@ export function usePhotoPicker({
     const {
         state,
         known,
-        generation,
+        requestId,
         revalidating,
         recheckFailed,
-        shown,
         load,
         refresh,
         retry,
@@ -137,10 +136,9 @@ export function usePhotoPicker({
     return {
         state,
         known,
-        generation,
+        requestId,
         revalidating,
         recheckFailed,
-        shown,
         refresh,
         retry,
         loadMore,
