@@ -214,6 +214,10 @@ const buildScoredCandidates = (
     const semanticScores = opts.semanticScores instanceof Map ? opts.semanticScores : null;
 
     const keywords = buildChallengeKeywords(challenge, opts.ignoreWords || null);
+    // GuruShots' suggested library photos for this challenge — tier 5 in
+    // rankByTiers, a weak tiebreak below every theme tier. It only marks
+    // photos already in this pool; no extra fetch happens for the ids.
+    const suggestedIds = opts.suggestedIds;
     return filtered.map(({ photo, wordStems }) => {
         const { semantic, semanticSupport } = semanticTiersOf(semanticScores, photo.id);
         return {
@@ -223,6 +227,7 @@ const buildScoredCandidates = (
             semantic,
             semanticSupport,
             score: scorePhoto(photo, keywords, wordStems),
+            suggested: suggestedIds?.has(String(photo.id)) ?? false,
             statsKnown: statsKnownOf(photo),
             achievementCount: achievementCountOf(photo),
             votes: votesOf(photo),

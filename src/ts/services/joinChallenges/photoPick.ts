@@ -85,6 +85,23 @@ const resolveJoinChosen = (challenge: Challenge, token: string, deps: JoinDeps) 
     });
 
 /**
+ * The library photos GuruShots suggests for this un-joined challenge, as a
+ * set. HONEST SCOPE: a weak tiebreak — it only orders photos already in the
+ * fetched candidate pool (no extra fetch for the suggested ids), and the
+ * visual re-rank of the shortlist may still reorder it. No dep wired in, or a
+ * read that fails, means no suggestions: the pick is unaffected.
+ */
+const suggestedIdsFor = async (challenge: Challenge, token: string, deps: JoinDeps): Promise<ReadonlySet<string>> => {
+    if (!deps.getSuggestedPhotoIds) return new Set();
+    try {
+        return new Set(await deps.getSuggestedPhotoIds(token, challenge.id));
+    } catch (error) {
+        cat().debug(`could not read the suggested photos for ${challenge?.id}: ${errorMessage(error) || error}`, null);
+        return new Set();
+    }
+};
+
+/**
  * Pick a single eligible entry photo for a candidate, honoring the same
  * must/should tag rules and picker as auto-fill. Tags are resolved by the
  * challenge object (title-aware); submitWithoutTagMatch by title profile.
@@ -95,6 +112,8 @@ const resolveJoinChosen = (challenge: Challenge, token: string, deps: JoinDeps) 
  * list is taken and nothing re-ranks it. With none usable the join picks as it always did — or, with Submit
  * Only Chosen Photos on, picks nothing (`ignoreChosenOnly` lifts that: a paid
  * join whose coins are already spent must still submit something).
+ * GuruShots' suggested photos for this un-joined challenge rank above equally
+ * theme-matched ones — a weak tiebreak the visual re-rank may still reorder.
  */
 const pickJoinPhoto = async (
     challenge: Challenge,
@@ -134,6 +153,9 @@ const pickJoinPhoto = async (
     });
     const eligible = [...loaded.eligible, ...missed];
     const semanticScores = await resolveSemanticScores(challenge, eligible, { ignoreWords });
+    // Suggestions exist only for an un-joined challenge, which is the only kind
+    // a join pick sees; auto-fill of already-joined challenges gets none.
+    const suggestedIds = await suggestedIdsFor(challenge, token, deps);
     // A shortlist, not one photo, so the visual re-rank a fill applies can
     // promote an on-theme alternative here too.
     // The candidates are library photo records, the shape the picker ranks.
@@ -143,6 +165,7 @@ const pickJoinPhoto = async (
         submitWithoutTagMatch,
         semanticScores,
         ignoreWords,
+        suggestedIds,
         chosen:
             chosenSettings.ids.length > 0
                 ? { ids: chosenSettings.ids, only: enforceOnly, inOrder: chosenSettings.inOrder }

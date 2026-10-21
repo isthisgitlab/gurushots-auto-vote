@@ -106,6 +106,16 @@ export interface PickOptions extends TagOptions {
     onFallback?: ((info: PickFallbackInfo) => void) | null;
     /** Honoured by pickPhotosForChallenge and buildChosenCandidates; buildScoredCandidates ignores it. */
     chosen?: ChosenPick | null;
+    /**
+     * The library photos GuruShots itself suggests for this challenge (join
+     * picks only — suggestions exist for challenges the member has NOT joined).
+     * HONEST SCOPE: a weak tiebreak. It only orders photos already in the
+     * fetched candidate pool (no extra fetch for the suggested ids), and the
+     * visual re-rank of the shortlist may still reorder it. A suggestion is
+     * never a theme match — the theme tiers still win — and chosen photos that
+     * go by the user's order (`orderedIds`) are never overridden by it.
+     */
+    suggestedIds?: ReadonlySet<string>;
 }
 
 /** The scored pool split into the user's chosen photos and the rest (buildChosenCandidates). */
@@ -125,6 +135,8 @@ export interface ScoredCandidate {
     semantic: number;
     semanticSupport: number;
     score: number;
+    /** GuruShots suggests this photo for the challenge (from opts.suggestedIds); a tier BELOW every theme tier. */
+    suggested: boolean;
     statsKnown: boolean;
     achievementCount: number;
     votes: number;

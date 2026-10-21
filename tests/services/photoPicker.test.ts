@@ -26,6 +26,7 @@ const {
     wholeLabelStems,
     SEMANTIC_MATCH_FLOOR,
     SEMANTIC_SUPPORT_CAP,
+    hasThemeMatch,
 } = require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
 
 const allowed = (id: string, labels: string[], uploadDate = 1000, extras: Partial<PickerPhoto> = {}) => ({
@@ -1720,6 +1721,60 @@ describe('photoPicker', () => {
         test('an unlabelled photo cannot be judged and is kept', () => {
             const photos = [allowed('portrait', ['Person'], 3000), allowed('bare', [], 1000)];
             expect(pickPhotosForChallenge({ title: 'No Humans' }, photos, 2)).toEqual(['bare']);
+        });
+    });
+
+    describe('suggested tier (opts.suggestedIds)', () => {
+        // Same fixture shape as the semantic tier describes: title keywords
+        // (pink/nature) match nothing below, so the tiers under test decide.
+        const challenge = { title: 'Pink In Nature', url: '', welcome_message: '' };
+
+        test('a suggested photo beats a popular non-suggested one that tied with it on theme', () => {
+            const pA = allowed('a', ['Random'], 1000, { votes: 1 });
+            const pB = allowed('b', ['Random'], 1000, { votes: 5 });
+            expect(pickPhotosForChallenge(challenge, [pA, pB], 1)).toEqual(['b']);
+            expect(pickPhotosForChallenge(challenge, [pA, pB], 1, { suggestedIds: new Set(['a']) })).toEqual(['a']);
+        });
+
+        test('a suggestion never beats a theme match', () => {
+            const pA = allowed('a', ['Random'], 1000, { votes: 99 });
+            const pB = allowed('b', ['Random'], 1000, { votes: 1 });
+            const semanticScores = new Map([
+                ['a', 0.1],
+                ['b', 0.9],
+            ]);
+            expect(
+                pickPhotosForChallenge(challenge, [pA, pB], 1, { suggestedIds: new Set(['a']), semanticScores }),
+            ).toEqual(['b']);
+        });
+
+        test('a suggested-only photo is still no theme match', () => {
+            const [scored] = buildScoredCandidates(challenge, [allowed('a', ['Random'])], {
+                suggestedIds: new Set(['a']),
+            });
+            expect(scored.suggested).toBe(true);
+            expect(hasThemeMatch(scored)).toBe(false);
+        });
+
+        test('buildScoredCandidates marks the suggested photos, and only them', () => {
+            const scored = buildScoredCandidates(challenge, [allowed('a', ['Random']), allowed('b', ['Random'])], {
+                suggestedIds: new Set(['b']),
+            });
+            expect(scored.map((entry) => entry.suggested)).toEqual([false, true]);
+            expect(buildScoredCandidates(challenge, [allowed('a', ['Random'])], {}).map((e) => e.suggested)).toEqual([
+                false,
+            ]);
+        });
+
+        test('chosen orderedIds are never overridden by the suggestion tier', () => {
+            const pA = allowed('a', ['Random'], 1000);
+            const pB = allowed('b', ['Random'], 1000);
+            expect(
+                pickPhotosForChallenge(challenge, [pA, pB], 2, {
+                    suggestedIds: new Set(['b']),
+                    chosen: { ids: ['a', 'b'], only: false, inOrder: true },
+                }),
+            ).toEqual(['a', 'b']);
         });
     });
 });

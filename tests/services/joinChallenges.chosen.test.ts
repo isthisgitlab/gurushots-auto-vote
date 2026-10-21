@@ -424,3 +424,31 @@ describe("resolveJoinSetting reads the candidate's own override for the chosen k
         expect(settings.getChallengeOverride).not.toHaveBeenCalled();
     });
 });
+
+describe("GuruShots' suggested photos as a join-pick tiebreak", () => {
+    test('a suggested photo is picked above equally theme-matched ones', async () => {
+        const getSuggestedPhotoIds = jest.fn(async (_token: string, challengeId: string | number) =>
+            String(challengeId) === '1' ? ['auto-7'] : [],
+        );
+        const deps = makeDeps([...eleven, CAR], { getSuggestedPhotoIds });
+        const res = await performJoin(challenge(), 'tok', deps, 0);
+        expect(res).toEqual({ status: 'joined', charged: 0, imageId: 'auto-7' });
+        expect(getSuggestedPhotoIds).toHaveBeenCalledWith('tok', 1);
+    });
+
+    test('without the dep the pick is what it always was', async () => {
+        const deps = makeDeps();
+        const res = await performJoin(challenge(), 'tok', deps, 0);
+        expect(res).toEqual({ status: 'joined', charged: 0, imageId: 'auto-0' });
+    });
+
+    test('a failed read of the suggestions is logged and the join picks as usual', async () => {
+        const deps = makeDeps(eleven, {
+            getSuggestedPhotoIds: jest.fn(async () => Promise.reject(new Error('down'))),
+        });
+        const res = await performJoin(challenge(), 'tok', deps, 0);
+        expect(res.status).toBe('joined');
+        expect(res.imageId).toMatch(/^auto-/);
+        expect(lines.debug.some((m) => m.includes('could not read the suggested photos for 1: down'))).toBe(true);
+    });
+});

@@ -8,6 +8,7 @@ import * as cancellation from '../../voting/cancellation';
 import { errorMessage } from '../../errorMessage';
 import type { Challenge } from '../../types/gurushots';
 import { sanitizeLogString } from '../../logger/sanitize';
+import { joinFreshRefusal } from '../VotingLogic';
 import { cat, lockFor } from './shared';
 import type { Claim, JoinDeps, JoinOutcome, UnlockState } from './shared';
 import {
@@ -93,7 +94,10 @@ const releaseRefusedClaim = async (deps: JoinDeps, id: string | number, owner: s
 
 /**
  * Whether the price still holds: the open list is read again, and the challenge must still be on it at no more than
- * the price the decision to join used. A price that cannot be read again is not one to spend on. `risenTo` is the
+ * the price the decision to join used. A price that cannot be read again is not one to spend on. The same read
+ * refuses a challenge that has since filled up, or whose unlock price is unreadable (`joinFreshRefusal`) — this is
+ * the last look before `coins_unlock`, so a spend that cannot succeed, or that nothing can consent to, happens
+ * nowhere. `risenTo` is the
  * live price when it is above the ceiling (null: it holds, or could not be read).
  */
 const priceHolds = async (
@@ -114,6 +118,14 @@ const priceHolds = async (
         return { holds: false, risenTo: null };
     }
     const live = open?.find((c) => String(c?.id) === String(challenge?.id));
+    // Only a FRESH unlock reaches here (a claim found earlier retries the submit without this read), so a full or
+    // price-unreadable live item refuses the spend outright — it only ever reduces spending.
+    const freshRefusal = joinFreshRefusal(live);
+    if (freshRefusal) {
+        const why = freshRefusal === 'full' ? 'it is full (max players reached)' : 'its unlock price could not be read';
+        cat().warning(`${tag}: ${why} since the join was decided — not spending coins`, null);
+        return { holds: false, risenTo: null };
+    }
     const cost = Number(live?.join_coins);
     if (!Number.isFinite(cost)) {
         cat().warning(`${tag}: its price could not be read again — not spending coins`, null);

@@ -110,8 +110,12 @@ const earlyJoinsFor = async (
  */
 const toPassNowSec = (now: number): number => Math.floor((Number.isFinite(now) && now > 0 ? now : Date.now()) / 1000);
 
-const decideCandidateJoin = (challenge: Challenge, pass: JoinPassState, alreadyPaid: boolean) => {
-    const cfg = resolveCandidateConfig(challenge);
+const decideCandidateJoin = (
+    challenge: Challenge,
+    cfg: ReturnType<typeof resolveCandidateConfig>,
+    pass: JoinPassState,
+    alreadyPaid: boolean,
+) => {
     // Join Early for Missions lifts the timing window while a mission wants
     // joins: these would join later anyway, the mission wants them now.
     const joinEarly = pass.earlyJoins > 0;
@@ -149,6 +153,27 @@ const noteTimingRefusal = (challenge: Challenge, reason: string, pass: JoinPassS
     if (pass.missingCloseTimeLogged) return;
     pass.missingCloseTimeLogged = true;
     warnMissingCloseTime(challenge, reason);
+};
+
+/**
+ * A full or price-unreadable candidate is never joined, so say why it was
+ * skipped — at INFO when the user pointed the pass at this challenge
+ * themselves (a title-profile opt-in, or a non-empty Chosen Photos list
+ * resolved for it: they should know why nothing happened), at DEBUG for the
+ * pass's general sweep. `chosenPhotos` resolves by rule and override here,
+ * which is the list's settings-layer resolution (the member scoping of
+ * resolveJoinChosen only filters it).
+ */
+const noteJoinSafetySkip = (challenge: Challenge, reason: 'full' | 'price-unknown', hasProfileMatch: boolean) => {
+    const chosen = resolveJoinSetting('chosenPhotos', challenge);
+    const optedIn = hasProfileMatch || (Array.isArray(chosen) && chosen.length > 0);
+    const why =
+        reason === 'full'
+            ? 'it is full (max players reached)'
+            : 'it needs a paid unlock but its price could not be read';
+    const message = `skipped ${logger.challengeTag(challenge)}: ${why} — nothing was joined`;
+    if (optedIn) cat().info(message, null);
+    else cat().debug(message, null);
 };
 
 // Account + challenge pairs already warned about a paid-but-not-entered join: once per pair per process.
@@ -193,9 +218,13 @@ const joinCandidate = async (
         return 'skipped:manual-photos-only';
     }
     const alreadyPaid = await paidByThisAccount(challenge, token, deps);
-    const decision = decideCandidateJoin(challenge, pass, alreadyPaid);
+    const cfg = resolveCandidateConfig(challenge);
+    const decision = decideCandidateJoin(challenge, cfg, pass, alreadyPaid);
     if (!decision.join) {
         noteTimingRefusal(challenge, decision.reason, pass);
+        if (decision.reason === 'full' || decision.reason === 'price-unknown') {
+            noteJoinSafetySkip(challenge, decision.reason, cfg.hasProfileMatch);
+        }
         return `skipped:${decision.reason}`;
     }
     // Guard each candidate: one bad candidate (unexpected throw) must not

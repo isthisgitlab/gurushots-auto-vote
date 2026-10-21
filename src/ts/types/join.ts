@@ -8,8 +8,19 @@
  *   earlier-payment — a payment record from before accounts were told apart, whose owner is unknown; the join
  *                     only retries the submit with it
  *   already-joined  — this account has already joined the challenge (its claim says so); nothing was spent
+ *   full            — the challenge has no free player slots left (its `max_players` is reached), so a fresh
+ *                     join was not attempted; nothing was spent
+ *   price-unknown   — the challenge still needs a paid unlock but its price could not be read, so no consent
+ *                     was possible; nothing was unlocked or spent
  */
-type JoinReason = 'no-photo' | 'account-unknown' | 'unconfirmed' | 'earlier-payment' | 'already-joined';
+type JoinReason =
+    | 'no-photo'
+    | 'account-unknown'
+    | 'unconfirmed'
+    | 'earlier-payment'
+    | 'already-joined'
+    | 'full'
+    | 'price-unknown';
 
 /**
  * What forgetting a payment came to:

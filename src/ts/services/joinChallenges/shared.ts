@@ -40,6 +40,12 @@ export interface JoinDeps {
     refreshJoinState?: () => Promise<boolean>;
     /** test seam over the visual re-rank */
     rankVisually?: typeof rankVisually;
+    /**
+     * The library photos GuruShots itself suggests for an UN-joined challenge (suggestions exist only for
+     * challenges the member has not joined). Optional: absent, or a read that fails, means no suggestions and
+     * leaves the photo pick unaffected.
+     */
+    getSuggestedPhotoIds?: (token: string, challengeId: string | number) => Promise<string[]>;
 }
 
 /**

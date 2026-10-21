@@ -1,6 +1,7 @@
 /**
  * Pure auto-join decision for one un-joined challenge: type/tag scope, the
- * join-timing window, and the coin caps. No I/O and no settings reads — the
+ * join-timing window, the capacity/price-readable guard for a fresh join, and
+ * the coin caps. No I/O and no settings reads — the
  * caller resolves both. Part of the services/VotingLogic facade.
  */
 
@@ -157,6 +158,47 @@ const paidJoinRefusal = (
 };
 
 /**
+ * Why a FRESH join of this challenge is refused on the listing itself, or null
+ * when it may go ahead. Two facts about the challenge — independent of the
+ * user's money settings — block a join that would otherwise burn a submit or
+ * a spend:
+ *
+ *   full           — `max_players` is set (0 or absent = no cap) and `players`
+ *                    has reached it.
+ *   price-unknown  — the member still owes the unlock (`submit_state` is
+ *                    'join_unlock') but `join_coins` is not a positive
+ *                    integer, so there is no price to consent to. A free
+ *                    'join' state is never price-unknown.
+ *
+ * This guards a join that would still SPEND something. A paid retry — coins
+ * already spent, only the submit left — ALWAYS takes precedence and is never
+ * blocked, so a paid unlock is never stranded: every caller gates this on its
+ * own retry knowledge (`alreadyPaid`, `retryOnly`, or the claim check that
+ * keeps `priceHolds` off retry submits).
+ */
+const joinFreshRefusal = (
+    challenge:
+        | {
+              players?: number;
+              max_players?: number;
+              join_coins?: number;
+              member?: { submit_state?: string };
+          }
+        | undefined,
+): 'full' | 'price-unknown' | null => {
+    const maxPlayers = Number(challenge?.max_players);
+    const players = Number(challenge?.players);
+    if (Number.isFinite(maxPlayers) && maxPlayers > 0 && Number.isFinite(players) && players >= maxPlayers) {
+        return 'full';
+    }
+    if (challenge?.member?.submit_state === 'join_unlock') {
+        const price = Number(challenge?.join_coins);
+        if (!Number.isInteger(price) || price <= 0) return 'price-unknown';
+    }
+    return null;
+};
+
+/**
  * @returns lowercase-trimmed type ('' = none) and string tags
  */
 const normalizeJoinFacets = (
@@ -206,6 +248,13 @@ const normalizeJoinFacets = (
  * paid join but still allows free joins. Both coin caps use the `0 = off`
  * sentinel — paid joins require `maxCoins > 0` AND `remainingBudget >= cost`.
  *
+ * Capacity and price readability are vetoes too, for a FRESH join only
+ * (`joinFreshRefusal`): a full challenge, or one that still owes an unlock
+ * (`submit_state` 'join_unlock') whose price is not a readable positive
+ * integer, is never joined fresh — there is nothing to submit into, or no
+ * price to consent to. A paid RETRY (`alreadyPaid`) always takes precedence
+ * and is never blocked, so a paid unlock is never stranded.
+ *
  * @param params.bankroll live balance, or null if unread
  * @param params.remainingBudget coins still spendable this cycle (0 = paid off)
  * @param params.includeTypes normalized lowercase types from `autoJoinTypes`; EMPTY = all types
@@ -241,6 +290,9 @@ const shouldJoinChallenge = ({
         close_time?: number;
         start_time?: number;
         tags?: string[];
+        players?: number;
+        max_players?: number;
+        member?: { submit_state?: string };
     };
     bankroll: { coins?: number } | null;
     remainingBudget: number;
@@ -275,6 +327,15 @@ const shouldJoinChallenge = ({
         return { join: false, needsCoins, reason: timingRefusal };
     }
 
+    // Capacity and price readability, after the timing window and before the
+    // cost branch: a FRESH join of a full challenge — or of one whose unlock
+    // price cannot be read — is refused, while a paid RETRY (alreadyPaid)
+    // always takes precedence and is never blocked.
+    if (!alreadyPaid) {
+        const freshRefusal = joinFreshRefusal(challenge);
+        if (freshRefusal) return { join: false, needsCoins, reason: freshRefusal };
+    }
+
     if (needsCoins <= 0) {
         return { join: true, needsCoins: 0, reason: 'free' };
     }
@@ -287,4 +348,4 @@ const shouldJoinChallenge = ({
     return { join: true, needsCoins, reason: 'paid' };
 };
 
-export { shouldJoinChallenge };
+export { shouldJoinChallenge, joinFreshRefusal };

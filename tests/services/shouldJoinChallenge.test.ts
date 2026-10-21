@@ -8,7 +8,8 @@
 import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
 import { invalid } from '../helpers/invalid';
 
-const { shouldJoinChallenge } = require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule;
+const { shouldJoinChallenge, joinFreshRefusal } =
+    require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule;
 
 type JoinParams = Parameters<typeof shouldJoinChallenge>[0];
 
@@ -419,5 +420,79 @@ describe('alreadyPaid (coins spent on it earlier; only the submit is left)', () 
 
     test('a free challenge is free, as ever', () => {
         expect(call({ alreadyPaid: true })).toMatchObject({ join: true, reason: 'free', needsCoins: 0 });
+    });
+});
+
+/**
+ * The fresh-join guard (`joinFreshRefusal`): a challenge that is FULL, or that
+ * still owes an unlock whose price cannot be read, is refused on the listing
+ * itself — before any cost branch. A paid retry (coins already spent, only the
+ * submit left) always takes precedence and is never blocked.
+ */
+describe('joinFreshRefusal — capacity and price readability', () => {
+    const refusalOf = (challenge: Parameters<typeof joinFreshRefusal>[0]) => joinFreshRefusal(challenge);
+
+    test('max_players 0 or absent means no cap', () => {
+        expect(refusalOf({ players: 999, max_players: 0 })).toBeNull();
+        expect(refusalOf({ players: 999 })).toBeNull();
+    });
+    test('a cap that is reached is full, one player short is not', () => {
+        expect(refusalOf({ players: 100, max_players: 100 })).toBe('full');
+        expect(refusalOf({ players: 120, max_players: 100 })).toBe('full');
+        expect(refusalOf({ players: 99, max_players: 100 })).toBeNull();
+    });
+    test('a player count that cannot be read is not a full challenge', () => {
+        expect(refusalOf({ max_players: 100 })).toBeNull();
+        expect(refusalOf({ players: invalid<number>('many'), max_players: 100 })).toBeNull();
+    });
+    test('join_unlock with a readable positive-integer price is fine', () => {
+        expect(refusalOf({ member: { submit_state: 'join_unlock' }, join_coins: 50 })).toBeNull();
+        expect(refusalOf({ member: { submit_state: 'join_unlock' }, join_coins: 1 })).toBeNull();
+    });
+    test('join_unlock with a price that is not a positive integer is price-unknown', () => {
+        for (const join_coins of [0, -5, 2.5, undefined]) {
+            expect(refusalOf({ member: { submit_state: 'join_unlock' }, join_coins })).toBe('price-unknown');
+        }
+        expect(refusalOf({ member: { submit_state: 'join_unlock' }, join_coins: invalid<number>('cheap') })).toBe(
+            'price-unknown',
+        );
+    });
+    test('a free join state is never price-unknown', () => {
+        expect(refusalOf({ member: { submit_state: 'join' } })).toBeNull();
+        expect(refusalOf({ member: { submit_state: 'join' }, join_coins: 0 })).toBeNull();
+        expect(refusalOf({})).toBeNull();
+    });
+    test('full is reported before price-unknown when both apply', () => {
+        expect(refusalOf({ players: 100, max_players: 100, member: { submit_state: 'join_unlock' } })).toBe('full');
+    });
+});
+
+describe('capacity and price readability veto a FRESH join, never a paid retry', () => {
+    test('a full challenge is refused with reason full', () => {
+        expect(
+            call({ challenge: { id: 1, type: 'flash', join_coins: 0, players: 100, max_players: 100 } }),
+        ).toMatchObject({ join: false, reason: 'full' });
+    });
+    test('a challenge that still owes an unlock with an unreadable price is refused with reason price-unknown', () => {
+        expect(
+            call({ challenge: { id: 1, type: 'flash', join_coins: 0, member: { submit_state: 'join_unlock' } } }),
+        ).toMatchObject({ join: false, reason: 'price-unknown' });
+    });
+    test('a paid retry of a full challenge still submits', () => {
+        expect(
+            call({
+                challenge: { id: 1, type: 'flash', join_coins: 50, players: 100, max_players: 100 },
+                alreadyPaid: true,
+            }),
+        ).toEqual({ join: true, needsCoins: 50, reason: 'already-paid' });
+    });
+    test('a paid retry of an unreadable price still submits', () => {
+        // The price is unreadable, so the cost computes to 0: the join proceeds as the free submit it is.
+        expect(
+            call({
+                challenge: { id: 1, type: 'flash', join_coins: 0, member: { submit_state: 'join_unlock' } },
+                alreadyPaid: true,
+            }).join,
+        ).toBe(true);
     });
 });

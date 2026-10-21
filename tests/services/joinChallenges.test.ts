@@ -533,6 +533,18 @@ describe('a paid join the pass decided: the price is read again right before the
         expect(warned()).toHaveBeenCalledWith(expect.stringContaining('could not be read again'), null);
     });
 
+    test.each([
+        ['full', [{ id: 7, join_coins: 100, players: 100, max_players: 100 }]],
+        ['price-unknown', [{ id: 7, join_coins: 0, member: { submit_state: 'join_unlock' } }]],
+    ])('a live read that says the challenge is %s refuses the spend before coins_unlock', async (_label, rows) => {
+        const deps = makeDeps({ getMemberChallenges: openList(rows) });
+        const res = await performJoin(invalid({ id: 7 }), 'tok', deps, 100, { priceCeiling: 100 });
+        expect(res).toEqual({ status: 'failed-no-charge', charged: 0 });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        expect(warned()).toHaveBeenCalledWith(expect.stringContaining('not spending coins'), null);
+    });
+
     test('a list that cannot be read at all spends nothing', async () => {
         const deps = makeDeps({ getMemberChallenges: double<'getMemberChallenges'>(async () => null) });
         const res = await performJoin(invalid({ id: 7 }), 'tok', deps, 100, { priceCeiling: 100 });
@@ -4297,5 +4309,99 @@ describe('runJoinPass — Manual Only', () => {
         });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.results).toEqual([{ id: 30, status: 'skipped:autojoin-off' }]);
+    });
+});
+
+describe('join safety — a challenge that is full, or whose unlock price cannot be read, is never joined fresh', () => {
+    const FULL = { players: 100, max_players: 100 };
+    const fullList = openList([{ id: 1, join_coins: 0, ...FULL }]);
+    const priceUnknownList = openList([{ id: 2, join_coins: 0, member: { submit_state: 'join_unlock' } }]);
+    const level = () => invalid<LoggerMock>(require('../../src/ts/logger')).withCategory();
+
+    test('the auto pass skips a full challenge as skipped:full, never spending', async () => {
+        const deps = makeDeps({ getMemberChallenges: fullList });
+        expect((await runJoinPass('tok', Date.now(), deps)).results).toEqual([{ id: 1, status: 'skipped:full' }]);
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('the auto pass skips an unreadable price as skipped:price-unknown, never spending', async () => {
+        const deps = makeDeps({ getMemberChallenges: priceUnknownList });
+        expect((await runJoinPass('tok', Date.now(), deps)).results).toEqual([
+            { id: 2, status: 'skipped:price-unknown' },
+        ]);
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('the skip is INFO when a title profile opted the challenge in, DEBUG for the general sweep', async () => {
+        await runJoinPass('tok', Date.now(), makeDeps({ getMemberChallenges: fullList }));
+        expect(level().debug).toHaveBeenCalledWith(expect.stringContaining('it is full'), null);
+        expect(level().info).not.toHaveBeenCalledWith(expect.stringContaining('it is full'), null);
+
+        settings.hasRuleJoinOptIn.mockReturnValue(true);
+        await runJoinPass('tok', Date.now(), makeDeps({ getMemberChallenges: fullList }));
+        expect(level().info).toHaveBeenCalledWith(expect.stringContaining('it is full'), null);
+    });
+
+    test('a non-empty Chosen Photos list for the challenge opts the skip in at INFO too', async () => {
+        settings.getChallengeOverride.mockImplementation((key: string) => (key === 'chosenPhotos' ? ['imgA'] : null));
+        await runJoinPass('tok', Date.now(), makeDeps({ getMemberChallenges: fullList }));
+        expect(level().info).toHaveBeenCalledWith(expect.stringContaining('it is full'), null);
+        expect(level().debug).not.toHaveBeenCalledWith(expect.stringContaining('it is full'), null);
+    });
+
+    test('a challenge the account already paid for is still submitted when it is full', async () => {
+        const A = 'a'.repeat(32);
+        const memberIdentity = require('../../src/ts/services/autoFill/memberIdentity') as typeof memberIdentityModule;
+        memberIdentity.__resetMemberIdCache();
+        const store = fileWith({ [`${A}:1`]: { unlockedAt: RECENT } });
+        const deps = makeDeps({
+            getMemberChallenges: openList([{ id: 1, join_coins: 100, ...FULL }]),
+            getBankroll: balance({ coins: 0 }),
+            getCurrentMemberProfile: jest.fn(async () => ({ id: A, userName: 'u' })),
+            joinStateStore: store,
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res.results).toEqual([{ id: 1, status: 'joined' }]);
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).toHaveBeenCalledWith(1, ['imgA'], 'tok');
+        memberIdentity.__resetMemberIdCache();
+    });
+
+    test('the manual join refuses a full challenge with failed-no-charge/full', async () => {
+        const deps = makeDeps({ getMemberChallenges: fullList });
+        expect(await joinChallengeSingle(1, 'tok', deps)).toEqual({
+            status: 'failed-no-charge',
+            challengeId: 1,
+            cost: 0,
+            reason: 'full',
+        });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('the manual join refuses an unreadable price with failed-no-charge/price-unknown', async () => {
+        const deps = makeDeps({ getMemberChallenges: priceUnknownList });
+        expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toEqual({
+            status: 'failed-no-charge',
+            challengeId: 2,
+            cost: 0,
+            reason: 'price-unknown',
+        });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test("the manual retry of an already-paid join (Discover's Retry submit) still submits a full challenge", async () => {
+        const store = fileWith({ 4: { unlockedAt: RECENT } });
+        const deps = makeDeps({
+            getMemberChallenges: openList([{ id: 4, join_coins: 100, ...FULL }]),
+            joinStateStore: store,
+        });
+        const res = await joinChallengeSingle(4, 'tok', deps, { spendCoins: true });
+        expect(res).toMatchObject({ status: 'joined', challengeId: 4 });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).toHaveBeenCalledWith(4, ['imgA'], 'tok');
     });
 });

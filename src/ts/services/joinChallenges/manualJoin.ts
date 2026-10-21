@@ -2,13 +2,17 @@
  * The manual single join, on the user's explicit request. A paid challenge needs
  * explicit paid consent (`spendCoins`): without it nothing is spent and the cost
  * is returned as `needs-confirm`. The live candidate and balance are re-read, so
- * a stale renderer list cannot trigger a wasted spend. A paid challenge whose coins
+ * a stale renderer list cannot trigger a wasted spend, and a candidate that is
+ * full, or paid with an unreadable price, is refused (`failed-no-charge`) before
+ * anything happens. A paid challenge whose coins
  * were already spent (an unlock marker, left by a join whose submit failed) is only
- * submitted: no consent to a price and no balance check, and nothing is charged.
+ * submitted: no consent to a price and no balance check, nothing is charged — and it is
+ * never blocked by the full/price guard, so a paid unlock is never stranded.
  */
 
 import { errorMessage } from '../../errorMessage';
 import type { Challenge } from '../../types/gurushots';
+import { joinFreshRefusal } from '../VotingLogic';
 import { cat } from './shared';
 import type { JoinDeps, JoinSingleResult } from './shared';
 import { performJoin } from './performJoin';
@@ -132,6 +136,21 @@ const joinListed = async (
         return { status: 'busy', challengeId, cost };
     }
     const retryOnly = cost > 0 && claimOf(deps.joinStateStore, challengeId, owner) !== null;
+
+    // A FRESH join of a challenge that is full, or whose unlock price cannot be read, does nothing and worded so,
+    // like the account-unknown refusal above. A paid RETRY (coins already spent, only the submit left) always
+    // takes precedence and is never blocked, so a paid unlock is never stranded.
+    if (!retryOnly) {
+        const freshRefusal = joinFreshRefusal(challenge);
+        if (freshRefusal) {
+            const why =
+                freshRefusal === 'full'
+                    ? 'it is full (max players reached)'
+                    : 'it needs a paid unlock but its price could not be read';
+            cat().warning(`challenge ${challengeId}: ${why} — not joining`, null);
+            return { status: 'failed-no-charge', challengeId, cost, reason: freshRefusal };
+        }
+    }
 
     // Consent covers a price: a cost above the one the caller confirmed (`expectedCost`) needs a new
     // confirmation, with the live cost, and unlocks nothing.
