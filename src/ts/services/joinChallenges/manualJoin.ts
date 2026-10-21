@@ -7,7 +7,8 @@
  * anything happens. A paid challenge whose coins
  * were already spent (an unlock marker, left by a join whose submit failed) is only
  * submitted: no consent to a price and no balance check, nothing is charged — and it is
- * never blocked by the full/price guard, so a paid unlock is never stranded.
+ * never blocked by the full/price guard, so a paid unlock is never stranded, whatever
+ * the listing's price says now (a claim beats the guard even once the price reads 0 or is gone).
  */
 
 import { errorMessage } from '../../errorMessage';
@@ -115,9 +116,16 @@ const joinListed = async (
     const rawCost = Number(challenge.join_coins);
     const cost = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : 0;
 
+    // The fresh guard's reason is read once here, before the claim: a claim on file beats the guard
+    // WHATEVER the cost — the listing's price may have dropped to 0 (or its field gone) since the
+    // unlock was paid, and only the submit would be left — so the claim is looked for whenever it
+    // could decide the guard, not only when the listing still shows a price.
+    const freshRefusal = joinFreshRefusal(challenge);
+    const claimMatters = cost > 0 || freshRefusal !== null;
+
     // A paid join of an account that cannot be identified does nothing paid: whose coins a marker holds
     // is unknown, and no marker could be written for it.
-    const owner = cost > 0 ? await markerOwner(token, deps) : null;
+    const owner = claimMatters ? await markerOwner(token, deps) : null;
     if (cost > 0 && paidOwnerUnknown(deps, owner)) {
         cat().warning(`challenge ${challengeId}: the account could not be identified — not joining`, null);
         return { status: 'failed-no-charge', challengeId, cost, reason: 'account-unknown' };
@@ -128,24 +136,22 @@ const joinListed = async (
     // unreadable marker file reads as "no marker" here, as in performJoin, whose paid path then refuses. An
     // unconfirmed claim stands like any other: only a submit that succeeds, or the user forgetting it, ends it.
     // A claim that could not be looked for again is not known to be absent: nothing is decided on the stale one.
-    if (cost > 0 && !(await refreshClaims(deps))) {
+    if (claimMatters && !(await refreshClaims(deps))) {
         cat().warning(
             `challenge ${challengeId}: the saved claims could not be read again — not joining — try again in a moment`,
             null,
         );
         return { status: 'busy', challengeId, cost };
     }
-    const retryOnly = cost > 0 && claimOf(deps.joinStateStore, challengeId, owner) !== null;
+    const retryOnly = claimMatters && claimOf(deps.joinStateStore, challengeId, owner) !== null;
 
     // A FRESH join of a challenge that is full, or whose unlock price cannot be read, does nothing and worded so,
     // like the account-unknown refusal above. A paid RETRY (coins already spent, only the submit left) always
-    // takes precedence and is never blocked, so a paid unlock is never stranded.
-    if (!retryOnly) {
-        const freshRefusal = joinFreshRefusal(challenge);
-        if (freshRefusal) {
-            cat().warning(`challenge ${challengeId}: ${joinFreshRefusalWhy(freshRefusal)} — not joining`, null);
-            return { status: 'failed-no-charge', challengeId, cost, reason: freshRefusal };
-        }
+    // takes precedence and is never blocked, so a paid unlock is never stranded — at a positive price through
+    // retryOnly above, at a price of 0 or none through the same claim read.
+    if (!retryOnly && freshRefusal) {
+        cat().warning(`challenge ${challengeId}: ${joinFreshRefusalWhy(freshRefusal)} — not joining`, null);
+        return { status: 'failed-no-charge', challengeId, cost, reason: freshRefusal };
     }
 
     // Consent covers a price: a cost above the one the caller confirmed (`expectedCost`) needs a new

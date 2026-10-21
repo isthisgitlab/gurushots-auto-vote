@@ -21,7 +21,15 @@ import {
     warnMissingCloseTime,
 } from './settingsResolution';
 import { performJoin } from './performJoin';
-import { markerKey, markerOwner, paidByThisAccount, pruneClosedClaims } from './unlockMarker';
+import {
+    claimOf,
+    markerKey,
+    markerOwner,
+    paidByThisAccount,
+    paidOwnerUnknown,
+    pruneClosedClaims,
+    refreshClaims,
+} from './unlockMarker';
 
 /**
  * Mutable per-pass join state: the balance and budget kept locally accurate as
@@ -193,6 +201,25 @@ const noteUnenteredPaidJoin = async (challenge: Challenge, token: string, deps: 
 };
 
 /**
+ * Whether this account holds an unlock claim for the challenge, whatever the listing now costs.
+ * `paidByThisAccount` reads claims only for a positive price, so a claim whose listing has since
+ * dropped to 0 (or whose price field is gone) is invisible to it — and the fresh guard would strand
+ * the already-paid unlock. The same building blocks with the cost gate off, and the same fail-safe:
+ * an account that cannot be identified, or claims that cannot be read again, are not read as a claim.
+ */
+const claimWhateverCost = async (
+    challenge: { id?: string | number },
+    token: string,
+    deps: JoinDeps,
+): Promise<boolean> => {
+    if (challenge?.id == null || !deps.joinStateStore) return false;
+    const owner = await markerOwner(token, deps);
+    // A claim that could not be looked for again is not known to be there: not read as "already paid".
+    if (!(await refreshClaims(deps))) return false;
+    return !paidOwnerUnknown(deps, owner) && claimOf(deps.joinStateStore, challenge.id, owner) !== null;
+};
+
+/**
  * Decide and (when due) perform one candidate's join, keeping the pass's
  * balance and budget in step with what it spent.
  *
@@ -217,12 +244,21 @@ const joinCandidate = async (
     const alreadyPaid = await paidByThisAccount(challenge, token, deps);
     const cfg = resolveCandidateConfig(challenge);
     const decision = decideCandidateJoin(challenge, cfg, pass, alreadyPaid);
+    let submitOnly = alreadyPaid;
     if (!decision.join) {
         noteTimingRefusal(challenge, decision.reason, pass);
         if (decision.reason === 'full' || decision.reason === 'price-unknown') {
-            noteJoinSafetySkip(challenge, decision.reason, cfg.hasProfileMatch);
+            // The guard refuses a FRESH join; a claim on file beats it whatever the listing now costs —
+            // the price may have dropped to 0 since the unlock was paid, and only the submit is left.
+            // With a claim the join goes ahead as the paid retry does: submit only, never an unlock.
+            if (!(await claimWhateverCost(challenge, token, deps))) {
+                noteJoinSafetySkip(challenge, decision.reason, cfg.hasProfileMatch);
+                return `skipped:${decision.reason}`;
+            }
+            submitOnly = true;
+        } else {
+            return `skipped:${decision.reason}`;
         }
-        return `skipped:${decision.reason}`;
     }
     // Guard each candidate: one bad candidate (unexpected throw) must not
     // abort the rest of the pass — mirrors the per-challenge voting loop.
@@ -231,7 +267,7 @@ const joinCandidate = async (
         // The balance the pass already holds goes into the claim, for the user to compare with GuruShots.
         const coins = Number(pass.bankroll?.coins);
         outcome = await performJoin(challenge, token, deps, decision.needsCoins, {
-            submitOnly: alreadyPaid,
+            submitOnly,
             coinsBefore: Number.isFinite(coins) ? coins : null,
             priceCeiling: decision.needsCoins,
         });

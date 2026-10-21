@@ -4404,6 +4404,101 @@ describe('join safety — a challenge that is full, or whose unlock price cannot
         expect(deps.coinsUnlock).not.toHaveBeenCalled();
         expect(deps.submitToChallenge).toHaveBeenCalledWith(4, ['imgA'], 'tok');
     });
+
+    // The exemption holds whatever the listing price says now: a claim on file beats the guard even
+    // once join_coins reads 0 (or is gone) — the coins were paid when the price was positive.
+    describe('a claim on file beats the guard even at a price of 0 or none', () => {
+        const A = 'a'.repeat(32);
+        const memberIdentity = require('../../src/ts/services/autoFill/memberIdentity') as typeof memberIdentityModule;
+
+        test('the auto pass still submits a full challenge whose price has dropped to 0, and logs no skip', async () => {
+            memberIdentity.__resetMemberIdCache();
+            const store = fileWith({ [`${A}:1`]: { unlockedAt: RECENT } });
+            const deps = makeDeps({
+                getMemberChallenges: openList([{ id: 1, join_coins: 0, ...FULL }]),
+                getCurrentMemberProfile: jest.fn(async () => ({ id: A, userName: 'u' })),
+                joinStateStore: store,
+            });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results).toEqual([{ id: 1, status: 'joined' }]);
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).toHaveBeenCalledWith(1, ['imgA'], 'tok');
+            expect(level().debug).not.toHaveBeenCalledWith(expect.stringContaining('it is full'), null);
+            memberIdentity.__resetMemberIdCache();
+        });
+
+        test('the auto pass still submits a candidate that owes an unlock whose price is unreadable', async () => {
+            memberIdentity.__resetMemberIdCache();
+            const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
+            const deps = makeDeps({
+                getMemberChallenges: openList([{ id: 2, join_coins: 0, member: { submit_state: 'join_unlock' } }]),
+                getCurrentMemberProfile: jest.fn(async () => ({ id: A, userName: 'u' })),
+                joinStateStore: store,
+            });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results).toEqual([{ id: 2, status: 'joined' }]);
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).toHaveBeenCalledWith(2, ['imgA'], 'tok');
+            memberIdentity.__resetMemberIdCache();
+        });
+
+        test('the manual join still submits a full challenge whose price has dropped to 0, with no balance read and the claim left', async () => {
+            memberIdentity.__resetMemberIdCache();
+            const store = fileWith({ [`${A}:1`]: { unlockedAt: RECENT } });
+            const deps = makeDeps({
+                getMemberChallenges: openList([{ id: 1, join_coins: 0, ...FULL }]),
+                getCurrentMemberProfile: jest.fn(async () => ({ id: A, userName: 'u' })),
+                joinStateStore: store,
+            });
+            const res = await joinChallengeSingle(1, 'tok', deps, { spendCoins: true });
+            expect(res).toMatchObject({ status: 'joined', challengeId: 1, cost: 0 });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.getBankroll).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).toHaveBeenCalledWith(1, ['imgA'], 'tok');
+            // The submit went through, but the claim is not this join's to settle at a 0 price: it stays.
+            expect(store.read()).toEqual({ [`${A}:1`]: { unlockedAt: RECENT } });
+            memberIdentity.__resetMemberIdCache();
+        });
+
+        test('the manual join still submits a challenge that owes an unlock whose price is gone', async () => {
+            const store = fileWith({ '5': { unlockedAt: RECENT } });
+            const deps = makeDeps({
+                getMemberChallenges: openList([{ id: 5, member: { submit_state: 'join_unlock' } }]),
+                joinStateStore: store,
+            });
+            const res = await joinChallengeSingle(5, 'tok', deps, { spendCoins: true });
+            expect(res).toMatchObject({ status: 'joined', challengeId: 5, cost: 0 });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).toHaveBeenCalledWith(5, ['imgA'], 'tok');
+        });
+
+        test.each([
+            ['an id-less candidate', openList([{ title: 'NoId', join_coins: 0, ...FULL }])],
+            ['a candidate with no claims store', openList([{ id: 6, join_coins: 0, ...FULL }])],
+        ])('%s is still refused — there is no claim to beat the guard with', async (_label, list) => {
+            const deps = makeDeps({ getMemberChallenges: list, joinStateStore: null });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results[0].status).toBe('skipped:full');
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        });
+
+        test('claims that cannot be read again are not read as a claim: the refusal stands', async () => {
+            memberIdentity.__resetMemberIdCache();
+            const store = fileWith({ [`${A}:1`]: { unlockedAt: RECENT } });
+            const deps = makeDeps({
+                getMemberChallenges: openList([{ id: 1, join_coins: 0, ...FULL }]),
+                getCurrentMemberProfile: jest.fn(async () => ({ id: A, userName: 'u' })),
+                joinStateStore: store,
+                refreshJoinState: jest.fn(async () => false),
+            });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results).toEqual([{ id: 1, status: 'skipped:full' }]);
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).not.toHaveBeenCalled();
+            memberIdentity.__resetMemberIdCache();
+        });
+    });
 });
 
 describe("the join's photo pick under a failing suggested-photos read", () => {
