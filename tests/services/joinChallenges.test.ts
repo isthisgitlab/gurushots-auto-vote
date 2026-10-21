@@ -4405,3 +4405,26 @@ describe('join safety — a challenge that is full, or whose unlock price cannot
         expect(deps.submitToChallenge).toHaveBeenCalledWith(4, ['imgA'], 'tok');
     });
 });
+
+describe("the join's photo pick under a failing suggested-photos read", () => {
+    test.each([
+        ['an Error', new Error('down'), 'down'],
+        ['a bare value', 'plain', 'plain'],
+    ])(
+        'a suggested-photos read that rejects with %s is debug-logged and the pick still succeeds',
+        async (_label, thrown, said) => {
+            const deps = makeDeps({
+                getSuggestedPhotoIds: jest.fn(async () => {
+                    throw thrown;
+                }),
+            });
+            const res = await performJoin(invalid({ id: 18 }), 'tok', deps, 0);
+            expect(res).toEqual({ status: 'joined', charged: 0, imageId: 'imgA' });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(invalid<LoggerMock>(require('../../src/ts/logger')).withCategory().debug).toHaveBeenCalledWith(
+                expect.stringContaining(`could not read the suggested photos for 18: ${said}`),
+                null,
+            );
+        },
+    );
+});
