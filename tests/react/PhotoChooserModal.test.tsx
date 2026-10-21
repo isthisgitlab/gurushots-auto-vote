@@ -14,6 +14,7 @@ import { PhotoGrid } from '@/components/app/PhotoGrid';
 import { useImageLoads } from '@/hooks/useImageLoads';
 import { Modal } from '@/components/ui/Modal';
 import { mockTranslator } from './helpers/setup';
+import { rememberCurrentMember } from '../../src/ts/react/hooks/currentMember';
 import { app, errors } from '../../src/ts/translations/english';
 import { MAX_CHOSEN_PHOTOS } from '../../src/ts/settings/limits';
 import { invalid } from '../helpers/invalid';
@@ -134,6 +135,8 @@ const setup = (
 
 beforeEach(() => {
     mockTranslator.t.mockImplementation(english);
+    // The remembered member outlives a test (a module-level store): each starts before any listing named one.
+    rememberCurrentMember(null);
     pickers.length = 0;
     // mockReset, so a once-queued answer a failed test never consumed cannot leak into the next one.
     getLibrary()
@@ -194,6 +197,9 @@ describe('opening', () => {
     });
 
     test('the saved picks show as numbered stubs straight away, and Save is not held', async () => {
+        // A listing named the member earlier in the page's life: the store keeps it, so the stubs get
+        // their thumbnails without any read.
+        rememberCurrentMember(MEMBER);
         setup({ value: [idOf(1), idOf(3)] });
         expect(await screen.findByRole('button', { name: /^Chosen photo 00000003:/ })).toBeTruthy();
         expect(stubTile(1).getAttribute('aria-pressed')).toBe('true');
@@ -202,8 +208,7 @@ describe('opening', () => {
         expect(within(stubTile(1)).getByText('1')).toBeTruthy();
         expect(within(stubTile(3)).getByText('2')).toBeTruthy();
         expect(stubTile(1).getAttribute('aria-label')).toMatch(/Number 1 in your list\.$/);
-        // No member is known yet, so the stubs have no thumbnails.
-        expect(stubTile(1).querySelector('img')).toBeNull();
+        expect(stubTile(1).querySelector('img')?.getAttribute('src')).toContain(MEMBER);
         // No library read happened.
         expect(getLibrary()).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: 'Use these photos' }).getAttribute('aria-disabled')).toBeNull();

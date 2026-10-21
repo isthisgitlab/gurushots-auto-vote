@@ -81,10 +81,14 @@ export function useLibraryListing(
     // The synchronous guard against two load-more triggers in one tick: it carries the request the
     // in-flight batch read belongs to, so a second trigger on the same listing returns at once.
     const loadingMoreRef = useRef<number | null>(null);
-    // One monotonic id for the newest request. It is the staleness check after every await, and it
-    // stamps which listing is on screen: a load, a search and a re-read are new requests, an
-    // appended batch is not.
+    // One monotonic id for the newest request: the staleness check after every await, and the number
+    // refresh and retry hand back. A load, a search and a re-read mint a new one; an appended batch
+    // does not. Which read's listing is on screen is `shownRequestId` below.
     const requestIdRef = useRef(0);
+    // The id of the read whose listing is on screen, stamped when `show` puts one there — not the ref,
+    // which a refresh bumps the moment it starts reading: the listing on screen, and with it the id the
+    // pick-prune consumers hold, must change only when a new listing actually replaces it.
+    const [shownRequestId, setShownRequestId] = useState(0);
     // Whether a batch has been appended to the listing on screen since its read.
     const [appendedSinceLoad, setAppendedSinceLoad] = useState(false);
     // The search term of the listing on screen, set when one is shown from the read that owns
@@ -132,6 +136,7 @@ export function useLibraryListing(
         }
         setAppendedSinceLoad(false);
         setSearchTerm(lastSearchRef.current);
+        setShownRequestId(requestIdRef.current);
         setState({ status: 'ready', listing: { ...listing, memberId } });
     }, []);
 
@@ -248,6 +253,8 @@ export function useLibraryListing(
             }
             if (memberId === null && result.memberId !== null) {
                 memberRef.current = result.memberId;
+                // The first answer to name the member feeds the store too, as a listing landing would.
+                rememberCurrentMember(result.memberId);
             }
             // The batch joins the listing on screen. The request guard rules out a newer read — an
             // older loadMore's answer included — and the in-flight guard a sibling loadMore, so
@@ -293,7 +300,7 @@ export function useLibraryListing(
     return {
         state,
         known,
-        requestId: requestIdRef.current,
+        requestId: shownRequestId,
         revalidating,
         recheckFailed,
         appendedSinceLoad,

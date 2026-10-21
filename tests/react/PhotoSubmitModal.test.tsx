@@ -1872,6 +1872,64 @@ describe('photos the challenge refuses', () => {
         expect(has(2)).toBe(false);
     });
 
+    test('a refused pick taken back stays on screen with its reason while a refresh is still reading', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1), refused(2), photo(3)]));
+        setup();
+        await autoSuggesting([photo(2)]);
+        fireEvent.click(stripTile(2));
+        loadPhotos();
+        await waitFor(() => expect(gridTile(1).textContent).toContain('Can be entered'));
+        fireEvent.click(gridTile(2));
+        expect(gridTile(2).getAttribute('aria-pressed')).toBe('false');
+        expect(gridTile(2).textContent).toContain('No 2');
+        expect(screen.queryByText(/^Hidden: /)).toBeNull();
+        // The refresh reads: the listing on screen is still the old one, so the pick is not dropped.
+        const reread = deferred<Listing>();
+        getLibrary().mockReturnValueOnce(reread.promise);
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: 'Refresh photos' }).getAttribute('aria-busy')).toBe('true'),
+        );
+        // The strip is gone, so the one tile left for photo 2 is the grid's.
+        const kept = screen.getByRole('button', { name: /^Photo 00000002:/ });
+        expect(kept.getAttribute('aria-pressed')).toBe('false');
+        expect(kept.textContent).toContain('No 2');
+        expect(screen.queryByText(/^Hidden: /)).toBeNull();
+        // The landing listing is another one: it takes the pick out, hidden and counted, as ever.
+        await act(async () => reread.resolve(listing([photo(1), refused(2), photo(3)])));
+        await screen.findByText(hiddenLine(1));
+        expect(has(2)).toBe(false);
+    });
+
+    test('a refused pick taken back is not lost to a refresh that fails', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1), refused(2), photo(3)]));
+        setup();
+        await autoSuggesting([photo(2)]);
+        fireEvent.click(stripTile(2));
+        loadPhotos();
+        await waitFor(() => expect(gridTile(1).textContent).toContain('Can be entered'));
+        fireEvent.click(gridTile(2));
+        getLibrary().mockResolvedValueOnce(
+            invalid<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>>({
+                success: false,
+                error: 'Failed to read your photo library',
+            }),
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
+        await screen.findByText(
+            "Couldn't check which of these photos this challenge accepts, so picking is held. Press Refresh.",
+        );
+        // The old listing is still the one on screen: the taken-back pick is still shown, not counted.
+        const kept = screen.getByRole('button', { name: /^Photo 00000002:/ });
+        expect(kept.getAttribute('aria-pressed')).toBe('false');
+        expect(screen.queryByText(/^Hidden: /)).toBeNull();
+        // The next refresh answers: its listing takes the pick out, hidden and counted, as ever.
+        getLibrary().mockResolvedValueOnce(listing([photo(1), refused(2), photo(3)]));
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
+        await screen.findByText(hiddenLine(1));
+        expect(has(2)).toBe(false);
+    });
+
     test('a refused pick taken back stays on screen when Load more appends the same listing, and goes with the next one', async () => {
         getLibrary().mockResolvedValue(listing([photo(1), refused(2), photo(3)], { truncated: true, nextStart: 3 }));
         setup();

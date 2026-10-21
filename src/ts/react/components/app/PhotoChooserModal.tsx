@@ -7,6 +7,7 @@ import { interp } from '@/utils/interp';
 import { ChooserFooter } from './ChooserFooter';
 import { PhotoPickerToolbar } from './PhotoPicker';
 import { PhotoGrid } from './PhotoGrid';
+import { useCurrentMember } from '@/hooks/currentMember';
 import { useChooserSave } from '@/hooks/usePhotoChooser';
 import { usePhotoPicker } from '@/hooks/usePhotoPicker';
 import { MAX_CHOSEN_PHOTOS } from '../../../settings/limits';
@@ -46,6 +47,8 @@ function PhotoChooserBody({
     unsaved: { current: boolean };
 }) {
     const { t } = useTranslation();
+    // The member the page has already seen, so the saved picks show their thumbnails before any Auto run.
+    const currentMember = useCurrentMember();
     const [selected, setSelected] = useState<string[]>(value);
     unsaved.current = selected.length !== value.length || selected.some((id, i) => id !== value[i]);
     // Auto ranks for a challenge the photos could be entered into: a Discover row's challenge is not
@@ -124,7 +127,7 @@ function PhotoChooserBody({
                 onToggle={toggle}
                 onRetry={retry}
                 onRefresh={refreshListing}
-                savedPicks={{ memberId: picker.suggestedMemberId }}
+                savedPicks={{ memberId: picker.suggestedMemberId ?? currentMember }}
                 idleKey={idleKey}
                 idleWithPicksKey={idleWithPicksKey}
                 extraPhotos={picker.suggestedKnown}

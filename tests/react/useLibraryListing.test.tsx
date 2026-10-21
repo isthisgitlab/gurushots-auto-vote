@@ -5,6 +5,7 @@
  */
 
 import { act, renderHook, waitFor } from '@testing-library/preact';
+import { useCurrentMember } from '@/hooks/currentMember';
 import { useLibraryListing } from '@/hooks/useLibraryListing';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
@@ -230,7 +231,7 @@ describe('load and retry', () => {
         expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 1]);
     });
 
-    test('Retry starts a new request, with the loading state', async () => {
+    test('Retry starts a new request, with the loading state, and the exposed id moves when its listing lands', async () => {
         getLibrary().mockResolvedValue(answer());
         const { result } = renderHook(() => useLibraryListing(7));
         await waitFor(() => expect(result.current.state.status).toBe('ready'));
@@ -242,10 +243,13 @@ describe('load and retry', () => {
             landsOn = result.current.retry();
         });
         expect(landsOn).toBe(before + 1);
-        expect(result.current.requestId).toBe(before + 1);
+        // The read is a new request, but the listing on screen is still the old one: its id holds until
+        // the new listing actually replaces it.
+        expect(result.current.requestId).toBe(before);
         expect(result.current.state.status).toBe('loading');
         retry.resolve(answer());
         await waitFor(() => expect(result.current.state.status).toBe('ready'));
+        expect(result.current.requestId).toBe(before + 1);
     });
 
     test.each([
@@ -274,7 +278,7 @@ describe('load and retry', () => {
 });
 
 describe('refresh', () => {
-    test('reads the current search again, keeps the listing on screen while it does, and the read is a new request at once', async () => {
+    test('reads the current search again, keeping the listing and its id on screen while it does; the landing listing brings the new id', async () => {
         getLibrary()
             .mockResolvedValueOnce(answer())
             .mockResolvedValueOnce(answer({ photos: [photo('p')] }));
@@ -290,7 +294,7 @@ describe('refresh', () => {
         });
         expect(landsOn).toBe(request + 1);
         expect(result.current.revalidating).toBe(true);
-        expect(result.current.requestId).toBe(request + 1);
+        expect(result.current.requestId).toBe(request);
         expect(ids(result.current.state as never)).toEqual(['p']);
         expect(getLibrary().mock.calls.at(-1)).toEqual([7, 'pink', 'fresh', 'submit', 0, 1]);
         read.resolve(answer({ photos: [photo('p'), photo('q')], readAtMs: 1_700_000_100_000 }));
@@ -650,6 +654,9 @@ describe('loadMore', () => {
         expect(result.current.state).toMatchObject({ status: 'ready', listing: { memberId: 'member-9' } });
         expect(result.current.known.size).toBe(2);
         expect(result.current.loadMoreFailed).toBeNull();
+        // The store is fed as well, so the chosen-photo chips can build their thumbnails from the batch.
+        const { result: member } = renderHook(() => useCurrentMember());
+        expect(member.current).toBe('member-9');
     });
 
     test('a new loadMore clears the failure of the last one while it reads', async () => {
