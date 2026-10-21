@@ -47,7 +47,7 @@ Commands:
   forget-payment <id> - Forget a join payment the app could not confirm (it got no answer), after checking on the
              GuruShots website that the coins were not taken. The next join asks for the price again; if the
              coins were taken, joining again charges a second time, and auto-join may join it again within its
-             coin budget. A record from an older version cannot be forgotten: it stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days.
+             coin budget.
   list-photos [--challenge=<id>] [--search=<tag>] - List your photo ids, to choose them for auto-join / auto-submit.
              With --challenge each photo shows whether that challenge accepts it.
   list-photos --challenge=<id> --suggest - Rank your photos for that challenge by your auto-submit rules and list

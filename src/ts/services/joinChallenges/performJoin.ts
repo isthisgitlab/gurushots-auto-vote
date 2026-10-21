@@ -28,14 +28,13 @@ import { sanitizeLogString } from '../../logger/sanitize';
 import { cat, inFlight, lockFor } from './shared';
 import type { Claim, JoinDeps, JoinOutcome, UnlockState } from './shared';
 import { alreadyJoined, claimsStale, failedNoCharge, unlockUnderLock } from './paidUnlock';
-import { claimOf, markJoined, markerKey, markerOwner, paidOwnerUnknown } from './unlockMarker';
+import { claimOf, markJoined } from './unlockMarker';
 import { dropChallenge } from '../libraryCache';
 import { pickJoinPhoto } from './photoPick';
 import type { JoinPick } from './photoPick';
 
-// A pending submit, worded by what is known of the payment: an unconfirmed one (the unlock got no answer) says so,
-// a bare claim from before accounts were told apart is an earlier payment record whose owner is unknown, and any
-// other claim is a payment that is known to have been taken.
+// A pending submit, worded by what is known of the payment: an unconfirmed one (the unlock got no answer) says so;
+// any other claim is a payment that is known to have been taken.
 const pendingOutcome = (claim: Claim | null, charged: number): JoinOutcome => {
     const base = { status: 'charged-pending-submit', charged };
     if (claim?.unconfirmed) {
@@ -43,7 +42,7 @@ const pendingOutcome = (claim: Claim | null, charged: number): JoinOutcome => {
         const before = claim.coinsBefore === null ? {} : { coinsBefore: claim.coinsBefore };
         return { ...base, reason: 'unconfirmed', ...before };
     }
-    return claim?.legacy ? { ...base, reason: 'earlier-payment' } : base;
+    return base;
 };
 
 /**
@@ -55,12 +54,10 @@ const markClaimJoined = async (
     deps: JoinDeps,
     id: string | number,
     claim: Claim,
-    owner: string | null,
     holdsLock: boolean,
 ): Promise<void> => {
-    const ownKey = markerKey(id, owner);
     if (holdsLock) {
-        await markJoined(deps, claim.key, ownKey);
+        await markJoined(deps, claim.key);
         return;
     }
     const lock = lockFor(deps, id);
@@ -72,7 +69,7 @@ const markClaimJoined = async (
         return;
     }
     try {
-        await markJoined(deps, claim.key, ownKey);
+        await markJoined(deps, claim.key);
     } finally {
         lock.release();
     }
@@ -91,7 +88,6 @@ const submitJoin = async (
     needsCoins: number,
     imageId: string,
     { charged, alreadyUnlocked, claim }: UnlockState,
-    owner: string | null,
     holdsLock: boolean,
 ): Promise<JoinOutcome> => {
     const id = challenge?.id;
@@ -104,11 +100,9 @@ const submitJoin = async (
     }
     const submit = await deps.submitToChallenge(id, [imageId], token);
     if (submit?.ok) {
-        // Only the coins this join spent are its to clear: a free join must not delete a marker that is
-        // another account's (a bare one from before accounts were told apart), or its owner is charged twice.
-        // A paid submit that succeeds proves this account held the unlock: the claim it used stays, marked joined,
-        // bare or not, for a process that read the open list before this join.
-        if (needsCoins > 0 && claim) await markClaimJoined(deps, id, claim, owner, holdsLock);
+        // A paid submit that succeeds proves the unlock was held: the claim it used stays, marked joined,
+        // for a process that read the open list before this join.
+        if (needsCoins > 0 && claim) await markClaimJoined(deps, id, claim, holdsLock);
         // The photo chooser's listing for it was read before the challenge had this entry.
         dropChallenge(String(id));
         cat().success(
@@ -141,13 +135,12 @@ const submitOnClaim = async (
     deps: JoinDeps,
     needsCoins: number,
     imageId: string,
-    owner: string | null,
 ): Promise<JoinOutcome> => {
     const lock = lockFor(deps, challenge?.id);
     if (!lock.ok) return { status: 'busy', charged: 0 };
     try {
         if (await claimsStale(challenge, deps, 'submitting')) return failedNoCharge();
-        const claim = claimOf(deps.joinStateStore, challenge?.id, owner);
+        const claim = claimOf(deps.joinStateStore, challenge?.id);
         if (!claim) {
             cat().warning(`${logger.challengeTag(challenge)}: the unlock marker is gone — not submitting`, null);
             return failedNoCharge();
@@ -161,7 +154,6 @@ const submitOnClaim = async (
                 needsCoins,
                 imageId,
                 { charged: 0, alreadyUnlocked: true, claim },
-                owner,
                 true,
             ))
         );
@@ -177,8 +169,8 @@ const submitOnClaim = async (
  */
 const noPhotoOutcome = (reason: JoinPick['reason'], owedClaim: Claim | null): JoinOutcome => {
     if (owedClaim) {
-        // A payment that may not have happened (or whose owner is unknown) is what the user is told about first.
-        if (owedClaim.unconfirmed || owedClaim.legacy) return pendingOutcome(owedClaim, 0);
+        // A payment that may not have happened is what the user is told about first.
+        if (owedClaim.unconfirmed) return pendingOutcome(owedClaim, 0);
         return reason === 'unreadable'
             ? pendingOutcome(owedClaim, 0)
             : { status: 'charged-pending-submit', charged: 0, reason: 'no-photo' };
@@ -198,7 +190,7 @@ const noPhotoOutcome = (reason: JoinPick['reason'], owedClaim: Claim | null): Jo
  * @param options.priceCeiling the price the decision to join used (the automatic pass): the open list is read again
  *   right before the claim, and a price above it, or one that cannot be read, spends nothing
  * @param options.submitOnly the caller saw an unlock marker and skipped the price and balance checks
- *   on that account: if this call's own read of the marker finds none (another process cleared it,
+ *   on it: if this call's own read of the marker finds none (another process cleared it,
  *   or the file is unreadable) nothing is unlocked — a charge nobody consented to
  *
  * status ∈ joined | skipped-no-photo | skipped-no-chosen |
@@ -228,16 +220,8 @@ const performJoin = async (
         // spent must submit something, so Submit Only Chosen Photos is lifted for
         // it — stranding paid coins behind a skipped pick would be worse than an
         // automatic photo.
-        const owner = await markerOwner(token, deps);
-        if (needsCoins > 0 && paidOwnerUnknown(deps, owner)) {
-            cat().warning(
-                `${logger.challengeTag(challenge)}: the account could not be identified — not joining a paid challenge`,
-                null,
-            );
-            return { ...failedNoCharge(), reason: 'account-unknown' };
-        }
         if (needsCoins > 0 && (await claimsStale(challenge, deps, 'joining a paid challenge'))) return failedNoCharge();
-        const claim = claimOf(deps.joinStateStore, id, owner);
+        const claim = claimOf(deps.joinStateStore, id);
         const joined = needsCoins > 0 ? alreadyJoined(challenge, claim) : null;
         if (joined) return joined;
         let unlock: UnlockState = { charged: 0, alreadyUnlocked: claim !== null, claim };
@@ -258,16 +242,16 @@ const performJoin = async (
 
         // 2. Paid unlock (skipped when a prior pass already unlocked → retry submit only).
         if (needsCoins > 0 && !unlock.alreadyUnlocked) {
-            const claimed = await unlockUnderLock(challenge, token, deps, needsCoins, owner, coinsBefore, priceCeiling);
+            const claimed = await unlockUnderLock(challenge, token, deps, needsCoins, coinsBefore, priceCeiling);
             if ('outcome' in claimed) return claimed.outcome;
             unlock = claimed;
         }
 
         // 3. Submit the photo (the actual join).
         if (needsCoins > 0 && unlock.alreadyUnlocked) {
-            return await submitOnClaim(challenge, token, deps, needsCoins, imageId, owner);
+            return await submitOnClaim(challenge, token, deps, needsCoins, imageId);
         }
-        return await submitJoin(challenge, token, deps, needsCoins, imageId, unlock, owner, false);
+        return await submitJoin(challenge, token, deps, needsCoins, imageId, unlock, false);
     } finally {
         inFlight.delete(key);
     }

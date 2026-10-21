@@ -724,28 +724,6 @@ describe('join', () => {
         expect(msgs('error')[0]).not.toContain('reports');
     });
 
-    test("an earlier payment record is worded as an older version's, possibly another account's, and shows no balances", async () => {
-        handlers['join-challenge'].mockResolvedValue(
-            invalid({ status: 'charged-pending-submit', reason: 'earlier-payment', cost: 100, coinsBefore: 500 }),
-        );
-        await joinChallengeCmd('7');
-        expect(msgs('error')).toEqual([
-            `Challenge 7 has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. The join did not finish. ${RERUN} The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.`,
-        ]);
-        expect(msgs('error')[0]).not.toContain('forget-payment');
-        expect(handlers['get-bankroll']).not.toHaveBeenCalled();
-    });
-
-    test('an account that could not be identified says so, instead of "no coins were charged"', async () => {
-        handlers['join-challenge'].mockResolvedValue(
-            invalid({ status: 'failed-no-charge', reason: 'account-unknown', cost: 100 }),
-        );
-        await joinChallengeCmd('7');
-        expect(msgs('error')).toEqual([
-            'Could not confirm which account is logged in, so this attempt to join 7 spent no coins. Try again shortly, or run "login" again.',
-        ]);
-    });
-
     test('a challenge this account has already joined says so and spent nothing, and is not a success of this call', async () => {
         handlers['join-challenge'].mockResolvedValue(
             invalid({ status: 'failed-no-charge', reason: 'already-joined', cost: 100 }),
@@ -894,18 +872,12 @@ describe('forget-payment', () => {
             'info',
             'Forgot the unconfirmed payment for 7. If the coins were in fact taken, joining it again charges you a second time, and auto-join may join it again within its coin budget. Run "join 7"',
         ],
-        [
-            'legacy-record',
-            'error',
-            'is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days.',
-        ],
         ['nothing-to-forget', 'error', 'Nothing to forget for 7'],
         [
             'busy',
             'error',
             'A join of 7 is in progress, or another process is using the saved payment records. Nothing was changed.',
         ],
-        ['account-unknown', 'error', 'Could not confirm which account is logged in, so nothing was changed'],
         ['locks-unavailable', 'error', 'The app cannot create its lock files in its data folder'],
         ['not-authenticated', 'error', 'Not logged in'],
         [

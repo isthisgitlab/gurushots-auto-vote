@@ -13,11 +13,9 @@ import type { ForgetStatus } from '../../../types/join';
 // the general one.
 const PROBLEM_TEXT: Record<Exclude<ForgetStatus, 'forgotten'>, string> = {
     'nothing-to-forget': 'app.discoverForgetNothing',
-    'legacy-record': 'app.discoverForgetLegacyRecord',
     busy: 'app.discoverForgetBusy',
     unreadable: 'app.discoverForgetUnreadable',
     'locks-unavailable': 'app.locksUnavailable',
-    'account-unknown': 'app.discoverForgetAccountUnknown',
     'not-authenticated': 'app.discoverForgetNotAuthenticated',
 };
 

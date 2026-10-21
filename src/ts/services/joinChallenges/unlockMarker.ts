@@ -8,13 +8,40 @@ import { isPlainObject } from '../../plainObject';
 import { acquireWithin } from '../../lockWait';
 import type { RawJsonStore } from '../../types/stores';
 import { errorMessage } from '../../errorMessage';
-import * as logger from '../../logger';
-import { resolveMemberId } from '../autoFill/memberIdentity';
 import { sanitizeLogString } from '../../logger/sanitize';
 import { cat, lockFor } from './shared';
 import type { Claim, JoinDeps } from './shared';
 import type { ForgetStatus } from '../../types/join';
 import { throughStore } from '../../settings/storeTransport';
+
+// The challenge id of a stored claim key. A claim is keyed by its challenge id; a stored key of the form
+// `<member id>:<challenge id>` is read as its challenge id, so such a record keeps protecting the challenge
+// it was paid on.
+const idOfKey = (key: string) => key.slice(key.lastIndexOf(':') + 1);
+
+const has = (state: Record<string, unknown>, key: string) => Object.prototype.hasOwnProperty.call(state, key);
+
+const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+// How protective a stored record is, most first: an unconfirmed payment (the user can still be asked about it),
+// then one whose join has not landed, then a joined one.
+const protectiveness = (claim: unknown): number => {
+    if (!isPlainObject(claim)) return 1;
+    if (claim.unconfirmed === true) return 2;
+    return isFiniteNumber(claim.joinedAt) ? 0 : 1;
+};
+
+// The claims as they are keyed now: every stored key is read as its challenge id, and records that collapse
+// onto one id keep the most protective of themselves.
+const byChallengeId = (stored: Record<string, unknown>): Record<string, unknown> => {
+    const claims: Record<string, unknown> = {};
+    for (const key of Object.keys(stored)) {
+        const id = idOfKey(key);
+        const claim = stored[key];
+        if (!has(claims, id) || protectiveness(claim) > protectiveness(claims[id])) claims[id] = claim;
+    }
+    return claims;
+};
 
 // Parse the marker map's text, distinguishing "empty/never-written" (ok:true, {}) from
 // "unreadable/corrupt" (ok:false). A corrupt file must NOT silently look empty:
@@ -32,7 +59,7 @@ const parseClaims = (raw: string | null | undefined): { state: Record<string, un
     try {
         const parsed: unknown = JSON.parse(raw);
         if (isPlainObject(parsed)) {
-            return { state: parsed, ok: true };
+            return { state: byChallengeId(parsed), ok: true };
         }
         cat().warning('join-state file is malformed (not an object) — treating as unreadable', null);
         return { state: {}, ok: false };
@@ -66,79 +93,28 @@ const readUnlocked = (store: RawJsonStore | null | undefined) => readUnlockedSta
  */
 const refreshClaims = async (deps: JoinDeps): Promise<boolean> => (await deps.refreshJoinState?.()) ?? true;
 
-const has = (state: Record<string, unknown>, key: string) => Object.prototype.hasOwnProperty.call(state, key);
-
-/**
- * The account whose join this is: its member id, which survives a re-login (a token does not). Null
- * when it cannot be told (no profile read wired in, or the lookup failed).
- */
-const markerOwner = (token: string, deps: JoinDeps): Promise<string | null> =>
-    deps.getCurrentMemberProfile
-        ? resolveMemberId(token, deps.getCurrentMemberProfile, logger, 'join')
-        : Promise.resolve(null);
-
-// A marker is keyed `<member id>:<challenge id>`, so a challenge another account left a marker on is
-// not one this account has paid for. A marker from before accounts were told apart is keyed by the
-// challenge id alone: it stays in force for whoever reads it, which can only err towards not charging
-// twice. Without a member id (no profile read wired in: the mock, tests) a marker is the bare id.
-const markerKey = (id: string | number, owner: string | null) => (owner ? `${owner}:${id}` : String(id));
-
-/**
- * Whether the account of a PAID join cannot be told although it should be: a real marker store and a
- * profile read are wired in, but the member id did not come. Such a join does nothing paid — it could
- * neither tell whose coins a marker holds nor write a marker that belongs to anyone.
- */
-const paidOwnerUnknown = (deps: JoinDeps, owner: string | null): boolean =>
-    owner === null && Boolean(deps.joinStateStore) && Boolean(deps.getCurrentMemberProfile);
-
 // A claim this young is never pruned for a challenge missing from the list (see pruneClosedClaims).
 const CLAIM_PRUNE_MIN_AGE_MS = 6 * 60 * 60 * 1000;
-// A claim this old is dropped whoever's it is: no challenge lives that long.
+// A claim this old is dropped when its challenge is not in the open list: no challenge lives that long.
 const CLAIM_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
-const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-
 /**
- * The claim this account's join of the challenge continues from: its own keyed one, else a bare one from before
- * accounts were told apart (it counts for every account). Null when there is none.
+ * The claim the challenge's join continues from. Null when there is none.
  */
-const findClaim = (state: Record<string, unknown>, id: string | number, owner: string | null): Claim | null => {
-    const key = markerKey(id, owner);
-    // A key with a colon is some account's own (`<member id>:<challenge id>`), never a bare one.
-    const bare = String(id);
-    const found = has(state, key) ? key : has(state, bare) && !bare.includes(':') ? bare : null;
-    if (found === null) return null;
-    const value = state[found];
+const findClaim = (state: Record<string, unknown>, id: string | number): Claim | null => {
+    const key = String(id);
+    if (!has(state, key)) return null;
+    const value = state[key];
     const before = isPlainObject(value) ? value.coinsBefore : undefined;
     return {
-        key: found,
+        key,
         unconfirmed: isPlainObject(value) && value.unconfirmed === true,
-        legacy: found !== key,
         joined: isPlainObject(value) && isFiniteNumber(value.joinedAt),
         coinsBefore: isFiniteNumber(before) ? before : null,
     };
 };
 
-const claimOf = (store: RawJsonStore | null | undefined, id: string | number, owner: string | null) =>
-    findClaim(readUnlocked(store), id, owner);
-
-/**
- * Whether this account already paid for the (paid) candidate and only has its submit left: it must
- * be finished whatever the balance or the budget now say, since the charge itself lowered them. An
- * unconfirmed claim stands like any other until a paid submit that used it succeeds, or the user forgets it.
- */
-const paidByThisAccount = async (
-    challenge: { id?: string | number; join_coins?: number },
-    token: string,
-    deps: JoinDeps,
-): Promise<boolean> => {
-    const cost = Number(challenge?.join_coins);
-    if (challenge?.id == null || !(cost > 0) || !deps.joinStateStore) return false;
-    const owner = await markerOwner(token, deps);
-    // A claim that could not be looked for again is not known to be there: not read as "already paid".
-    if (!(await refreshClaims(deps))) return false;
-    return !paidOwnerUnknown(deps, owner) && claimOf(deps.joinStateStore, challenge.id, owner) !== null;
-};
+const claimOf = (store: RawJsonStore | null | undefined, id: string | number) => findClaim(readUnlocked(store), id);
 
 // The claims file is one file for every challenge, so a change of it is read-modify-write of the whole: two processes
 // changing different challenges would drop one of the changes. It is changed only under this lock, held briefly.
@@ -212,32 +188,24 @@ const changeClaims = async (
     }
 };
 
-// The challenge id of a stored claim key (`<member id>:<challenge id>`, or the bare id).
-const idOfKey = (key: string) => key.slice(key.lastIndexOf(':') + 1);
-
-// What recording the unlock claim came to: `recorded` (this call wrote it), `exists` (a claim of this account's was
-// there already, written by another process or an earlier pass: it is the one to continue from) or `failed` (the file
-// cannot be read, the file's lock cannot be had or a real store write fails).
+// What recording the unlock claim came to: `recorded` (this call wrote it), `exists` (a claim was there already,
+// written by another process or an earlier pass: it is the one to continue from) or `failed` (the file cannot be
+// read, the file's lock cannot be had or a real store write fails).
 type Unlocking = { status: 'recorded' } | { status: 'exists'; claim: Claim } | { status: 'failed' };
 
-// Persist the unlock claim — only when this account has none for the challenge yet (own or bare), decided inside
-// the same atomic change that writes it, on what is stored, so two holders of the challenge (the app window and the
-// background service, say) cannot both record one: exactly one gets `recorded`. A store of none (mock mode, which
-// spends no real coins) records. The caller MUST NOT spend coins unless it got `recorded`, or a crash / retry could
-// re-unlock and double-charge.
-const claimUnlock = async (
-    deps: JoinDeps,
-    id: string | number,
-    owner: string | null,
-    coinsBefore: number | null,
-): Promise<Unlocking> => {
+// Persist the unlock claim — only when there is none for the challenge yet, decided inside the same atomic change
+// that writes it, on what is stored, so two holders of the challenge (the app window and the background service,
+// say) cannot both record one: exactly one gets `recorded`. A store of none (mock mode, which spends no real
+// coins) records. The caller MUST NOT spend coins unless it got `recorded`, or a crash / retry could re-unlock
+// and double-charge.
+const claimUnlock = async (deps: JoinDeps, id: string | number, coinsBefore: number | null): Promise<Unlocking> => {
     if (!deps.joinStateStore) return { status: 'recorded' };
     // Set by the last call of the change, which may be made more than once.
     const seen: { claim: Claim | null } = { claim: null };
     const done = await changeClaims(deps, `persist unlock marker for ${sanitizeLogString(id)}`, (state) => {
-        seen.claim = findClaim(state, id, owner);
+        seen.claim = findClaim(state, id);
         if (seen.claim) return false;
-        state[markerKey(id, owner)] = {
+        state[String(id)] = {
             unlockedAt: Date.now(),
             ...(isFiniteNumber(coinsBefore) ? { coinsBefore } : {}),
         };
@@ -252,16 +220,16 @@ const claimUnlock = async (
  *
  * @returns whether the flag is on the claim now: a claim that could not be flagged reads as a confirmed one
  */
-const markUnconfirmed = async (deps: JoinDeps, id: string | number, owner: string | null): Promise<boolean> => {
+const markUnconfirmed = async (deps: JoinDeps, id: string | number): Promise<boolean> => {
     let flagged = false;
     const done = await changeClaims(
         deps,
         `flag the unlock marker for ${sanitizeLogString(id)} as unconfirmed`,
         (state) => {
-            const claim = state[markerKey(id, owner)];
+            const claim = state[String(id)];
             flagged = isPlainObject(claim);
             if (!isPlainObject(claim)) return false;
-            state[markerKey(id, owner)] = { ...claim, unconfirmed: true };
+            state[String(id)] = { ...claim, unconfirmed: true };
             return true;
         },
     );
@@ -269,15 +237,14 @@ const markUnconfirmed = async (deps: JoinDeps, id: string | number, owner: strin
 };
 
 /**
- * Removes one claim, by the key it is stored under. Never a claim that was not read as the one in use: a bare
- * one may be another account's protection against a second charge.
+ * Removes one claim, by its key.
  *
  * @returns how the change ended: `done` means the claim is gone (or was never there)
  */
 const clearUnlocked = (deps: JoinDeps, key: string, waitMs?: number): Promise<Changed> =>
     changeClaims(
         deps,
-        `clear unlock marker for ${sanitizeLogString(idOfKey(key))}`,
+        `clear unlock marker for ${sanitizeLogString(key)}`,
         (state) => {
             if (!has(state, key)) return false;
             delete state[key];
@@ -291,49 +258,36 @@ const clearUnlocked = (deps: JoinDeps, key: string, waitMs?: number): Promise<Ch
  * before it (and then spent a while picking a photo) finds the proof under the lock and does not unlock again. It
  * is never forgettable, and pruning removes it once its challenge has left the list. Nothing but the time of the
  * unlock and of the join is kept: the balance before the payment and any doubt about it have no purpose left.
- * A bare claim from before accounts were told apart is replaced, in the same change, by this account's own joined
- * claim: a bare one that stayed would end the join for every other account on the device.
  *
  * @param key - the key of the claim the join used
- * @param ownKey - the key of this account's claim of the challenge (the same key when the claim is its own)
  */
-const markJoined = async (deps: JoinDeps, key: string, ownKey: string): Promise<void> => {
-    await changeClaims(deps, `mark the unlock marker for ${sanitizeLogString(idOfKey(key))} as joined`, (state) => {
+const markJoined = async (deps: JoinDeps, key: string): Promise<void> => {
+    await changeClaims(deps, `mark the unlock marker for ${sanitizeLogString(key)} as joined`, (state) => {
         const claim = state[key];
         if (!isPlainObject(claim)) return false;
-        delete state[key];
-        state[ownKey] = { unlockedAt: claim.unlockedAt, joinedAt: Date.now() };
+        state[key] = { unlockedAt: claim.unlockedAt, joinedAt: Date.now() };
         return true;
     });
 };
 
 type ForgetResult = Extract<
     ForgetStatus,
-    'forgotten' | 'nothing-to-forget' | 'legacy-record' | 'busy' | 'unreadable' | 'locks-unavailable'
+    'forgotten' | 'nothing-to-forget' | 'busy' | 'unreadable' | 'locks-unavailable'
 >;
 
 /**
- * What the user may forget: this account's claim for the challenge when it is still unconfirmed. Never a confirmed
- * claim (its coins are known to be taken). A bare claim from before accounts were told apart is never forgotten
- * either: it may be ANOTHER account's protection against a second charge, and nothing on this device can tell
- * whose. It stops applying to the other accounts once the account that paid joins (its claim then becomes that
- * account's own), and otherwise clears when it passes CLAIM_MAX_AGE_MS.
+ * What the user may forget: the claim for the challenge when it is still unconfirmed. Never a confirmed claim
+ * (its coins are known to be taken).
  *
- * @returns 'forgotten', 'nothing-to-forget' (no claim, or only a confirmed one), 'legacy-record' (a bare claim),
- *   'busy' (the claims file is locked by another process), 'locks-unavailable' (the app cannot create its lock
- *   files) or 'unreadable'
+ * @returns 'forgotten', 'nothing-to-forget' (no claim, or only a confirmed one), 'busy' (the claims file is locked
+ *   by another process), 'locks-unavailable' (the app cannot create its lock files) or 'unreadable'
  */
-const forgetClaim = async (deps: JoinDeps, id: string | number, owner: string | null): Promise<ForgetResult> => {
+const forgetClaim = async (deps: JoinDeps, id: string | number): Promise<ForgetResult> => {
     let result: ForgetResult = 'nothing-to-forget';
     const done = await changeClaims(deps, `forget the unlock marker for ${sanitizeLogString(id)}`, (state) => {
         result = 'nothing-to-forget';
-        const claim = findClaim(state, id, owner);
-        if (!claim) return false;
-        if (claim.legacy) {
-            result = 'legacy-record';
-            return false;
-        }
-        if (!claim.unconfirmed) return false;
+        const claim = findClaim(state, id);
+        if (!claim || !claim.unconfirmed) return false;
         delete state[claim.key];
         result = 'forgotten';
         return true;
@@ -345,31 +299,26 @@ const forgetClaim = async (deps: JoinDeps, id: string | number, owner: string | 
 
 /**
  * Drops claims that have outlived their use, so joinState.json does not grow for ever:
- *   - any claim, bare or of any account, older than CLAIM_MAX_AGE_MS (unless it is this account's own keyed claim
- *     of a challenge in the list just read): no challenge lives that long, and it ends the keeping of other
- *     accounts' records (and balances) for good. A bare claim is never kept by the list: that this account can see
- *     the challenge says nothing about whose the bare claim is;
- *   - this account's own joined claims whose challenge is no longer open, from a successful, non-empty open list (an
- *     empty one is never trusted, like the open-list memory of the settings facade). A claim whose join has not
- *     landed stays until the age above, whatever the list says. The list is this account's, so
- *     a challenge missing from it says nothing about another account's claim on it, nor about a bare claim.
- * A claim's age counts from its join once it has joined. An account that cannot be told prunes by age only. A claim
- * younger than CLAIM_PRUNE_MIN_AGE_MS is kept whatever
+ *   - any claim older than CLAIM_MAX_AGE_MS whose challenge is not in the list just read: no challenge lives that
+ *     long. A claim of a challenge still in the list is kept whatever its age: it is the protection against a
+ *     second charge;
+ *   - a joined claim whose challenge is no longer open, from a successful, non-empty open list (an empty one is
+ *     never trusted, like the open-list memory of the settings facade). A claim whose join has not landed stays
+ *     until the age above, whatever the list says: it is the proof that keeps the next join from paying again,
+ *     and one list read that misses its challenge must not end it.
+ * A claim's age counts from its join once it has joined. A claim younger than CLAIM_PRUNE_MIN_AGE_MS is kept whatever
  * the list says: it may belong to a join under way that the list, read a moment earlier, could not have known of.
  *
  * @param open - the open list the join code just read successfully
  */
 const pruneClosedClaims = async (
     open: ReadonlyArray<{ id?: string | number } | null>,
-    token: string,
     deps: JoinDeps,
 ): Promise<void> => {
     const store = deps.joinStateStore;
     const openIds = new Set(open.flatMap((c) => (c?.id == null ? [] : [String(c.id)])));
     if (!store || openIds.size === 0) return;
     if (Object.keys(readUnlocked(store)).length === 0) return;
-    const owner = await markerOwner(token, deps);
-    const ownerKnown = !paidOwnerUnknown(deps, owner);
     const now = Date.now();
     const age = (claim: unknown) => {
         const at = isPlainObject(claim) ? (claim.joinedAt ?? claim.unlockedAt) : undefined;
@@ -378,16 +327,13 @@ const pruneClosedClaims = async (
     const droppable = (key: string, claim: unknown) => {
         const claimAge = age(claim);
         if (claimAge === null) return false;
-        const sep = key.lastIndexOf(':');
-        const own = owner === null ? sep === -1 : key.startsWith(`${owner}:`);
-        const open = own && openIds.has(key.slice(sep + 1));
-        // Age alone never removes this account's own keyed claim of a challenge it can still join: that is its
-        // protection. A bare claim has no such protection: the list says nothing about whose it is.
-        if (claimAge >= CLAIM_MAX_AGE_MS) return sep === -1 || !open;
+        const open = openIds.has(key);
+        // Age alone never removes the claim of a challenge it can still join: that is its protection.
+        if (claimAge >= CLAIM_MAX_AGE_MS) return !open;
         // Only a joined claim goes on the list's say: a paid claim whose submit has not landed is the proof that
         // keeps the next join from paying again, and one list read that misses its challenge must not end it.
         const joined = isPlainObject(claim) && isFiniteNumber(claim.joinedAt);
-        return ownerKnown && own && joined && claimAge >= CLAIM_PRUNE_MIN_AGE_MS && !open;
+        return joined && claimAge >= CLAIM_PRUNE_MIN_AGE_MS && !open;
     };
     // A challenge whose unlock lock another process holds is mid-join: its claim is left alone.
     const held: Array<{ release: () => void }> = [];
@@ -399,7 +345,7 @@ const pruneClosedClaims = async (
             const stale = Object.keys(state)
                 .filter((key) => droppable(key, state[key]))
                 .filter((key) => {
-                    const lock = lockFor(deps, idOfKey(key));
+                    const lock = lockFor(deps, key);
                     if (lock.ok) held.push(lock);
                     return lock.ok;
                 });
@@ -418,15 +364,11 @@ const pruneClosedClaims = async (
 export {
     readUnlockedState,
     refreshClaims,
-    markerKey,
     findClaim,
     claimOf,
     pruneClosedClaims,
     markUnconfirmed,
     forgetClaim,
-    markerOwner,
-    paidOwnerUnknown,
-    paidByThisAccount,
     claimUnlock,
     markJoined,
     clearUnlocked,

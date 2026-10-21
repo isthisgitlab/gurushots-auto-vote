@@ -21,15 +21,7 @@ import {
     warnMissingCloseTime,
 } from './settingsResolution';
 import { performJoin } from './performJoin';
-import {
-    claimOf,
-    markerKey,
-    markerOwner,
-    paidByThisAccount,
-    paidOwnerUnknown,
-    pruneClosedClaims,
-    refreshClaims,
-} from './unlockMarker';
+import { claimOf, pruneClosedClaims, refreshClaims } from './unlockMarker';
 
 /**
  * Mutable per-pass join state: the balance and budget kept locally accurate as
@@ -181,7 +173,7 @@ const noteJoinSafetySkip = (challenge: Challenge, reason: 'full' | 'price-unknow
     else cat().debug(message, null);
 };
 
-// Account + challenge pairs already warned about a paid-but-not-entered join: once per pair per process.
+// Challenges already warned about a paid-but-not-entered join: once per challenge per process.
 const warnedPaidNotEntered = new Set<string>();
 
 /**
@@ -190,9 +182,9 @@ const warnedPaidNotEntered = new Set<string>();
  * the user enters it from Discover: choose the photo for that challenge (Chosen Photos), then press Join, which
  * tries those photos first.
  */
-const noteUnenteredPaidJoin = async (challenge: Challenge, token: string, deps: JoinDeps): Promise<void> => {
-    const key = markerKey(String(challenge?.id), await markerOwner(token, deps));
-    if (warnedPaidNotEntered.has(key) || !(await paidByThisAccount(challenge, token, deps))) return;
+const noteUnenteredPaidJoin = async (challenge: Challenge, deps: JoinDeps): Promise<void> => {
+    const key = String(challenge?.id);
+    if (warnedPaidNotEntered.has(key) || !(await paidAlready(challenge, deps))) return;
     warnedPaidNotEntered.add(key);
     cat().warning(
         `Manual Only is on for ${logger.challengeTag(challenge)}: the join was already paid for, but no photo is entered automatically — enter one from Discover: choose the photo for this challenge (Chosen Photos), then press Join`,
@@ -201,22 +193,27 @@ const noteUnenteredPaidJoin = async (challenge: Challenge, token: string, deps: 
 };
 
 /**
- * Whether this account holds an unlock claim for the challenge, whatever the listing now costs.
- * `paidByThisAccount` reads claims only for a positive price, so a claim whose listing has since
- * dropped to 0 (or whose price field is gone) is invisible to it — and the fresh guard would strand
- * the already-paid unlock. The same building blocks with the cost gate off, and the same fail-safe:
- * an account that cannot be identified, or claims that cannot be read again, are not read as a claim.
+ * Whether the challenge holds an unlock claim, at a positive listing price: a free candidate is not looked up at
+ * all. A claim that could not be looked for again is not known to be there: not read as "already paid".
  */
-const claimWhateverCost = async (
-    challenge: { id?: string | number },
-    token: string,
+const paidAlready = async (
+    challenge: { id?: string | number; join_coins?: number },
     deps: JoinDeps,
 ): Promise<boolean> => {
-    if (challenge?.id == null || !deps.joinStateStore) return false;
-    const owner = await markerOwner(token, deps);
-    // A claim that could not be looked for again is not known to be there: not read as "already paid".
+    const cost = Number(challenge?.join_coins);
+    if (challenge?.id == null || !(cost > 0) || !deps.joinStateStore) return false;
     if (!(await refreshClaims(deps))) return false;
-    return !paidOwnerUnknown(deps, owner) && claimOf(deps.joinStateStore, challenge.id, owner) !== null;
+    return claimOf(deps.joinStateStore, challenge.id) !== null;
+};
+
+/**
+ * The same claim whatever the listing now costs: a claim beats the full/price guard even once the price reads 0
+ * or is gone — the coins were paid when the price was positive.
+ */
+const claimWhateverCost = async (challenge: { id?: string | number }, deps: JoinDeps): Promise<boolean> => {
+    if (challenge?.id == null || !deps.joinStateStore) return false;
+    if (!(await refreshClaims(deps))) return false;
+    return claimOf(deps.joinStateStore, challenge.id) !== null;
 };
 
 /**
@@ -238,10 +235,10 @@ const joinCandidate = async (
     }
     // Manual Only: the join would enter a photo by itself, so it is left to the user.
     if (resolveJoinSetting('manualPhotosOnly', challenge) === true) {
-        await noteUnenteredPaidJoin(challenge, token, deps);
+        await noteUnenteredPaidJoin(challenge, deps);
         return 'skipped:manual-photos-only';
     }
-    const alreadyPaid = await paidByThisAccount(challenge, token, deps);
+    const alreadyPaid = await paidAlready(challenge, deps);
     const cfg = resolveCandidateConfig(challenge);
     const decision = decideCandidateJoin(challenge, cfg, pass, alreadyPaid);
     let submitOnly = alreadyPaid;
@@ -251,7 +248,7 @@ const joinCandidate = async (
             // The guard refuses a FRESH join; a claim on file beats it whatever the listing now costs —
             // the price may have dropped to 0 since the unlock was paid, and only the submit is left.
             // With a claim the join goes ahead as the paid retry does: submit only, never an unlock.
-            if (!(await claimWhateverCost(challenge, token, deps))) {
+            if (!(await claimWhateverCost(challenge, deps))) {
                 noteJoinSafetySkip(challenge, decision.reason, cfg.hasProfileMatch);
                 return `skipped:${decision.reason}`;
             }
@@ -397,7 +394,7 @@ const runJoinPass = async (
     }
 
     // After the joins, so each one's own reads of the claims come first.
-    await pruneClosedClaims(candidates, token, deps);
+    await pruneClosedClaims(candidates, deps);
     if (joined > 0) {
         cat().info(`join pass complete: joined ${joined} of ${candidates.length} open challenge(s)`, null);
     }

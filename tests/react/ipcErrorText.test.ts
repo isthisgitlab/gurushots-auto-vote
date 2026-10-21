@@ -70,7 +70,7 @@ describe('joinRefusalText', () => {
     });
 
     test('any other reason, and a missing one, stays missing: the status has its own text', () => {
-        for (const reason of ['no-photo', 'account-unknown', 'unconfirmed', 'already-joined']) {
+        for (const reason of ['no-photo', 'unconfirmed', 'already-joined']) {
             expect(joinRefusalText(reason, t)).toBeNull();
         }
         expect(joinRefusalText(undefined, t)).toBeNull();

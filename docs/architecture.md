@@ -433,13 +433,14 @@ repeated six times is one that gets forgotten at one of them.
 - **Paid-join money safety** (`services/joinChallenges/performJoin.ts`, with the unlock claim in `unlockMarker.ts` and the in-flight lock in `shared.ts`): the order is load-bearing — resolve an eligible
   photo **before** any `coins_unlock` (no photo ⇒ skip, no spend); persist the unlock claim
   (`joinState.json`) **before** the charge so a crash can never let a later pass re-unlock (idempotent
-  retry), and if the claim can't be written, don't spend: on Android the background service writes it through the native bridge (`gs_join_state`, strict: a write the bridge refuses throws), and a store that could not be read (the bridge threw, or the app window's start-up read failed) reads as unreadable, never as no claims (`storeLoaded`). Whose coins a claim holds is part of its key: a
-  new claim is always written as `<member id>:<challenge id>` (the member id survives a re-login; a token
-  does not), so one account's leftover claim never makes another account's join a submit-only retry. A
-  bare `<challenge id>` claim, from before accounts were told apart, counts for every account (it can only
-  err towards not charging twice). **Claims are never settled automatically.** A claim ends in exactly two
-  ways: a paid submit that used it succeeds (the submit proves this account held the unlock, so the claim it
-  used goes, bare or not), or the user explicitly forgets it (below). A failure never clears one, a balance is
+  retry), and if the claim can't be written, don't spend: on Android the background service writes it through the native bridge (`gs_join_state`, strict: a write the bridge refuses throws), and a store that could not be read (the bridge threw, or the app window's start-up read failed) reads as unreadable, never as no claims (`storeLoaded`). A
+  claim is keyed by its challenge id. A stored key of the form `<member id>:<challenge id>` is read as its
+  challenge id, and records that collapse onto one id keep the most protective of
+  themselves (unconfirmed, then paid-not-joined, then joined); the normalized map is written back by the
+  next change of the claims, so those records keep protecting the challenge they were paid on.
+  **Claims are never settled automatically.** A claim ends in exactly two
+  ways: a paid submit that used it succeeds (the submit proves the unlock was held, so the claim it used
+  is marked joined — kept, as the proof — until pruning removes it), or the user explicitly forgets it (below). A failure never clears one, a balance is
   never read to decide whether a claim was charged (a timed-out unlock can still commit, a reward can equal
   the cost, another join can be paid in the same pass), and a free join removes none. **Refused vs unclear**
   (`api/api-client.ts`, `api/postOutcome.ts`): `coins_unlock` and the currency spends go through `postOnce`, a
@@ -463,33 +464,22 @@ repeated six times is one that gets forgotten at one of them.
   submits on that claim (`submitOnly`), so nothing can pay again without asking, and it does so under the
   cross-process unlock lock with the claim read again under it (a claim gone by then submits nothing, a lock
   another process holds answers `busy`); marking a claim joined after a successful submit takes the lock too; a submit that fails on an
-  unconfirmed claim answers `unconfirmed` again, and on a bare claim `reason: 'earlier-payment'` (a payment
-  record from before accounts were told apart, whose owner is unknown): both are worded for what is not known
-  (the GUI and CLI say that a retry only submits the photo, so nobody is charged twice). **Forgetting**
+  unconfirmed claim answers `unconfirmed` again, worded for what is not known (the GUI and CLI say that a
+  retry only submits the photo, so nobody is charged twice). **Forgetting**
   (`services/joinChallenges/forgetPayment.ts`, IPC `forget-unconfirmed-payment`, GUI "I wasn't charged" on a
   Discover row with a confirmation dialog, CLI `forget-payment <id>`): for a user who checked on GuruShots
   that the coins were not taken. Under the same cross-process lock as the unlock, and refused while a join of
-  the challenge is under way, it re-reads the claims (an unreadable file aborts), and deletes this account's
-  claim for the challenge only when it is still unconfirmed; never a claim known to have been charged. A
-  bare claim from before accounts were told apart is **never** forgotten (`legacy-record`): it may be another
-  account's protection against a second charge and nothing on the device can tell whose, so it stops applying
-  to the other accounts when the account that paid joins through this app (the join replaces it, in one change of the claims, by
-  that account's own joined claim), and otherwise clears after 30 days (any claim, bare or any account's, older than 30 days is pruned at the next open-list pruning,
-  except this account's own keyed claim of a challenge still in the list just read: a bare claim is never kept by
-  the list, since the list says nothing of whose it is; no challenge lives that long, and it ends the keeping of
-  other accounts' records and balances). The
-  GUI offers no "I wasn't charged" for it, and its message tells the account that did not pay it can join on
-  the GuruShots website meanwhile. A key with a colon is never read as a bare claim, and the IPC handler and
-  the CLI take only a plain challenge id (digits), so a crafted id cannot name another account's record. It
-  refuses when the account cannot be told. The next
+  the challenge is under way, it re-reads the claims (an unreadable file aborts), and deletes the
+  claim for the challenge only when it is still unconfirmed; never a claim known to have been charged.
+  The IPC handler and
+  the CLI take only a plain challenge id (digits), so a crafted id cannot name a record. The next
   join then asks for the price like any first one. Every change of the claims is read-modify-write of one
   file for every challenge, so it is made under its own cross-process lock (`joinstate`, taken after any
   challenge lock and waited for up to half a second; when it cannot be had the change fails, and an unlock
   records no claim, so spends nothing). Every writer of the claims reads them with
   `readUnlockedState` and writes nothing when the file is unreadable (read as empty it would wipe every other
-  claim; `markUnlocked` then returns false and nothing is spent), and logs by challenge id only, never by the
-  member id in a key. `markUnlocked` is a compare-and-set inside the locked change: it refuses when this
-  account's or a bare claim for the challenge already exists, so two writers never overwrite each other's claim.
+  claim; `claimUnlock` then reports `failed` and nothing is spent), and logs by challenge id only. `claimUnlock` is a compare-and-set inside the locked change: it refuses when a
+  claim for the challenge already exists, so two writers never overwrite each other's claim.
   The file is written whole to a temporary file (owner-only, flushed to disk, then renamed over the file, and its
   directory flushed where that can be), so a reader never sees it cut off; the temp files a crash left beside it
   (its own name pattern, untouched for a minute) are removed at the first read or write; an empty file reads as
@@ -510,16 +500,14 @@ repeated six times is one that gets forgotten at one of them.
   retry resumes there. The retry of such a step never spends again: it only looks at the live challenge, passes
   the step over when that positively shows it took effect (the boost unlocked by a key, the exposure full, the
   replacement photo entered) and goes on, and otherwise ends the rule — a swap whose replacement a selector
-  chooses cannot be shown to have landed, so it ends the rule too — instead of spending on it or on a later step. A **paid** join whose account cannot be identified (a real claim store and a profile read are
-  wired in, but no member id came) does nothing paid: no unlock, no submit, and it answers `failed-no-charge`
-  with `reason: 'account-unknown'`, which the GUI and CLI word as "could not confirm the account; this attempt
-  spent no coins", not as "no coins were charged". The reasons are one union (`types/join.ts`) shared by core
+  chooses cannot be shown to have landed, so it ends the rule too — instead of spending on it or on a later step. The reasons are one union (`types/join.ts`) shared by core
   and renderer. Claims whose challenge is no longer open are dropped when a successful, non-empty open list is
-  read (`pruneClosedClaims`, after the pass or manual join): only this account's own keyed claims, only ones
-  older than six hours (a list read a moment ago cannot know of a join under way), never on an unknown account,
-  never another account's or a bare one by that rule (age is the only way those go, above), and never a
-  challenge whose unlock lock another process holds. A manual join or an auto-join pass that
-  finds this account's claim skips the price, balance and budget checks and only submits (`submitOnly`: the
+  read (`pruneClosedClaims`, after the pass or manual join): only joined claims, and only ones
+  older than six hours (a list read a moment ago cannot know of a join under way), and never a
+  challenge whose unlock lock another process holds. A claim whose join has not landed is ended only by Forget,
+  or by its age: any claim older than 30 days whose challenge is not in the list just read is pruned at the next
+  open-list pruning (no challenge lives that long). A manual join or an auto-join pass that
+  finds a claim for the challenge skips the price, balance and budget checks and only submits (`submitOnly`: the
   join re-reads the claim and refuses to unlock if it is gone); with no eligible photo it answers
   `charged-pending-submit` with `reason: 'no-photo'` only when the photo library was actually read and held
   nothing eligible (the GUI and CLI lead with adding an eligible photo, and name Must Include Tags and Submit

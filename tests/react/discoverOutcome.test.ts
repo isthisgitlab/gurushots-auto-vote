@@ -23,12 +23,6 @@ test('a status says what it says, unless a reason makes it more exact', () => {
         retry: true,
         forget: false,
     });
-    expect(outcomeMeta({ status: 'failed-no-charge', reason: 'account-unknown' })).toEqual({
-        key: 'app.discoverAccountUnknown',
-        variant: 'error',
-        retry: false,
-        forget: false,
-    });
     expect(outcomeMeta({ status: 'failed-no-charge', reason: 'already-joined' })).toEqual({
         key: 'app.discoverAlreadyJoined',
         variant: 'neutral',
@@ -37,19 +31,14 @@ test('a status says what it says, unless a reason makes it more exact', () => {
     });
 });
 
-test('an unconfirmed payment offers "I wasn\'t charged" as well as the retry; an older version\'s record only the retry', () => {
+test('an unconfirmed payment offers "I wasn\'t charged" as well as the retry', () => {
     expect(outcomeMeta({ status: 'charged-pending-submit', reason: 'unconfirmed' })).toEqual({
         key: 'app.discoverUnconfirmed',
         variant: 'error',
         retry: true,
         forget: true,
     });
-    expect(outcomeMeta({ status: 'charged-pending-submit', reason: 'earlier-payment' })).toEqual({
-        key: 'app.discoverEarlierPayment',
-        variant: 'error',
-        retry: true,
-        forget: false,
-    });
+    expect(outcomeMeta({ status: 'charged-pending-submit' }).forget).toBe(false);
 });
 
 test('a reason that does not belong to the status changes nothing', () => {

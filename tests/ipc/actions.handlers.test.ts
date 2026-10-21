@@ -1334,29 +1334,24 @@ describe('forget-unconfirmed-payment', () => {
         expect(result).toEqual({ success: true, status: 'forgotten' });
     });
 
-    test.each([
-        'nothing-to-forget',
-        'legacy-record',
-        'busy',
-        'account-unknown',
-        'unreadable',
-        'locks-unavailable',
-        'not-authenticated',
-    ] as const)('a %s answer is a failure that names it, and never throws', async (status) => {
-        stubAuthGuardOk();
-        stubStrategy({
-            forgetUnconfirmedPayment: jest
-                .fn<Promise<ForgetOutcome>, [string | number, string]>()
-                .mockResolvedValue({ status, challengeId: 5 }),
-        });
-        expect(await buildHandlers()['forget-unconfirmed-payment']({}, 5)).toEqual({
-            success: false,
-            error: status,
-            status,
-        });
-    });
+    test.each(['nothing-to-forget', 'busy', 'unreadable', 'locks-unavailable', 'not-authenticated'] as const)(
+        'a %s answer is a failure that names it, and never throws',
+        async (status) => {
+            stubAuthGuardOk();
+            stubStrategy({
+                forgetUnconfirmedPayment: jest
+                    .fn<Promise<ForgetOutcome>, [string | number, string]>()
+                    .mockResolvedValue({ status, challengeId: 5 }),
+            });
+            expect(await buildHandlers()['forget-unconfirmed-payment']({}, 5)).toEqual({
+                success: false,
+                error: status,
+                status,
+            });
+        },
+    );
 
-    // A claim is keyed `<member id>:<challenge id>`: an id with a colon in it could name another account's record.
+    // A claim is keyed by its challenge id: an id with a colon in it is not one.
     test.each([['555:123'], ['abc'], ['1.5'], ['-1'], [' 5'], ['5\n'], ['0x10'], [1.5], [-1]])(
         'the id %p is not a plain challenge id: refused, and nothing is forgotten',
         async (id) => {

@@ -727,8 +727,6 @@ export const app = {
         'Coins were already spent, but no photo qualifies for this challenge. Add an eligible photo, then press Retry submit: you will not be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.',
     discoverUnconfirmed:
         'The payment for this challenge got no answer, so it may or may not have gone through. Retrying only submits your photo, so you are never charged twice. If the GuruShots website shows the coins were not taken, press "I wasn\'t charged", then join again.',
-    discoverEarlierPayment:
-        'This challenge has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. Retry submit is for the account that paid: it only submits the photo, so nobody is charged twice. The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.',
     discoverForgetPayment: "I wasn't charged",
     discoverForgetPaymentLabel: "I wasn't charged for {title}",
     discoverForgetTitle: 'Forget this payment?',
@@ -742,10 +740,6 @@ export const app = {
     discoverForgetWorking: 'Forgetting…',
     discoverForgetNothing:
         'There was nothing to forget: the payment is already confirmed, or the join has finished. Refresh the list.',
-    discoverForgetAccountUnknown:
-        'Could not confirm which account is logged in, so nothing was changed. Try again shortly, or log in again.',
-    discoverForgetLegacyRecord:
-        'This record is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. Nothing was changed.',
     discoverForgetBusy:
         'A join of this challenge is in progress, or another part of the app is using the saved payment records. Nothing was changed. Try again in a moment.',
     discoverForgetNotAuthenticated: 'You are not logged in, so nothing was changed. Log in again, then try once more.',
@@ -754,8 +748,6 @@ export const app = {
     discoverForgetUnreadableAndroid:
         'The saved payment records could not be read, so nothing was changed. Restart the app and try again. If it keeps happening, the app\'s saved join state is unreadable: check your coin history on the GuruShots website first, then open Settings → About and data in this app and choose "Delete all local data…" (this also logs you out and resets the app\'s settings).',
     discoverForgetFailed: 'Could not forget the payment right now. Nothing was changed. Try again in a moment.',
-    discoverAccountUnknown:
-        'Could not confirm which account is logged in, so this attempt did nothing and spent no coins. Try again shortly, or log in again.',
     discoverAlreadyJoined:
         'This account has already joined this challenge, so nothing was spent. The list updates at the next check.',
     discoverConfirmDialogFirst: 'Confirm or cancel the open dialog first, then join again.',

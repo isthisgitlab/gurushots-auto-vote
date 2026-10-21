@@ -135,15 +135,8 @@ const balanceHint = (before: number | undefined, now: number | null): string => 
 
 // The line for a join that cannot tell whether its payment was taken: what is not known, why it is safe to retry,
 // and the way out when GuruShots shows the coins were not taken.
-const unconfirmedText = (
-    reason: 'unconfirmed' | 'earlier-payment',
-    challengeId: string | number,
-    balances: { before?: number; now: number | null },
-) => {
+const unconfirmedText = (challengeId: string | number, balances: { before?: number; now: number | null }) => {
     const rerun = `Re-run "join ${challengeId}": it only submits your photo, so you are never charged twice.`;
-    if (reason === 'earlier-payment') {
-        return `Challenge ${challengeId} has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. The join did not finish. ${rerun} The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.`;
-    }
     return `The payment for ${challengeId} got no answer, so it may or may not have gone through, and the join did not finish.${balanceHint(balances.before, balances.now)} ${rerun} If the GuruShots website shows the coins were not taken, run "forget-payment ${challengeId}" and join again.`;
 };
 
@@ -178,10 +171,10 @@ const joinLine = (
                     text: `Coins were already spent on ${challengeId}, but no photo qualifies for this challenge. Add an eligible photo, then re-run "join ${challengeId}" — you will NOT be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.`,
                 };
             }
-            if (result?.reason === 'unconfirmed' || result?.reason === 'earlier-payment') {
+            if (result?.reason === 'unconfirmed') {
                 return {
                     level: 'error',
-                    text: unconfirmedText(result.reason, challengeId, { before: result.coinsBefore, now: coinsNow }),
+                    text: unconfirmedText(challengeId, { before: result.coinsBefore, now: coinsNow }),
                 };
             }
             return {
@@ -189,12 +182,6 @@ const joinLine = (
                 text: `Coins were charged for ${challengeId} but the join did not complete. Re-run "join ${challengeId}" to retry the submit — you will NOT be charged again.`,
             };
         case 'failed-no-charge':
-            if (result?.reason === 'account-unknown') {
-                return {
-                    level: 'error',
-                    text: `Could not confirm which account is logged in, so this attempt to join ${challengeId} spent no coins. Try again shortly, or run "login" again.`,
-                };
-            }
             if (result?.reason === 'already-joined') {
                 return {
                     level: 'info',
@@ -330,20 +317,10 @@ const FORGET_LINES: Record<ForgetStatus, ForgetLine> = {
         text: (id) =>
             `Nothing to forget for ${id}: no unconfirmed payment is recorded for it (a payment known to have been taken cannot be forgotten).`,
     },
-    'legacy-record': {
-        level: 'error',
-        text: (id) =>
-            `The payment record for ${id} is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. Nothing was changed.`,
-    },
     busy: {
         level: 'error',
         text: (id) =>
             `A join of ${id} is in progress, or another process is using the saved payment records. Nothing was changed. Try again in a moment.`,
-    },
-    'account-unknown': {
-        level: 'error',
-        text: () =>
-            'Could not confirm which account is logged in, so nothing was changed. Try again shortly, or run "login" again.',
     },
     'locks-unavailable': {
         level: 'error',

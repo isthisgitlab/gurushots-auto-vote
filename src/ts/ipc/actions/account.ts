@@ -340,8 +340,7 @@ const handleJoinChallenge = (async (
  * challenge asks for its price. Never touches a claim known to be charged.
  */
 const handleForgetUnconfirmedPayment = (async (event: unknown, challengeId: string | number) => {
-    // A plain challenge id only: a claim is keyed `<member id>:<challenge id>`, and an id with a colon in it must
-    // never be able to name another record.
+    // A plain challenge id only: claims are keyed by their challenge id, so an id with a colon in it names no record.
     if (!isIdArg(challengeId) || !/^\d+$/.test(String(challengeId))) {
         return refuseInvalidArgs('join', 'forget-unconfirmed-payment');
     }

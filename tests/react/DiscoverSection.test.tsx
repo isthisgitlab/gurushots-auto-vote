@@ -457,22 +457,6 @@ describe('a paid row that was already charged', () => {
         expect(screen.queryByText('app.discoverChecking')).toBeNull();
     });
 
-    test('an account that could not be identified says so, and the row can be tried again', async () => {
-        window.api.joinChallenge = joinMock().mockResolvedValue(
-            invalid({ success: false, status: 'failed-no-charge', reason: 'account-unknown', cost: 100 }),
-        );
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
-        await screen.findByText('Paid One');
-        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
-        const note = await screen.findByText('app.discoverAccountUnknown');
-        expect(note.getAttribute('role')).toBe('alert');
-        expect(screen.queryByText('app.discoverJoinFailed')).toBeNull();
-        const again = screen.getByText<HTMLButtonElement>('app.discoverJoinPaid');
-        expect(again.disabled).toBe(false);
-        fireEvent.click(again);
-        await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledTimes(2));
-    });
-
     test('an answer that arrives while a dialog is open, quoting another price, reprices nothing and tells its row to wait', async () => {
         const paid = (id: number, title: string, join_coins: number) => ({ ...items[1], id, title, join_coins });
         window.api.getMemberChallenges = listMock().mockResolvedValue(
@@ -781,7 +765,7 @@ describe('edge paths', () => {
         expect(onJoined).toHaveBeenCalledTimes(2);
     });
 
-    test('retry submit with no marker behind it (another account, a lookup that blipped) opens the price dialog, spending nothing', async () => {
+    test('retry submit with no marker behind it (a lookup that blipped) opens the price dialog, spending nothing', async () => {
         window.api.joinChallenge = spendLater({ status: 'charged-pending-submit', cost: 100 });
         renderSection();
         await screen.findByText('Paid One');
@@ -816,7 +800,7 @@ describe('edge paths', () => {
         expect(screen.queryByText('app.discoverJoinPaid')).toBeNull();
     });
 
-    test.each([undefined, 'unconfirmed', 'earlier-payment'])(
+    test.each([undefined, 'unconfirmed'])(
         'a charged row (reason %s) has one button, Retry submit, named without a cost and not in the warning colour; it spends nothing',
         async (reason) => {
             window.api.joinChallenge = joinMock().mockResolvedValue(
@@ -894,7 +878,7 @@ describe('edge paths', () => {
             expect(screen.getByText('app.discoverRetrySubmit')).toBeTruthy();
         });
 
-        test.each([undefined, 'no-photo', 'earlier-payment'])(
+        test.each([undefined, 'no-photo'])(
             'a payment known to have been taken (reason %s) does not',
             async (reason) => {
                 window.api.joinChallenge = pendingWith(reason);
@@ -1019,8 +1003,6 @@ describe('edge paths', () => {
 
         test.each([
             ['nothing-to-forget', 'app.discoverForgetNothing'],
-            ['account-unknown', 'app.discoverForgetAccountUnknown'],
-            ['legacy-record', 'app.discoverForgetLegacyRecord'],
             ['busy', 'app.discoverForgetBusy'],
             ['unreadable', 'app.discoverForgetUnreadable'],
             ['locks-unavailable', 'app.locksUnavailable'],
