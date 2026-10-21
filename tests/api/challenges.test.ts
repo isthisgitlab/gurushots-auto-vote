@@ -10,6 +10,7 @@ import type * as api_clientModule from '../../src/ts/api/api-client';
 import type * as challengeTitlePinModule from '../../src/ts/services/challengeTitlePin';
 import type * as loggerModule from '../../src/ts/logger';
 import type * as teamMatchModule from '../../src/ts/strategies/real/teamMatch';
+import type * as suggestedPhotosModule from '../../src/ts/strategies/real/suggestedPhotos';
 import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
@@ -23,7 +24,12 @@ type LoggerMock = typeof loggerModule & {
 
 const { getActiveChallenges } =
     require('../../src/ts/strategies/real/activeChallenges') as typeof activeChallengesModule;
-const { fetchWebActiveTurbos } = require('../../src/ts/api/challenges') as typeof challengesModule;
+const { fetchWebActiveOverlay } = require('../../src/ts/api/challenges') as typeof challengesModule;
+const { beginSuggestedPhotos, getSuggestedPhotoIds } =
+    require('../../src/ts/strategies/real/suggestedPhotos') as typeof suggestedPhotosModule;
+
+// A 32-character lowercase-hex library photo id ('…01', '…02', …).
+const photoId = (n: number): string => n.toString(16).padStart(32, '0');
 
 // Mock the api-client module
 jest.mock('../../src/ts/api/api-client', () => ({
@@ -339,7 +345,7 @@ describe('challenges', () => {
             expect(second).toEqual({ challenges: [{ id: '2' }] });
         });
 
-        describe('turbo from the web read', () => {
+        describe('the web overlay on the merged list', () => {
             const WEB_URL = 'https://api.gurushots.com/rest/get_my_active_challenges';
             const mobileTurbo = { state: 'WON', time_to_open: null };
             const mobileResponse = () => ({
@@ -424,6 +430,134 @@ describe('challenges', () => {
                 expect(makePostRequest).toHaveBeenNthCalledWith(2, WEB_URL, expect.anything(), '');
                 resolveMobile!({ challenges: [] });
                 await pending;
+            });
+
+            test('overlay fields land even when the web turbo is null; the mobile total fields are never overwritten', async () => {
+                const benchmark = [{ benchmark: '10', score: '1411' }];
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [{ id: 1, title: 'A', member: { ranking: { total: { votes: 5, rank: 2 } } } }],
+                });
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        {
+                            id: 1,
+                            member: { turbo: null, ranking: { total: { benchmark } } },
+                            guru_pick_enable: false,
+                            top_photographer_enable: true,
+                            levels_rank_enable: false,
+                            new_ranking_enable: true,
+                            first_prizes: [{ type: 'KEY', amount: 1 }],
+                            achievements_and_prizes: [
+                                {
+                                    title: 'Top 10',
+                                    rank: { min_rank: 1, max_rank: 10, type: 'MEMBER' },
+                                    prizes: [{ type: 'COINS', amount: 5 }],
+                                },
+                            ],
+                        },
+                    ],
+                });
+
+                const result = await getActiveChallenges(mockToken);
+
+                const challenge = result.challenges[0];
+                expect(challenge.guru_pick_enable).toBe(false);
+                expect(challenge.top_photographer_enable).toBe(true);
+                expect(challenge.levels_rank_enable).toBe(false);
+                expect(challenge.new_ranking_enable).toBe(true);
+                expect(challenge.first_prizes).toEqual([{ type: 'KEY', amount: 1 }]);
+                expect(challenge.achievements_and_prizes).toEqual([
+                    {
+                        title: 'Top 10',
+                        rank: { min_rank: 1, max_rank: 10, type: 'MEMBER' },
+                        prizes: [{ type: 'COINS', amount: 5 }],
+                    },
+                ]);
+                // Only `benchmark` is set on the mobile read's own total; votes and rank stay.
+                expect(challenge.member?.ranking?.total).toEqual({ votes: 5, rank: 2, benchmark });
+                // A null web turbo never replaces what the mobile read had.
+                expect(challenge.member?.turbo).toBeUndefined();
+            });
+
+            test('the benchmark merge creates member / ranking / total when the mobile read lacks them', async () => {
+                const benchmark = [{ benchmark: '1', score: '' }];
+                const webBenchmark = { id: 0, member: { ranking: { total: { benchmark } } } };
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        { id: 1, title: 'No member' },
+                        { id: 2, title: 'No ranking', member: { boost: { state: 'USED' } } },
+                        { id: 3, title: 'No total', member: { ranking: { exposure: { exposure_factor: 9 } } } },
+                    ],
+                });
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        { ...webBenchmark, id: 1 },
+                        { ...webBenchmark, id: 2 },
+                        { ...webBenchmark, id: 3 },
+                    ],
+                });
+
+                const result = await getActiveChallenges(mockToken);
+
+                expect(result.challenges[0].member?.ranking?.total?.benchmark).toEqual(benchmark);
+                expect(result.challenges[1].member?.ranking?.total?.benchmark).toEqual(benchmark);
+                // Whatever the mobile read already carried next to the created chain stays.
+                expect(result.challenges[1].member?.boost).toEqual({ state: 'USED' });
+                expect(result.challenges[2].member?.ranking?.total?.benchmark).toEqual(benchmark);
+                expect(result.challenges[2].member?.ranking?.exposure).toEqual({ exposure_factor: 9 });
+            });
+
+            test('a challenge the web read does not cover is untouched', async () => {
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [{ id: 1, title: 'A', member: { ranking: { total: { votes: 1 } } } }],
+                });
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [{ id: 999, member: { turbo: { state: 'FREE' } } }],
+                });
+
+                const result = await getActiveChallenges(mockToken);
+
+                expect(result.challenges).toEqual([
+                    { id: 1, title: 'A', member: { ranking: { total: { votes: 1 } } } },
+                ]);
+            });
+
+            test('a shape-check failure inside one challenge is omitted for that challenge only', async () => {
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        { id: 1, title: 'A' },
+                        { id: 2, title: 'B' },
+                    ],
+                });
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        {
+                            id: 1,
+                            member: 'none',
+                            guru_pick_enable: 'yes',
+                            first_prizes: ['bad'],
+                            achievements_and_prizes: 'nope',
+                            benchmark: [{ benchmark: '1', score: '1' }, 'bad'],
+                        },
+                        {
+                            id: 2,
+                            member: { ranking: { total: { benchmark: [{ benchmark: '100', score: '3' }] } } },
+                            guru_pick_enable: true,
+                            first_prizes: [{ type: 'EXPOSURE_AUTOFILL', amount: 2 }],
+                        },
+                    ],
+                });
+
+                const result = await getActiveChallenges(mockToken);
+
+                // Every malformed field is left off challenge 1 — the mobile shape stands.
+                expect(result.challenges[0]).toEqual({ id: 1, title: 'A' });
+                // Challenge 2 keeps the fields its web element carried valid.
+                expect(result.challenges[1].guru_pick_enable).toBe(true);
+                expect(result.challenges[1].first_prizes).toEqual([{ type: 'EXPOSURE_AUTOFILL', amount: 2 }]);
+                expect(result.challenges[1].member?.ranking?.total?.benchmark).toEqual([
+                    { benchmark: '100', score: '3' },
+                ]);
             });
         });
 
@@ -552,6 +686,112 @@ describe('challenges', () => {
             });
         });
 
+        describe('the suggested-photos cache', () => {
+            // One challenge on both reads, so the assertions stay on the cache.
+            const list = () => ({ challenges: [{ id: 10, title: 'S' }] });
+            const webRead = (suggestedChallenges: unknown) => ({
+                challenges: [],
+                suggested_challenges: suggestedChallenges,
+            });
+            const images = (ids: string[]) => ids.map((id) => ({ id }));
+
+            beforeEach(() => {
+                // The cache is module state shared with the merge tests above.
+                beginSuggestedPhotos('');
+            });
+
+            test('a good read replaces the cache', async () => {
+                makePostRequest.mockResolvedValueOnce(list());
+                makePostRequest.mockResolvedValueOnce(
+                    webRead([{ id: 10, member: { suggested_images: images([photoId(1), photoId(2)]) } }]),
+                );
+                await getActiveChallenges(mockToken);
+                await expect(getSuggestedPhotoIds(mockToken, 10)).resolves.toEqual([photoId(1), photoId(2)]);
+
+                makePostRequest.mockResolvedValueOnce(list());
+                makePostRequest.mockResolvedValueOnce(
+                    webRead([{ id: 10, member: { suggested_images: images([photoId(3)]) } }]),
+                );
+                await getActiveChallenges(mockToken);
+                await expect(getSuggestedPhotoIds(mockToken, 10)).resolves.toEqual([photoId(3)]);
+            });
+
+            test.each([
+                ['missing', undefined],
+                ['malformed', 'nope'],
+            ])('a %s suggested_challenges clears the cache', async (_label, suggestedChallenges) => {
+                makePostRequest.mockResolvedValueOnce(list());
+                makePostRequest.mockResolvedValueOnce(
+                    webRead([{ id: 10, member: { suggested_images: images([photoId(1)]) } }]),
+                );
+                await getActiveChallenges(mockToken);
+                await expect(getSuggestedPhotoIds(mockToken, 10)).resolves.toEqual([photoId(1)]);
+
+                makePostRequest.mockResolvedValueOnce(list());
+                makePostRequest.mockResolvedValueOnce(webRead(suggestedChallenges));
+                await getActiveChallenges(mockToken);
+                await expect(getSuggestedPhotoIds(mockToken, 10)).resolves.toEqual([]);
+            });
+
+            test('a failed web read leaves the cache alone', async () => {
+                makePostRequest.mockResolvedValueOnce(list());
+                makePostRequest.mockResolvedValueOnce(
+                    webRead([{ id: 10, member: { suggested_images: images([photoId(1)]) } }]),
+                );
+                await getActiveChallenges(mockToken);
+
+                makePostRequest.mockResolvedValueOnce(list());
+                makePostRequest.mockResolvedValueOnce(null);
+                await getActiveChallenges(mockToken);
+
+                await expect(getSuggestedPhotoIds(mockToken, 10)).resolves.toEqual([photoId(1)]);
+            });
+
+            test('a failed mobile read leaves the cache alone', async () => {
+                makePostRequest.mockResolvedValueOnce(list());
+                makePostRequest.mockResolvedValueOnce(
+                    webRead([{ id: 10, member: { suggested_images: images([photoId(1)]) } }]),
+                );
+                await getActiveChallenges(mockToken);
+
+                makePostRequest.mockResolvedValueOnce(null);
+                makePostRequest.mockResolvedValueOnce(
+                    webRead([{ id: 10, member: { suggested_images: images([photoId(2)]) } }]),
+                );
+                await getActiveChallenges(mockToken);
+
+                await expect(getSuggestedPhotoIds(mockToken, 10)).resolves.toEqual([photoId(1)]);
+            });
+
+            test('another token never sees the cache', async () => {
+                makePostRequest.mockResolvedValueOnce(list());
+                makePostRequest.mockResolvedValueOnce(
+                    webRead([{ id: 10, member: { suggested_images: images([photoId(1)]) } }]),
+                );
+                await getActiveChallenges(mockToken);
+
+                await expect(getSuggestedPhotoIds('other-token', 10)).resolves.toEqual([]);
+                await expect(getSuggestedPhotoIds('', 10)).resolves.toEqual([]);
+            });
+
+            test('the cache keeps only 32-hex ids, twenty per challenge at most', async () => {
+                const ids = [
+                    photoId(1),
+                    'NOTHEX',
+                    photoId(0xab).toUpperCase(),
+                    ...Array.from({ length: 25 }, (_v, i) => photoId(i + 3)),
+                ];
+                makePostRequest.mockResolvedValueOnce(list());
+                makePostRequest.mockResolvedValueOnce(webRead([{ id: 10, member: { suggested_images: images(ids) } }]));
+                await getActiveChallenges(mockToken);
+
+                await expect(getSuggestedPhotoIds(mockToken, 10)).resolves.toEqual([
+                    photoId(1),
+                    ...Array.from({ length: 19 }, (_v, i) => photoId(i + 3)),
+                ]);
+            });
+        });
+
         test('never writes any part of the token into the debug log payload', async () => {
             // Security guard: a `tokenPrefix` slice of the real bearer token would
             // bypass the logger's key-based redaction and land in api-*.log in
@@ -575,20 +815,55 @@ describe('challenges', () => {
         });
     });
 
-    describe('fetchWebActiveTurbos', () => {
-        test('maps each challenge id (as a string) to its turbo, null when it has none', async () => {
+    describe('fetchWebActiveOverlay', () => {
+        test('maps each challenge id to its overlay and each suggested id to its raw photo ids', async () => {
             const snap = { state: 'IN_PROGRESS', mode: 'snap' };
+            const benchmark = [{ benchmark: '10', score: '1411' }];
             makePostRequest.mockResolvedValueOnce({
-                challenges: [{ id: 11, member: { turbo: snap } }, { id: '12', member: { turbo: null } }, { id: 13 }],
+                challenges: [
+                    {
+                        id: 11,
+                        member: { turbo: snap, ranking: { total: { benchmark } } },
+                        guru_pick_enable: true,
+                        top_photographer_enable: false,
+                        levels_rank_enable: true,
+                        new_ranking_enable: false,
+                        first_prizes: [{ type: 'KEY', amount: 1 }],
+                        achievements_and_prizes: [{ title: 'T', rank: null, prizes: [] }],
+                    },
+                    { id: '12', member: { turbo: null } },
+                    { id: 13 },
+                ],
+                suggested_challenges: [
+                    {
+                        id: 500,
+                        member: {
+                            suggested_images: [{ id: photoId(1), member_id: 'someone-else' }, { id: photoId(2) }],
+                        },
+                    },
+                    { id: '501', member: { suggested_images: [] } },
+                ],
             });
 
-            const turbos = await fetchWebActiveTurbos(mockToken);
+            const overlay = await fetchWebActiveOverlay(mockToken);
 
-            expect(turbos).toEqual(
+            expect(overlay?.byId.get('11')).toEqual({
+                turbo: snap,
+                guru_pick_enable: true,
+                top_photographer_enable: false,
+                levels_rank_enable: true,
+                new_ranking_enable: false,
+                first_prizes: [{ type: 'KEY', amount: 1 }],
+                achievements_and_prizes: [{ title: 'T', rank: null, prizes: [] }],
+                benchmark,
+            });
+            expect(overlay?.byId.get('12')).toEqual({ turbo: null });
+            expect(overlay?.byId.get('13')).toEqual({ turbo: null });
+            // Raw ids as the body carries them — the owner is not this cache's concern.
+            expect(overlay?.suggestions).toEqual(
                 new Map([
-                    ['11', snap],
-                    ['12', null],
-                    ['13', null],
+                    ['500', [photoId(1), photoId(2)]],
+                    ['501', []],
                 ]),
             );
             expect(makePostRequest).toHaveBeenCalledWith(
@@ -598,7 +873,7 @@ describe('challenges', () => {
             );
         });
 
-        test('skips elements that are not objects or have no usable id, and a turbo that is not an object', async () => {
+        test('skips unusable elements and omits a challenge’s malformed fields, keeping the rest', async () => {
             const snap = { state: 'IN_PROGRESS', mode: 'snap' };
             makePostRequest.mockResolvedValueOnce(
                 invalid({
@@ -609,20 +884,64 @@ describe('challenges', () => {
                         { id: null, member: { turbo: snap } },
                         { id: 21, member: 'none' },
                         { id: 22, member: { turbo: 'WON' } },
-                        { id: 23, member: { turbo: snap } },
+                        { id: 23, member: { turbo: snap, ranking: 'none' } },
+                        { id: 24, member: { turbo: snap, ranking: { total: 'none' } } },
+                        {
+                            id: 25,
+                            member: {
+                                turbo: snap,
+                                ranking: { total: { benchmark: [{ benchmark: '1', score: '1' }, 'bad'] } },
+                            },
+                            guru_pick_enable: 'yes',
+                            first_prizes: ['bad'],
+                            achievements_and_prizes: 'nope',
+                        },
+                        {
+                            id: 26,
+                            member: {
+                                turbo: snap,
+                                ranking: { total: { benchmark: [{ benchmark: '100', score: '' }] } },
+                            },
+                            new_ranking_enable: true,
+                        },
                     ],
                 }),
             );
 
-            const turbos = await fetchWebActiveTurbos(mockToken);
+            const overlay = await fetchWebActiveOverlay(mockToken);
 
-            expect(turbos).toEqual(
+            expect(overlay?.byId).toEqual(
                 new Map([
-                    ['21', null],
-                    ['22', null],
-                    ['23', snap],
+                    ['21', { turbo: null }],
+                    ['22', { turbo: null }],
+                    ['23', { turbo: snap }],
+                    ['24', { turbo: snap }],
+                    // 25's malformed fields are all omitted; the turbo survives.
+                    ['25', { turbo: snap }],
+                    ['26', { turbo: snap, new_ranking_enable: true, benchmark: [{ benchmark: '100', score: '' }] }],
                 ]),
             );
+        });
+
+        test('a missing or malformed suggested_challenges reads as an empty map, and bad entries are skipped', async () => {
+            makePostRequest.mockResolvedValueOnce(
+                invalid({
+                    challenges: [{ id: 1 }],
+                    suggested_challenges: [
+                        'text',
+                        { member: { suggested_images: [{ id: photoId(1) }] } },
+                        { id: null, member: { suggested_images: [{ id: photoId(1) }] } },
+                        { id: 600 },
+                        { id: 601, member: 'none' },
+                        { id: 602, member: { suggested_images: 'nope' } },
+                        { id: 603, member: { suggested_images: ['bad', { id: null }, { id: photoId(9) }] } },
+                    ],
+                }),
+            );
+
+            const overlay = await fetchWebActiveOverlay(mockToken);
+
+            expect(overlay?.suggestions).toEqual(new Map([['603', [photoId(9)]]]));
         });
 
         test.each([
@@ -632,7 +951,7 @@ describe('challenges', () => {
         ])('is null on %s, with a warning that carries no token', async (_label, body, requestFailed) => {
             makePostRequest.mockResolvedValueOnce(invalid(body));
 
-            await expect(fetchWebActiveTurbos(mockToken)).resolves.toBeNull();
+            await expect(fetchWebActiveOverlay(mockToken)).resolves.toBeNull();
 
             expect(logger.__mockWarningFn).toHaveBeenCalledWith(
                 'Web active challenges unavailable; turbo mode unknown',

@@ -288,8 +288,8 @@ describe('api-client', () => {
             });
         });
 
-        test.each([['getTeams'], ['getMatch']] as const)(
-            "logs the status of %s but never its body (it carries other members' rosters)",
+        test.each([['getTeams'], ['getMatch'], ['webActiveChallenges'], ['getMemberChallenges']] as const)(
+            "logs the status of %s but never its body (it carries other members' data)",
             async (endpoint) => {
                 const logger: LoggerMock = invalid(require('../../src/ts/logger'));
                 const url = ENDPOINTS[endpoint];

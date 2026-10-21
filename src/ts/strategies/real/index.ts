@@ -12,6 +12,7 @@ import { getActiveChallenges } from './activeChallenges';
 import { applyBoost } from './applyBoost';
 import { runSnapGame } from './snapGame';
 import type { TurboGameOptions } from './snapGame';
+import { getSuggestedPhotoIds } from './suggestedPhotos';
 import { getVoteImages, submitVotes } from '../../api/voting';
 import { applyBoostToEntry } from '../../api/boost';
 import { getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS } from '../../api/turbo';
@@ -89,6 +90,9 @@ const joinDeps = {
     searchTagAutocomplete,
     // Counts the turbos a turbo mission can still win (Join Early for Missions).
     getActiveChallenges,
+    // The member's library photos the web read suggests per un-joined challenge; the join's
+    // photo pick reads these off deps and no-ops without them, like the tag pair above.
+    getSuggestedPhotoIds,
     joinStateStore,
     acquireUnlockLock,
     refreshJoinState: refreshJoinStateAsync,
@@ -372,4 +376,5 @@ export {
     forgetUnconfirmedPayment,
     submitToChallenge,
     swapPhoto,
+    getSuggestedPhotoIds,
 };

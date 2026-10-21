@@ -24,6 +24,7 @@ import {
     forgetUnconfirmedPayment,
     submitToChallenge,
     swapPhoto,
+    getSuggestedPhotoIds,
 } from './strategies/real';
 import { getVoteImages, submitVotes } from './api/voting';
 import { applyBoostToEntry } from './api/boost';
@@ -58,6 +59,7 @@ const realApi = {
     keyUnlock,
     swapPhoto,
     exposureAutofill,
+    getSuggestedPhotoIds,
     getStrategyType: () => 'RealAPI',
 };
 
@@ -107,6 +109,7 @@ const mockApi: ApiStrategy = {
     keyUnlock: withMockDebug('keyUnlock', mockApiClient.keyUnlock),
     swapPhoto: withMockDebug('swapPhoto', mockApiClient.swapPhoto),
     exposureAutofill: withMockDebug('exposureAutofill', mockApiClient.exposureAutofill),
+    getSuggestedPhotoIds: withMockDebug('getSuggestedPhotoIds', mockApiClient.getSuggestedPhotoIds),
     getStrategyType: () => 'MockAPI',
 };
 
