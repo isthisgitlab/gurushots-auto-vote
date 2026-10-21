@@ -12,7 +12,6 @@ const buildRankedEntry = (entry: RankedEntrySpec) => ({
     rank: entry.rank,
     member_id: 'mock_user_001',
     adult: false,
-    event_id: entry.eventId,
     guru_pick: entry.guruPick,
     boost: entry.boost,
     turbo: entry.turbo,
@@ -50,7 +49,6 @@ const buildMember = (spec: ChallengeSpec, now: number) => ({
         : {
               turbo: {
                   max_selections: 10,
-                  turbo_unlock_type: 'COINS',
                   turbo_unlock_amount: 250,
                   required_selections: 6,
                   state: spec.turbo.state,
@@ -89,7 +87,6 @@ const buildChallenge = (spec: ChallengeSpec, id: number, now: number) => {
         badge: spec.badge,
         type: spec.type,
         tags: [...spec.tags],
-        vote_minimum_players: 200,
         prizes_worth: spec.prizesWorth,
         ranking_levels: {
             level_0: 0,

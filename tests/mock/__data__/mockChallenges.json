@@ -15,7 +15,6 @@
             "badge": "speed",
             "type": "flash",
             "tags": ["special 4 pic", "Comm", "Exposure", "Turbo"],
-            "vote_minimum_players": 200,
             "prizes_worth": 3500,
             "ranking_levels": {
                 "level_0": 0,
@@ -48,7 +47,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "TIMER",
@@ -95,7 +93,6 @@
                             "rank": 94,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060092,
                             "guru_pick": false,
                             "boost": -1,
                             "turbo": false,
@@ -108,7 +105,6 @@
                             "rank": 156,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060092,
                             "guru_pick": false,
                             "boost": 0,
                             "turbo": true,
@@ -134,7 +130,6 @@
             "badge": "",
             "type": "default",
             "tags": ["1 photo", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
             "prizes_worth": 180,
             "ranking_levels": {
                 "level_0": 0,
@@ -163,7 +158,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "FREE",
@@ -196,7 +190,6 @@
                             "rank": 89,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060093,
                             "guru_pick": true,
                             "boost": 1,
                             "turbo": false,
@@ -222,7 +215,6 @@
             "badge": "",
             "type": "default",
             "tags": ["2 photos", "No comm"],
-            "vote_minimum_players": 200,
             "prizes_worth": 200,
             "ranking_levels": {
                 "level_0": 0,
@@ -251,7 +243,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "LOCKED",
@@ -296,7 +287,6 @@
             "badge": "speed",
             "type": "speed",
             "tags": ["1 photo", "Speed", "No comm"],
-            "vote_minimum_players": 200,
             "prizes_worth": 140,
             "ranking_levels": {
                 "level_0": 0,
@@ -325,7 +315,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "FREE",
@@ -358,7 +347,6 @@
                             "rank": 156,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060094,
                             "guru_pick": false,
                             "boost": 0,
                             "turbo": false,
@@ -401,7 +389,6 @@
             "badge": "",
             "type": "default",
             "tags": ["4 photos", "No comm"],
-            "vote_minimum_players": 200,
             "prizes_worth": 120,
             "ranking_levels": {
                 "level_0": 0,
@@ -430,7 +417,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "FREE",
@@ -463,7 +449,6 @@
                             "rank": 234,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060095,
                             "guru_pick": false,
                             "boost": 0,
                             "turbo": true,
@@ -506,7 +491,6 @@
             "badge": "speed",
             "type": "speed",
             "tags": ["1 photo", "Speed", "No comm"],
-            "vote_minimum_players": 200,
             "prizes_worth": 120,
             "ranking_levels": {
                 "level_0": 0,
@@ -627,7 +611,6 @@
                             "rank": 456,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060096,
                             "guru_pick": false,
                             "boost": 0,
                             "turbo": false,
@@ -653,7 +636,6 @@
             "badge": "",
             "type": "default",
             "tags": ["2 photos", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
             "prizes_worth": 140,
             "ranking_levels": {
                 "level_0": 0,
@@ -682,7 +664,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "WON",
@@ -715,7 +696,6 @@
                             "rank": 201,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060097,
                             "guru_pick": false,
                             "boost": 1,
                             "turbo": true,
@@ -728,7 +708,6 @@
                             "rank": 267,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060098,
                             "guru_pick": false,
                             "boost": -1,
                             "turbo": false,
@@ -764,7 +743,6 @@
             "badge": "",
             "type": "default",
             "tags": ["1 photo", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
             "prizes_worth": 160,
             "ranking_levels": {
                 "level_0": 0,
@@ -793,7 +771,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "USED",
@@ -826,7 +803,6 @@
                             "rank": 134,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060099,
                             "guru_pick": false,
                             "boost": 1,
                             "turbo": true,
@@ -852,7 +828,6 @@
             "badge": "",
             "type": "default",
             "tags": ["1 photo", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
             "prizes_worth": 140,
             "ranking_levels": {
                 "level_0": 0,
@@ -881,7 +856,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "LOCKED",
@@ -914,7 +888,6 @@
                             "rank": 234,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060100,
                             "guru_pick": false,
                             "boost": 0,
                             "turbo": false,
@@ -958,7 +931,6 @@
             "badge": "",
             "type": "default",
             "tags": ["2 photos", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
             "prizes_worth": 200,
             "ranking_levels": {
                 "level_0": 0,
@@ -987,7 +959,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "FREE",
@@ -1020,7 +991,6 @@
                             "rank": 125,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060101,
                             "guru_pick": true,
                             "boost": 1,
                             "turbo": false,
@@ -1033,7 +1003,6 @@
                             "rank": 156,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060102,
                             "guru_pick": false,
                             "boost": 0,
                             "turbo": true,
@@ -1070,7 +1039,6 @@
             "badge": "speed",
             "type": "speed",
             "tags": ["1 photo", "Speed", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
             "prizes_worth": 110,
             "ranking_levels": {
                 "level_0": 0,
@@ -1099,7 +1067,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "TIMER",
@@ -1132,7 +1099,6 @@
                             "rank": 89,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060103,
                             "guru_pick": false,
                             "boost": 0,
                             "turbo": false,
@@ -1158,7 +1124,6 @@
             "badge": "",
             "type": "default",
             "tags": ["2 photos", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
             "prizes_worth": 170,
             "ranking_levels": {
                 "level_0": 0,
@@ -1187,7 +1152,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "LOCKED",
@@ -1232,7 +1196,6 @@
             "badge": "",
             "type": "default",
             "tags": ["1 photo", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
             "prizes_worth": 190,
             "ranking_levels": {
                 "level_0": 0,
@@ -1261,7 +1224,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "IN_PROGRESS",
@@ -1294,7 +1256,6 @@
                             "rank": 67,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060104,
                             "guru_pick": false,
                             "boost": 1,
                             "turbo": true,
@@ -1320,7 +1281,6 @@
             "badge": "",
             "type": "default",
             "tags": ["2 photos", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
             "prizes_worth": 160,
             "ranking_levels": {
                 "level_0": 0,
@@ -1349,7 +1309,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "WON",
@@ -1382,7 +1341,6 @@
                             "rank": 45,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060105,
                             "guru_pick": true,
                             "boost": -1,
                             "turbo": true,
@@ -1395,7 +1353,6 @@
                             "rank": 67,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060106,
                             "guru_pick": true,
                             "boost": -1,
                             "turbo": false,
@@ -1421,7 +1378,6 @@
             "badge": "",
             "type": "default",
             "tags": ["1 photo", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
             "prizes_worth": 130,
             "ranking_levels": {
                 "level_0": 0,
@@ -1450,7 +1406,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "FREE",
@@ -1483,7 +1438,6 @@
                             "rank": 178,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060107,
                             "guru_pick": false,
                             "boost": -1,
                             "turbo": true,
@@ -1509,7 +1463,6 @@
             "badge": "",
             "type": "default",
             "tags": ["2 photos", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
             "prizes_worth": 210,
             "ranking_levels": {
                 "level_0": 0,
@@ -1538,7 +1491,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "USED",
@@ -1571,7 +1523,6 @@
                             "rank": 89,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060108,
                             "guru_pick": false,
                             "boost": 0,
                             "turbo": true,
@@ -1584,7 +1535,6 @@
                             "rank": 134,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060109,
                             "guru_pick": true,
                             "boost": 1,
                             "turbo": false,
@@ -1610,7 +1560,6 @@
             "badge": "",
             "type": "default",
             "tags": ["1 photo", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
             "prizes_worth": 180,
             "ranking_levels": {
                 "level_0": 0,
@@ -1639,7 +1588,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "LOCKED",
@@ -1672,7 +1620,6 @@
                             "rank": 45,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060110,
                             "guru_pick": true,
                             "boost": 1,
                             "turbo": false,
@@ -1698,7 +1645,6 @@
             "badge": "",
             "type": "default",
             "tags": ["2 photos", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
             "prizes_worth": 195,
             "ranking_levels": {
                 "level_0": 0,
@@ -1727,7 +1673,6 @@
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
                     "required_selections": 6,
                     "state": "LOCKED",

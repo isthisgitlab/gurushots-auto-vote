@@ -17,7 +17,6 @@ interface RankedEntrySpec {
     id: string;
     votes: number;
     rank: number;
-    eventId: number;
     guruPick: boolean;
     boost: number;
     turbo: boolean;

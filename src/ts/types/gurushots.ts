@@ -29,7 +29,6 @@ export interface RankingEntry {
     rank?: number;
     views?: number;
     adult?: boolean;
-    event_id?: number;
     guru_pick?: boolean;
     boost?: number;
     turbo?: boolean;
@@ -94,7 +93,6 @@ export interface MemberTurbo {
     time_to_open?: UnixSeconds | null;
     max_selections?: number;
     required_selections?: number;
-    turbo_unlock_type?: string;
     turbo_unlock_amount?: number;
 }
 
@@ -152,7 +150,6 @@ export interface Challenge {
     max_players?: number;
     votes?: number;
     max_photo_submits?: number;
-    vote_minimum_players?: number;
     prizes_worth?: number;
     first_prizes?: Prize[];
     achievements_and_prizes?: PrizeTier[];

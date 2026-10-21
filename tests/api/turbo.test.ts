@@ -27,7 +27,6 @@ describe('turbo', () => {
     describe('getChallengeTurbo', () => {
         test('parses a successful battle set into normalized shape', async () => {
             makePostRequest.mockResolvedValueOnce({
-                turbo_unlock_type: 'COINS',
                 max_selections: 10,
                 required_selections: 6,
                 images: [
