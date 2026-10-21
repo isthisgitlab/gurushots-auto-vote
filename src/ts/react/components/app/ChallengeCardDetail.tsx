@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef } from 'react';
+import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getLevelStatus, isBoostAvailable, statusText } from '@/utils/formatters';
 import { getNextLevelInfo } from '@/utils/challengeCardView';
@@ -120,8 +120,9 @@ function DetailHeader({
 }
 
 /**
- * User progress — full bar + level + next-level info. Rendered only once the
- * member has votes in the challenge. A benchmark challenge also reads the scores
+ * User progress — full bar + level + next-level info. Rendered whenever the member's vote count
+ * reads as a whole number (0 votes is a real count); a missing or garbled one shows nothing.
+ * A benchmark challenge also reads the scores
  * to chase (each "Top n" group labelled on its own) and, when the rank and votes
  * can name one, the gap to the next group. `levels_rank_enable: false` hides the
  * level lines alone: the rank, the votes and the bar are not level ranking.
@@ -143,7 +144,8 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
             ? []
             : [interp(t('app.benchmarkScore'), { target: group, score: score.toLocaleString() })];
     });
-    // The gap names a positive integer rank and vote count: anything else the server sends drops it.
+    // The gap names a positive integer rank and a readable vote count (0 is a real count):
+    // anything else the server sends drops it.
     const rank = userProgress.rank;
     const votes = userProgress.votes;
     const gap =
@@ -152,7 +154,7 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
         rank > 0 &&
         typeof votes === 'number' &&
         Number.isInteger(votes) &&
-        votes > 0
+        votes >= 0
             ? benchmarkGap(rank, votes, scores)
             : null;
 
@@ -464,6 +466,7 @@ function EntryDetails({
 /**
  * The challenge's achievement tiers: each with its title, the rank window it covers (top photographers or
  * top photos — a tier with no readable rank window shows its title alone), and its prizes as type × amount.
+ * The parts are separated visually by the flex gap and for assistive technology by an sr-only comma.
  * Tier titles are the server's text: React text children only.
  */
 function PrizesPanel({ tiers }: { tiers: PrizeTier[] }) {
@@ -489,15 +492,17 @@ function PrizesPanel({ tiers }: { tiers: PrizeTier[] }) {
             <div className="font-medium text-base-content/70">{t('app.prize')}</div>
             {tiers.map((tier, index) => {
                 const title = typeof tier.title === 'string' ? tier.title.trim() : '';
-                const prizes = tier.prizes ? prizeItemsText(tier.prizes, t) : '';
+                // The wire field is typed as an array but is not guaranteed one: read it only when it is.
+                const prizes = Array.isArray(tier.prizes) ? prizeItemsText(tier.prizes, t) : '';
                 const parts = [title, rankWindowOf(tier), prizes].filter(Boolean);
                 if (parts.length === 0) return null;
                 return (
                     <div key={index} className="mt-1 flex flex-wrap gap-x-2">
                         {parts.map((part, partIndex) => (
-                            <span key={partIndex} className="wrap-anywhere">
-                                {part}
-                            </span>
+                            <Fragment key={partIndex}>
+                                {partIndex > 0 && <span className="sr-only">, </span>}
+                                <span className="wrap-anywhere">{part}</span>
+                            </Fragment>
                         ))}
                     </div>
                 );
@@ -585,9 +590,10 @@ export function ChallengeCardDetail({
 
             {prizeTiers.length > 0 && <PrizesPanel tiers={prizeTiers} />}
 
-            {userProgress && (userProgress.votes ?? 0) > 0 && (
-                <UserProgressPanel challenge={challenge} userProgress={userProgress} />
-            )}
+            {userProgress &&
+                typeof userProgress.votes === 'number' &&
+                Number.isInteger(userProgress.votes) &&
+                userProgress.votes >= 0 && <UserProgressPanel challenge={challenge} userProgress={userProgress} />}
 
             <StatusCells
                 challenge={challenge}
@@ -603,7 +609,8 @@ export function ChallengeCardDetail({
                     {cardTags.length > 0 && <ChallengeTagBadges tags={cardTags} />}
                     {trackBadges.map(([icon, key]) => (
                         <span key={key} className="badge badge-ghost badge-sm">
-                            {icon} {t(key)}
+                            <span aria-hidden="true">{icon} </span>
+                            {t(key)}
                         </span>
                     ))}
                 </div>

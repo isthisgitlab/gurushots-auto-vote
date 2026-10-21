@@ -28,10 +28,6 @@ const KNOWN_ERRORS: Record<string, string> = {
     'pin-cap-reached': 'errors.pinCapReached',
     'pin-write-failed': 'errors.pinFailed',
     'library-read-failed': 'errors.libraryReadFailed',
-    // The join refusal reasons (a failed join answers `failed-no-charge` with its `reason`, which
-    // RowOutcome reads the same way as an error text).
-    full: 'errors.joinRefusedFull',
-    'price-unknown': 'errors.joinRefusedPriceUnknown',
     'Failed to apply boost': 'errors.boostFailed',
     'Failed to fetch challenges': 'errors.fetchChallengesFailed',
     'Could not list challenges': 'errors.fetchChallengesFailed',
@@ -57,6 +53,22 @@ export const ipcErrorText = <E extends string | null | undefined>(
     t: (key: string) => string,
     fallbackKey = 'errors.actionFailed',
 ) => (error ? t(Object.hasOwn(KNOWN_ERRORS, error) ? KNOWN_ERRORS[error] : fallbackKey) : error);
+
+/** The translation key for each reason a refused fresh join answers with (`failed-no-charge` + `reason`). */
+const JOIN_REFUSALS: Record<string, string> = {
+    full: 'errors.joinRefusedFull',
+    'price-unknown': 'errors.joinRefusedPriceUnknown',
+};
+
+/**
+ * Display text for a join the live list refused: the refusal's what → why → what next text, kept out of
+ * `KNOWN_ERRORS` so a bare "full" from any other handler never gets join wording. A missing or unmapped
+ * reason stays missing (the caller falls back to the status's own text).
+ *
+ * @param t - the translation function (useTranslation().t)
+ */
+export const joinRefusalText = (reason: string | null | undefined, t: (key: string) => string): string | null =>
+    reason && Object.hasOwn(JOIN_REFUSALS, reason) ? t(JOIN_REFUSALS[reason]) : null;
 
 /** The translation key for each code the photo suggestions (Pick… > Auto) answer with. */
 const SUGGEST_ERRORS: Record<string, string> = {

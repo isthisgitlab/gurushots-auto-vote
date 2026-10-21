@@ -14,6 +14,7 @@ import { dropContext } from '../../services/libraryCache';
 import { getAutoClaimStatus } from '../../services/autoClaim';
 import { rememberChallenges } from '../../windows/quitGuard';
 import { sanitizeForLog, refuseInvalidArgs } from './shared';
+import { isPlainObject } from '../../plainObject';
 
 import type { IpcReplyFn } from '../registerHandlers';
 import type { joinChallengeSingle } from '../../services/joinChallenges';
@@ -186,7 +187,10 @@ const pickDiscoverItem = (item: DiscoverChallenge, chosen: ChosenAnnotation, sug
     votes: item.votes,
     join_coins: item.join_coins,
     max_photo_submits: item.max_photo_submits,
-    first_prizes: item.first_prizes,
+    // The renderer reads the prize line with .map, so only an array of objects crosses IPC —
+    // anything else (GuruShots has sent a bare object) drops the field.
+    first_prizes:
+        Array.isArray(item.first_prizes) && item.first_prizes.every(isPlainObject) ? item.first_prizes : undefined,
     member: item.member && { submit_state: item.member.submit_state },
     ...(suggested.length > 0 ? { suggestedPhotoIds: suggested } : {}),
     ...chosen,

@@ -1797,16 +1797,36 @@ describe('capacity and join safety on a row', () => {
     beforeEach(() => mockTranslator.t.mockImplementation(english));
     afterEach(() => mockTranslator.t.mockImplementation((key) => key));
 
-    test('a capped row shows the head count and Full, and its Join is a disabled control named for the challenge', async () => {
+    test('a capped row shows the head count and Full, and its Join stays pressable: the live list decides', async () => {
         window.api.getMemberChallenges = rows(fullOne);
         render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
         await screen.findByText('Full One');
 
         const row = screen.getByText('Full One').closest('li')!;
-        expect(row.textContent).toContain(`👥 ${(150).toLocaleString()}/${(150).toLocaleString()} · Full`);
+        // The head count names its unit for assistive technology; the emoji is decorative.
+        expect(row.textContent).toContain(`Players: ${(150).toLocaleString()}/${(150).toLocaleString()} · Full`);
+        expect(row.querySelector('.sr-only')?.textContent).toBe('Players: ');
+        const emoji = [...row.querySelectorAll('[aria-hidden="true"]')].find((el) => el.textContent?.includes('👥'));
+        expect(emoji).toBeTruthy();
+        // The listing can lag the live list (or a claim from an earlier session only needs its
+        // submit retried): the button stays enabled and the server answers with its reason.
         const join = screen.getByRole<HTMLButtonElement>('button', { name: 'Join Full One — the challenge is full' });
-        expect(join.disabled).toBe(true);
-        expect(join.textContent).toBe('Full');
+        expect(join.disabled).toBe(false);
+        expect(join.textContent).toBe('Join');
+        fireEvent.click(join);
+        await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledWith(900003, false));
+    });
+
+    test('a head count the listing left unreadable shows no capacity fraction', async () => {
+        const uncounted = invalid<OpenChallenge>({ ...fullOne, id: 900007, title: 'Uncounted', players: 'many' });
+        window.api.getMemberChallenges = rows(uncounted);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Uncounted');
+
+        const row = screen.getByText('Uncounted').closest('li')!;
+        expect(row.textContent).not.toContain('NaN');
+        expect(row.textContent).not.toContain('/150');
+        expect(row.querySelector('.sr-only')).toBeNull();
     });
 
     test('an uncapped row says nothing about capacity', async () => {
@@ -1818,7 +1838,7 @@ describe('capacity and join safety on a row', () => {
         expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Join Free One' }).disabled).toBe(false);
     });
 
-    test('a price GuruShots did not send: the row says so, hints at the next step, and the Join is disabled', async () => {
+    test('a price GuruShots did not send: the row says so, hints at the next step, and the Join stays pressable', async () => {
         const mystery = invalid<OpenChallenge>({
             ...items[0],
             id: 900004,
@@ -1836,8 +1856,10 @@ describe('capacity and join safety on a row', () => {
             'GuruShots did not send it, so the app cannot ask you to confirm a spend. Refresh the list, or join the challenge on gurushots.com.',
         );
         const join = screen.getByRole<HTMLButtonElement>('button', { name: 'Join Mystery — its price is unknown' });
-        expect(join.disabled).toBe(true);
+        expect(join.disabled).toBe(false);
         expect(join.textContent).toBe('Join');
+        fireEvent.click(join);
+        await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledWith(900004, false));
     });
 
     test('the first prizes read as one line of translated type × amount', async () => {
@@ -1856,6 +1878,16 @@ describe('capacity and join safety on a row', () => {
 
         const row = screen.getByText('Prized').closest('li')!;
         expect(row.textContent).toContain(`Prize: Key × 1, Coins × ${(250).toLocaleString()}`);
+    });
+
+    test('a first-prizes payload that is not an array is dropped: no prize line, no crash', async () => {
+        const unprized = invalid<OpenChallenge>({ ...items[0], id: 900008, title: 'Unprized', first_prizes: {} });
+        window.api.getMemberChallenges = rows(unprized);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Unprized');
+
+        const row = screen.getByText('Unprized').closest('li')!;
+        expect(row.textContent).not.toContain('Prize:');
     });
 
     test('a row with suggested photos is marked as recommended by GuruShots', async () => {

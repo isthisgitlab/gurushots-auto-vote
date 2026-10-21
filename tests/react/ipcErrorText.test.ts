@@ -1,4 +1,4 @@
-import { ipcErrorText, suggestErrorText } from '@/api/ipcErrorText';
+import { ipcErrorText, joinRefusalText, suggestErrorText } from '@/api/ipcErrorText';
 
 const t = (key: string) => `[${key}]`;
 
@@ -60,6 +60,28 @@ describe('ipcErrorText', () => {
         expect(ipcErrorText(null, t)).toBeNull();
         expect(ipcErrorText(undefined, t)).toBeUndefined();
         expect(ipcErrorText('', t)).toBe('');
+    });
+});
+
+describe('joinRefusalText', () => {
+    test.each([
+        ['full', 'errors.joinRefusedFull'],
+        ['price-unknown', 'errors.joinRefusedPriceUnknown'],
+    ])('words the %j refusal as %s', (reason, key) => {
+        expect(joinRefusalText(reason, t)).toBe(`[${key}]`);
+    });
+
+    test('any other reason, and a missing one, stays missing: the status has its own text', () => {
+        for (const reason of ['no-photo', 'account-unknown', 'unconfirmed', 'already-joined']) {
+            expect(joinRefusalText(reason, t)).toBeNull();
+        }
+        expect(joinRefusalText(undefined, t)).toBeNull();
+        expect(joinRefusalText('', t)).toBeNull();
+    });
+
+    test('the refusal reasons are not error wording: ipcErrorText stays generic on them', () => {
+        expect(ipcErrorText('full', t)).toBe('[errors.actionFailed]');
+        expect(ipcErrorText('price-unknown', t)).toBe('[errors.actionFailed]');
     });
 });
 

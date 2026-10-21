@@ -117,7 +117,7 @@ describe('ChallengeBadgeRow — team standing', () => {
 
         const [, , , standing] = badges(container);
         expect(badges(container)).toHaveLength(4);
-        expect(standing.textContent).toBe(`You #3 · active · +${(93).toLocaleString()} over standby`);
+        expect(standing.textContent).toBe(`You #3 · active · +${(93).toLocaleString()} votes over standby`);
     });
 
     test.each([
@@ -125,12 +125,12 @@ describe('ChallengeBadgeRow — team standing', () => {
         [
             'a cushion of 0 stays visible',
             active({ cushion: 0 }),
-            `You #3 · active · +${(0).toLocaleString()} over standby`,
+            `You #3 · active · +${(0).toLocaleString()} votes over standby`,
         ],
         [
             'a standby waiting for votes to move up',
             { kind: 'standby', position: 9, votes: 640, activeSlots: 5, votesToActive: 107 },
-            `Standby · ${(107).toLocaleString()} to active`,
+            `Standby · ${(107).toLocaleString()} votes to active`,
         ],
     ] as Array<[string, TeamStanding, string]>)('%s', (_name, me, expected) => {
         const { container } = renderStanding(me);

@@ -230,7 +230,8 @@ describe('header', () => {
         expect(screen.getByText((2000).toLocaleString())).toBeTruthy();
         unmount();
         renderCard(makeChallenge({ votes: undefined }));
-        expect(screen.getByText('0')).toBeTruthy();
+        // The votes STAT CELL reads 0 (the member's 0-vote progress panel is not the statistic).
+        expect(screen.getByText('app.votes').nextElementSibling?.textContent).toBe('0');
     });
 
     test('flash challenges have no settings button, no URL row without a url', () => {
@@ -1077,7 +1078,9 @@ describe('benchmark scores and the gap to chase', () => {
         renderCard(withBench({ benchmark: rows() }));
 
         expect(
-            screen.getByText(`Top 1: 300 · Top 10: 200 · Top 100: 100 · +${(51).toLocaleString()} to top 100`),
+            screen.getByText(
+                `Top 1: 300 votes · Top 10: 200 votes · Top 100: 100 votes · +${(51).toLocaleString()} votes to top 100`,
+            ),
         ).toBeTruthy();
     });
 
@@ -1097,7 +1100,7 @@ describe('benchmark scores and the gap to chase', () => {
                 ]),
             }),
         );
-        expect(screen.getByText(`Top 100: 100 · +${(51).toLocaleString()} to top 100`)).toBeTruthy();
+        expect(screen.getByText(`Top 100: 100 votes · +${(51).toLocaleString()} votes to top 100`)).toBeTruthy();
         unmount();
 
         // A benchmark block that is not a list is no benchmark block at all.
@@ -1105,24 +1108,37 @@ describe('benchmark scores and the gap to chase', () => {
         expect(screen.queryByText(/Top \d+:/)).toBeNull();
     });
 
-    test('a rank the panel cannot chase with (missing, or not a positive integer) shows the scores alone', () => {
+    test('a rank the panel cannot chase with (missing, or not a positive integer) shows the scores alone; an unreadable vote count hides the block', () => {
         const noRank = renderCard(withBench({ rank: undefined, benchmark: rows() }));
-        expect(screen.getByText('Top 1: 300 · Top 10: 200 · Top 100: 100')).toBeTruthy();
+        expect(screen.getByText('Top 1: 300 votes · Top 10: 200 votes · Top 100: 100 votes')).toBeTruthy();
         expect(screen.queryByText(/to top/)).toBeNull();
         noRank.unmount();
 
+        // A vote count the server left garbled is unreadable: no progress panel, no benchmark block.
         renderCard(withBench({ votes: 50.5, benchmark: rows() }));
-        expect(screen.getByText('Top 1: 300 · Top 10: 200 · Top 100: 100')).toBeTruthy();
-        expect(screen.queryByText(/to top/)).toBeNull();
+        expect(screen.queryByText(/Top \d+:/)).toBeNull();
+        expect(screen.queryByText('Your Progress')).toBeNull();
+    });
+
+    test('0 votes is a real count: the gap to the group is the score plus one', () => {
+        renderCard(withBench({ votes: 0, benchmark: rows() }));
+
+        expect(
+            screen.getByText(
+                `Top 1: 300 votes · Top 10: 200 votes · Top 100: 100 votes · +${(101).toLocaleString()} votes to top 100`,
+            ),
+        ).toBeTruthy();
     });
 
     test.each([
-        ['inside the top 100 chases the 10 benchmark', 45, `+${(151).toLocaleString()} to top 10`],
-        ['inside the top 10 chases the 1 benchmark', 7, `+${(251).toLocaleString()} to top 1`],
+        ['inside the top 100 chases the 10 benchmark', 45, `+${(151).toLocaleString()} votes to top 10`],
+        ['inside the top 10 chases the 1 benchmark', 7, `+${(251).toLocaleString()} votes to top 1`],
     ])('%s', (_name, rank, expected) => {
         renderCard(withBench({ rank, benchmark: rows() }));
 
-        expect(screen.getByText(`Top 1: 300 · Top 10: 200 · Top 100: 100 · ${expected}`)).toBeTruthy();
+        expect(
+            screen.getByText(`Top 1: 300 votes · Top 10: 200 votes · Top 100: 100 votes · ${expected}`),
+        ).toBeTruthy();
     });
 
     test.each([
@@ -1131,7 +1147,7 @@ describe('benchmark scores and the gap to chase', () => {
     ] as Array<[string, number, number]>)('%s: no gap', (_name, rank, votes) => {
         renderCard(withBench({ rank, votes, benchmark: rows() }));
 
-        expect(screen.getByText('Top 1: 300 · Top 10: 200 · Top 100: 100')).toBeTruthy();
+        expect(screen.getByText('Top 1: 300 votes · Top 10: 200 votes · Top 100: 100 votes')).toBeTruthy();
         expect(screen.queryByText(/to top/)).toBeNull();
     });
 });
@@ -1256,6 +1272,20 @@ describe('prize tiers', () => {
         expect(screen.getByText('Coins')).toBeTruthy();
     });
 
+    test('a prize list that is not an array is dropped: the tier shows, no prize line, no crash', () => {
+        renderCard(
+            makeChallenge({
+                achievements_and_prizes: invalid<Challenge['achievements_and_prizes']>([
+                    { title: 'Empty', rank: { min_rank: 1, max_rank: 3, type: 'MEMBER' }, prizes: {} },
+                ]),
+            }),
+        );
+
+        expect(screen.getByText('Empty')).toBeTruthy();
+        expect(screen.getByText('Top photographer #1–3')).toBeTruthy();
+        expect(screen.queryByText(/×/)).toBeNull();
+    });
+
     test('no prize section without tiers', () => {
         renderCard(makeChallenge({ achievements_and_prizes: [] }));
 
@@ -1275,14 +1305,17 @@ describe('track badges', () => {
         const all = renderCard(
             makeChallenge({ tags: [], top_photographer_enable: true, top_photo_enable: true, guru_pick_enable: true }),
         );
-        expect(screen.getByText('🏆 Top photographer')).toBeTruthy();
-        expect(screen.getByText('📷 Top photo')).toBeTruthy();
-        expect(screen.getByText("⭐ Guru's pick")).toBeTruthy();
+        // The emoji is decorative (aria-hidden): the badge's text for assistive technology is the name alone.
+        const badgeOf = (text: string) => screen.getByText(text).closest('span.badge')!;
+        expect(badgeOf('Top photographer').textContent).toBe('🏆 Top photographer');
+        expect(badgeOf('Top photographer').querySelector('span[aria-hidden="true"]')?.textContent).toBe('🏆 ');
+        expect(badgeOf('Top photo').textContent).toBe('📷 Top photo');
+        expect(badgeOf("Guru's pick").textContent).toBe("⭐ Guru's pick");
         all.unmount();
 
         renderCard(makeChallenge({ tags: [], top_photographer_enable: true, top_photo_enable: false }));
-        expect(screen.getByText('🏆 Top photographer')).toBeTruthy();
-        expect(screen.queryByText('📷 Top photo')).toBeNull();
+        expect(screen.getByText('Top photographer')).toBeTruthy();
+        expect(screen.queryByText('Top photo')).toBeNull();
         expect(screen.queryByText(/Guru's pick/)).toBeNull();
     });
 });

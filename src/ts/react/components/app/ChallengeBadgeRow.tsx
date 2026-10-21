@@ -47,7 +47,8 @@ function TeamMatchBadges({ teamMatch }: { teamMatch: TeamMatch }) {
     return (
         <>
             <StatusBadge variant="ghost" className="h-auto py-0.5 wrap-anywhere">
-                👥 {t('app.teamMatchVs').replace('{opponent}', () => teamMatch.them.name)}
+                <span aria-hidden="true">👥 </span>
+                {t('app.teamMatchVs').replace('{opponent}', () => teamMatch.them.name)}
             </StatusBadge>
             <StatusBadge variant="ghost">
                 {t('app.teamMatchVotes')

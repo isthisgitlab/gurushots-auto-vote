@@ -14,7 +14,7 @@ import { ToneNote } from '@/components/ui/ToneNote';
 import { interp } from '@/utils/interp';
 import { formatDuration, formatEndTime } from '@/utils/formatters';
 import * as ipc from '@/api/ipc';
-import { ipcErrorText } from '@/api/ipcErrorText';
+import { ipcErrorText, joinRefusalText } from '@/api/ipcErrorText';
 import { listedTags } from '../../../format/challengeListing';
 import { endTimeOf } from '../../../format/endTime';
 // The pure fresh-join guard the facade re-exports (services/VotingLogic) — imported at its home
@@ -120,8 +120,10 @@ function ChosenMarks({ c, name, onChoose }: { c: OpenChallenge; name: string; on
  * pressing it spends nothing.
  * A challenge that has not started cannot be joined, and neither can one that has only just started
  * and is not in the open list yet (a join would answer "no longer open"): the button is disabled and
- * its name says why. The same for a join the listing itself refuses (`blocked`: a full challenge, or
- * one whose unlock price GuruShots did not send) — though never a retry, which spends nothing.
+ * its name says why. A join the listing itself refuses (`blocked`: a full challenge, or one whose
+ * unlock price GuruShots did not send) still shows a plain Join — the listing can lag the live list,
+ * and a claim from an earlier session may only need its submit retried — so the button stays enabled,
+ * its name mentions the refusal, and a fresh join is answered `failed-no-charge` with the reason.
  */
 function JoinButton({
     id,
@@ -162,24 +164,21 @@ function JoinButton({
         ),
         { title: name, coins: cost },
     );
-    const held = blocked !== null && !retry;
     return (
         <button
             className={`btn btn-sm ${paid ? 'btn-latvian' : 'btn-neutral'}`}
             id={`discover-join-${id}`}
             aria-label={busy ? undefined : label}
             onClick={onClick}
-            disabled={busy !== null || waiting !== null || held}
+            disabled={busy !== null || waiting !== null}
         >
             {busy
                 ? t(busy === 'asking' ? 'app.discoverChecking' : 'app.discoverJoining')
                 : retry
                   ? t('app.discoverRetrySubmit')
-                  : blocked === 'full'
-                    ? t('app.discoverFull')
-                    : paid
-                      ? t('app.discoverJoinPaid')
-                      : t('app.discoverJoin')}
+                  : paid
+                    ? t('app.discoverJoinPaid')
+                    : t('app.discoverJoin')}
         </button>
     );
 }
@@ -287,7 +286,7 @@ function RowOutcome({
     const { variant } = meta;
     const refused =
         outcome.status === 'failed-no-charge' && (outcome.reason === 'full' || outcome.reason === 'price-unknown')
-            ? ipcErrorText(outcome.reason, t)
+            ? joinRefusalText(outcome.reason, t)
             : null;
     const content = (
         <>
@@ -353,11 +352,14 @@ function DiscoverRow({
     const name = rowName(c, t('app.discoverUntitled'));
     // Upcoming rows wait: until the start, then until the open list shows the challenge.
     const waiting = c.status !== 'upcoming' ? null : secondsToStart(c, nowSec) !== null ? 'notStarted' : 'startingNow';
-    // The capacity line, on a challenge that names a cap: the head count, and "Full" when it is reached.
+    // The capacity line, on a challenge whose cap and head count BOTH read: the head count, and
+    // "Full" when it is reached. A count the listing left unreadable shows no fraction (never
+    // "NaN/150") — the join asks the live list, which decides.
     const maxPlayers = Number(c.max_players);
-    const capped = Number.isFinite(maxPlayers) && maxPlayers > 0;
     const players = Number(c.players);
-    const prizes = c.first_prizes ? prizeItemsText(c.first_prizes, t) : '';
+    const capped = Number.isFinite(maxPlayers) && maxPlayers > 0 && Number.isFinite(players);
+    // The wire field is typed as an array but is not guaranteed one: read it only when it is.
+    const prizes = Array.isArray(c.first_prizes) ? prizeItemsText(c.first_prizes, t) : '';
     return (
         <li className="flex flex-wrap items-center justify-between gap-2 rounded border border-base-200 px-2 py-1.5">
             <div className="min-w-0">
@@ -374,8 +376,9 @@ function DiscoverRow({
                     </span>
                     {capped && (
                         <span>
-                            <span aria-hidden="true">· </span>
-                            👥 {players.toLocaleString()}/{maxPlayers.toLocaleString()}
+                            <span aria-hidden="true">· 👥 </span>
+                            <span className="sr-only">{t('app.players')}: </span>
+                            {players.toLocaleString()}/{maxPlayers.toLocaleString()}
                             {blocked === 'full' && (
                                 <>
                                     <span aria-hidden="true"> · </span>
