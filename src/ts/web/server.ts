@@ -190,9 +190,17 @@ const decodeArgs = (body: unknown): unknown[] | null => {
     return decoded;
 };
 
+// The dist/ file a URL path serves: the root is the web document, and the
+// favicon browsers ask for by convention (no token travels with it) is the
+// app icon staged next to it by scripts/build-react.ts.
+const staticFileFor = (pathname: string) => {
+    if (pathname === '/') return 'web.html';
+    if (pathname === '/favicon.ico') return 'favicon.png';
+    return decodeURIComponent(pathname).replace(/^\/+/, '');
+};
+
 const serveStatic = (distDir: string, pathname: string, res: ServerResponse) => {
-    const relative = pathname === '/' ? 'web.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
-    const file = path.resolve(distDir, relative);
+    const file = path.resolve(distDir, staticFileFor(pathname));
     if (!file.startsWith(distDir + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
         fail(res, 404, 'Not found');
         return;

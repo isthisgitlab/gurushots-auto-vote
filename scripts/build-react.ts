@@ -239,6 +239,11 @@ const prepareDist = async () => {
     fs.writeFileSync(path.join(distDir, HEADLESS_FLAG_FILE), HEADLESS_FLAG_SOURCE);
     // Web shell document (served by src/ts/web/server.ts).
     fs.writeFileSync(path.join(distDir, 'web.html'), webHtml);
+    // The app icon next to it: the server answers the browser's /favicon.ico
+    // with this file. The same committed logo the Electron and Android builds
+    // use as their icon.
+    const logoSrc = path.join(__dirname, '..', 'src', 'assets', 'logo.png');
+    fs.copyFileSync(logoSrc, path.join(distDir, 'favicon.png'));
 
     // Ship the semantic-matching word-vector lexicon into the webDir so the
     // Android WebView (Capacitor page + headless service) can fetch() it at

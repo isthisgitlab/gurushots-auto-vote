@@ -162,6 +162,7 @@ beforeAll(() => {
     distDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-web-dist-'));
     fs.writeFileSync(path.join(distDir, 'web.html'), '<html>web</html>');
     fs.writeFileSync(path.join(distDir, 'web-bundle.js'), 'console.log(1)');
+    fs.writeFileSync(path.join(distDir, 'favicon.png'), 'icon-bytes');
     fs.writeFileSync(path.join(distDir, 'model.onnx'), 'bin');
     fs.mkdirSync(path.join(distDir, 'assets'));
 });
@@ -199,6 +200,13 @@ describe('static files', () => {
         const head = await request('HEAD', '/web-bundle.js');
         expect(head.status).toBe(200);
         expect(head.body).toBe('');
+    });
+
+    test('/favicon.ico is answered with the app icon staged next to the document', async () => {
+        const icon = await request('GET', '/favicon.ico');
+        expect(icon.status).toBe(200);
+        expect(icon.headers['content-type']).toBe('image/png');
+        expect(icon.body).toBe('icon-bytes');
     });
 
     test('missing files, directories and paths outside dist/ are 404', async () => {
