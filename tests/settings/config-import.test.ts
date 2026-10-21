@@ -356,6 +356,29 @@ describe('the import of a settings.json (real fs)', () => {
             expect(fs.readFileSync(legacyFile, 'utf8')).toBe('{broken');
         });
 
+        test('the steps the settled notice gives import the fixed file once: config.json and the marker go, settings.json is kept', () => {
+            fs.writeFileSync(legacyFile, '{broken');
+            loadFresh();
+            settings.loadSettings();
+            expect(stored(configFile)).toMatchObject({ imported: { failure: { reason: 'corrupt' } } });
+
+            // The user fixed the file, then deleted config.json and v2-import.json beside it; settings.json stayed.
+            fs.writeFileSync(legacyFile, RAW);
+            fs.rmSync(configFile);
+            fs.rmSync(markerFile);
+
+            loadFresh();
+
+            expect(settings.getSettingsRecovery()).toBeNull();
+            expect(settings.loadSettings().app.theme).toBe('dark');
+            expect(stored(markerFile)).toEqual({ importedAt: expect.any(String) });
+
+            // That was the one import: the next start reads config.json, not settings.json.
+            fs.writeFileSync(legacyFile, JSON.stringify({ ...ONE_X, theme: 'light' }));
+            loadFresh();
+            expect(settings.loadSettings().app.theme).toBe('dark');
+        });
+
         test('a failed import is attempted once, however often the settings are read', () => {
             fs.writeFileSync(legacyFile, '{broken');
             let attempts = 0;

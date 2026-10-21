@@ -1700,9 +1700,9 @@ export const notice = {
     recoveryImportWhyMigration:
         'Tajā esošos uzstādījumus nevar pārveidot uz pašreizējo uzstādījumu formātu. Fails ir paturēts, kāds ir, un importēšana pēc savas iniciatīvas vairs netiek mēģināta.',
     recoveryImportSettledNext:
-        'Lai importētu settings.json, kad tas ir salabots, sadaļā „Par lietotni un datiem” izmanto „Dzēst visus vietējos datus” un pēc tam atkal palaiž lietotni.',
+        'Lai importētu settings.json, kad tas ir salabots: aizvēr lietotni, izdzēs failus config.json un v2-import.json no lietotnes datu mapes (paturi settings.json) un pēc tam atkal palaiž lietotni; nākamajā palaišanā salabotais fails tiek importēts vienreiz.',
     recoveryImportSettledNextAndroid:
-        'Lai importētu saglabātos uzstādījumus, kad tos atkal var nolasīt, sadaļā „Par lietotni un datiem” izmanto „Dzēst visus vietējos datus” un pēc tam atkal palaiž lietotni.',
+        'Lietotne izmanto noklusētos uzstādījumus. Iestati savus vēlreiz; jaunus uzstādījumus vari saglabāt kā parasti.',
     recoverySignInKept:
         'Bojātajā kopijā joprojām var būt pieteikšanās dati, arī pēc izrakstīšanās. Izdzēs to, kad tā vairs nav vajadzīga.',
     recoverySignInKeptAndroid: 'Bojātajā kopijā joprojām var būt pieteikšanās dati, arī pēc izrakstīšanās.',

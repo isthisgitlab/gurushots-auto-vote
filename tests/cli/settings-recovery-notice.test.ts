@@ -96,8 +96,10 @@ describe('describeSettingsRecovery', () => {
         expect(corrupt).toContain('it is not a readable settings file');
         expect(corrupt).toContain('the default settings were saved in its place');
         expect(corrupt).toContain('the file was left as it is');
-        expect(corrupt).toContain('settings-recovery start-fresh --force');
-        expect(corrupt).toContain('delete all local data');
+        expect(corrupt).toContain('delete config.json and v2-import.json');
+        expect(corrupt).toContain('(keep settings.json)');
+        expect(corrupt).not.toContain('start-fresh');
+        expect(corrupt).not.toContain('delete all local data');
 
         const migration = describeSettingsRecovery({
             code: 'settings-import-failed',
