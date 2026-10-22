@@ -13,6 +13,7 @@ import { BusyContent } from '@/components/ui/LoadingSpinner';
 
 import { EntryPhoto } from './EntryPhoto';
 import { EntryTime } from './EntryTime';
+import { PinToggle } from './PinToggle';
 import { SwapEntryButton, SwapBackButton } from './SwapEntryButton';
 
 /**
@@ -32,45 +33,6 @@ export type EntryPinControls = {
     busy: boolean;
     onToggle: (kind: EntryPinKind, imageId: string) => void | Promise<void>;
 };
-
-// A pressed pin is solid in its feature's colour. An unpressed one is a plain `btn-outline`, which daisyUI draws in
-// `base-content` (border and label) in every theme; the label names the feature, so no colour cue is needed.
-const PIN_PRESSED_VARIANTS = { boost: 'success', turbo: 'warning' } as const;
-
-/**
- * One "Pin for Boost / Turbo" toggle: `aria-pressed` carries the state, and the visible text says it too ("Pinned
- * for Boost", as the compact tile does), which is also its accessible name.
- */
-function PinToggle({
-    kind,
-    pressed,
-    busy,
-    onToggle,
-}: {
-    kind: EntryPinKind;
-    pressed: boolean;
-    busy: boolean;
-    onToggle: () => void | Promise<void>;
-}) {
-    const { t } = useTranslation();
-    const name = t(kind === 'boost' ? 'app.pinForBoost' : 'app.pinForTurbo');
-    const pinnedName = t(kind === 'boost' ? 'app.pinnedForBoost' : 'app.pinnedForTurbo');
-    return (
-        <ActionButton
-            variant={pressed ? PIN_PRESSED_VARIANTS[kind] : 'plain'}
-            className={[pressed ? '' : 'btn-outline', busy ? 'btn-disabled' : ''].filter(Boolean).join(' ')}
-            aria-pressed={pressed}
-            // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body> mid-write.
-            onClick={() => {
-                if (!busy) void onToggle();
-            }}
-            aria-disabled={busy}
-            aria-busy={busy}
-        >
-            <span aria-hidden="true">📌</span> {pressed ? pinnedName : name}
-        </ActionButton>
-    );
-}
 
 /**
  * Which pin toggles an entry shows: a toggle shows while its feature can still fire, and not on a photo that carries

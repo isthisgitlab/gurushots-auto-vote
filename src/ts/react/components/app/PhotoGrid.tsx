@@ -60,6 +60,7 @@ export function PhotoGrid({
     savedPicks = null,
     keepIds,
     recommendedIds,
+    tileSlot,
 }: {
     state: ListState;
     known: Map<string, LibraryPhoto>;
@@ -111,14 +112,18 @@ export function PhotoGrid({
     idleWithPicksKey?: string;
     /** The saved picks may show as stubs (nothing is read), with this member for their thumbnails. */
     savedPicks?: { memberId: string | null } | null;
-    /** Photos the submit modal's grid keeps showing, with their reason, whatever the listing says (taken back during it). */
+    /** The submit modal's grid keeps showing these, with their reason, whatever the listing says (taken back during it). */
     keepIds?: ReadonlySet<string>;
     /** The photos GuruShots suggests for the challenge; their tiles carry the recommended mark. */
     recommendedIds?: ReadonlyArray<string>;
+    /**
+     * Rendered under a selected tile, inside its grid cell (the chooser's pin toggles); the function decides
+     * which tiles get content. Absent, the tile is the grid cell as before (the submit modal).
+     */
+    tileSlot?: (id: string) => ReactNode;
 }) {
     const { t } = useTranslation();
-    const recommended = new Set(recommendedIds ?? []);
-    // Every won id this chooser has been told of: a search that no longer lists a chosen photo still knows it has won.
+    const recommended = new Set(recommendedIds ?? []); // Every won id this chooser has been told of: a search that no longer lists a chosen photo still knows it has won.
     const everWon = useRef(new Set<string>());
     // The element that last had the keyboard focus, and the hidden-count line an element the fresh read
     // hides hands it to.
@@ -127,6 +132,17 @@ export function PhotoGrid({
     // Load more waits while any read is in flight: its own batch, or a re-read of the listing on screen (a
     // read that takes the listing down shows the loader, and the button is gone with it).
     const loadMoreHeld = loadingMore || revalidating;
+    // A tile with the caller's slot under it (the pin toggles name the photo, so they sit with their tile), both in
+    // one grid cell. Without a slot the tile is the cell, as before.
+    const cell = (id: string, tileEl: ReactNode): ReactNode =>
+        tileSlot ? (
+            <div key={id} className="flex flex-col gap-1">
+                {tileEl}
+                {tileSlot(id)}
+            </div>
+        ) : (
+            tileEl
+        );
     // An element that leaves the page takes the focus to <body>: when that was one of this grid's (a tile,
     // or the Load more button its final batch took away) and the user had not moved the focus off it (see
     // onBlurCapture), the focus goes to the status line (if it is shown) instead of being lost.
@@ -168,7 +184,8 @@ export function PhotoGrid({
             const tiles = shownIdleIds.map((id) => {
                 const record = extraPhotos?.get(id);
                 if (record)
-                    return (
+                    return cell(
+                        id,
                         <PhotoTile
                             key={id}
                             photo={record}
@@ -183,10 +200,11 @@ export function PhotoGrid({
                             locked={locked}
                             lockedKey={lockedKey}
                             onToggle={onToggle}
-                        />
+                        />,
                     );
                 if (!savedPicks) return null;
-                return (
+                return cell(
+                    id,
                     <SavedPickTile
                         key={id}
                         id={id}
@@ -198,7 +216,7 @@ export function PhotoGrid({
                         locked={locked}
                         lockedKey={lockedKey}
                         onToggle={onToggle}
-                    />
+                    />,
                 );
             });
             return {
@@ -287,23 +305,25 @@ export function PhotoGrid({
             numberOf.set(id, numberOf.size + 1);
         }
         const shown = (id: string): number | null => (numbered ? (numberOf.get(id) ?? null) : null);
-        const tile = (photo: LibraryPhoto, position: number | null) => (
-            <PhotoTile
-                key={photo.id}
-                photo={photo}
-                memberId={listing.memberId}
-                selected={chosen.has(photo.id)}
-                position={position}
-                recommended={recommended.has(photo.id)}
-                blockedReason={blockedReasonOf(photo)}
-                atCap={atCap}
-                fullKey={fullKey}
-                allowedKnown={listing.allowedKnown}
-                locked={locked}
-                lockedKey={lockedKey}
-                onToggle={onToggle}
-            />
-        );
+        const tile = (photo: LibraryPhoto, position: number | null) =>
+            cell(
+                photo.id,
+                <PhotoTile
+                    key={photo.id}
+                    photo={photo}
+                    memberId={listing.memberId}
+                    selected={chosen.has(photo.id)}
+                    position={position}
+                    recommended={recommended.has(photo.id)}
+                    blockedReason={blockedReasonOf(photo)}
+                    atCap={atCap}
+                    fullKey={fullKey}
+                    allowedKnown={listing.allowedKnown}
+                    locked={locked}
+                    lockedKey={lockedKey}
+                    onToggle={onToggle}
+                />,
+            );
         // An empty listing's text. A non-preview listing puts it in the live region in place of the Showing
         // line (so "Showing 0 photos" never doubles "No photos found"); a preview, which names no count,
         // keeps it as a body paragraph.
@@ -418,14 +438,15 @@ export function PhotoGrid({
                                 const photo = lookup(id);
                                 if (photo) return tile(photo, shown(id));
                                 if (listing.preview && !won.has(id)) {
-                                    return (
+                                    return cell(
+                                        id,
                                         <PendingTile
                                             key={id}
                                             id={id}
                                             position={shown(id)}
                                             recheckFailed={recheckFailed}
                                             onToggle={onToggle}
-                                        />
+                                        />,
                                     );
                                 }
                                 // No batch read so far has shown the pick: a stub keeps it visible (and removable)
@@ -433,7 +454,8 @@ export function PhotoGrid({
                                 // the note says reading on would not find it; a won pick keeps its missing tile,
                                 // which says why it is gone.
                                 if (listing.truncated && !won.has(id)) {
-                                    return (
+                                    return cell(
+                                        id,
                                         <SavedPickTile
                                             key={id}
                                             id={id}
@@ -450,10 +472,11 @@ export function PhotoGrid({
                                                     ? 'app.photoChooserUnreachedTileNoteSearch'
                                                     : 'app.photoChooserUnreachedTileNote'
                                             }
-                                        />
+                                        />,
                                     );
                                 }
-                                return (
+                                return cell(
+                                    id,
                                     <MissingTile
                                         key={id}
                                         id={id}
@@ -463,7 +486,7 @@ export function PhotoGrid({
                                         search={search}
                                         won={won.has(id)}
                                         onToggle={onToggle}
-                                    />
+                                    />,
                                 );
                             })}
                         {shownPhotos.map((photo) => tile(photo, shown(photo.id)))}

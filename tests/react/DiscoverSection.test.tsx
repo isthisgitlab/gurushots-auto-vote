@@ -1276,6 +1276,10 @@ describe('chosen photos', () => {
                 ),
             })),
             joinChallenge: spendLater({ success: true, status: 'joined' }),
+            // The row chooser reads the row's pins; none are stored, so its pin controls stay idle.
+            getEntryPins: jest
+                .fn<ReturnType<WindowApi['getEntryPins']>, Parameters<WindowApi['getEntryPins']>>()
+                .mockResolvedValue({ boost: null, turbo: null }),
             setChallengeOverride: jest.fn(async (_key: string, id: string, value: string[]) => {
                 own[id] = value;
                 return true;

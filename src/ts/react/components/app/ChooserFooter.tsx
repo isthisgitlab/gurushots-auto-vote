@@ -11,12 +11,15 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
  */
 export function ChooserFooter({
     saveFailed,
+    saveError,
     saving,
     onSave,
     onClear,
     onClose,
 }: {
     saveFailed: boolean;
+    /** Replaces the generic save-failure text (a failed pin write says what was and was not saved). */
+    saveError?: string;
     saving: boolean;
     onSave: () => void;
     onClear: () => void;
@@ -27,7 +30,7 @@ export function ChooserFooter({
         <>
             {saveFailed && (
                 <div role="alert" className="alert alert-error py-2 text-sm">
-                    <span>{t('app.photoChooserSaveError')}</span>
+                    <span>{saveError ?? t('app.photoChooserSaveError')}</span>
                 </div>
             )}
             <div className="flex flex-wrap justify-end gap-2">

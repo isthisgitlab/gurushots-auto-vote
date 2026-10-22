@@ -234,7 +234,7 @@ export const app = {
     pinNotApplyingShort: '{kind} piespraude netiek piemērota',
     pinNotApplyingShortBoth: '{boost} un {turbo} piespraudes netiek piemērotas',
     pinGoneNote:
-        'Piespraustā {kind} foto šajā izaicinājumā pašlaik nav, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus. Piespraud citu foto vai noņem piespraudi.',
+        'Piespraustā {kind} foto šajā izaicinājumā pašlaik nav, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus. Piespraud citu foto vai noņem piespraudi. Ja tas ir viens no taviem izvēlētajiem foto, piespraude stāsies spēkā, kad tas tiks iesniegts.',
     pinConflictNote:
         'Piespraustajam {kind} foto jau ir {other}, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus. Piespraud citu foto vai noņem piespraudi.',
     pinSwapWarning:
@@ -912,6 +912,12 @@ export const app = {
         'Neizdevās ielādēt vairāk foto. Nolasīšana tika pārtraukta. Spied „Ielādēt vairāk foto”, lai mēģinātu vēlreiz.',
     photoChooserTileLocked: 'Aizslēgts, līdz tavs saglabātais saraksts ir nolasīts',
     photoChooserSaveError: 'Izvēlētos foto neizdevās saglabāt, jo uzstādījumu nevarēja ierakstīt. Mēģini vēlreiz.',
+    photoChooserPinHelp:
+        'Piespraud izvēlēto foto Boost vai Turbo. Piespraude stāsies spēkā, kad foto būs izaicinājumā.',
+    photoChooserPinElsewhere: '{kind} piespraude ir uz foto, kas jau atrodas izaicinājumā.',
+    photoChooserPinsUnreadable:
+        'Piespraudes nevarēja nolasīt, tāpēc tās šeit nevar mainīt. Aizvēri un atver to vēlreiz, lai mēģinātu atkal.',
+    photoChooserPinSaveError: 'Tavi foto tika saglabāti, bet {kind} piespraude netika: {reason}',
     photoChooserDiscardTitle: 'Atmest izmaiņas?',
     photoChooserDiscardText:
         'Izvēlētie foto ir mainīti, bet nav saglabāti. Ja aizvērsi tagad, šīs izmaiņas pazudīs. Izvēlies „Atcelt”, lai turpinātu izvēli, un tad spied „Izmantot šos foto”.',

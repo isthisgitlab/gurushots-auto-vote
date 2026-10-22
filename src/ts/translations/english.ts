@@ -232,7 +232,7 @@ export const app = {
     pinNotApplyingShort: '{kind} pin not applying',
     pinNotApplyingShortBoth: '{boost} and {turbo} pins not applying',
     pinGoneNote:
-        "The photo pinned for {kind} isn't in this challenge right now, so {kind} will use your usual {kind} settings. Pin another photo or clear the pin.",
+        "The photo pinned for {kind} isn't in this challenge right now, so {kind} will use your usual {kind} settings. Pin another photo or clear the pin. If it's one of your Chosen Photos, the pin applies once it's submitted.",
     pinConflictNote:
         'The photo pinned for {kind} already has {other}, so {kind} will use your usual {kind} settings. Pin another photo or clear the pin.',
     pinSwapWarning:
@@ -901,6 +901,10 @@ export const app = {
         "Couldn't load more photos. The read was interrupted. Press Load more photos to try again.",
     photoChooserTileLocked: 'Locked until your saved list is read',
     photoChooserSaveError: "The chosen photos weren't saved because the setting couldn't be written. Try again.",
+    photoChooserPinHelp: 'Pin a chosen photo for Boost or Turbo. The pin applies once the photo is in the challenge.',
+    photoChooserPinElsewhere: '{kind} is pinned to a photo already in the challenge.',
+    photoChooserPinsUnreadable: "Pins couldn't be read, so they can't be changed here. Close and reopen to try again.",
+    photoChooserPinSaveError: "Your photos were saved, but the {kind} pin wasn't: {reason}",
     photoChooserDiscardTitle: 'Discard your changes?',
     photoChooserDiscardText:
         "You've changed the chosen photos but haven't saved them. Closing now throws those changes away. Choose Cancel to keep choosing, then press Use these photos.",
