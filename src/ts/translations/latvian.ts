@@ -913,11 +913,15 @@ export const app = {
     photoChooserTileLocked: 'Aizslēgts, līdz tavs saglabātais saraksts ir nolasīts',
     photoChooserSaveError: 'Izvēlētos foto neizdevās saglabāt, jo uzstādījumu nevarēja ierakstīt. Mēģini vēlreiz.',
     photoChooserPinHelp:
-        'Piespraud izvēlēto foto Boost vai Turbo. Piespraude stāsies spēkā, kad foto būs izaicinājumā.',
-    photoChooserPinElsewhere: '{kind} piespraude ir uz foto, kas jau atrodas izaicinājumā.',
+        'Piespraud izvēlēto foto Boost vai Turbo. Piespraudes saglabājas ar „Izmantot šos foto” un stājas spēkā, kad foto ir izaicinājumā.',
+    photoChooserPinElsewhere: '{kind} piespraude ir uz foto, kas šajā sarakstā nav.',
     photoChooserPinsUnreadable:
         'Piespraudes nevarēja nolasīt, tāpēc tās šeit nevar mainīt. Aizvēri un atver to vēlreiz, lai mēģinātu atkal.',
-    photoChooserPinSaveError: 'Tavi foto tika saglabāti, bet {kind} piespraude netika: {reason}',
+    photoChooserPinSaveError:
+        'Izvēlētie foto ir saglabāti, bet {kind} piespraude nav saglabāta: {reason} Spied „Izmantot šos foto”, lai mēģinātu vēlreiz.',
+    photoChooserPinSaveErrorBoth:
+        'Izvēlētie foto ir saglabāti, bet Boost un Turbo piespraudes nav saglabātas: {reason} Spied „Izmantot šos foto”, lai mēģinātu vēlreiz.',
+    photoChooserPinGroup: 'Izvēlētā {n}. foto piespraudes',
     photoChooserDiscardTitle: 'Atmest izmaiņas?',
     photoChooserDiscardText:
         'Izvēlētie foto ir mainīti, bet nav saglabāti. Ja aizvērsi tagad, šīs izmaiņas pazudīs. Izvēlies „Atcelt”, lai turpinātu izvēli, un tad spied „Izmantot šos foto”.',

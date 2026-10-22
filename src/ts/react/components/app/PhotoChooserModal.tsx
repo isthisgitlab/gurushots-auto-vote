@@ -55,12 +55,11 @@ const toggledPinDraft = (prev: PinDraft, stored: EntryPins, kind: EntryPinKind, 
     return next;
 };
 
-/** The draft after `imageId` left the selection: a pin naming it — draft or stored — is cleared. */
-const pinDraftWithout = (prev: PinDraft, stored: EntryPins, imageId: string): PinDraft => {
+/** The draft after `imageId` left the selection: a draft pin naming it is dropped, back to the stored pin. */
+const pinDraftWithout = (prev: PinDraft, imageId: string): PinDraft => {
     const next: PinDraft = { ...prev };
     for (const kind of PIN_KINDS) {
-        next[kind] = pinOf(prev, stored, kind) === imageId ? null : next[kind];
-        if (next[kind] === stored[kind]) {
+        if (next[kind] === imageId) {
             delete next[kind];
         }
     }
@@ -106,8 +105,8 @@ function PhotoChooserBody({
     const currentMember = useCurrentMember();
     const [selected, setSelected] = useState<string[]>(value);
     const [pinDraft, setPinDraft] = useState<PinDraft>({});
-    // The kind whose pin write failed at the last Save, with the handler's error code.
-    const [pinSaveError, setPinSaveError] = useState<{ kind: EntryPinKind; code: string } | null>(null);
+    // The kind(s) whose pin writes failed at the last Save, with the first failure's error code.
+    const [pinSaveError, setPinSaveError] = useState<{ kinds: EntryPinKind[]; code: string } | null>(null);
     unsaved.current =
         selected.length !== value.length ||
         selected.some((id, i) => id !== value[i]) ||
@@ -129,33 +128,40 @@ function PhotoChooserBody({
     const showAuto = canSuggest && challengeId !== null;
     const picker = usePhotoPicker({ challengeId, usage: 'submit', alwaysFresh: false, selected });
     const { state, known, revalidating, recheckFailed, retry, refresh, resetLoadPhotos } = picker;
-    // Mirrors of the state a stable `toggle` reads at call time (it must stay identity-stable: the memoised
-    // tiles skip their re-render by it).
+    // A mirror of the selection the stable `toggle` reads at call time (it must stay identity-stable:
+    // the memoised tiles skip their re-render by it).
     const selectedRef = useRef(selected);
     selectedRef.current = selected;
-    const storedPinsRef = useRef(storedPins);
-    storedPinsRef.current = storedPins;
     const toggle = useCallback((id: string) => {
-        if (selectedRef.current.includes(id)) setPinDraft((prev) => pinDraftWithout(prev, storedPinsRef.current, id));
+        if (selectedRef.current.includes(id)) setPinDraft((prev) => pinDraftWithout(prev, id));
         setSelected((prev) => (prev.includes(id) ? prev.filter((other) => other !== id) : [...prev, id]));
     }, []);
     const togglePinDraft = (kind: EntryPinKind, imageId: string) =>
         setPinDraft((prev) => toggledPinDraft(prev, storedPins, kind, imageId));
+    // Clears a kind's pin at its next Save: the elsewhere line's Clear pin button.
+    const clearPinDraft = (kind: EntryPinKind) => setPinDraft((prev) => ({ ...prev, [kind]: null }));
 
-    // The pin writes of a save: each kind the draft changed, once, after the host's save (useChooserSave runs
-    // them). Only reachable with a challenge — the pin controls, and so a changed draft, exist only for one.
+    // The pin writes of a save: every changed kind is attempted once, after the host's save (useChooserSave
+    // runs them), and the failures collected; any failure keeps the chooser open. A null whose stored photo
+    // the draft moved to the other kind is not sent: that write clears it atomically, so a partial state
+    // cannot survive a failed second write. Only reachable with a challenge — the pin controls, and so a
+    // changed draft, exist only for one.
     let commit: (() => Promise<boolean>) | undefined;
     if (challengeId !== null) {
         const challengeKey = challengeId;
         commit = async () => {
+            const failures: Array<{ kind: EntryPinKind; code: string }> = [];
             for (const kind of PIN_KINDS) {
                 const next = pinDraft[kind];
                 if (next === undefined) continue;
+                const other: EntryPinKind = kind === 'boost' ? 'turbo' : 'boost';
+                if (next === null && storedPins[kind] === pinDraft[other]) continue;
                 const outcome = await runSetEntryPin(kind, challengeKey, next);
-                if (!outcome.success) {
-                    setPinSaveError({ kind, code: outcome.error });
-                    return false;
-                }
+                if (!outcome.success) failures.push({ kind, code: outcome.error });
+            }
+            if (failures.length > 0) {
+                setPinSaveError({ kinds: failures.map((failure) => failure.kind), code: failures[0].code });
+                return false;
             }
             return true;
         };
@@ -169,10 +175,13 @@ function PhotoChooserBody({
         hostSave();
     };
     const pinSaveErrorText = pinSaveError
-        ? interp(t('app.photoChooserPinSaveError'), {
-              kind: kindName(pinSaveError.kind, t),
-              reason: ipcErrorText(pinSaveError.code, t),
-          })
+        ? interp(
+              t(pinSaveError.kinds.length === 2 ? 'app.photoChooserPinSaveErrorBoth' : 'app.photoChooserPinSaveError'),
+              {
+                  kind: kindName(pinSaveError.kinds[0], t),
+                  reason: ipcErrorText(pinSaveError.code, t),
+              },
+          )
         : undefined;
     const atCap = selected.length >= MAX_CHOSEN_PHOTOS;
     const idleKey = showAuto ? 'app.photoChooserIdleAuto' : 'app.photoChooserIdle';
@@ -245,8 +254,11 @@ function PhotoChooserBody({
                             {t('app.photoChooserPinHelp')}
                         </p>
                         {elsewhereKinds.map((kind) => (
-                            <p key={kind} className="text-base-content/70 text-xs">
-                                {interp(t('app.photoChooserPinElsewhere'), { kind: kindName(kind, t) })}
+                            <p key={kind} className="text-base-content/70 flex items-center gap-2 text-xs">
+                                <span>{interp(t('app.photoChooserPinElsewhere'), { kind: kindName(kind, t) })}</span>
+                                <button type="button" className="btn btn-xs" onClick={() => clearPinDraft(kind)}>
+                                    {t('app.pinClear')}
+                                </button>
                             </p>
                         ))}
                     </>
@@ -277,7 +289,13 @@ function PhotoChooserBody({
                     challengeId !== null && pinsError === null
                         ? (id) =>
                               selected.includes(id) ? (
-                                  <div className="flex flex-wrap gap-1">
+                                  <div
+                                      role="group"
+                                      aria-label={interp(t('app.photoChooserPinGroup'), {
+                                          n: selected.indexOf(id) + 1,
+                                      })}
+                                      className="flex flex-wrap gap-1"
+                                  >
                                       {PIN_KINDS.map((kind) => (
                                           <PinToggle
                                               key={kind}

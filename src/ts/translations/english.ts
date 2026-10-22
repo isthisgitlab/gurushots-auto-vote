@@ -901,10 +901,15 @@ export const app = {
         "Couldn't load more photos. The read was interrupted. Press Load more photos to try again.",
     photoChooserTileLocked: 'Locked until your saved list is read',
     photoChooserSaveError: "The chosen photos weren't saved because the setting couldn't be written. Try again.",
-    photoChooserPinHelp: 'Pin a chosen photo for Boost or Turbo. The pin applies once the photo is in the challenge.',
-    photoChooserPinElsewhere: '{kind} is pinned to a photo already in the challenge.',
+    photoChooserPinHelp:
+        'Pin a chosen photo for Boost or Turbo. Pins are saved with Use these photos and apply once the photo is in the challenge.',
+    photoChooserPinElsewhere: "{kind} is pinned to a photo that isn't in this list.",
     photoChooserPinsUnreadable: "Pins couldn't be read, so they can't be changed here. Close and reopen to try again.",
-    photoChooserPinSaveError: "Your photos were saved, but the {kind} pin wasn't: {reason}",
+    photoChooserPinSaveError:
+        "Your chosen photos are kept, but the {kind} pin wasn't saved: {reason} Press Use these photos to try again.",
+    photoChooserPinSaveErrorBoth:
+        "Your chosen photos are kept, but the Boost and Turbo pins weren't saved: {reason} Press Use these photos to try again.",
+    photoChooserPinGroup: 'Pins for chosen photo {n}',
     photoChooserDiscardTitle: 'Discard your changes?',
     photoChooserDiscardText:
         "You've changed the chosen photos but haven't saved them. Closing now throws those changes away. Choose Cancel to keep choosing, then press Use these photos.",

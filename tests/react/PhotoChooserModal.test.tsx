@@ -20,6 +20,7 @@ import { app, errors } from '../../src/ts/translations/english';
 import { MAX_CHOSEN_PHOTOS } from '../../src/ts/settings/limits';
 import { invalid } from '../helpers/invalid';
 import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
+import type { EntryPinKind } from '../../src/ts/types/settings';
 import type { WindowApi } from '../../src/ts/types/ipc';
 
 // The live picker instances, so a test can press loadMore: the saved-list read keys on the listing the
@@ -1900,6 +1901,7 @@ describe('pins', () => {
     const turboToggle = () => screen.getByRole('button', { name: 'Pin for Turbo' });
     const turboPressed = () => screen.getByRole('button', { name: 'Pinned for Turbo' });
     const save = () => screen.getByRole('button', { name: 'Use these photos' });
+    const groupOf = (n: number) => screen.getByRole('group', { name: `Pins for chosen photo ${n}` });
 
     beforeEach(() => {
         // The suite's shared mocks: this describe overrides them per case, so each starts from none.
@@ -1964,16 +1966,15 @@ describe('pins', () => {
         expect(turboPressed()).toBeTruthy();
     });
 
-    test('a Boost/Turbo swap is saved as the stored result: Boost on the photo, Turbo cleared', async () => {
+    test('a Boost/Turbo swap sends one write: the moved Turbo null is the backend’s to clear', async () => {
         getPins().mockResolvedValue({ boost: null, turbo: idOf(1) });
         const { onSave, onClose } = setup({ value: [idOf(1)] });
         await screen.findByRole('button', { name: 'Pinned for Turbo' });
         fireEvent.click(boostToggle());
         fireEvent.click(save());
         await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(1)]));
-        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(2));
-        expect(setPins()).toHaveBeenNthCalledWith(1, 'boost', 7, idOf(1));
-        expect(setPins()).toHaveBeenNthCalledWith(2, 'turbo', 7, null);
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(1));
+        expect(setPins()).toHaveBeenCalledWith('boost', 7, idOf(1));
         await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     });
 
@@ -2014,28 +2015,27 @@ describe('pins', () => {
         expect(onClose).not.toHaveBeenCalled();
     });
 
-    test('deselecting a pinned photo clears its pin; a pin outside the selection is kept and named', async () => {
+    test('deselecting a photo with a stored pin keeps it: no write, and the elsewhere line names it', async () => {
         getPins().mockResolvedValue({ boost: idOf(1), turbo: idOf(9) });
         const { onSave } = setup({ value: [idOf(1)] });
         expect(await screen.findByRole('button', { name: 'Pinned for Boost' })).toBeTruthy();
-        // Turbo names a photo that is not among the chosen: one line above the grid says so.
-        expect(screen.getByText('Turbo is pinned to a photo already in the challenge.')).toBeTruthy();
         await opened();
         fireEvent.click(tile(1));
-        expect(screen.queryByRole('button', { name: /^Pin/ })).toBeNull();
+        // The stored pin is untouched: the line above the grid now names it, with its Clear pin button.
+        expect(screen.getByText("Boost is pinned to a photo that isn't in this list.")).toBeTruthy();
+        expect(screen.getByText("Turbo is pinned to a photo that isn't in this list.")).toBeTruthy();
         fireEvent.click(save());
         await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
-        expect(setPins()).toHaveBeenCalledTimes(1);
-        expect(setPins()).toHaveBeenCalledWith('boost', 7, null);
-        // Turbo's elsewhere line stays: its pin was not touched.
-        expect(screen.getByText('Turbo is pinned to a photo already in the challenge.')).toBeTruthy();
+        expect(setPins()).not.toHaveBeenCalled();
     });
 
-    test('deselecting a photo pinned in this draft, with none stored, leaves nothing to write', async () => {
+    test('deselecting a photo drops only the draft pin set on it in this session', async () => {
         const { onSave } = setup({ value: [idOf(1)] });
         await opened();
         fireEvent.click(boostToggle());
+        expect(boostPressed()).toBeTruthy();
         fireEvent.click(tile(1));
+        expect(screen.queryByRole('button', { name: /^Pin/ })).toBeNull();
         fireEvent.click(save());
         await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
         expect(setPins()).not.toHaveBeenCalled();
@@ -2044,13 +2044,25 @@ describe('pins', () => {
     test('pinning a chosen photo for a kind replaces the elsewhere pin at save', async () => {
         getPins().mockResolvedValue({ boost: idOf(9), turbo: null });
         const { onSave } = setup({ value: [idOf(1)] });
-        expect(await screen.findByText('Boost is pinned to a photo already in the challenge.')).toBeTruthy();
+        expect(await screen.findByText("Boost is pinned to a photo that isn't in this list.")).toBeTruthy();
         fireEvent.click(boostToggle());
-        expect(screen.queryByText(/is pinned to a photo already in the challenge/)).toBeNull();
+        expect(screen.queryByText(/isn't in this list/)).toBeNull();
         fireEvent.click(save());
         await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
         expect(setPins()).toHaveBeenCalledTimes(1);
         expect(setPins()).toHaveBeenCalledWith('boost', 7, idOf(1));
+    });
+
+    test("the elsewhere line's Clear pin saves the clear of the stored pin", async () => {
+        getPins().mockResolvedValue({ boost: idOf(9), turbo: null });
+        const { onSave } = setup({ value: [idOf(1)] });
+        const line = await screen.findByText("Boost is pinned to a photo that isn't in this list.");
+        fireEvent.click(within(line.closest('p') as HTMLElement).getByRole('button', { name: 'Clear pin' }));
+        expect(screen.queryByText(/isn't in this list/)).toBeNull();
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+        expect(setPins()).toHaveBeenCalledTimes(1);
+        expect(setPins()).toHaveBeenCalledWith('boost', 7, null);
     });
 
     test('a pin-only change asks before discarding, and a toggle taken back is no change', async () => {
@@ -2078,7 +2090,7 @@ describe('pins', () => {
         await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toBe(
-            `Your photos were saved, but the Boost pin wasn't: ${english('errors.pinCapReached')}`,
+            `Your chosen photos are kept, but the Boost pin wasn't saved: ${english('errors.pinCapReached')} Press Use these photos to try again.`,
         );
         expect(onClose).not.toHaveBeenCalled();
     });
@@ -2090,7 +2102,7 @@ describe('pins', () => {
         setPins().mockResolvedValueOnce({ success: false, error: 'pin-write-failed' });
         fireEvent.click(save());
         await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(1));
-        expect((await screen.findByRole('alert')).textContent).toContain("the Boost pin wasn't");
+        expect((await screen.findByRole('alert')).textContent).toContain("the Boost pin wasn't saved");
         fireEvent.click(save());
         await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
         expect(onSave).toHaveBeenCalledTimes(2);
@@ -2102,12 +2114,56 @@ describe('pins', () => {
     test('Clear empties the selection and the pin draft with it, so nothing pin-named is saved', async () => {
         getPins().mockResolvedValue({ boost: idOf(9), turbo: null });
         const { onSave } = setup({ value: [idOf(1)] });
-        expect(await screen.findByText('Boost is pinned to a photo already in the challenge.')).toBeTruthy();
+        expect(await screen.findByText("Boost is pinned to a photo that isn't in this list.")).toBeTruthy();
         fireEvent.click(boostToggle());
         fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
-        expect(screen.getByText('Boost is pinned to a photo already in the challenge.')).toBeTruthy();
+        expect(screen.getByText("Boost is pinned to a photo that isn't in this list.")).toBeTruthy();
         fireEvent.click(save());
         await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
         expect(setPins()).not.toHaveBeenCalled();
+    });
+
+    test('a save where both pin writes fail attempts both and shows the both-pins message', async () => {
+        getPins().mockResolvedValue({ boost: null, turbo: null });
+        const { onClose } = setup({ value: [idOf(1), idOf(2)] });
+        await opened();
+        fireEvent.click(within(groupOf(1)).getByRole('button', { name: 'Pin for Boost' }));
+        fireEvent.click(within(groupOf(2)).getByRole('button', { name: 'Pin for Turbo' }));
+        setPins().mockResolvedValue({ success: false, error: 'pin-write-failed' });
+        fireEvent.click(save());
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(2));
+        expect(setPins()).toHaveBeenNthCalledWith(1, 'boost', 7, idOf(1));
+        expect(setPins()).toHaveBeenNthCalledWith(2, 'turbo', 7, idOf(2));
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            `Your chosen photos are kept, but the Boost and Turbo pins weren't saved: ${english('errors.pinFailed')} Press Use these photos to try again.`,
+        );
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test('a save where one pin write fails still attempts the other and names the failed kind', async () => {
+        getPins().mockResolvedValue({ boost: null, turbo: null });
+        const { onClose } = setup({ value: [idOf(1), idOf(2)] });
+        await opened();
+        fireEvent.click(within(groupOf(1)).getByRole('button', { name: 'Pin for Boost' }));
+        fireEvent.click(within(groupOf(2)).getByRole('button', { name: 'Pin for Turbo' }));
+        setPins().mockImplementation(async (kind: EntryPinKind) =>
+            kind === 'boost' ? { success: false, error: 'pin-write-failed' } : { success: true },
+        );
+        fireEvent.click(save());
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(2));
+        expect(setPins()).toHaveBeenNthCalledWith(1, 'boost', 7, idOf(1));
+        expect(setPins()).toHaveBeenNthCalledWith(2, 'turbo', 7, idOf(2));
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            `Your chosen photos are kept, but the Boost pin wasn't saved: ${english('errors.pinFailed')} Press Use these photos to try again.`,
+        );
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test("each tile's pin pair is a group named with the photo's position in the list", async () => {
+        setup({ value: [idOf(2), idOf(1)] });
+        await opened();
+        // Photo 2 was picked first, so its pair is group 1; the group sits with its tile in the cell.
+        expect(groupOf(1).previousElementSibling!.getAttribute('aria-label')).toMatch(/^Photo 00000002:/);
+        expect(groupOf(2).previousElementSibling!.getAttribute('aria-label')).toMatch(/^Photo 00000001:/);
     });
 });
