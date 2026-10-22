@@ -1,8 +1,8 @@
 /**
- * The lock settings.json and config.json are changed under on a desktop, where two processes (the app and the CLI) share
- * the user-data directory: the import, and the mirror's compare-and-write of settings.json, hold it, so that neither
- * runs while the other is in the middle of its change. Android has no file lock (the native compare-and-write of each
- * key decides there), so the lock is always free.
+ * The lock config.json and the import marker are changed under on a desktop, where two processes (the app and the CLI)
+ * share the user-data directory: the 1.x import, the import marker's change, and the settled-import defaults write hold
+ * it, so that neither runs while the other is in the middle of its change. Android has no file lock (the native
+ * compare-and-write of each key decides there), so the lock is always free.
  */
 
 import { acquireUnlockLock } from '../joinStateStore';
@@ -35,8 +35,8 @@ const acquireSettingsLock = (waitMs: number) => {
     };
 };
 
-// How many holds of the lock this process has now: a change made inside one (the mirror's, the import's) that needs the lock
-// again does not wait for itself.
+// How many holds of the lock this process has now: a change made inside one (the import marker's change, made inside the
+// import) that needs the lock again does not wait for itself.
 let heldHere = 0;
 
 /**

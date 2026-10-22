@@ -129,8 +129,8 @@ export type EntryPins = Record<EntryPinKind, string | null>;
 export type AuthKey = keyof ConfigAuthV2;
 
 /**
- * The settings a renderer sees: the configuration without its `auth` block (the token, the API headers, the last
- * user name and the chosen-photos account never leave the main process), plus whether a token exists.
+ * The settings a renderer sees: the configuration without its `auth` block (the token, the API headers and the last
+ * user name never leave the main process), plus whether a token exists.
  */
 export type RendererSettings = Omit<ConfigV2, 'auth'> & { hasToken: boolean };
 

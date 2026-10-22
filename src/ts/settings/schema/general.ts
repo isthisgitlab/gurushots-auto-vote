@@ -99,7 +99,7 @@ export const generalSettings = {
         description: 'app.voteOnNewEntryDesc',
     },
     // Manual Only: the app runs nothing by itself in this challenge (services/manualPhotosOnly.ts); the key keeps its
-    // original name so saved settings, the format-1 mirror and the frozen v1 importer need no migration.
+    // original name so saved settings and the frozen v1 importer need no migration.
     // challengeOnly: `false` exists only as a per-challenge override. An explicit `false` in a rule or profile
     // would, with first-match-wins rule order, silently cancel a later, more specific "on".
     // It sits in `general`, not `autoSubmit`: that group is disabled once the slots are full, which is
