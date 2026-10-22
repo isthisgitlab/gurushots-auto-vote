@@ -112,7 +112,7 @@ export function PhotoGrid({
     idleWithPicksKey?: string;
     /** The saved picks may show as stubs (nothing is read), with this member for their thumbnails. */
     savedPicks?: { memberId: string | null } | null;
-    /** The submit modal's grid keeps showing these, with their reason, whatever the listing says (taken back during it). */
+    /** Photos the submit modal's grid keeps showing, with their reason, whatever the listing says (taken back during it). */
     keepIds?: ReadonlySet<string>;
     /** The photos GuruShots suggests for the challenge; their tiles carry the recommended mark. */
     recommendedIds?: ReadonlyArray<string>;
@@ -123,7 +123,8 @@ export function PhotoGrid({
     tileSlot?: (id: string) => ReactNode;
 }) {
     const { t } = useTranslation();
-    const recommended = new Set(recommendedIds ?? []); // Every won id this chooser has been told of: a search that no longer lists a chosen photo still knows it has won.
+    const recommended = new Set(recommendedIds ?? []);
+    // Every won id this chooser has been told of: a search that no longer lists a chosen photo still knows it has won.
     const everWon = useRef(new Set<string>());
     // The element that last had the keyboard focus, and the hidden-count line an element the fresh read
     // hides hands it to.
