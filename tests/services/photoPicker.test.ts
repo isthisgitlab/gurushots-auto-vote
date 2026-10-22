@@ -1790,6 +1790,17 @@ describe('photoPicker', () => {
             ['no people, pets or animals', ['people', 'animals']],
             ['Pets are not allowed', ['animals']],
             ['Images of persons will be disqualified', ['people']],
+            // A sentence-initial "No X, or … disqualified" is a penalty on
+            // photos lacking X, so the exclusion still counts.
+            ['No people, or your photo will be disqualified.', ['people']],
+            ['No people or the entry will be disqualified.', ['people']],
+            ['No animals, otherwise the photo is disqualified.', ['animals']],
+            ['Please no people in the frame, photos breaking this rule will be disqualified.', ['people']],
+            ['No people allowed, entries that break this are excluded.', ['people']],
+            ['No people - any photo with a face is off-topic', ['people']],
+            // A photo-noun post-modifier without a verdict is an exclusion.
+            ['Share photos without people in them', ['people']],
+            ['Show a city with no people or cars.', ['people']],
         ])('"%s" excludes %j', (text, expected) => {
             expect(excludes(text)).toEqual(expected);
         });
@@ -1813,8 +1824,36 @@ describe('photoPicker', () => {
             'No personal edits',
             'no petals',
             'carpets are not allowed',
+            'Photos without people in them will be disqualified.',
+            'Photos without pets in the frame are off-topic.',
+            'Entries with no animals, will be disqualified.',
         ])('"%s" excludes nothing', (text) => {
             expect(excludes(text)).toEqual([]);
+        });
+
+        // A negator before the noun list ("without pets") makes the noun the
+        // object of the negation, not the subject a verdict is pronounced on.
+        // The titles name no concept, so the regex alone decides.
+        test.each([
+            ['Best Friends', 'Photos without pets will be considered off-topic.'],
+            ['Street Life', 'Images with no people are disqualified.'],
+            ['City Night', 'Shots that do not include people will be considered off-topic.'],
+            ['Furry Friends', 'Photos without animals are not allowed.'],
+            ['Best Friends', 'Images with no animals will be disqualified.'],
+            ['Best Friends', 'Photos without pets or people are disqualified.'],
+            ['Best Friends', 'Images with no people, pets or animals will be disqualified.'],
+        ])('"%s" ignores a negated verdict: "%s" excludes nothing', (title, text) => {
+            expect(descriptionExclusions({ title, welcome_message: text })).toEqual([]);
+        });
+
+        test('"no other ..." grants an exception instead of excluding', () => {
+            expect(
+                descriptionExclusions({
+                    title: 'Solo',
+                    welcome_message: 'one person only, no other people in the frame',
+                }),
+            ).toEqual([]);
+            expect(descriptionExclusions({ title: 'My Best Friend', welcome_message: 'no other animals' })).toEqual([]);
         });
 
         test('an empty or missing description excludes nothing', () => {
@@ -1826,15 +1865,40 @@ describe('photoPicker', () => {
         test.each([
             // Pinned known limits: the follower check is strict (" are" is not a
             // follower, so the comma-joined list is rejected whole), "should" is
-            // a follower, and a "/" after a noun is a separator rather than a
-            // follower (so only the second lead match counts).
+            // a follower, a "/" after a noun is a separator rather than a
+            // follower (so only the second lead match counts), and the greedy
+            // list ends at the last noun ("animal"), so a phrase after it
+            // (" lovers") is not a follower and the challenge FOR animal lovers
+            // reads as excluding nothing.
             ['No people, animals are welcome', []],
             ['without people around', []],
             ['no pet photos', []],
             ['no animals should be harmed', ['animals']],
             ['no pets/no people', ['people']],
+            ['no people or animal lovers', []],
         ])('known limit: "%s" → %j', (text, expected) => {
             expect(excludes(text)).toEqual(expected);
+        });
+
+        // Known limit: a requirement sentence whose lead keyword has no listed
+        // photo word right before it ("photos", "entries", …) is still read as
+        // an exclusion — only those words open the requirement reading.
+        test.each([
+            ['Photos that have no people in them will be disqualified.', ['people']],
+            ['Landscapes without people in them are disqualified.', ['people']],
+            ['Scenes with no animals in the frame will be disqualified.', ['animals']],
+            ['Photos with absolutely no people in them will be disqualified.', ['people']],
+            ['Shots taken without people in the frame are off-topic.', ['people']],
+            ['Your photo, without people in it, will be disqualified.', ['people']],
+        ])('known limit: "%s" → %j', (text, expected) => {
+            expect(excludes(text)).toEqual(expected);
+        });
+
+        test('the requirement reading starts exactly at the listed photo noun', () => {
+            // "Entries with no animals, …" is the requirement reading; the
+            // sentence-initial penalty reading one line down still excludes.
+            expect(excludes('Entries with no animals, will be disqualified.')).toEqual([]);
+            expect(excludes('No animals, or the photo will be disqualified.')).toEqual(['animals']);
         });
 
         test.each([
@@ -1865,6 +1929,28 @@ describe('photoPicker', () => {
             expect(descriptionExclusions({ title: 'Dogs', welcome_message: 'no animals' }, ['dogs'])).toEqual([
                 'animals',
             ]);
+            // The guard's animal set keeps the taxonomy words the label set
+            // dropped, and a participle does not hide the real animal noun
+            // beside it.
+            expect(descriptionExclusions({ title: 'Wild Mammals', welcome_message: 'No pets please.' })).toEqual([]);
+            expect(descriptionExclusions({ title: 'Dog Walking', welcome_message: 'No animals' })).toEqual([]);
+        });
+
+        test('a photo-type title word and a participle do not cancel a concept', () => {
+            // "Portrait" names how a photo is framed, not that a person is in it;
+            // "Fishing" is an activity, not the fish its stem lands on.
+            expect(
+                descriptionExclusions({ title: 'Pet Portraits', welcome_message: 'Show us your pet. No people.' }),
+            ).toEqual(['people']);
+            expect(descriptionExclusions({ title: 'Fishing Boats', welcome_message: 'No people or animals.' })).toEqual(
+                ['people', 'animals'],
+            );
+        });
+
+        test('an ignored title word does not cancel a description exclusion', () => {
+            expect(
+                descriptionExclusions({ title: 'Street', welcome_message: 'No people please.' }, ['people']),
+            ).toEqual(['people']);
         });
 
         test('adversarial descriptions finish in bounded time', () => {

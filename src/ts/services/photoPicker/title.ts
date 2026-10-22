@@ -14,6 +14,7 @@ import type {
     ChallengeText,
     ChallengeTheme,
     ExcludedConcept,
+    ExcludedConceptName,
     ExcludedSubject,
     IgnoreWords,
     Negation,
@@ -231,15 +232,23 @@ const PEOPLE_LABEL_STEMS = new Set(
         'tourist',
     ].map((w) => stem(w)),
 );
+// The conflict guard's people set. The photo-type words "portrait", "face" and
+// "selfie" name how a photo is framed, not that a person is in it — a photo of
+// a pet can be a portrait — so a title holding one is not asking for people and
+// must not cancel a description's "no people".
+const PHOTO_TYPE_STEMS = new Set(['portrait', 'face', 'selfie'].map((w) => stem(w)));
+const PEOPLE_GUARD_STEMS = new Set([...PEOPLE_LABEL_STEMS].filter((s) => !PHOTO_TYPE_STEMS.has(s)));
 
 // The animal concept, spelled out for the same reason as the people one: the
 // vision labels on a photo of an animal rarely say "animal" — they say "Dog",
-// "Vertebrate", "Wildlife". Compared by EXACT stem, not matches(): "cat" must
-// not catch "catamaran". Deliberately left out are the words that name an
-// object as often as an animal — "bear" (teddy bear), "duck" (rubber duck),
-// "mouse" (computer mouse), "seal" (wax seal), "feather", "fur", "fin" (quill,
-// coat, surfboard), "wing" (aircraft) — dropping them would keep those photos
-// out of still-life and machine challenges.
+// "Wildlife". Compared by EXACT stem, not matches(): "cat" must not catch
+// "catamaran". Deliberately left out are the words that name an object as often
+// as an animal — "bear" (teddy bear), "duck" (rubber duck), "mouse" (computer
+// mouse), "seal" (wax seal), "feather", "fur", "fin" (quill, coat, surfboard),
+// "wing" (aircraft) — dropping them would keep those photos out of still-life
+// and machine challenges. The generic taxonomy labels "mammal" and "vertebrate"
+// are left out too: some vision labellers put them on photos of people, so
+// "no animals" could drop a portrait.
 //
 // SCOPE: these sets only drop photos from automatic picks, by the photo's
 // existing labels. They must never grow into attributes of people (age,
@@ -272,8 +281,6 @@ const ANIMAL_LABEL_STEMS = new Set(
         'turtle',
         'frog',
         'amphibian',
-        'mammal',
-        'vertebrate',
         'wildlife',
         'fauna',
         'deer',
@@ -301,6 +308,10 @@ const ANIMAL_LABEL_STEMS = new Set(
         'whiskers',
     ].map((w) => stem(w)),
 );
+// The conflict guard's animal set: the label set above plus the taxonomy words
+// it left out, which a title may legitimately ask for ("Wild Mammals") even
+// though they must not match a photo's labels.
+const ANIMAL_GUARD_STEMS = new Set([...ANIMAL_LABEL_STEMS, ...['mammal', 'vertebrate'].map((w) => stem(w))]);
 // A photo labelled as food does not count as showing an animal: fish, poultry
 // or game on a table is classic still life. The exemption applies to the
 // animal concept only, never to people.
@@ -313,6 +324,11 @@ const FOOD_LABEL_STEMS = new Set(
 // cats keep their challenge.
 const ANIMAL_HEAD_NOUNS = new Set(['animal', 'pet'].map((w) => stem(w)));
 
+// Trailing '-ing' marks a participle ("running", "leading"). Length-guarded the
+// same way the stemmer's own '-ing' branch is, so short words that merely end in
+// those letters ("king", "ring", "wing" — all plausible subjects) are not caught.
+const isParticiple = (word: string) => word.length > 5 && word.endsWith('ing');
+
 /**
  * Which concepts a challenge's description rules out, read from the two fixed
  * forms below. A concept the positive title asks FOR is dropped (the conflict
@@ -324,28 +340,52 @@ const ANIMAL_HEAD_NOUNS = new Set(['animal', 'pet'].map((w) => stem(w)));
 const descriptionExclusions = (
     challenge: ChallengeText | null | undefined,
     ignoreWords: IgnoreWords = null,
-): Array<'people' | 'animals'> => {
+): ExcludedConceptName[] => {
     const message = challenge?.welcome_message;
     if (typeof message !== 'string' || message === '') return [];
     // Single spaces only, so every space in the patterns below is literal.
     const text = stripTags(message).toLowerCase().replace(/\s+/g, ' ');
-    const found: Array<'people' | 'animals'> = [];
+    const found: ExcludedConceptName[] = [];
     const add = (matched: string) => {
         if (PEOPLE_NOUNS_RE.test(matched) && !found.includes('people')) found.push('people');
         if (ANIMAL_NOUNS_RE.test(matched) && !found.includes('animals')) found.push('animals');
     };
-    for (let m = DESCRIPTION_LEAD_RE.exec(text); m !== null; m = DESCRIPTION_LEAD_RE.exec(text)) {
-        const rest = text.slice(m.index + m[0].length);
-        if (rest === '' || DESCRIPTION_LEAD_FOLLOWER_RE.test(rest)) add(m[0]);
+    // matchAll iterates a clone, so no lastIndex state is left on the shared
+    // regexes between calls.
+    for (const m of text.matchAll(DESCRIPTION_LEAD_RE)) {
+        const end = m.index + m[0].length;
+        // A lead match counts when the follower accepts it, and is rejected
+        // only when BOTH hold: (a) the lead keyword opens a photo noun's
+        // post-modifier ("Photos without …", "Entries with no …"), and (b) a
+        // verdict on the noun follows in the same sentence. Together that is
+        // the requirement reading — "photos without X … are disqualified"
+        // demands photos with X — while a sentence-initial "No X, or …
+        // disqualified" is a penalty and still excludes. The two probes are
+        // sticky at the match end on the whole text, the photo-noun check
+        // reads the fixed window before the keyword, and every lastIndex is
+        // reset after each probe so no state leaks out.
+        const before = text.slice(Math.max(0, m.index - LEAD_POSTMODIFIER_WINDOW), m.index);
+        DESCRIPTION_LEAD_FOLLOWER_RE.lastIndex = end;
+        DESCRIPTION_LEAD_VERDICT_TAIL_RE.lastIndex = end;
+        const nounIsRequired =
+            DESCRIPTION_LEAD_PHOTO_POSTMODIFIER_RE.test(before) && DESCRIPTION_LEAD_VERDICT_TAIL_RE.test(text);
+        if (DESCRIPTION_LEAD_FOLLOWER_RE.test(text) && !nounIsRequired) add(m[0]);
+        DESCRIPTION_LEAD_FOLLOWER_RE.lastIndex = 0;
+        DESCRIPTION_LEAD_VERDICT_TAIL_RE.lastIndex = 0;
     }
-    for (let m = DESCRIPTION_VERDICT_RE.exec(text); m !== null; m = DESCRIPTION_VERDICT_RE.exec(text)) add(m[0]);
+    for (const m of text.matchAll(DESCRIPTION_VERDICT_RE)) add(m[0]);
     if (found.length === 0) return [];
-    const titleWords = rawTokenise(parseNegation(challenge?.title, ignoreWords).positiveTitle, { ignoreWords }).map(
-        (word) => stem(word),
-    );
+    const titleWords = rawTokenise(parseNegation(challenge?.title, ignoreWords).positiveTitle, { ignoreWords });
     return found.filter((noun) => {
-        const labels = noun === 'people' ? PEOPLE_LABEL_STEMS : ANIMAL_LABEL_STEMS;
-        return !titleWords.some((word) => labels.has(word) || word === noun);
+        const labels = noun === 'people' ? PEOPLE_GUARD_STEMS : ANIMAL_GUARD_STEMS;
+        return !titleWords.some((word) => {
+            // A participle title word is an activity, not the animal its stem
+            // lands on ("Fishing" stems to "fish"), so the animal guard skips
+            // the raw word before stemming.
+            if (noun === 'animals' && isParticiple(word)) return false;
+            const stemmed = stem(word);
+            return labels.has(stemmed) || stemmed === noun;
+        });
     });
 };
 
@@ -360,33 +400,65 @@ const descriptionExclusions = (
 // single spaces first, so every space in a pattern is literal and each split
 // is unique — no adjacent optional whitespace to backtrack over. The verdict
 // form can restart at each noun of a long list, which makes it quadratic in
-// the noun count; at the MAX_TOKENISE_CHARS cap that measured about 1.3 ms,
-// pinned by the timing test in tests/services/photoPicker.test.ts.
+// the noun count; the cost is bounded by the 4,096-char cap (measured worst
+// case ~11 ms at the cap, a negated 510-noun list) and guarded by the timing
+// test in tests/services/photoPicker.test.ts (< 200 ms).
 const DESCRIPTION_NOUN = '(?:people|persons?|humans?|animals?|pets?)';
 // A bare comma joins too, so serial lists ("no people, pets or animals") read whole.
 const DESCRIPTION_SEP = '(?:, (?:and |or )?| and | or |\\/)';
 const DESCRIPTION_LIST = `${DESCRIPTION_NOUN}(?:${DESCRIPTION_SEP}${DESCRIPTION_NOUN})*`;
 // The lookbehind rejects "with or without people" (and "with and", "with/"):
 // those grant a freedom rather than excluding. "not" is deliberately not a
-// lead word, so "not only people but also animals" excludes nothing.
+// lead word, so "not only people but also animals" excludes nothing, and
+// "other" is deliberately not in the optional group either: "no other people"
+// grants an exception (the subject itself may appear) rather than excluding.
 const DESCRIPTION_LEAD_RE = new RegExp(
-    `\\b(?<!with or |with and |with\\/)(?:no|without|avoid|avoiding|excluding) (?:any |other |the )?${DESCRIPTION_LIST}\\b`,
+    `\\b(?<!with or |with and |with\\/)(?:no|without|avoid|avoiding|excluding) (?:any |the )?${DESCRIPTION_LIST}\\b`,
     'g',
 );
-// A lead match counts only when the text after the noun list is the end of the
+// A lead match counts only when the text at the match end is the end of the
 // text, punctuation, " -" or " (", or opens one of these words. The list is
 // greedy and there is no lookahead to backtrack into, so the match ends after
-// the full list and this code-side check sees exactly what follows it.
+// the full list and this check runs anchored exactly there: sticky (`y`), with
+// the end of the text as its `$` alternative, probed on the whole text at the
+// match end — no slice of the input is taken — and lastIndex reset after each
+// probe so no state leaks out.
 // "will", "are", "is", "can" and "may" stay out — they would let "no animals
 // will be harmed" through — while "should" and "must" stay in, at the pinned
-// cost that "no animals should be harmed" counts too.
+// cost that "no animals should be harmed" counts too, and "or" is in for a
+// penalty clause riding on the lead ("no people or the entry will be
+// disqualified"); the greedy list still ends at the last noun, so "no people
+// or animal lovers" reads " lovers" as its follower and excludes nothing.
 const DESCRIPTION_LEAD_FOLLOWER_RE =
-    /^(?:[.,;:!?()]| -| \(| (?:in|on|at|please|allowed|permitted|visible|should|must)\b)/;
+    /(?:[.,;:!?()]| -| \(| (?:in|on|or|at|please|allowed|permitted|visible|should|must)\b|$)/y;
 // The trailing lookahead rejects "places where people are not allowed to enter".
+// The lookbehind rejects a negator before the list ("Photos without pets ...",
+// "Shots that do not include people ..."): there the noun is what the sentence
+// rules out, not the subject a verdict is pronounced on. The list prefix in the
+// lookbehind also covers a match that would restart mid-list, on a later noun
+// of the negated list ("without pets or people ...", "with no people, pets or
+// animals ..."): the restart point sits right after a separator, where a
+// word-only lookbehind sees no negator.
+const DESCRIPTION_VERDICT_NEGATORS = 'without |with no |no |not include |not including |not contain |not containing ';
+// The verdict a sentence pronounces on the noun list ("... will be considered
+// off-topic"), shared by the verdict form and the lead-match rejection below.
+const DESCRIPTION_VERDICT_TAIL =
+    '(?:will be|would be|are|is) (?:considered )?(?:off[ -]?topic|not allowed|not permitted|disqualified|forbidden|prohibited|excluded)\\b';
 const DESCRIPTION_VERDICT_RE = new RegExp(
-    `\\b${DESCRIPTION_LIST}\\b (?:will be|would be|are|is) (?:considered )?(?:off[ -]?topic|not allowed|not permitted|disqualified|forbidden|prohibited|excluded)\\b(?! to\\b)`,
+    `\\b(?<!(?:${DESCRIPTION_VERDICT_NEGATORS})(?:${DESCRIPTION_NOUN}${DESCRIPTION_SEP})*)${DESCRIPTION_LIST}\\b ${DESCRIPTION_VERDICT_TAIL}(?! to\\b)`,
     'g',
 );
+// The (b) half of the lead rejection: a verdict pronounced later in the same
+// sentence. Sticky at the lead match end, it scans the rest of the sentence —
+// to the next [.!?;] or the end of the text, the class cannot cross one —
+// without slicing the input; lastIndex is reset after each probe.
+const DESCRIPTION_LEAD_VERDICT_TAIL_RE = new RegExp(`[^.!?;]*?${DESCRIPTION_VERDICT_TAIL}`, 'y');
+// The (a) half: the lead keyword opens a photo noun's post-modifier ("Photos
+// without …", "Entries with no …", "images with no …"). Anchored at the end of
+// a fixed window of the text before the keyword, built only from this list.
+const LEAD_POSTMODIFIER_WINDOW = 32;
+const DESCRIPTION_LEAD_PHOTO_POSTMODIFIER_RE =
+    /(?:photos?|images?|shots?|pictures?|entries?|submissions?|pics?) (?:with )?$/;
 const PEOPLE_NOUNS_RE = /\b(?:people|persons?|humans?)\b/;
 const ANIMAL_NOUNS_RE = /\b(?:animals?|pets?)\b/;
 
@@ -577,4 +649,5 @@ export {
     photoShowsExcluded,
     detectLetterPrefix,
     readChallengeTheme,
+    isParticiple,
 };

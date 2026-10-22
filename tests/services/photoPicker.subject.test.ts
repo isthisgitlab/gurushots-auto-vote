@@ -87,9 +87,9 @@ describe('abstractTitleWords', () => {
 describe('title readers with the real lexicon', () => {
     const balloonFun = { title: 'Balloon Fun', url: 'balloon-fun', welcome_message: 'Have fun with balloons!' };
 
-    // A real challenge description (136550), word for word: its quoted
-    // "Still Life" and "no living ... objects" wording are what the theme
-    // reader sees.
+    // GuruShots' public challenge copy (136550), quoted word for word as test
+    // input: its quoted "Still Life" and "no living ... objects" wording are
+    // what the theme reader sees.
     const STILL_LIFE = {
         title: 'Beauty of Still Life',
         url: 'beauty-of-still-life',
@@ -249,6 +249,17 @@ describe('title readers with the real lexicon', () => {
             test('the food exemption keeps an "Animal" + "Food" photo under the description-only exclusion', () => {
                 const plate = allowed('plate', ['Animal', 'Food'], 2000);
                 expect(pickPhotosForChallenge(STILL_LIFE, [plate], 1)).toEqual(['plate']);
+            });
+
+            test('a generic taxonomy label alone does not make a person an animal', () => {
+                // Some vision labellers put "Mammal" on photos of people; it is
+                // not an animal label here. submitWithoutTagMatch:false so a
+                // wrongly excluded photo cannot come back through the fallback.
+                const person = allowed('person', ['Person', 'Mammal'], 2000);
+                const noAnimals = { title: 'City Night', welcome_message: 'Pets are not allowed' };
+                expect(pickPhotosForChallenge(noAnimals, [person], 1, { submitWithoutTagMatch: false })).toEqual([
+                    'person',
+                ]);
             });
 
             test('a "Pet food" label counts as food', () => {

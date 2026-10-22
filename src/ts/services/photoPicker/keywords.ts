@@ -17,9 +17,10 @@ import {
     descriptionExclusions,
     detectLetterPrefix,
     readChallengeTheme,
+    isParticiple,
 } from './title';
 
-import type { ChallengeText, IgnoreWords, TagOptions } from '../../types/photoPicker';
+import type { ChallengeText, ExcludedConceptName, IgnoreWords, TagOptions } from '../../types/photoPicker';
 
 // Keyword count is bounded for the same reason the per-photo stem count is (see
 // MAX_STEMS_PER_PHOTO): these keywords are the inner loop of every scorePhoto
@@ -29,7 +30,7 @@ import type { ChallengeText, IgnoreWords, TagOptions } from '../../types/photoPi
 const MAX_CHALLENGE_KEYWORDS = 48;
 
 // The label stems each description concept catches, keyed by its noun.
-const CONCEPT_LABEL_STEMS: Record<'people' | 'animals', ReadonlySet<string>> = {
+const CONCEPT_LABEL_STEMS: Record<ExcludedConceptName, ReadonlySet<string>> = {
     people: PEOPLE_LABEL_STEMS,
     animals: ANIMAL_LABEL_STEMS,
 };
@@ -38,7 +39,7 @@ const CONCEPT_LABEL_STEMS: Record<'people' | 'animals', ReadonlySet<string>> = {
 // naming "people" and "animals" would otherwise score People- and
 // Animal-labelled photos UP for a challenge that rules them off-topic).
 // Title-negation keywords are untouched: dropNegated alone still handles those.
-const dropDescribedConcepts = (keywords: string[], described: Array<'people' | 'animals'>): string[] => {
+const dropDescribedConcepts = (keywords: string[], described: ExcludedConceptName[]): string[] => {
     if (described.length === 0) return keywords;
     const excluded = new Set<string>();
     for (const noun of described) {
@@ -170,11 +171,6 @@ const visualSubjectWords = (challenge: ChallengeText | null | undefined, ignoreW
     );
     return Array.from(new Set(words));
 };
-
-// Trailing '-ing' marks a participle ("running", "leading"). Length-guarded the
-// same way the stemmer's own '-ing' branch is, so short words that merely end in
-// those letters ("king", "ring", "wing" — all plausible subjects) are not caught.
-const isParticiple = (word: string) => word.length > 5 && word.endsWith('ing');
 
 // Issue at most a few server-side searches per fill: a title rarely has more
 // than two or three subject nouns, and tag lists are short. The cap bounds the
