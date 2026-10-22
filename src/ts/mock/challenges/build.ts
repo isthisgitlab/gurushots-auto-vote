@@ -67,6 +67,13 @@ const buildMember = (spec: ChallengeSpec, now: number) => ({
             vote_ratio: spec.exposure.voteRatio,
         },
         entries: spec.myEntries.map(buildRankedEntry),
+        ...(spec.swaps === undefined
+            ? {}
+            : {
+                  swaps: Array.from({ length: spec.swaps }, (_, i) => ({
+                      id: `swap_0${String(i + 1).padStart(2, '0')}`,
+                  })),
+              }),
     },
 });
 
@@ -84,9 +91,12 @@ const buildChallenge = (spec: ChallengeSpec, id: number, now: number) => {
         players: spec.players,
         votes: spec.votes,
         max_photo_submits: spec.maxPhotoSubmits,
+        ...(spec.joinCoins === undefined ? {} : { join_coins: spec.joinCoins }),
+        ...(spec.maxPlayers === undefined ? {} : { max_players: spec.maxPlayers }),
         badge: spec.badge,
         type: spec.type,
         tags: [...spec.tags],
+        ...(spec.image ? { image: { ...spec.image } } : {}),
         prizes_worth: spec.prizesWorth,
         ranking_levels: {
             level_0: 0,
@@ -101,6 +111,8 @@ const buildChallenge = (spec: ChallengeSpec, id: number, now: number) => {
         fill_enable: true,
         swap_enable: true,
         top_photo_enable: true,
+        ...(spec.fillLocked === undefined ? {} : { fill_locked: spec.fillLocked }),
+        ...(spec.swapLocked === undefined ? {} : { swap_locked: spec.swapLocked }),
         ...(spec.guruPickEnable === undefined ? {} : { guru_pick_enable: spec.guruPickEnable }),
         ...(spec.topPhotographerEnable === undefined ? {} : { top_photographer_enable: spec.topPhotographerEnable }),
         ...(spec.levelsRankEnable === undefined ? {} : { levels_rank_enable: spec.levelsRankEnable }),

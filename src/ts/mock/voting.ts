@@ -6,112 +6,12 @@
 
 import type { Challenge } from '../types/gurushots';
 
-const PHOTOGRAPHERS = [
-    'John Doe',
-    'Jane Smith',
-    'Mike Johnson',
-    'Sarah Wilson',
-    'David Brown',
-    'Lisa Davis',
-    'Tom Miller',
-    'Emma Taylor',
-    'Chris Anderson',
-    'Anna Garcia',
-    'Robert Chen',
-    'Maria Rodriguez',
-    'James Wilson',
-    'Sophie Martin',
-    'Alex Thompson',
-];
-
-const TITLES_BY_CHALLENGE_URL: Record<string, string[]> = {
-    'street-photography-2024': [
-        'Urban Life',
-        'City Lights',
-        'Street Market',
-        'Morning Commute',
-        'Street Art',
-        'Night Scene',
-        'Street Portrait',
-        'Urban Architecture',
-        'Street Food',
-        'City Reflection',
-    ],
-    'portrait-photography-2024': [
-        'Eyes of Wisdom',
-        'Smile of Joy',
-        'Contemplation',
-        'Laughing Child',
-        'Elderly Grace',
-        'Young Dreamer',
-        'Artist Portrait',
-        'Chef at Work',
-        'Musician Focus',
-        'Dancer Movement',
-    ],
-    'landscape-photography-2024': [
-        'Mountain Peak',
-        'Ocean Sunset',
-        'Forest Path',
-        'Desert Dunes',
-        'Alpine Lake',
-        'Coastal Cliffs',
-        'Valley Mist',
-        'River Bend',
-        'Snowy Summit',
-        'Golden Fields',
-    ],
-    'macro-photography-2024': [
-        'Dew Drop',
-        'Butterfly Wing',
-        'Flower Petals',
-        'Insect Eye',
-        'Water Droplet',
-        'Leaf Veins',
-        'Spider Web',
-        'Crystal Formation',
-        'Feather Detail',
-        'Bark Texture',
-    ],
-    'wildlife-photography-2024': [
-        'Lion Pride',
-        'Eagle Flight',
-        'Elephant Family',
-        'Wolf Pack',
-        'Dolphin Jump',
-        'Tiger Stare',
-        'Gorilla Strength',
-        'Penguin Colony',
-        'Shark Hunt',
-        'Owl Wisdom',
-    ],
-    'architecture-photography-2024': [
-        'Modern Skyscraper',
-        'Gothic Cathedral',
-        'Glass Facade',
-        'Stone Bridge',
-        'Steel Structure',
-        'Ancient Temple',
-        'Art Deco Building',
-        'Minimalist Design',
-        'Historic Castle',
-        'Contemporary Museum',
-    ],
-};
-
-const buildVoteImage = (i: number, challengeTitles: string[]) => {
-    const photographer = PHOTOGRAPHERS[Math.floor(Math.random() * PHOTOGRAPHERS.length)];
-    const title = challengeTitles[Math.floor(Math.random() * challengeTitles.length)];
+const buildVoteImage = (i: number) => {
     const ratio = Math.random() * 3 + 3; // 3-6 ratio
-    const votes = Math.floor(Math.random() * 50) + 10; // 10-60 votes
 
     return {
         id: `vote_img_${String(i + 1).padStart(3, '0')}`,
-        image_url: `https://example.com/vote${i + 1}.jpg`,
-        photographer,
-        title,
         ratio: Math.round(ratio * 10) / 10, // Round to 1 decimal
-        votes,
     };
 };
 
@@ -125,11 +25,9 @@ const titleFromUrl = (challengeUrl: string) =>
  * Generate dynamic mock vote images for different challenges
  */
 const generateMockVoteImages = (challengeUrl: string, originalChallenge: Challenge | null = null) => {
-    const challengeTitles = TITLES_BY_CHALLENGE_URL[challengeUrl] || TITLES_BY_CHALLENGE_URL['street-photography-2024'];
-
     // Generate 15-25 random images for voting
     const numImages = Math.floor(Math.random() * 11) + 15; // 15-25 images
-    const images = Array.from({ length: numImages }, (_, i) => buildVoteImage(i, challengeTitles));
+    const images = Array.from({ length: numImages }, (_, i) => buildVoteImage(i));
 
     return {
         challenge: {
@@ -139,10 +37,16 @@ const generateMockVoteImages = (challengeUrl: string, originalChallenge: Challen
         },
         voting: {
             exposure: {
+                // Use original challenge's exposure values or random defaults.
                 exposure_factor:
                     originalChallenge?.member?.ranking?.exposure?.exposure_factor ||
-                    Math.floor(Math.random() * 30) + 20, // Use original challenge's exposure or random 20-50%
-                max_exposure: 100,
+                    Math.floor(Math.random() * 30) + 20, // random 20-50%
+                vote_exposure_factor:
+                    originalChallenge?.member?.ranking?.exposure?.vote_exposure_factor ||
+                    Math.floor(Math.random() * 30) + 20, // random 20-50%
+                vote_ratio:
+                    originalChallenge?.member?.ranking?.exposure?.vote_ratio ||
+                    Math.round((1 + Math.random() * 2) * 100) / 100, // random 1-3, 2 decimals
             },
         },
         images,

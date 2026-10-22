@@ -17,27 +17,29 @@ describe('generateMockVoteImages', () => {
             id: 77,
             title: 'Golden Hour',
             url: 'golden-hour',
-            member: { ranking: { exposure: { exposure_factor: 63 } } },
+            member: {
+                ranking: {
+                    exposure: { exposure_factor: 63, vote_exposure_factor: 61, vote_ratio: 2.4 },
+                },
+            },
         });
         const out = generateMockVoteImages('street-photography-2024', original);
         expect(out.challenge).toEqual({ id: 77, title: 'Golden Hour', url: 'golden-hour' });
-        expect(out.voting.exposure).toEqual({ exposure_factor: 63, max_exposure: 100 });
+        expect(out.voting.exposure).toEqual({ exposure_factor: 63, vote_exposure_factor: 61, vote_ratio: 2.4 });
     });
 
     test('without a challenge, derives a title from the url and randomises id/exposure in range', () => {
         jest.spyOn(Math, 'random').mockReturnValue(0);
         const out = generateMockVoteImages('macro-photography-2024');
         expect(out.challenge).toEqual({ id: 1000, title: 'Macro Photography', url: 'macro-photography-2024' });
-        expect(out.voting.exposure.exposure_factor).toBe(20);
+        expect(out.voting.exposure).toEqual({ exposure_factor: 20, vote_exposure_factor: 20, vote_ratio: 1 });
         expect(out.images).toHaveLength(15);
     });
 
-    test('an unknown url falls back to the street-photography titles', () => {
+    test('an unknown url still yields the title derived from it', () => {
         jest.spyOn(Math, 'random').mockReturnValue(0);
-        const out = generateMockVoteImages('no-such-challenge', invalid({ id: 1, title: 'T', url: 'u' }));
-        expect(out.images.every((img) => img.title === 'Urban Life')).toBe(true);
-        // No exposure on the challenge → a random 20-50% value.
-        expect(out.voting.exposure.exposure_factor).toBe(20);
+        const out = generateMockVoteImages('no-such-challenge');
+        expect(out.challenge).toEqual({ id: 1000, title: 'No Such Challenge', url: 'no-such-challenge' });
     });
 
     test('produces 15-25 well-formed images with 3-6 ratios', () => {

@@ -1,0 +1,1035 @@
+[
+    {
+        "id": 900001,
+        "type": "exhibition",
+        "join_coins": 0,
+        "title": "Best of Black & White",
+        "url": "mock-free",
+        "start_time": 1768046400,
+        "close_time": 1768489200,
+        "entries": 2800,
+        "players": 920,
+        "tags": ["Exhibition", "Comm", "test35"],
+        "badge": "exhibition",
+        "max_photo_submits": 4,
+        "max_players": 0,
+        "prizes_worth": 600,
+        "ranking_levels": {
+            "level_0": 0,
+            "level_1": 50,
+            "level_2": 250,
+            "level_3": 900,
+            "level_4": 1900,
+            "level_5": 5000
+        },
+        "image": {
+            "id": "photo_cover_best_of_black_white_001",
+            "member_id": "mock_user_001"
+        },
+        "welcome_message": "Mock challenge: show us black and white at its best.",
+        "first_prizes": [
+            {
+                "type": "PHOTO_SWAP",
+                "amount": 2
+            },
+            {
+                "type": "KEY",
+                "amount": 1
+            },
+            {
+                "type": "COINS",
+                "amount": 250
+            }
+        ],
+        "achievements_and_prizes": [
+            {
+                "title": "TOP PHOTOGRAPHER WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 1,
+                    "max_rank": 1
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 2
+                    },
+                    {
+                        "type": "KEY",
+                        "amount": 1
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 250
+                    }
+                ]
+            },
+            {
+                "title": "TOP PHOTO WINNER",
+                "rank": {
+                    "type": "IMAGE",
+                    "min_rank": 1,
+                    "max_rank": 1
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 2
+                    },
+                    {
+                        "type": "KEY",
+                        "amount": 1
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 250
+                    }
+                ]
+            },
+            {
+                "title": "GURU'S TOP PICK WINNER",
+                "rank": null,
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 2
+                    },
+                    {
+                        "type": "KEY",
+                        "amount": 1
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 250
+                    }
+                ]
+            },
+            {
+                "title": "TOP 50 PHOTOGRAPHER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 2,
+                    "max_rank": 50
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 1
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 100
+                    }
+                ]
+            },
+            {
+                "title": "TOP 50 PHOTO",
+                "rank": {
+                    "type": "IMAGE",
+                    "min_rank": 2,
+                    "max_rank": 50
+                },
+                "prizes": [
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 2
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 100
+                    }
+                ]
+            }
+        ],
+        "member": {
+            "submit_state": "join"
+        }
+    },
+    {
+        "id": 900002,
+        "type": "flash",
+        "join_coins": 100,
+        "title": "All Cats",
+        "url": "mock-flash",
+        "start_time": 1768392000,
+        "close_time": 1768651200,
+        "entries": 80,
+        "players": 50,
+        "tags": ["Flash", "test35"],
+        "badge": "flash",
+        "max_photo_submits": 3,
+        "max_players": 100,
+        "prizes_worth": 85,
+        "ranking_levels": {
+            "level_0": 0,
+            "level_1": 50,
+            "level_2": 250,
+            "level_3": 450,
+            "level_4": 900,
+            "level_5": 1500
+        },
+        "image": {
+            "id": "photo_cover_all_cats_001",
+            "member_id": "mock_user_001"
+        },
+        "welcome_message": "Mock challenge: show us your favourite cat.",
+        "first_prizes": [
+            {
+                "type": "PHOTO_SWAP",
+                "amount": 2
+            },
+            {
+                "type": "KEY",
+                "amount": 2
+            },
+            {
+                "type": "COINS",
+                "amount": 300
+            }
+        ],
+        "achievements_and_prizes": [
+            {
+                "title": "TOP FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 1,
+                    "max_rank": 1
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 2
+                    },
+                    {
+                        "type": "KEY",
+                        "amount": 2
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 300
+                    }
+                ]
+            },
+            {
+                "title": "TOP 3 FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 2,
+                    "max_rank": 3
+                },
+                "prizes": [
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 2
+                    },
+                    {
+                        "type": "KEY",
+                        "amount": 1
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 120
+                    }
+                ]
+            },
+            {
+                "title": "TOP 10 FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 4,
+                    "max_rank": 10
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 1
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 2
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 50
+                    }
+                ]
+            },
+            {
+                "title": "TOP 50 FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 11,
+                    "max_rank": 50
+                },
+                "prizes": [
+                    {
+                        "type": "COINS",
+                        "amount": 40
+                    }
+                ]
+            }
+        ],
+        "member": {
+            "submit_state": "join"
+        }
+    },
+    {
+        "id": 900003,
+        "type": "flash",
+        "join_coins": 250,
+        "title": "My Most Voted",
+        "url": "mock-paid",
+        "start_time": 1768305600,
+        "close_time": 1768910400,
+        "entries": 67,
+        "players": 67,
+        "tags": ["Flash", "test35"],
+        "badge": "flash",
+        "max_photo_submits": 1,
+        "max_players": 0,
+        "prizes_worth": 85,
+        "ranking_levels": {
+            "level_0": 0,
+            "level_1": 50,
+            "level_2": 250,
+            "level_3": 450,
+            "level_4": 900,
+            "level_5": 1500
+        },
+        "image": {
+            "id": "photo_cover_my_most_voted_001",
+            "member_id": "mock_user_001"
+        },
+        "welcome_message": "Mock challenge: show us your most-voted shot.",
+        "first_prizes": [
+            {
+                "type": "KEY",
+                "amount": 1
+            },
+            {
+                "type": "COINS",
+                "amount": 250
+            }
+        ],
+        "achievements_and_prizes": [
+            {
+                "title": "TOP FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 1,
+                    "max_rank": 1
+                },
+                "prizes": [
+                    {
+                        "type": "KEY",
+                        "amount": 1
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 250
+                    }
+                ]
+            },
+            {
+                "title": "TOP 3 FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 2,
+                    "max_rank": 3
+                },
+                "prizes": [
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 2
+                    },
+                    {
+                        "type": "KEY",
+                        "amount": 1
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 120
+                    }
+                ]
+            },
+            {
+                "title": "TOP 10 FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 4,
+                    "max_rank": 10
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 1
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 2
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 50
+                    }
+                ]
+            },
+            {
+                "title": "TOP 50 FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 11,
+                    "max_rank": 50
+                },
+                "prizes": [
+                    {
+                        "type": "COINS",
+                        "amount": 40
+                    }
+                ]
+            }
+        ],
+        "member": {
+            "submit_state": "join"
+        }
+    },
+    {
+        "id": 900004,
+        "type": "flash",
+        "join_coins": 20,
+        "title": "Blue Sky",
+        "url": "mock-fail",
+        "start_time": 1768219200,
+        "close_time": 1768737600,
+        "entries": 160,
+        "players": 100,
+        "tags": ["Flash"],
+        "badge": "flash",
+        "max_players": 120,
+        "prizes_worth": 15,
+        "ranking_levels": {
+            "level_0": 0,
+            "level_1": 50,
+            "level_2": 250,
+            "level_3": 450,
+            "level_4": 900,
+            "level_5": 1500
+        },
+        "image": {
+            "id": "photo_cover_blue_sky_001",
+            "member_id": "mock_user_001"
+        },
+        "welcome_message": "Mock challenge: show us your open sky.",
+        "first_prizes": [
+            {
+                "type": "PHOTO_SWAP",
+                "amount": 1
+            },
+            {
+                "type": "EXPOSURE_AUTOFILL",
+                "amount": 2
+            },
+            {
+                "type": "COINS",
+                "amount": 60
+            }
+        ],
+        "achievements_and_prizes": [
+            {
+                "title": "TOP FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 1,
+                    "max_rank": 1
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 1
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 2
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 60
+                    }
+                ]
+            },
+            {
+                "title": "TOP 3 FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 2,
+                    "max_rank": 3
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 1
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 1
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 10
+                    }
+                ]
+            },
+            {
+                "title": "TOP 10 FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 4,
+                    "max_rank": 10
+                },
+                "prizes": [
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 1
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 5
+                    }
+                ]
+            },
+            {
+                "title": "TOP 50 FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 11,
+                    "max_rank": 50
+                },
+                "prizes": [
+                    {
+                        "type": "COINS",
+                        "amount": 5
+                    }
+                ]
+            }
+        ],
+        "member": {
+            "submit_state": "join"
+        }
+    },
+    {
+        "id": 900005,
+        "type": "flash",
+        "join_coins": 50,
+        "title": "Summer Time",
+        "url": "mock-submitfail",
+        "start_time": 1768132800,
+        "close_time": 1768824000,
+        "entries": 112,
+        "players": 108,
+        "tags": ["Flash", "test35"],
+        "badge": "flash",
+        "max_players": 120,
+        "prizes_worth": 50,
+        "ranking_levels": {
+            "level_0": 0,
+            "level_1": 50,
+            "level_2": 250,
+            "level_3": 450,
+            "level_4": 900,
+            "level_5": 1500
+        },
+        "image": {
+            "id": "photo_cover_summer_time_001",
+            "member_id": "mock_user_001"
+        },
+        "welcome_message": "Mock challenge: show us your summer.",
+        "first_prizes": [
+            {
+                "type": "PHOTO_SWAP",
+                "amount": 1
+            },
+            {
+                "type": "EXPOSURE_AUTOFILL",
+                "amount": 2
+            },
+            {
+                "type": "COINS",
+                "amount": 120
+            }
+        ],
+        "achievements_and_prizes": [
+            {
+                "title": "TOP FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 1,
+                    "max_rank": 1
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 1
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 2
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 120
+                    }
+                ]
+            },
+            {
+                "title": "TOP 3 FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 2,
+                    "max_rank": 3
+                },
+                "prizes": [
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 1
+                    },
+                    {
+                        "type": "KEY",
+                        "amount": 1
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 50
+                    }
+                ]
+            },
+            {
+                "title": "TOP 10 FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 4,
+                    "max_rank": 10
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 1
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 25
+                    }
+                ]
+            },
+            {
+                "title": "TOP 50 FLASH WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 11,
+                    "max_rank": 50
+                },
+                "prizes": [
+                    {
+                        "type": "COINS",
+                        "amount": 15
+                    }
+                ]
+            }
+        ],
+        "member": {
+            "submit_state": "join"
+        }
+    },
+    {
+        "id": 900006,
+        "type": "default",
+        "join_coins": 0,
+        "title": "Close Up",
+        "url": "mock-full",
+        "start_time": 1767960000,
+        "close_time": 1768996800,
+        "entries": 100,
+        "players": 100,
+        "tags": ["Strong", "No comm", "1 day", "Turbo"],
+        "badge": "speed",
+        "max_photo_submits": 1,
+        "max_players": 100,
+        "prizes_worth": 900,
+        "ranking_levels": {
+            "level_0": 0,
+            "level_1": 50,
+            "level_2": 250,
+            "level_3": 900,
+            "level_4": 1900,
+            "level_5": 5000
+        },
+        "image": {
+            "id": "photo_cover_close_up_001",
+            "member_id": "mock_user_001"
+        },
+        "welcome_message": "Mock challenge: show us the details up close.",
+        "first_prizes": [
+            {
+                "type": "PHOTO_SWAP",
+                "amount": 5
+            },
+            {
+                "type": "EXPOSURE_AUTOFILL",
+                "amount": 5
+            }
+        ],
+        "achievements_and_prizes": [
+            {
+                "title": "TOP PHOTOGRAPHER WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 1,
+                    "max_rank": 1
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 5
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 5
+                    }
+                ]
+            },
+            {
+                "title": "TOP PHOTO WINNER",
+                "rank": {
+                    "type": "IMAGE",
+                    "min_rank": 1,
+                    "max_rank": 1
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 5
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 5
+                    }
+                ]
+            },
+            {
+                "title": "GURU'S TOP PICK WINNER",
+                "rank": null,
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 5
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 5
+                    }
+                ]
+            },
+            {
+                "title": "TOP 50 PHOTOGRAPHER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 2,
+                    "max_rank": 50
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 1
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 100
+                    }
+                ]
+            },
+            {
+                "title": "TOP 50 PHOTO",
+                "rank": {
+                    "type": "IMAGE",
+                    "min_rank": 2,
+                    "max_rank": 50
+                },
+                "prizes": [
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 2
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 100
+                    }
+                ]
+            }
+        ],
+        "member": {
+            "submit_state": "join"
+        }
+    },
+    {
+        "id": 900007,
+        "type": "default",
+        "join_coins": 200,
+        "title": "Retro Or Vintage",
+        "url": "mock-unlock",
+        "start_time": 1767873600,
+        "close_time": 1769083200,
+        "entries": 90,
+        "players": 60,
+        "tags": ["Strong", "No comm", "1 day", "Turbo"],
+        "badge": "speed",
+        "max_photo_submits": 2,
+        "max_players": 0,
+        "prizes_worth": 3000,
+        "ranking_levels": {
+            "level_0": 0,
+            "level_1": 50,
+            "level_2": 250,
+            "level_3": 900,
+            "level_4": 1900,
+            "level_5": 5000
+        },
+        "image": {
+            "id": "photo_cover_retro_or_vintage_001",
+            "member_id": "mock_user_001"
+        },
+        "welcome_message": "Mock challenge: show us your retro or vintage side.",
+        "first_prizes": [
+            {
+                "type": "PHOTO_SWAP",
+                "amount": 1
+            },
+            {
+                "type": "EXPOSURE_AUTOFILL",
+                "amount": 50
+            }
+        ],
+        "achievements_and_prizes": [
+            {
+                "title": "TOP PHOTOGRAPHER WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 1,
+                    "max_rank": 1
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 1
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 50
+                    }
+                ]
+            },
+            {
+                "title": "TOP PHOTO WINNER",
+                "rank": {
+                    "type": "IMAGE",
+                    "min_rank": 1,
+                    "max_rank": 1
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 1
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 50
+                    }
+                ]
+            },
+            {
+                "title": "GURU'S TOP PICK WINNER",
+                "rank": null,
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 1
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 50
+                    }
+                ]
+            },
+            {
+                "title": "TOP 50 PHOTOGRAPHER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 2,
+                    "max_rank": 50
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 1
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 100
+                    }
+                ]
+            },
+            {
+                "title": "TOP 50 PHOTO",
+                "rank": {
+                    "type": "IMAGE",
+                    "min_rank": 2,
+                    "max_rank": 50
+                },
+                "prizes": [
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 2
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 100
+                    }
+                ]
+            }
+        ],
+        "member": {
+            "submit_state": "join_unlock"
+        }
+    },
+    {
+        "id": 900008,
+        "type": "default",
+        "title": "Urban Creatures",
+        "url": "mock-price-unknown",
+        "start_time": 1767787200,
+        "close_time": 1769169600,
+        "entries": 60,
+        "players": 40,
+        "tags": ["2 photos", "No comm", "Turbo"],
+        "badge": "speed",
+        "max_photo_submits": 2,
+        "max_players": 0,
+        "prizes_worth": 3000,
+        "ranking_levels": {
+            "level_0": 0,
+            "level_1": 50,
+            "level_2": 250,
+            "level_3": 900,
+            "level_4": 1900,
+            "level_5": 5000
+        },
+        "image": {
+            "id": "photo_cover_urban_creatures_001",
+            "member_id": "mock_user_001"
+        },
+        "welcome_message": "Mock challenge: show us the creatures of the city.",
+        "first_prizes": [
+            {
+                "type": "PHOTO_SWAP",
+                "amount": 20
+            },
+            {
+                "type": "EXPOSURE_AUTOFILL",
+                "amount": 20
+            }
+        ],
+        "achievements_and_prizes": [
+            {
+                "title": "TOP PHOTOGRAPHER WINNER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 1,
+                    "max_rank": 1
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 20
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 20
+                    }
+                ]
+            },
+            {
+                "title": "TOP PHOTO WINNER",
+                "rank": {
+                    "type": "IMAGE",
+                    "min_rank": 1,
+                    "max_rank": 1
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 20
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 20
+                    }
+                ]
+            },
+            {
+                "title": "GURU'S TOP PICK WINNER",
+                "rank": null,
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 20
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 20
+                    }
+                ]
+            },
+            {
+                "title": "TOP 50 PHOTOGRAPHER",
+                "rank": {
+                    "type": "MEMBER",
+                    "min_rank": 2,
+                    "max_rank": 50
+                },
+                "prizes": [
+                    {
+                        "type": "PHOTO_SWAP",
+                        "amount": 1
+                    },
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 1
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 100
+                    }
+                ]
+            },
+            {
+                "title": "TOP 50 PHOTO",
+                "rank": {
+                    "type": "IMAGE",
+                    "min_rank": 2,
+                    "max_rank": 50
+                },
+                "prizes": [
+                    {
+                        "type": "EXPOSURE_AUTOFILL",
+                        "amount": 2
+                    },
+                    {
+                        "type": "COINS",
+                        "amount": 100
+                    }
+                ]
+            }
+        ],
+        "member": {
+            "submit_state": "join_unlock"
+        }
+    }
+]

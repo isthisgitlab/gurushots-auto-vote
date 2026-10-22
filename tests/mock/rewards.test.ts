@@ -51,8 +51,8 @@ describe('mock prize-claim endpoints', () => {
     test('getMyCompletedChallenges returns one claimable and one claimed challenge', async () => {
         const items = await mockApiClient.getMyCompletedChallenges('tok', 0, 20);
         expect(items.map((c) => [c.id, c.member!.rewards_by_section!.claim_state])).toEqual([
-            [900101, 'CLAIM'],
-            [900102, 'CLAIMED'],
+            [900301, 'CLAIM'],
+            [900302, 'CLAIMED'],
         ]);
         expect(items[0].member!.rewards_by_section!.sections![0]).toEqual(
             expect.objectContaining({ type: 'TOTAL', resources: [{ type: 'COINS', title: 'Coins', value: 60 }] }),
@@ -70,7 +70,7 @@ describe('mock prize-claim endpoints', () => {
     });
 
     test('both claims confirm', async () => {
-        await expect(mockApiClient.claimChallengeResources(900101, 'tok')).resolves.toBe(true);
+        await expect(mockApiClient.claimChallengeResources(900301, 'tok')).resolves.toBe(true);
         await expect(mockApiClient.claimMissionPrize(900201, 'tok')).resolves.toBe(true);
     });
 

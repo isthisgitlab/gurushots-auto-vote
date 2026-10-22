@@ -110,17 +110,17 @@ test('the CLI lists them as "starts in …" and says how to choose their photos'
     await showDiscover();
     const lines = printed();
     expect(lines).toContain('=== Open and upcoming challenges ===');
-    expect(
-        lines.some(
-            (l) => l.startsWith(`  • [${UPCOMING_FREE}] Mock Upcoming Free Challenge`) && l.includes('starts in'),
-        ),
-    ).toBe(true);
+    expect(lines.some((l) => l.startsWith(`  • [${UPCOMING_FREE}] Halloween Time`) && l.includes('starts in'))).toBe(
+        true,
+    );
     expect(
         lines.some((l) => l.startsWith(`  • [${UPCOMING_PAID}]`) && l.includes('150 coins') && l.includes('starts in')),
     ).toBe(true);
     expect(lines.some((l) => l.includes(UPCOMING_LATER))).toBe(false);
     expect(lines).toContain('  list-photos --challenge=<id>');
-    expect(lines.some((l) => l.startsWith('  • [900001] Mock Free Challenge') && !l.includes('starts in'))).toBe(true);
+    expect(lines.some((l) => l.startsWith('  • [900001] Best of Black & White') && !l.includes('starts in'))).toBe(
+        true,
+    );
 });
 
 test('chosen photos are saved for an upcoming id and survive a join pass and cleanup — with the window at 0 too', async () => {

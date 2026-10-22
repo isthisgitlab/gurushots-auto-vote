@@ -1,12 +1,11 @@
 /**
  * mock/challenges.ts + mock/voting.ts + mock/endpoints/join.ts — strict-equal
- * guards over the generated mock payloads and the open-join rows, with the
- * clock and Math.random pinned to a seeded sequence so every branch of the
- * generators is exercised and any change in the output values, or in the
- * order of random calls, fails.
+ * guards over the generated mock payloads, with the clock and Math.random
+ * pinned to a seeded sequence so every branch of the generators is exercised
+ * and any change in the output values, or in the order of random calls, fails.
  *
- * Expected generator output lives in tests/mock/__data__/*.json; the join
- * rows are inline.
+ * Expected generator output lives in tests/mock/__data__/*.json; only the
+ * upcoming join rows stay inline.
  */
 
 import type * as challengesModule from '../../src/ts/mock/challenges';
@@ -50,22 +49,18 @@ describe('generated mock payload guards', () => {
         expect(generateMockChallenges()).toStrictEqual(expected);
     });
 
-    test('generateMockVoteImages(...) output is unchanged across every url and challenge branch', () => {
+    test('generateMockVoteImages(...) output is unchanged across every remaining branch', () => {
         pinClockAndRandom(1);
-        const [first, second] = generateMockChallenges().challenges;
+        const [first] = generateMockChallenges().challenges;
         const noExposure = invalid<Challenge>({ id: 9, title: 'No Exposure', url: 'no-exposure' });
 
+        // Urls no longer branch (the per-url title tables are gone): one case
+        // per remaining branch — no challenge, a real challenge with exposure,
+        // and one without.
         const cases: { label: string; url: string; challenge: Challenge | null }[] = [
-            { label: 'street, no challenge', url: 'street-photography-2024', challenge: null },
-            { label: 'portrait, no challenge', url: 'portrait-photography-2024', challenge: null },
-            { label: 'landscape, no challenge', url: 'landscape-photography-2024', challenge: null },
-            { label: 'macro, no challenge', url: 'macro-photography-2024', challenge: null },
-            { label: 'wildlife, no challenge', url: 'wildlife-photography-2024', challenge: null },
-            { label: 'architecture, no challenge', url: 'architecture-photography-2024', challenge: null },
-            { label: 'unknown url, no challenge', url: 'no-such-challenge', challenge: null },
-            { label: 'real challenge with exposure', url: 'street-photography-2024', challenge: first },
-            { label: 'second real challenge', url: 'macro-photography-2024', challenge: second },
-            { label: 'challenge without exposure', url: 'wildlife-photography-2024', challenge: noExposure },
+            { label: 'street, no challenge', url: 'mock-street', challenge: null },
+            { label: 'real challenge with exposure', url: 'mock-exposure', challenge: first },
+            { label: 'challenge without exposure', url: 'mock-no-exposure', challenge: noExposure },
         ];
 
         const actual = cases.map(({ label, url, challenge }, index) => {
@@ -131,125 +126,12 @@ describe('generated mock payload guards', () => {
         ]);
     });
 
-    test('getMemberChallenges() open rows are unchanged but for the tags and photo counts a listing shows', async () => {
+    test('getMemberChallenges() open rows are pinned', async () => {
         jest.useFakeTimers({ now: PINNED_NOW_MS });
         const pending = getMemberChallenges('token', 'open');
         await jest.advanceTimersByTimeAsync(400);
-        await expect(pending).resolves.toStrictEqual([
-            {
-                id: 900001,
-                type: 'default',
-                join_coins: 0,
-                title: 'Mock Free Challenge',
-                url: 'mock-free',
-                start_time: 1768046400,
-                close_time: 1768489200,
-                entries: 40,
-                players: 25,
-                tags: ['Exhibition'],
-                max_photo_submits: 1,
-                member: { submit_state: 'join' },
-            },
-            {
-                id: 900002,
-                type: 'flash',
-                join_coins: 100,
-                title: 'Mock Flash Challenge',
-                url: 'mock-flash',
-                start_time: 1768392000,
-                close_time: 1768651200,
-                entries: 80,
-                players: 50,
-                tags: ['No comm', '3 photos'],
-                max_photo_submits: 3,
-                member: { submit_state: 'join' },
-            },
-            {
-                id: 900003,
-                type: 'default',
-                join_coins: 250,
-                title: 'Mock Paid Challenge',
-                url: 'mock-paid',
-                start_time: 1768305600,
-                close_time: 1768910400,
-                entries: 120,
-                players: 75,
-                first_prizes: [
-                    { type: 'KEY', amount: 1 },
-                    { type: 'COINS', amount: 250 },
-                ],
-                member: { submit_state: 'join' },
-            },
-            {
-                id: 900004,
-                type: 'flash',
-                join_coins: 100,
-                title: 'Mock Unlock-Fails Challenge',
-                url: 'mock-fail',
-                start_time: 1768219200,
-                close_time: 1768737600,
-                entries: 160,
-                players: 100,
-                member: { submit_state: 'join' },
-            },
-            {
-                id: 900005,
-                type: 'flash',
-                join_coins: 100,
-                title: 'Mock Submit-Fails Challenge',
-                url: 'mock-submitfail',
-                start_time: 1768132800,
-                close_time: 1768824000,
-                entries: 200,
-                players: 125,
-                member: { submit_state: 'join' },
-            },
-            {
-                id: 900006,
-                type: 'default',
-                join_coins: 0,
-                title: 'Mock Full Challenge',
-                url: 'mock-full',
-                start_time: 1767960000,
-                close_time: 1768996800,
-                entries: 150,
-                players: 150,
-                tags: ['Exhibition'],
-                max_photo_submits: 1,
-                max_players: 150,
-                member: { submit_state: 'join' },
-            },
-            {
-                id: 900007,
-                type: 'default',
-                join_coins: 200,
-                title: 'Mock Unlock Challenge',
-                url: 'mock-unlock',
-                start_time: 1767873600,
-                close_time: 1769083200,
-                entries: 90,
-                players: 60,
-                tags: ['Comm'],
-                max_photo_submits: 2,
-                first_prizes: [
-                    { type: 'PHOTO_SWAP', amount: 1 },
-                    { type: 'EXPOSURE_AUTOFILL', amount: 50 },
-                ],
-                member: { submit_state: 'join_unlock' },
-            },
-            {
-                id: 900008,
-                type: 'default',
-                title: 'Mock Price-Unknown Challenge',
-                url: 'mock-price-unknown',
-                start_time: 1767787200,
-                close_time: 1769169600,
-                entries: 60,
-                players: 40,
-                tags: ['Comm'],
-                max_photo_submits: 2,
-                member: { submit_state: 'join_unlock' },
-            },
-        ]);
+        const rows = (await pending) ?? [];
+        const expected: unknown = require('./__data__/mockOpenRows.json');
+        expect(rows).toStrictEqual(expected);
     });
 });

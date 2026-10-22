@@ -37,7 +37,7 @@ interface ChallengeSpec {
     votes: number;
     maxPhotoSubmits: number;
     badge: string;
-    type: 'default' | 'flash' | 'speed';
+    type: 'default' | 'flash' | 'speed' | 'exhibition';
     tags: string[];
     prizesWorth: number;
     rankingLevels: [number, number, number, number, number];
@@ -67,6 +67,17 @@ interface ChallengeSpec {
     topPhotographerEnable?: boolean;
     levelsRankEnable?: boolean;
     newRankingEnable?: boolean;
+    /** Coins to join; emitted as `join_coins`. */
+    joinCoins?: number;
+    /** Player cap; emitted as `max_players`. */
+    maxPlayers?: number;
+    /** The cover photo, with non-hex mock ids so mock mode never builds a real CDN url; emitted as `image`. */
+    image?: { id: string; member_id: string };
+    /** Emitted as `fill_locked` / `swap_locked`. */
+    fillLocked?: boolean;
+    swapLocked?: boolean;
+    /** Swap count; emitted as `member.ranking.swaps` with one mock id per swap. */
+    swaps?: number;
     /** `factor` 0 = no exposure yet; otherwise a random value of at most `cap`, drawn at generation time. */
     exposure: { factor: ExposureRange | 0; voteFactor: number; voteRatio: number };
     myEntries: RankedEntrySpec[];

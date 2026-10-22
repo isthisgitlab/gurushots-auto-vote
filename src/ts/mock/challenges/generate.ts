@@ -6,8 +6,9 @@ import { buildChallenge } from './build';
 import { SPECS_PART_1 } from './specsPart1';
 import { SPECS_PART_2 } from './specsPart2';
 import { SPECS_PART_3 } from './specsPart3';
+import { SPECS_PART_4 } from './specsPart4';
 
-const CHALLENGE_SPECS = [...SPECS_PART_1, ...SPECS_PART_2, ...SPECS_PART_3];
+const CHALLENGE_SPECS = [...SPECS_PART_1, ...SPECS_PART_2, ...SPECS_PART_3, ...SPECS_PART_4];
 
 /**
  * Generate dynamic mock challenges with realistic exposure factors

@@ -38,8 +38,8 @@ const getMyCompletedChallenges: typeof rewardsModule.getMyCompletedChallenges = 
             sections: [{ type: 'TOTAL', name: 'Total', resources: [{ type: 'COINS', title: 'Coins', value: 60 }] }],
         });
         return [
-            { id: 900101, title: 'Mock Finished Challenge', member: { rewards_by_section: rewards('CLAIM') } },
-            { id: 900102, title: 'Mock Claimed Challenge', member: { rewards_by_section: rewards('CLAIMED') } },
+            { id: 900301, title: 'Telling A Story', member: { rewards_by_section: rewards('CLAIM') } },
+            { id: 900302, title: "Nature's Sounds", member: { rewards_by_section: rewards('CLAIMED') } },
         ];
     },
 );
@@ -51,8 +51,8 @@ const claimChallengeResources: typeof rewardsModule.claimChallengeResources = mo
 
 /**
  * Simulate /rest/get_my_missions: one completed mission (claim_state CLAIM)
- * and three still in progress (DISABLED) — a "Win Turbo" and a "Use a boost"
- * mission, so mock mode exercises the mission-aware turbo earn and boost.
+ * and three still in progress (DISABLED), so mock mode exercises the
+ * mission-aware turbo earn, boost and vote paths.
  */
 const getMyMissions: typeof rewardsModule.getMyMissions = mockMethod(
     {
@@ -65,30 +65,40 @@ const getMyMissions: typeof rewardsModule.getMyMissions = mockMethod(
         return [
             {
                 id: 900201,
-                name: 'Vote on 400 photos',
-                progress: { current: 400, required: 400 },
-                prizes: [{ type: 'COINS', amount: 20 }],
+                name: 'Reach Allstar Level 2 times',
+                progress: { current: 2, required: 2 },
+                prizes: [{ type: 'COINS', amount: 60 }],
                 claim_state: 'CLAIM',
             },
             {
                 id: 900202,
-                name: 'Play 6 Duels',
-                progress: { current: 0, required: 6 },
-                prizes: [{ type: 'COINS', amount: 60 }],
+                name: 'Win Turbo 4 times',
+                progress: { current: 1, required: 4 },
+                prizes: [
+                    { type: 'COINS', amount: 100 },
+                    { type: 'EXPOSURE_AUTOFILL', amount: 3 },
+                ],
                 claim_state: 'DISABLED',
             },
             {
                 id: 900203,
-                name: 'Win Turbo 4 times',
-                progress: { current: 1, required: 4 },
-                prizes: [{ type: 'COINS', amount: 30 }],
+                name: 'Vote on 400 photos',
+                progress: { current: 100, required: 400 },
+                prizes: [
+                    { type: 'COINS', amount: 200 },
+                    { type: 'EXPOSURE_AUTOFILL', amount: 6 },
+                ],
                 claim_state: 'DISABLED',
             },
             {
                 id: 900204,
                 name: 'Use a boost',
                 progress: { current: 0, required: 1 },
-                prizes: [{ type: 'COINS', amount: 10 }],
+                prizes: [
+                    { type: 'COINS', amount: 500 },
+                    { type: 'PHOTO_SWAP', amount: 5 },
+                    { type: 'EXPOSURE_AUTOFILL', amount: 5 },
+                ],
                 claim_state: 'DISABLED',
             },
         ];
