@@ -773,3 +773,22 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
         expect(document.body.textContent).not.toContain('app.scheduledFillProfileReplacesWarning');
     });
 });
+
+describe('ChallengeSettingsModal load failure', () => {
+    afterEach(() => {
+        mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
+    });
+
+    test('the load-error alert renders in the plain box: no steady-height or flex chrome', async () => {
+        mockApi.getChallengeOverrides.mockRejectedValue(new Error('ipc'));
+        render(<ChallengeSettingsModal isOpen={true} onClose={jest.fn()} challengeId="1" challengeTitle="C" />);
+
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('app.challengeOverridesLoadError'));
+        // The steady box belongs to the form (same plain box the spinner case
+        // keeps in the tabs suite) — the alert must not inherit its classes.
+        const box = document.querySelector('.modal-box')!.classList;
+        expect(box.contains('h-[calc(100vh-5em)]')).toBe(false);
+        expect(box.contains('flex')).toBe(false);
+        expect(box.contains('flex-col')).toBe(false);
+    });
+});

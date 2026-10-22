@@ -28,6 +28,19 @@ export type SettingsSection = {
 export type SettingsBand = { id: string | null; label: string | null; groups: SettingsSection[] };
 
 /**
+ * A settings modal's tab id. The `tier-` prefix puts tier tabs outside the
+ * fixed id space, so a tier id can never collide with `application`,
+ * `titleRules`, `scenarios`, `about` or the fallback band's `otherTier`.
+ */
+export type SettingsTabId = 'application' | 'titleRules' | 'scenarios' | 'about' | 'otherTier' | `tier-${string}`;
+
+/**
+ * One settings modal tab as bandTabs emits it: the id and the band's label as
+ * a translation key (callers apply t()).
+ */
+export type SettingsTab = { id: SettingsTabId; label: string };
+
+/**
  * Responsive grid for a settings section. One column on phones (Capacitor)
  * and narrow windows, two from `lg`.
  *
@@ -123,6 +136,21 @@ export function tierSchemaEntries(
 
     const orphans = rendered.filter((group) => !known.has(group.tier));
     return orphans.length ? [...banded, { id: null, label: null, groups: orphans }] : banded;
+}
+
+/**
+ * Map tier bands to the settings modals' tab descriptors: one tab per band,
+ * `tier-<tierId>`, carrying the band's label key. The fallback band
+ * (`id: null` — groups whose tier is unknown, or every group when the main
+ * process sent no tiers) becomes the fixed `otherTier` tab, labelled
+ * `app.tierOther`; that mapping lives only here.
+ */
+export function bandTabs(bands: readonly SettingsBand[] | null | undefined): SettingsTab[] {
+    return (bands ?? []).map((band) =>
+        band.id === null || band.label === null
+            ? { id: 'otherTier', label: 'app.tierOther' }
+            : { id: `tier-${band.id}`, label: band.label },
+    );
 }
 
 /**

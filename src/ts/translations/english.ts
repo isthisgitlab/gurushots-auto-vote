@@ -918,7 +918,9 @@ export const app = {
     settingsDropScenario: 'A scenario you are editing and have not saved',
     settingsFilterPlaceholder: 'Filter settings…',
     settingsFilterClear: 'Clear',
-    settingsJumpLabel: 'Jump to section',
+    settingsJumpLabel: 'Settings sections',
+    tabHasErrors: 'has errors',
+    tabOverrideCount: 'Overrides: {0}',
     settingsNoMatch: 'No settings match',
     hide: 'Hide',
     photoChooserUse: 'Use these photos',
@@ -1049,7 +1051,6 @@ export const app = {
     addOnePhoto: 'Submit one photo to an empty slot',
     fillAllPhotos: 'Submit photos to all empty slots now (no spacing)',
     cancel: 'Cancel',
-    challengeDefaults: 'Challenge Defaults',
     // Keys, Swaps & Fills (currency automation) settings
     groupCurrencyAuto: 'Keys, Swaps & Fills',
     autoKeyUnlock: 'Auto-Use a Key',
@@ -1124,6 +1125,8 @@ export const app = {
     tierOverrides: 'Timing Overrides',
     tierOverridesDesc: 'All off by default — turn one on only to change when the normal exposure rule applies.',
     tierApp: 'App',
+    tierDefaultsNote: 'Defaults for every challenge — each challenge can override them',
+    tierOther: 'Other',
     // Notification settings (all default off, opt-in)
     autoClaimPrizes: 'Auto-Claim Prizes',
     autoClaimPrizesDesc:

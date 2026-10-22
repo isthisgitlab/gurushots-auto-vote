@@ -929,7 +929,9 @@ export const app = {
     settingsDropScenario: 'Scenārijs, ko rediģē un neesi saglabājis',
     settingsFilterPlaceholder: 'Filtrēt uzstādījumus…',
     settingsFilterClear: 'Notīrīt',
-    settingsJumpLabel: 'Pāriet uz sadaļu',
+    settingsJumpLabel: 'Iestatījumu sadaļas',
+    tabHasErrors: 'ir kļūdas',
+    tabOverrideCount: 'Manuāli pielāgoti: {0}',
     settingsNoMatch: 'Nav atbilstošu uzstādījumu',
     hide: 'Paslēpt',
     photoChooserUse: 'Izmantot šos foto',
@@ -1060,7 +1062,6 @@ export const app = {
     addOnePhoto: 'Iesniegt vienu foto tukšā vietā',
     fillAllPhotos: 'Iesniegt foto visās tukšajās vietās tagad (bez intervāla)',
     cancel: 'Atcelt',
-    challengeDefaults: 'Izaicinājumu noklusējuma uzstādījumi',
     // Keys, Swaps & Fills (currency automation) settings
     groupCurrencyAuto: 'Atslēgas, apmaiņas un uzpildes',
     autoKeyUnlock: 'Automātiski izmantot atslēgu',
@@ -1142,6 +1143,8 @@ export const app = {
     tierOverridesDesc:
         'Visi pēc noklusējuma izslēgti — ieslēdz kādu tikai tad, ja vēlies mainīt, kad darbojas parastais redzamības noteikums.',
     tierApp: 'Lietotne',
+    tierDefaultsNote: 'Noklusējumi visiem izaicinājumiem — katrs izaicinājums tos var aizstāt',
+    tierOther: 'Citi',
     // Paziņojumu uzstādījumi (pēc noklusējuma izslēgti)
     autoClaimPrizes: 'Automātiski saņemt balvas',
     autoClaimPrizesDesc:

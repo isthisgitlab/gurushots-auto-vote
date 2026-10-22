@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { SETTINGS_SECTION_TITLES } from '@/contexts/SettingsNavContext';
 import { ToneIcon } from '@/components/ui/ToneNote';
 import { useImportRefText, useImportReport } from '@/api/useImportReport';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
@@ -58,7 +59,7 @@ export function AboutDataSection() {
     const [licensesOpen, setLicensesOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     return (
-        <SettingsSectionPanel id="about">
+        <SettingsSectionPanel id="about" title={t(SETTINGS_SECTION_TITLES.about)}>
             <div className="flex flex-wrap items-center gap-3 mb-4">
                 <button type="button" className="btn btn-outline btn-sm" onClick={() => setLicensesOpen(true)}>
                     {t('about.licensesButton')}

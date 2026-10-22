@@ -21,12 +21,11 @@ export const STICKY_FOOTER_SCROLL_PADDING = 'scroll-pb-60 md:scroll-pb-32';
  * pickers' Submit / Save): render it as the last child of the modal content. The negative margins cancel the
  * modal box's padding so the bar sits flush with the box edges and the opaque background hides the content
  * scrolling underneath. The hosting modal passes STICKY_FOOTER_SCROLL_PADDING as the Modal's className so
- * focus scrolling keeps controls above the footer.
+ * focus scrolling keeps controls above the footer. `className` extends the root's classes — the
+ * global settings modal passes `mt-auto` to pin the row to the bottom of a short tab.
  */
-export function StickyModalFooter({ children }: { children?: ComponentChildren }) {
-    return (
-        <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 px-6 py-4 bg-base-100 border-t border-base-300 space-y-2">
-            {children}
-        </div>
-    );
+export function StickyModalFooter({ children, className = '' }: { children?: ComponentChildren; className?: string }) {
+    // With no className the root's classes are exactly what they always were; a passed one appends.
+    const classes = `sticky -bottom-6 z-10 -mx-6 -mb-6 px-6 py-4 bg-base-100 border-t border-base-300 space-y-2${className ? ` ${className}` : ''}`;
+    return <div className={classes}>{children}</div>;
 }

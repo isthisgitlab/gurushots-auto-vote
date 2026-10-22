@@ -1,51 +1,35 @@
-import { useTranslation } from '@/contexts/TranslationContext';
-import {
-    SETTINGS_SECTION_TITLES,
-    settingsContentId,
-    settingsToggleId,
-    useSettingsNav,
-} from '@/contexts/SettingsNavContext';
+import { settingsPanelId, settingsTabId, useSettingsNav } from '@/contexts/SettingsNavContext';
+import { TabPanel } from '@/components/ui/Tabs';
 
 import type { ComponentChildren } from 'preact';
-import type { SettingsSectionId } from '@/contexts/SettingsNavContext';
+import type { SettingsTabId } from '@/utils/groupSettings';
 
 /**
- * One top-level section of the settings modal: a daisyUI collapse driven by the modal's section navigation.
- * Its content stays mounted while it is closed (`collapse-close`) or filtered out (`hidden`). The heading is the
- * collapse's direct child, so daisyUI draws and turns the arrow on it; the button inside spans it, so the whole
- * header toggles. `headingId` makes the heading a focus target for a Save that failed on a part with no input.
+ * One top-level panel of the settings modal: a WAI-ARIA tab panel driven by the modal's
+ * section navigation. Its content stays mounted while it is inactive or filtered out — hiding
+ * it would drop a scenario draft or a title-rule edit the unsaved-changes guard still counts —
+ * and the `hidden` attribute also takes it out of role queries. `title` is the display-ready
+ * tab label, which names the panel's sr-only heading.
  */
 export function SettingsSectionPanel({
     id,
-    headingId,
+    title,
     children,
 }: {
-    id: SettingsSectionId;
-    headingId?: string;
+    id: SettingsTabId;
+    title: string;
     children?: ComponentChildren;
 }) {
-    const { t } = useTranslation();
     const nav = useSettingsNav();
-    const open = nav.open[id];
     return (
-        <div
-            className={`collapse collapse-arrow border border-base-300 ${open ? 'collapse-open' : 'collapse-close'} ${nav.instant === id ? 'transition-none' : ''} ${nav.shown[id] ? '' : 'hidden'}`}
+        <TabPanel
+            id={id}
+            tabId={settingsTabId}
+            panelId={settingsPanelId}
+            active={nav.active === id && nav.isShown(id)}
+            title={title}
         >
-            <h4 id={headingId} tabIndex={-1} className="collapse-title p-0 font-semibold text-base">
-                <button
-                    type="button"
-                    id={settingsToggleId(id)}
-                    aria-expanded={open}
-                    aria-controls={settingsContentId(id)}
-                    className="p-4 pe-12 w-full text-left"
-                    onClick={() => nav.toggle(id)}
-                >
-                    {t(SETTINGS_SECTION_TITLES[id])}
-                </button>
-            </h4>
-            <div id={settingsContentId(id)} className="collapse-content">
-                {children}
-            </div>
-        </div>
+            {children}
+        </TabPanel>
     );
 }

@@ -20,6 +20,8 @@ export const SAVE_ERROR_ID = 'settings-save-error';
  * @param props.onSecondary - destructive button handler (Reset All / Clear All)
  * @param props.secondaryLabel - already-translated destructive button label
  * @param props.saveError   - shows the save-failed alert above the buttons
+ * @param props.className   - forwarded to the StickyModalFooter root (the global settings
+ *                          modal passes `mt-auto` to pin the row to a short modal's bottom)
  */
 export function ModalActionRow({
     onSave,
@@ -29,6 +31,7 @@ export function ModalActionRow({
     secondaryIcon = 'reset',
     onCancel,
     saveError = false,
+    className = '',
 }: {
     onSave: () => void | Promise<void>;
     saving: boolean;
@@ -37,11 +40,12 @@ export function ModalActionRow({
     secondaryIcon?: 'reset' | 'trash';
     onCancel: () => void;
     saveError?: boolean;
+    className?: string;
 }) {
     const { t } = useTranslation();
 
     return (
-        <StickyModalFooter>
+        <StickyModalFooter className={className}>
             {saveError && (
                 <div id={SAVE_ERROR_ID} className="alert alert-error py-2 text-sm" role="alert">
                     <span>{t('app.settingsSaveError')}</span>

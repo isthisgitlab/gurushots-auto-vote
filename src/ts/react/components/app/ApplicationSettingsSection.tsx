@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { useSettingsNav } from '@/contexts/SettingsNavContext';
+import { SETTINGS_SECTION_TITLES, useSettingsNav } from '@/contexts/SettingsNavContext';
 import { matchesSettingFilter } from '@/utils/matchesSettingFilter';
 import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { ResetButton } from '@/components/ui/ResetButton';
@@ -27,9 +27,6 @@ export interface UiFormProps {
     /** The settings the last Save refused: their controls are marked invalid. */
     rejectedKeys: readonly string[];
 }
-
-// The section heading: where focus goes when a Save fails on the language, which has no key of its own to mark.
-export const APPLICATION_HEADING_ID = 'settings-application-heading';
 
 /**
  * The label and description keys of the section's hand-written cells: the cells render them, and the settings
@@ -435,7 +432,7 @@ export function ApplicationSettingsSection({
     const ui = { uiValues, handleUiChange, handleResetUi, rejectedKeys };
 
     return (
-        <SettingsSectionPanel id="application" headingId={APPLICATION_HEADING_ID}>
+        <SettingsSectionPanel id="application" title={t(SETTINGS_SECTION_TITLES.application)}>
             <div className={SETTINGS_GRID_CLASS}>
                 <ThemeSetting {...ui} />
                 <LanguageSetting {...ui} />

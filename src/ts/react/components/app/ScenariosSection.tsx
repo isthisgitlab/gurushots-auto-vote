@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { SETTINGS_SECTION_TITLES } from '@/contexts/SettingsNavContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { useScenarios } from '@/api/useScenarios';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
@@ -371,7 +372,7 @@ export function ScenariosSection({
 
     const names = Object.keys(scenarios);
     return (
-        <SettingsSectionPanel id="scenarios">
+        <SettingsSectionPanel id="scenarios" title={t(SETTINGS_SECTION_TITLES.scenarios)}>
             <p className="text-xs text-base-content/70 mb-3">{t('app.scenariosDesc')}</p>
             {loading ? (
                 <InlineLoader text={t('common.loading')} />

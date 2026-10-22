@@ -13,6 +13,7 @@
 
 import { act, fireEvent, pickOption, render, screen, waitFor } from './helpers/test-utils';
 import { SettingsModal } from '@/components/app/SettingsModal';
+import { selectTab } from '../helpers/selectTab';
 import type { TitleRule } from '../../src/ts/types/settings';
 import type { UiResetHandler } from '../../src/ts/types/settingsEditor';
 import type { useSettingsForm } from '@/hooks/useSettingsForm';
@@ -449,9 +450,9 @@ describe('SettingsModal — title-tag-rules save', () => {
         await screen.findByText('app.titleTagRulesSaveError');
         expect(window.api.setTitleRules).toHaveBeenCalledWith([rule]);
         expect(onClose).not.toHaveBeenCalled();
-        // Focus moves to the section that failed.
+        // Focus moves to the section that failed: its tab button.
         await waitFor(() =>
-            expect(document.activeElement).toBe(screen.getByRole('heading', { level: 4, name: 'app.titleTagRules' })),
+            expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'app.titleTagRules' })),
         );
     });
 
@@ -489,14 +490,12 @@ describe('SettingsModal — title-tag-rules save', () => {
 });
 
 /**
- * Tier bands in the GLOBAL modal. The default mockSchemaState carries an empty
- * schema so the SettingInput-driven section renders nothing, which left this
- * whole path uncovered — SettingsModal renders bands at a different heading
- * depth than ChallengeSettingsModal (h5 band over h6 group, because it nests
- * under its own h4 "Challenge Defaults" section), so the per-challenge modal's
- * test does not stand in for it.
+ * Tier tabs in the GLOBAL modal. The default mockSchemaState carries an empty
+ * schema so the SettingInput-driven panels render nothing, which left this
+ * whole path uncovered — SettingsModal renders each band as its own tab, so
+ * the per-challenge modal's test does not stand in for it.
  */
-describe('SettingsModal tier bands', () => {
+describe('SettingsModal tier tabs', () => {
     const schemaFixture = {
         exposure: {
             type: 'number',
@@ -537,38 +536,96 @@ describe('SettingsModal tier bands', () => {
         Object.assign(mockSchemaState, { schema: {}, defaults: {}, groups: undefined, tiers: undefined });
     });
 
-    test('renders each band heading above its group, at the right depth', async () => {
+    test('one tab per band, and the outline modal h3 over the panel h4 over the group h5', async () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await waitFor(() => expect(document.getElementById('setting-exposure')).not.toBeNull());
 
-        // Bands are h5 here (under the h4 "Challenge Defaults" section);
-        // group headings drop to h6.
-        const bands = await screen.findAllByRole('heading', { level: 5 });
-        // (The last h5 is the About section's danger zone.)
-        expect(bands.map((h) => h.textContent)).toEqual(['app.tierCore', 'app.tierOverrides', 'about.dangerTitle']);
+        // The tabs, Application first and the fixed tabs last, one per non-app band.
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+            'app.applicationSettings',
+            'app.tierCore',
+            'app.tierOverrides',
+            'app.titleTagRules',
+            'app.scenarios',
+            'about.title',
+        ]);
+        // The outline: the modal titles itself h3, each panel opens with an sr-only h4 naming
+        // it, and a group directly under a panel is an h5.
+        expect(screen.getByRole('heading', { level: 3, name: 'app.globalSettings' })).toBeTruthy();
+        selectTab('app.tierCore');
+        expect(screen.getByRole('heading', { level: 4, name: 'app.tierCore' })).toBeTruthy();
+        const corePanel = screen.getByRole('tabpanel', { name: 'app.tierCore' });
+        expect(corePanel.querySelector('h4')!.classList.contains('sr-only')).toBe(true);
+        expect(Array.from(corePanel.querySelectorAll('h5')).map((h) => h.textContent)).toEqual(['app.groupGeneral']);
 
-        const groups = screen.getAllByRole('heading', { level: 6 });
-        expect(groups.map((h) => h.textContent)).toEqual(['app.groupGeneral', 'app.groupLastMinute']);
+        selectTab('app.tierOverrides');
+        const overridesPanel = screen.getByRole('tabpanel', { name: 'app.tierOverrides' });
+        expect(Array.from(overridesPanel.querySelectorAll('h5')).map((h) => h.textContent)).toEqual([
+            'app.groupLastMinute',
+        ]);
+        // Every tier tab carries the defaults note (the challenge modal never does).
+        expect(screen.getAllByText('app.tierDefaultsNote')).toHaveLength(2);
     });
 
     test('shows the off-by-default sub-line on the overrides band only', async () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await waitFor(() => expect(document.getElementById('setting-voteOnlyInLastMinute')).not.toBeNull());
 
-        await screen.findByRole('heading', { level: 5, name: 'app.tierOverrides' });
-        // Keyed off the tier id in SettingsTierHeading, so a renamed tier id
+        selectTab('app.tierOverrides');
+        // Keyed off the tier id in SettingsTierIntro, so a renamed tier id
         // would silently drop this line without this assertion.
         expect(screen.getAllByText('app.tierOverridesDesc')).toHaveLength(1);
     });
 
     // Version skew: a main process predating the `tiers` IPC field. Every
-    // section must still render, just without band headings.
+    // group must still render, just under the fallback Other tab.
     test('renders every group unbanded when the main process sends no tiers', async () => {
         Object.assign(mockSchemaState, { tiers: undefined });
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await waitFor(() => expect(document.getElementById('setting-exposure')).not.toBeNull());
 
-        const groups = await screen.findAllByRole('heading', { level: 6 });
-        expect(groups.map((h) => h.textContent)).toEqual(['app.groupGeneral', 'app.groupLastMinute']);
-        expect(screen.queryByRole('heading', { level: 5, name: 'app.tierCore' })).toBeNull();
+        selectTab('app.tierOther');
+        const panel = screen.getByRole('tabpanel', { name: 'app.tierOther' });
+        expect(Array.from(panel.querySelectorAll('h5')).map((h) => h.textContent)).toEqual([
+            'app.groupGeneral',
+            'app.groupLastMinute',
+        ]);
+        expect(screen.queryByRole('tab', { name: 'app.tierCore' })).toBeNull();
         expect(screen.queryByText('app.tierOverridesDesc')).toBeNull();
+    });
+
+    // Version skew the other way round: the `tiers` field is there but does not
+    // name every group's tier. Only the orphan joins the fallback Other tab,
+    // and the tab still carries the defaults note like every tier tab.
+    test('a group whose tier no band names joins the Other tab, with the defaults note', async () => {
+        Object.assign(mockSchemaState, {
+            schema: {
+                ...schemaFixture,
+                oddity: {
+                    type: 'boolean',
+                    default: false,
+                    perChallenge: true,
+                    group: 'odd',
+                    label: 'app.oddity',
+                    description: 'app.oddityDesc',
+                },
+            },
+            groups: [
+                { id: 'general', label: 'app.groupGeneral', tier: 'core' },
+                { id: 'lastMinute', label: 'app.groupLastMinute', tier: 'overrides' },
+                { id: 'odd', label: 'app.groupOdd', tier: 'mystery' },
+            ],
+        });
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await waitFor(() => expect(document.getElementById('setting-oddity')).not.toBeNull());
+
+        // The named bands keep their tabs; the unknown `mystery` tier falls back to Other.
+        selectTab('app.tierOther');
+        const panel = screen.getByRole('tabpanel', { name: 'app.tierOther' });
+        expect(Array.from(panel.querySelectorAll('h5')).map((h) => h.textContent)).toEqual(['app.groupOdd']);
+        expect(panel.textContent).toContain('app.tierDefaultsNote');
+        // Core, overrides and Other: the note is on every tier tab, Other included.
+        expect(screen.getAllByText('app.tierDefaultsNote')).toHaveLength(3);
     });
 });
 
@@ -605,19 +662,18 @@ describe('SettingsModal — app-wide settings', () => {
         Object.assign(mockSchemaState, { schema: {}, defaults: {}, groups: undefined, tiers: undefined });
     });
 
-    test('app-tier groups render with the Application Settings, not as challenge defaults', async () => {
+    test('app-tier groups render in the Application tab, not as a tier band', async () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-        // h5: directly under the h4 section heading, with no tier band between.
+        // h5: directly under the panel's sr-only h4, with no tier band between.
         await screen.findByRole('heading', { level: 5, name: 'app.groupMissions' });
-        const sections = screen.getAllByRole('heading', { level: 4 }).map((h) => h.parentElement!);
-        const [appSection, defaultsSection] = [
-            sections.find((el) => el.textContent.startsWith('app.applicationSettings')),
-            sections.find((el) => el.textContent.startsWith('app.challengeDefaults')),
-        ];
-        expect(appSection!.textContent).toContain('app.missionSaveTurbos');
-        expect(defaultsSection!.textContent).not.toContain('app.missionSaveTurbos');
-        expect(defaultsSection!.textContent).toContain('app.autoTurbo');
-        expect(screen.queryByRole('heading', { level: 5, name: 'app.tierApp' })).toBeNull();
+        expect(screen.queryByRole('tab', { name: 'app.tierApp' })).toBeNull();
+        const appPanel = screen.getByRole('tabpanel', { name: 'app.applicationSettings' });
+        expect(appPanel.textContent).toContain('app.missionSaveTurbos');
+
+        selectTab('app.tierCore');
+        const corePanel = screen.getByRole('tabpanel', { name: 'app.tierCore' });
+        expect(corePanel.textContent).toContain('app.autoTurbo');
+        expect(corePanel.textContent).not.toContain('app.missionSaveTurbos');
     });
 
     test('only settings a challenge can override carry the global-default badge', async () => {
@@ -651,6 +707,11 @@ describe('SettingsModal — loading state', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         expect(screen.getByRole('status').textContent).toBe('common.loading');
         expect(screen.queryByRole('heading', { level: 4, name: 'app.applicationSettings' })).toBeNull();
+        // The spinner keeps the plain box: the fixed height is the tabbed form's, not its.
+        const box = document.querySelector('.modal-box')!;
+        expect(box.classList.contains('h-[calc(100vh-5em)]')).toBe(false);
+        expect(box.classList.contains('flex')).toBe(false);
+        expect(box.classList.contains('flex-col')).toBe(false);
     });
 
     test('keeps the form on screen during a background schema refetch', async () => {
@@ -1086,11 +1147,9 @@ describe('SettingsModal — save outcomes', () => {
 
         await screen.findByText('app.settingsSaveError');
         expect(onClose).not.toHaveBeenCalled();
-        // The language has no key to mark, so focus goes to its section's heading.
+        // The language has no key to mark, so focus goes to its section's tab button.
         await waitFor(() =>
-            expect(document.activeElement).toBe(
-                screen.getByRole('heading', { level: 4, name: 'app.applicationSettings' }),
-            ),
+            expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'app.applicationSettings' })),
         );
     });
 
