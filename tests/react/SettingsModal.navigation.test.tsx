@@ -23,7 +23,7 @@ const SCHEMA = {
         type: 'number',
         default: 70,
         label: 'Ekspozīcija',
-        description: 'How much of the challenge to vote on',
+        description: 'How much of the challenge to vote on, about',
         group: 'gCore',
         perChallenge: true,
     },
@@ -39,7 +39,7 @@ const SCHEMA = {
         type: 'boolean',
         default: true,
         label: 'Badges',
-        description: 'Show the badge row',
+        description: 'Show the badge row, turbo',
         group: 'gExtra',
         perChallenge: true,
     },
@@ -118,6 +118,7 @@ beforeEach(() => {
     mockApi.getTitleProfile.mockReset().mockResolvedValue(null);
     mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
     mockApi.replaceChallengeOverrides.mockReset().mockResolvedValue(true);
+    mockApi.getImportReport.mockReset().mockResolvedValue(invalid(undefined));
     window.api.checkScenario = invalid(jest.fn(async () => ({ success: true })));
     window.api.saveScenario = invalid(jest.fn(async () => ({ success: true })));
 });
@@ -341,8 +342,113 @@ describe('SettingsModal — filter', () => {
         expect(panelOf('app.applicationSettings').hasAttribute('hidden')).toBe(false);
         expect(isHidden(cellOf('ui-timezone'))).toBe(true);
         expect(isHidden(cellOf('setting-missionTurbo'))).toBe(true);
-        const aboutBlock = screen.getByText('about.title').closest('.mb-4') as HTMLElement;
+        const aboutBlock = screen.getByText('about.title').parentElement as HTMLElement;
         expect(isHidden(aboutBlock)).toBe(false);
+    });
+
+    test('a description word loses to a name match anywhere ("about" finds the About block, not the exposure text)', async () => {
+        // "about" is in the exposure description, but the About block's heading is a name — and one
+        // name match anywhere silences the description search in every tab.
+        await openSettings();
+        typeFilter('about');
+        expect(tabNames()).toEqual(['app.applicationSettings']);
+        expect(document.getElementById(settingsPanelId('tier-core'))!.hasAttribute('hidden')).toBe(true);
+    });
+
+    test('a name match anywhere silences description matches, until no name matches', async () => {
+        await openSettings();
+        // "turbo" matches the name "Mission turbo", so the badges description ("turbo") is not searched.
+        typeFilter('turbo');
+        expect(tabNames()).toEqual(['app.applicationSettings']);
+        expect(isHidden(cellOf('setting-missionTurbo'))).toBe(false);
+        expect(isHidden(cellOf('setting-badges'))).toBe(true);
+        expect(document.getElementById(settingsPanelId('tier-extra'))!.hasAttribute('hidden')).toBe(true);
+
+        // No name contains "giving up", so descriptions are searched and Retries is found again.
+        typeFilter('giving up');
+        expect(isHidden(cellOf('setting-retries'))).toBe(false);
+        expect(isHidden(cellOf('setting-exposure'))).toBe(true);
+    });
+
+    test('a group label shows the whole group, and a tier tab label the whole tab', async () => {
+        await openSettings();
+        typeFilter('Core group');
+        expect(tabNames()).toEqual(['app.tierCore']);
+        expect(isHidden(cellOf('setting-exposure'))).toBe(false);
+        expect(isHidden(cellOf('setting-retries'))).toBe(false);
+
+        typeFilter('tierExtra');
+        expect(tabNames()).toEqual(['app.tierExtra']);
+        expect(isHidden(cellOf('setting-badges'))).toBe(false);
+    });
+
+    test('a query matching the Application title and another tab’s setting shows all of one, only the match in the other', async () => {
+        await openSettings();
+        // "ic" is in the Application tab's own title and in the exposure setting's name. The only
+        // other name holding it (the licenses button) sits in the Application tab, whose title
+        // match already shows all of it — the point is that no Core or Extra name contains it.
+        typeFilter('ic');
+        expect(tabNames()).toEqual(['app.applicationSettings', 'app.tierCore']);
+        // The title match shows every Application cell, group and the About block, including the
+        // ones whose own names have no "ic".
+        expect(isHidden(cellOf('ui-theme'))).toBe(false);
+        expect(isHidden(cellOf('setting-missionTurbo'))).toBe(false);
+        const aboutBlock = screen.getByText('about.title').parentElement as HTMLElement;
+        expect(isHidden(aboutBlock)).toBe(false);
+        // Core, whose title does not match, shows only the setting whose name matches.
+        selectTab('app.tierCore');
+        expect(panelOf('app.tierCore').hasAttribute('hidden')).toBe(false);
+        expect(isHidden(cellOf('setting-exposure'))).toBe(false);
+        expect(isHidden(cellOf('setting-retries'))).toBe(true);
+    });
+
+    test('the Application tab title shows all its content', async () => {
+        await openSettings();
+        typeFilter('app.applicationSettings');
+        expect(tabNames()).toEqual(['app.applicationSettings']);
+        expect(isHidden(cellOf('ui-theme'))).toBe(false);
+        expect(isHidden(cellOf('setting-missionTurbo'))).toBe(false);
+        const aboutBlock = screen.getByText('about.title').parentElement as HTMLElement;
+        expect(isHidden(aboutBlock)).toBe(false);
+    });
+
+    test('a hand-written cell is found through its field labels', async () => {
+        await openSettings();
+        typeFilter('app.apiRetryBaseDelayMs');
+        expect(tabNames()).toEqual(['app.applicationSettings']);
+        // The group cells' inputs carry their field label, and the cell is the input's rounded box.
+        const reliability = screen.getByLabelText('app.apiRetryBaseDelayMs').closest('.rounded-box') as HTMLElement;
+        expect(isHidden(reliability)).toBe(false);
+        const checkFrequency = screen.getByLabelText('app.checkFrequencyMin').closest('.rounded-box') as HTMLElement;
+        expect(isHidden(checkFrequency)).toBe(true);
+    });
+
+    test('the import heading is a name only while a report is shown', async () => {
+        mockApi.getImportReport.mockResolvedValue(
+            invalid({
+                success: true,
+                report: { at: '2026-10-16T09:00:00.000Z', refsBlocked: [], acknowledged: true },
+            }),
+        );
+        await openSettings();
+        await screen.findByRole('heading', { name: 'about.importTitle' });
+
+        typeFilter('about.importTitle');
+        expect(tabNames()).toEqual(['app.applicationSettings']);
+        const aboutBlock = screen.getByText('about.title').parentElement as HTMLElement;
+        expect(isHidden(aboutBlock)).toBe(false);
+    });
+
+    test('without a report the import heading matches nothing', async () => {
+        await openSettings();
+        typeFilter('about.importTitle');
+        expect(tabNames()).toHaveLength(0);
+        expect(screen.getByText('app.settingsNoMatch')).toBeTruthy();
+    });
+
+    test('a closed modal does not read the import report', () => {
+        render(<SettingsModal isOpen={false} onClose={onClose} />);
+        expect(mockApi.getImportReport).not.toHaveBeenCalled();
     });
 
     test('a blank filter is no filter', async () => {
@@ -407,6 +513,41 @@ describe('SettingsModal — filter', () => {
         expect(activeTab().textContent).toBe('app.tierExtra');
         expect(screen.getAllByRole('tabpanel')).toHaveLength(1);
         expect(activeTab().getAttribute('tabindex')).toBe('0');
+    });
+
+    test('a schema refetch removing the selected tier falls back to the first shown tab', async () => {
+        await openSettings();
+        // The user selected Extra; the filter then hides it in favour of Core, and the refetch
+        // removes Extra outright — the selection no longer names any section the modal renders.
+        selectTab('app.tierExtra');
+        typeFilter('ekspozicija');
+        expect(tabNames()).toEqual(['app.tierCore']);
+        mockApi.getSettingsSchema.mockResolvedValue(
+            invalid({
+                schema: {
+                    exposure: {
+                        type: 'number',
+                        default: 70,
+                        label: 'Ekspozīcija',
+                        description: 'Stayed with the band',
+                        group: 'gCore',
+                        perChallenge: true,
+                    },
+                },
+                defaults: { exposure: 70 },
+                groups: [{ id: 'gCore', label: 'Core group', tier: 'core' }],
+                tiers: [{ id: 'core', label: 'app.tierCore' }],
+            }),
+        );
+        act(() => fireSettingsChanged());
+
+        // Wait for a state only the refetch produces before reading the active tab. The stale
+        // selected tab also drives sectionTexts' unknown-id arm (`index === -1`).
+        await waitFor(() => expect(document.getElementById(settingsPanelId('tier-extra'))).toBeNull());
+        // A hidden tab is never the active one: the first shown one takes over.
+        expect(tabNames()).toEqual(['app.tierCore']);
+        expect(activeTab().textContent).toBe('app.tierCore');
+        expect(panelOf('app.tierCore').hasAttribute('hidden')).toBe(false);
     });
 
     test('staged values of hidden tabs are still saved', async () => {

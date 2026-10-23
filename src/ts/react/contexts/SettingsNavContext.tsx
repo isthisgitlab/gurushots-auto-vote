@@ -41,6 +41,11 @@ export const settingsPanelId = (id: SettingsTabId): string => `settings-panel-${
 export type SettingsNav = {
     /** The filter text; blank when nothing is filtered. */
     query: string;
+    /**
+     * Whether to search names only. The name check spans the whole modal, so one name match
+     * anywhere turns off description matches in every tab. False while the filter is blank.
+     */
+    namesOnly: boolean;
     /** Whether a section survives the current filter (always true without one). */
     isShown: (id: SettingsTabId) => boolean;
     /** The section whose panel is on screen: the selected one, or the first shown one when a refetch or a language change hid the selection. */
@@ -61,6 +66,7 @@ const noop = () => undefined;
 // section shown, Application active. Tests that need a visible panel wrap with a provider.
 const SettingsNavContext = createContext<SettingsNav>({
     query: '',
+    namesOnly: false,
     isShown: () => true,
     active: 'application',
     selectionSeq: 0,
@@ -75,18 +81,22 @@ export const SettingsNavProvider = SettingsNavContext.Provider;
 export const useSettingsNav = (): SettingsNav => useContext(SettingsNavContext);
 
 /**
- * The state behind SettingsNavProvider. `matched` says, for a filter text, whether a section
- * has a match; `sections` is the tab order the active-tab fallback follows.
+ * The state behind SettingsNavProvider. `matched` says, for a filter text, whether a section has
+ * a match under the names-only rule; `nameMatched` says whether the query matches a name anywhere
+ * in the modal (the check behind `namesOnly`); `sections` is the tab order the active-tab
+ * fallback follows.
  */
 export function useSettingsNavState(
     sections: readonly SettingsTabId[],
-    matched: (query: string, id: SettingsTabId) => boolean,
+    matched: (query: string, id: SettingsTabId, namesOnly: boolean) => boolean,
+    nameMatched: (query: string) => boolean,
 ): SettingsNav {
     const [query, setQueryState] = useState('');
     const [selected, setSelected] = useState<SettingsTabId>('application');
     const [selectionSeq, setSelectionSeq] = useState(0);
 
-    const isShown = (id: SettingsTabId) => query.trim() === '' || matched(query, id);
+    const namesOnly = query.trim() !== '' && nameMatched(query);
+    const isShown = (id: SettingsTabId) => query.trim() === '' || matched(query, id, namesOnly);
 
     // A filter — or a schema refetch or language change re-evaluating it — can hide the
     // selected tab; the first shown one takes over, so a hidden tab is never the active one.
@@ -114,5 +124,5 @@ export function useSettingsNavState(
         setSelected('application');
     }, []);
 
-    return { query, isShown, active, selectionSeq, select, setQuery, reveal, reset };
+    return { query, namesOnly, isShown, active, selectionSeq, select, setQuery, reveal, reset };
 }

@@ -6,6 +6,7 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
 import { AboutDataSection } from '@/components/app/AboutDataSection';
+import { useImportReport } from '@/api/useImportReport';
 import { SettingsNavProvider } from '@/contexts/SettingsNavContext';
 import { mockTranslator, defaultTranslate } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
@@ -15,14 +16,17 @@ import { about as englishAbout } from '../../src/ts/translations/english';
 import { about as latvianAbout } from '../../src/ts/translations/latvian';
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
 
+import type { ReactNode } from 'react';
+import type { ImportReport } from '@/api/useImportReport';
 import type { SettingsNav } from '@/contexts/SettingsNavContext';
 
 const open = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
 const dialog = () => screen.getByRole('dialog');
 
 // The block renders inside the Application panel; give it a navigation that shows it.
-const shownNav = (query = ''): SettingsNav => ({
+const shownNav = (query = '', namesOnly = false): SettingsNav => ({
     query,
+    namesOnly,
     isShown: () => true,
     active: 'application',
     selectionSeq: 0,
@@ -31,10 +35,23 @@ const shownNav = (query = ''): SettingsNav => ({
     reveal: () => undefined,
     reset: () => undefined,
 });
-const renderSection = (query = '') =>
+const renderSection = (query = '', namesOnly = false, report: ImportReport | null = null) =>
     render(
-        <SettingsNavProvider value={shownNav(query)}>
-            <AboutDataSection />
+        <SettingsNavProvider value={shownNav(query, namesOnly)}>
+            <AboutDataSection report={report} />
+        </SettingsNavProvider>,
+    );
+
+// The import-report tests keep reading the report the way the modal does — over useImportReport —
+// and pass it in: the section takes it as a prop.
+function ReportBridge({ children }: { children: (report: ImportReport | null) => ReactNode }) {
+    const { data: report } = useImportReport();
+    return <>{children(report)}</>;
+}
+const renderWithReport = () =>
+    render(
+        <SettingsNavProvider value={shownNav()}>
+            <ReportBridge>{(report) => <AboutDataSection report={report} />}</ReportBridge>
         </SettingsNavProvider>,
     );
 
@@ -467,7 +484,7 @@ describe('the import report in About and data', () => {
                 acknowledged: true,
             },
         });
-        renderSection();
+        renderWithReport();
 
         await screen.findByRole('heading', { name: 'about.importTitle' });
         expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
@@ -486,7 +503,7 @@ describe('the import report in About and data', () => {
                 acknowledged: true,
             },
         });
-        renderSection();
+        renderWithReport();
 
         expect(await screen.findByRole('heading', { name: 'about.importTitle' })).toBeTruthy();
         expect(screen.getByText('about.importSome')).toBeTruthy();
@@ -509,7 +526,7 @@ describe('the import report in About and data', () => {
                 acknowledged: true,
             },
         });
-        renderSection();
+        renderWithReport();
 
         await screen.findByRole('heading', { name: 'about.importTitle' });
 
@@ -521,7 +538,7 @@ describe('the import report in About and data', () => {
     test('on Android the date line does not name a settings.json the user never sees', async () => {
         (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
         answer({ success: true, report: { at: '2026-10-16T12:00:00.000Z', refsBlocked: [], acknowledged: true } });
-        renderSection();
+        renderWithReport();
 
         expect(await screen.findByText('about.importAtAndroid')).toBeTruthy();
         expect(screen.queryByText('about.importAt')).toBeNull();
@@ -531,7 +548,7 @@ describe('the import report in About and data', () => {
     test('says when it ran, in the date format of the page language', async () => {
         mockTranslator.t.mockImplementation((text) => (text === 'about.importAt' ? 'On {date}' : text));
         answer({ success: true, report: { at: '2026-10-16T12:00:00.000Z', refsBlocked: [], acknowledged: true } });
-        renderSection();
+        renderWithReport();
 
         expect(await screen.findByText('On 16/10/2026')).toBeTruthy();
         mockTranslator.t.mockImplementation(defaultTranslate);
@@ -540,7 +557,7 @@ describe('the import report in About and data', () => {
     test('a date that cannot be read is shown as stored', async () => {
         mockTranslator.t.mockImplementation((text) => (text === 'about.importAt' ? 'On {date}' : text));
         answer({ success: true, report: { at: 'sometime', refsBlocked: [], acknowledged: true } });
-        renderSection();
+        renderWithReport();
 
         expect(await screen.findByText('On sometime')).toBeTruthy();
         mockTranslator.t.mockImplementation(defaultTranslate);
@@ -548,7 +565,7 @@ describe('the import report in About and data', () => {
 
     test('says nothing needed attention when the list is empty', async () => {
         answer({ success: true, report: { at: '2026-10-16T09:00:00.000Z', refsBlocked: [], acknowledged: false } });
-        renderSection();
+        renderWithReport();
 
         expect(await screen.findByText('about.importNone')).toBeTruthy();
         expect(screen.queryByText('about.importSome')).toBeNull();
@@ -561,7 +578,7 @@ describe('the import report in About and data', () => {
         ['no answer', undefined],
     ])('%s shows no block', async (_name, result) => {
         answer(result);
-        renderSection();
+        renderWithReport();
 
         await waitFor(() => expect(window.api.getImportReport).toHaveBeenCalledTimes(1));
         expect(screen.queryByText('about.importTitle')).toBeNull();
@@ -582,26 +599,73 @@ describe('the import report texts', () => {
 });
 
 describe('the block in the Application panel', () => {
-    const aboutBlock = () =>
-        screen.getByRole('heading', { level: 5, name: 'about.title' }).closest('.mb-4') as HTMLElement;
+    // Under the real English words the h5's accessible name is englishAbout.title; under the
+    // default identity translator it is the key.
+    const aboutBlock = (headingName = 'about.title') =>
+        screen.getByRole('heading', { level: 5, name: headingName }).parentElement as HTMLElement;
+    // The filter sees what a user sees: translate the about keys into their English words.
+    const translateAbout = (key: string): string => {
+        const name = key.slice('about.'.length) as keyof typeof englishAbout;
+        return name in englishAbout ? englishAbout[name] : key;
+    };
+    const ENGLISH_BLOCK_HEADING = englishAbout.title;
+    const withEnglishWords = (run: () => void) => {
+        mockTranslator.t.mockImplementation(translateAbout);
+        try {
+            run();
+        } finally {
+            mockTranslator.t.mockImplementation(defaultTranslate);
+        }
+    };
+
+    afterEach(() => {
+        mockTranslator.t.mockImplementation(defaultTranslate);
+    });
 
     test('a query that matches none of its texts hides the block', () => {
         renderSection('zzz');
         expect(aboutBlock().classList.contains('hidden')).toBe(true);
     });
 
-    test.each(['about', 'licensesButton', 'deleteButton'])('a query matching %s keeps the block visible', (query) => {
-        renderSection(query);
-        expect(aboutBlock().classList.contains('hidden')).toBe(false);
+    test.each(['licenses', 'delete', 'danger'])('a name word, %s, keeps the block visible', (query) => {
+        withEnglishWords(() => {
+            renderSection(query);
+            expect(aboutBlock(ENGLISH_BLOCK_HEADING).classList.contains('hidden')).toBe(false);
+        });
     });
 
-    test('the block heading is an h5 over the import-report and danger h6s', async () => {
-        jest.mocked(window.api.getImportReport).mockResolvedValue(
-            invalid({ success: true, report: { at: '2026-10-16T09:00:00.000Z', refsBlocked: [], acknowledged: true } }),
-        );
-        renderSection();
+    test('with descriptions searched, a word only in a description keeps the block visible', () => {
+        withEnglishWords(() => {
+            renderSection('open-source', false);
+            expect(aboutBlock(ENGLISH_BLOCK_HEADING).classList.contains('hidden')).toBe(false);
+        });
+    });
 
-        await screen.findByRole('heading', { level: 6, name: 'about.importTitle' });
+    test('with names only, a word only in a description hides the block', () => {
+        withEnglishWords(() => {
+            renderSection('cannot be undone', true);
+            expect(aboutBlock(ENGLISH_BLOCK_HEADING).classList.contains('hidden')).toBe(true);
+        });
+    });
+
+    test('the import heading keeps the block visible only when a report is passed', () => {
+        withEnglishWords(() => {
+            const withoutReport = renderSection(englishAbout.importTitle, false, null);
+            expect(aboutBlock(ENGLISH_BLOCK_HEADING).classList.contains('hidden')).toBe(true);
+            withoutReport.unmount();
+
+            renderSection(englishAbout.importTitle, false, {
+                at: '2026-10-16T09:00:00.000Z',
+                refsBlocked: [],
+                acknowledged: true,
+            });
+            expect(aboutBlock(ENGLISH_BLOCK_HEADING).classList.contains('hidden')).toBe(false);
+        });
+    });
+
+    test('the block heading is an h5 over the import-report and danger h6s', () => {
+        renderSection('', false, { at: '2026-10-16T09:00:00.000Z', refsBlocked: [], acknowledged: true });
+
         expect(screen.getAllByRole('heading', { level: 5 }).map((heading) => heading.textContent)).toEqual([
             'about.title',
         ]);

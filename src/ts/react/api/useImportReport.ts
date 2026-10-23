@@ -10,7 +10,7 @@ import type { IpcQueryTools } from './useIpcQuery';
 type ImportReportAnswer = Awaited<ReturnType<typeof ipc.getImportReport>>;
 
 /** What the import of settings.json left unresolved (null: the settings were not imported from one). */
-type ImportReport = NonNullable<Extract<ImportReportAnswer, { success: true }>['report']>;
+export type ImportReport = NonNullable<Extract<ImportReportAnswer, { success: true }>['report']>;
 
 const fetchReport = () => ipc.getImportReport();
 
@@ -20,9 +20,17 @@ const applyReport = (
     { setData }: Pick<IpcQueryTools<ImportReport | null, Error>, 'setData'>,
 ) => setData(result?.success ? result.report : null);
 
-/** The import report, read again whenever the settings change. */
-export function useImportReport() {
-    return useIpcQuery(fetchReport, { initialData: null as ImportReport | null, apply: applyReport, subscribe: true });
+/**
+ * The import report, read again whenever the settings change. `enabled` gates the read and its
+ * subscription, for a caller that only needs them while it is on screen.
+ */
+export function useImportReport({ enabled = true }: { enabled?: boolean } = {}) {
+    return useIpcQuery(fetchReport, {
+        initialData: null as ImportReport | null,
+        apply: applyReport,
+        subscribe: true,
+        enabled,
+    });
 }
 
 /** One entry of the report as a line in the language of the window. */

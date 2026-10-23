@@ -1,6 +1,7 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettings } from '@/api/useSettings';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
+import { useImportReport } from '@/api/useImportReport';
 import { useSettingsForm } from '@/hooks/useSettingsForm';
 import { useSettingsSave } from '@/hooks/useSettingsSave';
 import { useTitleRules } from '@/hooks/useTitleRules';
@@ -18,10 +19,12 @@ import {
     bandTabs,
     entryMatchesFilter,
     groupMatchesFilter,
+    groupFilterTexts,
+    groupLabelMatchesFilter,
     SETTINGS_GRID_CLASS,
     SETTING_CELL_CLASS,
 } from '@/utils/groupSettings';
-import { matchesSettingFilter } from '@/utils/matchesSettingFilter';
+import { matchesFilterTexts, matchesSettingFilter } from '@/utils/matchesSettingFilter';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { UnsavedChangesModal } from '@/components/ui/UnsavedChangesModal';
@@ -37,9 +40,10 @@ import { SettingsNavBar, SettingsNoMatch, SETTINGS_NAV_SCROLL_PADDING } from './
 import { SettingsSectionPanel } from './SettingsSectionPanel';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { ScenariosSection } from './ScenariosSection';
-import { AboutDataSection, aboutDataMatchesFilter } from './AboutDataSection';
+import { AboutDataSection, aboutDataTexts } from './AboutDataSection';
 
 import type { SettingsSection, SettingsTabId } from '@/utils/groupSettings';
+import type { SettingFilterTexts } from '@/utils/matchesSettingFilter';
 import type { TabDescriptor } from '@/components/ui/Tabs';
 import type { HintsFor, SettingChangeHandler, SettingResetHandler } from '../../../types/settingsEditor';
 
@@ -80,22 +84,27 @@ const RULE_TYPE_SUGGESTIONS = ['default', 'exhibition', 'flash', 'speed'];
  */
 function SchemaSettingsGroup({
     group,
+    showAll,
     formValues,
     handleFormChange,
     handleResetGlobal,
     hintsFor,
     rejectedKeys,
-}: { group: SettingsSection } & SchemaFormProps) {
+}: { group: SettingsSection; showAll?: boolean } & SchemaFormProps) {
     const { t } = useTranslation();
-    const { query } = useSettingsNav();
+    const { query, namesOnly } = useSettingsNav();
+    // The group's own heading matched (or the tab title did): the heading and every entry show.
+    const labelShown = showAll || groupLabelMatchesFilter(t, group, query);
     return (
-        <div className={`mb-4 ${groupMatchesFilter(t, group, query) ? '' : 'hidden'}`}>
+        <div className={`mb-4 ${showAll || groupMatchesFilter(t, group, query, namesOnly) ? '' : 'hidden'}`}>
             <h5 className="font-medium text-sm opacity-70 mb-2 mt-3">{t(group.label)}</h5>
             <div className={SETTINGS_GRID_CLASS}>
                 {group.entries.map(([key, config]) => (
                     <div
                         key={key}
-                        className={`${SETTING_CELL_CLASS} ${entryMatchesFilter(t, config, query) ? '' : 'hidden'}`}
+                        className={`${SETTING_CELL_CLASS} ${
+                            labelShown || entryMatchesFilter(t, config, query, namesOnly) ? '' : 'hidden'
+                        }`}
                     >
                         <SettingLabel inputId={`setting-${key}`} type={config.type}>
                             <span className="font-medium">{t(config.label)}</span>
@@ -245,22 +254,40 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     const defaultsTabs = bandTabs(defaultsBands);
     const sections = settingsSections(defaultsBands);
 
-    // Which tabs have a setting (or, for the tabs without any, a heading) matching the filter.
+    // The About block's import heading counts as a name only while a report is shown. The modal is
+    // always mounted, so the read and its settings-changed subscription run only while it is open;
+    // reopening fetches fresh data.
+    const { data: importReport } = useImportReport({ enabled: isOpen });
+
+    // Every text the filter searches in one tab: the tab's own title, and the names and
+    // descriptions of everything it renders.
+    const sectionTexts = (id: SettingsTabId): SettingFilterTexts[] => {
+        if (id === 'application') {
+            return [
+                { names: [t(SETTINGS_SECTION_TITLES.application)], descriptions: [] },
+                ...applicationCellTexts(t),
+                ...appGroups.flatMap((group) => groupFilterTexts(t, group)),
+                aboutDataTexts(t, importReport !== null),
+            ];
+        }
+        if (id === 'titleRules') return [{ names: [t(SETTINGS_SECTION_TITLES.titleRules)], descriptions: [] }];
+        if (id === 'scenarios') return [{ names: [t(SETTINGS_SECTION_TITLES.scenarios)], descriptions: [] }];
+        const index = defaultsTabs.findIndex((tab) => tab.id === id);
+        return index !== -1
+            ? [
+                  { names: [t(defaultsTabs[index].label)], descriptions: [] },
+                  ...defaultsBands[index].groups.flatMap((group) => groupFilterTexts(t, group)),
+              ]
+            : [];
+    };
+
+    // Which tabs survive the filter. A match on any name anywhere in the modal turns the
+    // description search off in every tab (namesOnly).
     const nav = useSettingsNavState(
         sections.map(({ id }) => id),
-        (query, id) => {
-            if (id === 'application') {
-                return (
-                    matchesSettingFilter(applicationCellTexts(t), query) ||
-                    appGroups.some((group) => groupMatchesFilter(t, group, query)) ||
-                    aboutDataMatchesFilter(t, query)
-                );
-            }
-            if (id === 'titleRules') return matchesSettingFilter([t(SETTINGS_SECTION_TITLES.titleRules)], query);
-            if (id === 'scenarios') return matchesSettingFilter([t(SETTINGS_SECTION_TITLES.scenarios)], query);
-            const index = defaultsTabs.findIndex((tab) => tab.id === id);
-            return index !== -1 && defaultsBands[index].groups.some((group) => groupMatchesFilter(t, group, query));
-        },
+        (query, id, namesOnly) => sectionTexts(id).some((texts) => matchesFilterTexts(texts, query, namesOnly)),
+        (query) =>
+            sections.some(({ id }) => sectionTexts(id).some((texts) => matchesSettingFilter(texts.names, query))),
     );
 
     const timezoneInput = useCustomTimezoneInput({ isOpen, uiValues, handleUiChange });
@@ -304,6 +331,8 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         invalid: save.refusedTabs.has(id),
     }));
     const anyShown = sections.some((section) => nav.isShown(section.id));
+    // The Application tab's title matched: its whole content shows, however the filter reads.
+    const appShowAll = matchesSettingFilter([t(SETTINGS_SECTION_TITLES.application)], nav.query);
 
     return (
         <>
@@ -329,19 +358,32 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                             handleResetUi={handleResetUi}
                             rejectedKeys={save.rejectedKeys}
                             timezoneInput={timezoneInput}
+                            showAll={appShowAll}
                         >
                             {appGroups.map((group) => (
-                                <SchemaSettingsGroup key={group.id} group={group} {...schemaForm} />
+                                <SchemaSettingsGroup
+                                    key={group.id}
+                                    group={group}
+                                    showAll={appShowAll}
+                                    {...schemaForm}
+                                />
                             ))}
-                            <AboutDataSection />
+                            <AboutDataSection report={importReport} showAll={appShowAll} />
                         </ApplicationSettingsSection>
                         {defaultsBands.map((band, index) => {
                             const tab = defaultsTabs[index];
+                            // The tier tab's own title matched: the whole band shows.
+                            const showAll = matchesSettingFilter([t(tab.label)], nav.query);
                             return (
                                 <SettingsSectionPanel key={tab.id} id={tab.id} title={t(tab.label)}>
                                     <SettingsTierIntro id={band.id} defaultsNote />
                                     {band.groups.map((group) => (
-                                        <SchemaSettingsGroup key={group.id} group={group} {...schemaForm} />
+                                        <SchemaSettingsGroup
+                                            key={group.id}
+                                            group={group}
+                                            showAll={showAll}
+                                            {...schemaForm}
+                                        />
                                     ))}
                                 </SettingsSectionPanel>
                             );

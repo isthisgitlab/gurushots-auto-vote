@@ -23,6 +23,7 @@ const withScenarios = (scenarios: Record<string, unknown> = { Plan: plan }) =>
 // The section renders inside the modal's tab panel; give it a navigation that shows it.
 const shownNav = (active: SettingsTabId): SettingsNav => ({
     query: '',
+    namesOnly: false,
     isShown: () => true,
     active,
     selectionSeq: 0,

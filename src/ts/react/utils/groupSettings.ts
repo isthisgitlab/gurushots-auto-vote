@@ -1,6 +1,7 @@
-import { matchesSettingFilter } from './matchesSettingFilter';
+import { matchesFilterTexts, matchesSettingFilter } from './matchesSettingFilter';
 
 import type { SerializableSchemaEntry } from '../../ipc/settings.handlers';
+import type { SettingFilterTexts } from './matchesSettingFilter';
 
 /**
  * One settings group as the modals receive it (SETTINGS_GROUPS entry).
@@ -154,11 +155,19 @@ export function bandTabs(bands: readonly SettingsBand[] | null | undefined): Set
 }
 
 /**
- * The texts a settings filter searches in one schema setting: its label and its description.
+ * The texts a settings filter searches in one schema setting: its label (a name) and its description.
  */
-export const schemaEntryTexts = (t: (key: string) => string, config: SerializableSchemaEntry): string[] => [
-    t(config.label),
-    t(config.description),
+export const schemaEntryTexts = (t: (key: string) => string, config: SerializableSchemaEntry): SettingFilterTexts => ({
+    names: [t(config.label)],
+    descriptions: [t(config.description)],
+});
+
+/**
+ * The texts a settings filter searches in one group: its heading (a name-only text) and each entry.
+ */
+export const groupFilterTexts = (t: (key: string) => string, group: SettingsSection): SettingFilterTexts[] => [
+    { names: [t(group.label)], descriptions: [] },
+    ...group.entries.map(([, config]) => schemaEntryTexts(t, config)),
 ];
 
 /**
@@ -168,10 +177,24 @@ export const entryMatchesFilter = (
     t: (key: string) => string,
     config: SerializableSchemaEntry,
     query: string,
-): boolean => matchesSettingFilter(schemaEntryTexts(t, config), query);
+    namesOnly: boolean,
+): boolean => matchesFilterTexts(schemaEntryTexts(t, config), query, namesOnly);
 
 /**
- * Whether any setting of a group matches the settings filter `query`.
+ * Whether a group's label or any of its settings matches the settings filter `query`.
  */
-export const groupMatchesFilter = (t: (key: string) => string, group: SettingsSection, query: string): boolean =>
-    group.entries.some(([, config]) => entryMatchesFilter(t, config, query));
+export const groupMatchesFilter = (
+    t: (key: string) => string,
+    group: SettingsSection,
+    query: string,
+    namesOnly: boolean,
+): boolean =>
+    groupLabelMatchesFilter(t, group, query) ||
+    group.entries.some(([, config]) => entryMatchesFilter(t, config, query, namesOnly));
+
+/**
+ * Whether a group's heading alone matches the settings filter `query`: the whole-group case, where
+ * every entry shows whatever the entries themselves match.
+ */
+export const groupLabelMatchesFilter = (t: (key: string) => string, group: SettingsSection, query: string): boolean =>
+    matchesSettingFilter([t(group.label)], query);

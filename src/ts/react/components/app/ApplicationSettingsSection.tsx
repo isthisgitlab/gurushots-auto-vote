@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { SETTINGS_SECTION_TITLES, useSettingsNav } from '@/contexts/SettingsNavContext';
-import { matchesSettingFilter } from '@/utils/matchesSettingFilter';
+import { matchesFilterTexts } from '@/utils/matchesSettingFilter';
 import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { ResetButton } from '@/components/ui/ResetButton';
 import { ThemeSelect } from '@/components/ui/ThemeSelect';
@@ -13,6 +13,7 @@ import { SettingsSectionPanel } from './SettingsSectionPanel';
 import type { ComponentChildren } from 'preact';
 import type { useCustomTimezoneInput } from '@/hooks/useCustomTimezoneInput';
 import type { UiChangeHandler, UiResetHandler, UiValues } from '../../../types/settingsEditor';
+import type { SettingFilterTexts } from '@/utils/matchesSettingFilter';
 import type { ReactNode } from 'react';
 
 export type TimezoneInputState = ReturnType<typeof useCustomTimezoneInput>;
@@ -27,24 +28,6 @@ export interface UiFormProps {
     /** The settings the last Save refused: their controls are marked invalid. */
     rejectedKeys: readonly string[];
 }
-
-/**
- * The label and description keys of the section's hand-written cells: the cells render them, and the settings
- * filter searches the same texts.
- */
-export const APPLICATION_CELLS = {
-    theme: { labelKey: 'app.theme', descKey: 'app.themeDesc' },
-    language: { labelKey: 'app.language', descKey: 'app.languageDesc' },
-    timezone: { labelKey: 'app.timezone', descKey: 'app.timezoneDesc' },
-    checkFrequency: { labelKey: 'app.checkFrequency', descKey: 'app.checkFrequencyDesc' },
-    reliability: { labelKey: 'app.reliability', descKey: 'app.apiMaxRetriesDesc' },
-};
-
-/**
- * Every text of the section's hand-written cells, for the settings filter.
- */
-export const applicationCellTexts = (t: (key: string) => string): string[] =>
-    Object.values(APPLICATION_CELLS).flatMap(({ labelKey, descKey }) => [t(labelKey), t(descKey)]);
 
 type UiNumberKey = 'checkFrequencyMin' | 'checkFrequencyMax' | 'apiMaxRetries' | 'apiRetryBaseDelayMs';
 
@@ -61,11 +44,88 @@ interface UiNumberField {
     atLeastKey?: UiNumberKey;
 }
 
+const CHECK_FREQUENCY_FIELDS: UiNumberField[] = [
+    {
+        key: 'checkFrequencyMin',
+        labelKey: 'app.checkFrequencyMin',
+        widthClass: 'w-20',
+        min: '1',
+        max: '60',
+    },
+    {
+        key: 'checkFrequencyMax',
+        labelKey: 'app.checkFrequencyMax',
+        widthClass: 'w-20',
+        min: '1',
+        max: '60',
+        atLeastKey: 'checkFrequencyMin',
+    },
+];
+
+const RELIABILITY_FIELDS: UiNumberField[] = [
+    { key: 'apiMaxRetries', labelKey: 'app.apiMaxRetries', widthClass: 'w-20', min: '0', max: '10' },
+    {
+        key: 'apiRetryBaseDelayMs',
+        labelKey: 'app.apiRetryBaseDelayMs',
+        widthClass: 'w-24',
+        min: '100',
+        max: '10000',
+        step: '100',
+    },
+];
+
+/**
+ * The label and description keys of the section's hand-written cells: the cells render them, and the settings
+ * filter searches the same texts. A cell's field labels are names too (the filter finds "Min" or "API Retries").
+ */
+export const APPLICATION_CELLS = {
+    theme: { labelKey: 'app.theme', descKey: 'app.themeDesc' },
+    language: { labelKey: 'app.language', descKey: 'app.languageDesc' },
+    timezone: { labelKey: 'app.timezone', descKey: 'app.timezoneDesc' },
+    checkFrequency: {
+        labelKey: 'app.checkFrequency',
+        descKey: 'app.checkFrequencyDesc',
+        fieldLabelKeys: CHECK_FREQUENCY_FIELDS.map(({ labelKey }) => labelKey),
+    },
+    reliability: {
+        labelKey: 'app.reliability',
+        descKey: 'app.apiMaxRetriesDesc',
+        fieldLabelKeys: RELIABILITY_FIELDS.map(({ labelKey }) => labelKey),
+    },
+};
+
+/**
+ * The searchable texts of one hand-written cell: its label and field labels as names, its description.
+ */
+const cellTexts = (
+    t: (key: string) => string,
+    {
+        labelKey,
+        descKey,
+        fieldLabelKeys = [],
+    }: { labelKey: string; descKey: string; fieldLabelKeys?: readonly string[] },
+): SettingFilterTexts => ({
+    names: [t(labelKey), ...fieldLabelKeys.map((key) => t(key))],
+    descriptions: [t(descKey)],
+});
+
+/**
+ * Every text of the section's hand-written cells, for the settings filter.
+ */
+export const applicationCellTexts = (t: (key: string) => string): SettingFilterTexts[] =>
+    Object.values(APPLICATION_CELLS).map((cell) => cellTexts(t, cell));
+
 /**
  * The accessible name of a UI setting's reset button: the action and the setting it resets.
  */
 const resetLabel = (t: (key: string) => string, labelKey: string): string =>
     `${t('app.resetToDefault')}: ${t(labelKey)}`;
+
+/**
+ * UiFormProps plus the tab-title match a cell inherits: with it the cell shows even when the
+ * filter matches none of its texts.
+ */
+type UiCellFormProps = UiFormProps & { showAll?: boolean };
 
 /**
  * One application (UI) setting: caption with the "UI setting" badge, description, then its controls.
@@ -75,17 +135,21 @@ function UiSettingCell({
     group,
     labelKey,
     descKey,
+    fieldLabelKeys,
+    showAll,
     children,
 }: {
     inputId: string;
     group?: boolean;
     labelKey: string;
     descKey: string;
+    fieldLabelKeys?: readonly string[];
+    showAll?: boolean;
     children?: ComponentChildren;
 }) {
     const { t } = useTranslation();
-    const { query } = useSettingsNav();
-    const shown = matchesSettingFilter([t(labelKey), t(descKey)], query);
+    const { query, namesOnly } = useSettingsNav();
+    const shown = showAll || matchesFilterTexts(cellTexts(t, { labelKey, descKey, fieldLabelKeys }), query, namesOnly);
     return (
         <div className={`${SETTING_CELL_CLASS} ${shown ? '' : 'hidden'}`}>
             <SettingLabel inputId={inputId} group={group}>
@@ -183,12 +247,13 @@ function UiNumberGroupCell({
     labelKey,
     descKey,
     fields,
+    showAll,
     suffix,
     uiValues,
     handleUiChange,
     handleResetUi,
     rejectedKeys,
-}: UiFormProps & {
+}: UiCellFormProps & {
     inputId: string;
     labelKey: string;
     descKey: string;
@@ -197,7 +262,14 @@ function UiNumberGroupCell({
 }) {
     const { t } = useTranslation();
     return (
-        <UiSettingCell inputId={inputId} group labelKey={labelKey} descKey={descKey}>
+        <UiSettingCell
+            inputId={inputId}
+            group
+            labelKey={labelKey}
+            descKey={descKey}
+            fieldLabelKeys={fields.map(({ labelKey: fieldLabelKey }) => fieldLabelKey)}
+            showAll={showAll}
+        >
             <div className="flex items-center gap-2 flex-wrap" role="group" aria-labelledby={`${inputId}-label`}>
                 {fields.map((field) => (
                     <UiNumberInput
@@ -217,36 +289,6 @@ function UiNumberGroupCell({
         </UiSettingCell>
     );
 }
-
-const CHECK_FREQUENCY_FIELDS: UiNumberField[] = [
-    {
-        key: 'checkFrequencyMin',
-        labelKey: 'app.checkFrequencyMin',
-        widthClass: 'w-20',
-        min: '1',
-        max: '60',
-    },
-    {
-        key: 'checkFrequencyMax',
-        labelKey: 'app.checkFrequencyMax',
-        widthClass: 'w-20',
-        min: '1',
-        max: '60',
-        atLeastKey: 'checkFrequencyMin',
-    },
-];
-
-const RELIABILITY_FIELDS: UiNumberField[] = [
-    { key: 'apiMaxRetries', labelKey: 'app.apiMaxRetries', widthClass: 'w-20', min: '0', max: '10' },
-    {
-        key: 'apiRetryBaseDelayMs',
-        labelKey: 'app.apiRetryBaseDelayMs',
-        widthClass: 'w-24',
-        min: '100',
-        max: '10000',
-        step: '100',
-    },
-];
 
 const TIMEZONE_ERROR_ID = 'ui-customTimezone-error';
 
@@ -296,18 +338,20 @@ function ResettableUiCell({
     inputId,
     labelKey,
     descKey,
+    showAll,
     onReset,
     children,
 }: {
     inputId: string;
     labelKey: string;
     descKey: string;
+    showAll?: boolean;
     onReset: () => void;
     children?: ComponentChildren;
 }) {
     const { t } = useTranslation();
     return (
-        <UiSettingCell inputId={inputId} labelKey={labelKey} descKey={descKey}>
+        <UiSettingCell inputId={inputId} labelKey={labelKey} descKey={descKey} showAll={showAll}>
             <div className="flex items-center gap-2">
                 {children}
                 <ResetButton label={resetLabel(t, labelKey)} onClick={onReset} />
@@ -316,9 +360,14 @@ function ResettableUiCell({
     );
 }
 
-function ThemeSetting({ uiValues, handleUiChange, handleResetUi, rejectedKeys }: UiFormProps) {
+function ThemeSetting({ uiValues, handleUiChange, handleResetUi, rejectedKeys, showAll }: UiCellFormProps) {
     return (
-        <ResettableUiCell inputId="ui-theme" {...APPLICATION_CELLS.theme} onReset={() => handleResetUi('theme')}>
+        <ResettableUiCell
+            inputId="ui-theme"
+            {...APPLICATION_CELLS.theme}
+            showAll={showAll}
+            onReset={() => handleResetUi('theme')}
+        >
             <ThemeSelect
                 id="ui-theme"
                 value={uiValues.theme}
@@ -329,12 +378,13 @@ function ThemeSetting({ uiValues, handleUiChange, handleResetUi, rejectedKeys }:
     );
 }
 
-function LanguageSetting({ uiValues, handleUiChange, handleResetUi }: UiFormProps) {
+function LanguageSetting({ uiValues, handleUiChange, handleResetUi, showAll }: UiCellFormProps) {
     const { t } = useTranslation();
     return (
         <ResettableUiCell
             inputId="ui-language"
             {...APPLICATION_CELLS.language}
+            showAll={showAll}
             onReset={() => handleResetUi('language')}
         >
             <select
@@ -355,12 +405,13 @@ function TimezoneSetting({
     handleUiChange,
     handleResetUi,
     rejectedKeys,
+    showAll,
     timezoneInput,
-}: UiFormProps & { timezoneInput: TimezoneInputState }) {
+}: UiCellFormProps & { timezoneInput: TimezoneInputState }) {
     const { t } = useTranslation();
     const { timezone, customTimezones } = uiValues;
     return (
-        <UiSettingCell inputId="ui-timezone" {...APPLICATION_CELLS.timezone}>
+        <UiSettingCell inputId="ui-timezone" {...APPLICATION_CELLS.timezone} showAll={showAll}>
             <div className="flex items-center gap-2 flex-wrap">
                 <select
                     id="ui-timezone"
@@ -426,10 +477,11 @@ export function ApplicationSettingsSection({
     handleResetUi,
     rejectedKeys,
     timezoneInput,
+    showAll,
     children,
-}: UiFormProps & { timezoneInput: TimezoneInputState; children?: ReactNode }) {
+}: UiFormProps & { timezoneInput: TimezoneInputState; showAll?: boolean; children?: ReactNode }) {
     const { t } = useTranslation();
-    const ui = { uiValues, handleUiChange, handleResetUi, rejectedKeys };
+    const ui = { uiValues, handleUiChange, handleResetUi, rejectedKeys, showAll };
 
     return (
         <SettingsSectionPanel id="application" title={t(SETTINGS_SECTION_TITLES.application)}>
