@@ -614,7 +614,8 @@ repeated six times is one that gets forgotten at one of them.
   to recover, and an older release a user goes back to uses whatever it finds. Files older builds left
   (`settings.json.original`, `settings.json.unimportable-<time>`, and their Android keys) are only wiped with the
   rest ("Delete all local data").
-- **Import and recovery (`settings/legacyImport.ts`, `persistence.ts`).** With no `config.json`, the first load
+- **Import and recovery (`settings/legacyImport.ts`, `persistence.ts` + its `persistence/importFlow.ts`).** With no
+  `config.json`, the first load
   imports `settings.json` once, under the import lock (Android has none: the native compare-and-write of the
   configuration decides which context is first) and writes the marker (`v2-import.json`, kept outside
   `config.json`, so deleting or setting the configuration aside never makes the next start import unasked). The
