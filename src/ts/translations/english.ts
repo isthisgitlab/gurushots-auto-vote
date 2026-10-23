@@ -747,7 +747,7 @@ export const app = {
     discoverForgetUnreadable:
         'The saved payment records could not be read; nothing was changed. Restart and try again. If it keeps happening, joinState.json is unreadable: check your coin history, move it aside, restart.',
     discoverForgetUnreadableAndroid:
-        'The saved payment records could not be read; nothing was changed. Restart and retry. If it keeps happening, use "Delete all local data…" under About and data (it logs you out and resets settings).',
+        'The saved payment records could not be read; nothing was changed. Restart and retry. If it keeps happening, use "Delete all local data…" under Application Settings → About and data (it logs you out and resets settings).',
     discoverForgetFailed: 'Could not forget the payment right now. Nothing was changed. Try again in a moment.',
     discoverAlreadyJoined:
         'This account has already joined this challenge, so nothing was spent. The list updates at the next check.',
@@ -1659,7 +1659,7 @@ export const notice = {
     recoveryUnreadableWhyAndroid:
         "The app could not read its stored settings. The device's storage may be busy or full.",
     recoveryUnreadableNextAndroid:
-        'Restart the app. Nothing was overwritten, and saving stays off until the settings can be read. If it keeps happening, use "Delete all local data" under About and data to start with defaults.',
+        'Restart the app. Nothing was overwritten, and saving stays off until the settings can be read. If it keeps happening, use "Delete all local data" under Application Settings → About and data to start with defaults.',
     recoveryImportWhat:
         'Your settings in settings.json could not be imported, so saving settings is turned off and the app uses default settings.',
     recoveryImportWhatAndroid:

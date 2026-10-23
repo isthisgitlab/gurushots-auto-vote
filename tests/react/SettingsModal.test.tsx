@@ -547,7 +547,6 @@ describe('SettingsModal tier tabs', () => {
             'app.tierOverrides',
             'app.titleTagRules',
             'app.scenarios',
-            'about.title',
         ]);
         // The outline: the modal titles itself h3, each panel opens with an sr-only h4 naming
         // it, and a group directly under a panel is an h5.

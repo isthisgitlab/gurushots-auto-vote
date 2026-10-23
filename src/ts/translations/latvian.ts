@@ -753,7 +753,7 @@ export const app = {
     discoverForgetUnreadable:
         'Saglabātos maksājumu ierakstus neizdevās nolasīt; nekas netika mainīts. Restartē un mēģini vēlreiz. Ja atkārtojas, joinState.json nav nolasāms: pārbaudi monētu vēsturi, pārvieto failu malā, restartē.',
     discoverForgetUnreadableAndroid:
-        'Saglabātos maksājumu ierakstus neizdevās nolasīt; nekas netika mainīts. Restartē un mēģini vēlreiz. Ja atkārtojas, „Par lietotni un datiem” → „Dzēst visus vietējos datus…” (izrakstīs un atiestatīs).',
+        'Saglabātos maksājumu ierakstus neizdevās nolasīt; nekas netika mainīts. Restartē un mēģini vēlreiz. Ja atkārtojas, „Lietotnes uzstādījumi” → „Par lietotni un datiem” → „Dzēst visus vietējos datus…” (izrakstīs un atiestatīs).',
     discoverForgetFailed: 'Pašlaik neizdevās aizmirst maksājumu. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
     discoverAlreadyJoined:
         'Šis konts jau ir pievienojies šim izaicinājumam, tāpēc nekas netika iztērēts. Saraksts atjaunosies nākamajā pārbaudē.',
@@ -1689,7 +1689,7 @@ export const notice = {
     recoveryUnreadableWhyAndroid:
         'Lietotne nevarēja nolasīt saglabātos uzstādījumus. Iespējams, ierīces krātuve ir aizņemta vai pilna.',
     recoveryUnreadableNextAndroid:
-        'Restartē lietotni. Nekas netika pārrakstīts, un saglabāšana paliek izslēgta, kamēr uzstādījumus nevar nolasīt. Ja atkārtojas, sadaļā „Par lietotni un datiem” izmanto „Dzēst visus vietējos datus”.',
+        'Restartē lietotni. Nekas netika pārrakstīts, un saglabāšana paliek izslēgta, kamēr uzstādījumus nevar nolasīt. Ja atkārtojas, sadaļā „Lietotnes uzstādījumi” → „Par lietotni un datiem” izmanto „Dzēst visus vietējos datus”.',
     recoveryImportWhat:
         'Tavus uzstādījumus no settings.json neizdevās importēt, tāpēc uzstādījumu saglabāšana ir izslēgta un lietotne izmanto noklusētos uzstādījumus.',
     recoveryImportWhatAndroid:

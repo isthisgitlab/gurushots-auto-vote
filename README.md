@@ -211,12 +211,12 @@ For GUI and CLI instructions, voting rules, settings, logs, and troubleshooting,
 - Credentials are redacted from logs — sensitive keys are masked before any log write.
 - Your token is stored locally in the app's settings file (owner-only on desktop and the CLI; app-private storage on Android) and is sent only to GuruShots; settings and config never leave your device.
 - **What leaves your device:** requests to GuruShots (voting and your account data, photo thumbnails) and requests to GitHub (`api.github.com` and GitHub release downloads) to check for and download updates. Nothing else is contacted, and the photo analysis runs on the device.
-- Logging out removes only the login token. **Delete all local data** (Settings → About and data; CLI `reset-data --yes`) removes everything the app stores in its data folder, browser storage included — see [where your data is stored](docs/usage.md#️-where-your-data-is-stored--how-to-erase-it).
+- Logging out removes only the login token. **Delete all local data** (Settings → Application Settings → About and data; CLI `reset-data --yes`) removes everything the app stores in its data folder, browser storage included — see [where your data is stored](docs/usage.md#️-where-your-data-is-stored--how-to-erase-it).
 - Error messages don't expose sensitive information.
 - The web UI (`pnpm web`) listens only on this computer (localhost), refuses requests from other websites, and has no password of its own — instead each run generates a random token that every request must carry. Open the exact URL the command prints (it ends in `#t=<token>`); the tab keeps the token for as long as it stays open, so a reload works, but the bare address opened in a new tab is refused, as is any page left open from an earlier run (start `pnpm web` again and open its new URL). Never expose its port to a network.
 - The auto-submit image check runs locally with a bundled model; it only downloads your own photo thumbnails from GuruShots and sends nothing to any other service.
 - Desktop builds are not signed by a publisher, so updates are trusted on the strength of the project's GitHub releases. See [accepted limits](docs/architecture.md#10-security-renderer--main--state-the-limits-dont-over-promise).
-- Third-party software and data the app includes, with their licenses: Settings → About and data, or `licenses` in the CLI.
+- Third-party software and data the app includes, with their licenses: Settings → Application Settings → About and data, or `licenses` in the CLI.
 
 ## 📄 License & Support
 

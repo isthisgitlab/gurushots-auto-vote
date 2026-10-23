@@ -37,7 +37,7 @@ import { SettingsNavBar, SettingsNoMatch, SETTINGS_NAV_SCROLL_PADDING } from './
 import { SettingsSectionPanel } from './SettingsSectionPanel';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { ScenariosSection } from './ScenariosSection';
-import { AboutDataSection } from './AboutDataSection';
+import { AboutDataSection, aboutDataMatchesFilter } from './AboutDataSection';
 
 import type { SettingsSection, SettingsTabId } from '@/utils/groupSettings';
 import type { TabDescriptor } from '@/components/ui/Tabs';
@@ -252,12 +252,12 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             if (id === 'application') {
                 return (
                     matchesSettingFilter(applicationCellTexts(t), query) ||
-                    appGroups.some((group) => groupMatchesFilter(t, group, query))
+                    appGroups.some((group) => groupMatchesFilter(t, group, query)) ||
+                    aboutDataMatchesFilter(t, query)
                 );
             }
             if (id === 'titleRules') return matchesSettingFilter([t(SETTINGS_SECTION_TITLES.titleRules)], query);
             if (id === 'scenarios') return matchesSettingFilter([t(SETTINGS_SECTION_TITLES.scenarios)], query);
-            if (id === 'about') return matchesSettingFilter([t(SETTINGS_SECTION_TITLES.about)], query);
             const index = defaultsTabs.findIndex((tab) => tab.id === id);
             return index !== -1 && defaultsBands[index].groups.some((group) => groupMatchesFilter(t, group, query));
         },
@@ -333,6 +333,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                             {appGroups.map((group) => (
                                 <SchemaSettingsGroup key={group.id} group={group} {...schemaForm} />
                             ))}
+                            <AboutDataSection />
                         </ApplicationSettingsSection>
                         {defaultsBands.map((band, index) => {
                             const tab = defaultsTabs[index];
@@ -347,7 +348,6 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                         })}
                         <TitleRulesSection titleRules={titleRules} />
                         <ScenariosSection isOpen={isOpen} onDirtyChange={save.setScenarioDirty} />
-                        <AboutDataSection />
                         <ModalActionRow
                             className="mt-auto"
                             onSave={save.handleSave}

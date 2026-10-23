@@ -30,9 +30,9 @@ export type SettingsBand = { id: string | null; label: string | null; groups: Se
 /**
  * A settings modal's tab id. The `tier-` prefix puts tier tabs outside the
  * fixed id space, so a tier id can never collide with `application`,
- * `titleRules`, `scenarios`, `about` or the fallback band's `otherTier`.
+ * `titleRules`, `scenarios` or the fallback band's `otherTier`.
  */
-export type SettingsTabId = 'application' | 'titleRules' | 'scenarios' | 'about' | 'otherTier' | `tier-${string}`;
+export type SettingsTabId = 'application' | 'titleRules' | 'scenarios' | 'otherTier' | `tier-${string}`;
 
 /**
  * One settings modal tab as bandTabs emits it: the id and the band's label as

@@ -418,7 +418,7 @@ function TimezoneSetting({
  * timezone, check frequency and API retry. These are UI settings, edited
  * through useSettingsForm's `uiValues` half; `timezoneInput` is
  * useCustomTimezoneInput's state. `children` are the app-wide schema groups
- * (rewards, missions, notifications, display) the modal renders below them.
+ * (rewards, missions, notifications, display) and the About and data block the modal renders below them.
  */
 export function ApplicationSettingsSection({
     uiValues,

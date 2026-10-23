@@ -141,7 +141,6 @@ describe('SettingsModal — tabs', () => {
             'app.tierExtra',
             'app.titleTagRules',
             'app.scenarios',
-            'about.title',
         ]);
         expect(activeTab().textContent).toBe('app.applicationSettings');
         expect(screen.queryByRole('tab', { name: 'app.tierApp' })).toBeNull();
@@ -243,7 +242,7 @@ describe('SettingsModal — tabs', () => {
 
         expect(filterInput().value).toBe('');
         expect(activeTab().textContent).toBe('app.applicationSettings');
-        expect(tabNames()).toHaveLength(6);
+        expect(tabNames()).toHaveLength(5);
     });
 
     test('the bar keeps its sticky treatment and the box its height and scroll padding', async () => {
@@ -274,7 +273,7 @@ describe('SettingsModal — tabs', () => {
         // From xl: one scrolling line beside the filter again.
         expect(row.classList.contains('xl:flex-nowrap')).toBe(true);
         expect(row.classList.contains('xl:overflow-x-auto')).toBe(true);
-        expect(tabs()).toHaveLength(6);
+        expect(tabs()).toHaveLength(5);
     });
 });
 
@@ -331,16 +330,25 @@ describe('SettingsModal — filter', () => {
         typeFilter('scenarios');
         expect(tabNames()).toEqual(['app.scenarios']);
         expect(panelOf('app.scenarios').hasAttribute('hidden')).toBe(false);
-        typeFilter('about');
-        expect(tabNames()).toEqual(['about.title']);
         typeFilter('titleTag');
         expect(tabNames()).toEqual(['app.titleTagRules']);
+    });
+
+    test('the about filter shows the Application tab with only the About and data block', async () => {
+        await openSettings();
+        typeFilter('about');
+        expect(tabNames()).toEqual(['app.applicationSettings']);
+        expect(panelOf('app.applicationSettings').hasAttribute('hidden')).toBe(false);
+        expect(isHidden(cellOf('ui-timezone'))).toBe(true);
+        expect(isHidden(cellOf('setting-missionTurbo'))).toBe(true);
+        const aboutBlock = screen.getByText('about.title').closest('.mb-4') as HTMLElement;
+        expect(isHidden(aboutBlock)).toBe(false);
     });
 
     test('a blank filter is no filter', async () => {
         await openSettings();
         typeFilter('   ');
-        expect(tabNames()).toHaveLength(6);
+        expect(tabNames()).toHaveLength(5);
         expect(isHidden(cellOf('setting-exposure'))).toBe(false);
     });
 
@@ -351,9 +359,9 @@ describe('SettingsModal — filter', () => {
         expect(activeTab().textContent).toBe('app.tierCore');
         typeFilter('');
 
-        expect(tabNames()).toHaveLength(6);
+        expect(tabNames()).toHaveLength(5);
         expect(activeTab().textContent).toBe('app.tierCore');
-        expect(document.querySelectorAll('[role="tabpanel"][hidden]')).toHaveLength(5);
+        expect(document.querySelectorAll('[role="tabpanel"][hidden]')).toHaveLength(4);
     });
 
     test('with no match anywhere it says so, and Clear restores a focusable tab', async () => {
@@ -366,7 +374,7 @@ describe('SettingsModal — filter', () => {
         fireEvent.click(screen.getByRole('button', { name: 'app.settingsFilterClear' }));
         expect(screen.queryByText('app.settingsNoMatch')).toBeNull();
         expect(filterInput().value).toBe('');
-        expect(tabs()).toHaveLength(6);
+        expect(tabs()).toHaveLength(5);
         expect(activeTab().getAttribute('tabindex')).toBe('0');
     });
 
@@ -671,11 +679,11 @@ describe('the default navigation (outside the settings modal)', () => {
     test('shows everything with Application active, and its actions do nothing', () => {
         function Probe() {
             const nav = useSettingsNav();
-            nav.select('about');
+            nav.select('scenarios');
             nav.setQuery('x');
-            nav.reveal('about');
+            nav.reveal('scenarios');
             nav.reset();
-            return <p>{`${nav.query}|${nav.isShown('about')}|${nav.active}`}</p>;
+            return <p>{`${nav.query}|${nav.isShown('scenarios')}|${nav.active}`}</p>;
         }
         render(<Probe />);
         expect(screen.getByText('|true|application')).toBeTruthy();
@@ -687,12 +695,12 @@ describe('the default navigation (outside the settings modal)', () => {
                 <SettingsSectionPanel id="application" title="app.applicationSettings">
                     <p>application</p>
                 </SettingsSectionPanel>
-                <SettingsSectionPanel id="about" title="about.title">
-                    <p>about</p>
+                <SettingsSectionPanel id="scenarios" title="app.scenarios">
+                    <p>scenarios</p>
                 </SettingsSectionPanel>
             </>,
         );
         expect(document.getElementById(settingsPanelId('application'))!.hasAttribute('hidden')).toBe(false);
-        expect(document.getElementById(settingsPanelId('about'))!.hasAttribute('hidden')).toBe(true);
+        expect(document.getElementById(settingsPanelId('scenarios'))!.hasAttribute('hidden')).toBe(true);
     });
 });

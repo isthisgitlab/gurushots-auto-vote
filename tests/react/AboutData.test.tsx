@@ -1,5 +1,5 @@
 /**
- * The settings modal's About and data section: the third-party licenses dialog (text read on open into a focusable,
+ * The Application panel's About and data block: the third-party licenses dialog (text read on open into a focusable,
  * named, scrollable region) and "Delete all local data" (a confirm that lists what is lost, starts on Cancel and words
  * every outcome).
  */
@@ -16,25 +16,24 @@ import { about as latvianAbout } from '../../src/ts/translations/latvian';
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
 
 import type { SettingsNav } from '@/contexts/SettingsNavContext';
-import type { SettingsTabId } from '@/utils/groupSettings';
 
 const open = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
 const dialog = () => screen.getByRole('dialog');
 
-// The section renders inside the modal's tab panel; give it a navigation that shows it.
-const shownNav = (active: SettingsTabId): SettingsNav => ({
-    query: '',
+// The block renders inside the Application panel; give it a navigation that shows it.
+const shownNav = (query = ''): SettingsNav => ({
+    query,
     isShown: () => true,
-    active,
+    active: 'application',
     selectionSeq: 0,
     select: () => undefined,
     setQuery: () => undefined,
     reveal: () => undefined,
     reset: () => undefined,
 });
-const renderSection = () =>
+const renderSection = (query = '') =>
     render(
-        <SettingsNavProvider value={shownNav('about')}>
+        <SettingsNavProvider value={shownNav(query)}>
             <AboutDataSection />
         </SettingsNavProvider>,
     );
@@ -579,5 +578,36 @@ describe('the import report texts', () => {
         }
         expect(englishAbout.importAt).toContain('{date}');
         expect(latvianAbout.importAt).toContain('{date}');
+    });
+});
+
+describe('the block in the Application panel', () => {
+    const aboutBlock = () =>
+        screen.getByRole('heading', { level: 5, name: 'about.title' }).closest('.mb-4') as HTMLElement;
+
+    test('a query that matches none of its texts hides the block', () => {
+        renderSection('zzz');
+        expect(aboutBlock().classList.contains('hidden')).toBe(true);
+    });
+
+    test.each(['about', 'licensesButton', 'deleteButton'])('a query matching %s keeps the block visible', (query) => {
+        renderSection(query);
+        expect(aboutBlock().classList.contains('hidden')).toBe(false);
+    });
+
+    test('the block heading is an h5 over the import-report and danger h6s', async () => {
+        jest.mocked(window.api.getImportReport).mockResolvedValue(
+            invalid({ success: true, report: { at: '2026-10-16T09:00:00.000Z', refsBlocked: [], acknowledged: true } }),
+        );
+        renderSection();
+
+        await screen.findByRole('heading', { level: 6, name: 'about.importTitle' });
+        expect(screen.getAllByRole('heading', { level: 5 }).map((heading) => heading.textContent)).toEqual([
+            'about.title',
+        ]);
+        expect(screen.getAllByRole('heading', { level: 6 }).map((heading) => heading.textContent)).toEqual([
+            'about.importTitle',
+            'about.dangerTitle',
+        ]);
     });
 });

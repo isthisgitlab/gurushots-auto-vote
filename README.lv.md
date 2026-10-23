@@ -211,12 +211,12 @@ Norādījumus par grafisko lietotni un CLI, balsošanas noteikumus, uzstādījum
 - Akreditācijas dati žurnālos netiek rādīti — pirms jebkura ieraksta žurnālā jutīgo lauku vērtības tiek maskētas.
 - Lietotne jūsu tokenu glabā lokāli uzstādījumu failā (darbvirsmā un CLI — failā, ko var lasīt tikai tā īpašnieks; Android — lietotnes privātajā krātuvē) un sūta to tikai uz GuruShots; uzstādījumi un konfigurācija nekad nepamet jūsu ierīci.
 - **Kas atstāj jūsu ierīci:** pieprasījumi uz GuruShots (balsošana un konta dati, foto miniatūras) un pieprasījumi uz GitHub (`api.github.com` un GitHub izlaidumu lejupielādes), lai pārbaudītu un lejupielādētu atjauninājumus. Citām adresēm lietotne nesazinās, un foto analīze notiek ierīcē.
-- Izrakstoties tiek noņemts tikai pieteikšanās tokens. **Dzēst visus vietējos datus** (Uzstādījumi → Par lietotni un datiem; CLI `reset-data --yes`) izdzēš visu, ko lietotne glabā ierīcē; skatiet [kur tiek glabāti jūsu dati](docs/usage.lv.md#️-kur-tiek-glabāti-jūsu-dati--kā-tos-dzēst).
+- Izrakstoties tiek noņemts tikai pieteikšanās tokens. **Dzēst visus vietējos datus** (Uzstādījumi → Lietotnes uzstādījumi → Par lietotni un datiem; CLI `reset-data --yes`) izdzēš visu, ko lietotne glabā ierīcē; skatiet [kur tiek glabāti jūsu dati](docs/usage.lv.md#️-kur-tiek-glabāti-jūsu-dati--kā-tos-dzēst).
 - Kļūdu ziņojumos nav jutīgas informācijas.
 - Tīmekļa saskarne (`pnpm web`) ir pieejama tikai šajā datorā (localhost), noraida pieprasījumus no citām vietnēm un tai nav savas paroles — tā vietā katrā palaišanas reizē tiek izveidots nejaušs tokens, kas jānorāda katram pieprasījumam. Atveriet precīzu adresi, ko komanda izvada (tā beidzas ar `#t=<tokens>`); cilne tokenu glabā, kamēr ir atvērta, tāpēc pārlādēšana darbojas, bet adrese bez tokena, atvērta jaunā cilnē, tiek noraidīta, tāpat kā iepriekšējā palaišanas reizē atstāta lapa (palaidiet `pnpm web` vēlreiz un atveriet tā jauno adresi). Nekad nepadariet tās portu pieejamu tīklā.
 - Automātiskās iesniegšanas vizuālā pārbaude darbojas lokāli ar iebūvētu modeli; tā no GuruShots lejupielādē tikai jūsu pašu foto sīktēlus un neko nesūta citiem pakalpojumiem.
 - Darbvirsmas būvējumus neparaksta izdevējs, tāpēc atjauninājumiem uzticas, pamatojoties uz projekta GitHub izlaidumiem. Skatiet [pieņemtos ierobežojumus](docs/architecture.md#10-security-renderer--main--state-the-limits-dont-over-promise) (angliski).
-- Trešo pušu programmatūra un dati, ko lietotne iekļauj, ar to licencēm: Uzstādījumi → Par lietotni un datiem vai CLI komanda `licenses`.
+- Trešo pušu programmatūra un dati, ko lietotne iekļauj, ar to licencēm: Uzstādījumi → Lietotnes uzstādījumi → Par lietotni un datiem vai CLI komanda `licenses`.
 
 ## 📄 Licence un atbalsts
 
