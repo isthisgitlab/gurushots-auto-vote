@@ -22,8 +22,9 @@ const readAtText = (readAtMs: number, timezone: string, t: (key: string) => stri
 };
 
 /**
- * What the status line says while the listing is a preview, or after a re-check that failed. The submit
- * modal holds picking in both, which its lines say.
+ * What the status line says while the listing is a preview, or after a re-check that failed. A preview is
+ * only ever on screen without a challenge — a challenge-bound grid holds a loader for one — so it has the
+ * one wording; the submit modal's re-check-failed line says picking is held.
  */
 const statusKey = ({
     recheckFailed,
@@ -34,9 +35,9 @@ const statusKey = ({
     hasChallenge: boolean;
     submit: boolean;
 }): string => {
-    const base = recheckFailed ? 'app.photoChooserRecheckFailed' : 'app.photoChooserPreview';
-    if (submit) return `${base}Submit`;
-    return hasChallenge ? base : `${base}NoChallenge`;
+    if (!recheckFailed) return 'app.photoChooserPreviewNoChallenge';
+    if (submit) return 'app.photoChooserRecheckFailedSubmit';
+    return hasChallenge ? 'app.photoChooserRecheckFailed' : 'app.photoChooserRecheckFailedNoChallenge';
 };
 
 /**
@@ -60,7 +61,7 @@ export function ListingHeader({
     preview: boolean;
     recheckFailed: boolean;
     hasChallenge: boolean;
-    /** The grid is the submit modal's: picking is held while a preview shows, and its lines say so. */
+    /** The grid is the submit modal's: its re-check-failed line says picking is held. */
     submit: boolean;
     onRefresh: () => void;
 }) {

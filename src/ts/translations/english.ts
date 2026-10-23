@@ -857,10 +857,7 @@ export const app = {
     photoChooserAsOfDate: 'Photos as of {date}, {time}',
     photoChooserRefresh: 'Refresh',
     photoChooserRefreshLabel: 'Refresh photos',
-    photoChooserPreview: 'Showing your photos as last loaded while the app checks which ones this challenge accepts…',
     photoChooserPreviewNoChallenge: 'Showing your photos as last loaded while the app checks for anything new…',
-    photoChooserPreviewSubmit:
-        'Showing your photos as last loaded. You can pick once the app has checked which ones this challenge accepts…',
     photoChooserRecheckFailed:
         "Couldn't check which of these photos this challenge accepts, so they're shown as last loaded. Press Refresh.",
     photoChooserRecheckFailedNoChallenge:

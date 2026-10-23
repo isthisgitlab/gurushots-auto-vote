@@ -188,7 +188,6 @@ describe('the Showing line', () => {
 
     test('the count is the tiles the grid shows, not the refused ones it hides', () => {
         grid({
-            submit: true,
             state: {
                 status: 'ready',
                 listing: listing([photo(1, { allowed: false, message: 'In another challenge' }), photo(2)]),
@@ -201,22 +200,11 @@ describe('the Showing line', () => {
 
     test('a truncated listing where every photo is blocked says so, pointing past the batch too', () => {
         grid({
-            submit: true,
             blockedIds: new Set([idOf(1), idOf(2)]),
         });
         expect(statusRegion().textContent).toContain(
             "GuruShots won't take any of the photos loaded so far in this challenge. Press Load more photos to look further, or search by tag. If nothing fits, upload new photos and press Refresh.",
         );
-    });
-
-    test('a preview listing names no count: its header already says it shows the library as last loaded', () => {
-        grid({
-            state: {
-                status: 'ready',
-                listing: listing([photo(1), photo(2)], { preview: true }),
-            } as ListState,
-        });
-        expect(screen.queryByText('Showing 2 photo(s).')).toBeNull();
     });
 
     test('the final batch leaves the line and takes the button away, so the region never goes empty', () => {
@@ -250,9 +238,149 @@ describe('an empty listing', () => {
     });
 
     test('a preview keeps its empty text as a body paragraph — its region names no count', () => {
-        grid({ state: { status: 'ready', listing: listing([], { preview: true }) } as ListState });
+        grid({
+            hasChallenge: false,
+            state: { status: 'ready', listing: listing([], { preview: true, allowedKnown: false }) } as ListState,
+        });
         expect(statusRegion().textContent).toBe('');
         expect(screen.getByText(/No photos found/)).toBeTruthy();
+    });
+});
+
+describe('hiding refused photos in a challenge-bound grid', () => {
+    const refusedAt = (n: number, message = 'In another challenge') => photo(n, { allowed: false, message });
+
+    test('without submit the refused photos are hidden and counted, and the appended batch keeps hiding', () => {
+        const first = grid({
+            state: {
+                status: 'ready',
+                listing: listing([photo(1), refusedAt(2)], { truncated: true, nextStart: 2 }),
+            } as ListState,
+        });
+        expect(screen.queryByRole('button', { name: /^Photo 00000002:/ })).toBeNull();
+        expect(statusRegion().textContent).toBe(
+            "Showing 1 photo(s).Hidden: at least 1 photo(s) GuruShots won't take in this challenge. Press Load more photos to look for others.",
+        );
+        first.unmount();
+        // Load more appended its batch: the truncation is gone, and the new refused photo is hidden with the rest.
+        grid({
+            state: {
+                status: 'ready',
+                listing: listing([photo(1), refusedAt(2), refusedAt(3)]),
+            } as ListState,
+        });
+        expect(screen.queryByRole('button', { name: /^Photo 00000003:/ })).toBeNull();
+        expect(statusRegion().textContent).toBe(
+            "Showing 1 photo(s).Hidden: 2 photo(s) GuruShots won't take in this challenge.",
+        );
+    });
+
+    test('a picked refused photo stays shown, and unticking it hides it and hands the focus to the status line', () => {
+        const shown = listing([photo(1), refusedAt(2)]);
+        const { rerender } = grid({ selected: [idOf(2)], state: { status: 'ready', listing: shown } as ListState });
+        const tileEl = screen.getByRole('button', { name: /^Photo 00000002:/ });
+        expect(tileEl.getAttribute('aria-pressed')).toBe('true');
+        expect(tileEl.textContent).toContain('In another challenge');
+        // The pick is shown, so nothing is hidden and the status line stays empty.
+        expect(screen.queryByText(/^Hidden: /)).toBeNull();
+        tileEl.focus();
+        rerender(
+            <PhotoGrid {...baseProps({ selected: [], state: { status: 'ready', listing: shown } as ListState })} />,
+        );
+        expect(screen.queryByRole('button', { name: /^Photo 00000002:/ })).toBeNull();
+        // The Hidden line keeps the status region on screen, so the handed-off focus is not on a hidden element.
+        expect(document.activeElement).toBe(statusRegion());
+        expect(statusRegion().textContent).toBe(
+            "Showing 1 photo(s).Hidden: 1 photo(s) GuruShots won't take in this challenge.",
+        );
+    });
+
+    test('says so when every listed photo is refused, and a pick holds the line back', () => {
+        const all = listing([refusedAt(1), refusedAt(2)]);
+        const noneLine =
+            "GuruShots won't take any of the listed photos in this challenge. Search by tag to find others, or upload new photos and press Refresh.";
+        const { rerender } = grid({ state: { status: 'ready', listing: all } as ListState });
+        expect(statusRegion().textContent).toBe(
+            `Showing 0 photo(s).Hidden: 2 photo(s) GuruShots won't take in this challenge.${noneLine}`,
+        );
+        rerender(
+            <PhotoGrid
+                {...baseProps({ selected: [idOf(1)], state: { status: 'ready', listing: all } as ListState })}
+            />,
+        );
+        // The picked refused photo is shown; the other is hidden and counted, and nothing more is claimed.
+        expect(screen.getByRole('button', { name: /^Photo 00000001:/ }).getAttribute('aria-pressed')).toBe('true');
+        expect(statusRegion().textContent).toBe(
+            "Showing 1 photo(s).Hidden: 1 photo(s) GuruShots won't take in this challenge.",
+        );
+    });
+
+    test('a no-challenge grid hides nothing', () => {
+        grid({
+            hasChallenge: false,
+            state: {
+                status: 'ready',
+                listing: listing([photo(1, { allowed: false, message: 'No' }), photo(2)], { allowedKnown: false }),
+            } as ListState,
+        });
+        expect(screen.getByRole('button', { name: /^Photo 00000001:/ })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /^Photo 00000002:/ })).toBeTruthy();
+        expect(screen.queryByText(/^Hidden: /)).toBeNull();
+    });
+});
+
+describe('a preview in the grid', () => {
+    test('a challenge-bound preview is never rendered: the loader holds its place', () => {
+        grid({
+            state: {
+                status: 'ready',
+                listing: listing([photo(1), photo(2)], { preview: true, allowedKnown: false }),
+            } as ListState,
+        });
+        expect(screen.getByText('Loading your photos…')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /^Photo / })).toBeNull();
+        expect(screen.queryByText(/as last loaded/)).toBeNull();
+        expect(statusRegion().textContent).toBe('');
+    });
+
+    test('without a challenge the preview renders its tiles, its line, and the pick that waits', () => {
+        grid({
+            hasChallenge: false,
+            selected: [idOf(9)],
+            recheckFailed: false,
+            state: {
+                status: 'ready',
+                listing: listing([photo(1)], { preview: true, allowedKnown: false }),
+            } as ListState,
+        });
+        expect(screen.getByRole('button', { name: /^Photo 00000001:/ })).toBeTruthy();
+        // A preview names no count in the grid's live region; its header line says what it is.
+        expect(screen.queryByText('Showing 1 photo(s).')).toBeNull();
+        expect(
+            screen.getByText('Showing your photos as last loaded while the app checks for anything new…'),
+        ).toBeTruthy();
+        const pending = screen.getByRole('button', { name: /^Chosen photo 00000009:/ });
+        expect(pending.textContent).toContain('Not among your photos as last loaded. Checking again…');
+        expect(pending.getAttribute('aria-disabled')).toBe('true');
+    });
+
+    test('after a failed re-check the same preview says so, and the waiting pick can be removed', () => {
+        grid({
+            hasChallenge: false,
+            selected: [idOf(9)],
+            recheckFailed: true,
+            state: {
+                status: 'ready',
+                listing: listing([photo(1)], { preview: true, allowedKnown: false }),
+            } as ListState,
+        });
+        expect(screen.getByRole('button', { name: /^Photo 00000001:/ })).toBeTruthy();
+        expect(
+            screen.getByText("Couldn't check your photos for changes, so they're shown as last loaded. Press Refresh."),
+        ).toBeTruthy();
+        const pending = screen.getByRole('button', { name: /^Chosen photo 00000009:/ });
+        expect(pending.textContent).toContain('Not among your photos as last loaded. Press Refresh to check again.');
+        expect(pending.getAttribute('aria-disabled')).toBe('false');
     });
 });
 

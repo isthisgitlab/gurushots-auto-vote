@@ -865,12 +865,8 @@ export const app = {
     photoChooserAsOfDate: 'Foto ielādēti {date} plkst. {time}',
     photoChooserRefresh: 'Atsvaidzināt',
     photoChooserRefreshLabel: 'Atsvaidzināt foto',
-    photoChooserPreview:
-        'Rāda tavus foto, kā tie ielādēti iepriekš, kamēr lietotne pārbauda, kuri no tiem der šim izaicinājumam…',
     photoChooserPreviewNoChallenge:
         'Rāda tavus foto, kā tie ielādēti iepriekš, kamēr lietotne pārbauda, vai nav kas jauns…',
-    photoChooserPreviewSubmit:
-        'Rāda tavus foto, kā tie ielādēti iepriekš. Izvēlēties varēs, kad lietotne būs pārbaudījusi, kuri no tiem der šim izaicinājumam…',
     photoChooserRecheckFailed:
         'Neizdevās pārbaudīt, kuri no šiem foto der šim izaicinājumam, tāpēc tie rādīti, kā ielādēti iepriekš. Spied „Atsvaidzināt”.',
     photoChooserRecheckFailedNoChallenge:

@@ -125,7 +125,8 @@ function PhotoSubmitBody({
     const { t } = useTranslation();
     const [selected, setSelected] = useState<string[]>([]);
     // Marks read before an action of this window (a join, a submit) are not to be trusted: a cached listing
-    // always comes back as a preview, and picking waits for the fresh read.
+    // always comes back as a preview — the grid holds a loader in its place — and picking waits for the fresh
+    // read behind it.
     const picker = usePhotoPicker({ challengeId, usage, alwaysFresh: true, selected });
     const { state, known, retry, refresh, resetLoadPhotos, requestId } = picker;
     const preview = state.status === 'ready' && state.listing.preview;

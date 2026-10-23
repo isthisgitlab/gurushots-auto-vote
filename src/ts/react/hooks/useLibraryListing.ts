@@ -43,7 +43,9 @@ const replacesListing = (error: string | undefined): boolean =>
  * How far a re-read of a listing goes: what the batch rule counts — the allowed photos once the marks are
  * known, every photo before that — clamped to 1..MAX_LIBRARY_KEEP_PHOTOS. The handler and the mock serve
  * exactly this many photos, so a Refresh, Retry or re-check re-reads what is on screen instead of
- * shrinking it.
+ * shrinking it. The one exception is the re-check behind a borrowed preview (another challenge's, or an expired
+ * one) when the listing names a challenge: it reads a single batch, because a challenge-bound grid holds a
+ * loader for such a preview instead of its photos.
  */
 const countedKeep = (listing: Listing): number => {
     const counted = listing.allowedKnown
@@ -171,16 +173,29 @@ export function useLibraryListing(
             show(asShown);
             if (!asShown.preview) return;
             setRevalidating(true);
-            // The re-check re-reads the extent of the preview just shown, so a cached answer read
-            // again in the background keeps what is on screen instead of shrinking it to one batch.
-            const fresh = await read(search, 'fresh', 0, countedKeep(asShown));
+            // The re-check's extent. With a challenge, a cached answer of this same challenge is re-read to its
+            // own accepted extent (`result` still knows the marks), so the photos — and the picks made beside
+            // them — stay on screen; a borrowed preview (another challenge's, or an expired one) is read for one
+            // batch, since a challenge-bound grid holds a loader for it, not its photos. Without a challenge the
+            // preview on screen is re-read to its own extent, so nothing shown shrinks.
+            const recheckKeep =
+                challengeId !== null && !cachedMarks
+                    ? LIBRARY_BATCH_PHOTOS
+                    : countedKeep(cachedMarks ? result : asShown);
+            const fresh = await read(search, 'fresh', 0, recheckKeep);
             if (request !== requestIdRef.current) return;
             setRevalidating(false);
             if (fresh?.success) show(fresh, true);
-            else if (replacesListing(fresh?.error)) showFailure(fresh);
+            else if (replacesListing(fresh?.error) || challengeId !== null)
+                // With a challenge, any failed re-check lands in the error state, as a failed cold read does —
+                // superseded and signed-out included: the grid holds a loader for the preview, so there is no
+                // listing to leave up under a recheck-failed line, and Retry reads one batch from there. Without
+                // one, only the answers that replace the listing do; every other failure keeps the preview on
+                // screen with `recheckFailed`, because it is worth keeping.
+                showFailure(fresh);
             else setRecheckFailed(true);
         },
-        [read, show, showFailure, alwaysFresh],
+        [read, show, showFailure, alwaysFresh, challengeId],
     );
 
     useEffect(() => {

@@ -19,10 +19,17 @@ const TILE_GRID = 'grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4';
  * listing does not return pinned first, the rest in the library's order). The defaults are the
  * Chosen Photos list's: numbered, capped at MAX_CHOSEN_PHOTOS.
  *
- * The submit modal's grid (`submit`) leaves out the photos the challenge refuses once the listing says which it
+ * A grid read for a challenge leaves out the photos that challenge refuses once the listing says which it
  * accepts, and counts them in a line of their own. A photo is shown anyway when it is picked (a pick that a later
- * read marks refused keeps its tile and its reason: the pick is pruned only after a Refresh or a refused submit,
- * not after Load photos or Search) or when the caller lists it as blocked (it is shown blocked, not counted).
+ * read marks refused keeps its tile and its reason) or when the caller lists it as blocked (it is shown blocked,
+ * not counted). The submit modal prunes a refused pick only after a Refresh or a refused submit — not after
+ * Load photos or Search.
+ *
+ * A preview (the library as last loaded, its marks withheld) is never rendered where the grid is read for a
+ * challenge: it is another challenge's listing or a distrusted cached one, so its tiles would offer unmarked
+ * photos for picking that the fresh read behind it then collapses. The grid holds the loader in its place, as
+ * while the read itself is on its way; a re-check that fails lands in the error state (useLibraryListing's
+ * load), so a grid with a challenge never waits on a preview that will not resolve.
  *
  * A cut-off listing carries Load more under its tiles: it reads the next batch and appends it, held while any
  * read is in flight, with the failure of the last press in an alert of its own. Every non-preview listing says
@@ -77,7 +84,7 @@ export function PhotoGrid({
     revalidating: boolean;
     /** The last re-read failed, so what is shown is the library as last loaded. */
     recheckFailed: boolean;
-    /** The grid is the submit modal's: picking is held while a preview shows, and its lines say so. */
+    /** The grid is the submit modal's: its re-check-failed line says picking is held. */
     submit?: boolean;
     /** Refresh cannot be pressed now (a submit is running). */
     refreshDisabled?: boolean;
@@ -112,7 +119,7 @@ export function PhotoGrid({
     idleWithPicksKey?: string;
     /** The saved picks may show as stubs (nothing is read), with this member for their thumbnails. */
     savedPicks?: { memberId: string | null } | null;
-    /** Photos the submit modal's grid keeps showing, with their reason, whatever the listing says (taken back during it). */
+    /** Photos the grid keeps showing, with their reason, whatever the listing says (a pick taken back during it). */
     keepIds?: ReadonlySet<string>;
     /** The photos GuruShots suggests for the challenge; their tiles carry the recommended mark. */
     recommendedIds?: ReadonlyArray<string>;
@@ -238,6 +245,11 @@ export function PhotoGrid({
         }
         if (state.status === 'loading')
             return { status: null, body: <InlineLoader text={t('app.photoChooserLoading')} /> };
+        if (state.status === 'ready' && state.listing.preview && hasChallenge) {
+            // The loader holds a challenge-bound preview's place (see the file doc): the hook runs, and fails,
+            // that re-check by the same challenge id this `hasChallenge` comes from.
+            return { status: null, body: <InlineLoader text={t('app.photoChooserLoading')} /> };
+        }
         if (state.status === 'no-context') {
             return {
                 status: null,
@@ -278,22 +290,21 @@ export function PhotoGrid({
             if (blockedIds?.has(photo.id)) return t(blockedKey);
             return refusedHere(photo) ? photo.message || t('app.photoChooserNotEligible') : null;
         };
-        // Left out of the submit modal's grid, in this order: a pick is shown, a blocked photo is shown blocked, a photo
-        // taken back from the pick during this listing stays visible with its reason (it does not vanish under the
-        // click), and a photo the challenge refuses is hidden. Nothing is hidden before the fresh read says what is accepted.
+        // Left out of a grid read for a challenge, in this order: a pick is shown, a blocked photo is shown
+        // blocked, a photo the caller keeps shown (`keepIds` — a pick taken back during this listing, the submit
+        // modal's) stays visible with its reason (it does not vanish under the click), and a photo the challenge
+        // refuses is hidden. The chooser passes no `keepIds`, so an unticked refused pick is hidden at once, and
+        // the focus hand-off moves the focus to the status line. Nothing is hidden before the listing says what
+        // is accepted (`refusedHere` needs `allowedKnown`, which only a read through a challenge sets — a
+        // chooser with no challenge hides nothing).
         const hiddenFromGrid = (photo: LibraryPhoto): boolean =>
-            submit &&
-            !chosen.has(photo.id) &&
-            !blockedIds?.has(photo.id) &&
-            !keepIds?.has(photo.id) &&
-            refusedHere(photo);
+            !chosen.has(photo.id) && !blockedIds?.has(photo.id) && !keepIds?.has(photo.id) && refusedHere(photo);
         const refusedHidden = listing.photos.filter(hiddenFromGrid).length;
         const shownPhotos = listing.photos.filter((photo) => !hiddenFromGrid(photo));
         // The ids the listing returns, as a set: a pick's "listed or not" is a lookup, not a scan per pick.
         const listedIds = new Set(listing.photos.map((photo) => photo.id));
         // A non-empty listing with nothing in it to pick: every photo is hidden or blocked, and nothing is picked.
         const noneAccepted =
-            submit &&
             listing.allowedKnown &&
             listing.photos.length > 0 &&
             selected.length === 0 &&

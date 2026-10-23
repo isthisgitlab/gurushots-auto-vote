@@ -1,7 +1,9 @@
 /**
  * useLibraryListing — the chooser's library read: a cached answer that is a preview is shown at once and read
  * again in the background under the same request, a Refresh reads the current search again without taking
- * the listing off the screen, and a failed re-check leaves what is shown as last loaded.
+ * the listing off the screen, and a failed re-check lands in the error state when the hook reads for a
+ * challenge (a challenge-bound grid holds a loader for the preview) and leaves the preview as last loaded
+ * with recheckFailed when it does not.
  */
 
 import { act, renderHook, waitFor } from '@testing-library/preact';
@@ -71,7 +73,8 @@ describe('a preview answer', () => {
         const request = result.current.requestId;
         expect(getLibrary().mock.calls).toEqual([
             [7, undefined, 'cached', 'submit', 0, 100],
-            [7, undefined, 'fresh', 'submit', 0, 1],
+            // A borrowed preview: with a challenge its re-check reads one batch, not the preview's extent.
+            [7, undefined, 'fresh', 'submit', 0, 100],
         ]);
         expect(result.current.known.size).toBe(0);
 
@@ -104,14 +107,40 @@ describe('a preview answer', () => {
     });
 
     test.each([
+        [
+            'a failure',
+            () => Promise.resolve(failure('Failed to read your photo library')),
+            'Failed to read your photo library',
+        ],
+        ['a superseded read', () => Promise.resolve(failure('superseded')), 'superseded'],
+        ['no answer at all', () => Promise.reject(new Error('down')), null],
+    ])(
+        '%s of the re-check lands in the error state when the hook reads for a challenge',
+        async (_name, recheck, error) => {
+            getLibrary().mockResolvedValueOnce(previewAnswer()).mockImplementationOnce(recheck);
+            const { result } = renderHook(() => useLibraryListing(7));
+            await waitFor(() => expect(result.current.state).toEqual({ status: 'error', error }));
+            expect(result.current.revalidating).toBe(false);
+            expect(result.current.recheckFailed).toBe(false);
+            // From the error state a Retry reads one batch, as after a failed cold read.
+            getLibrary().mockResolvedValueOnce(answer());
+            await act(async () => {
+                result.current.retry();
+            });
+            await waitFor(() => expect(result.current.state.status).toBe('ready'));
+            expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 100]);
+        },
+    );
+
+    test.each([
         ['a failure', () => Promise.resolve(failure('Failed to read your photo library'))],
         ['a superseded read', () => Promise.resolve(failure('superseded'))],
         ['no answer at all', () => Promise.reject(new Error('down'))],
     ])(
-        '%s of the re-check leaves the preview on screen with recheckFailed, and a new load clears it',
+        '%s of the re-check leaves a no-challenge preview on screen with recheckFailed, and a new load clears it',
         async (_name, recheck) => {
             getLibrary().mockResolvedValueOnce(previewAnswer()).mockImplementationOnce(recheck);
-            const { result } = renderHook(() => useLibraryListing(7));
+            const { result } = renderHook(() => useLibraryListing(null));
             await waitFor(() => expect(result.current.recheckFailed).toBe(true));
             expect(result.current.revalidating).toBe(false);
             expect(result.current.state).toMatchObject({ status: 'ready', listing: { preview: true } });
@@ -135,6 +164,22 @@ describe('a preview answer', () => {
             const { result } = renderHook(() => useLibraryListing(7));
             await waitFor(() => expect(result.current.known.size).toBe(1));
             await act(async () => result.current.load('pink'));
+            await waitFor(() => expect(result.current.state).toEqual({ status: 'error', error }));
+            expect(result.current.known.size).toBe(0);
+        },
+    );
+
+    test.each([['not-logged-in'], ['No authentication token found']])(
+        'a signed-out answer (%s) to a challenge re-check clears what was known and lands in the error state',
+        async (error) => {
+            getLibrary()
+                .mockResolvedValueOnce(answer({ photos: [photo('a')] }))
+                .mockResolvedValueOnce(previewAnswer())
+                .mockResolvedValueOnce(failure(error));
+            const { result } = renderHook(() => useLibraryListing(7));
+            await waitFor(() => expect([...result.current.known.keys()]).toEqual(['a']));
+            // The next load is served a borrowed preview, whose re-check fails signed out.
+            await act(async () => result.current.load(''));
             await waitFor(() => expect(result.current.state).toEqual({ status: 'error', error }));
             expect(result.current.known.size).toBe(0);
         },
@@ -189,6 +234,21 @@ describe('alwaysFresh', () => {
         await waitFor(() => expect(result.current.revalidating).toBe(false));
         expect(result.current.state).toMatchObject({ listing: { preview: false, allowedKnown: true } });
         expect(getLibrary().mock.calls.map((call) => call[2])).toEqual(['cached', 'fresh']);
+    });
+
+    test('a same-challenge cached entry is re-read to its own accepted extent', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(
+                answer({ photos: [photo('a'), photo('b'), photo('c', { allowed: false })], truncated: true }),
+            )
+            .mockResolvedValueOnce(answer({ photos: [photo('a'), photo('b')] }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true, alwaysFresh: true }));
+        await act(async () => result.current.load(''));
+        await waitFor(() => expect(result.current.revalidating).toBe(false));
+        // The cached marks are distrusted, but the extent is this challenge's own: its 2 accepted
+        // photos — not the 3 listed, and not one batch — so what Load more loaded stays on screen.
+        expect(getLibrary().mock.calls[1]).toEqual([7, undefined, 'fresh', 'submit', 0, 2]);
+        expect(result.current.state).toMatchObject({ listing: { preview: false, allowedKnown: true } });
     });
 
     test('an answer whose read began after the request is not a cached one: one call, no preview, nothing locked', async () => {
@@ -888,17 +948,32 @@ describe('re-reading the extent on screen', () => {
         expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 130]);
     });
 
-    test('the fresh re-check of a preview re-reads the preview’s extent, not one batch', async () => {
+    test('the re-check of a borrowed preview reads one batch, not the preview’s extent', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(previewAnswer({ photos: many(130) }))
+            .mockResolvedValueOnce(answer({ photos: many(100), nextStart: 100, truncated: true }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await waitFor(() => expect(result.current.revalidating).toBe(false));
+        // The 130 unmarked photos on screen would count 130; with a challenge the borrowed preview is
+        // never shown, so its re-check reads exactly one batch instead.
+        expect(getLibrary().mock.calls).toEqual([
+            [7, undefined, 'cached', 'submit', 0, 100],
+            [7, undefined, 'fresh', 'submit', 0, 100],
+        ]);
+    });
+
+    test('without a challenge the re-check still re-reads the preview’s extent, not one batch', async () => {
         getLibrary()
             .mockResolvedValueOnce(previewAnswer({ photos: many(8) }))
             .mockResolvedValueOnce(answer({ photos: many(8), nextStart: 8, truncated: true }));
-        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        const { result } = renderHook(() => useLibraryListing(null, { onDemand: true }));
         await act(async () => result.current.load(''));
         await waitFor(() => expect(result.current.revalidating).toBe(false));
         // The cached read keeps `load`'s batch; the re-check counts the preview's 8 photos (marks unknown).
         expect(getLibrary().mock.calls).toEqual([
-            [7, undefined, 'cached', 'submit', 0, 100],
-            [7, undefined, 'fresh', 'submit', 0, 8],
+            [null, undefined, 'cached', 'submit', 0, 100],
+            [null, undefined, 'fresh', 'submit', 0, 8],
         ]);
     });
 });
