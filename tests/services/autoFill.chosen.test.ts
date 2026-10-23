@@ -349,7 +349,9 @@ describe('chosen photos rank first', () => {
         const verified = await verifyFillPick(challenge, scored, [], picked, null, deps, chosenIds);
         expect(rankVisually).toHaveBeenCalledTimes(2);
         expect(verified.visualEvidence).toBeNull();
-        recordUncertainSubmission({
+        // The theme read inside awaits the lexicon, so the record call must be
+        // awaited before the ledger can be judged.
+        await recordUncertainSubmission({
             challenge,
             label: 'autoSubmit',
             scored,

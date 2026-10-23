@@ -4,6 +4,7 @@
 
 import { buildChosenCandidates, selectBlockEnrichmentSet } from '../../photoPicker';
 import { enrichCandidates } from '../../photoStats';
+import * as lexicon from '../../semantic/lexicon';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from '../candidates';
 import { makeFallbackLogger } from '../fillLogging';
 import type { Challenge } from '../../../types/gurushots';
@@ -133,6 +134,10 @@ const scoreFillCandidates = async ({
     orderedIds: readonly string[];
 }> => {
     const { logger } = deps;
+    // The picker tokenises the title in compound mode, which reads the
+    // lexicon's table (see abstractTitleWords) — load it before scoring. Never
+    // rejects, and is cached after the first load.
+    await lexicon.isAvailable();
     const { scored, chosenIds, orderedIds } = buildChosenCandidates(challenge, eligible, {
         mustIncludeTags,
         shouldIncludeTags,

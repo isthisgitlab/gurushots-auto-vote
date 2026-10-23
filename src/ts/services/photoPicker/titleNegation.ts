@@ -55,7 +55,9 @@ const parseNegation = (title: string | null | undefined, ignoreWords: IgnoreWord
     if (typeof title !== 'string' || title === '') return NO_NEGATION;
     const stems: Set<string> = new Set();
     const addWords = (text: string) => {
-        const words = rawTokenise(text, { ignoreWords });
+        // Same compound mode as the keyword sources: a negated "No Close-Ups"
+        // yields the close-up stem, so the merged keyword is excluded by it.
+        const words = rawTokenise(text, { ignoreWords, compounds: 'replace' });
         for (const word of words) stems.add(stem(word));
         return words.length > 0;
     };

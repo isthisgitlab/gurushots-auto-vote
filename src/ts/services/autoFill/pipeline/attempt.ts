@@ -107,7 +107,7 @@ const addMissedChosen = async ({
  * why the popularity tiers decided (when they did), the exact ranking inputs of
  * each submitted photo, and any weak subject evidence.
  */
-const explainSubmission = ({
+const explainSubmission = async ({
     label,
     challenge,
     deps,
@@ -134,7 +134,7 @@ const explainSubmission = ({
         logPopularityPicks({ label, challenge, scored, chosenIds, inOrder, contestedIds, picked, logger });
     }
     logSelectionDetails({ prefix: label, challenge, scored, picked, contestedIds, chosenIds, inOrder, logger });
-    recordUncertainSubmission({ challenge, label, scored, picked, visualEvidence, ignoreWords, chosenIds, deps });
+    await recordUncertainSubmission({ challenge, label, scored, picked, visualEvidence, ignoreWords, chosenIds, deps });
 };
 
 /**
@@ -306,7 +306,7 @@ const runFillAttempt = async ({
             // that then stood down on the live re-check or was rejected — an
             // entry they would go looking for and never find. `picked` is also
             // final only here: onRefreshed can replace it.
-            explainSubmission({
+            await explainSubmission({
                 label,
                 challenge,
                 deps,

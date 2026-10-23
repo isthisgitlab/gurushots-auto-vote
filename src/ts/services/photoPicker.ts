@@ -18,6 +18,7 @@ import {
     buildThemeAlternatives,
     visualSubjectWords,
     buildSearchTerms,
+    compoundSpellings,
 } from './photoPicker/keywords';
 import { wholeLabelStems, labelWordStems, labelStemGroups, scorePhoto } from './photoPicker/labels';
 import {
@@ -62,4 +63,5 @@ export {
     scorePhoto,
     tokeniseTagList,
     wholeLabelStems,
+    compoundSpellings,
 };

@@ -56,7 +56,6 @@ const buildChallengeKeywords = (
     // An open theme has no subject, and matching its prose ("breathtaking",
     // "Turbo") against photo labels would only rank noise.
     if (readChallengeTheme(challenge, ignoreWords).kind === 'open') return [];
-    const opts = { ignoreWords };
     // The WHOLE title, series prefix included — unlike buildThemeKeywords, which
     // pools its keywords into one vector and so must drop everything that is not
     // the subject. Here each keyword is matched on its own, so a series word is
@@ -67,6 +66,9 @@ const buildChallengeKeywords = (
     // slug and the welcome_message repeat it, and a keyword here ranks photos UP.
     const negation = parseNegation(challenge?.title, ignoreWords);
     const title = negation.active ? negation.positiveTitle : challenge?.title;
+    // Compound mode: adjacent words the model knows ("Close Up") become one
+    // term, so "Close Up" stops matching "Closed".
+    const opts = { ignoreWords, compounds: 'replace' as const };
     const fromTitle = tokenise(title, opts);
     const fromUrl = tokenise(challenge?.url, opts);
     const fromWelcome = tokenise(challenge?.welcome_message, opts);
@@ -119,7 +121,7 @@ const buildChallengeKeywords = (
  */
 const buildThemeKeywords = (challenge: ChallengeText | null | undefined, ignoreWords: IgnoreWords = null): string[] => {
     if (readChallengeTheme(challenge, ignoreWords).kind === 'open') return [];
-    const opts = { ignoreWords };
+    const opts = { ignoreWords, compounds: 'replace' as const };
     // A negated subject must not become the theme (see parseNegation): pooling
     // "human" for "No Humans" pulls the vector straight at photos of people.
     const negation = parseNegation(challenge?.title, ignoreWords);
@@ -166,10 +168,18 @@ const visualSubjectWords = (challenge: ChallengeText | null | undefined, ignoreW
     const negation = parseNegation(challenge?.title, ignoreWords);
     const title = negation.active ? negation.positiveTitle : challenge?.title;
     const negated = new Set(negation.stems);
-    const words = rawTokenise(titleSubject(title, ignoreWords), { ignoreWords }).filter(
+    const words = rawTokenise(titleSubject(title, ignoreWords), { ignoreWords, compounds: 'replace' }).filter(
         (word) => !negated.has(stem(word)) && !NEGATION_MARKER_STEMS.has(stem(word)),
     );
     return Array.from(new Set(words));
+};
+
+// The two mechanical spellings of a compound search term ("close-up" →
+// "close up" and "closeup"), or [] for a plain term. Purely derived — no
+// spelling is authored anywhere.
+const compoundSpellings = (term: string): string[] => {
+    if (typeof term !== 'string' || !term.includes('-')) return [];
+    return [term.replace(/-/g, ' '), term.replace(/-/g, '')];
 };
 
 // Issue at most a few server-side searches per fill: a title rarely has more
@@ -227,7 +237,7 @@ const buildSearchTerms = (challenge: ChallengeText | null | undefined, opts: Tag
         // fetch exactly the photos the challenge forbids.
         const negation = parseNegation(challenge?.title, ignoreWords);
         const title = negation.active ? negation.positiveTitle : challenge?.title;
-        const words = rawTokenise(titleSubject(title, ignoreWords), { ignoreWords });
+        const words = rawTokenise(titleSubject(title, ignoreWords), { ignoreWords, compounds: 'replace' });
         // A participle is a modifier, never the subject: "Leading with Lines" is
         // about lines, "Cats and Dogs Running" is about cats and dogs. Sink them
         // behind the nouns, then read the nouns right-to-left.
@@ -250,4 +260,11 @@ const buildSearchTerms = (challenge: ChallengeText | null | undefined, opts: Tag
     return Array.from(new Set(terms)).slice(0, SEARCH_TERMS_CAP);
 };
 
-export { buildChallengeKeywords, buildThemeKeywords, buildThemeAlternatives, visualSubjectWords, buildSearchTerms };
+export {
+    buildChallengeKeywords,
+    buildThemeKeywords,
+    buildThemeAlternatives,
+    visualSubjectWords,
+    buildSearchTerms,
+    compoundSpellings,
+};

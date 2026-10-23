@@ -370,8 +370,10 @@ repeated six times is one that gets forgotten at one of them.
   hand-tuned**. Scores below the floor are forced to 0 (sub-floor cosine is indistinguishable from vector
   noise), not merely ranked low. **The floor is calibrated per pooling shape** — the validator pools exactly
   as the matcher does, so changing one without re-deriving the other silently admits the noise tail.
-- Labels must be **stemmed word tokens** — the lexicon has no multi-word keys, so a raw multi-word label
-  always misses.
+- Labels must be **stemmed word tokens** — the lexicon also ships hyphenated compound keys derived from
+  GloVe's own compound tokens, and challenge text merges adjacent words into one term only where the model
+  holds it ('replace' for challenge text and per-label semantic groups, 'add' for lexical label stems, 'off'
+  for user tags).
 
 ### 4a. Visual re-rank (on-device image model)
 

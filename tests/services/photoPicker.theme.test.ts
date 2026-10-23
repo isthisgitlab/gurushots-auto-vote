@@ -171,15 +171,15 @@ describe('the title readers follow the theme', () => {
     });
 });
 
-describe('the fixed phrase "Still Life" through the title readers', () => {
+describe('compound titles with the lexicon not loaded', () => {
     // This file runs with the lexicon unloaded, like the readers above: the
-    // phrase merge itself is pure tokenising, so the ignore-word rules show
-    // here without it.
-    test('the phrase merges, and a single-word ignore keeps it unmerged', () => {
-        expect(buildThemeKeywords({ title: 'Beauty of Still Life' })).toEqual(['beauty', 'still life']);
+    // compound merge consults the lexicon's compound table, so nothing merges
+    // here and the phrase-form ignore word finds no merged window either.
+    test('words stay split, and a phrase-form ignore word is a no-op', () => {
+        expect(buildThemeKeywords({ title: 'Beauty of Still Life' })).toEqual(['beauty', 'still']);
         expect(buildThemeKeywords({ title: 'Beauty of Still Life' }, ['still'])).toEqual(['beauty']);
         expect(buildThemeKeywords({ title: 'Beauty of Still Life' }, ['life'])).toEqual(['beauty', 'still']);
-        // The merged token is dropped when the ignore set holds the phrase.
-        expect(buildThemeKeywords({ title: 'Beauty of Still Life' }, ['still life'])).toEqual(['beauty']);
+        expect(buildThemeKeywords({ title: 'Beauty of Still Life' }, ['still life'])).toEqual(['beauty', 'still']);
+        expect(buildThemeKeywords({ title: 'Close Up' })).toEqual(['close', 'up']);
     });
 });

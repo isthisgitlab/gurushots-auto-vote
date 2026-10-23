@@ -60,12 +60,21 @@ const MAX_RESOLVED_TAGS = 3;
  * tag "face" (or "faces") is the trivially correct answer, and requiring the
  * lexicon to confirm it would reject perfectly good tags whenever a word is
  * out of vocabulary.
+ *
+ * A compound term ("close-up") is additionally matched by its joined stems:
+ * the tag's stems joined must equal the term stem joined ("closeup"), which
+ * accepts the spellings "close up", "close-up" and "closeup" — with the
+ * lexicon unloaded too, where the compound merge cannot run. The tags "close"
+ * and "closes" are rejected.
  */
 const isLexicalMatch = (tag: string, term: string): boolean => {
     const termStem = stem(term);
     // keepStopwords: a tag is the member's own vocabulary, not challenge
     // boilerplate — "body part" must keep both words.
-    return tokenise(tag, { keepStopwords: true }).some((tagStem) => matches(tagStem, termStem));
+    const tagStems = tokenise(tag, { keepStopwords: true, compounds: 'replace' });
+    if (tagStems.some((tagStem) => matches(tagStem, termStem))) return true;
+    if (!termStem.includes('-')) return false;
+    return tagStems.join('') === termStem.replace(/-/g, '');
 };
 
 /**
@@ -88,7 +97,9 @@ const isLexicalMatch = (tag: string, term: string): boolean => {
  */
 const themeBucketOf = (challengeVec: Float64Array | null, tag: string): number | null => {
     if (!challengeVec) return null;
-    const tokens = tokenise(tag, { keepStopwords: true });
+    // Compound mode: a "Close-up" tag embeds as the close-up vector, not the
+    // pooled close+up mean.
+    const tokens = tokenise(tag, { keepStopwords: true, compounds: 'replace' });
     if (tokens.length === 0) return null;
     const tagVec = lexicon.embed(tokens);
     if (!tagVec) return null;

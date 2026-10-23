@@ -4,7 +4,8 @@
  * letter challenges ("Begins With L").
  */
 
-import { MAX_TOKENISE_CHARS, FIXED_PHRASE_TOKENS, stem, tokenise, matches } from './stemming';
+import { MAX_TOKENISE_CHARS, stem, tokenise, matches } from './stemming';
+import { STOPWORDS } from './stopwords';
 import { SERIES_SEPARATOR_RE, parseNegation } from './titleNegation';
 import * as lexicon from '../semantic/lexicon';
 import { finiteOr } from '../../numbers';
@@ -33,6 +34,12 @@ const ABSTRACT_WORD_MAX = -0.1;
 // 0.009).
 const PHRASE_QUALIFIER_MAX = 0.05;
 
+// The stopword list stemmed once, so the compound-head check in
+// abstractTitleWords agrees with both surface and stemmed callers: "life" and
+// "lives" both stem into the set, so the compounds "still-life" and
+// "still-lives" qualify alike.
+const STOPWORD_STEMS: ReadonlySet<string> = new Set([...STOPWORDS].map(stem));
+
 const lexiconConcreteness = (word: string) => lexicon.concreteness(word);
 
 /**
@@ -45,15 +52,20 @@ const lexiconConcreteness = (word: string) => lexicon.concreteness(word);
  * word, including ones nobody has seen in a title before.
  *
  * Returns the words to demote: those reading as abstract, but ONLY when another
- * word in the same title is clearly a thing. A fixed phrase (FIXED_PHRASE_TOKENS,
- * "still life") anchors too: the phrase itself has no lexicon vector, so it
- * cannot anchor by concreteness — instead every OTHER word with a known score
- * at or under PHRASE_QUALIFIER_MAX is demoted next to it ("beauty" in "Beauty
- * of Still Life"). A title with no concrete anchor
- * ("Creative Focus", "People and Architecture") returns nothing, so every
- * caller keeps its existing behavior there — as it does whenever the lexicon is
- * not loaded (every score null, nothing demoted) or a word is out of vocabulary
- * (null concreteness = no opinion).
+ * word in the same title is clearly a thing. A compound ("still-life", the
+ * merge of an adjacent-word phrase the model knows) is never demoted and never
+ * anchors the normal path — a concrete compound must not demote "nature" in
+ * "Close Up Nature" or "people" in "Black and White People". A compound whose
+ * HEAD (its last part) stems to a stopword anchors the qualifier branch
+ * instead, and only when the compound itself reads concrete: every word BEFORE
+ * it scoring at or under PHRASE_QUALIFIER_MAX is a qualifier of the phrase
+ * ("beauty" in "Beauty of Still Life"), every word AFTER it at or under
+ * ABSTRACT_WORD_MAX is abstract ("fun" in "Still Life Fun") while a concrete
+ * follower stays ("portrait" in "Real Life Portraits"). A title with no
+ * concrete anchor ("Creative Focus", "People and Architecture") returns
+ * nothing, so every caller keeps its existing behavior there — as it does
+ * whenever the lexicon is not loaded (every score null, nothing demoted) or a
+ * word is out of vocabulary (null concreteness = no opinion).
  *
  * @param words - title words (surface or stemmed, as the caller has them)
  * @returns a subset of `words`; never all of them
@@ -65,21 +77,39 @@ const abstractTitleWords = (
     const abstract: Set<string> = new Set();
     if (!Array.isArray(words) || words.length < 2) return abstract;
     const scores = words.map((word) => finiteOr(concretenessOf(word), null));
-    // The fixed phrase anchors by name, so this branch runs BEFORE the
-    // concrete-anchor early return below, which would otherwise exit first for
-    // "beauty still life" (no word there is remotely CONCRETE_SUBJECT_MIN).
-    if (words.some((word) => FIXED_PHRASE_TOKENS.has(word))) {
+    // Compounds carry their hyphen through stemming, so the hyphen is the
+    // structural mark in both surface and stemmed input.
+    const isCompound = (word: string) => word.includes('-');
+    // The stopword-head compound anchors by shape and model data, so this
+    // branch runs BEFORE the concrete-anchor early return below, which would
+    // otherwise exit first for "beauty still life" (no word there is remotely
+    // CONCRETE_SUBJECT_MIN). The LAST qualifying compound in the title is the
+    // anchor — English puts the head noun last.
+    let anchor = -1;
+    for (let i = words.length - 1; i >= 0; i--) {
+        const word = words[i];
+        const score = scores[i];
+        if (!isCompound(word) || score === null || score < CONCRETE_SUBJECT_MIN) continue;
+        const head = word.slice(word.lastIndexOf('-') + 1);
+        if (STOPWORD_STEMS.has(stem(head))) {
+            anchor = i;
+            break;
+        }
+    }
+    if (anchor >= 0) {
         words.forEach((word, i) => {
             const score = scores[i];
-            if (score !== null && score <= PHRASE_QUALIFIER_MAX) abstract.add(word);
+            if (isCompound(word) || score === null) return;
+            const ceiling = i < anchor ? PHRASE_QUALIFIER_MAX : ABSTRACT_WORD_MAX;
+            if (score <= ceiling) abstract.add(word);
         });
         return abstract;
     }
-    const known = scores.filter((score) => score !== null);
+    const known = scores.filter((score, i): score is number => score !== null && !isCompound(words[i]));
     if (!(Math.max(...known) >= CONCRETE_SUBJECT_MIN)) return abstract;
     words.forEach((word, i) => {
         const score = scores[i];
-        if (score !== null && score <= ABSTRACT_WORD_MAX) abstract.add(word);
+        if (score !== null && !isCompound(word) && score <= ABSTRACT_WORD_MAX) abstract.add(word);
     });
     return abstract;
 };
@@ -226,18 +256,18 @@ const readChallengeTheme = (
             : '';
     if (OPEN_THEME_RE.test(title) || OPEN_THEME_RE.test(description)) return OPEN;
     const subject = titleSubject(title, ignoreWords);
-    const fromTitle = tokenise(subject, { ignoreWords });
+    const fromTitle = tokenise(subject, { ignoreWords, compounds: 'replace' });
     // A title of pure boilerplate ("Best of the Best") can still carry its
     // subject in the slug ("macro-insects4"), which buildThemeKeywords falls
     // back to — so the slug has to be empty too before the theme reads as open.
-    const words = fromTitle.length > 0 ? fromTitle : tokenise(challenge?.url, { ignoreWords });
+    const words = fromTitle.length > 0 ? fromTitle : tokenise(challenge?.url, { ignoreWords, compounds: 'replace' });
     if (words.every((word) => FORMAT_STEMS.has(word))) return OPEN;
     // Descriptions often quote the title back ("the 'Travel Wonders'
     // challenge"), which would confirm every one of its words for free. Only a
     // QUOTED copy is dropped: "Share your photos of people in action" restates
     // the subject in its own words and must still confirm it.
     const prose = [title, subject].reduce((text, quoted) => text.replace(quotedPhraseRe(quoted), ' '), description);
-    const described = tokenise(prose, { ignoreWords });
+    const described = tokenise(prose, { ignoreWords, compounds: 'replace' });
     const subjects = words.filter((word) => described.some((d) => matches(d, word)));
     return subjects.length > 0 ? { kind: 'subject', subjects: Array.from(new Set(subjects)) } : UNCONFIRMED;
 };

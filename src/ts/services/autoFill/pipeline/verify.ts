@@ -3,6 +3,7 @@
  */
 
 import { finalizePick, readChallengeTheme, buildThemeKeywords, scorePhoto, splitByChosen } from '../../photoPicker';
+import * as lexicon from '../../semantic/lexicon';
 import { rankVisually } from '../../visionVerifier';
 import type { Challenge } from '../../../types/gurushots';
 import type { IgnoreWords, PickerPhoto, ScoredCandidate } from '../../../types/photoPicker';
@@ -97,7 +98,7 @@ const verifyFillPick = async (
  * A photo the user chose is never marked: they picked it on purpose, so
  * automatic Boost/Turbo must not skip it as a doubtful theme match.
  */
-const recordUncertainSubmission = ({
+const recordUncertainSubmission = async ({
     challenge,
     label,
     scored,
@@ -113,7 +114,11 @@ const recordUncertainSubmission = ({
     ignoreWords: IgnoreWords;
     chosenIds: ReadonlySet<string> | null;
 }) => {
-    if (label === 'manualFill' || !deps.entryAges || readChallengeTheme(challenge, ignoreWords).kind === 'open') return;
+    if (label === 'manualFill' || !deps.entryAges) return;
+    // The theme read tokenises the title in compound mode, which reads the
+    // lexicon's table — load it before reading the title. Never rejects.
+    await lexicon.isAvailable();
+    if (readChallengeTheme(challenge, ignoreWords).kind === 'open') return;
     const subjectWords = visualEvidence ? [] : buildThemeKeywords(challenge, ignoreWords);
     for (const id of picked) {
         const entry = scored.find((candidate) => String(candidate.id) === String(id));

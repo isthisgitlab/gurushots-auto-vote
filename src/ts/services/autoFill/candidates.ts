@@ -6,6 +6,7 @@
 
 import {
     buildSearchTerms,
+    compoundSpellings,
     detectLetterPrefix,
     descriptionExclusions,
     parseNegation,
@@ -361,7 +362,14 @@ const fetchCandidatesForChallenge = async (
     };
     if (terms.length > 0) {
         const fromUserTags = buildSearchTerms(null, tagOpts).length > 0;
-        const union = await searchUnion(terms);
+        // A compound term ("close-up") is also searched under its two derived
+        // spellings ("close up", "closeup"), so a library that spells the
+        // subject differently is still found. The spellings ride ONLY on this
+        // raw-terms search — the related-terms and resolved-tag searches below
+        // keep the canonical terms — costing at most two extra walks per
+        // compound title term inside the shared themed budget.
+        const spellings = Array.from(new Set(terms.flatMap((term) => compoundSpellings(term))));
+        const union = await searchUnion([...terms, ...spellings]);
         const relatedUnion = await searchUnion(fromUserTags ? [] : lexicon.relatedSearchTerms(terms));
         if (hasEligible(union) || hasEligible(relatedUnion)) {
             return [...new Map([...union, ...relatedUnion].map((photo) => [photo.id, photo])).values()];

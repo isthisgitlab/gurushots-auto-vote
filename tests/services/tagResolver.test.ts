@@ -74,6 +74,17 @@ describe('tagResolver', () => {
         test('matches inside a multi-word tag', () => {
             expect(isLexicalMatch('flower bouquet', 'bouquet')).toBe(true);
         });
+        test('accepts every spelling of a compound term and rejects a bare part', () => {
+            // A compound term matches by its stems JOINED, so "close up",
+            // "close-up" and "closeup" all read as the term "close-up" — with
+            // the lexicon unloaded too, where the compound merge cannot run.
+            // "close" and "closes" are bare parts, never the compound.
+            expect(isLexicalMatch('close up', 'close-up')).toBe(true);
+            expect(isLexicalMatch('close-up', 'close-up')).toBe(true);
+            expect(isLexicalMatch('closeup', 'close-up')).toBe(true);
+            expect(isLexicalMatch('close', 'close-up')).toBe(false);
+            expect(isLexicalMatch('closes', 'close-up')).toBe(false);
+        });
     });
 
     describe('resolveTermsToTags', () => {
@@ -81,6 +92,16 @@ describe('tagResolver', () => {
             const ac = stubAutocomplete({ stair: ['staircase'] });
             const tags = await resolveTermsToTags(['stair'], { title: 'Stairs' }, baseDeps(ac));
             expect(tags).toEqual(['staircase']);
+        });
+
+        test('resolves a compound term to its three spellings, rejecting a bare part', async () => {
+            // The compound term vetts each candidate: "close up", "close-up" and
+            // "closeup" are the term itself; "close" and "closes" are rejected
+            // by the lexical guard (and the semantic branch embeds each tag in
+            // compound mode, so a "Close-up" tag scores the close-up vector).
+            const ac = stubAutocomplete({ 'close-up': ['close up', 'close-up', 'closeup', 'close', 'closes'] });
+            const tags = await resolveTermsToTags(['close-up'], { title: 'Close Up', url: 'close-up' }, baseDeps(ac));
+            expect(tags).toEqual(['close up', 'close-up', 'closeup']);
         });
 
         test('rejects same-prefix noise that is off theme', async () => {

@@ -10,6 +10,8 @@ jest.mock('../../../src/ts/services/semantic/lexicon', () => ({
     cosine: jest.fn(() => 0.9),
     // No opinion: title-subject ordering stays positional under this stub.
     concreteness: jest.fn(() => null),
+    // The table this stub stands for is never loaded, so no window merges.
+    compoundOf: jest.fn(() => false),
 }));
 
 import lexiconModule = require('../../../src/ts/services/semantic/lexicon');

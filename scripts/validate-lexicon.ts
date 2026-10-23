@@ -112,7 +112,10 @@ const validateConfigRefs = (config: ConceptsConfig): Array<string> => {
  * the words it lists — no more (a real subject pushed aside), no fewer (the
  * mood word still leading the search). Runs the runtime's own
  * abstractTitleWords over the runtime's own tokeniser, against `lex`, so it
- * judges the asset that ships.
+ * judges the asset that ships. The title is tokenised in compound 'replace'
+ * mode — the same mode every matcher entry uses — so the gate runs the same
+ * code as the matcher and a compound title ("Beauty of Still Life") is read
+ * the way the app reads it, with the lexicon loaded.
  *
  * @returns one line per failing case
  */
@@ -122,7 +125,9 @@ const checkSubjectCases = (
 ): string[] => {
     const failures: string[] = [];
     for (const { title, abstract } of cases) {
-        const got = [...abstractTitleWords(tokenise(title), (word) => lex.concreteness(word))].sort();
+        const got = [
+            ...abstractTitleWords(tokenise(title, { compounds: 'replace' }), (word) => lex.concreteness(word)),
+        ].sort();
         const want = [...abstract].sort();
         if (JSON.stringify(got) !== JSON.stringify(want)) {
             failures.push(`"${title}" demotes [${got.join(', ')}], expected [${want.join(', ')}]`);

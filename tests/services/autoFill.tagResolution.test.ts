@@ -294,6 +294,32 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         expect(searchTagAutocomplete).not.toHaveBeenCalled();
     });
 
+    test('a compound search term is also searched under its two derived spellings', async () => {
+        // "close-up" rides with "close up" and "closeup" on the raw-terms
+        // search, so a library that spells the subject differently is still
+        // found; the exact-match stub answers only the hyphenless forms.
+        const searched: string[] = [];
+        const getEligiblePhotos = jest.fn(
+            async (_id: string | number, _token: string, options: EligibleOptions = {}) => {
+                if (options.search) {
+                    searched.push(options.search);
+                    return options.search === 'closeup' || options.search === 'close up'
+                        ? [allowed('closeup_1', ['Closeup'])]
+                        : [];
+                }
+                return [allowed('misc_1', ['Misc'])];
+            },
+        );
+        const result = await fetchCandidatesForChallenge(
+            invalid({ id: 'c-closeup', title: 'Close Up', url: 'close-up' }),
+            'tok',
+            {},
+            { getEligiblePhotos, logger: makeLogger().logger },
+        );
+        expect(searched).toEqual(expect.arrayContaining(['close-up', 'close up', 'closeup']));
+        expect(result.map((p) => p.id)).toContain('closeup_1');
+    });
+
     test('a negated title never searches its subject and explains the full-library fetch', async () => {
         // "No Humans" searching "human" would fetch exactly the forbidden photos.
         const getEligiblePhotos = makeGetEligiblePhotos();

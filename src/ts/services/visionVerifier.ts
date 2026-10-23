@@ -15,6 +15,7 @@ import { appPath } from '../appPaths';
 import { entryPhotoUrl } from '../format/photoUrl';
 import { oneLine } from '../format/logSafe';
 import { stripTags, visualSubjectWords } from './photoPicker';
+import * as lexicon from './semantic/lexicon';
 
 import type { ChallengeText, IgnoreWords, PickerPhoto } from '../types/photoPicker';
 import type { FillLogger } from '../types/autoFill';
@@ -222,6 +223,9 @@ const rankVisually = async (
     }: { logger: FillLogger; ignoreWords?: IgnoreWords; onVisualEvidence?: (acceptedIds: Set<string>) => void },
 ): Promise<string[]> => {
     const original = rankedIds.slice(0, wantCount);
+    // The prompts tokenise the title in compound mode, which reads the
+    // lexicon's table — load it before reading the title. Never rejects.
+    await lexicon.isAvailable();
     const prompts = challengePrompts(challenge, ignoreWords);
     const log = logger.withCategory('autoSubmit');
     const keepOriginal = (reason: string, detail: unknown = null) => {

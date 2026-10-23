@@ -27,6 +27,12 @@ export const TOP_N = 40000;
 // that the existing semantic floor was calibrated against.
 export const CENTER_TOP_N = 10000;
 export const GENERIC_TOKEN_RE = /^[a-z]{2,20}$/;
+// Compound tokens GloVe knows as single rows ("close-up", "black-and-white").
+// They are buffered raw during the scan and only ship when every hyphen-split
+// part is itself a kept row. The cap below is a LINE RANK (the scan's parsed
+// counter), not a count of kept compounds.
+export const COMPOUND_TOKEN_RE = /^[a-z]{2,20}(?:-[a-z]{2,20}){1,2}$/;
+export const COMPOUND_TOP_N = 150000;
 // glove.6B.100d.txt is ~347 MB; anything past this is not the file we pinned.
 export const MAX_ENTRY_BYTES = 1024 * 1024 * 1024;
 // Most stem merges are the stemmer doing its job: inflected forms of one lemma

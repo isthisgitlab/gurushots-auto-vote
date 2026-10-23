@@ -1,7 +1,6 @@
 /**
- * Photo picker — the photography stopword list and the fixed subject phrases:
- * the boilerplate words tokenise() strips from challenge text, and "Still
- * Life", which survives the strip whole.
+ * Photo picker — the photography stopword list: the boilerplate words
+ * tokenise() strips from challenge text.
  */
 
 const STOPWORDS = new Set([
@@ -183,9 +182,10 @@ const STOPWORDS = new Set([
     // noun carries none ("The Farm Life" is about farms; "Sea Life" is about
     // the sea). Left in, "life" would both drive a server-side search that
     // pulls in sea-life photos for a Farm Life challenge AND score those photos
-    // as a keyword match. "Still Life" is the one exception: the pair names a
-    // genre, and FIXED_PHRASES below merges it back into one term before this
-    // filter runs.
+    // as a keyword match. "Still Life" survives only where the word-vector
+    // model knows the compound: the tokeniser's compound merge
+    // (stemming.ts, mergeCompounds) keeps "still life" whole as "still-life"
+    // before this filter runs, because only "life" here is a stopword.
     //
     // Only the challenge side strips these (tokenise filters before it stems,
     // so entries are raw words). A user who TYPES "sea life" as a tag means it
@@ -215,28 +215,4 @@ const STOPWORDS = new Set([
     'tales',
 ]);
 
-// Phrases that are ONE subject term even though their head noun is a stopword
-// above: "Still Life" names a genre, and stripping "life" leaves "still" to
-// stand for the whole thing. Merging keeps the "Farm Life" / "Sea Life" strip
-// intact for every other title while the phrase survives whole — into
-// the keywords, the theme, the search terms and the vision prompt. The merged
-// token has no lexicon vector and no longer matches a bare "Still" label or
-// tag, which is the point.
-//
-// The pair is merged across punctuation too ("hold it still. Life is…"), and
-// prose like that does falsely merge — accepted: challenge text rarely quotes
-// prose, and the cost there is one extra keyword, not a flipped subject.
-//
-// Single-word ignore words ("still" or "life" in a user's ignore list) keep
-// the pair from merging — see the ignore rules in the walk below. Lookups are
-// exact Map.get hits against this list, never a regex built from it: the text
-// is untrusted API data, and the walk runs on input already cut to
-// MAX_TOKENISE_CHARS.
-const FIXED_PHRASES: Map<string, string> = new Map([
-    ['still life', 'still life'],
-    ['still lifes', 'still life'],
-    ['still lives', 'still life'],
-    ['stilllife', 'still life'],
-]);
-
-export { STOPWORDS, FIXED_PHRASES };
+export { STOPWORDS };

@@ -2,9 +2,29 @@
  * Tests for photoPicker.ts
  */
 
+// tests/setup.ts mocks fs globally, so the asset loader is mocked to hand back
+// the committed JSON read through requireActual (as photoPicker.subject.test.ts).
+// The lexicon only loads where a describe says so (lexicon.init()); the rest of
+// this file runs with the table unloaded, where nothing merges.
+const realFs = jest.requireActual<typeof import('fs')>('fs');
+const realPath = jest.requireActual<typeof import('path')>('path');
+const mockLexicon = JSON.parse(
+    realFs.readFileSync(realPath.join(__dirname, '..', '..', 'src', 'assets', 'semantic-vectors.json'), 'utf8'),
+) as RawLexicon;
+
+jest.mock('../../src/ts/services/semantic/assets', () => ({
+    loadLexiconAsset: async () => mockLexicon,
+    ASSET_NAME: 'semantic-vectors.json',
+    __resetForTests: () => {},
+}));
+
 import type * as photoPickerModule from '../../src/ts/services/photoPicker';
+import type * as lexiconModule from '../../src/ts/services/semantic/lexicon';
 import type { ChallengeText, PickerPhoto, PickOptions, SemanticScore } from '../../src/ts/types/photoPicker';
+import type { RawLexicon } from '../../src/ts/types/semantic';
 import { invalid } from '../helpers/invalid';
+
+const lexicon = require('../../src/ts/services/semantic/lexicon') as typeof lexiconModule;
 
 const {
     pickPhotosForChallenge,
@@ -25,6 +45,7 @@ const {
     tokeniseTagList,
     labelWordStems,
     wholeLabelStems,
+    visualSubjectWords,
     SEMANTIC_MATCH_FLOOR,
     SEMANTIC_SUPPORT_CAP,
     hasThemeMatch,
@@ -140,43 +161,155 @@ describe('photoPicker', () => {
         });
     });
 
-    // The fixed-phrase merge keeps "Still Life" one term while every other
-    // title keeps its "life" strip.
-    describe('fixed phrases — "Still Life" stays one subject term', () => {
-        test('title, slug, quoted text, plurals and the hashtag spelling all give the phrase', () => {
-            expect(tokenise('Beauty of Still Life')).toEqual(['beauty', 'still life']);
-            expect(tokenise('beauty-of-still-life')).toEqual(['beauty', 'still life']);
-            expect(tokenise('"Still Life"')).toEqual(['still life']);
-            expect(tokenise('Still Lifes')).toEqual(['still life']);
-            expect(tokenise('still lives')).toEqual(['still life']);
-            expect(tokenise('stilllife')).toEqual(['still life']);
+    // The compound merge keeps adjacent words the model knows as one term. The
+    // merge is decided by the lexicon's compound table, so every describe here
+    // states whether the table is loaded.
+    describe('compounds with the lexicon loaded', () => {
+        beforeEach(() => lexicon.init());
+        afterEach(() => lexicon.__resetForTests());
+
+        test('title, slug, quoted text and plurals all give the compound', () => {
+            expect(tokenise('Close Up', { compounds: 'replace' })).toEqual(['close-up']);
+            expect(tokenise('Close-Up', { compounds: 'replace' })).toEqual(['close-up']);
+            expect(tokenise('Close Ups', { compounds: 'replace' })).toEqual(['close-up']);
+            expect(tokenise('Beauty of Still Life', { compounds: 'replace' })).toEqual(['beauty', 'still-life']);
+            expect(tokenise('beauty-of-still-life', { compounds: 'replace' })).toEqual(['beauty', 'still-life']);
+            expect(tokenise('"Still Life"', { compounds: 'replace' })).toEqual(['still-life']);
+            expect(tokenise('Still Lifes', { compounds: 'replace' })).toEqual(['still-life']);
+        });
+
+        test('accepted spelling misses merge nothing', () => {
+            // "stilllife" is not a GloVe token; "still lives" stems to
+            // "still-live", which misses the table, so "lives" is dropped as the
+            // stopword it is; "up-close" sits past the fetch cap, so "Up Close"
+            // stays split; a single-letter part keeps "x-ray" out; the "&"
+            // breaks the window for "Black & White".
+            expect(tokenise('stilllife', { compounds: 'replace' })).toEqual(['stilllife']);
+            expect(tokenise('still lives', { compounds: 'replace' })).toEqual(['still']);
+            expect(tokenise('Up Close', { compounds: 'replace' })).toEqual(['up', 'close']);
+            expect(tokenise('x-ray', { compounds: 'replace' })).toEqual(['ray']);
+            expect(tokenise('Black & White', { compounds: 'replace' })).toEqual(['black', 'white']);
+            expect(tokenise('Best of Black & White', { compounds: 'replace' })).toEqual(['black', 'white']);
         });
 
         test('the "life" strip stays as it is for every other title', () => {
-            expect(tokenise('The Farm Life')).toEqual(['farm']);
-            expect(tokenise('still water')).toEqual(['still', 'water']);
-            expect(tokenise('hold it still')).toEqual(['hold', 'still']);
+            expect(tokenise('The Farm Life', { compounds: 'replace' })).toEqual(['farm']);
+            expect(tokenise('still water', { compounds: 'replace' })).toEqual(['still', 'water']);
+            expect(tokenise('hold it still', { compounds: 'replace' })).toEqual(['hold', 'still']);
         });
 
-        test('the merge joins words across punctuation', () => {
-            // Prose like this merges falsely — accepted: the cost there is one
-            // extra keyword, not a flipped subject.
-            expect(tokenise('hold it still. Life is good')).toEqual(['hold', 'still life']);
+        test('a window joins only across whitespace or a single hyphen', () => {
+            // "Blue & Green" and the sentence break both stay unmerged: any
+            // other punctuation breaks the window.
+            expect(tokenise('Blue & Green', { compounds: 'replace' })).toEqual(['blue', 'green']);
+            expect(tokenise('hold it still. Life is good', { compounds: 'replace' })).toEqual(['hold', 'still']);
         });
 
-        test('a single-word ignore keeps the pair unmerged — the ignored word wins', () => {
-            expect(tokenise('Beauty of Still Life', { ignoreWords: ['still'] })).toEqual(['beauty']);
-            expect(tokenise('Beauty of Still Life', { ignoreWords: ['life'] })).toEqual(['beauty', 'still']);
-            // The merged token is dropped when the ignore set holds the phrase.
-            expect(tokenise('Beauty of Still Life', { ignoreWords: ['still life'] })).toEqual(['beauty']);
+        test('a single-word ignore keeps the window unmerged — the ignored word wins', () => {
+            expect(tokenise('Close Up', { ignoreWords: ['close'], compounds: 'replace' })).toEqual(['up']);
+            expect(tokenise('Beauty of Still Life', { ignoreWords: ['still'], compounds: 'replace' })).toEqual([
+                'beauty',
+            ]);
+            expect(tokenise('Beauty of Still Life', { ignoreWords: ['life'], compounds: 'replace' })).toEqual([
+                'beauty',
+                'still',
+            ]);
         });
 
-        test('a "Still Life" label is one stem, so a bare "life" tag no longer matches it', () => {
-            const stems = labelWordStems({ labels: ['Still Life'] });
-            expect(stems).toEqual(['still life']);
-            // The same comparison photoMatchesAllStems makes: "life" vs
-            // "still life" is far past MAX_STEM_PREFIX_DELTA.
-            expect(stems.some((labelStem) => matches(labelStem, 'life'))).toBe(false);
+        test('a phrase-form ignore word drops the whole merged window', () => {
+            // The window is only dropped for a compound the model knows, and the
+            // phrase must be spelled the way the merge joins it — the surface
+            // words "Close" and "Ups" never match an ignore word.
+            expect(tokenise('Close Up', { ignoreWords: ['close up'], compounds: 'replace' })).toEqual([]);
+            expect(tokenise('Close-Ups', { ignoreWords: ['close-up'], compounds: 'replace' })).toEqual(['close-up']);
+        });
+
+        test('neither "close" nor "up" appears in the keywords or search terms of an ignored compound', () => {
+            expect(buildChallengeKeywords({ title: 'Close Up', url: 'close-up' }, ['close up'])).toEqual([]);
+            expect(buildThemeKeywords({ title: 'Close Up', url: 'close-up' }, ['close up'])).toEqual([]);
+            expect(buildSearchTerms({ title: 'Close Up', url: 'close-up' }, { ignoreWords: ['close up'] })).toEqual([]);
+        });
+
+        test('a 3-word window wins at its leftmost position', () => {
+            // "son-in-law" and "in-law" are both compounds: the merge tries the
+            // 3-word window first at position 0, consuming all three words, so
+            // "son in law" cannot degrade to ["son", "in-law"].
+            expect(tokenise('son in law', { compounds: 'replace' })).toEqual(['son-in-law']);
+            expect(tokenise('in law', { compounds: 'replace' })).toEqual(['in-law']);
+        });
+
+        test('keywords and search terms carry the compound', () => {
+            expect(buildChallengeKeywords({ title: 'Close Up', url: 'close-up' })).toEqual(['close-up']);
+            expect(buildThemeKeywords({ title: 'Close Up', url: 'close-up' })).toEqual(['close-up']);
+            expect(buildSearchTerms({ title: 'Close Up', url: 'close-up' })).toEqual(['close-up']);
+            // Both subjects survive, within the caps.
+            expect(buildChallengeKeywords({ title: 'Close Up Flowers', url: 'close-up-flowers' })).toEqual([
+                'close-up',
+                'flower',
+            ]);
+            expect(buildSearchTerms({ title: 'Close Up Flowers', url: 'close-up-flowers' })).toEqual([
+                'flower',
+                'close-up',
+            ]);
+        });
+
+        test('a BARE hyphen is still not a series separator - compounds survive whole', () => {
+            // The spacing is the whole distinction: a compound joins its parts
+            // with no spaces, so splitting on a bare "-" would silently discard
+            // a real subject.
+            expect(buildThemeKeywords({ title: 'Black-and-White Portraits' })).toEqual(['black-and-white', 'portrait']);
+            expect(buildThemeKeywords({ title: 'Close-Up Macro' })).toEqual(['close-up', 'macro']);
+        });
+
+        test('a negated compound stays out of the keywords and the vision prompt', () => {
+            const challenge = { title: 'Flowers: No Close-Ups', url: 'flowers-no-close-ups' };
+            expect(buildChallengeKeywords(challenge)).toEqual(['flower']);
+            expect(visualSubjectWords(challenge)).toEqual(['flowers']);
+            expect(buildSearchTerms(challenge)).toEqual(['flower']);
+        });
+
+        test('compound labels keep the compound and its parts, compound first', () => {
+            // 'add' mode emits the compound ahead of its parts, so a label cut
+            // at MAX_WORDS_PER_LABEL cannot lose the compound and keep only
+            // pieces of it.
+            expect(labelWordStems({ labels: ['Self-portrait'] })).toEqual(['self-portrait', 'self', 'portrait']);
+            expect(labelStemGroups({ labels: ['Close-up'] })).toEqual([['close-up']]);
+            expect(labelWordStems({ labels: ['Close up'] })).toEqual(['close-up', 'close', 'up']);
+        });
+
+        test("'add' mode keeps the compound when MAX_WORDS_PER_LABEL cuts the parts", () => {
+            const prefix = Array.from({ length: 11 }, (_, i) => `word${'abcdefghijk'[i]}`).join(' ');
+            const stems = labelWordStems({ labels: [`${prefix} close up`] });
+            expect(stems).toHaveLength(12);
+            expect(stems[11]).toBe('close-up');
+        });
+
+        test('a must-tag matches one part of a compound label', () => {
+            const photo = { labels: ['Self-portrait'] };
+            expect(scorePhoto(photo, ['portrait'])).toBe(1);
+        });
+
+        test('a "Close" label does not match the keyword "close-up", a "Closeup" label does', () => {
+            // A compound stem matches only by equality with the hyphens
+            // stripped — the prefix rule would let "close" match "closeup".
+            expect(matches('close', 'close-up')).toBe(false);
+            expect(matches('closeup', 'close-up')).toBe(true);
+            expect(scorePhoto({ labels: ['Close'] }, ['close-up'])).toBe(0);
+            expect(scorePhoto({ labels: ['Closeup'] }, ['close-up'])).toBe(1);
+        });
+    });
+
+    describe('compounds with the lexicon NOT loaded — words stay split', () => {
+        test('the merge needs the table, so the phrase ignore does not apply either', () => {
+            expect(tokenise('Close Up')).toEqual(['close', 'up']);
+            expect(tokenise('Beauty of Still Life')).toEqual(['beauty', 'still']);
+            // The ignore set holds "still life", but no window merged, so the
+            // parts flow through (and "life" is stripped as the stopword it is).
+            expect(tokenise('Beauty of Still Life', { ignoreWords: ['still life'] })).toEqual(['beauty', 'still']);
+        });
+
+        test('compoundOf is false before init()', () => {
+            expect(lexicon.compoundOf(['close', 'up'])).toBe(false);
         });
     });
 
@@ -238,10 +371,12 @@ describe('photoPicker', () => {
             ]);
         });
 
-        test('a BARE hyphen is still not a separator - compounds survive whole', () => {
+        test('a BARE hyphen is still not a separator - the compound keeps its parts split here', () => {
             // The spacing is the whole distinction: a compound joins its parts
-            // with no spaces, so splitting on a bare "-" would silently discard
-            // a real subject.
+            // with no spaces, so a bare "-" is never series structure. The
+            // compound-aware reading of these titles is pinned in the
+            // compounds-with-lexicon-loaded describe above; this file's body
+            // runs with the table unloaded.
             expect(buildThemeKeywords({ title: 'Black-and-White Portraits' })).toEqual(['black', 'white', 'portrait']);
             expect(buildThemeKeywords({ title: 'Close-Up Macro' })).toEqual(['close', 'up', 'macro']);
         });
@@ -747,11 +882,14 @@ describe('photoPicker', () => {
             expect(tokeniseTagList(['shot'])).toEqual(['shot']);
             expect(tokeniseTagList(['winner'])).toEqual(['winner']);
         });
-        test('each tag is tokenised on its own — separate tags never fuse into the phrase', () => {
-            // Joining the tags first would fuse "still" + "life" into the fixed
-            // phrase, which no single tag said.
+        test('each tag is tokenised on its own, with compound merging off', () => {
+            // Joining the tags first would merge "still" + "life" into the
+            // compound; and a saved must-tag means its literal words, so even
+            // one tag spelled "still life" stays two stems — a must-tag "black
+            // and white" keeps its words (stopword included) the same way.
             expect(tokeniseTagList(['still', 'life'])).toEqual(['still', 'life']);
-            expect(tokeniseTagList(['still life'])).toEqual(['still life']);
+            expect(tokeniseTagList(['still life'])).toEqual(['still', 'life']);
+            expect(tokeniseTagList(['black and white'])).toEqual(['black', 'and', 'white']);
             expect(tokeniseTagList(['Still', 'still'])).toEqual(['still']);
         });
     });

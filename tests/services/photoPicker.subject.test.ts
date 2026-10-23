@@ -34,6 +34,7 @@ const {
     visualSubjectWords,
     readChallengeTheme,
     pickPhotosForChallenge,
+    SEMANTIC_MATCH_FLOOR,
 } = require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
 // The facade, so the assets mock above covers the lexicon load it triggers.
 const { getSemanticScores } = require('../../src/ts/services/semantic') as typeof semanticModule;
@@ -70,17 +71,24 @@ describe('abstractTitleWords', () => {
         expect(demote(invalid(null))).toEqual([]);
     });
 
-    test('a fixed phrase anchors the demotion, bounded at 0.05', () => {
-        // The stub returns null for "still life" (no lexicon vector), so the
-        // phrase is in the word list — the new branch's trigger — but never
-        // demotes itself. The PHRASE_QUALIFIER_MAX bound is pinned from both
-        // sides, and an unknown word stays as it does everywhere else.
+    test('a stopword-head compound anchors the demotion, bounded at 0.05', () => {
+        // "still-life" reads concrete (0.330) and its head "life" stems to a
+        // stopword, so it anchors the qualifier branch without itself being a
+        // candidate: the word before it demotes only at or under
+        // PHRASE_QUALIFIER_MAX, and an unknown score there stays.
         const withPhrase = (score: number | null) => [
-            ...abstractTitleWords(['x', 'still life'], (w) => (w === 'x' ? score : null)),
+            ...abstractTitleWords(['x', 'still-life'], (w) => (w === 'x' ? score : 0.33)),
         ];
         expect(withPhrase(0.05)).toEqual(['x']);
         expect(withPhrase(0.06)).toEqual([]);
         expect(withPhrase(null)).toEqual([]);
+    });
+
+    test('a compound is never demoted and never anchors the normal path', () => {
+        // "close-up" has no stopword head ("up" is not in STOPWORDS), so the
+        // qualifier branch does not fire; and a concrete compound must not
+        // demote "nature" (−0.30) through the normal concrete-anchor path.
+        expect([...abstractTitleWords(['close-up', 'nature'], (w) => (w === 'close-up' ? 0.2 : -0.3))]).toEqual([]);
     });
 });
 
@@ -103,6 +111,7 @@ describe('title readers with the real lexicon', () => {
     };
 
     beforeEach(() => lexicon.__resetForTests());
+    afterEach(() => lexicon.__resetForTests());
 
     test('the fixture description rules out people and animals', () => {
         expect(descriptionExclusions(STILL_LIFE)).toEqual(['people', 'animals']);
@@ -145,56 +154,78 @@ describe('title readers with the real lexicon', () => {
             expect(buildThemeKeywords(title)).toEqual(['built', 'among', 'nature']);
         });
 
-        test('a fixed phrase anchors the title: "beauty" is demoted, a real qualifier is not', () => {
-            expect([...abstractTitleWords(['beauty', 'still life'])]).toEqual(['beauty']);
-            expect([...abstractTitleWords(['fruit', 'still life'])]).toEqual([]);
+        test('a stopword-head compound anchors the title: "beauty" is demoted, a real qualifier is not', () => {
+            expect([...abstractTitleWords(['beauty', 'still-life'])]).toEqual(['beauty']);
+            expect([...abstractTitleWords(['fruit', 'still-life'])]).toEqual([]);
         });
 
-        test('real qualifiers survive next to the phrase, including the 0.05–0.15 band', () => {
+        test('real qualifiers survive next to the compound, including the 0.05–0.15 band', () => {
             expect(buildChallengeKeywords({ title: 'Fruit Still Life' })).toEqual(
-                expect.arrayContaining(['fruit', 'still life']),
+                expect.arrayContaining(['fruit', 'still-life']),
             );
-            expect(buildThemeKeywords({ title: 'Fruit Still Life' })).toEqual(['fruit', 'still life']);
+            expect(buildThemeKeywords({ title: 'Fruit Still Life' })).toEqual(['fruit', 'still-life']);
             // "food" (0.116) sits between PHRASE_QUALIFIER_MAX and
-            // CONCRETE_SUBJECT_MIN — exactly the band the phrase anchor exists
+            // CONCRETE_SUBJECT_MIN — exactly the band the compound anchor exists
             // to bridge without dropping real qualifiers.
             expect(buildChallengeKeywords({ title: 'Food Still Life' })).toEqual(
-                expect.arrayContaining(['food', 'still life']),
+                expect.arrayContaining(['food', 'still-life']),
             );
-            expect(buildThemeKeywords({ title: 'Food Still Life' })).toEqual(['food', 'still life']);
+            expect(buildThemeKeywords({ title: 'Food Still Life' })).toEqual(['food', 'still-life']);
         });
 
         test('the 136550 fixture reads "still life" as its one subject', () => {
-            expect(readChallengeTheme(STILL_LIFE)).toEqual({ kind: 'subject', subjects: ['still life'] });
-            expect(buildThemeKeywords(STILL_LIFE)).toEqual(['still life']);
+            expect(readChallengeTheme(STILL_LIFE)).toEqual({ kind: 'subject', subjects: ['still-life'] });
+            expect(buildThemeKeywords(STILL_LIFE)).toEqual(['still-life']);
             // Demoted to last, but still searched (the existing design).
-            expect(buildSearchTerms(STILL_LIFE)).toEqual(['still life', 'beauty']);
+            expect(buildSearchTerms(STILL_LIFE)).toEqual(['still-life', 'beauty']);
             // The vision prompt keeps every word readable — visualSubjectWords
             // deliberately skips abstractTitleWords.
-            expect(visualSubjectWords(STILL_LIFE)).toEqual(['beauty', 'still life']);
+            expect(visualSubjectWords(STILL_LIFE)).toEqual(['beauty', 'still-life']);
         });
 
         test('the fixture keywords lose "beauty" and the bare "still"', () => {
             const keywords = buildChallengeKeywords(STILL_LIFE);
-            expect(keywords).toContain('still life');
+            expect(keywords).toContain('still-life');
             expect(keywords).not.toContain('beauty');
             expect(keywords).not.toContain('still');
         });
 
-        test('the still-life photo ranks first, and a "still life" must-tag keeps only it', async () => {
+        test('the still-life photo wins on the semantic tier, and a "still life" must-tag keeps only it', async () => {
             const photos = [
                 allowed('fish', ['Fish', 'Still water', 'Underwater'], 5000, { votes: 500 }),
                 allowed('portrait', ['Beauty', 'Woman', 'Fashion'], 3000, { votes: 300 }),
                 allowed('still-life', ['Still life', 'Fruit', 'Vase'], 1000, { votes: 5 }),
             ];
-            // First, unconditionally: the semantic tier is OFF for this
-            // challenge under the real lexicon — the theme pools to "still
-            // life", which has no vector — so the ranking runs without it.
-            await expect(getSemanticScores(STILL_LIFE, photos)).resolves.toBeNull();
-            expect(pickPhotosForChallenge(STILL_LIFE, photos, 1, { semanticScores: null })).toEqual(['still-life']);
+            // The theme pools to "still-life", which the shipped lexicon carries
+            // as one vector, so the tier is ON: the still-life photo scores a
+            // full 1.0 on its own label while the fish and portrait photos sit
+            // far below the floor.
+            const scores = await getSemanticScores(STILL_LIFE, photos);
+            expect(scores!.get('still-life')).toEqual({ score: 1, support: 2 });
+            expect(scores!.get('fish')!.score).toBeLessThan(SEMANTIC_MATCH_FLOOR / 100);
+            expect(scores!.get('portrait')!.score).toBeLessThan(SEMANTIC_MATCH_FLOOR / 100);
+            expect(pickPhotosForChallenge(STILL_LIFE, photos, 1, { semanticScores: scores })).toEqual(['still-life']);
             expect(pickPhotosForChallenge(STILL_LIFE, photos, 1, { mustIncludeTags: ['still life'] })).toEqual([
                 'still-life',
             ]);
+        });
+
+        test('a compound with a stopword head reads concrete only when the model says so', () => {
+            // "real-life" measures 0.103, below CONCRETE_SUBJECT_MIN, so the
+            // qualifier branch does not fire for it: the concrete follower
+            // "portrait" stays on both sides of the compound.
+            expect(buildThemeKeywords({ title: 'Real Life Portraits' })).toEqual(['real-life', 'portrait']);
+            expect(buildThemeKeywords({ title: 'Portraits of Real Life' })).toEqual(['portrait', 'real-life']);
+            // The same reading puts "fun" (−0.158) after the concrete
+            // "still-life" (0.330), whose stopword head fires the branch.
+            expect(buildThemeKeywords({ title: 'Still Life Fun' })).toEqual(['still-life']);
+        });
+
+        test('compounds never demote a second subject', () => {
+            // A concrete compound is never an anchor of the normal path, so the
+            // abstract-reading followers survive ("nature" −0.30, "people" −0.38).
+            expect(buildThemeKeywords({ title: 'Close Up Nature' })).toEqual(['close-up', 'nature']);
+            expect(buildThemeKeywords({ title: 'Black and White People' })).toEqual(['black-and-white', 'people']);
         });
 
         describe('description exclusions in the pick', () => {
