@@ -174,10 +174,11 @@ export function useLibraryListing(
             if (!asShown.preview) return;
             setRevalidating(true);
             // The re-check's extent. With a challenge, a cached answer of this same challenge is re-read to its
-            // own accepted extent (`result` still knows the marks), so the photos — and the picks made beside
-            // them — stay on screen; a borrowed preview (another challenge's, or an expired one) is read for one
-            // batch, since a challenge-bound grid holds a loader for it, not its photos. Without a challenge the
-            // preview on screen is re-read to its own extent, so nothing shown shrinks.
+            // own accepted extent (`result` still knows the marks), so the fresh listing comes back as wide as
+            // the one last loaded, and the picks made in it keep their tiles; a borrowed preview (another
+            // challenge's, or an expired one) is read for one batch, since a challenge-bound grid holds a loader
+            // for it, not its photos. Without a challenge the preview on screen is re-read to its own extent, so
+            // nothing shown shrinks.
             const recheckKeep =
                 challengeId !== null && !cachedMarks
                     ? LIBRARY_BATCH_PHOTOS
