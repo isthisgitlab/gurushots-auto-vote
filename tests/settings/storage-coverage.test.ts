@@ -64,7 +64,9 @@ const USER_DATA = '/home/u/.config/gurushots-auto-vote-dev';
 
 /**
  * Load a fresh storage module. `electronApp` (or null) becomes the module's
- * captured electron handle; `sourceCode` drives logger.isSourceCode.
+ * captured electron handle (runtime.isElectron is mocked to match);
+ * `sourceCode` drives logger.isSourceCode. `noElectron` makes the electron
+ * mock throw, so a load that requires it outside Electron fails loudly.
  */
 const loadStorage = ({
     electronApp = null,
@@ -88,6 +90,7 @@ const loadStorage = ({
         logger.isSourceCode.mockReturnValue(sourceCode);
         const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
         jest.spyOn(runtime, 'getAppUserDataPath').mockReturnValue(USER_DATA);
+        jest.spyOn(runtime, 'isElectron').mockReturnValue(electronApp !== null);
         const mod = require('../../src/ts/settings/storage') as typeof storageModule;
         ctx = { mod, fs, categoryLogger, runtime };
     });
@@ -108,12 +111,11 @@ describe('settings storage — edge cases', () => {
         jest.dontMock('electron');
     });
 
-    test('falls back to the CLI userData path when electron cannot be loaded', () => {
-        const { categoryLogger } = loadStorage({ noElectron: true });
-        expect(categoryLogger.info).toHaveBeenCalledWith(
-            'Running in CLI context - using fallback userData path:',
-            'Cannot find module electron',
-        );
+    test('outside Electron the electron package is never loaded (its npm package downloads the binary)', () => {
+        // The electron mock throws on load, so a regression to an
+        // unconditional require fails right here.
+        const { mod } = loadStorage({ noElectron: true });
+        expect(mod.electronApp).toBeNull();
     });
 
     describe('initializeAsync (settings store)', () => {

@@ -16,6 +16,10 @@ jest.mock('electron', () => ({
     BrowserWindow: { getAllWindows: getAllWindowsMock },
     app: { relaunch: relaunchMock, exit: exitMock },
 }));
+jest.mock('../../src/ts/runtime', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
+}));
 jest.mock('../../src/ts/settings');
 jest.mock('../../src/ts/settings/localData', () => ({ wipeLocalData: jest.fn() }));
 jest.mock('../../src/ts/thirdPartyNotices', () => ({ loadThirdPartyNotices: jest.fn() }));
@@ -40,7 +44,13 @@ const localData = jest.mocked(localDataModule);
 import noticesModule = require('../../src/ts/thirdPartyNotices');
 const notices = jest.mocked(noticesModule);
 import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
+import type * as runtimeModule from '../../src/ts/runtime';
+// settings.handlers captures BrowserWindow/app at load, gated on isElectron —
+// report Electron for that capture; the register() tests below need both.
+const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
+const isElectronSpy = jest.spyOn(runtime, 'isElectron').mockReturnValue(true);
 const { buildHandlers, register } = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
+isElectronSpy.mockRestore();
 
 type ChannelImpl = Parameters<IpcMain['handle']>[1];
 
@@ -844,5 +854,23 @@ describe('register (Electron)', () => {
             app: { theme: 'dark' },
             hasToken: false,
         });
+    });
+});
+
+describe('module load outside Electron', () => {
+    test('loads without requiring the electron package', () => {
+        // A fresh module graph whose electron mock throws on load: a
+        // regression to an unconditional require fails right here. Kept last —
+        // resetModules drops the registry the top-level requires came from.
+        jest.resetModules();
+        jest.doMock('electron', () => {
+            throw new Error('electron must not be loaded outside Electron');
+        });
+        const fresh = require('../../src/ts/runtime') as typeof runtimeModule;
+        jest.spyOn(fresh, 'isElectron').mockReturnValue(false);
+        expect(() => {
+            require('../../src/ts/ipc/settings.handlers');
+        }).not.toThrow();
+        jest.dontMock('electron');
     });
 });

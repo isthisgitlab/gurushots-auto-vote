@@ -11,17 +11,18 @@
  */
 
 // Lazy require: esbuild must not resolve electron when this module is bundled
-// into the Capacitor renderer; only register() uses BrowserWindow.
+// into the Capacitor renderer; only register() uses BrowserWindow. Gated on
+// isElectron: outside Electron, require('electron') loads the npm package,
+// which downloads the Electron binary when it is missing.
 let BrowserWindow: typeof electronModule.BrowserWindow | null = null;
 let electronApp: typeof electronModule.app | null = null;
-try {
+if (runtime.isElectron()) {
     const electron = require('electron') as typeof import('electron');
     BrowserWindow = electron.BrowserWindow;
     electronApp = electron.app;
-} catch {
-    // Capacitor / CLI: register() in this module is never reached.
 }
 import * as settings from '../settings';
+import * as runtime from '../runtime';
 import { registerHandlers, type IpcHandlerMap } from './registerHandlers';
 import { errorResult } from './errorResult';
 import {

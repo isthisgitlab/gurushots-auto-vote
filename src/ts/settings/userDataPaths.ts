@@ -8,16 +8,13 @@ import * as logger from '../logger';
 const { isSourceCode, getAppName } = logger;
 import * as runtime from '../runtime';
 import type { App } from 'electron';
-import { errorMessage } from '../errorMessage';
 
-// Try to import electron, but don't fail if it's not available (CLI context)
+// Outside Electron, require('electron') loads the npm package, which downloads
+// the Electron binary when it is missing; the require only runs inside
+// Electron, where it cannot fail.
 let electronApp: App | null | undefined = null;
-try {
-    const electron = require('electron') as typeof import('electron');
-    electronApp = electron.app;
-} catch (error) {
-    // Electron not available (CLI context), we'll use fallback
-    logger.withCategory('ui').info('Running in CLI context - using fallback userData path:', errorMessage(error));
+if (runtime.isElectron()) {
+    electronApp = (require('electron') as typeof import('electron')).app;
 }
 
 // One-shot notice if a legacy dev directory exists elsewhere. The legacy
