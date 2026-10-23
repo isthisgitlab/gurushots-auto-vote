@@ -914,7 +914,7 @@ export const app = {
     photoChooserDiscard: 'Discard changes',
     settingsDiscardTitle: 'Discard your changes?',
     settingsDiscardText:
-        "You have changes in these settings that you haven't saved. Closing now throws them away. Choose Keep editing to go back, then press Save.",
+        "You have changes here that you haven't saved. Closing now throws them away. Choose Keep editing to go back and save them.",
     settingsDiscard: 'Discard changes',
     settingsKeepEditing: 'Keep editing',
     settingsDropTitle: 'Save without part of your work?',
@@ -1288,7 +1288,7 @@ export const app = {
     removeCurrentTimezone: 'Remove current timezone',
     resetToGlobal: 'Reset to Global',
     resetToDefault: 'Reset to default',
-    resetToDefaultNotSaved: 'Reset to default (not saved until Save)',
+    resetToDefaultNotSaved: 'Reset to default (applies when you save)',
     resetAll: 'Reset all',
     resetAllConfirmTitle: 'Reset All Settings',
     resetAllConfirmMessage: 'Are you sure you want to reset ALL settings to their default values?',

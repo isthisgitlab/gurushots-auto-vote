@@ -925,7 +925,7 @@ export const app = {
     photoChooserDiscard: 'Atmest izmaiņas',
     settingsDiscardTitle: 'Atmest izmaiņas?',
     settingsDiscardText:
-        'Šajos uzstādījumos ir izmaiņas, kas nav saglabātas. Ja aizvērsi tagad, tās pazudīs. Izvēlies „Turpināt rediģēt”, lai atgrieztos, un tad spied „Saglabāt”.',
+        'Šeit ir izmaiņas, kas nav saglabātas. Ja aizvērsi tagad, tās pazudīs. Izvēlies „Turpināt rediģēt”, lai atgrieztos un tās saglabātu.',
     settingsDiscard: 'Atmest izmaiņas',
     settingsKeepEditing: 'Turpināt rediģēt',
     settingsDropTitle: 'Saglabāt bez daļas darba?',
@@ -1308,7 +1308,7 @@ export const app = {
     removeCurrentTimezone: 'Noņemt pašreizējo laika joslu',
     resetToGlobal: 'Atiestatīt uz globālajiem',
     resetToDefault: 'Atiestatīt uz noklusējumu',
-    resetToDefaultNotSaved: 'Atiestatīt uz noklusējumu (netiks saglabāts, kamēr nenospiedīsi „Saglabāt”)',
+    resetToDefaultNotSaved: 'Atiestatīt uz noklusējumu (stāsies spēkā, kad saglabāsi)',
     resetAll: 'Atiestatīt visu',
     resetAllConfirmTitle: 'Atiestatīt visus uzstādījumus',
     resetAllConfirmMessage: 'Vai tiešām atiestatīt VISUS uzstādījumus uz noklusējumu?',
