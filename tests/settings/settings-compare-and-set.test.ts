@@ -710,6 +710,38 @@ describe('the app window being told that a save was given up', () => {
         expect(getSaveDroppedCause()).toBe('storage');
     });
 
+    test('discarding the pending writes is no notice of its own: the serial stays and the listener is not told', async () => {
+        const { native, compareAndWrite } = nativeWindow('{"a":1}');
+        const {
+            storage,
+            initializeAsync,
+            flushPendingWrites,
+            discardPendingWrites,
+            isSaveDropped,
+            getSaveDroppedCause,
+            getSaveDroppedSerial,
+            onSaveDroppedChange,
+        } = loadStorage();
+        await initializeAsync();
+        const listener = jest.fn();
+        onSaveDroppedChange(listener);
+        alwaysConflicting(native, compareAndWrite);
+        storage.writeRaw('{"a":1,"w":1}');
+        await flushPendingWrites();
+        expect(isSaveDropped()).toBe(true);
+        expect(getSaveDroppedSerial()).toBe(1);
+        expect(listener).toHaveBeenCalledTimes(1);
+
+        await discardPendingWrites();
+
+        // The discard is the app's own doing: the dropped state goes away, but the given-up save keeps its
+        // serial and the window learns nothing new.
+        expect(isSaveDropped()).toBe(false);
+        expect(getSaveDroppedCause()).toBe('storage');
+        expect(getSaveDroppedSerial()).toBe(1);
+        expect(listener).toHaveBeenCalledTimes(1);
+    });
+
     test('a save still queued when the pending writes are discarded puts nothing down and reports nothing', async () => {
         const { compareAndWrite } = nativeWindow('{"a":1}');
         const { storage, initializeAsync, discardPendingWrites, isSaveDropped } = loadStorage();
