@@ -52,7 +52,17 @@ import type * as electronModule from 'electron';
  */
 export type SerializableSchemaEntry = Pick<
     SettingsSchemaEntry,
-    'type' | 'default' | 'perChallenge' | 'group' | 'label' | 'description' | 'helpKey' | 'min' | 'max' | 'unit'
+    | 'type'
+    | 'default'
+    | 'perChallenge'
+    | 'group'
+    | 'label'
+    | 'description'
+    | 'helpKey'
+    | 'min'
+    | 'max'
+    | 'unit'
+    | 'minutes'
 > & { challengeOnly: boolean };
 
 /**
@@ -354,6 +364,7 @@ const serializeSchemaEntries = () => {
             min: schema[key].min,
             max: schema[key].max,
             unit: schema[key].unit,
+            minutes: schema[key].minutes,
         };
         defaults[key] = settings.getGlobalDefault(key);
     });

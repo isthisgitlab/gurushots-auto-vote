@@ -54,4 +54,11 @@ export interface SettingsSchemaEntry {
     max?: number;
     /** Translation key for the suffix shown beside a number input. */
     unit?: string;
+    /**
+     * Display-only marker for a number setting the GUI edits as an hours +
+     * minutes pair (the stored value stays fractional hours). Like `unit`,
+     * never affects validation — the `validation` zod schema stays the only
+     * range authority. Forwarded by the schema IPC projection alongside `unit`.
+     */
+    minutes?: boolean;
 }

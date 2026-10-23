@@ -141,6 +141,7 @@ describe('SettingsModal — tabs', () => {
             'app.tierCore',
             'app.tierExtra',
             'app.titleTagRules',
+            'app.challengeProfiles',
             'app.scenarios',
         ]);
         expect(activeTab().textContent).toBe('app.applicationSettings');
@@ -243,7 +244,7 @@ describe('SettingsModal — tabs', () => {
 
         expect(filterInput().value).toBe('');
         expect(activeTab().textContent).toBe('app.applicationSettings');
-        expect(tabNames()).toHaveLength(5);
+        expect(tabNames()).toHaveLength(6);
     });
 
     test('the bar keeps its sticky treatment and the box its height and scroll padding', async () => {
@@ -274,7 +275,7 @@ describe('SettingsModal — tabs', () => {
         // From xl: one scrolling line beside the filter again.
         expect(row.classList.contains('xl:flex-nowrap')).toBe(true);
         expect(row.classList.contains('xl:overflow-x-auto')).toBe(true);
-        expect(tabs()).toHaveLength(5);
+        expect(tabs()).toHaveLength(6);
     });
 });
 
@@ -333,6 +334,8 @@ describe('SettingsModal — filter', () => {
         expect(panelOf('app.scenarios').hasAttribute('hidden')).toBe(false);
         typeFilter('titleTag');
         expect(tabNames()).toEqual(['app.titleTagRules']);
+        typeFilter('challengeProfiles');
+        expect(tabNames()).toEqual(['app.challengeProfiles']);
     });
 
     test('the about filter shows the Application tab with only the About and data block', async () => {
@@ -454,7 +457,7 @@ describe('SettingsModal — filter', () => {
     test('a blank filter is no filter', async () => {
         await openSettings();
         typeFilter('   ');
-        expect(tabNames()).toHaveLength(5);
+        expect(tabNames()).toHaveLength(6);
         expect(isHidden(cellOf('setting-exposure'))).toBe(false);
     });
 
@@ -465,9 +468,9 @@ describe('SettingsModal — filter', () => {
         expect(activeTab().textContent).toBe('app.tierCore');
         typeFilter('');
 
-        expect(tabNames()).toHaveLength(5);
+        expect(tabNames()).toHaveLength(6);
         expect(activeTab().textContent).toBe('app.tierCore');
-        expect(document.querySelectorAll('[role="tabpanel"][hidden]')).toHaveLength(4);
+        expect(document.querySelectorAll('[role="tabpanel"][hidden]')).toHaveLength(5);
     });
 
     test('with no match anywhere it says so, and Clear restores a focusable tab', async () => {
@@ -480,7 +483,7 @@ describe('SettingsModal — filter', () => {
         fireEvent.click(screen.getByRole('button', { name: 'app.settingsFilterClear' }));
         expect(screen.queryByText('app.settingsNoMatch')).toBeNull();
         expect(filterInput().value).toBe('');
-        expect(tabs()).toHaveLength(5);
+        expect(tabs()).toHaveLength(6);
         expect(activeTab().getAttribute('tabindex')).toBe('0');
     });
 

@@ -923,6 +923,7 @@ export const app = {
     settingsSaveWithout: 'Save without them',
     settingsDropTimezone: 'A custom timezone you typed but did not add',
     settingsDropScenario: 'A scenario you are editing and have not saved',
+    settingsDropProfile: 'A profile you are editing and have not saved',
     settingsFilterPlaceholder: 'Filter settings…',
     settingsFilterClear: 'Clear',
     settingsJumpLabel: 'Settings sections',
@@ -1036,7 +1037,7 @@ export const app = {
     titleRuleAutoJoin: 'Auto-join',
     titleRuleAutoSubmit: 'Auto-submit',
     titleRulePercentElapsed: 'Join after',
-    titleRuleJoinWindow: 'Or hours before end',
+    titleRuleJoinWindow: 'Or time before end',
     titleRuleJoinWindowPlaceholder: 'inherit',
     titleRuleOverridesLabel: 'Behaviour',
     titleRuleBroadWarning:
@@ -1485,8 +1486,21 @@ export const app = {
     profileLimitReached: 'Profile limit reached ({0}) — delete one first.',
     profileAppliedHint: 'Applied — review the values below, then Save.',
     profileApplyHint:
-        'Applying a profile replaces the current form values (including unsaved edits); settings the profile does not include revert to "Using global".',
+        'Applying a profile replaces the current form values (including unsaved edits); settings the profile does not include revert to "Using global". To change a saved profile without touching this challenge, use Settings → Profiles.',
     profileOverwriteHint: 'Saving with an existing name overwrites that profile.',
+    profilesTabDesc:
+        'Edit a saved profile here without opening a challenge. Saving changes every challenge rule that uses this profile. Challenges you applied the profile to earlier keep the values they got then.',
+    profilesEmptyHint: "No profiles yet. Create one from a challenge's settings with “Save current as profile”.",
+    profilesLoadError: "Profiles couldn't be loaded. Close and reopen the settings to try again.",
+    profileSwitchTitle: 'Discard profile changes?',
+    profileSwitchText:
+        "You changed this profile and haven't saved it. Switching to another profile throws those changes away. To keep them, choose Keep editing and press Save profile.",
+    saveProfile: 'Save profile',
+    profileSaved: 'Profile saved.',
+    profileEditSaveError:
+        "Couldn't save the profile. A value may be out of range, or a challenge rule that uses this profile clashes with a challenge's own settings. Check the values, or the challenges those rules match, and try again.",
+    setInProfile: 'Set in profile',
+    discardProfileChanges: 'Discard changes',
     intentBuiltIn: 'Built-in preset',
     intentModified: 'Edited built-in',
     intentJustParticipate: 'Just Participate',

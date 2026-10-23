@@ -471,7 +471,9 @@ describe('SettingsModal — title-tag-rules save', () => {
     });
 
     test('loads saved profiles into each title rule profile selector', async () => {
-        jest.mocked(window.api.getChallengeProfiles).mockResolvedValueOnce({ 'Portrait Tactic': { exposure: 80 } });
+        // Not a Once: the Profiles tab's own loader reads the same channel on
+        // open, and both consumers get the same stored map.
+        jest.mocked(window.api.getChallengeProfiles).mockResolvedValue({ 'Portrait Tactic': { exposure: 80 } });
         jest.mocked(window.api.getTitleRules).mockResolvedValueOnce([
             {
                 title: 'Portraits',
@@ -546,6 +548,7 @@ describe('SettingsModal tier tabs', () => {
             'app.tierCore',
             'app.tierOverrides',
             'app.titleTagRules',
+            'app.challengeProfiles',
             'app.scenarios',
         ]);
         // The outline: the modal titles itself h3, each panel opens with an sr-only h4 naming
@@ -1009,6 +1012,9 @@ describe('SettingsModal — rule loading', () => {
         mockSchemaState.defaults = {};
         mockSchemaState.groups = undefined;
         mockSchemaState.tiers = undefined;
+        // The malformed-payload test below parks a null here for both profile
+        // consumers; hand the later describes an empty store back.
+        jest.mocked(window.api.getChallengeProfiles).mockResolvedValue({});
     });
 
     test('the rule editor waits behind a loader until the rules have loaded', async () => {
@@ -1028,7 +1034,9 @@ describe('SettingsModal — rule loading', () => {
 
     test('malformed payloads fall back to empty lists', async () => {
         jest.mocked(window.api.getTitleRules).mockResolvedValueOnce(invalid({ not: 'an array' }));
-        jest.mocked(window.api.getChallengeProfiles).mockResolvedValueOnce(null);
+        // Not a Once: the Profiles tab's own loader fires first (a child's
+        // layout effect runs before the modal's own hooks) and would eat it.
+        jest.mocked(window.api.getChallengeProfiles).mockResolvedValue(invalid(null));
 
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
 

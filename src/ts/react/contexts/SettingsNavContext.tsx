@@ -10,18 +10,20 @@ import type { SettingsBand, SettingsTab, SettingsTabId } from '@/utils/groupSett
 export const SETTINGS_SECTION_TITLES = {
     application: 'app.applicationSettings',
     titleRules: 'app.titleTagRules',
+    profiles: 'app.challengeProfiles',
     scenarios: 'app.scenarios',
 } as const;
 
 /**
  * The global settings modal's sections in tab order: Application, one tab per non-app tier
- * band, then the fixed title-rules and scenarios tabs. Built from the modal's bands,
+ * band, then the fixed title-rules, profiles and scenarios tabs. Built from the modal's bands,
  * because which tier tabs exist depends on the schema the main process sent.
  */
 export const settingsSections = (bands: readonly SettingsBand[]): SettingsTab[] => [
     { id: 'application', label: SETTINGS_SECTION_TITLES.application },
     ...bandTabs(bands),
     { id: 'titleRules', label: SETTINGS_SECTION_TITLES.titleRules },
+    { id: 'profiles', label: SETTINGS_SECTION_TITLES.profiles },
     { id: 'scenarios', label: SETTINGS_SECTION_TITLES.scenarios },
 ];
 

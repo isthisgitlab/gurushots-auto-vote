@@ -165,6 +165,24 @@ const useRunSave = (deps: UseSettingsSaveDeps & ReturnType<typeof useSaveFeedbac
     return runSave;
 };
 
+/**
+ * The two tab drafts the modal's Save does not write, reported by their
+ * sections: the scenario builder's and the Profiles tab's. Both reset when the
+ * modal opens — one question per opening, no draft carried over from the last
+ * one.
+ */
+const useTabDraftFlags = (isOpen: boolean) => {
+    const [scenarioDirty, setScenarioDirty] = useState(false);
+    const [profileDirty, setProfileDirty] = useState(false);
+    useEffect(() => {
+        if (isOpen) {
+            setScenarioDirty(false);
+            setProfileDirty(false);
+        }
+    }, [isOpen]);
+    return { scenarioDirty, setScenarioDirty, profileDirty, setProfileDirty };
+};
+
 export const useSettingsSave = (deps: UseSettingsSaveDeps) => {
     const {
         isOpen,
@@ -184,17 +202,15 @@ export const useSettingsSave = (deps: UseSettingsSaveDeps) => {
     } = deps;
     const { saveError, setSaveError, rejectedKeys, setRejectedKeys, setFocusIds } = useSaveFeedback();
     const resetNav = nav.reset;
-    // The scenario builder's unsaved draft, reported by the section: the modal's Save does not save it.
-    const [scenarioDirty, setScenarioDirty] = useState(false);
+    const { scenarioDirty, setScenarioDirty, profileDirty, setProfileDirty } = useTabDraftFlags(isOpen);
     // The question on screen: dismissing with unsaved edits, or saving with work Save would drop.
     const [asking, setAsking] = useState<'discard' | 'drop' | null>(null);
 
-    // One question per opening, and no draft carried over from the last one: the modal stays mounted while closed.
+    // One question per opening: the modal stays mounted while closed.
     useEffect(() => {
         if (isOpen) {
             setSaveError(false);
             setRejectedKeys([]);
-            setScenarioDirty(false);
             resetNav();
         } else {
             setAsking(null);
@@ -214,7 +230,8 @@ export const useSettingsSave = (deps: UseSettingsSaveDeps) => {
     // Read when the user acts, not at render: a Save that failed partway moved the persisted baselines after the
     // last render. Nothing is guarded while the form is still loading or has nothing to differ from.
     const hasUnsavedEdits = () =>
-        !(schemaLoading && !schema) && (isDirty() || titleRules.isDirty() || timezoneDirty || scenarioDirty);
+        !(schemaLoading && !schema) &&
+        (isDirty() || titleRules.isDirty() || timezoneDirty || scenarioDirty || profileDirty);
 
     // Esc, the backdrop, the close button and Cancel: edits that are not saved are not thrown away unasked.
     const dismiss = () => (hasUnsavedEdits() ? setAsking('discard') : handleCancel());
@@ -223,6 +240,7 @@ export const useSettingsSave = (deps: UseSettingsSaveDeps) => {
     const droppedWork = [
         timezoneDirty && 'app.settingsDropTimezone',
         scenarioDirty && 'app.settingsDropScenario',
+        profileDirty && 'app.settingsDropProfile',
     ].filter((key): key is string => typeof key === 'string');
 
     // The tabs holding a refused key: like the inputs' invalid state, the marks come from
@@ -242,6 +260,8 @@ export const useSettingsSave = (deps: UseSettingsSaveDeps) => {
         refusedTabs,
         scenarioDirty,
         setScenarioDirty,
+        profileDirty,
+        setProfileDirty,
         asking,
         setAsking,
         droppedWork,

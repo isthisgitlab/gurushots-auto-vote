@@ -37,6 +37,13 @@ const MAX_VOTING_PAUSE_MINUTES = 720;
 // library listing accepts (the same free-text field the server matches tags with).
 const MAX_TAG_LENGTH = 50;
 
+// Longest an auto-join timing window may run, in hours before a candidate's
+// close_time (30 days — longer than any real challenge, so at or above it the
+// window behaves as "always in window" while still bounding a corrupted
+// settings file). schema/autoJoin.ts bounds its zod validator with it and the
+// GUI's hours + minutes editor clamps to it.
+const MAX_JOIN_WINDOW_HOURS = 720;
+
 // Most photos a Chosen Photos list may hold. Deliberately small: the list is a
 // handful of hand-picked favourites, not a library mirror, and every id in it
 // costs a membership check on each fill and join of the challenges it applies
@@ -102,6 +109,7 @@ export {
     MAX_SCHEDULED_FILL_ENTRIES,
     MAX_VOTING_PAUSE_MINUTES,
     MAX_TAG_LENGTH,
+    MAX_JOIN_WINDOW_HOURS,
     MAX_CHOSEN_PHOTOS,
     MAX_ANNOTATED_IDS,
     MAX_SUGGEST_EXCLUDE,

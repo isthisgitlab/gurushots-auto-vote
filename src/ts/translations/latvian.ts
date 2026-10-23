@@ -934,6 +934,7 @@ export const app = {
     settingsSaveWithout: 'Saglabāt bez tiem',
     settingsDropTimezone: 'Pielāgota laika josla, ko ievadīji, bet nepievienoji',
     settingsDropScenario: 'Scenārijs, ko rediģē un neesi saglabājis',
+    settingsDropProfile: 'Profils, ko rediģē un neesi saglabājis',
     settingsFilterPlaceholder: 'Filtrēt uzstādījumus…',
     settingsFilterClear: 'Notīrīt',
     settingsJumpLabel: 'Iestatījumu sadaļas',
@@ -1047,7 +1048,7 @@ export const app = {
     titleRuleAutoJoin: 'Automātiski pievienoties',
     titleRuleAutoSubmit: 'Automātiskā iesniegšana',
     titleRulePercentElapsed: 'Pievienoties pēc',
-    titleRuleJoinWindow: 'Vai stundas pirms beigām',
+    titleRuleJoinWindow: 'Vai laiks pirms beigām',
     titleRuleJoinWindowPlaceholder: 'noklusējums',
     titleRuleOverridesLabel: 'Uzvedība',
     titleRuleBroadWarning:
@@ -1512,8 +1513,22 @@ export const app = {
     profileLimitReached: 'Sasniegts profilu limits ({0}) — vispirms izdzēs kādu.',
     profileAppliedHint: 'Profils piemērots — pārskati vērtības zemāk un nospied „Saglabāt”.',
     profileApplyHint:
-        'Profila piemērošana aizstāj pašreizējās formas vērtības (arī nesaglabātās izmaiņas); uzstādījumi, kas profilā nav iekļauti, atgriežas pie „Izmanto globālo”.',
+        'Profila piemērošana aizstāj pašreizējās formas vērtības (arī nesaglabātās izmaiņas); uzstādījumi, kas profilā nav iekļauti, atgriežas pie „Izmanto globālo”. Lai mainītu saglabātu profilu, neaiztiekot šo izaicinājumu, izmanto Uzstādījumus → Profilus.',
     profileOverwriteHint: 'Ja saglabā ar esošu nosaukumu, esošais profils tiek pārrakstīts.',
+    profilesTabDesc:
+        'Šeit vari rediģēt saglabātu profilu, neatverot izaicinājumu. Saglabājot, tiek mainīts katrs izaicinājuma noteikums, kas izmanto šo profilu. Izaicinājumi, kuriem šo profilu piemēroji agrāk, patur vērtības, ko saņēma toreiz.',
+    profilesEmptyHint:
+        'Vēl nav profilu. Izveido to no izaicinājuma uzstādījumiem ar „Saglabāt pašreizējos kā profilu”.',
+    profilesLoadError: 'Profilus neizdevās ielādēt. Aizver uzstādījumus un atver tos vēlreiz.',
+    profileSwitchTitle: 'Atmest profila izmaiņas?',
+    profileSwitchText:
+        'Šajā profilā ir nesaglabātas izmaiņas. Pārejot uz citu profilu, tās tiks atmestas. Lai tās paturētu, izvēlies „Turpināt rediģēt” un nospied „Saglabāt profilu”.',
+    saveProfile: 'Saglabāt profilu',
+    profileSaved: 'Profils saglabāts.',
+    profileEditSaveError:
+        'Neizdevās saglabāt profilu. Iespējams, kāda vērtība ir ārpus diapazona, vai arī kāds izaicinājuma noteikums, kas izmanto šo profilu, konfliktē ar izaicinājuma paša uzstādījumiem. Pārbaudi vērtības vai izaicinājumus, kuriem šie noteikumi atbilst, un mēģini vēlreiz.',
+    setInProfile: 'Iestatīts profilā',
+    discardProfileChanges: 'Atmest izmaiņas',
     intentBuiltIn: 'Iebūvēta sagatave',
     intentModified: 'Rediģēta sagatave',
     intentJustParticipate: 'Vienkārši piedalīties',

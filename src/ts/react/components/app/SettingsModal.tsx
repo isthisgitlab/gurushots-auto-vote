@@ -40,6 +40,7 @@ import { SettingsNavBar, SettingsNoMatch, SETTINGS_NAV_SCROLL_PADDING } from './
 import { SettingsSectionPanel } from './SettingsSectionPanel';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { ScenariosSection } from './ScenariosSection';
+import { ProfilesSection } from './ProfilesSection';
 import { AboutDataSection, aboutDataTexts } from './AboutDataSection';
 
 import type { ImportReport } from '@/api/useImportReport';
@@ -107,7 +108,7 @@ function SchemaSettingsGroup({
                             labelShown || entryMatchesFilter(t, config, query, namesOnly) ? '' : 'hidden'
                         }`}
                     >
-                        <SettingLabel inputId={`setting-${key}`} type={config.type}>
+                        <SettingLabel inputId={`setting-${key}`} type={config.type} config={config}>
                             <span className="font-medium">{t(config.label)}</span>
                             {config.perChallenge && (
                                 <span className="badge badge-ghost badge-sm ml-2">{t('app.globalDefault')}</span>
@@ -249,6 +250,7 @@ function useSettingsModalFilter({
             ];
         }
         if (id === 'titleRules') return [{ names: [t(SETTINGS_SECTION_TITLES.titleRules)], descriptions: [] }];
+        if (id === 'profiles') return [{ names: [t(SETTINGS_SECTION_TITLES.profiles)], descriptions: [] }];
         if (id === 'scenarios') return [{ names: [t(SETTINGS_SECTION_TITLES.scenarios)], descriptions: [] }];
         const index = defaultsTabs.findIndex((tab) => tab.id === id);
         return index !== -1
@@ -415,6 +417,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                             );
                         })}
                         <TitleRulesSection titleRules={titleRules} />
+                        <ProfilesSection isOpen={isOpen} onDirtyChange={save.setProfileDirty} />
                         <ScenariosSection isOpen={isOpen} onDirtyChange={save.setScenarioDirty} />
                         <ModalActionRow
                             className="mt-auto"

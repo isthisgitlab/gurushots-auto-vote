@@ -785,6 +785,11 @@ repeated six times is one that gets forgotten at one of them.
   `settings-changed` to every open window (Electron) or the in-process bus (Capacitor); `useIpcQuery`
   subscribers refetch in the background without toggling `loading`, and the translation provider reads
   `language` straight from the payload.
+- **The settings modal's fixed tabs own their drafts**: Challenge Rules, Profiles (edit a saved
+  profile; its "Save profile" writes through `saveChallengeProfile`, which re-validates and updates
+  the rules assigned to it — the modal's Save never touches it) and Scenarios (immediate writes).
+  `useSettingsSave` counts each tab's unsaved draft in its dismiss guard and its "Save without them"
+  list (`settingsDrop*` keys).
 - **No router.** "Pages" are separate mount entry points chosen by auth state: `mountApp()`
   (`react/pages/App.tsx`) / `mountLogin()` (`react/pages/Login.tsx`). Electron swaps native windows; Capacitor swaps React trees into `#root`.
 - **No toast library.** Error surfaces are: inline DaisyUI `alert` banners with a translated message; and

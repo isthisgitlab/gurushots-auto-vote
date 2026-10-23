@@ -296,24 +296,34 @@ describe('TitleTagRulesEditor', () => {
             });
         });
 
-        test('the join window emits a number', () => {
+        test('the join window emits the hours typed', () => {
             const onChange = jest.fn();
             render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
-            fireEvent.change(screen.getByLabelText('app.titleRuleJoinWindow'), { target: { value: '24' } });
+            fireEvent.change(screen.getByLabelText('app.titleRuleJoinWindow app.hours'), { target: { value: '24' } });
             expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoJoinWithinHoursOfEnd: 24 })]);
+        });
+
+        test('the join window takes minutes and stores fractional hours', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            fireEvent.change(screen.getByLabelText('app.titleRuleJoinWindow app.minutes'), { target: { value: '30' } });
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ autoJoinWithinHoursOfEnd: 0.5 })]);
         });
 
         test('clearing the join window emits inherit, NOT 0', () => {
             // 0 means "join on sight" — an empty field must not silently become it.
             const onChange = jest.fn();
             render(<TitleTagRulesEditor value={rowWith({ autoJoinWithinHoursOfEnd: 24 })} onChange={onChange} />);
-            fireEvent.change(screen.getByLabelText('app.titleRuleJoinWindow'), { target: { value: '' } });
-            expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoJoinWithinHoursOfEnd: '' })]);
+            fireEvent.change(screen.getByLabelText('app.titleRuleJoinWindow app.hours'), { target: { value: '' } });
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ autoJoinWithinHoursOfEnd: 0 })]);
+            fireEvent.change(screen.getByLabelText('app.titleRuleJoinWindow app.minutes'), { target: { value: '' } });
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ autoJoinWithinHoursOfEnd: '' })]);
         });
 
-        test('an explicit 0 window renders as 0, not as an empty (inherit) field', () => {
+        test('an explicit 0 window renders as 0h 0m, not as an empty (inherit) pair', () => {
             render(<TitleTagRulesEditor value={rowWith({ autoJoinWithinHoursOfEnd: 0 })} onChange={jest.fn()} />);
-            expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleJoinWindow').value).toBe('0');
+            expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleJoinWindow app.hours').value).toBe('0');
+            expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleJoinWindow app.minutes').value).toBe('0');
         });
     });
 

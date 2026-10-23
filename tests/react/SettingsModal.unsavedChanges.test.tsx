@@ -284,6 +284,80 @@ describe('SettingsModal — work Save would drop', () => {
     });
 });
 
+describe('SettingsModal — the Profiles tab draft', () => {
+    // A valid zone is added when the input loses focus (as Save's click does), so only text that is
+    // not a zone is still un-added by the time Save asks — the same trick the timezone test uses.
+    const typeTimezone = () => {
+        selectTab('app.applicationSettings');
+        fireEvent.click(screen.getByRole('button', { name: 'app.addCustomTimezone' }));
+        fireEvent.change(screen.getByPlaceholderText('app.timezonePlaceholder'), { target: { value: 'Not/A/Zone' } });
+    };
+    const pickProfile = async () => {
+        selectTab('app.challengeProfiles');
+        const select = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'app.challengeProfiles' });
+        act(() => {
+            select.value = 'tactic';
+            select.dispatchEvent(new window.Event('change', { bubbles: true }));
+        });
+        return select;
+    };
+    // The Profiles tab renders the same schema key as the tier tab, and label
+    // queries ignore neither — reach the tab's cell by its element id.
+    const profileExposureInput = () => document.getElementById('challenge-setting-exposure') as HTMLInputElement;
+
+    test('a profile edit asks on dismiss, and the modal Save lists it as work it would drop', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue(invalid({ tactic: { exposure: 80 } }));
+        await openSettings();
+        const select = await pickProfile();
+        fireEvent.change(profileExposureInput(), { target: { value: '90' } });
+
+        click('app.cancel');
+        expect(asked()).toBe(true);
+        click('app.settingsKeepEditing');
+
+        click('app.save');
+        expect(screen.getByText('app.settingsDropTitle')).toBeTruthy();
+        expect(screen.getByText('app.settingsDropProfile')).toBeTruthy();
+        click('app.settingsKeepEditing');
+        expect(mockApi.saveChallengeProfile).not.toHaveBeenCalled();
+        expect(select.value).toBe('tactic');
+    });
+
+    test('Save without it saves the rest and closes, leaving the draft to the tab', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue(invalid({ tactic: { exposure: 80 } }));
+        await openSettings();
+        await pickProfile();
+        fireEvent.change(profileExposureInput(), { target: { value: '90' } });
+        typeTimezone();
+
+        click('app.save');
+        expect(screen.getByText('app.settingsDropTimezone')).toBeTruthy();
+        expect(screen.getByText('app.settingsDropProfile')).toBeTruthy();
+
+        click('app.settingsSaveWithout');
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        expect(mockApi.setGlobalDefault).not.toHaveBeenCalled();
+        expect(mockApi.saveChallengeProfile).not.toHaveBeenCalled();
+    });
+
+    test('the tab Save profile lands the draft: closing then does not ask', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue(invalid({ tactic: { exposure: 80 } }));
+        await openSettings();
+        await pickProfile();
+        fireEvent.change(profileExposureInput(), { target: { value: '90' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'app.saveProfile' }));
+        await screen.findByText('app.profileSaved');
+        // The tab's not-dirty report is a passive effect, which Preact defers by
+        // up to its 35 ms frame fallback; wait out more than that.
+        await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+        click('app.cancel');
+        expect(asked()).toBe(false);
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe('ChallengeSettingsModal — dismissing', () => {
     const openChallenge = async () => {
         const view = render(<ChallengeSettingsModal isOpen onClose={onClose} challengeId="1" challengeTitle="One" />);

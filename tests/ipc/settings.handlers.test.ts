@@ -331,6 +331,7 @@ describe('get-settings-schema', () => {
                 min: 0,
                 max: 86400,
                 unit: 's',
+                minutes: true,
                 validate: () => true,
             },
         });
@@ -356,6 +357,7 @@ describe('get-settings-schema', () => {
                     min: 0,
                     max: 86400,
                     unit: 's',
+                    minutes: true,
                 },
             },
             defaults: { boostTime: 1800 },
