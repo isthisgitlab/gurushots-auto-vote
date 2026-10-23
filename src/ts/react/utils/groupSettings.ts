@@ -194,7 +194,7 @@ export const groupMatchesFilter = (
 
 /**
  * Whether a group's heading alone matches the settings filter `query`: the whole-group case, where
- * every entry shows whatever the entries themselves match.
+ * every entry shows, whatever the entries themselves match.
  */
 export const groupLabelMatchesFilter = (t: (key: string) => string, group: SettingsSection, query: string): boolean =>
     matchesSettingFilter([t(group.label)], query);

@@ -246,6 +246,7 @@ function UiNumberGroupCell({
     inputId,
     labelKey,
     descKey,
+    fieldLabelKeys,
     fields,
     showAll,
     suffix,
@@ -257,6 +258,7 @@ function UiNumberGroupCell({
     inputId: string;
     labelKey: string;
     descKey: string;
+    fieldLabelKeys?: readonly string[];
     fields: UiNumberField[];
     suffix?: ComponentChildren;
 }) {
@@ -267,7 +269,7 @@ function UiNumberGroupCell({
             group
             labelKey={labelKey}
             descKey={descKey}
-            fieldLabelKeys={fields.map(({ labelKey: fieldLabelKey }) => fieldLabelKey)}
+            fieldLabelKeys={fieldLabelKeys}
             showAll={showAll}
         >
             <div className="flex items-center gap-2 flex-wrap" role="group" aria-labelledby={`${inputId}-label`}>

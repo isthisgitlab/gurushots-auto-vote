@@ -611,11 +611,7 @@ describe('the block in the Application panel', () => {
     const ENGLISH_BLOCK_HEADING = englishAbout.title;
     const withEnglishWords = (run: () => void) => {
         mockTranslator.t.mockImplementation(translateAbout);
-        try {
-            run();
-        } finally {
-            mockTranslator.t.mockImplementation(defaultTranslate);
-        }
+        run();
     };
 
     afterEach(() => {
@@ -643,8 +639,12 @@ describe('the block in the Application panel', () => {
 
     test('with names only, a word only in a description hides the block', () => {
         withEnglishWords(() => {
-            renderSection('cannot be undone', true);
+            const namesOnly = renderSection('cannot be undone', true);
             expect(aboutBlock(ENGLISH_BLOCK_HEADING).classList.contains('hidden')).toBe(true);
+            namesOnly.unmount();
+
+            renderSection('cannot be undone', false);
+            expect(aboutBlock(ENGLISH_BLOCK_HEADING).classList.contains('hidden')).toBe(false);
         });
     });
 
