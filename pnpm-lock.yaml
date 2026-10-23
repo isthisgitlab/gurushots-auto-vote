@@ -190,7 +190,7 @@ importers:
         version: 4.3.1(@types/node@26.6.5)
       '@preact/signals':
         specifier: ^2.11.3
-        version: 2.11.3(preact@11.0.1)
+        version: 2.11.3(preact@11.0.2)
       axios:
         specifier: ^1.20.0
         version: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
@@ -198,8 +198,8 @@ importers:
         specifier: ^6.8.9
         version: 6.8.9(supports-color@10.2.2)
       preact:
-        specifier: ^11.0.1
-        version: 11.0.1
+        specifier: ^11.0.2
+        version: 11.0.2
       tar:
         specifier: ^7.5.22
         version: 7.5.22
@@ -233,7 +233,7 @@ importers:
         version: 10.4.2
       '@testing-library/preact':
         specifier: ^3.2.6
-        version: 3.2.6(preact@11.0.1)
+        version: 3.2.6(preact@11.0.2)
       '@types/jest':
         specifier: ^30.0.0
         version: 30.0.0
@@ -3516,8 +3516,8 @@ packages:
   natural-compare@1.4.0:
     resolution: {integrity: sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==}
 
-  node-abi@4.39.0:
-    resolution: {integrity: sha512-pULjI3qsVrn6K5DZz5tCpX2dL8IKM9/xBMRz29hBko8UFXZ/C3QxRMl/Z7wKaQwaxPmYU+7UPKbDf7EO+ASvfA==}
+  node-abi@4.40.0:
+    resolution: {integrity: sha512-GuvqvtrOk+AC27RidBxBsMzVNkwNl7PjHgc4NXbmdvSVLgIUjpaqcG1FjNRYnt2Yn9Ytq+Ln37XsBaglUcte/w==}
     engines: {node: '>=22.12.0'}
 
   node-addon-api@7.1.1:
@@ -3720,8 +3720,8 @@ packages:
     engines: {node: '>=14.0.0'}
     hasBin: true
 
-  preact@11.0.1:
-    resolution: {integrity: sha512-TNNwEq++jYNHy747LziCjPRVgEwnLSOIOAw/oYcjI3Tdnubx2EXtt76I0an8PATvUWtx/DX1kFIg1eFN+O/fkw==}
+  preact@11.0.2:
+    resolution: {integrity: sha512-ofG+Lqznbt13JKDjdWPLTo5ONBqcNgidqnLRzJBG6PZjzGXOLRd5y9r448+HUofTyDbgKWVrPhHP0IgcxEZslQ==}
     peerDependencies:
       preact-render-to-string: '>=6.7.0'
     peerDependenciesMeta:
@@ -4604,7 +4604,7 @@ snapshots:
     dependencies:
       '@malept/cross-spawn-promise': 2.0.0
       debug: 4.4.3(supports-color@10.2.2)
-      node-abi: 4.39.0
+      node-abi: 4.40.0
       node-api-version: 0.2.1
       node-gyp: 12.4.0
       read-binary-file-arch: 1.0.6(supports-color@10.2.2)
@@ -5493,10 +5493,10 @@ snapshots:
 
   '@preact/signals-core@1.14.4': {}
 
-  '@preact/signals@2.11.3(preact@11.0.1)':
+  '@preact/signals@2.11.3(preact@11.0.2)':
     dependencies:
       '@preact/signals-core': 1.14.4
-      preact: 11.0.1
+      preact: 11.0.2
 
   '@protobufjs/aspromise@1.1.2': {}
 
@@ -5688,10 +5688,10 @@ snapshots:
       picocolors: 1.1.1
       pretty-format: 27.5.1
 
-  '@testing-library/preact@3.2.6(preact@11.0.1)':
+  '@testing-library/preact@3.2.6(preact@11.0.2)':
     dependencies:
       '@testing-library/dom': 10.4.2
-      preact: 11.0.1
+      preact: 11.0.2
 
   '@tybys/wasm-util@0.10.4':
     dependencies:
@@ -7535,7 +7535,7 @@ snapshots:
 
   natural-compare@1.4.0: {}
 
-  node-abi@4.39.0:
+  node-abi@4.40.0:
     dependencies:
       semver: 7.7.4
 
@@ -7786,7 +7786,7 @@ snapshots:
     dependencies:
       commander: 9.5.0
 
-  preact@11.0.1: {}
+  preact@11.0.2: {}
 
   prettier@4.0.0-alpha.13: {}
 

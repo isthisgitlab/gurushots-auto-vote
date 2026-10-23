@@ -925,7 +925,7 @@ export const app = {
     photoChooserDiscard: 'Atmest izmaiņas',
     settingsDiscardTitle: 'Atmest izmaiņas?',
     settingsDiscardText:
-        'Šeit ir izmaiņas, kas nav saglabātas. Ja aizvērsi tagad, tās pazudīs. Izvēlies „Turpināt rediģēt”, lai atgrieztos un tās saglabātu.',
+        'Šajos uzstādījumos ir izmaiņas, kas nav saglabātas. Ja aizvērsi tagad, tās pazudīs. Izvēlies „Turpināt rediģēt”, lai atgrieztos un tās saglabātu.',
     settingsDiscard: 'Atmest izmaiņas',
     settingsKeepEditing: 'Turpināt rediģēt',
     settingsDropTitle: 'Saglabāt bez daļas darba?',

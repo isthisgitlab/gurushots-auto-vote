@@ -914,7 +914,7 @@ export const app = {
     photoChooserDiscard: 'Discard changes',
     settingsDiscardTitle: 'Discard your changes?',
     settingsDiscardText:
-        "You have changes here that you haven't saved. Closing now throws them away. Choose Keep editing to go back and save them.",
+        "You have changes in these settings that you haven't saved. Closing now throws them away. Choose Keep editing to go back and save them.",
     settingsDiscard: 'Discard changes',
     settingsKeepEditing: 'Keep editing',
     settingsDropTitle: 'Save without part of your work?',
