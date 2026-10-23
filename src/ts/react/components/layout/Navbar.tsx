@@ -1,9 +1,10 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import { openDonatePage } from '@/api/donate';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 
 /**
- * Main app navbar with title, mock status, logs (Android), settings, and logout
+ * Main app navbar with title, mock status, donate, logs (Android), settings, and logout
  */
 export function Navbar({
     isMock,
@@ -22,13 +23,21 @@ export function Navbar({
 
     return (
         <div className="navbar bg-base-100 shadow-md mb-4">
-            <div className="navbar-start">
+            <div className="navbar-start w-auto flex-1 min-w-0 flex-wrap gap-x-2">
                 <h1 className="text-xl font-bold">{t('app.title')}</h1>
-                {isMock && (
-                    <span className="badge badge-warning badge-sm ml-2 whitespace-nowrap">{t('app.mockMode')}</span>
-                )}
+                {isMock && <span className="badge badge-warning badge-sm whitespace-nowrap">{t('app.mockMode')}</span>}
             </div>
-            <div className="navbar-end gap-2">
+            <div className="navbar-end w-auto shrink-0 gap-2">
+                <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={openDonatePage}
+                    title={t('about.donateDesc')}
+                    aria-label={t('app.donate')}
+                >
+                    <StrokeIcon className="w-4 h-4" d={ICON_PATHS.heart} />
+                    <span className="hidden sm:inline">{t('app.donate')}</span>
+                </button>
                 {showLogs && (
                     <button
                         className="btn btn-outline btn-sm"

@@ -216,6 +216,7 @@ export const app = {
     deadlineActionBoost: 'Boost',
     deadlineActionTurbo: 'Turbo',
     deadlineActionEmergencySubmit: 'Emergency submit',
+    donate: 'Donate',
     conflictFlag:
         "{kind} can't apply: your only entry already has {other} (they can't share an entry). Add another entry to use both.",
     conflictPinReleases:

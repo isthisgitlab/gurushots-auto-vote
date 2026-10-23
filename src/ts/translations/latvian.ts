@@ -218,6 +218,7 @@ export const app = {
     deadlineActionBoost: 'Boost',
     deadlineActionTurbo: 'Turbo',
     deadlineActionEmergencySubmit: 'Ārkārtas iesniegšana',
+    donate: 'Ziedot',
     conflictFlag:
         '{kind} nevar izmantot: vienīgajam foto jau ir {other} (abi nevar būt vienam foto). Pievieno vēl vienu foto, lai izmantotu abus.',
     conflictPinReleases:

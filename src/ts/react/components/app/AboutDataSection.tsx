@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsNav } from '@/contexts/SettingsNavContext';
 import { ToneIcon } from '@/components/ui/ToneNote';
-import * as ipc from '@/api/ipc';
+import { openDonatePage } from '@/api/donate';
 import { useImportRefText } from '@/api/useImportReport';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { matchesFilterTexts } from '@/utils/matchesSettingFilter';
@@ -52,8 +52,6 @@ function ImportReportBlock({ report }: { report: ImportReport | null }) {
     );
 }
 
-const DONATE_URL = 'https://donatr.ee/isthisgitlab/';
-
 const ABOUT_DATA_NAME_KEYS = [
     'about.title',
     'about.donateButton',
@@ -91,10 +89,6 @@ export function AboutDataSection({ report, showAll }: { report: ImportReport | n
     const { query, namesOnly } = useSettingsNav();
     const [licensesOpen, setLicensesOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
-    // A refused or failed open stays silent, like the challenge URL row: the URL is a constant https page.
-    const openDonatePage = () => {
-        void ipc.callOrNull(() => ipc.openExternalUrl(DONATE_URL));
-    };
     const shown = showAll || aboutDataMatchesFilter(t, query, namesOnly, report !== null);
     return (
         <div className={`mb-4 ${shown ? '' : 'hidden'}`}>
