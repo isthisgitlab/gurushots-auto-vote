@@ -1,8 +1,8 @@
-import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettings } from '@/api/useSettings';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useSettingsForm } from '@/hooks/useSettingsForm';
+import { useSettingsSave } from '@/hooks/useSettingsSave';
 import { useTitleRules } from '@/hooks/useTitleRules';
 import { useCustomTimezoneInput } from '@/hooks/useCustomTimezoneInput';
 import { useAutovote } from '@/contexts/AutovoteContext';
@@ -10,7 +10,6 @@ import {
     SettingsNavProvider,
     SETTINGS_SECTION_TITLES,
     settingsSections,
-    settingsTabId,
     useSettingsNav,
     useSettingsNavState,
 } from '@/contexts/SettingsNavContext';
@@ -39,12 +38,10 @@ import { SettingsSectionPanel } from './SettingsSectionPanel';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { ScenariosSection } from './ScenariosSection';
 import { AboutDataSection } from './AboutDataSection';
-import * as ipc from '@/api/ipc';
 
 import type { SettingsSection, SettingsTabId } from '@/utils/groupSettings';
 import type { TabDescriptor } from '@/components/ui/Tabs';
 import type { HintsFor, SettingChangeHandler, SettingResetHandler } from '../../../types/settingsEditor';
-import { errorMessage } from '../../../errorMessage';
 
 /**
  * The form state every schema-driven setting input reads and writes.
@@ -158,6 +155,59 @@ function TitleRulesSection({ titleRules }: { titleRules: ReturnType<typeof useTi
 }
 
 /**
+ * The two questions a close-with-unsaved-work can ask: discarding the edits, and saving without
+ * the work Save does not write (each listed in the confirm's body).
+ */
+function UnsavedWorkDialogs({
+    asking,
+    setAsking,
+    droppedWork,
+    onDiscard,
+    onSaveWithout,
+}: {
+    asking: 'discard' | 'drop' | null;
+    setAsking: (asking: 'discard' | 'drop' | null) => void;
+    droppedWork: string[];
+    onDiscard: () => void;
+    onSaveWithout: () => void;
+}) {
+    const { t } = useTranslation();
+    return (
+        <>
+            <UnsavedChangesModal
+                isOpen={asking === 'discard'}
+                onKeepEditing={() => setAsking(null)}
+                onDiscard={() => {
+                    setAsking(null);
+                    onDiscard();
+                }}
+            />
+            <ConfirmModal
+                isOpen={asking === 'drop'}
+                title={t('app.settingsDropTitle')}
+                working={false}
+                problem={null}
+                onClose={() => setAsking(null)}
+                onConfirm={() => {
+                    setAsking(null);
+                    onSaveWithout();
+                }}
+                confirmLabel="app.settingsSaveWithout"
+                cancelLabel="app.settingsKeepEditing"
+                workingLabel="app.settingsSaveWithout"
+            >
+                <p>{t('app.settingsDropText')}</p>
+                <ul className="list-disc ml-5">
+                    {droppedWork.map((key) => (
+                        <li key={key}>{t(key)}</li>
+                    ))}
+                </ul>
+            </ConfirmModal>
+        </>
+    );
+}
+
+/**
  * Global settings modal
  */
 export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -212,157 +262,46 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             return index !== -1 && defaultsBands[index].groups.some((group) => groupMatchesFilter(t, group, query));
         },
     );
-    const resetNav = nav.reset;
 
     const timezoneInput = useCustomTimezoneInput({ isOpen, uiValues, handleUiChange });
     const titleRules = useTitleRules(isOpen);
-    const persistTitleRules = titleRules.persist;
-    // True when commit() reported schema writes rejected by validation —
-    // shown as an alert and the modal stays open (mirrors titleRules.error).
-    const [saveError, setSaveError] = useState(false);
-    // The keys commit() reported, so each one's input — and its tab — can say it was refused.
-    const [rejectedKeys, setRejectedKeys] = useState<string[]>([]);
-    // Element ids a failed Save moves focus to (the first that exists), set as data and applied after the render
-    // that marks the inputs invalid.
-    const [focusIds, setFocusIds] = useState<string[] | null>(null);
-    // The scenario builder's unsaved draft, reported by the section: the modal's Save does not save it.
-    const [scenarioDirty, setScenarioDirty] = useState(false);
-    // The question on screen: dismissing with unsaved edits, or saving with work Save would drop.
-    const [asking, setAsking] = useState<'discard' | 'drop' | null>(null);
-
-    // One question per opening, and no draft carried over from the last one: the modal stays mounted while closed.
-    useEffect(() => {
-        if (isOpen) {
-            setSaveError(false);
-            setRejectedKeys([]);
-            setScenarioDirty(false);
-            resetNav();
-        } else {
-            setAsking(null);
-        }
-    }, [isOpen, resetNav]);
-
-    useEffect(() => {
-        if (!focusIds) return;
-        setFocusIds(null);
-        // The first target that exists takes focus; none may exist (the refused key's input was
-        // gone by the time focus was looked for).
-        focusIds
-            .map((id) => document.getElementById(id))
-            .find((target) => target !== null)
-            ?.focus();
-    }, [focusIds]);
-
-    const handleCancel = useCallback(() => {
-        // Put the persisted theme back on screen if the user previewed another one in this open session.
-        const persistedTheme = getPersistedTheme();
-        if (persistedTheme && persistedTheme !== uiValues.theme) {
-            document.documentElement.setAttribute('data-theme', persistedTheme);
-        }
-        revert();
-        onClose();
-    }, [getPersistedTheme, uiValues.theme, revert, onClose]);
-
-    // Read when the user acts, not at render: a Save that failed partway moved the persisted baselines after the
-    // last render. Nothing is guarded while the form is still loading or has nothing to differ from.
-    const hasUnsavedEdits = () =>
-        !(schemaLoading && !schema) && (formIsDirty() || titleRules.isDirty() || timezoneInput.dirty || scenarioDirty);
-
-    // Esc, the backdrop, the close button and Cancel: edits that are not saved are not thrown away unasked.
-    const dismiss = () => (hasUnsavedEdits() ? setAsking('discard') : handleCancel());
-
-    // What Save does not write: it is lost when the modal closes.
-    const droppedWork = [
-        timezoneInput.dirty && 'app.settingsDropTimezone',
-        scenarioDirty && 'app.settingsDropScenario',
-    ].filter((key): key is string => typeof key === 'string');
-
-    // The element a refused key's input carries: a UI key's `ui-` id (the custom zones are edited through the
-    // timezone select), else the schema input's `setting-` id.
-    const focusIdOf = useCallback(
-        (key: string) => {
-            if (!(key in uiValues)) return `setting-${key}`;
-            return key === 'customTimezones' ? 'ui-timezone' : `ui-${key}`;
-        },
-        [uiValues],
-    );
-
-    // The section a refused key's input sits in: a UI key in Application, a schema key in the
-    // tab of its tier band (an app-tier key in Application too).
-    const sectionOfKey = (key: string): SettingsTabId | null => {
-        if (key in uiValues) return 'application';
-        if (appGroups.some((group) => group.entries.some(([entryKey]) => entryKey === key))) return 'application';
-        const index = defaultsBands.findIndex((band) =>
-            band.groups.some((group) => group.entries.some(([entryKey]) => entryKey === key)),
-        );
-        return index === -1 ? null : defaultsTabs[index].id;
-    };
-
-    const runSave = async () => {
-        try {
-            // commit() returns the schema keys whose write was rejected by
-            // validation (e.g. a duplicate-count auto-fill schedule). Surface
-            // that and keep the modal open — same rationale as the title-rules
-            // check below — so the edit isn't silently lost behind a closed
-            // modal that looked like a successful save.
-            const rejected = await commit();
-            setRejectedKeys(rejected);
-            if (rejected.length > 0) {
-                setSaveError(true);
-                // The first refused key that has a section: the filter is cleared and its tab selected for the focus.
-                const section = rejected.map(sectionOfKey).find((id) => id !== null);
-                if (section) nav.reveal(section);
-                setFocusIds(rejected.map(focusIdOf));
-                return;
-            }
-            setSaveError(false);
-            // Title rules are rejected as a whole (e.g. a tag over the length
-            // cap); the hook surfaces that and the modal stays open.
-            if (!(await persistTitleRules())) {
-                nav.reveal('titleRules');
-                // The rules have no single input: focus the tab button, which is visible and draws its own ring.
-                setFocusIds([settingsTabId('titleRules')]);
-                return;
-            }
-            // A language that fails to save keeps the modal open with the
-            // save-error alert instead of closing on a change that didn't land.
-            if (uiValues.language !== language && !(await setLanguage(uiValues.language))) {
-                setSaveError(true);
-                nav.reveal('application');
-                setFocusIds([settingsTabId('application')]);
-                return;
-            }
-            // Close first: the re-arm reads settings and fetches the active
-            // challenges over the network, and the saved modal must not sit
-            // open for that round-trip.
-            onClose();
-            // Re-arm the cadence timer so a changed threshold / scheduled-fill
-            // setting takes effect now, not after the current wait elapses.
-            await rearmSchedule();
-        } catch (err) {
-            await ipc.logRendererError(`Error saving settings: ${errorMessage(err) || err}`);
-        }
-    };
-
-    const handleSave = () => (droppedWork.length > 0 ? setAsking('drop') : runSave());
+    const save = useSettingsSave({
+        isOpen,
+        nav,
+        titleRules,
+        uiValues,
+        language,
+        setLanguage,
+        schema,
+        schemaLoading,
+        commit,
+        revert,
+        getPersistedTheme,
+        isDirty: formIsDirty,
+        timezoneDirty: timezoneInput.dirty,
+        appGroups,
+        defaultsBands,
+        defaultsTabs,
+        onClose,
+        rearmSchedule,
+    });
 
     if (!isOpen) return null;
 
     const hintsFor = globalSettingHints({ formValues, schema, timezone: uiValues.timezone, t });
-    const schemaForm = { formValues, handleFormChange, handleResetGlobal, hintsFor, rejectedKeys };
+    const schemaForm = {
+        formValues,
+        handleFormChange,
+        handleResetGlobal,
+        hintsFor,
+        rejectedKeys: save.rejectedKeys,
+    };
 
-    // The tabs holding a refused key: like the inputs' invalid state, the marks come from
-    // rejectedKeys and clear on the next Save or on reopen, not as the user edits.
-    const refusedTabs = new Set<SettingsTabId>();
-    for (const key of rejectedKeys) {
-        const section = sectionOfKey(key);
-        if (section !== null) refusedTabs.add(section);
-    }
     const navTabs: Array<TabDescriptor<SettingsTabId>> = sections.map(({ id, label }) => ({
         id,
         label: t(label),
         hidden: !nav.isShown(id),
-        invalid: refusedTabs.has(id),
+        invalid: save.refusedTabs.has(id),
     }));
     const anyShown = sections.some((section) => nav.isShown(section.id));
 
@@ -370,7 +309,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         <>
             <Modal
                 isOpen={isOpen}
-                onClose={dismiss}
+                onClose={save.dismiss}
                 title={t('app.globalSettings')}
                 size="2xl"
                 className={schemaLoading && !schema ? SETTINGS_MODAL_BOX_CLASS : SETTINGS_MODAL_FORM_BOX_CLASS}
@@ -388,7 +327,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                             uiValues={uiValues}
                             handleUiChange={handleUiChange}
                             handleResetUi={handleResetUi}
-                            rejectedKeys={rejectedKeys}
+                            rejectedKeys={save.rejectedKeys}
                             timezoneInput={timezoneInput}
                         >
                             {appGroups.map((group) => (
@@ -407,49 +346,27 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                             );
                         })}
                         <TitleRulesSection titleRules={titleRules} />
-                        <ScenariosSection isOpen={isOpen} onDirtyChange={setScenarioDirty} />
+                        <ScenariosSection isOpen={isOpen} onDirtyChange={save.setScenarioDirty} />
                         <AboutDataSection />
                         <ModalActionRow
                             className="mt-auto"
-                            onSave={handleSave}
+                            onSave={save.handleSave}
                             saving={saving}
                             onSecondary={handleResetAll}
                             secondaryLabel={t('app.resetAll')}
-                            onCancel={dismiss}
-                            saveError={saveError}
+                            onCancel={save.dismiss}
+                            saveError={save.saveError}
                         />
                     </SettingsNavProvider>
                 )}
             </Modal>
-            <UnsavedChangesModal
-                isOpen={asking === 'discard'}
-                onKeepEditing={() => setAsking(null)}
-                onDiscard={() => {
-                    setAsking(null);
-                    handleCancel();
-                }}
+            <UnsavedWorkDialogs
+                asking={save.asking}
+                setAsking={save.setAsking}
+                droppedWork={save.droppedWork}
+                onDiscard={save.handleCancel}
+                onSaveWithout={() => void save.runSave()}
             />
-            <ConfirmModal
-                isOpen={asking === 'drop'}
-                title={t('app.settingsDropTitle')}
-                working={false}
-                problem={null}
-                onClose={() => setAsking(null)}
-                onConfirm={() => {
-                    setAsking(null);
-                    void runSave();
-                }}
-                confirmLabel="app.settingsSaveWithout"
-                cancelLabel="app.settingsKeepEditing"
-                workingLabel="app.settingsSaveWithout"
-            >
-                <p>{t('app.settingsDropText')}</p>
-                <ul className="list-disc ml-5">
-                    {droppedWork.map((key) => (
-                        <li key={key}>{t(key)}</li>
-                    ))}
-                </ul>
-            </ConfirmModal>
         </>
     );
 }

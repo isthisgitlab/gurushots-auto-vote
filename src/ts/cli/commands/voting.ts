@@ -284,33 +284,38 @@ const teamMatchLine = (challenge: Challenge): string | null => {
         : `${base} — standby, ${match.me.votesToActive} votes to active`;
 };
 
-const showStatus = async () => {
-    const userSettings = settings.loadSettings();
-    const isMockMode = userSettings.app.mock;
-    const isAuthenticated = getMiddleware().isAuthenticated();
-
+/**
+ * The banner's opening lines: the header, the mode, and the sign-in state — with the token
+ * line only when signed in.
+ */
+const logOverview = (userSettings: ReturnType<typeof settings.loadSettings>, isAuthenticated: boolean) => {
     logger.withCategory('ui').info('=== GuruShots Auto Voter - Status ===');
-
-    logger.withCategory('ui').info(`Mode: ${isMockMode ? 'MOCK (simulated API calls)' : 'REAL (live API calls)'}`);
+    logger
+        .withCategory('ui')
+        .info(`Mode: ${userSettings.app.mock ? 'MOCK (simulated API calls)' : 'REAL (live API calls)'}`);
     logger
         .withCategory('authentication')
         .info(`Authentication: ${isAuthenticated ? '✅ Authenticated' : '❌ Not authenticated'}`);
-
     if (isAuthenticated) {
         logger.withCategory('authentication').info(`Token: ${userSettings.auth.token ? '✅ Present' : '❌ Missing'}`);
     }
+};
 
+/**
+ * The Settings section: the app-level preferences, then every challenge that holds values of
+ * its own, formatted and masked like every other settings print.
+ */
+const logSettingsSection = (userSettings: ReturnType<typeof settings.loadSettings>) => {
+    const min = userSettings.app.checkFrequencyMin;
+    const max = userSettings.app.checkFrequencyMax;
     logger.withCategory('settings').info('\nSettings:');
     logger.withCategory('settings').info(`  Theme: ${userSettings.app.theme}`);
     logger.withCategory('settings').info(`  Language: ${userSettings.app.language}`);
     logger.withCategory('settings').info(`  Timezone: ${effectiveTimezone(userSettings.app.timezone)}`);
     logger.withCategory('settings').info(`  API Timeout: ${userSettings.app.apiTimeout}s`);
-    {
-        const min = userSettings.app.checkFrequencyMin;
-        const max = userSettings.app.checkFrequencyMax;
-        const label = min === max ? `${min}min` : `${min}–${max}min (random per cycle)`;
-        logger.withCategory('settings').info(`  Check Frequency: ${label}`);
-    }
+    logger
+        .withCategory('settings')
+        .info(`  Check Frequency: ${min === max ? `${min}min` : `${min}–${max}min (random per cycle)`}`);
     logger
         .withCategory('settings')
         .info(
@@ -329,7 +334,72 @@ const showStatus = async () => {
             });
         });
     }
+};
 
+/**
+ * ONE best-effort fetch of the active challenges behind the boost-window and Standing sections:
+ * `challenges` is null when the call failed (each section then prints a note and status goes on),
+ * `fetchError` the failure for that note.
+ */
+const fetchChallengesForStatus = async (): Promise<{ challenges: Challenge[] | null; fetchError: unknown }> => {
+    try {
+        const resp = await getMiddleware().getActiveChallenges();
+        return { challenges: Array.isArray(resp?.challenges) ? resp.challenges : [], fetchError: null };
+    } catch (err) {
+        return { challenges: null, fetchError: err };
+    }
+};
+
+/** The note a section prints when the shared fetch failed: the error's message, or the thrown value itself. */
+const logUnavailable = (fetchError: unknown) =>
+    logger.withCategory('ui').info(`  (unavailable — ${errorMessage(fetchError) || fetchError})`);
+
+/** The Boost Window Open section: which challenges' boost windows are open now, and for how long. */
+const logBoostWindows = (challenges: Challenge[] | null, fetchError: unknown) => {
+    logger.withCategory('ui').info('\nBoost Window Open:');
+    if (challenges === null) {
+        logUnavailable(fetchError);
+        return;
+    }
+    const open = openBoostWindows(challenges, Math.floor(Date.now() / 1000));
+    if (open.length === 0) {
+        logger.withCategory('ui').info('  None');
+        return;
+    }
+    open.forEach(({ title, remaining }) => {
+        const suffix = remaining == null ? 'no expiry' : formatDuration(remaining);
+        logger.withCategory('ui').info(`  • ${title} — ${suffix}`);
+    });
+};
+
+/** The Standing section: each challenge's rank with its benchmark gap, then its team-match standing. */
+const logStanding = (challenges: Challenge[] | null, fetchError: unknown) => {
+    logger.withCategory('ui').info('\nStanding:');
+    if (challenges === null) {
+        logUnavailable(fetchError);
+        return;
+    }
+    const lines = challenges.flatMap((challenge) => {
+        const total = challenge?.member?.ranking?.total;
+        const tail = total ? rankingTail(total) : null;
+        return [
+            tail === null ? null : `  • ${stripTerminalControl(challenge.title)} — ${tail}`,
+            teamMatchLine(challenge),
+        ].filter((line): line is string => line !== null);
+    });
+    if (lines.length === 0) {
+        logger.withCategory('ui').info('  None');
+        return;
+    }
+    lines.forEach((line) => logger.withCategory('ui').info(line));
+};
+
+const showStatus = async () => {
+    const userSettings = settings.loadSettings();
+    const isAuthenticated = getMiddleware().isAuthenticated();
+
+    logOverview(userSettings, isAuthenticated);
+    logSettingsSection(userSettings);
     logPinnedEntries(userSettings);
 
     // Boost-window status (the CLI parity of the GUI banner, no anchors) and the member's
@@ -337,52 +407,9 @@ const showStatus = async () => {
     // call prints a note under each section and never crashes status. The boost list reuses
     // the engine's own predicate so there is no duplicated boost-window logic.
     if (isAuthenticated) {
-        let challenges: Challenge[] | null = null;
-        let fetchError: unknown = null;
-        try {
-            const resp = await getMiddleware().getActiveChallenges();
-            challenges = Array.isArray(resp?.challenges) ? resp.challenges : [];
-        } catch (err) {
-            fetchError = err;
-        }
-        const noteUnavailable = () =>
-            logger.withCategory('ui').info(`  (unavailable — ${errorMessage(fetchError) || fetchError})`);
-
-        logger.withCategory('ui').info('\nBoost Window Open:');
-        if (challenges === null) {
-            noteUnavailable();
-        } else {
-            const now = Math.floor(Date.now() / 1000);
-            const open = openBoostWindows(challenges, now);
-
-            if (open.length === 0) {
-                logger.withCategory('ui').info('  None');
-            } else {
-                open.forEach(({ title, remaining }) => {
-                    const suffix = remaining == null ? 'no expiry' : formatDuration(remaining);
-                    logger.withCategory('ui').info(`  • ${title} — ${suffix}`);
-                });
-            }
-        }
-
-        logger.withCategory('ui').info('\nStanding:');
-        if (challenges === null) {
-            noteUnavailable();
-        } else {
-            const lines = challenges.flatMap((challenge) => {
-                const total = challenge?.member?.ranking?.total;
-                const tail = total ? rankingTail(total) : null;
-                return [
-                    tail === null ? null : `  • ${stripTerminalControl(challenge.title)} — ${tail}`,
-                    teamMatchLine(challenge),
-                ].filter((line): line is string => line !== null);
-            });
-            if (lines.length === 0) {
-                logger.withCategory('ui').info('  None');
-            } else {
-                lines.forEach((line) => logger.withCategory('ui').info(line));
-            }
-        }
+        const { challenges, fetchError } = await fetchChallengesForStatus();
+        logBoostWindows(challenges, fetchError);
+        logStanding(challenges, fetchError);
     }
 
     logger.withCategory('ui').info('\nTo change mode, run: login');

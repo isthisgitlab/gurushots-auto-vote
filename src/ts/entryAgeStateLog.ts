@@ -92,6 +92,46 @@ const parseState = (raw: string | null): State => {
     }
 };
 
+/** The change a write logs: `edit` made of the parsed stored state and stringified back, bookkeeping starting clean. */
+const makeChange = (kind: ChangeKind, edit: Edit): Change => ({
+    apply: (current) => {
+        const next = edit(parseState(current));
+        return next ? JSON.stringify(next) : null;
+    },
+    failed: false,
+    settled: false,
+    kind,
+    edit,
+});
+
+/** The changes applied, in order, over the stored text; one that throws is skipped with a note, not fatal. */
+const applyChanges = (raw: string | null, changes: Change[]): string | null => {
+    for (const change of changes) {
+        try {
+            raw = change.apply(raw) ?? raw;
+        } catch (error) {
+            logger.withCategory('boost').warning(`entry-age change not applied (${errorKind(error)})`, null);
+        }
+    }
+    return raw;
+};
+
+/**
+ * At a refresh that succeeded: from the first failed mark on, the marks are made again on the fresh value in their
+ * order (a photo may still be missing from a lagging listing, and a forgotten pending photo would have the boost
+ * submit a second one), those still in flight too: left in the log, one would land before the replay and be undone
+ * by it. An observation is not made again: the next fetch observes anew. What is kept is what sits before that mark
+ * and is still in flight — failed observations are dropped, and a landed mark is only kept behind a failed one, so
+ * none is here.
+ */
+const refreshReplay = (changes: Change[]): { keep: Change[]; replay: Change[] } => {
+    const first = changes.findIndex((c) => c.kind === 'mark' && c.failed);
+    return {
+        keep: (first === -1 ? changes : changes.slice(0, first)).filter((change) => !change.failed),
+        replay: first === -1 ? [] : changes.slice(first).filter((c) => c.kind === 'mark'),
+    };
+};
+
 /**
  * @param refreshStore - re-reads the stored value where the cache can be behind it (the app window); true when it did
  */
@@ -112,16 +152,7 @@ export const createStateLog = (store: RawJsonStore, refreshStore?: () => Promise
 
     // Makes `edit` of the stored state (answering null to change nothing); the caller never sees a failure.
     const write = (kind: ChangeKind, edit: Edit) => {
-        const change: Change = {
-            apply: (current) => {
-                const next = edit(parseState(current));
-                return next ? JSON.stringify(next) : null;
-            },
-            failed: false,
-            settled: false,
-            kind,
-            edit,
-        };
+        const change = makeChange(kind, edit);
         const immediate = store.updateNow?.(change.apply) ?? null;
         if (immediate !== null) {
             if (immediate === 'failed') change.failed = true;
@@ -148,17 +179,7 @@ export const createStateLog = (store: RawJsonStore, refreshStore?: () => Promise
     return {
         read: (): State => {
             try {
-                let raw = store.readRaw();
-                for (const change of changes) {
-                    try {
-                        raw = change.apply(raw) ?? raw;
-                    } catch (error) {
-                        logger
-                            .withCategory('boost')
-                            .warning(`entry-age change not applied (${errorKind(error)})`, null);
-                    }
-                }
-                return parseState(raw);
+                return parseState(applyChanges(store.readRaw(), changes));
             } catch (error) {
                 logger
                     .withCategory('boost')
@@ -174,16 +195,8 @@ export const createStateLog = (store: RawJsonStore, refreshStore?: () => Promise
             let failure = 'the read failed';
             try {
                 if (await refreshStore()) {
-                    // From the first failed mark on, the marks are made again on the fresh value in their order (a photo
-                    // may still be missing from a lagging listing, and a forgotten pending photo would have the boost
-                    // submit a second one), those still in flight too: left in the log, one would land before the
-                    // replay and be undone by it. An observation is not made again: the next fetch observes anew.
-                    const first = changes.findIndex((c) => c.kind === 'mark' && c.failed);
-                    const replay = first === -1 ? [] : changes.slice(first).filter((c) => c.kind === 'mark');
-                    const before = first === -1 ? changes : changes.slice(0, first);
-                    // What is before the first failed mark: changes still in flight, and failed observations (dropped).
-                    // A landed mark is only kept behind a failed one, so none is here.
-                    changes = before.filter((change) => !change.failed);
+                    const { keep, replay } = refreshReplay(changes);
+                    changes = keep;
                     for (const change of replay) write(change.kind, change.edit);
                     return;
                 }

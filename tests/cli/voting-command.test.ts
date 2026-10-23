@@ -418,4 +418,85 @@ describe('showStatus', () => {
         await showStatus();
         expect(msgs('info')).toContain('  (unavailable — offline)');
     });
+
+    test('the full unauthenticated banner, line for line', async () => {
+        settings.loadSettings.mockReturnValue(
+            config({
+                app: {
+                    mock: false,
+                    theme: 'latvian',
+                    language: 'en',
+                    apiTimeout: 30,
+                    checkFrequencyMin: 3,
+                    checkFrequencyMax: 3,
+                },
+            }),
+        );
+        settings.getEffectiveSetting.mockReturnValue(7);
+        mw.isAuthenticated.mockReturnValue(false);
+        await showStatus();
+        expect(msgs('info')).toEqual([
+            '=== GuruShots Auto Voter - Status ===',
+            'Mode: REAL (live API calls)',
+            'Authentication: ❌ Not authenticated',
+            '\nSettings:',
+            '  Theme: latvian',
+            '  Language: en',
+            '  Timezone: Europe/Riga',
+            '  API Timeout: 30s',
+            '  Check Frequency: 3min',
+            '  Last Minute Check Frequency: 7min',
+            '\nTo change mode, run: login',
+        ]);
+    });
+
+    test('the full authenticated banner, line for line', async () => {
+        settings.loadSettings.mockReturnValue(
+            config({
+                app: { theme: 'latvian', language: 'en', apiTimeout: 30, checkFrequencyMin: 2, checkFrequencyMax: 5 },
+                auth: { token: 'tok' },
+                challenges: { 42: { values: { exposure: 80 } } },
+            }),
+        );
+        settings.getEffectiveSetting.mockReturnValue(2);
+        settings.getEntryPins.mockReturnValue({ boost: 'imgA', turbo: null });
+        openBoostWindows.mockReturnValue(invalid([{ id: 111, title: 'Sunset', remaining: 300 }]));
+        mw.getActiveChallenges.mockResolvedValue(
+            invalid({
+                challenges: [
+                    {
+                        id: 111,
+                        title: 'Sunset',
+                        member: {
+                            ranking: { total: { rank: 3, votes: 3, benchmark: [{ benchmark: '1', score: '10' }] } },
+                        },
+                    },
+                ],
+            }),
+        );
+        await showStatus();
+        expect(msgs('info')).toEqual([
+            '=== GuruShots Auto Voter - Status ===',
+            'Mode: MOCK (simulated API calls)',
+            'Authentication: ✅ Authenticated',
+            'Token: ✅ Present',
+            '\nSettings:',
+            '  Theme: latvian',
+            '  Language: en',
+            '  Timezone: Europe/Riga',
+            '  API Timeout: 30s',
+            '  Check Frequency: 2–5min (random per cycle)',
+            '  Last Minute Check Frequency: 2min',
+            '\nChallenge Settings:',
+            '  Challenge 42:',
+            '    exposure: 80',
+            '\nPinned entries:',
+            '  Challenge 42: Boost imgA, Turbo none',
+            '\nBoost Window Open:',
+            '  • Sunset — 5m',
+            '\nStanding:',
+            '  • Sunset — rank 3 — top 1 needs 8 votes',
+            '\nTo change mode, run: login',
+        ]);
+    });
 });
