@@ -859,18 +859,25 @@ describe('register (Electron)', () => {
 
 describe('module load outside Electron', () => {
     test('loads without requiring the electron package', () => {
-        // A fresh module graph whose electron mock throws on load: a
-        // regression to an unconditional require fails right here. Kept last —
-        // resetModules drops the registry the top-level requires came from.
+        // A fresh module graph whose electron mock throws if required. The
+        // factory-never-called assertion catches a regression that swallows
+        // the throw (try/catch). Kept last — resetModules drops the registry
+        // the top-level requires came from.
         jest.resetModules();
-        jest.doMock('electron', () => {
+        const electronFactory = jest.fn<never, []>(() => {
             throw new Error('electron must not be loaded outside Electron');
         });
+        jest.doMock('electron', electronFactory);
         const fresh = require('../../src/ts/runtime') as typeof runtimeModule;
-        jest.spyOn(fresh, 'isElectron').mockReturnValue(false);
-        expect(() => {
-            require('../../src/ts/ipc/settings.handlers');
-        }).not.toThrow();
-        jest.dontMock('electron');
+        const isElectronSpy = jest.spyOn(fresh, 'isElectron').mockReturnValue(false);
+        try {
+            expect(() => {
+                require('../../src/ts/ipc/settings.handlers');
+            }).not.toThrow();
+            expect(electronFactory).not.toHaveBeenCalled();
+        } finally {
+            jest.dontMock('electron');
+            isElectronSpy.mockRestore();
+        }
     });
 });

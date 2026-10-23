@@ -10,8 +10,8 @@ import * as runtime from '../runtime';
 import type { App } from 'electron';
 
 // Outside Electron, require('electron') loads the npm package, which downloads
-// the Electron binary when it is missing; the require only runs inside
-// Electron, where it cannot fail.
+// the Electron binary when it is missing. Under ELECTRON_RUN_AS_NODE, app is
+// undefined.
 let electronApp: App | null | undefined = null;
 if (runtime.isElectron()) {
     electronApp = (require('electron') as typeof import('electron')).app;
