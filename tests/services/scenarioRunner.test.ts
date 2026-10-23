@@ -39,6 +39,8 @@ jest.mock('../../src/ts/services/autoFill', () => {
 jest.mock('../../src/ts/runtime', () => ({
     isCapacitor: jest.fn(() => false),
     isHeadlessService: jest.fn(() => false),
+    // settings/userDataPaths gates its electron require on this at load.
+    isElectron: jest.fn(() => false),
 }));
 jest.mock('../../src/ts/services/NativeAutovoteBridge', () => ({ isAvailable: jest.fn(() => false) }));
 
