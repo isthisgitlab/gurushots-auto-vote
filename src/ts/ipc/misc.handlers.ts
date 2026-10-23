@@ -28,9 +28,9 @@ const buildHandlers = (deps: MiscHandlerDeps) => {
             try {
                 // Scheme allow-list (shared with the Capacitor bridge via
                 // format/urlSafe): every legitimate call site opens an https
-                // page (gurushots.com, GitHub releases). Refusing anything else
-                // keeps this from ever becoming an open-any-scheme primitive
-                // (file:, shell handlers, ...).
+                // page (gurushots.com, GitHub releases, the donatr.ee donation
+                // page). Refusing anything else keeps this from ever becoming
+                // an open-any-scheme primitive (file:, shell handlers, ...).
                 if (!isSafeExternalUrl(url)) {
                     logger.withCategory('api').warning(`Refused open-external-url for non-https URL: ${url}`, null);
                     return { success: false as const, error: 'Only https:// URLs can be opened' };

@@ -40,8 +40,7 @@ interface Footer {
 }
 
 interface Badge {
-    /** the grey left half; a badge without one is a single coloured block */
-    label?: string;
+    label: string;
     message: string;
     color: string;
 }
@@ -137,8 +136,6 @@ const LANGUAGES: Record<Lang, { entry: string; switchLabel: string; privacy: str
 // its alt text stays.
 const BADGES: Record<string, Badge> = {
     License: { label: 'license', message: 'Apache-2.0', color: '#007ec6' },
-    Bitcoin: { message: 'Bitcoin', color: '#000000' },
-    Ethereum: { message: 'Ethereum', color: '#3c3c3d' },
 };
 const BADGE_DIR = 'badges';
 const IMAGE_DIR = 'images';
@@ -198,18 +195,18 @@ const escapeXml = (text: string) => text.replace(/[&<>"']/g, (c) => `&#${c.charC
 // A flat two-part badge; the width follows the text length, which is close enough for these short fixed texts.
 const badgeSvg = ({ label, message, color }: Badge) => {
     const widthOf = (text: string) => Math.ceil(text.length * 7) + 12;
-    const labelWidth = label ? widthOf(label) : 0;
+    const labelWidth = widthOf(label);
     const messageWidth = widthOf(message);
-    const name = escapeXml(label ? `${label}: ${message}` : message);
+    const name = escapeXml(`${label}: ${message}`);
     const text = (x: number, value: string) =>
         `<text x="${x}" y="14" fill="#fff" text-anchor="middle">${escapeXml(value)}</text>`;
     return [
         `<svg xmlns="http://www.w3.org/2000/svg" width="${labelWidth + messageWidth}" height="20" role="img" aria-label="${name}">`,
         `<title>${name}</title>`,
-        label ? `<rect width="${labelWidth}" height="20" fill="#555"/>` : '',
+        `<rect width="${labelWidth}" height="20" fill="#555"/>`,
         `<rect x="${labelWidth}" width="${messageWidth}" height="20" fill="${color}"/>`,
         '<g font-family="Verdana,DejaVu Sans,sans-serif" font-size="11">',
-        label ? text(labelWidth / 2, label) : '',
+        text(labelWidth / 2, label),
         text(labelWidth + messageWidth / 2, message),
         '</g></svg>',
     ].join('');

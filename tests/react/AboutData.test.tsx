@@ -147,6 +147,36 @@ describe('third-party licenses', () => {
     });
 });
 
+describe('the donate button', () => {
+    test('is an outline button whose click opens the donation page', () => {
+        renderSection();
+        const button = screen.getByRole('button', { name: 'about.donateButton' });
+        expect(button.className).toContain('btn-outline');
+        open('about.donateButton');
+        expect(window.api.openExternalUrl).toHaveBeenCalledWith('https://donatr.ee/isthisgitlab/');
+        expect(window.api.openExternalUrl).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+        [
+            'is refused',
+            () =>
+                jest
+                    .mocked(window.api.openExternalUrl)
+                    .mockResolvedValue({ success: false, error: 'Only https:// URLs can be opened' }),
+        ],
+        ['throws', () => jest.mocked(window.api.openExternalUrl).mockRejectedValue(new Error('bridge down'))],
+    ])('a click whose answer %s leaves the block shown and stays silent', async (_name, stub) => {
+        stub();
+        renderSection();
+        open('about.donateButton');
+        await act(async () => undefined);
+        expect(screen.getByRole('heading', { level: 5, name: 'about.title' })).toBeTruthy();
+        expect(window.api.logError).not.toHaveBeenCalled();
+        expect(window.api.logWarning).not.toHaveBeenCalled();
+    });
+});
+
 describe('Delete all local data', () => {
     test('the delete button is a filled destructive one', () => {
         renderSection();
@@ -603,14 +633,16 @@ describe('the block in the Application panel', () => {
     // default identity translator it is the key.
     const aboutBlock = (headingName = 'about.title') =>
         screen.getByRole('heading', { level: 5, name: headingName }).parentElement as HTMLElement;
-    // The filter sees what a user sees: translate the about keys into their English words.
-    const translateAbout = (key: string): string => {
-        const name = key.slice('about.'.length) as keyof typeof englishAbout;
-        return name in englishAbout ? englishAbout[name] : key;
-    };
+    // The filter sees what a user sees: translate the about keys into their words in `words`.
+    const translateAboutIn =
+        (words: typeof englishAbout | typeof latvianAbout) =>
+        (key: string): string => {
+            const name = key.slice('about.'.length);
+            return words[name as keyof typeof words] ?? key;
+        };
     const ENGLISH_BLOCK_HEADING = englishAbout.title;
     const withEnglishWords = (run: () => void) => {
-        mockTranslator.t.mockImplementation(translateAbout);
+        mockTranslator.t.mockImplementation(translateAboutIn(englishAbout));
         run();
     };
 
@@ -674,4 +706,26 @@ describe('the block in the Application panel', () => {
             'about.dangerTitle',
         ]);
     });
+
+    test.each([
+        ['English', englishAbout, 'support', 'donat'],
+        ['Latvian', latvianAbout, 'atbalst', 'ziedo'],
+    ])(
+        'the donation row answers %s filter words: the button as a name, the description only when descriptions are searched',
+        (_lang, words, nameWord, descWord) => {
+            mockTranslator.t.mockImplementation(translateAboutIn(words));
+            const heading = words.title;
+
+            const byName = renderSection(nameWord, true);
+            expect(aboutBlock(heading).classList.contains('hidden')).toBe(false);
+            byName.unmount();
+
+            const descWhileNamesOnly = renderSection(descWord, true);
+            expect(aboutBlock(heading).classList.contains('hidden')).toBe(true);
+            descWhileNamesOnly.unmount();
+
+            renderSection(descWord, false);
+            expect(aboutBlock(heading).classList.contains('hidden')).toBe(false);
+        },
+    );
 });

@@ -20,8 +20,8 @@ const hasNoCredentials = (parsed: URL): boolean => parsed.username === '' && par
  * desktop.
  *
  * Every legitimate call site opens an https page (gurushots.com, GitHub
- * releases). Refusing anything else keeps this from ever becoming an
- * open-any-scheme primitive.
+ * releases, the donatr.ee donation page). Refusing anything else keeps this
+ * from ever becoming an open-any-scheme primitive.
  *
  * Also rejects embedded userinfo (`https://real.com@evil.com/`): a bare
  * startsWith('https://') check passes that, but the browser navigates to the

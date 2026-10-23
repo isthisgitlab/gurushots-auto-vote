@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsNav } from '@/contexts/SettingsNavContext';
 import { ToneIcon } from '@/components/ui/ToneNote';
+import * as ipc from '@/api/ipc';
 import { useImportRefText } from '@/api/useImportReport';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { matchesFilterTexts } from '@/utils/matchesSettingFilter';
@@ -51,8 +52,16 @@ function ImportReportBlock({ report }: { report: ImportReport | null }) {
     );
 }
 
-const ABOUT_DATA_NAME_KEYS = ['about.title', 'about.licensesButton', 'about.dangerTitle', 'about.deleteButton'];
-const ABOUT_DATA_DESCRIPTION_KEYS = ['about.licensesDesc', 'about.deleteDesc'];
+const DONATE_URL = 'https://donatr.ee/isthisgitlab/';
+
+const ABOUT_DATA_NAME_KEYS = [
+    'about.title',
+    'about.donateButton',
+    'about.licensesButton',
+    'about.dangerTitle',
+    'about.deleteButton',
+];
+const ABOUT_DATA_DESCRIPTION_KEYS = ['about.donateDesc', 'about.licensesDesc', 'about.deleteDesc'];
 
 /**
  * The texts of the block the settings filter searches, like the section's cells. `hasReport` adds
@@ -74,18 +83,28 @@ export const aboutDataMatchesFilter = (
 ): boolean => matchesFilterTexts(aboutDataTexts(t, hasReport), query, namesOnly);
 
 /**
- * The Application panel's last block: the third-party licenses, the report of the settings import, and the danger zone
- * with "Delete all local data".
+ * The Application panel's last block: the donation row, the third-party licenses, the report of the settings import,
+ * and the danger zone with "Delete all local data".
  */
 export function AboutDataSection({ report, showAll }: { report: ImportReport | null; showAll?: boolean }) {
     const { t } = useTranslation();
     const { query, namesOnly } = useSettingsNav();
     const [licensesOpen, setLicensesOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    // A refused or failed open stays silent, like the challenge URL row: the URL is a constant https page.
+    const openDonatePage = () => {
+        void ipc.callOrNull(() => ipc.openExternalUrl(DONATE_URL));
+    };
     const shown = showAll || aboutDataMatchesFilter(t, query, namesOnly, report !== null);
     return (
         <div className={`mb-4 ${shown ? '' : 'hidden'}`}>
             <h5 className="font-medium text-sm opacity-70 mb-2 mt-3">{t('about.title')}</h5>
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+                <button type="button" className="btn btn-outline btn-sm" onClick={openDonatePage}>
+                    {t('about.donateButton')}
+                </button>
+                <span className="text-xs text-base-content/70">{t('about.donateDesc')}</span>
+            </div>
             <div className="flex flex-wrap items-center gap-3 mb-4">
                 <button type="button" className="btn btn-outline btn-sm" onClick={() => setLicensesOpen(true)}>
                     {t('about.licensesButton')}

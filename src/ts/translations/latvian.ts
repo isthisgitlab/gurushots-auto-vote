@@ -1770,6 +1770,8 @@ export const notice = {
 // about
 export const about = {
     title: 'Par lietotni un datiem',
+    donateDesc: 'Ja lietotne jums noder, varat atbalstīt tās izstrādi ar ziedojumu vietnē donatr.ee.',
+    donateButton: 'Atbalstīt izstrādi',
     licensesDesc: 'Atvērtā koda programmatūra un dati, kas iekļauti šajā lietotnē, ar to licencēm.',
     licensesButton: 'Trešo pušu licences',
     licensesTitle: 'Trešo pušu licences',

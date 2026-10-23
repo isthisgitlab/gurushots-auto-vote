@@ -226,11 +226,9 @@ For help, check [Troubleshooting](docs/usage.md#-troubleshooting) first, then [o
 
 If this tool is useful to you, you can support development:
 
-[![Bitcoin](https://img.shields.io/badge/Bitcoin-000000?style=for-the-badge&logo=bitcoin&logoColor=white)](bitcoin:3JSKTwYk1sfqsFyXisFsxvdD5yb7L81vBD)
-[![Ethereum](https://img.shields.io/badge/Ethereum-3C3C3D?style=for-the-badge&logo=Ethereum&logoColor=white)](ethereum:0xe065D3F01e8826Ecbd128abfB8F0B98069B98Ad6)
+**Donate**: [donatr.ee/isthisgitlab](https://donatr.ee/isthisgitlab/)
 
-**Bitcoin**: `3JSKTwYk1sfqsFyXisFsxvdD5yb7L81vBD`
-**Ethereum**: `0xe065D3F01e8826Ecbd128abfB8F0B98069B98Ad6`
+![QR code for https://donatr.ee/isthisgitlab/](docs/donate-qr.svg)
 
 ---
 
