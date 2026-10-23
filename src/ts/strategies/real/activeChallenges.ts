@@ -68,8 +68,7 @@ const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => 
                 challenge.teamMatch = teamMatch.teamMatch;
             }
         }
-        // A successful web read replaces the suggestions cache — an empty suggestions map clears it;
-        // a failed web read (null) or a failed mobile read leaves the cache alone.
+        // Only a read that succeeded may rewrite the cached suggestions.
         if (webOverlay) storeSuggestedPhotos(token, webOverlay.suggestions);
         pinChallengeTitles(response.challenges);
         await annotateEntryTimes(response, entryAgeLedger);

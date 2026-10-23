@@ -6,6 +6,17 @@
 import type { Prize, PrizeTier } from '../../types/gurushots';
 import type { ChallengeSpec, ExposureRange, RankedEntrySpec } from './types';
 
+/**
+ * Row builders for the spec tables: each emits one server-shaped row on a single
+ * line, so the tables stay readable as data instead of page-wide literals.
+ */
+
+/** One `member.ranking.total.benchmark` row. */
+const bench = (benchmark: string, score: string) => ({ benchmark, score });
+
+/** One prize row, as the server shapes every prize list. */
+const prize = (type: string, amount: number): Prize => ({ type, amount });
+
 const buildRankedEntry = (entry: RankedEntrySpec) => ({
     id: entry.id,
     votes: entry.votes,
@@ -136,4 +147,4 @@ const buildChallenge = (spec: ChallengeSpec, id: number, now: number) => {
     };
 };
 
-export { buildChallenge };
+export { bench, prize, copyPrizes, buildChallenge };

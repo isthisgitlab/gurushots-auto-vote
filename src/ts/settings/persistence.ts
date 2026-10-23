@@ -593,8 +593,7 @@ const retryImportDetailed = (): { ok: boolean; adopted?: true } => {
             return outcome;
         },
         () => {
-            // (A retry's outcomes are an import or an adoption: either way a configuration is in use, and replaces
-            // the damaged one the notice was about.)
+            // Either retry outcome puts a configuration in use, so the corrupt notice no longer applies.
             corruptBackupPath = null;
         },
     );

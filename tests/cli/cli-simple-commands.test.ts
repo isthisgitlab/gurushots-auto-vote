@@ -674,6 +674,25 @@ describe('join', () => {
         expect(msgs(level).some((m) => m.includes(text))).toBe(true);
     });
 
+    // The error lines word-for-word: each outcome prints exactly this one error, at the error level.
+    test.each([
+        [{ status: 'skipped-unaffordable', cost: 10, coins: 3 }, 'Not enough coins to join 7 (needs 10, you have 3).'],
+        [{ status: 'skipped-unaffordable', cost: 10 }, 'Not enough coins to join 7 (needs 10, you have ?).'],
+        [{ status: 'balance-unknown' }, 'Could not read your coin balance — not joining 7.'],
+        [
+            { status: 'charged-pending-submit' },
+            'Coins were charged for 7 but the join did not complete. Re-run "join 7" to retry the submit — you will NOT be charged again.',
+        ],
+        [{ status: 'failed-no-charge' }, 'Could not join 7. No coins were charged.'],
+        [{ status: 'skipped-no-photo' }, 'No eligible photo to submit for 7. No coins were charged.'],
+        [{ status: 'not-authenticated' }, 'Not logged in — run "login" first, then join 7.'],
+        [{ status: 'fetch-failed' }, 'Could not reach GuruShots to join 7. Check your connection and try again.'],
+    ])('error outcome %p prints exactly its line', async (result, text) => {
+        handlers['join-challenge'].mockResolvedValue(invalid(result));
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([text]);
+    });
+
     test('coins spent but no photo qualifies: the line says what is missing, not just to re-run', async () => {
         handlers['join-challenge'].mockResolvedValue(
             invalid({ status: 'charged-pending-submit', reason: 'no-photo', cost: 100 }),

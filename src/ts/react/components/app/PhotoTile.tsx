@@ -260,9 +260,8 @@ export function SavedPickTile({
     const { t } = useTranslation();
     const url = memberId ? buildPhotoUrl(memberId, id, { size: TILE_PX }) : null;
     const [showImage, imageRef] = useImageLoads(url);
-    // Like any tile: a pick stays removable, an unpicked one is offered no more at the cap, and a
-    // locked one is inert. The reason travels in the name too — the label replaces the visible text
-    // for readers, so it must carry what the tile says.
+    // A pick stays removable, an unpicked one is blocked at the cap and a locked one is inert; the reason goes in the
+    // label because it replaces the tile's visible text.
     const unavailable = locked || (!selected && atCap);
     const reason = locked ? t(lockedKey) : !selected && atCap ? t(fullKey) : t(noteKey);
     const dim = unavailable ? 'opacity-50' : '';

@@ -46,6 +46,7 @@ import votingLogicModule = require('../../src/ts/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
 import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
+import type { CategoryLogger } from '../../src/ts/logger';
 import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
 import type * as logCategoriesModule from '../helpers/logCategories';
 import type * as actions_handlersModule from '../../src/ts/ipc/actions.handlers';
@@ -286,6 +287,44 @@ describe('authenticate', () => {
         const result = await handlers.authenticate({}, 'u', 'p', false);
         expect(result).toEqual({ success: false, error: 'ECONNREFUSED' });
     });
+
+    // Every argument every logger call received, collected from the withCategory results (each call
+    // returns a fresh category logger of jest.fn methods).
+    const loggedArgs = (): string =>
+        JSON.stringify(
+            logger.withCategory.mock.results.flatMap((call) =>
+                Object.values(invalid<CategoryLogger>(call.value)).flatMap(
+                    (fn) => invalid<jest.MockedFunction<(...args: unknown[]) => void>>(fn).mock.calls,
+                ),
+            ),
+        );
+
+    test.each([
+        ['username', invalid<string>(12345), 'pw'],
+        ['password', 'user@example.com', invalid<string>({ user: 'h4x' })],
+    ])(
+        'refuses a non-string %s locally: no strategy, no save, no value in any log',
+        async (_bad, username, password) => {
+            const handlers = buildHandlers();
+            const result = await handlers.authenticate({}, username, password, false);
+
+            expect(result).toEqual({ success: false, error: 'Invalid credentials' });
+            expect(apiFactory.getApiStrategy).not.toHaveBeenCalled();
+            expect(mockSurface.authenticate).not.toHaveBeenCalled();
+            expect(realSurface.authenticate).not.toHaveBeenCalled();
+            expect(settings.setSetting).not.toHaveBeenCalled();
+            expect(loggedArgs()).not.toContain('12345');
+            expect(loggedArgs()).not.toContain('h4x');
+            // One fixed warning on the authentication category, telling a local refusal from a GuruShots one.
+            expect(logger.withCategory).toHaveBeenCalledTimes(1);
+            expect(logger.withCategory).toHaveBeenCalledWith('authentication');
+            const warning = invalid<jest.MockedFunction<(message: string, data?: unknown) => void>>(
+                invalid<CategoryLogger>(logger.withCategory.mock.results[0].value).warning,
+            );
+            expect(warning).toHaveBeenCalledTimes(1);
+            expect(warning.mock.calls[0][0]).toContain('non-string credentials');
+        },
+    );
 });
 
 describe('play-auto-turbo', () => {

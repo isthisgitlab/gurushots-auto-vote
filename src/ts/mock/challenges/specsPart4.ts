@@ -4,6 +4,7 @@
  */
 
 import { HOUR, DAY } from '../time';
+import { bench } from './build';
 import type { ChallengeSpec } from './types';
 
 const SPECS_PART_4: readonly ChallengeSpec[] = [
@@ -41,11 +42,7 @@ const SPECS_PART_4: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '40 votes to next level',
         },
-        benchmark: [
-            { benchmark: '1', score: '5349' },
-            { benchmark: '10', score: '5101' },
-            { benchmark: '100', score: '4586' },
-        ],
+        benchmark: [bench('1', '5349'), bench('10', '5101'), bench('100', '4586')],
         guruPickEnable: true,
         topPhotographerEnable: true,
         levelsRankEnable: true,
@@ -110,11 +107,7 @@ const SPECS_PART_4: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '1544 votes to next level',
         },
-        benchmark: [
-            { benchmark: '1', score: '9187' },
-            { benchmark: '10', score: '8287' },
-            { benchmark: '100', score: '7371' },
-        ],
+        benchmark: [bench('1', '9187'), bench('10', '8287'), bench('100', '7371')],
         guruPickEnable: true,
         topPhotographerEnable: true,
         levelsRankEnable: true,
@@ -196,11 +189,7 @@ const SPECS_PART_4: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '1141 votes to next level',
         },
-        benchmark: [
-            { benchmark: '1', score: '6447' },
-            { benchmark: '10', score: '5987' },
-            { benchmark: '100', score: '5299' },
-        ],
+        benchmark: [bench('1', '6447'), bench('10', '5987'), bench('100', '5299')],
         guruPickEnable: true,
         topPhotographerEnable: true,
         levelsRankEnable: true,
@@ -266,11 +255,7 @@ const SPECS_PART_4: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '372 votes to next level',
         },
-        benchmark: [
-            { benchmark: '1', score: '7500' },
-            { benchmark: '10', score: '5911' },
-            { benchmark: '100', score: '5107' },
-        ],
+        benchmark: [bench('1', '7500'), bench('10', '5911'), bench('100', '5107')],
         guruPickEnable: true,
         topPhotographerEnable: true,
         levelsRankEnable: true,

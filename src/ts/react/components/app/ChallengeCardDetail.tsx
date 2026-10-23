@@ -92,7 +92,8 @@ function DetailHeader({
                 {sanitizedWelcome && (
                     <div
                         className="text-xs text-base-content/70 wrap-anywhere"
-                        dangerouslySetInnerHTML={{ __html: sanitizedWelcome }} /* aislop-ignore-line -- sanitized */
+                        // aislop-ignore-next-line security/dangerously-set-innerhtml -- sanitized by sanitizeWelcomeMessage
+                        dangerouslySetInnerHTML={{ __html: sanitizedWelcome }}
                     />
                 )}
                 <ChallengeBadgeRow {...badgeRowProps} />

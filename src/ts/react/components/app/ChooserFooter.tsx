@@ -18,7 +18,7 @@ export function ChooserFooter({
     onClose,
 }: {
     saveFailed: boolean;
-    /** Replaces the generic save-failure text (a failed pin write says what was and was not saved). */
+    /** Overrides the generic save-failure text with what the failed save did and did not keep. */
     saveError?: string;
     saving: boolean;
     onSave: () => void;

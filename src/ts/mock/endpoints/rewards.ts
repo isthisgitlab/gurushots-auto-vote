@@ -4,7 +4,9 @@
  */
 
 import { simulateApiResponse, mockMethod } from '../simulate';
+import { prize } from '../challenges/build';
 import type * as rewardsModule from '../../api/rewards';
+import type { Prize } from '../../types/gurushots';
 
 /** A claim endpoint taking `(id, token)`: confirms every claim, resolves false without a token. */
 const mockClaim = (name: string) =>
@@ -19,6 +21,15 @@ const mockClaim = (name: string) =>
             return true;
         },
     );
+
+/** One mission as get_my_missions sends it. */
+const mission = (id: number, name: string, current: number, required: number, prizes: Prize[], state: string) => ({
+    id,
+    name,
+    progress: { current, required },
+    prizes,
+    claim_state: state,
+});
 
 /**
  * Simulate /rest/get_my_completed_challenges: one finished challenge with
@@ -63,44 +74,31 @@ const getMyMissions: typeof rewardsModule.getMyMissions = mockMethod(
     async () => {
         await simulateApiResponse({}, 200);
         return [
-            {
-                id: 900201,
-                name: 'Reach Allstar Level 2 times',
-                progress: { current: 2, required: 2 },
-                prizes: [{ type: 'COINS', amount: 60 }],
-                claim_state: 'CLAIM',
-            },
-            {
-                id: 900202,
-                name: 'Win Turbo 4 times',
-                progress: { current: 1, required: 4 },
-                prizes: [
-                    { type: 'COINS', amount: 100 },
-                    { type: 'EXPOSURE_AUTOFILL', amount: 3 },
-                ],
-                claim_state: 'DISABLED',
-            },
-            {
-                id: 900203,
-                name: 'Vote on 400 photos',
-                progress: { current: 100, required: 400 },
-                prizes: [
-                    { type: 'COINS', amount: 200 },
-                    { type: 'EXPOSURE_AUTOFILL', amount: 6 },
-                ],
-                claim_state: 'DISABLED',
-            },
-            {
-                id: 900204,
-                name: 'Use a boost',
-                progress: { current: 0, required: 1 },
-                prizes: [
-                    { type: 'COINS', amount: 500 },
-                    { type: 'PHOTO_SWAP', amount: 5 },
-                    { type: 'EXPOSURE_AUTOFILL', amount: 5 },
-                ],
-                claim_state: 'DISABLED',
-            },
+            mission(900201, 'Reach Allstar Level 2 times', 2, 2, [prize('COINS', 60)], 'CLAIM'),
+            mission(
+                900202,
+                'Win Turbo 4 times',
+                1,
+                4,
+                [prize('COINS', 100), prize('EXPOSURE_AUTOFILL', 3)],
+                'DISABLED',
+            ),
+            mission(
+                900203,
+                'Vote on 400 photos',
+                100,
+                400,
+                [prize('COINS', 200), prize('EXPOSURE_AUTOFILL', 6)],
+                'DISABLED',
+            ),
+            mission(
+                900204,
+                'Use a boost',
+                0,
+                1,
+                [prize('COINS', 500), prize('PHOTO_SWAP', 5), prize('EXPOSURE_AUTOFILL', 5)],
+                'DISABLED',
+            ),
         ];
     },
 );

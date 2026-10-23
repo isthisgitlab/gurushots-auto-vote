@@ -4,6 +4,7 @@
  */
 
 import { MINUTE } from '../time';
+import { bench, prize } from './build';
 import type { ChallengeSpec } from './types';
 
 const SPECS_PART_3: readonly ChallengeSpec[] = [
@@ -41,11 +42,7 @@ const SPECS_PART_3: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '52 votes to next level',
         },
-        benchmark: [
-            { benchmark: '1', score: '3852' },
-            { benchmark: '10', score: '3580' },
-            { benchmark: '100', score: '3009' },
-        ],
+        benchmark: [bench('1', '3852'), bench('10', '3580'), bench('100', '3009')],
         guruPickEnable: true,
         topPhotographerEnable: true,
         levelsRankEnable: true,
@@ -102,11 +99,7 @@ const SPECS_PART_3: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '393 votes to next level',
         },
-        benchmark: [
-            { benchmark: '1', score: '2899' },
-            { benchmark: '10', score: '2544' },
-            { benchmark: '100', score: '1993' },
-        ],
+        benchmark: [bench('1', '2899'), bench('10', '2544'), bench('100', '1993')],
         guruPickEnable: true,
         topPhotographerEnable: true,
         levelsRankEnable: true,
@@ -163,11 +156,7 @@ const SPECS_PART_3: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '794 votes to next level',
         },
-        benchmark: [
-            { benchmark: '1', score: '4377' },
-            { benchmark: '10', score: '4214' },
-            { benchmark: '100', score: '3780' },
-        ],
+        benchmark: [bench('1', '4377'), bench('10', '4214'), bench('100', '3780')],
         guruPickEnable: true,
         topPhotographerEnable: true,
         levelsRankEnable: true,
@@ -226,11 +215,7 @@ const SPECS_PART_3: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '565 votes to next level',
         },
-        benchmark: [
-            { benchmark: '1', score: '3460' },
-            { benchmark: '10', score: '3232' },
-            { benchmark: '100', score: '2778' },
-        ],
+        benchmark: [bench('1', '3460'), bench('10', '3232'), bench('100', '2778')],
         guruPickEnable: true,
         topPhotographerEnable: true,
         levelsRankEnable: true,
@@ -298,10 +283,7 @@ const SPECS_PART_3: readonly ChallengeSpec[] = [
         },
         // A benchmark row whose score the server left empty.
         benchmark: [{ benchmark: '10', score: '' }],
-        firstPrizes: [
-            { type: 'KEY', amount: 1 },
-            { type: 'COINS', amount: 500 },
-        ],
+        firstPrizes: [prize('KEY', 1), prize('COINS', 500)],
         achievementsAndPrizes: [
             {
                 title: 'Top 10 photographers',
@@ -381,11 +363,7 @@ const SPECS_PART_3: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '56 votes to next level',
         },
-        benchmark: [
-            { benchmark: '1', score: '3150' },
-            { benchmark: '10', score: '2806' },
-            { benchmark: '100', score: '2379' },
-        ],
+        benchmark: [bench('1', '3150'), bench('10', '2806'), bench('100', '2379')],
         guruPickEnable: true,
         topPhotographerEnable: false,
         levelsRankEnable: true,

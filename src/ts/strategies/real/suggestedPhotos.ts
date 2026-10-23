@@ -34,10 +34,8 @@ const keepIds = (ids: string[]): string[] => {
 };
 
 /**
- * Notes the token an active-challenge read is starting for and drops the slot
- * of another token; an empty token (signed out) drops it too. The web read of
- * that call replaces the cache on success (storeSuggestedPhotos) and leaves it
- * alone on failure.
+ * Notes the token an active-challenge read is starting for, and drops the slot of any other token, an empty one
+ * included.
  */
 const beginSuggestedPhotos = (token: string): void => {
     latestToken = token;
@@ -45,10 +43,8 @@ const beginSuggestedPhotos = (token: string): void => {
 };
 
 /**
- * Replaces the cache from the suggestions map of a successful web
- * active-challenge read. A store for another token than the one the latest
- * read started for is discarded — an old read landing late — and so is an
- * empty token's.
+ * Stores the suggestions map as the cache under the token of the read that produced it. A store whose token is not
+ * the latest one seen is discarded, as is an empty token's.
  */
 const storeSuggestedPhotos = (token: string, suggestions: Map<string, string[]>): void => {
     if (!token || token !== latestToken) return;

@@ -1,9 +1,6 @@
 /**
- * The member id the library listings report — the signed-in account, as the main process sees it.
- * A listing carries it, so once one has landed the chosen-photo chips can build their thumbnails
- * from it. Held for the page's lifetime: a sign-out reloads the renderer, so it never outlives the
- * account it belongs to. One account per install: a new value replaces the old, and nothing
- * compares or invalidates beyond that.
+ * The member id the library listings report, so the chosen-photo chips can build their thumbnails from it. Held for
+ * the page's lifetime: a sign-out reloads the renderer, so it never outlives the account it belongs to.
  */
 
 import { useSyncExternalStore } from 'react';

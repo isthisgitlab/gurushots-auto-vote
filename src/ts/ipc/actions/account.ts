@@ -62,6 +62,13 @@ const handleGetActiveChallenges = (async (): Promise<ActiveChallengesResponse> =
 }) satisfies IpcReplyFn;
 
 const handleAuthenticate = (async (event: unknown, username: string, password: string, isMock: boolean) => {
+    // IPC boundary: the renderer (or any caller) can send anything, so the typed signature is checked before any use.
+    if (!(typeof username === 'string' && typeof password === 'string')) {
+        logger
+            .withCategory(logger.CATEGORIES.AUTHENTICATION)
+            .warning('authenticate refused non-string credentials locally; GuruShots was not contacted', null);
+        return { success: false as const, error: 'Invalid credentials' };
+    }
     logger
         .withCategory(logger.CATEGORIES.AUTHENTICATION)
         .info(`🔐 Authentication request received - Mock: ${isMock}`, null);
@@ -86,7 +93,7 @@ const handleAuthenticate = (async (event: unknown, username: string, password: s
             // The login form pre-fills the name while "Stay logged in" is on.
             const nameSaved = settings.setSetting(
                 'lastUsername',
-                settings.getSetting('stayLoggedIn') === true ? String(username) : '',
+                settings.getSetting('stayLoggedIn') === true ? username : '',
             );
             if (!nameSaved) {
                 logger

@@ -66,6 +66,7 @@ const fetchActiveChallenges = async (token: string): Promise<ActiveChallengesRes
     return response;
 };
 
+// aislop-ignore-next-line ai-slop/thin-wrapper -- type guard narrowing to MemberTurbo; isPlainObject only narrows to Record<string, unknown>
 const isMemberTurbo = (value: unknown): value is MemberTurbo => isPlainObject(value);
 
 const isObjectArray = <T extends object>(value: unknown): value is T[] =>

@@ -4,6 +4,7 @@
  */
 
 import { MINUTE } from '../time';
+import { bench } from './build';
 import type { ChallengeSpec } from './types';
 
 const SPECS_PART_1: readonly ChallengeSpec[] = [
@@ -41,13 +42,9 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '269 votes to next level',
         },
-        benchmark: [
-            // Benchmark challenge: a row per group, the groups named as the server names them and the
-            // scores descending vote counts (the top 1 needs more votes than the top 10, and so on).
-            { benchmark: '1', score: '2788' },
-            { benchmark: '10', score: '2365' },
-            { benchmark: '100', score: '1702' },
-        ],
+        // Benchmark challenge: a row per group, the groups named as the server names them and the
+        // scores descending vote counts (the top 1 needs more votes than the top 10, and so on).
+        benchmark: [bench('1', '2788'), bench('10', '2365'), bench('100', '1702')],
         guruPickEnable: true,
         topPhotographerEnable: true,
         levelsRankEnable: true,
@@ -111,11 +108,7 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '32 votes to next level',
         },
-        benchmark: [
-            { benchmark: '1', score: '690' },
-            { benchmark: '10', score: '514' },
-            { benchmark: '100', score: '362' },
-        ],
+        benchmark: [bench('1', '690'), bench('10', '514'), bench('100', '362')],
         guruPickEnable: true,
         topPhotographerEnable: true,
         levelsRankEnable: true,
@@ -172,11 +165,7 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '29 votes to next level',
         },
-        benchmark: [
-            { benchmark: '1', score: '2200' },
-            { benchmark: '10', score: '1944' },
-            { benchmark: '100', score: '1406' },
-        ],
+        benchmark: [bench('1', '2200'), bench('10', '1944'), bench('100', '1406')],
         guruPickEnable: true,
         topPhotographerEnable: true,
         levelsRankEnable: true,
@@ -233,11 +222,7 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
             guru_picks: 1,
             next_message: '215 votes to next level',
         },
-        benchmark: [
-            { benchmark: '1', score: '1415' },
-            { benchmark: '10', score: '1253' },
-            { benchmark: '100', score: '662' },
-        ],
+        benchmark: [bench('1', '1415'), bench('10', '1253'), bench('100', '662')],
         guruPickEnable: true,
         topPhotographerEnable: false,
         levelsRankEnable: true,
@@ -294,11 +279,7 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '38 votes to next level',
         },
-        benchmark: [
-            { benchmark: '1', score: '1918' },
-            { benchmark: '10', score: '1589' },
-            { benchmark: '100', score: '1163' },
-        ],
+        benchmark: [bench('1', '1918'), bench('10', '1589'), bench('100', '1163')],
         guruPickEnable: true,
         topPhotographerEnable: true,
         levelsRankEnable: true,
@@ -355,11 +336,7 @@ const SPECS_PART_1: readonly ChallengeSpec[] = [
             guru_picks: 0,
             next_message: '224 votes to next level',
         },
-        benchmark: [
-            { benchmark: '1', score: '2221' },
-            { benchmark: '10', score: '1999' },
-            { benchmark: '100', score: '1537' },
-        ],
+        benchmark: [bench('1', '2221'), bench('10', '1999'), bench('100', '1537')],
         guruPickEnable: true,
         topPhotographerEnable: true,
         levelsRankEnable: true,

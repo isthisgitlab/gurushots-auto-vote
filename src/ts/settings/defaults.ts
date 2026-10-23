@@ -46,8 +46,7 @@ const getDefaultSettings = (): ConfigV2 => ({
     // profile, override a few join settings inline, and add must/should-include tags; all of it is an inherited
     // baseline below any id-keyed manual override.
     rules: [],
-    // Challenge id -> its own values, whether a manually applied profile replaces the rule's profile, and the entries
-    // pinned for Boost and Turbo.
+    // Per challenge: its own values, a manual profile override and its pinned Boost and Turbo entries.
     challenges: {},
 });
 

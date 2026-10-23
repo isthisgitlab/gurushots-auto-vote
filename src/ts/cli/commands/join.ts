@@ -146,6 +146,9 @@ type SpendCap = { coins: number; named: boolean };
 const capText = (cap: SpendCap | undefined): string =>
     cap && !cap.named ? `the ${cap.coins} coins shown` : '--max-coins allows';
 
+// The shape every error outcome shares; the info-level lines stay inline.
+const error = (text: string): { level: 'error'; text: string } => ({ level: 'error', text });
+
 // Map a join outcome status to a user-facing line; null for an unknown status.
 const joinLine = (
     result: JoinOutcome | null | undefined,
@@ -153,34 +156,28 @@ const joinLine = (
     coinsNow: number | null,
     cap?: SpendCap,
 ): { level: 'info' | 'error'; text: string } | null => {
-    if (result?.error === 'invalid-args') return { level: 'error', text: INVALID_ID_TEXT };
+    if (result?.error === 'invalid-args') return error(INVALID_ID_TEXT);
     switch (result?.status) {
         case 'joined':
             return { level: 'info', text: `✅ Joined challenge ${challengeId}.` };
         case 'skipped-unaffordable':
-            return {
-                level: 'error',
-                text: `Not enough coins to join ${challengeId} (needs ${result?.cost}, you have ${result?.coins ?? '?'}).`,
-            };
+            return error(
+                `Not enough coins to join ${challengeId} (needs ${result?.cost}, you have ${result?.coins ?? '?'}).`,
+            );
         case 'balance-unknown':
-            return { level: 'error', text: `Could not read your coin balance — not joining ${challengeId}.` };
+            return error(`Could not read your coin balance — not joining ${challengeId}.`);
         case 'charged-pending-submit':
             if (result?.reason === 'no-photo') {
-                return {
-                    level: 'error',
-                    text: `Coins were already spent on ${challengeId}, but no photo qualifies for this challenge. Add an eligible photo, then re-run "join ${challengeId}" — you will NOT be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.`,
-                };
+                return error(
+                    `Coins were already spent on ${challengeId}, but no photo qualifies for this challenge. Add an eligible photo, then re-run "join ${challengeId}" — you will NOT be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.`,
+                );
             }
             if (result?.reason === 'unconfirmed') {
-                return {
-                    level: 'error',
-                    text: unconfirmedText(challengeId, { before: result.coinsBefore, now: coinsNow }),
-                };
+                return error(unconfirmedText(challengeId, { before: result.coinsBefore, now: coinsNow }));
             }
-            return {
-                level: 'error',
-                text: `Coins were charged for ${challengeId} but the join did not complete. Re-run "join ${challengeId}" to retry the submit — you will NOT be charged again.`,
-            };
+            return error(
+                `Coins were charged for ${challengeId} but the join did not complete. Re-run "join ${challengeId}" to retry the submit — you will NOT be charged again.`,
+            );
         case 'failed-no-charge':
             if (result?.reason === 'already-joined') {
                 return {
@@ -189,23 +186,18 @@ const joinLine = (
                 };
             }
             if (result?.reason === 'full') {
-                return {
-                    level: 'error',
-                    text: `Challenge ${challengeId} is full, so this attempt to join it spent no coins. Join another one, or check it on gurushots.com.`,
-                };
+                return error(
+                    `Challenge ${challengeId} is full, so this attempt to join it spent no coins. Join another one, or check it on gurushots.com.`,
+                );
             }
             if (result?.reason === 'price-unknown') {
-                return {
-                    level: 'error',
-                    text: `GuruShots did not send the price for ${challengeId}, so it is not known what joining costs — no coins were charged. Run "discover" again to refresh it, or join the challenge on gurushots.com.`,
-                };
+                return error(
+                    `GuruShots did not send the price for ${challengeId}, so it is not known what joining costs — no coins were charged. Run "discover" again to refresh it, or join the challenge on gurushots.com.`,
+                );
             }
-            return { level: 'error', text: `Could not join ${challengeId}. No coins were charged.` };
+            return error(`Could not join ${challengeId}. No coins were charged.`);
         case 'skipped-no-photo':
-            return {
-                level: 'error',
-                text: `No eligible photo to submit for ${challengeId}. No coins were charged.`,
-            };
+            return error(`No eligible photo to submit for ${challengeId}. No coins were charged.`);
         case 'unavailable':
             return {
                 level: 'info',
@@ -217,19 +209,15 @@ const joinLine = (
                 text: `Challenge ${challengeId} has not started yet, so it can't be joined. Choose its photos now — list-photos --challenge=${challengeId}, then set-setting chosenPhotos '["<photo id>"]' --challenge=${challengeId} — and join once it starts.`,
             };
         case 'needs-confirm':
-            return {
-                level: 'error',
-                text: `Challenge ${challengeId} costs ${Number(result?.cost)} coins, more than ${capText(cap)}. Nothing was spent — to pay this cost, re-run: join ${challengeId} --yes --max-coins=${Number(result?.cost)}`,
-            };
+            return error(
+                `Challenge ${challengeId} costs ${Number(result?.cost)} coins, more than ${capText(cap)}. Nothing was spent — to pay this cost, re-run: join ${challengeId} --yes --max-coins=${Number(result?.cost)}`,
+            );
         case 'busy':
             return { level: 'info', text: `A join is already in progress for ${challengeId}. Try again in a moment.` };
         case 'not-authenticated':
-            return { level: 'error', text: `Not logged in — run "login" first, then join ${challengeId}.` };
+            return error(`Not logged in — run "login" first, then join ${challengeId}.`);
         case 'fetch-failed':
-            return {
-                level: 'error',
-                text: `Could not reach GuruShots to join ${challengeId}. Check your connection and try again.`,
-            };
+            return error(`Could not reach GuruShots to join ${challengeId}. Check your connection and try again.`);
         default:
             return null;
     }
