@@ -144,7 +144,7 @@
         "marked-gfm-heading-id": "^4.1.4",
         "npm-check-updates": "23.1.1",
         "oxlint": "^1.89.0",
-        "oxlint-tsgolint": "^7.0.2004",
+        "oxlint-tsgolint": "^7.0.2005",
         "postject": "1.0.0-alpha.6",
         "prettier": "4.0.0-alpha.13",
         "tailwindcss": "^4.3.3",

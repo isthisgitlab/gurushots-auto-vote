@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSessionLoad } from './useSessionLoad';
 import { useLatestRef } from './useLatestRef';
+import { perChallengeOnly } from './perChallengeOnly';
 import * as ipc from '@/api/ipc';
 import { valuesEqual } from '@/utils/valuesEqual';
 
@@ -35,21 +36,6 @@ const NO_RULES: TitleRuleInfo = {
 };
 
 const hasOwn = (obj: object, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
-
-/**
- * Keep only the keys the schema allows as per-challenge overrides; without a
- * schema (its fetch failed) no key is known to be allowed.
- */
-const perChallengeOnly = (
-    schema: RendererSchema | null | undefined,
-    values: ChallengeValues | null | undefined,
-): ChallengeValues => {
-    const kept: ChallengeValues = {};
-    for (const [key, value] of Object.entries(values || {})) {
-        if (schema?.[key]?.perChallenge) kept[key] = value;
-    }
-    return kept;
-};
 
 // Single batch IPC call for the overrides (the facade's own-property-safe
 // sparse map) instead of one round-trip per schema key, alongside the
