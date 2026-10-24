@@ -204,6 +204,15 @@ Baseball Cap`.split('\n'),
         expect(await getSemanticScores({}, [{ id: 'cat', labels: ['cat'] }])).toBeNull();
     });
 
+    test('a letter challenge whose title names nothing but the letter has no theme', async () => {
+        // The letter phrases are stripped and the slug ("the-letter-s") is not
+        // consulted, so the semantic tier goes inert instead of ranking against
+        // the noun "letter".
+        expect(
+            await getSemanticScores({ title: 'The Letter "S"', url: 'the-letter-s' }, [{ id: 'cat', labels: ['cat'] }]),
+        ).toBeNull();
+    });
+
     test('multi-word labels reach the lexicon', async () => {
         // The lexicon keys are stemmed single tokens (plus the shipped
         // compounds), so a raw multi-word label looked up as one string only

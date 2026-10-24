@@ -16,6 +16,7 @@ import {
     PEOPLE_LABEL_STEMS,
     descriptionExclusions,
     detectLetterPrefix,
+    withoutLetterPhrases,
     readChallengeTheme,
     isParticiple,
 } from './title';
@@ -64,14 +65,22 @@ const buildChallengeKeywords = (
     //
     // A negated subject ("No Humans") is removed from all three sources: the url
     // slug and the welcome_message repeat it, and a keyword here ranks photos UP.
+    // In a letter challenge ("The Letter S") the letter phrases are not subject
+    // text either — in the title or in the description — so both are stripped.
+    // The url slug is dropped outright: "the-letter-s" restates the stripped
+    // title and can carry nothing else, while the description's other words stay.
     const negation = parseNegation(challenge?.title, ignoreWords);
     const title = negation.active ? negation.positiveTitle : challenge?.title;
+    const letter = detectLetterPrefix(challenge?.title);
     // Compound mode: adjacent words the model knows ("Close Up") become one
     // term, so "Close Up" stops matching "Closed".
     const opts = { ignoreWords, compounds: 'replace' as const };
-    const fromTitle = tokenise(title, opts);
-    const fromUrl = tokenise(challenge?.url, opts);
-    const fromWelcome = tokenise(challenge?.welcome_message, opts);
+    const fromTitle = tokenise(letter === null ? title : withoutLetterPhrases(title), opts);
+    const fromUrl = letter === null ? tokenise(challenge?.url, opts) : [];
+    const fromWelcome = tokenise(
+        letter === null ? challenge?.welcome_message : withoutLetterPhrases(challenge?.welcome_message),
+        opts,
+    );
     // A title word judged not-the-subject ("fun" in "Balloon Fun") is dropped
     // from every source: the slug and the prose repeat it, and here it would
     // score every photo vision-labelled "Fun" as on theme.
@@ -124,13 +133,24 @@ const buildThemeKeywords = (challenge: ChallengeText | null | undefined, ignoreW
     const opts = { ignoreWords, compounds: 'replace' as const };
     // A negated subject must not become the theme (see parseNegation): pooling
     // "human" for "No Humans" pulls the vector straight at photos of people.
+    // A letter phrase is not the subject either: strip it AFTER titleSubject, so
+    // a series prefix ("Color Hunt") cannot become the subject when the tail
+    // empties out.
     const negation = parseNegation(challenge?.title, ignoreWords);
     const title = negation.active ? negation.positiveTitle : challenge?.title;
+    const letter = detectLetterPrefix(challenge?.title);
+    const subject = titleSubject(title, ignoreWords);
     // Pooling is where an abstract word hurts most — "fun" averaged into
     // "balloon" drags the theme toward parties and laughter — so only the
     // subject words are pooled (see abstractTitleWords).
-    const fromTitle = withoutAbstract(dropNegated(tokenise(titleSubject(title, ignoreWords), opts), negation));
+    const fromTitle = withoutAbstract(
+        dropNegated(tokenise(letter === null ? subject : withoutLetterPhrases(subject), opts), negation),
+    );
     if (fromTitle.length > 0) return Array.from(new Set(fromTitle)).slice(0, MAX_CHALLENGE_KEYWORDS);
+    // A letter challenge's slug ("the-letter-s") restates the title and cannot
+    // be stripped, so with the phrase gone there is no signal left in it either:
+    // the theme stays empty and the semantic tier goes inert.
+    if (letter !== null) return [];
     // Title said nothing usable — the slug is the only signal left, and with no
     // title to contradict it there is nothing for a stale one to poison.
     const fromUrl = withoutAbstract(dropNegated(tokenise(challenge?.url, opts), negation));
@@ -168,9 +188,14 @@ const visualSubjectWords = (challenge: ChallengeText | null | undefined, ignoreW
     const negation = parseNegation(challenge?.title, ignoreWords);
     const title = negation.active ? negation.positiveTitle : challenge?.title;
     const negated = new Set(negation.stems);
-    const words = rawTokenise(titleSubject(title, ignoreWords), { ignoreWords, compounds: 'replace' }).filter(
-        (word) => !negated.has(stem(word)) && !NEGATION_MARKER_STEMS.has(stem(word)),
-    );
+    // A letter phrase is not a visual subject; strip it after titleSubject, as
+    // buildThemeKeywords does.
+    const letter = detectLetterPrefix(challenge?.title);
+    const subject = titleSubject(title, ignoreWords);
+    const words = rawTokenise(letter === null ? subject : withoutLetterPhrases(subject), {
+        ignoreWords,
+        compounds: 'replace',
+    }).filter((word) => !negated.has(stem(word)) && !NEGATION_MARKER_STEMS.has(stem(word)));
     return Array.from(new Set(words));
 };
 

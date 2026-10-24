@@ -641,6 +641,47 @@ describe('chosen photos rank first', () => {
     });
 });
 
+describe('the uncertain-submission record on a letter challenge', () => {
+    const entry = (labels: string[]) =>
+        invalid<ScoredCandidate>({ id: 'p1', photo: photo('p1', labels), semantic: 0, semanticSupport: 0, score: 0 });
+    const run = async (title: string, labels: string[], visualEvidence: Set<string> | null = null) => {
+        const ledger = createMemoryEntryAgeLedger();
+        const challenge = makeChallenge({ title });
+        await recordUncertainSubmission({
+            challenge,
+            label: 'autoSubmit',
+            scored: [entry(labels)],
+            picked: ['p1'],
+            visualEvidence,
+            ignoreWords: null,
+            chosenIds: null,
+            deps: invalid<RankDeps & FillDeps>({ logger: makeLog().logger, entryAges: ledger }),
+        });
+        return ledger.isUncertain(challenge.id, 'p1');
+    };
+
+    test('when the letter is the title only subject, a matching label is evidence', async () => {
+        expect(await run('The Letter "S"', ['Sun'])).toBe(false);
+        expect(await run('Letter S', ['Sun'])).toBe(false);
+        expect(await run('Begins With L', ['Lion'])).toBe(false);
+        // The negation is read first, so the positive title is "Letter S: " alone.
+        expect(await run('Letter S: No People', ['Sun'])).toBe(false);
+    });
+
+    test('a title that still names a subject keeps the old evidence rules', async () => {
+        // "A is for Apple": an A-label with no apple evidence stays marked,
+        // whether the visual check rejected the photo or abstained.
+        expect(await run('A is for Apple', ['Apricot'])).toBe(true);
+        expect(await run('A is for Apple', ['Apricot'], new Set())).toBe(true);
+        // A fallback pick without a letter label is still marked.
+        expect(await run('The Letter "S"', ['Dog'])).toBe(true);
+        // So is an S-label on a letter title with another subject word: the
+        // whole-title gate keeps these picks conservative.
+        expect(await run('Snakes: Starting With S', ['Sun'])).toBe(true);
+        expect(await run('Color Hunt: The Letter S', ['Sun'])).toBe(true);
+    });
+});
+
 describe('looking for a chosen photo the themed fetch missed', () => {
     const car = photo('car', ['Car']);
 

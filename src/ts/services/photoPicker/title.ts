@@ -148,17 +148,24 @@ const titleSubject = (title: string | null | undefined, ignoreWords?: IgnoreWord
 // handled. A bare "L Words" intentionally returns null and is treated as an
 // ordinary title.
 //
-// SECURITY: `title` is an untrusted string from the GuruShots API. We cap its
-// length before matching (ReDoS defense-in-depth, though neither pattern has
-// nested quantifiers) and the captured value is a single [a-z] char used ONLY in
-// a first-character equality check downstream — never interpolated into a query,
-// template, or eval.
+// SECURITY: `title` is an untrusted string from the GuruShots API. Detection caps
+// its length at 200 chars before matching, and withoutLetterPhrases runs the same
+// patterns as a global `replace` over up to MAX_TOKENISE_CHARS (4096) chars of
+// description text — ReDoS defense-in-depth either way: no pattern has nested
+// quantifiers, and every alternation is anchored on a \b (or ^/start-of-text)
+// plus a literal word, so a scan is linear in the input. The captured value is a
+// single [a-z] char used ONLY in a first-character equality check downstream —
+// never interpolated into a query, template, or eval.
 //
 // The trailing (?![\w-]) (instead of \b) forces the captured letter to be a
 // standalone token: "Begins With Love" → null (next char is a word char) and
 // "Begins With L-A" → null (next char is '-'); "Begins With L" / "...L." → 'l'.
+// The letter may also be quoted ("start with 'S'", `start with the letter "S"`,
+// "Begins With \"L\"") and the article may be "an" ("begins with an S") — the
+// phrasings GuruShots descriptions ship. The bare "a" article is deliberately NOT
+// accepted, because "Begins With A" names the letter A.
 const LETTER_CHALLENGE_RE =
-    /\b(?:begin(?:s|ning)?|start(?:s|ing)?)\s+with\s+(?:the\s+)?(?:letter\s+)?([a-z])(?![\w-])/i;
+    /\b(?:begin(?:s|ning)?|start(?:s|ing)?)\s+with\s+(?:the\s+|an\s+)?(?:letter\s+)?(?:([a-z])|['"‘“]\s*([a-z])\s*['"’”])(?![\w-])/i;
 // "C is for…", "A is for Apple". The (?:^|\s) guard forces the letter to be a
 // standalone leading token: "What is for dinner" / "This is for you" → null
 // (the single letter before "is" is the tail of a word), and "Q&A is for
@@ -184,16 +191,47 @@ const LETTER_IS_FOR_RE = /(?:^|\s)([a-z])\s+is\s+for\b/i;
 // because the curly pairs differ on each side (U+2018/U+2019, U+201C/U+201D);
 // a mismatched pair is accepted since this parses messy titles, not validates.
 const LETTER_NAMED_RE = /\bletters?\s*:?\s*(?:['"‘“]\s*([a-z])\s*['"’”]|([a-z])(?=\s*(?:[-–—:;,.!?|]|$)))/i;
+// The three letter-phrase matchers in detection order. detectLetterPrefix and
+// withoutLetterPhrases both read this list, so what a title is DETECTED by is
+// exactly what a text is STRIPPED by — the two cannot drift.
+const LETTER_PATTERNS: readonly RegExp[] = [LETTER_CHALLENGE_RE, LETTER_IS_FOR_RE, LETTER_NAMED_RE];
+// The same list with /g, built once, for String.prototype.replace ONLY. A /g
+// regex carries `lastIndex` across .test/.exec calls, so reusing one of these
+// for a match test would corrupt the next call.
+const LETTER_PATTERNS_GLOBAL: readonly RegExp[] = LETTER_PATTERNS.map((re) => new RegExp(re.source, re.flags + 'g'));
 const detectLetterPrefix = (title: string | null | undefined): string | null => {
     if (typeof title !== 'string' || title.length > 200) return null;
-    const m = title.match(LETTER_CHALLENGE_RE) || title.match(LETTER_IS_FOR_RE) || title.match(LETTER_NAMED_RE);
+    let m: RegExpMatchArray | null = null;
+    for (const re of LETTER_PATTERNS) {
+        m = title.match(re);
+        if (m) break;
+    }
     if (!m) return null;
-    // Each pattern captures the letter in a different group (LETTER_NAMED_RE has
-    // one per quoted/bare branch, only one of which participates), so read the
-    // first group that actually matched rather than hard-coding an index. Every
-    // match has exactly one participating `([a-z])` group, so this always finds it.
+    // Each pattern captures the letter in a different group (LETTER_CHALLENGE_RE
+    // and LETTER_NAMED_RE have one per bare/quoted branch, only one of which
+    // participates), so read the first group that actually matched rather than
+    // hard-coding an index. Every match has exactly one participating `([a-z])`
+    // group, so this always finds it.
     const letter = m.slice(1).find((g) => typeof g === 'string' && g.length === 1) as string;
     return letter.toLowerCase();
+};
+
+/**
+ * `text` with every letter phrase ("The Letter S", "starts with 'S'", "C is
+ * for") replaced by a space — a letter phrase names a challenge's RULE, never
+ * its subject, in a title or in a description. Callers apply it only when
+ * `detectLetterPrefix(challenge?.title)` is non-null, so a title over 200 chars
+ * (detect returns null) is never stripped, and detect and strip agree at the cap.
+ * The input is cut to MAX_TOKENISE_CHARS, the cut `tokenise` already applies; a
+ * non-string returns ''. The replacement must stay ' ': LETTER_IS_FOR_RE
+ * consumes its leading whitespace, so '' would glue the neighbouring words
+ * together.
+ */
+const withoutLetterPhrases = (text: string | null | undefined): string => {
+    if (typeof text !== 'string') return '';
+    let out = text.slice(0, MAX_TOKENISE_CHARS);
+    for (const re of LETTER_PATTERNS_GLOBAL) out = out.replace(re, ' ');
+    return out;
 };
 
 // Title words that name a challenge's FORMAT, never its subject: its length
@@ -272,7 +310,14 @@ const readChallengeTheme = (
     return subjects.length > 0 ? { kind: 'subject', subjects: Array.from(new Set(subjects)) } : UNCONFIRMED;
 };
 
-export { abstractTitleWords, withoutAbstract, titleSubject, detectLetterPrefix, readChallengeTheme };
+export {
+    abstractTitleWords,
+    withoutAbstract,
+    titleSubject,
+    detectLetterPrefix,
+    withoutLetterPhrases,
+    readChallengeTheme,
+};
 
 export { NEGATION_MARKER_STEMS, parseNegation, dropNegated } from './titleNegation';
 export { PEOPLE_LABEL_STEMS, ANIMAL_LABEL_STEMS } from './titleLabelStems';

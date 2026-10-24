@@ -11,6 +11,7 @@ import {
     descriptionExclusions,
     parseNegation,
     readChallengeTheme,
+    withoutLetterPhrases,
 } from './photoPicker/title';
 import {
     buildChallengeKeywords,
@@ -30,12 +31,18 @@ import {
     splitByChosen,
     finalizePick,
 } from './photoPicker/tiers';
-import { pickPhotosForChallenge, buildScoredCandidates, buildChosenCandidates } from './photoPicker/candidates';
+import {
+    pickPhotosForChallenge,
+    buildScoredCandidates,
+    buildChosenCandidates,
+    startsWithLetter,
+} from './photoPicker/candidates';
 
 export {
     pickPhotosForChallenge,
     buildScoredCandidates,
     buildChosenCandidates,
+    startsWithLetter,
     selectEnrichmentSet,
     selectBlockEnrichmentSet,
     splitByChosen,
@@ -43,6 +50,7 @@ export {
     hasThemeMatch,
     buildSearchTerms,
     detectLetterPrefix,
+    withoutLetterPhrases,
     parseNegation,
     descriptionExclusions,
     readChallengeTheme,

@@ -139,12 +139,19 @@ const THEMED_SEARCH_MIN_BUDGET_MS = 1500;
  * are what a misread theme can be checked (and the rule measured) against.
  */
 const describeTheme = (theme: ChallengeTheme, challenge: Challenge, ignoreWords: IgnoreWords): string => {
+    const letter = detectLetterPrefix(challenge?.title);
+    const upper = letter === null ? null : letter.toUpperCase();
+    const letterVerdict =
+        upper === null
+            ? null
+            : `is a letter challenge ("${upper}"), so photos with a label starting with "${upper}" ` +
+              'are ranked first (the whole library if none has one)';
     const verdict =
         theme.kind === 'open'
             ? 'reads as an open theme, so its title and description are not matched against your photos'
             : theme.kind === 'subject'
               ? `has the subject ${theme.subjects.map((s) => `"${s}"`).join(', ')} (its description repeats it)`
-              : 'has no subject its description confirms, so its title is searched head-noun first';
+              : (letterVerdict ?? 'has no subject its description confirms, so its title is searched head-noun first');
     // A description can rule a subject off-topic on its own. Only the
     // fixed concept names go in the line, never matched description text.
     const ruled = descriptionExclusions(challenge, ignoreWords);

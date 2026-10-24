@@ -210,6 +210,23 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         );
     });
 
+    test('a letter challenge logs its letter rule, not the head-noun search', async () => {
+        const { logger, category } = makeLogger();
+        await fetchCandidatesForChallenge(
+            invalid({ id: 'c-letter', title: 'Begins With L' }),
+            'tok',
+            {},
+            { getEligiblePhotos: makeGetEligiblePhotos(), logger },
+        );
+        expect(category.info).toHaveBeenCalledWith(
+            expect.stringContaining(
+                'is a letter challenge ("L"), so photos with a label starting with "L" are ranked first ' +
+                    '(the whole library if none has one)',
+            ),
+            null,
+        );
+    });
+
     test('logs a long description in full, without truncating it', async () => {
         const { logger, category } = makeLogger();
         const sentence = 'Show photos of the different kinds of roads.';

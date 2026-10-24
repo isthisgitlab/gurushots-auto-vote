@@ -645,6 +645,17 @@ describe('photoPicker', () => {
             expect(detectLetterPrefix('Begins With Love')).toBeNull();
             expect(detectLetterPrefix('Begins With LA')).toBeNull();
             expect(detectLetterPrefix('Begins With L-A')).toBeNull();
+            expect(detectLetterPrefix('Starts With an Apple')).toBeNull(); // "an" is an article, the letter is not lone
+        });
+        test('a quoted letter after begins/starts-with parses, as the descriptions ship it', () => {
+            expect(detectLetterPrefix('Begins With "L"')).toBe('l');
+            expect(detectLetterPrefix("Starts With 'S'")).toBe('s');
+        });
+        test('the "an" article before the letter parses; the bare "a" article still names letter A', () => {
+            expect(detectLetterPrefix('Begins With an S')).toBe('s');
+            // Deliberate: "Begins With A" names the letter A itself, so the
+            // bare-`a` article is not accepted as an article.
+            expect(detectLetterPrefix('Begins With A')).toBe('a');
         });
         test('out-of-scope title forms return null', () => {
             expect(detectLetterPrefix('L Words')).toBeNull();
@@ -1276,6 +1287,49 @@ describe('photoPicker', () => {
                 throw new Error('boom');
             });
             expect(pickPhotosForChallenge(challenge, photos, 5, { onFallback })).toEqual(['dog']);
+        });
+    });
+
+    describe('letter challenge "The Letter S" — the 136581 incident', () => {
+        // Challenge 136581's description, quoted word for word as the API
+        // returned it on 2026-10-22. The visual check scored the "Symbol" photo
+        // at −4.99 against the leftover title word "letter" and it replaced the
+        // tag pick; with the letter phrases stripped, the description's own
+        // example words decide inside the letter-filtered set.
+        const DESC =
+            'Share your shots that start with S! From snakes to snacks and shampoo to shopping carts, ' +
+            "get stylistic and share those stunning shots that start with 'S' (in English). Join our " +
+            'challenge and earn rewards! * Participation reward: 10 coins * Elite Level reward: 20 coins ' +
+            '* ALLSTAR Level reward: 50 coins Scores of success and splendid shooting!';
+        const challenge = { title: 'The Letter "S"', url: 'the-letter-s', welcome_message: DESC };
+
+        test('a description word picks the matching S photo over a low-voted same-letter one', () => {
+            const snake = allowed('snake', ['Snake'], 1000, { votes: 500 });
+            const symbol = allowed('symbol', ['Symbol'], 9000, { votes: 5 });
+            expect(pickPhotosForChallenge(challenge, [symbol, snake], 1)).toEqual(['snake']);
+        });
+
+        test('a description that matches no label leaves the decision to votes alone', () => {
+            const plain = {
+                title: 'The Letter "S"',
+                url: 'the-letter-s',
+                welcome_message:
+                    "Share your shots that start with 'S' (in English). Join our challenge and earn rewards!",
+            };
+            const sunset = allowed('sunset', ['Sunset'], 1000, { votes: 500 });
+            const symbol = allowed('symbol', ['Symbol'], 9000, { votes: 5 });
+            expect(pickPhotosForChallenge(plain, [symbol, sunset], 1)).toEqual(['sunset']);
+        });
+
+        test('the visual check is skipped in both cases: the title has no visual subject', () => {
+            expect(visualSubjectWords(challenge)).toEqual([]);
+            expect(
+                visualSubjectWords({
+                    title: 'The Letter "S"',
+                    welcome_message:
+                        "Share your shots that start with 'S' (in English). Join our challenge and earn rewards!",
+                }),
+            ).toEqual([]);
         });
     });
 

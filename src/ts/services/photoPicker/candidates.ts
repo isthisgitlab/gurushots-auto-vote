@@ -107,6 +107,16 @@ const pickPhotosForChallenge = (
 };
 
 /**
+ * Does one of the photo's WHOLE-label stems begin with the challenge's letter?
+ * The MIN_USER_TAG_STEM_LENGTH floor stops generic 2-char vision labels ("in",
+ * "at", "on") from spuriously satisfying an I/A/O challenge. Extracted from
+ * applyHardFilters because the uncertain-submission record (autoFill pipeline)
+ * reads the same predicate as letter-label evidence.
+ */
+const startsWithLetter = (wholeStems: string[], letter: string): boolean =>
+    wholeStems.some((s) => s.length >= MIN_USER_TAG_STEM_LENGTH && s[0] === letter);
+
+/**
  * Apply the hard filters (must-include tags, letter prefix) to stemmed photos.
  *
  * When they eliminate everything, relax to the unfiltered set so the slot still
@@ -126,9 +136,7 @@ const applyHardFilters = (
         filtered = filtered.filter(({ wordStems }) => photoMatchesAllStems(wordStems, mustStems));
     }
     if (letterPrefix) {
-        filtered = filtered.filter(({ wholeStems }) =>
-            wholeStems.some((s) => s.length >= MIN_USER_TAG_STEM_LENGTH && s[0] === letterPrefix),
-        );
+        filtered = filtered.filter(({ wholeStems }) => startsWithLetter(wholeStems, letterPrefix));
     }
     if (filtered.length > 0) return filtered;
     const hadHardFilter = mustStems.length > 0 || Boolean(letterPrefix);
@@ -286,4 +294,4 @@ const buildChosenCandidates = (
     return { scored, chosenIds: orderedIds.length > 0 ? new Set(orderedIds) : null, orderedIds };
 };
 
-export { pickPhotosForChallenge, buildScoredCandidates, buildChosenCandidates };
+export { pickPhotosForChallenge, buildScoredCandidates, buildChosenCandidates, startsWithLetter };

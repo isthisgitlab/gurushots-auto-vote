@@ -6,8 +6,17 @@
  */
 
 import type * as photoPickerModule from '../../src/ts/services/photoPicker';
-const { readChallengeTheme, buildSearchTerms, buildChallengeKeywords, buildThemeKeywords, visualSubjectWords } =
-    require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
+const {
+    readChallengeTheme,
+    buildSearchTerms,
+    buildChallengeKeywords,
+    buildThemeKeywords,
+    visualSubjectWords,
+    detectLetterPrefix,
+    withoutLetterPhrases,
+    parseNegation,
+    tokenise,
+} = require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
 
 const TEN_HOURS = {
     title: '10 Hours',
@@ -181,5 +190,119 @@ describe('compound titles with the lexicon not loaded', () => {
         expect(buildThemeKeywords({ title: 'Beauty of Still Life' }, ['life'])).toEqual(['beauty', 'still']);
         expect(buildThemeKeywords({ title: 'Beauty of Still Life' }, ['still life'])).toEqual(['beauty', 'still']);
         expect(buildThemeKeywords({ title: 'Close Up' })).toEqual(['close', 'up']);
+    });
+});
+
+describe('letter challenges — the letter phrase is not the subject', () => {
+    // GuruShots challenge 136581 ("The Letter \"S\""), quoted word for word as
+    // the API returned it on 2026-10-22.
+    const LETTER_S_DESC =
+        'Share your shots that start with S! From snakes to snacks and shampoo to shopping carts, ' +
+        "get stylistic and share those stunning shots that start with 'S' (in English). Join our " +
+        'challenge and earn rewards! * Participation reward: 10 coins * Elite Level reward: 20 coins ' +
+        '* ALLSTAR Level reward: 50 coins Scores of success and splendid shooting!';
+
+    describe('withoutLetterPhrases', () => {
+        test('replaces EVERY match with a space, in the middle of prose too', () => {
+            expect(withoutLetterPhrases('things that start with the letter S today')).toBe('things that   today');
+            expect(withoutLetterPhrases('The Letter "S"')).toBe('The  ');
+        });
+
+        test("the replacement stays ' ', so the whitespace LETTER_IS_FOR_RE consumes cannot glue words", () => {
+            expect(withoutLetterPhrases('C is for…')).toBe(' …');
+        });
+
+        test('a non-string is empty', () => {
+            expect(withoutLetterPhrases(null)).toBe('');
+            expect(withoutLetterPhrases(undefined)).toBe('');
+        });
+
+        test('the /g strip carries no lastIndex state into detection (or back)', () => {
+            const title = 'The Letter "S"';
+            expect(withoutLetterPhrases(title)).toBe('The  ');
+            expect(detectLetterPrefix(title)).toBe('s');
+            expect(detectLetterPrefix(title)).toBe('s');
+            expect(withoutLetterPhrases(title)).toBe('The  ');
+        });
+    });
+
+    test('a letter title strips to the subject its title still names', () => {
+        expect(buildThemeKeywords({ title: 'The Letter "S"' })).toEqual([]);
+        expect(buildThemeKeywords({ title: 'A is for Apple' })).toEqual(['apple']);
+        expect(buildThemeKeywords({ title: 'Letter G: Green Things' })).toEqual(['green']);
+        expect(buildThemeKeywords({ title: 'Begins With L' })).toEqual([]);
+        expect(buildThemeKeywords({ title: 'Snakes Starting With S' })).toEqual(['snake']);
+        // titleSubject takes the tail "The Letter S" first and the strip then
+        // empties it — the series prefix ("Color Hunt") must not become the
+        // subject in its place.
+        expect(buildThemeKeywords({ title: 'Color Hunt: The Letter S' })).toEqual([]);
+    });
+
+    test('the visual subject strips the same way', () => {
+        expect(visualSubjectWords({ title: 'The Letter "S"' })).toEqual([]);
+        expect(visualSubjectWords({ title: 'A is for Apple' })).toEqual(['apple']);
+        expect(visualSubjectWords({ title: 'Begins With L' })).toEqual([]);
+    });
+
+    test('the real 136581 description keeps its example subjects as keywords, never the rule words', () => {
+        // Neither "letter" (the stripped title) nor "start" (the stripped
+        // description) may come back; the slug is not consulted either.
+        const keywords = buildChallengeKeywords({
+            title: 'The Letter "S"',
+            url: 'the-letter-s',
+            welcome_message: LETTER_S_DESC,
+        });
+        expect(keywords).toEqual([
+            'snake',
+            'snack',
+            'shampoo',
+            'shopp',
+            'cart',
+            'get',
+            'stylistic',
+            'stunn',
+            'english',
+            'score',
+            'success',
+            'splendid',
+            'shoot',
+        ]);
+    });
+
+    test.each([
+        ["Share your shots that start with 'S' this week.", ['start']],
+        ['Share your shots that start with the letter "S" this week.', ['start', 'letter']],
+        ['Share your shots: anything that begins with an S this week.', ['begin']],
+    ] as const)(
+        'a description that restates the rule (%s) leaves no rule word among the keywords',
+        (welcome, banned) => {
+            const keywords = buildChallengeKeywords({ title: 'The Letter "S"', welcome_message: welcome });
+            expect(keywords).not.toContain('letter');
+            expect(keywords).not.toContain('start');
+            expect(keywords).not.toContain('begin');
+            for (const word of banned) expect(keywords).not.toContain(word);
+        },
+    );
+
+    test('a negated letter title: strip and detect agree after parseNegation', () => {
+        const title = 'Letter S: No People';
+        const negation = parseNegation(title);
+        const positive = negation.active ? negation.positiveTitle : title;
+        expect(negation.active).toBe(true);
+        expect(detectLetterPrefix(title)).toBe('s');
+        expect(tokenise(withoutLetterPhrases(positive), { compounds: 'replace' })).toEqual([]);
+        expect(buildThemeKeywords({ title })).toEqual([]);
+        expect(visualSubjectWords({ title })).toEqual([]);
+    });
+
+    test('a letter title past the detection cap is an ordinary title on every reader', () => {
+        const longTitle = `The Letter S ${'x'.repeat(196)}`;
+        expect(longTitle.length).toBeGreaterThan(200);
+        // detect returns null, so no reader strips: 'letter' stays exactly what
+        // it was before the letter pass existed (a before/after pin).
+        expect(detectLetterPrefix(longTitle)).toBeNull();
+        expect(buildThemeKeywords({ title: longTitle })).toContain('letter');
+        expect(visualSubjectWords({ title: longTitle })).toContain('letter');
+        expect(buildChallengeKeywords({ title: longTitle })).toContain('letter');
     });
 });
