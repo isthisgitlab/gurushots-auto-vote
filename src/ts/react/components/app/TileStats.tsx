@@ -43,17 +43,18 @@ export function TileStatsLine({ stats, dim }: { stats: TileStats; dim: string })
 
 /** A tile's name with the read stats added after it, the way withPosition and withRank add theirs. */
 export const withStatsLabel = (label: string, t: (key: string) => string, stats: TileStats): string => {
+    const count = numberFormat(dateLocale());
     const tail =
         stats.views > 0
             ? interp(t('app.photoChooserTileStats'), {
                   ratio: ratioText(stats),
-                  likes: stats.likes,
-                  guruPicks: stats.guruPicks,
+                  likes: count.format(stats.likes),
+                  guruPicks: count.format(stats.guruPicks),
               })
             : // No views to divide by: the visible line keeps its dash, but the name says so in words.
               interp(t('app.photoChooserTileStatsNoViews'), {
-                  likes: stats.likes,
-                  guruPicks: stats.guruPicks,
+                  likes: count.format(stats.likes),
+                  guruPicks: count.format(stats.guruPicks),
               });
     return `${label.replace(/[.!?]*$/, '.')} ${tail}`;
 };

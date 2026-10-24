@@ -42,6 +42,28 @@ test('a ranking asked for with no challenge to rank for is refused at the door',
     expect(result.current.suggested).toBeNull();
 });
 
+test('the shown count follows the tile reports: a report of none is a zero, and a fresh opening starts unreported', () => {
+    const { result, rerender } = renderHook(() =>
+        usePhotoPicker({ challengeId: 7, usage: 'submit', alwaysFresh: false, selected: [] }),
+    );
+    // Not reported yet. The report stays the same function across renders: the grid sends its
+    // report through an effect keyed on it, so a new identity per render would re-fire the report.
+    expect(result.current.shownCount).toBeNull();
+    const report = result.current.setTileIds;
+    rerender();
+    expect(result.current.setTileIds).toBe(report);
+    act(() => report(['a', 'b']));
+    expect(result.current.shownCount).toBe(2);
+    // A report of no tiles is a real zero (every photo hidden), not not-reported.
+    act(() => report([]));
+    expect(result.current.shownCount).toBe(0);
+    // A fresh opening starts from not-reported again.
+    const { result: next } = renderHook(() =>
+        usePhotoPicker({ challengeId: 7, usage: 'submit', alwaysFresh: false, selected: [] }),
+    );
+    expect(next.current.shownCount).toBeNull();
+});
+
 describe('the listing side, passed through', () => {
     beforeEach(() => {
         mockApi.getLibraryPhotos.mockReset();

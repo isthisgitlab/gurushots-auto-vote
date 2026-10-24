@@ -72,6 +72,11 @@ const LIBRARY_BATCH_PHOTOS = 100;
 // the page cap it is tied to; keep the two in step by hand.
 const MAX_LIBRARY_KEEP_PHOTOS = 1000;
 
+// The minimum gap the photo-stats handler's single-flight queue enforces between two calls: one
+// stats read is one get_image_data per photo, so a stuck Retry key must not queue burst after
+// burst. The picker's stats loader waits the same gap before it re-asks a superseded call.
+const STATS_MIN_INTERVAL_MS = 1500;
+
 // The shape a photo id must have to be stored in a Chosen Photos list and to be
 // listed by the library read: ids are opaque server tokens, so only the safe
 // token characters (the mock ids fit) are accepted.
@@ -129,6 +134,7 @@ export {
     MAX_WON_IDS,
     LIBRARY_BATCH_PHOTOS,
     MAX_LIBRARY_KEEP_PHOTOS,
+    STATS_MIN_INTERVAL_MS,
     CHOSEN_PHOTO_ID_RE,
     MAX_UPCOMING_HOURS,
     RESERVED_PROFILE_NAMES,

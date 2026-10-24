@@ -979,7 +979,7 @@ export const app = {
         'Par katru foto no GuruShots nolasa tā balsis, skatījumus, „Patīk” atzīmes un Guru izvēles; kad ielādēts daudz foto, tas aizņem laiku. Uz flīzes redzams: attiecība (balsis pret skatījumu) · ♥ „Patīk” · ★ Guru izvēles.',
     pickShowStatsLocked: 'Nepieciešams, lai kārtotu pēc „Attiecība”, „Patīk” vai „Guru izvēles”.',
     pickLoadedSortHelp:
-        'Attiecība, „Patīk” un Guru izvēles pārkārto tikai līdz šim ielādētos foto ({count}). „Ielādēt vairāk foto” pievieno vēl, secībā „{order}”.',
+        'Attiecība, „Patīk” un Guru izvēles pārkārto tikai rādītos foto ({count}). „Ielādēt vairāk foto” pievieno vēl, secībā „{order}”.',
     pickStatsReading: 'Nolasa statistiku: {done} no {total}',
     pickStatsRead: 'Statistika nolasīta.',
     pickStatsReordered: 'Statistika nolasīta. Foto pārkārtoti.',

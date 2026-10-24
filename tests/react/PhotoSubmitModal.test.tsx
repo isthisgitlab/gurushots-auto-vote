@@ -2172,13 +2172,13 @@ describe('the toolbar: order, loaded-photo sort and Show stats', () => {
     test('an order change re-reads the library in that order', async () => {
         setupLoaded();
         await opened();
-        // The ordered read comes back as a preview (alwaysFresh) and is re-checked fresh: both answer the same.
+        // The ordered read is fresh from the switch: the mock answers it in the order.
         getLibrary().mockResolvedValue(listing([photo(5)]));
         pickOption(orderSelect(), 'newest');
         await waitFor(() => expect(getLibrary().mock.calls.some((call) => call[6] === 'newest')).toBe(true));
         expect(await screen.findByRole('button', { name: /^Photo 00000005:/ })).toBeTruthy();
-        // The fresh read behind the ordered listing re-checks the preview's own extent, in the order.
-        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 1, 'newest']);
+        // The Order switch re-reads fresh, keeping the extent on screen, in the order.
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 4, 'newest']);
     });
 
     test('a loaded-photo sort turns Show stats on and the tiles reorder once the run ends', async () => {

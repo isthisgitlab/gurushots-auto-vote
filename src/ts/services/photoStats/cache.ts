@@ -45,7 +45,7 @@ export type PhotoStatsFile = { version: number; photos: Record<string, PhotoStat
 // ranking when the lookup budget or an API failure postpones that refresh.
 const STATS_TTL_MS = 24 * 60 * 60 * 1000;
 
-// Bounds the persisted cache. Entries are tiny (five numbers), so this is
+// Bounds the persisted cache. Entries are tiny (six numbers), so this is
 // generous; on overflow the oldest entries are dropped.
 const MAX_CACHE_ENTRIES = 5000;
 
@@ -56,7 +56,7 @@ const MAX_CACHE_ENTRIES = 5000;
 const MAX_ACHIEVEMENT_COUNT = 999;
 
 // Photo ids are untrusted strings and become cache KEYS, so MAX_CACHE_ENTRIES
-// alone does not bound the file: 5000 entries whose values are five numbers
+// alone does not bound the file: 5000 entries whose values are six numbers
 // each is tiny, but 5000 megabyte-long keys is not. Real GuruShots ids are
 // 32-char hex; anything past this is malformed and simply goes uncached (it is
 // still enriched for the current fill, just never persisted). Same

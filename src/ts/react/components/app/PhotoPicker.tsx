@@ -88,6 +88,9 @@ function PickerStatsControls({ picker }: { picker: ReturnType<typeof usePhotoPic
         else if (picker.statsRead) status = t(sortNeedsStats ? 'app.pickStatsReordered' : 'app.pickStatsRead');
     }
     const loadedCount = picker.state.status === 'ready' ? picker.state.listing.photos.length : 0;
+    // The grid reports the tiles it shows (shownCount); before it reports, the loaded
+    // count stands in. The line names what the sort reorders: the tiles on screen.
+    const shownCount = picker.shownCount ?? loadedCount;
     return (
         <>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -164,7 +167,7 @@ function PickerStatsControls({ picker }: { picker: ReturnType<typeof usePhotoPic
             {sortNeedsStats && picker.state.status === 'ready' && (
                 <p className="text-base-content/70 text-xs">
                     {interp(t('app.pickLoadedSortHelp'), {
-                        count: loadedCount,
+                        count: shownCount,
                         order: t(ORDER_NAME_KEYS[picker.state.order]),
                     })}
                 </p>

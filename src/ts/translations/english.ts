@@ -967,7 +967,7 @@ export const app = {
         "Reads each photo's votes, views, likes and Guru picks from GuruShots; with many photos loaded this takes a while. Tiles show ratio (votes per view) · ♥ likes · ★ Guru picks.",
     pickShowStatsLocked: 'Needed for the Ratio, Likes and Guru picks sorts.',
     pickLoadedSortHelp:
-        'Ratio, likes and Guru picks reorder only the photos loaded so far ({count}). Load more adds more, in {order} order.',
+        'Ratio, likes and Guru picks reorder only the photos shown ({count}). Load more adds more, in {order} order.',
     pickStatsReading: 'Reading stats: {done} of {total}',
     pickStatsRead: 'Stats read.',
     pickStatsReordered: 'Stats read. Photos reordered.',

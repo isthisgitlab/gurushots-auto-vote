@@ -7,7 +7,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as ipc from '@/api/ipc';
-import { LIBRARY_BATCH_PHOTOS } from '../../settings/limits';
+import { LIBRARY_BATCH_PHOTOS, STATS_MIN_INTERVAL_MS } from '../../settings/limits';
+import { sleep } from '../../timing';
 
 import type { LoadedSort } from '../../librarySort';
 
@@ -40,7 +41,7 @@ type StatsSink = {
     merge(landed: TileStats[]): void;
     /** The run finished: every id it could not read. */
     ended(missing: string[]): void;
-    /** A call failed: it and everything behind it stay unread. */
+    /** A call failed: every id of the run still without stats — the failed chunk, the unread queue, and the ids earlier chunks missed. */
     failed(unread: string[]): void;
 };
 
@@ -109,14 +110,22 @@ const drainStatsQueue = async (
             if (!q.running || epochRef.current !== epoch) return;
             if (answer?.error === 'superseded') {
                 // A newer call took this one's place in the queue: its ids go back to the front
-                // and are asked again.
+                // and are asked again — after the queue's minimum gap. Every picker of the web
+                // shell's one process shares that queue; two reading at once would otherwise
+                // knock each other's waiting call out in a tight loop for the whole gap window.
                 q.queue.unshift(...chunk);
+                await sleep(STATS_MIN_INTERVAL_MS);
+                // The wait can outlive the run: a stopped or closed opening must not fall
+                // through to the normal end below, which would mark it read.
+                if (!q.running || epochRef.current !== epoch) return;
                 continue;
             }
             // A failed call: it and everything behind it stay unread, and the run ends so the
-            // warning can offer its Retry.
+            // warning can offer its Retry. The ids earlier chunks missed join them, so the
+            // warning names every id of the run still without stats — the same filter the
+            // normal end path uses.
             sink.progress(null);
-            sink.failed([...chunk, ...q.queue]);
+            sink.failed([...q.missing, ...chunk, ...q.queue].filter((id) => !has(id)));
             q.queue = [];
             q.running = false;
             return;
@@ -210,12 +219,14 @@ const createStatsSink = (
         statsMapRef.current = next;
         setStats(next);
     },
+    // An id answered missing and re-asked after a grid report can arrive twice, and the warning
+    // counts the list: both exits dedup it.
     ended: (missing) => {
         setStatsRead(true);
         setSortStats(new Map(statsMapRef.current));
-        setStatsMissing(missing);
+        setStatsMissing([...new Set(missing)]);
     },
-    failed: setStatsMissing,
+    failed: (unread) => setStatsMissing([...new Set(unread)]),
 });
 
 /**

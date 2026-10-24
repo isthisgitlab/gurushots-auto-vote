@@ -2266,27 +2266,44 @@ describe('the toolbar: order, loaded-photo sort and Show stats', () => {
         await opened();
         getLibrary().mockResolvedValueOnce(listing([photo(5)]));
         pickOption(orderSelect(), 'newest');
+        // The re-read keeps the extent on screen: 3 photos shown, not one batch.
         await waitFor(() =>
-            expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'cached', 'submit', 0, 100, 'newest'),
+            expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh', 'submit', 0, 3, 'newest'),
         );
         expect(await screen.findByRole('button', { name: /^Photo 00000005:/ })).toBeTruthy();
     });
 
-    test('the help line names the loaded count and the order on screen', async () => {
+    test('the help line names the shown count and the order on screen', async () => {
         setup();
         await opened();
         pickOption(sortSelect(), 'ratio');
         await effectsFlushed();
         expect(
             screen.getByText(
-                'Ratio, likes and Guru picks reorder only the photos loaded so far (3). Load more adds more, in Votes order.',
+                'Ratio, likes and Guru picks reorder only the photos shown (3). Load more adds more, in Votes order.',
             ),
         ).toBeTruthy();
         pickOption(orderSelect(), 'oldest');
+        // The re-read keeps the extent on screen: 3 photos shown, not one batch.
         await waitFor(() =>
-            expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'cached', 'submit', 0, 100, 'oldest'),
+            expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh', 'submit', 0, 3, 'oldest'),
         );
         await screen.findByText(/in Oldest order\.$/);
+    });
+
+    test('the help line counts the tiles the grid shows: every photo hidden reports none, not the loaded count', async () => {
+        getLibrary().mockResolvedValue(
+            listing([photo(1, { allowed: false }), photo(2, { allowed: false }), photo(3, { allowed: false })]),
+        );
+        setup();
+        loadPhotos();
+        pickOption(sortSelect(), 'ratio');
+        await effectsFlushed();
+        expect(
+            screen.getByText(
+                'Ratio, likes and Guru picks reorder only the photos shown (0). Load more adds more, in Votes order.',
+            ),
+        ).toBeTruthy();
     });
 
     test('Show stats on under Votes reads the tiles without reordering, and ends with "Stats read."', async () => {

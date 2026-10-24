@@ -327,18 +327,21 @@ export function useLibraryListing(
     /**
      * Sets the order the reads ask the server for. While a listing is shown or a read is in flight
      * (the first read, a Load more, a re-check), it starts a new read of the term on screen from the
-     * top, under a new request id, so the answer of a read in the older order can never land; when
-     * idle it only arms the next read. A non-votes order is read fresh by the handler whatever the
-     * mode asks, so no cached vote-ordered listing can answer for it.
+     * top, under a new request id, so the answer of a read in the older order can never land; the
+     * re-read is fresh like Refresh and Retry — a switch back to Votes cannot be answered by a
+     * narrower cached listing — and keeps the extent on screen. When idle it only arms the next read.
+     * A non-votes order is read fresh by the handler whatever the mode asks, so no cached
+     * vote-ordered listing can answer for it.
      */
     const setOrder = useCallback(
         (next: LibraryOrder) => {
             orderRef.current = next;
             setOrderState(next);
             const current = latestState.current;
-            if (current.status === 'ready' || current.status === 'loading') void load(lastSearchRef.current);
+            if (current.status === 'ready' || current.status === 'loading')
+                void load(lastSearchRef.current, 'fresh', keepOnScreen());
         },
-        [load],
+        [load, keepOnScreen],
     );
 
     // Whether the listing on screen came from a non-empty search term: true while a read of one is

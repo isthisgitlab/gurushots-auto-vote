@@ -84,6 +84,20 @@ export function usePhotoPicker({
         [],
     );
     const stats = usePhotoStatsLoader();
+    // The tiles the grid last reported as shown (it hides refused and blocked photos, so fewer than
+    // the listing holds): the sort reorders those tiles, so the count follows the reports, and null
+    // means not reported yet — the loaded count stands in for it in the help line.
+    const [shownCount, setShownCount] = useState<number | null>(null);
+    // The grid's report, wrapped so each one records the shown count first; the dep is the loader's
+    // setTileIds — one function for the opening — so the wrapper's identity holds beside it.
+    const { setTileIds: reportTileIds } = stats;
+    const setTileIds = useCallback(
+        (ids: readonly string[]) => {
+            setShownCount(ids.length);
+            reportTileIds(ids);
+        },
+        [reportTileIds],
+    );
 
     // The suggestions are of the listing they were ranked beside: a new read drops them, and an answer still on
     // its way.
@@ -177,6 +191,7 @@ export function usePhotoPicker({
         statsRead: stats.statsRead,
         statsMissing: stats.statsMissing,
         retryStats: stats.retryStats,
-        setTileIds: stats.setTileIds,
+        setTileIds,
+        shownCount,
     };
 }

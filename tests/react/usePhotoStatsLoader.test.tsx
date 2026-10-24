@@ -1,13 +1,15 @@
 /**
  * usePhotoStatsLoader at the hook level: the queue behind Show stats asks for the ids the grid
- * reports, in chunks of one batch, one call at a time; a superseded answer requeues its ids at the
- * front, a failed one ends the run with everything unread missing, and answers merge for the whole
- * opening — a stopped run's included. The loaded-photo sort snapshot refreshes on a sort change and
- * when a run ends, never while a run is out.
+ * reports, in chunks of one batch, one call at a time; a superseded answer waits out the queue's
+ * gap and requeues its ids at the front, a failed one ends the run with every id still without
+ * stats missing, and answers merge for the whole opening — a stopped run's included. The
+ * loaded-photo sort snapshot refreshes on a sort change and when a run ends, never while a run
+ * is out.
  */
 
 import { act, renderHook, waitFor } from '@testing-library/preact';
 import { usePhotoStatsLoader } from '@/hooks/usePhotoStatsLoader';
+import { STATS_MIN_INTERVAL_MS } from '../../src/ts/settings/limits';
 
 import type { WindowApi } from '../../src/ts/types/ipc';
 
@@ -40,6 +42,8 @@ const deferred = <T,>() => {
 const getStats = () => jest.mocked(window.api.getPhotoStats);
 
 beforeEach(() => {
+    // A supersede test that stops early must not leak its fake timers into the next one.
+    jest.useRealTimers();
     getStats().mockReset();
 });
 
@@ -133,7 +137,122 @@ describe('the queue', () => {
         expect(result.current.stats.size).toBe(1);
     });
 
+    test('an id answered missing and re-reported by the grid is named once in the warning', async () => {
+        const first = deferred<StatsReply>();
+        const second = deferred<StatsReply>();
+        getStats()
+            .mockReturnValueOnce(first.promise)
+            .mockReturnValueOnce(second.promise)
+            .mockResolvedValue(answer([], ['photo-0']));
+        const { result } = renderHook(() => usePhotoStatsLoader());
+        act(() => {
+            result.current.setTileIds(ids(2));
+            result.current.setShowStats(true);
+        });
+        // A new tile joins before the first answer: chunk two keeps the run alive past it.
+        act(() => {
+            result.current.setTileIds([...ids(2), 'photo-2']);
+        });
+        await act(async () => {
+            first.resolve(answer([], ['photo-0', 'photo-1']));
+        });
+        expect(getStats().mock.calls[1][0]).toEqual(['photo-2']);
+        // The grid re-reports photo-0 while the run is still on: enqueue asks it again.
+        act(() => {
+            result.current.setTileIds(['photo-0']);
+        });
+        await act(async () => {
+            second.resolve(answer([], ['photo-0']));
+        });
+        await waitFor(() => expect(result.current.statsRead).toBe(true));
+        expect(getStats()).toHaveBeenCalledTimes(3);
+        expect(getStats().mock.calls[2][0]).toEqual(['photo-0']);
+        // Missing twice across the run, named once.
+        expect(result.current.statsMissing).toEqual(['photo-0', 'photo-1']);
+        expect(result.current.statsProgress).toBeNull();
+    });
+
+    test('a failed call names an id re-reported by the grid once', async () => {
+        const first = deferred<StatsReply>();
+        const second = deferred<StatsReply>();
+        getStats().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+        const { result } = renderHook(() => usePhotoStatsLoader());
+        act(() => {
+            result.current.setTileIds(ids(2));
+            result.current.setShowStats(true);
+        });
+        // A new tile joins before the first answer: chunk two keeps the run alive past it.
+        act(() => {
+            result.current.setTileIds([...ids(2), 'photo-2']);
+        });
+        await act(async () => {
+            first.resolve(answer([], ['photo-0', 'photo-1']));
+        });
+        expect(getStats().mock.calls[1][0]).toEqual(['photo-2']);
+        // The grid re-reports photo-0 while the run is still on: it now sits in q.missing and the queue.
+        act(() => {
+            result.current.setTileIds(['photo-0']);
+        });
+        await act(async () => {
+            second.resolve(failure('boom'));
+        });
+        await waitFor(() => expect(result.current.statsProgress).toBeNull());
+        expect(result.current.statsRead).toBe(false);
+        expect(getStats()).toHaveBeenCalledTimes(2);
+        // photo-0 reached the failed exit twice — as an earlier chunk's miss and as an unread
+        // queued id — and is named once.
+        expect(result.current.statsMissing).toEqual(['photo-0', 'photo-1', 'photo-2']);
+    });
+
+    test('a re-asked id that lands with stats is not named by a later failed call', async () => {
+        const first = deferred<StatsReply>();
+        const second = deferred<StatsReply>();
+        const third = deferred<StatsReply>();
+        getStats()
+            .mockReturnValueOnce(first.promise)
+            .mockReturnValueOnce(second.promise)
+            .mockReturnValueOnce(third.promise)
+            .mockResolvedValue(failure('boom'));
+        const { result } = renderHook(() => usePhotoStatsLoader());
+        act(() => {
+            result.current.setTileIds(ids(2));
+            result.current.setShowStats(true);
+        });
+        // A new tile joins before the first answer: chunk two keeps the run alive past it.
+        act(() => {
+            result.current.setTileIds([...ids(2), 'photo-2']);
+        });
+        await act(async () => {
+            first.resolve(answer([], ['photo-0', 'photo-1']));
+        });
+        expect(getStats().mock.calls[1][0]).toEqual(['photo-2']);
+        // The grid re-reports photo-0: it re-enters the queue while sitting in the warning's ids.
+        act(() => {
+            result.current.setTileIds(['photo-0']);
+        });
+        await act(async () => {
+            second.resolve(answer([stat(2)]));
+        });
+        expect(getStats().mock.calls[2][0]).toEqual(['photo-0']);
+        // The re-ask is out; the grid reports one more tile, whose chunk will fail.
+        act(() => {
+            result.current.setTileIds(['photo-0', 'photo-4']);
+        });
+        await act(async () => {
+            third.resolve(answer([stat(0)]));
+        });
+        expect(getStats().mock.calls[3][0]).toEqual(['photo-4']);
+        await waitFor(() => expect(result.current.statsProgress).toBeNull());
+        expect(getStats()).toHaveBeenCalledTimes(4);
+        // photo-0 was answered missing once and has stats now: the failed call's warning keeps
+        // photo-1 and the failed chunk's photo-4, and does not name photo-0 again.
+        expect([...result.current.stats.keys()]).toEqual(['photo-2', 'photo-0']);
+        expect(result.current.statsRead).toBe(false);
+        expect(result.current.statsMissing).toEqual(['photo-1', 'photo-4']);
+    });
+
     test('a superseded answer requeues its ids at the front of the current run', async () => {
+        jest.useFakeTimers();
         getStats()
             .mockResolvedValueOnce(failure('superseded'))
             .mockResolvedValue(answer([stat(0), stat(1)]));
@@ -142,10 +261,65 @@ describe('the queue', () => {
             result.current.setTileIds(ids(2));
             result.current.setShowStats(true);
         });
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        // The re-ask waits out the shared queue's gap first.
+        await act(async () => {
+            await jest.advanceTimersByTimeAsync(STATS_MIN_INTERVAL_MS);
+        });
         await waitFor(() => expect(result.current.statsRead).toBe(true));
         expect(getStats().mock.calls[1][0]).toEqual(['photo-0', 'photo-1']);
         expect(result.current.stats.size).toBe(2);
         expect(result.current.statsMissing).toEqual([]);
+    });
+
+    test('a superseded answer sends no second call before the gap ends; after it the re-ask goes out and merges', async () => {
+        jest.useFakeTimers();
+        getStats()
+            .mockResolvedValueOnce(failure('superseded'))
+            .mockResolvedValue(answer([stat(0), stat(1)]));
+        const { result } = renderHook(() => usePhotoStatsLoader());
+        act(() => {
+            result.current.setTileIds(ids(2));
+            result.current.setShowStats(true);
+        });
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        await act(async () => {
+            await jest.advanceTimersByTimeAsync(STATS_MIN_INTERVAL_MS - 1);
+        });
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        await act(async () => {
+            await jest.advanceTimersByTimeAsync(1);
+        });
+        expect(getStats().mock.calls[1][0]).toEqual(['photo-0', 'photo-1']);
+        await waitFor(() => expect(result.current.statsRead).toBe(true));
+        expect(result.current.stats.size).toBe(2);
+        expect(result.current.statsMissing).toEqual([]);
+    });
+
+    test('Show stats off during the supersede wait: nothing goes out after the gap and nothing is read', async () => {
+        jest.useFakeTimers();
+        getStats().mockResolvedValueOnce(failure('superseded'));
+        const { result } = renderHook(() => usePhotoStatsLoader());
+        act(() => {
+            result.current.setTileIds(ids(2));
+            result.current.setShowStats(true);
+        });
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        // Flush the superseded answer first: the drain must be parked on the gap's timer before
+        // Show stats goes off, or the stop lands on the pre-wait guard and the post-wait one
+        // never runs.
+        await act(async () => {
+            await jest.advanceTimersByTimeAsync(0);
+        });
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        act(() => {
+            result.current.setShowStats(false);
+        });
+        await act(async () => {
+            await jest.advanceTimersByTimeAsync(STATS_MIN_INTERVAL_MS);
+        });
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        expect(result.current.statsRead).toBe(false);
     });
 
     test('a failed call ends the run: it and everything behind it are missing, and the loader stops', async () => {
@@ -162,6 +336,29 @@ describe('the queue', () => {
         expect(getStats()).toHaveBeenCalledTimes(2);
         expect(result.current.statsMissing).toEqual(ids(150, 100));
         expect(result.current.stats.size).toBe(100);
+    });
+
+    test('a failed call keeps the earlier chunks missing ids in the warning beside its own unread ones', async () => {
+        getStats()
+            .mockResolvedValueOnce(
+                answer(
+                    ids(98).map((_, i) => stat(i)),
+                    ['photo-98', 'photo-99'],
+                ),
+            )
+            .mockResolvedValueOnce(failure('boom'));
+        const { result } = renderHook(() => usePhotoStatsLoader());
+        act(() => {
+            result.current.setTileIds(ids(250));
+            result.current.setShowStats(true);
+        });
+        await waitFor(() => expect(result.current.statsProgress).toBeNull());
+        expect(result.current.statsRead).toBe(false);
+        expect(getStats()).toHaveBeenCalledTimes(2);
+        // photo-98 and photo-99 the first chunk answered missing; the failed chunk and everything
+        // behind it were never read. The warning names all of them together.
+        expect(result.current.statsMissing).toEqual([...ids(2, 98), ...ids(150, 100)]);
+        expect(result.current.stats.size).toBe(98);
     });
 
     test('a call that throws (no bridge) counts as a failed one', async () => {
@@ -574,6 +771,38 @@ describe('restarts while a call is out', () => {
         },
     );
 
+    test('a restart during the supersede wait is picked up when the wait ends, and the new run ends', async () => {
+        jest.useFakeTimers();
+        getStats()
+            .mockResolvedValueOnce(failure('superseded'))
+            .mockResolvedValue(answer([stat(0), stat(1), stat(5)]));
+        const { result } = renderHook(() => usePhotoStatsLoader());
+        act(() => {
+            result.current.setTileIds(ids(2));
+            result.current.setShowStats(true);
+        });
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        // The superseded answer parks the drain in the gap wait, holding busy.
+        await flush();
+        // A new tile joins and the Retry restarts during the wait: the restart's pump call no-ops
+        // while busy is held, so only the loop's next iteration can pick the new run's queue up.
+        act(() => {
+            result.current.setTileIds([...ids(2), 'photo-5']);
+            result.current.retryStats();
+        });
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        expect(result.current.statsProgress).toEqual({ done: 0, total: 3 });
+        await act(async () => {
+            await jest.advanceTimersByTimeAsync(STATS_MIN_INTERVAL_MS);
+        });
+        await waitFor(() => expect(result.current.statsRead).toBe(true));
+        expect(getStats()).toHaveBeenCalledTimes(2);
+        expect(getStats().mock.calls[1][0]).toEqual(['photo-0', 'photo-1', 'photo-5']);
+        expect(result.current.stats.size).toBe(3);
+        expect(result.current.statsProgress).toBeNull();
+        expect(result.current.statsMissing).toEqual([]);
+    });
+
     test('a requeued chunk that fails again ends the run with every id in the warning, and asks nothing more', async () => {
         const first = deferred<StatsReply>();
         getStats().mockReturnValueOnce(first.promise).mockResolvedValueOnce(failure('boom'));
@@ -667,6 +896,7 @@ describe('restarts while a call is out', () => {
     });
 
     test('a second superseded answer in a row still ends once a success follows', async () => {
+        jest.useFakeTimers();
         getStats()
             .mockResolvedValueOnce(failure('superseded'))
             .mockResolvedValueOnce(failure('superseded'))
@@ -675,6 +905,14 @@ describe('restarts while a call is out', () => {
         act(() => {
             result.current.setTileIds(ids(1));
             result.current.setShowStats(true);
+        });
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        await act(async () => {
+            await jest.advanceTimersByTimeAsync(STATS_MIN_INTERVAL_MS);
+        });
+        expect(getStats()).toHaveBeenCalledTimes(2);
+        await act(async () => {
+            await jest.advanceTimersByTimeAsync(STATS_MIN_INTERVAL_MS);
         });
         await waitFor(() => expect(result.current.statsRead).toBe(true));
         expect(getStats()).toHaveBeenCalledTimes(3);

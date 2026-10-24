@@ -906,6 +906,35 @@ describe('re-reading the extent on screen', () => {
         await waitFor(() => expect(result.current.state.status).toBe('ready'));
     });
 
+    test('an Order switch re-reads the extent on screen too', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(answer({ photos: many(250), nextStart: 250, truncated: true }))
+            .mockResolvedValueOnce(answer({ photos: many(250), nextStart: 250, truncated: true }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => result.current.setOrder('newest'));
+        // The re-read starts from the top in the new order, and keeps the 250 on screen, not one batch.
+        expect(getLibrary().mock.calls[1]).toEqual([7, undefined, 'fresh', 'submit', 0, 250, 'newest']);
+    });
+
+    test('a switch back to Votes reads fresh, past the narrower cached entry', async () => {
+        getLibrary()
+            // The cached vote-ordered entry: 100 wide, and a Load more never widens it.
+            .mockResolvedValueOnce(answer({ photos: many(100), nextStart: 100, truncated: true }))
+            .mockResolvedValueOnce(answer({ photos: many(150, 'q'), nextStart: 250, truncated: true }))
+            .mockResolvedValueOnce(answer({ photos: many(250, 'q'), nextStart: 250, truncated: true }))
+            .mockResolvedValueOnce(answer({ photos: many(250), nextStart: 250, truncated: true }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => result.current.loadMore());
+        await act(async () => result.current.setOrder('newest'));
+        await waitFor(() => expect(ids(result.current.state as never)).toHaveLength(250));
+        await act(async () => result.current.setOrder('votes'));
+        // A cached request would be answered by the stale 100-wide entry; the read goes out fresh.
+        expect(getLibrary().mock.calls[3]).toEqual([7, undefined, 'fresh', 'submit', 0, 250]);
+        await waitFor(() => expect(ids(result.current.state as never)).toHaveLength(250));
+    });
+
     test('a listing with known marks counts only the allowed photos, not every one listed', async () => {
         const mixed = (allowed: number, refused = 0) => [
             ...Array.from({ length: allowed }, (_, i) => photo(`a${i}`)),
@@ -1068,7 +1097,8 @@ describe('the order', () => {
         await act(async () => result.current.load(''));
         expect(result.current.state).toMatchObject({ status: 'ready', order: 'votes' });
         await act(async () => result.current.setOrder('oldest'));
-        expect(getLibrary().mock.calls[1]).toEqual([7, undefined, 'cached', 'submit', 0, 100, 'oldest']);
+        // One photo on screen: the re-read keeps that extent.
+        expect(getLibrary().mock.calls[1]).toEqual([7, undefined, 'fresh', 'submit', 0, 1, 'oldest']);
         expect(result.current.state).toMatchObject({ status: 'loading' });
         await waitFor(() => expect(ids(result.current.state as never)).toEqual(['n']));
         expect(result.current.state).toMatchObject({ order: 'oldest' });

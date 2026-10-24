@@ -100,18 +100,18 @@ describe('the visible stats line', () => {
 });
 
 describe('the composed aria-label', () => {
-    test('gains the translated stats after the tile name, with the ratio and plain counts', () => {
-        tile({ stats, showStats: true });
+    test('gains the translated stats after the tile name, with the ratio and formatted counts', () => {
+        tile({ stats: { ...stats, likes: 13860 }, showStats: true });
         const label = screen.getByRole('button').getAttribute('aria-label') ?? '';
         expect(label).toBe(
-            'Photo aaaaaaaa: sunset. Can be entered. Ratio 2.42 votes per view, 1386 likes, 14 Guru picks.',
+            'Photo aaaaaaaa: sunset. Can be entered. Ratio 2.42 votes per view, 13,860 likes, 14 Guru picks.',
         );
     });
 
     test('a photo with no views says so in words (the visible line keeps its dash)', () => {
         tile({ stats: { ...stats, votes: 0, views: 0 }, showStats: true });
         expect(screen.getByRole('button').getAttribute('aria-label')).toContain(
-            'No views yet, 1386 likes, 14 Guru picks.',
+            'No views yet, 1,386 likes, 14 Guru picks.',
         );
     });
 
@@ -138,13 +138,14 @@ describe('the composed aria-label', () => {
     });
 
     test('the numbers take the active language’s formatting', () => {
-        // One-shot, so the mocked language is back for the next test.
-        mockTranslator.getCurrentLanguage.mockReturnValueOnce('lv');
-        tile({ stats, showStats: true });
+        // Two one-shots, so the mocked language is back for the next test: the
+        // label reads the locale once for the counts and once inside ratioText.
+        mockTranslator.getCurrentLanguage.mockReturnValueOnce('lv').mockReturnValueOnce('lv');
+        tile({ stats: { ...stats, likes: 13860 }, showStats: true });
         const format = new Intl.NumberFormat('lv-LV');
         const label = screen.getByRole('button').getAttribute('aria-label') ?? '';
         expect(label).toContain(
-            `Ratio 2,42 votes per view, ${format.format(1386)} likes, ${format.format(14)} Guru picks.`,
+            `Ratio 2,42 votes per view, ${format.format(13860)} likes, ${format.format(14)} Guru picks.`,
         );
     });
 });

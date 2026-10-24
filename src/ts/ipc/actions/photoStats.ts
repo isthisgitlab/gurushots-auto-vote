@@ -9,16 +9,12 @@ import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import { createStatsBudget, enrichCandidates, statsBudgetTripped } from '../../services/photoStats';
-import { CHOSEN_PHOTO_ID_RE, LIBRARY_BATCH_PHOTOS } from '../../settings/limits';
+import { CHOSEN_PHOTO_ID_RE, LIBRARY_BATCH_PHOTOS, STATS_MIN_INTERVAL_MS } from '../../settings/limits';
 import { errorResult } from '../errorResult';
 import { refuseInvalidArgs } from './shared';
 import { SUPERSEDED, createThrottle } from './throttle';
 
 import type { IpcReplyFn } from '../registerHandlers';
-
-// Shortest gap between the end of one stats-queue run and the start of the next. A display read is
-// one get_image_data per photo, so a stuck Retry key must not queue burst after burst either.
-const STATS_MIN_INTERVAL_MS = 1500;
 
 // After a stats call's failure breaker trips, later calls answer every uncached
 // id as missing without fetching, for this long. GuruShots pushing back on one
