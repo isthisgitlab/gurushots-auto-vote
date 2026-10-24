@@ -317,20 +317,20 @@ const judgeSnapImage = async (caption: string, image: SnapImage): Promise<SnapJu
     if (!prompts) return null;
     const url = entryPhotoUrl({ id: image.imageId, member_id: image.memberId }, { size: 512, fit: true });
     if (!url) return null;
+    const noJudgment = (reason: string): null => {
+        logger.withCategory('turbo').warning(`Snap judgment ${reason}`, null);
+        return null;
+    };
     try {
         if (!(await hasBundledModel())) return null;
         const classifier = await getClassifier();
         const results = await classifier(url, [prompts.yes, prompts.no]);
         const yesLogit = toLogit(results?.find?.((r) => r.label === prompts.yes)?.score);
         const noLogit = toLogit(results?.find?.((r) => r.label === prompts.no)?.score);
-        if (!Number.isFinite(yesLogit) || !Number.isFinite(noLogit)) {
-            logger.withCategory('turbo').warning('Snap judgment found invalid model scores', null);
-            return null;
-        }
+        if (!Number.isFinite(yesLogit) || !Number.isFinite(noLogit)) return noJudgment('found invalid model scores');
         return { answer: yesLogit >= noLogit ? 'yes' : 'no', yesLogit, noLogit };
     } catch (error) {
-        logger.withCategory('turbo').warning(`Snap judgment unavailable: ${errorMessage(error) || error}`, null);
-        return null;
+        return noJudgment(`unavailable: ${errorMessage(error) || error}`);
     }
 };
 
