@@ -1210,4 +1210,30 @@ describe('the order', () => {
         expect(ids(result.current.state as never)).toEqual(['a']);
         expect(getLibrary()).toHaveBeenCalledTimes(1);
     });
+
+    test('two same-value changes batched in one act while the first read is in flight re-read once', async () => {
+        const first = deferred();
+        const reread = deferred();
+        getLibrary().mockReturnValueOnce(first.promise).mockReturnValueOnce(reread.promise);
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => {
+            void result.current.load('pink');
+        });
+        expect(getLibrary().mock.calls[0]).toEqual([7, 'pink', 'fresh', 'submit', 0, 100]);
+        expect(result.current.state).toMatchObject({ status: 'loading' });
+        await act(async () => {
+            result.current.setOrder('newest');
+            result.current.setOrder('newest');
+        });
+        // The duplicate meets the ref the first call already moved, not the state this batch still
+        // holds at 'votes': one re-read goes out for the change, and it is not superseded again.
+        expect(getLibrary()).toHaveBeenCalledTimes(2);
+        expect(getLibrary().mock.calls[1]).toEqual([7, 'pink', 'fresh', 'submit', 0, 100, 'newest']);
+        await act(async () => first.resolve(answer({ photos: [photo('a')] })));
+        await act(async () => reread.resolve(answer({ photos: [photo('n')] })));
+        await act(async () => undefined);
+        expect(result.current.state).toMatchObject({ status: 'ready', order: 'newest' });
+        expect(ids(result.current.state as never)).toEqual(['n']);
+        expect(getLibrary()).toHaveBeenCalledTimes(2);
+    });
 });
