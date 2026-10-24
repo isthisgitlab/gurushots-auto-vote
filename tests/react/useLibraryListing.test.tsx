@@ -1191,4 +1191,23 @@ describe('the order', () => {
         expect(getLibrary()).toHaveBeenCalledTimes(1);
         expect(result.current.state).toMatchObject({ status: 'ready', order: 'votes' });
     });
+
+    test('the order it already holds re-chosen while the first read is in flight leaves that read alone', async () => {
+        const pending = deferred();
+        getLibrary().mockReturnValueOnce(pending.promise);
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => {
+            void result.current.load('pink');
+        });
+        expect(getLibrary().mock.calls[0]).toEqual([7, 'pink', 'fresh', 'submit', 0, 100]);
+        expect(result.current.state).toMatchObject({ status: 'loading' });
+        await act(async () => result.current.setOrder('votes'));
+        // No second read goes out and the in-flight request is not superseded: its answer still lands.
+        expect(getLibrary()).toHaveBeenCalledTimes(1);
+        await act(async () => pending.resolve(answer({ photos: [photo('a')] })));
+        await act(async () => undefined);
+        expect(result.current.state).toMatchObject({ status: 'ready', order: 'votes' });
+        expect(ids(result.current.state as never)).toEqual(['a']);
+        expect(getLibrary()).toHaveBeenCalledTimes(1);
+    });
 });

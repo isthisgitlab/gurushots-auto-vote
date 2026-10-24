@@ -657,6 +657,33 @@ describe('the loaded-photo sort', () => {
         expect(result.current.statsProgress).toBeNull();
         expect(result.current.sortStats).toBe(snapshot);
     });
+
+    test('the sort it already holds re-chosen while its run is out leaves the run alone', async () => {
+        const pending = deferred<StatsReply>();
+        getStats().mockReturnValueOnce(pending.promise);
+        const { result } = renderHook(() => usePhotoStatsLoader());
+        act(() => {
+            result.current.setTileIds(ids(2));
+            result.current.setSortBy('ratio');
+        });
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        expect(result.current.statsProgress).toEqual({ done: 0, total: 2 });
+        const snapshot = result.current.sortStats;
+        act(() => {
+            result.current.setSortBy('ratio');
+        });
+        // No new call, the in-flight run's count stands, and no mid-run re-snapshot.
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        expect(result.current.statsProgress).toEqual({ done: 0, total: 2 });
+        expect(result.current.sortStats).toBe(snapshot);
+        await act(async () => {
+            pending.resolve(answer([stat(0), stat(1)]));
+        });
+        await waitFor(() => expect(result.current.statsRead).toBe(true));
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        expect(result.current.statsProgress).toBeNull();
+        expect([...result.current.stats.keys()]).toEqual(['photo-0', 'photo-1']);
+    });
 });
 
 describe('restarts while a call is out', () => {
