@@ -1,13 +1,16 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { BusyContent, InlineLoader } from '@/components/ui/LoadingSpinner';
 import { interp } from '@/utils/interp';
 import { ipcErrorText } from '@/api/ipcErrorText';
+import { reorderLoadedPhotos } from '@/utils/loadedPhotoSort';
 import { ListingHeader } from './ListingHeader';
 import { MissingTile, PendingTile, PhotoTile, SavedPickTile } from './PhotoTile';
 import { MAX_CHOSEN_PHOTOS } from '../../../settings/limits';
 
 import type { FocusEvent, ReactNode } from 'react';
+import type { LoadedSort } from '../../../librarySort';
+import type { TileStats } from '@/hooks/usePhotoStatsLoader';
 import type { LibraryPhoto, ListState } from '@/hooks/useLibraryListing';
 
 const TILE_GRID = 'grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4';
@@ -68,6 +71,11 @@ export function PhotoGrid({
     keepIds,
     recommendedIds,
     tileSlot,
+    stats,
+    sortStats,
+    sortBy,
+    showStats,
+    onTileIds,
 }: {
     state: ListState;
     known: Map<string, LibraryPhoto>;
@@ -128,6 +136,16 @@ export function PhotoGrid({
      * which tiles get content. Absent, the tile is the grid cell as before (the submit modal).
      */
     tileSlot?: (id: string) => ReactNode;
+    /** The stats the Show-stats loader has read, by photo id: a full tile's line and label come from here. */
+    stats?: ReadonlyMap<string, TileStats>;
+    /** The snapshot the loaded-photo sort goes by, so answers landing mid-run cannot move the tiles. */
+    sortStats?: ReadonlyMap<string, TileStats>;
+    /** The loaded-photo sort the toolbar selected (default `library`: the listing's own order). */
+    sortBy?: LoadedSort;
+    /** Show stats is on: full tiles carry their ratio, likes and Guru picks. */
+    showStats?: boolean;
+    /** Reports the ids the grid renders as full photo tiles, for the picker's stats loader. */
+    onTileIds?: (ids: string[]) => void;
 }) {
     const { t } = useTranslation();
     const recommended = new Set(recommendedIds ?? []);
@@ -137,6 +155,10 @@ export function PhotoGrid({
     // hides hands it to.
     const lastFocusedTile = useRef<Element | null>(null);
     const hiddenLineRef = useRef<HTMLDivElement>(null);
+    // The ids of the full photo tiles the last render made, and the set they were last reported
+    // under: the stats loader asks for them (see onTileIds).
+    const tileIds: string[] = [];
+    const reportedTileIds = useRef<string | null>(null);
     // Load more waits while any read is in flight: its own batch, or a re-read of the listing on screen (a
     // read that takes the listing down shows the loader, and the button is gone with it).
     const loadMoreHeld = loadingMore || revalidating;
@@ -191,7 +213,8 @@ export function PhotoGrid({
             const atCap = selected.length >= max;
             const tiles = shownIdleIds.map((id) => {
                 const record = extraPhotos?.get(id);
-                if (record)
+                if (record) {
+                    tileIds.push(id);
                     return cell(
                         id,
                         <PhotoTile
@@ -208,8 +231,11 @@ export function PhotoGrid({
                             locked={locked}
                             lockedKey={lockedKey}
                             onToggle={onToggle}
+                            stats={stats?.get(id) ?? null}
+                            showStats={showStats === true}
                         />,
                     );
+                }
                 if (!savedPicks) return null;
                 return cell(
                     id,
@@ -300,7 +326,13 @@ export function PhotoGrid({
         const hiddenFromGrid = (photo: LibraryPhoto): boolean =>
             !chosen.has(photo.id) && !blockedIds?.has(photo.id) && !keepIds?.has(photo.id) && refusedHere(photo);
         const refusedHidden = listing.photos.filter(hiddenFromGrid).length;
-        const shownPhotos = listing.photos.filter((photo) => !hiddenFromGrid(photo));
+        // The shown photos in the order they render: the loaded-photo sort reorders them from the
+        // sort snapshot, never from the live Map a running read is still filling in.
+        const shownPhotos = reorderLoadedPhotos(
+            listing.photos.filter((photo) => !hiddenFromGrid(photo)),
+            sortBy ?? 'library',
+            sortStats ?? new Map(),
+        );
         // The ids the listing returns, as a set: a pick's "listed or not" is a lookup, not a scan per pick.
         const listedIds = new Set(listing.photos.map((photo) => photo.id));
         // A non-empty listing with nothing in it to pick: every photo is hidden or blocked, and nothing is picked.
@@ -317,8 +349,9 @@ export function PhotoGrid({
             numberOf.set(id, numberOf.size + 1);
         }
         const shown = (id: string): number | null => (numbered ? (numberOf.get(id) ?? null) : null);
-        const tile = (photo: LibraryPhoto, position: number | null) =>
-            cell(
+        const tile = (photo: LibraryPhoto, position: number | null) => {
+            tileIds.push(photo.id);
+            return cell(
                 photo.id,
                 <PhotoTile
                     key={photo.id}
@@ -334,8 +367,11 @@ export function PhotoGrid({
                     locked={locked}
                     lockedKey={lockedKey}
                     onToggle={onToggle}
+                    stats={stats?.get(photo.id) ?? null}
+                    showStats={showStats === true}
                 />,
             );
+        };
         // An empty listing's text. A non-preview listing puts it in the live region in place of the Showing
         // line (so "Showing 0 photos" never doubles "No photos found"); a preview, which names no count,
         // keeps it as a body paragraph.
@@ -509,6 +545,19 @@ export function PhotoGrid({
         };
     };
     const { status, body } = render();
+    // The full-tile ids report once per SET change, keyed from a sorted copy: the grid's own
+    // reordering (a loaded sort applying, a reorder-at-run-end) renders the same tiles and sends
+    // nothing, and the loader re-asks only ids without stats anyway. The ids themselves go in the
+    // grid's render order, so the loader reads the visible top first.
+    const tileIdsKey = [...tileIds].sort().join('\n');
+    useEffect(() => {
+        if (onTileIds === undefined || reportedTileIds.current === tileIdsKey) return;
+        reportedTileIds.current = tileIdsKey;
+        onTileIds(tileIds);
+        // tileIds is this render's collection of the same set the key names; listing it in deps
+        // would re-run the effect every render for a report the key guard would drop anyway.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [onTileIds, tileIdsKey]);
     return (
         <>
             {/* One live region at the same place in every state, so a line that arrives in it is announced. It is

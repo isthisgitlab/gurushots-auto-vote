@@ -56,7 +56,7 @@ const MAX_CACHE_ENTRIES = 5000;
 const MAX_ACHIEVEMENT_COUNT = 999;
 
 // Photo ids are untrusted strings and become cache KEYS, so MAX_CACHE_ENTRIES
-// alone does not bound the file: 5000 entries whose values are three numbers
+// alone does not bound the file: 5000 entries whose values are five numbers
 // each is tiny, but 5000 megabyte-long keys is not. Real GuruShots ids are
 // 32-char hex; anything past this is malformed and simply goes uncached (it is
 // still enriched for the current fill, just never persisted). Same

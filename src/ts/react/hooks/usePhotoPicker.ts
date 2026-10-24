@@ -3,11 +3,15 @@
  * and Search, the Auto ranking with its suggestions strip and paging, and the idle grid's memory of
  * what has been picked in this opening. The caller owns the selection (`selected`) and what it means
  * (a submit's pick, a saved list): this hook only reads and ranks.
+ *
+ * The toolbar's session state — the library order, the loaded-photo sort and Show stats — is here
+ * too, with the stats loader it drives (`usePhotoStatsLoader`, the only caller of `get-photo-stats`).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSuggestPhotos } from '@/api/useSuggestPhotos';
 import { useLibraryListing } from '@/hooks/useLibraryListing';
+import { usePhotoStatsLoader } from '@/hooks/usePhotoStatsLoader';
 import { MAX_SUGGEST_EXCLUDE } from '../../settings/limits';
 
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
@@ -35,6 +39,8 @@ export function usePhotoPicker({
         requestId,
         revalidating,
         recheckFailed,
+        order,
+        setOrder,
         load,
         refresh,
         retry,
@@ -77,6 +83,7 @@ export function usePhotoPicker({
         },
         [],
     );
+    const stats = usePhotoStatsLoader();
 
     // The suggestions are of the listing they were ranked beside: a new read drops them, and an answer still on
     // its way.
@@ -139,6 +146,8 @@ export function usePhotoPicker({
         requestId,
         revalidating,
         recheckFailed,
+        order,
+        setOrder,
         refresh,
         retry,
         loadMore,
@@ -158,5 +167,16 @@ export function usePhotoPicker({
         shownIds,
         idleShown,
         autoSuggest,
+        sortBy: stats.sortBy,
+        setSortBy: stats.setSortBy,
+        showStats: stats.showStats,
+        setShowStats: stats.setShowStats,
+        stats: stats.stats,
+        sortStats: stats.sortStats,
+        statsProgress: stats.statsProgress,
+        statsRead: stats.statsRead,
+        statsMissing: stats.statsMissing,
+        retryStats: stats.retryStats,
+        setTileIds: stats.setTileIds,
     };
 }

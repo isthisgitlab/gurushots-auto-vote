@@ -1037,3 +1037,117 @@ describe('the request id', () => {
         expect(result.current.requestId).toBe(2);
     });
 });
+
+describe('the order', () => {
+    test('the default is votes, which travels as no argument, and the listing carries it', async () => {
+        getLibrary().mockResolvedValue(answer());
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        expect(result.current.order).toBe('votes');
+        await act(async () => result.current.load(''));
+        expect(getLibrary().mock.calls[0]).toEqual([7, undefined, 'cached', 'submit', 0, 100]);
+        expect(result.current.state).toMatchObject({ status: 'ready', order: 'votes' });
+    });
+
+    test('when idle a change only arms the next read, which carries the order as the 7th argument', async () => {
+        getLibrary().mockResolvedValue(answer());
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.setOrder('newest'));
+        expect(result.current.order).toBe('newest');
+        expect(getLibrary()).not.toHaveBeenCalled();
+        await act(async () => result.current.load(''));
+        // The handler walks a cached request with a non-votes order fresh; the renderer just names the order.
+        expect(getLibrary().mock.calls[0]).toEqual([7, undefined, 'cached', 'submit', 0, 100, 'newest']);
+        expect(result.current.state).toMatchObject({ status: 'ready', order: 'newest' });
+    });
+
+    test('while a listing is shown a change re-reads the term on screen from the top in that order', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(answer({ photos: [photo('a')], nextStart: 1, truncated: true }))
+            .mockResolvedValueOnce(answer({ photos: [photo('n')], nextStart: 1, truncated: true }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        expect(result.current.state).toMatchObject({ status: 'ready', order: 'votes' });
+        await act(async () => result.current.setOrder('oldest'));
+        expect(getLibrary().mock.calls[1]).toEqual([7, undefined, 'cached', 'submit', 0, 100, 'oldest']);
+        expect(result.current.state).toMatchObject({ status: 'loading' });
+        await waitFor(() => expect(ids(result.current.state as never)).toEqual(['n']));
+        expect(result.current.state).toMatchObject({ order: 'oldest' });
+        // A Load more of the new listing continues in it.
+        getLibrary().mockResolvedValueOnce(
+            answer({ photos: [photo('n'), photo('m')], nextStart: 2, truncated: false }),
+        );
+        await act(async () => result.current.loadMore());
+        expect(getLibrary().mock.calls[2]).toEqual([7, undefined, 'fresh', 'submit', 1, 100, 'oldest']);
+    });
+
+    test('a change during the first read drops the older answer and re-reads from the top', async () => {
+        const pending = deferred();
+        getLibrary()
+            .mockReturnValueOnce(pending.promise)
+            .mockResolvedValueOnce(answer({ photos: [photo('newest')] }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => {
+            void result.current.load('pink');
+        });
+        expect(getLibrary().mock.calls[0]).toEqual([7, 'pink', 'fresh', 'submit', 0, 100]);
+        await act(async () => result.current.setOrder('newest'));
+        expect(getLibrary().mock.calls[1]).toEqual([7, 'pink', 'fresh', 'submit', 0, 100, 'newest']);
+        await waitFor(() => expect(ids(result.current.state as never)).toEqual(['newest']));
+        // The vote-ordered answer of the read the change superseded never lands.
+        await act(async () => pending.resolve(answer({ photos: [photo('votes')] })));
+        await act(async () => undefined);
+        expect(ids(result.current.state as never)).toEqual(['newest']);
+    });
+
+    test('a change during a Load more drops the batch and re-reads from the top', async () => {
+        const more = deferred();
+        getLibrary()
+            .mockResolvedValueOnce(answer({ photos: [photo('a')], nextStart: 1, truncated: true }))
+            .mockReturnValueOnce(more.promise)
+            .mockResolvedValueOnce(answer({ photos: [photo('top')] }));
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => {
+            void result.current.loadMore();
+        });
+        expect(result.current.loadingMore).toBe(true);
+        await act(async () => result.current.setOrder('oldest'));
+        await waitFor(() => expect(ids(result.current.state as never)).toEqual(['top']));
+        expect(result.current.loadingMore).toBe(false);
+        await act(async () => more.resolve(answer({ photos: [photo('late')], nextStart: 2, truncated: false })));
+        await act(async () => undefined);
+        expect(ids(result.current.state as never)).toEqual(['top']);
+        expect(result.current.loadMoreFailed).toBeNull();
+    });
+
+    test('Refresh and Retry read in the order on screen', async () => {
+        getLibrary().mockResolvedValue(answer());
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        await act(async () => result.current.setOrder('oldest'));
+        await waitFor(() => expect(result.current.state.status).toBe('ready'));
+        await act(async () => {
+            result.current.refresh();
+        });
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 1, 'oldest']);
+        await waitFor(() => expect(result.current.revalidating).toBe(false));
+        await act(async () => {
+            result.current.retry();
+        });
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 1, 'oldest']);
+    });
+    test('a change in the error state only arms the next read; Retry carries the order', async () => {
+        getLibrary().mockResolvedValueOnce(failure('flaky')).mockResolvedValueOnce(answer());
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        expect(result.current.state).toMatchObject({ status: 'error' });
+        await act(async () => result.current.setOrder('newest'));
+        // No listing is on screen, so the change arms the next read instead of starting one.
+        expect(getLibrary()).toHaveBeenCalledTimes(1);
+        act(() => {
+            result.current.retry();
+        });
+        expect(getLibrary().mock.calls[1]).toEqual([7, undefined, 'fresh', 'submit', 0, 100, 'newest']);
+        await waitFor(() => expect(result.current.state).toMatchObject({ status: 'ready', order: 'newest' }));
+    });
+});

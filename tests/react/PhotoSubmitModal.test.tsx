@@ -4,7 +4,7 @@
  * refreshed for, and no way out while a submit is in flight. Translations are the real English strings.
  */
 
-import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
+import { act, fireEvent, pickOption, render, screen, waitFor, within } from './helpers/test-utils';
 import { PICK_TEXTS, PhotoSubmitModal } from '@/components/app/PhotoSubmitModal';
 import type { PickOutcome } from '@/components/app/PhotoSubmitModal';
 import { mockTranslator } from './helpers/setup';
@@ -2138,5 +2138,89 @@ describe('Load more', () => {
         // Photo 3 is refused, so the grid hides it: the batch joins the hidden count, the shown count stays.
         await screen.findByText("Hidden: 2 photo(s) GuruShots won't take in this challenge.");
         expect(screen.getByText('Showing 1 photo(s).')).toBeTruthy();
+    });
+});
+
+describe('the toolbar: order, loaded-photo sort and Show stats', () => {
+    const getStats = () => jest.mocked(window.api.getPhotoStats);
+    const orderSelect = () => screen.getByLabelText('Order (applies to your whole library)') as HTMLSelectElement;
+    const sortSelect = () => screen.getByLabelText('Then sort loaded photos by') as HTMLSelectElement;
+    const showStatsBox = () => screen.getByRole('checkbox', { name: 'Show stats' }) as HTMLInputElement;
+    const statOf = (id: string) => ({
+        id,
+        votes: Number(id.slice(0, 8)),
+        views: 10,
+        likes: 0,
+        guruPicks: 0,
+    });
+    const statsAnswer = async (asked: unknown) => ({
+        success: true as const,
+        stats: (asked as string[]).map((id) => statOf(id)),
+        missing: [] as string[],
+    });
+    const tileOrder = () =>
+        screen
+            .getAllByRole('button')
+            .map((button) => button.getAttribute('aria-label') ?? '')
+            .filter((label) => label.startsWith('Photo '))
+            .map((label) => label.slice('Photo '.length, 'Photo '.length + 8));
+
+    beforeEach(() => {
+        getStats().mockReset().mockImplementation(statsAnswer);
+    });
+
+    test('an order change re-reads the library in that order', async () => {
+        setupLoaded();
+        await opened();
+        // The ordered read comes back as a preview (alwaysFresh) and is re-checked fresh: both answer the same.
+        getLibrary().mockResolvedValue(listing([photo(5)]));
+        pickOption(orderSelect(), 'newest');
+        await waitFor(() => expect(getLibrary().mock.calls.some((call) => call[6] === 'newest')).toBe(true));
+        expect(await screen.findByRole('button', { name: /^Photo 00000005:/ })).toBeTruthy();
+        // The fresh read behind the ordered listing re-checks the preview's own extent, in the order.
+        expect(getLibrary().mock.calls.at(-1)).toEqual([7, undefined, 'fresh', 'submit', 0, 1, 'newest']);
+    });
+
+    test('a loaded-photo sort turns Show stats on and the tiles reorder once the run ends', async () => {
+        setupLoaded();
+        await opened();
+        pickOption(sortSelect(), 'ratio');
+        // The mock answers at once, so the reading count is a transient: the run is read by its end.
+        await screen.findByText('Stats read. Photos reordered.');
+        expect(showStatsBox().checked).toBe(true);
+        // The ratio is votes per view, and the ids carry the vote counts: 4 (0.4), 3 (0.3), 2 (0.2), 1 (0.1).
+        expect(tileOrder()).toEqual([shortOf(4), shortOf(3), shortOf(2), shortOf(1)]);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    test('under Library order a run that comes back missing shows the plain warning with Retry', async () => {
+        getStats()
+            .mockReset()
+            .mockResolvedValue({ success: true, stats: [], missing: [idOf(1), idOf(2), idOf(3), idOf(4)] });
+        setupLoaded();
+        await opened();
+        fireEvent.click(showStatsBox());
+        await screen.findByText(
+            "Stats couldn't be read for 4 of these photos. GuruShots didn't send them, or reading is paused for a minute after errors. Try again in a minute.",
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        expect(screen.getByText('Reading stats: 0 of 4')).toBeTruthy();
+        await screen.findByText(
+            "Stats couldn't be read for 4 of these photos. GuruShots didn't send them, or reading is paused for a minute after errors. Try again in a minute.",
+        );
+        expect(getStats()).toHaveBeenCalledTimes(2);
+    });
+
+    test('both selects and Show stats reset when the modal reopens', async () => {
+        const first = setupLoaded();
+        await opened();
+        pickOption(orderSelect(), 'oldest');
+        pickOption(sortSelect(), 'likes');
+        await waitFor(() => expect(showStatsBox().checked).toBe(true));
+        first.update({ isOpen: false });
+        first.update({});
+        expect(orderSelect().value).toBe('votes');
+        expect(sortSelect().value).toBe('library');
+        expect(showStatsBox().checked).toBe(false);
     });
 });

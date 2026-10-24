@@ -8,7 +8,7 @@
 import type * as librarySortModule from '../src/ts/librarySort';
 import { invalid } from './helpers/invalid';
 
-const { LIBRARY_ORDERS, isLibraryOrder } = require('../src/ts/librarySort') as typeof librarySortModule;
+const { LIBRARY_ORDERS, isLibraryOrder, isLoadedSort } = require('../src/ts/librarySort') as typeof librarySortModule;
 
 describe('LIBRARY_ORDERS', () => {
     test.each([
@@ -48,5 +48,22 @@ describe('isLibraryOrder', () => {
 
     test.each([[undefined], [null], [7], [{}], [[]]])('refuses the non-string %j', (value) => {
         expect(isLibraryOrder(value)).toBe(false);
+    });
+});
+
+describe('isLoadedSort', () => {
+    test.each(['library', 'ratio', 'likes', 'guruPicks'])('accepts %s', (sort) => {
+        expect(isLoadedSort(sort)).toBe(true);
+    });
+
+    test.each([['toString'], ['constructor'], ['__proto__'], ['Library'], [''], ['votes'], ['newest']])(
+        'refuses %j',
+        (value) => {
+            expect(isLoadedSort(value)).toBe(false);
+        },
+    );
+
+    test.each([[undefined], [null], [7], [{}], [[]]])('refuses the non-string %j', (value) => {
+        expect(isLoadedSort(value)).toBe(false);
     });
 });

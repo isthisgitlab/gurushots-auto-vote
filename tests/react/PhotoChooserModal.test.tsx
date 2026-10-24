@@ -9,7 +9,7 @@
  * are the real English strings so the tiles are told apart by their accessible names.
  */
 
-import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
+import { act, fireEvent, pickOption, render, screen, waitFor, within } from './helpers/test-utils';
 import { PhotoChooserModal } from '@/components/app/PhotoChooserModal';
 import { PhotoGrid } from '@/components/app/PhotoGrid';
 import { useImageLoads } from '@/hooks/useImageLoads';
@@ -812,7 +812,7 @@ describe('PhotoGrid numbering when a selected photo is left out of the grid', ()
         const photos = [photo(1), photo(2), photo(3)];
         return render(
             <PhotoGrid
-                state={{ status: 'ready', listing: listing(photos) }}
+                state={{ status: 'ready', listing: listing(photos), order: 'votes' }}
                 known={new Map(photos.map((p) => [p.id, p]))}
                 selected={[idOf(1), idOf(9), idOf(2)]}
                 locked={false}
@@ -847,7 +847,7 @@ describe('PhotoGrid as a plain set (max, fullKey, numbered)', () => {
     const grid = (props: Partial<Parameters<typeof PhotoGrid>[0]> = {}) =>
         render(
             <PhotoGrid
-                state={{ status: 'ready', listing: listing(photos) }}
+                state={{ status: 'ready', listing: listing(photos), order: 'votes' }}
                 known={new Map(photos.map((p) => [p.id, p]))}
                 selected={[idOf(1), idOf(9)]}
                 locked={false}
@@ -2210,5 +2210,188 @@ describe('pins', () => {
         // Photo 2 was picked first, so its pair is group 1; the group sits with its tile in the cell.
         expect(groupOf(1).previousElementSibling!.getAttribute('aria-label')).toMatch(/^Photo 00000002:/);
         expect(groupOf(2).previousElementSibling!.getAttribute('aria-label')).toMatch(/^Photo 00000001:/);
+    });
+});
+
+describe('the toolbar: order, loaded-photo sort and Show stats', () => {
+    const getStats = () => jest.mocked(window.api.getPhotoStats);
+    const orderSelect = () => screen.getByLabelText('Order (applies to your whole library)') as HTMLSelectElement;
+    const sortSelect = () => screen.getByLabelText('Then sort loaded photos by') as HTMLSelectElement;
+    const showStatsBox = () => screen.getByRole('checkbox', { name: 'Show stats' }) as HTMLInputElement;
+    const statOf = (id: string) => ({ id, votes: 121, views: 50, likes: 1, guruPicks: 0 });
+    const statsAnswer = async (asked: unknown) => ({
+        success: true as const,
+        stats: (asked as string[]).map((id) => statOf(id)),
+        missing: [] as string[],
+    });
+    const tileOrder = () =>
+        screen
+            .getAllByRole('button')
+            .map((button) => button.getAttribute('aria-label') ?? '')
+            .filter((label) => label.startsWith('Photo '))
+            .map((label) => label.slice('Photo '.length, 'Photo '.length + 8));
+
+    beforeEach(() => {
+        getStats().mockReset().mockImplementation(statsAnswer);
+    });
+
+    test('both selects and Show stats are there, labeled; the Show-stats help is always shown, the sort help is not', () => {
+        setup();
+        expect(orderSelect().value).toBe('votes');
+        expect(sortSelect().value).toBe('library');
+        expect(screen.getByRole('option', { name: 'Votes' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'Newest' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'Oldest' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'Library order' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'Ratio (votes per view)' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'Likes' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'Guru picks' })).toBeTruthy();
+        expect(showStatsBox().checked).toBe(false);
+        expect(screen.getByText(/^Reads each photo's votes, views, likes and Guru picks/)).toBeTruthy();
+        expect(screen.queryByText(/reorder only the/)).toBeNull();
+    });
+
+    test('a select change whose value is not one of the named ones changes nothing', async () => {
+        setup();
+        await opened();
+        // A guarded value reads nothing and runs nothing: no order re-read, no stats run.
+        fireEvent.change(orderSelect(), { target: { value: 'toString' } });
+        fireEvent.change(sortSelect(), { target: { value: '__proto__' } });
+        expect(getLibrary()).toHaveBeenCalledTimes(1);
+        expect(getStats()).not.toHaveBeenCalled();
+    });
+
+    test('an order change re-reads the listing in that order', async () => {
+        setup();
+        await opened();
+        getLibrary().mockResolvedValueOnce(listing([photo(5)]));
+        pickOption(orderSelect(), 'newest');
+        await waitFor(() =>
+            expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'cached', 'submit', 0, 100, 'newest'),
+        );
+        expect(await screen.findByRole('button', { name: /^Photo 00000005:/ })).toBeTruthy();
+    });
+
+    test('the help line names the loaded count and the order on screen', async () => {
+        setup();
+        await opened();
+        pickOption(sortSelect(), 'ratio');
+        await effectsFlushed();
+        expect(
+            screen.getByText(
+                'Ratio, likes and Guru picks reorder only the photos loaded so far (3). Load more adds more, in Votes order.',
+            ),
+        ).toBeTruthy();
+        pickOption(orderSelect(), 'oldest');
+        await waitFor(() =>
+            expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'cached', 'submit', 0, 100, 'oldest'),
+        );
+        await screen.findByText(/in Oldest order\.$/);
+    });
+
+    test('Show stats on under Votes reads the tiles without reordering, and ends with "Stats read."', async () => {
+        setup();
+        await opened();
+        fireEvent.click(showStatsBox());
+        expect(screen.getByText('Reading stats: 0 of 3')).toBeTruthy();
+        await screen.findByText('Stats read.');
+        expect(getStats().mock.calls[0][0]).toEqual([idOf(1), idOf(2), idOf(3)]);
+        expect(tileOrder()).toEqual([shortOf(1), shortOf(2), shortOf(3)]);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    test('a loaded-photo sort turns Show stats on and locks it with the reason; back on Library order it can be cleared', async () => {
+        setup();
+        await opened();
+        pickOption(sortSelect(), 'guruPicks');
+        await effectsFlushed();
+        expect(showStatsBox().checked).toBe(true);
+        expect(showStatsBox().getAttribute('aria-disabled')).toBe('true');
+        const describedBy = showStatsBox().getAttribute('aria-describedby');
+        expect(describedBy).toBeTruthy();
+        expect(document.getElementById(describedBy!)?.textContent).toBe(
+            'Needed for the Ratio, Likes and Guru picks sorts.',
+        );
+        fireEvent.click(showStatsBox());
+        expect(showStatsBox().checked).toBe(true);
+        // Back on Library order the box unlocks and can be cleared.
+        pickOption(sortSelect(), 'library');
+        await effectsFlushed();
+        expect(showStatsBox().getAttribute('aria-disabled')).toBe('false');
+        expect(showStatsBox().getAttribute('aria-describedby')).toBeNull();
+        fireEvent.click(showStatsBox());
+        expect(showStatsBox().checked).toBe(false);
+    });
+
+    test('a run that comes back missing shows the warning with Retry, and Retry restarts with one call', async () => {
+        getStats()
+            .mockReset()
+            .mockResolvedValue({ success: true, stats: [], missing: [idOf(1), idOf(2), idOf(3)] });
+        setup();
+        await opened();
+        fireEvent.click(showStatsBox());
+        await screen.findByText(
+            "Stats couldn't be read for 3 of these photos. GuruShots didn't send them, or reading is paused for a minute after errors. Try again in a minute.",
+        );
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        // Retry during the cool-down: the status counts again, the warning returns, and the restart
+        // sent its one call — nothing beside it.
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        expect(screen.getByText('Reading stats: 0 of 3')).toBeTruthy();
+        await screen.findByText(
+            "Stats couldn't be read for 3 of these photos. GuruShots didn't send them, or reading is paused for a minute after errors. Try again in a minute.",
+        );
+        expect(getStats()).toHaveBeenCalledTimes(2);
+    });
+
+    test('under a loaded-photo sort the warning says the unread photos are listed last, and the status names the reorder', async () => {
+        getStats()
+            .mockReset()
+            .mockResolvedValue({ success: true, stats: [], missing: [idOf(1), idOf(2)] });
+        setup();
+        await opened();
+        pickOption(sortSelect(), 'ratio');
+        expect(
+            await screen.findByText(
+                "Stats couldn't be read for 2 of these photos. GuruShots didn't send them, or reading is paused for a minute after errors. They're listed last. Try again in a minute.",
+            ),
+        ).toBeTruthy();
+        expect(screen.getByText('Stats read. Photos reordered.')).toBeTruthy();
+    });
+
+    test('a failed call (not a missing one) leaves the status empty and the warning carries the failure', async () => {
+        getStats().mockReset().mockRejectedValue(new Error('down'));
+        // Without Auto, so the toolbar's status region is the only aria-live one on the page.
+        setup({ canSuggest: false });
+        await opened();
+        fireEvent.click(showStatsBox());
+        await screen.findByText(
+            "Stats couldn't be read for 3 of these photos. GuruShots didn't send them, or reading is paused for a minute after errors. Try again in a minute.",
+        );
+        // The region the run would report in holds nothing: the run did not get its answers.
+        expect(document.querySelector('p[aria-live="polite"]')?.textContent).toBe('');
+        expect(getStats()).toHaveBeenCalledTimes(1);
+    });
+
+    test('the stats status region is mounted where Auto is not (a Discover row)', async () => {
+        setup({ canSuggest: false });
+        await opened();
+        expect(screen.queryByRole('button', { name: 'Auto' })).toBeNull();
+        fireEvent.click(showStatsBox());
+        await screen.findByText('Stats read.');
+    });
+
+    test('both selects and Show stats reset when the chooser reopens', async () => {
+        const first = setup();
+        await opened();
+        pickOption(orderSelect(), 'newest');
+        pickOption(sortSelect(), 'ratio');
+        await effectsFlushed();
+        expect(showStatsBox().checked).toBe(true);
+        first.rerender(<PhotoChooserModal {...first} isOpen={false} />);
+        first.rerender(<PhotoChooserModal {...first} isOpen />);
+        expect(orderSelect().value).toBe('votes');
+        expect(sortSelect().value).toBe('library');
+        expect(showStatsBox().checked).toBe(false);
     });
 });

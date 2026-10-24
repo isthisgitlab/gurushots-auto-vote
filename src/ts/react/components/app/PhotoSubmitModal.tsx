@@ -305,6 +305,11 @@ function PhotoSubmitBody({
                 idleIds={picker.idleShown}
                 idleWithPicksKey={texts.idleWithPicks}
                 keepIds={keepIds}
+                stats={picker.stats}
+                sortStats={picker.sortStats}
+                sortBy={picker.sortBy}
+                showStats={picker.showStats}
+                onTileIds={picker.setTileIds}
             />
             <StickyModalFooter>
                 {alert}

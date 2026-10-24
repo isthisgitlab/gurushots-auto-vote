@@ -1,20 +1,38 @@
 /**
  * The picker's controls, shared by the submit picker and the Chosen Photos chooser: the help line,
- * Search with Load photos (nothing is read until one of them asks), Auto with its ranking and the
- * suggestions strip (only where `canSuggest`). `children` renders between the help lines and Auto's
- * status — the caller's count line — so every chooser keeps its live regions in the same order.
+ * Search with Load photos (nothing is read until one of them asks), the library order and
+ * loaded-photo sort selects with Show stats (the picker hook's session state), Auto with its ranking
+ * and the suggestions strip (only where `canSuggest`). `children` renders between the help lines and
+ * Auto's status — the caller's count line — so every chooser keeps its live regions in the same order.
  */
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
 import { interp } from '@/utils/interp';
 import { suggestErrorText } from '@/api/ipcErrorText';
+import { LIBRARY_ORDERS, LOADED_SORTS, isLibraryOrder, isLoadedSort } from '../../../librarySort';
 import { SuggestedStrip } from './SuggestedStrip';
 
 import type { ReactNode } from 'react';
+import type { LibraryOrder, LoadedSort } from '../../../librarySort';
 import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
+
+/** The Order select's options, named from the one list of orders the backend reads too. */
+const ORDER_NAME_KEYS: Record<LibraryOrder, string> = {
+    votes: 'app.pickOrderVotes',
+    newest: 'app.pickOrderNewest',
+    oldest: 'app.pickOrderOldest',
+};
+
+/** The loaded-photo sort select's options, named from the one list of sorts. */
+const SORT_NAME_KEYS: Record<LoadedSort, string> = {
+    library: 'app.pickSortLibrary',
+    ratio: 'app.pickSortRatio',
+    likes: 'app.pickSortLikes',
+    guruPicks: 'app.pickSortGuruPicks',
+};
 
 /** The search box: submitting reads the listing again for the (trimmed) term. */
 function SearchForm({ onSearch }: { onSearch: (term: string) => void }) {
@@ -44,6 +62,132 @@ function SearchForm({ onSearch }: { onSearch: (term: string) => void }) {
                 {t('app.photoChooserSearch')}
             </button>
         </form>
+    );
+}
+
+/**
+ * The toolbar's Order and loaded-photo sort selects with Show stats, the loaded-sort help line, the
+ * stats status region and the missed-stats warning. All session state: it lives in the picker hook,
+ * so every opening starts from Votes, Library order and Show stats off. The status region is this
+ * toolbar's own (always mounted), because Auto's is not mounted where it cannot suggest.
+ */
+function PickerStatsControls({ picker }: { picker: ReturnType<typeof usePhotoPicker> }) {
+    const { t } = useTranslation();
+    const orderId = useId();
+    const sortId = useId();
+    const lockReasonId = useId();
+    const { order, setOrder, sortBy, setSortBy, showStats, setShowStats } = picker;
+    const sortNeedsStats = sortBy !== 'library';
+    let status = '';
+    if (showStats) {
+        if (picker.statsProgress)
+            status = interp(t('app.pickStatsReading'), {
+                done: picker.statsProgress.done,
+                total: picker.statsProgress.total,
+            });
+        else if (picker.statsRead) status = t(sortNeedsStats ? 'app.pickStatsReordered' : 'app.pickStatsRead');
+    }
+    const loadedCount = picker.state.status === 'ready' ? picker.state.listing.photos.length : 0;
+    return (
+        <>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div className="flex items-center gap-2">
+                    <label htmlFor={orderId} className="text-xs">
+                        {t('app.pickOrderLabel')}
+                    </label>
+                    <select
+                        id={orderId}
+                        className="select select-sm"
+                        value={order}
+                        onChange={(event) => {
+                            const next = event.currentTarget.value;
+                            if (isLibraryOrder(next)) setOrder(next);
+                        }}
+                    >
+                        {(Object.keys(LIBRARY_ORDERS) as LibraryOrder[]).map((name) => (
+                            <option key={name} value={name}>
+                                {t(ORDER_NAME_KEYS[name])}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <div className="flex items-center gap-2">
+                    <label htmlFor={sortId} className="text-xs">
+                        {t('app.pickSortLabel')}
+                    </label>
+                    <select
+                        id={sortId}
+                        className="select select-sm"
+                        value={sortBy}
+                        onChange={(event) => {
+                            const next = event.currentTarget.value;
+                            if (isLoadedSort(next)) setSortBy(next);
+                        }}
+                    >
+                        {LOADED_SORTS.map((sort) => (
+                            <option key={sort} value={sort}>
+                                {t(SORT_NAME_KEYS[sort])}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <label className="flex items-center gap-2 text-xs">
+                    <input
+                        type="checkbox"
+                        className={`checkbox checkbox-sm ${sortNeedsStats ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        checked={showStats}
+                        aria-disabled={sortNeedsStats}
+                        aria-describedby={sortNeedsStats ? lockReasonId : undefined}
+                        onClick={(event) => {
+                            if (sortNeedsStats) event.preventDefault();
+                        }}
+                        onChange={() => {
+                            // A locked box's click is default-prevented above, so no change event
+                            // follows it in a real browser or under happy-dom; the guard is a
+                            // second belt against a hand-dispatched event.
+                            /* istanbul ignore else */
+                            if (!sortNeedsStats) setShowStats(!showStats);
+                        }}
+                    />
+                    {t('app.pickShowStats')}
+                </label>
+                {sortNeedsStats && (
+                    <span id={lockReasonId} className="text-xs text-base-content/70">
+                        {t('app.pickShowStatsLocked')}
+                    </span>
+                )}
+            </div>
+            <p className="text-base-content/70 text-xs">{t('app.pickShowStatsHelp')}</p>
+            {/* The {order} names the order the loaded photos were READ in (the listing's own tag),
+            not the select's value: a switched order does not re-word the line until the new
+            listing lands. */}
+            {sortNeedsStats && picker.state.status === 'ready' && (
+                <p className="text-base-content/70 text-xs">
+                    {interp(t('app.pickLoadedSortHelp'), {
+                        count: loadedCount,
+                        order: t(ORDER_NAME_KEYS[picker.state.order]),
+                    })}
+                </p>
+            )}
+            {picker.showStats && picker.statsMissing.length > 0 && (
+                <div role="alert" className="alert alert-warning py-2 text-sm">
+                    <div className="flex-1">
+                        <p>
+                            {interp(t(sortNeedsStats ? 'app.pickStatsMissingSorted' : 'app.pickStatsMissing'), {
+                                count: picker.statsMissing.length,
+                            })}
+                        </p>
+                    </div>
+                    <button type="button" className="btn btn-sm" onClick={picker.retryStats}>
+                        {t('app.photoChooserRetry')}
+                    </button>
+                </div>
+            )}
+            {/* Always mounted, so a screen reader announces the text that arrives in it. */}
+            <p aria-live="polite" className={status ? 'text-xs' : 'sr-only'}>
+                {status}
+            </p>
+        </>
     );
 }
 
@@ -149,6 +293,7 @@ export function PhotoPickerToolbar({
                         </button>
                     )}
                 </div>
+                <PickerStatsControls picker={picker} />
                 {canSuggest && <p className="text-base-content/70 text-xs">{t(autoHelpKey)}</p>}
             </div>
             {children}

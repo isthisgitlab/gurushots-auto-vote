@@ -887,6 +887,9 @@ export const app = {
     photoChooserNotEligible: 'Neder šim izaicinājumam',
     photoChooserAllowed: 'Var iesniegt',
     photoChooserTileLabel: 'Foto {id}: {labels}. {reason}',
+    photoChooserTileStats:
+        'Attiecība {ratio} (balsis pret skatījumu), {likes} atzīmes „Patīk”, {guruPicks} Guru izvēles.',
+    photoChooserTileStatsNoViews: 'Vēl nav skatījumu, {likes} atzīmes „Patīk”, {guruPicks} Guru izvēles.',
     photoChooserPosition: 'Numurs {n} tavā sarakstā.',
     photoChooserNoTags: 'Bez tagiem',
     photoChooserInheritNote:
@@ -962,6 +965,28 @@ export const app = {
         'Šī poga sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem un, kur pieejams, ar vietējo attēlu pārbaudi. Nekas netiek iesniegts; vēlreiz nospiežot, redzēsi nākamos.',
     pickLoadPhotos: 'Ielādēt foto',
     pickLoadMore: 'Ielādēt vairāk foto',
+    pickOrderLabel: 'Secība (attiecas uz visu bibliotēku)',
+    pickOrderVotes: 'Balsis',
+    pickOrderNewest: 'Jaunākie',
+    pickOrderOldest: 'Vecākie',
+    pickSortLabel: 'Papildu kārtošana ielādētajiem foto',
+    pickSortLibrary: 'Bibliotēkas secība',
+    pickSortRatio: 'Attiecība (balsis pret skatījumu)',
+    pickSortLikes: 'Patīk',
+    pickSortGuruPicks: 'Guru izvēles',
+    pickShowStats: 'Rādīt statistiku',
+    pickShowStatsHelp:
+        'Par katru foto no GuruShots nolasa tā balsis, skatījumus, „Patīk” atzīmes un Guru izvēles; kad ielādēts daudz foto, tas aizņem laiku. Uz flīzes redzams: attiecība (balsis pret skatījumu) · ♥ „Patīk” · ★ Guru izvēles.',
+    pickShowStatsLocked: 'Nepieciešams, lai kārtotu pēc „Attiecība”, „Patīk” vai „Guru izvēles”.',
+    pickLoadedSortHelp:
+        'Attiecība, „Patīk” un Guru izvēles pārkārto tikai līdz šim ielādētos foto ({count}). „Ielādēt vairāk foto” pievieno vēl, secībā „{order}”.',
+    pickStatsReading: 'Nolasa statistiku: {done} no {total}',
+    pickStatsRead: 'Statistika nolasīta.',
+    pickStatsReordered: 'Statistika nolasīta. Foto pārkārtoti.',
+    pickStatsMissing:
+        'Neizdevās nolasīt statistiku par {count} no šiem foto. GuruShots tos nenosūtīja, vai arī lasīšana uz minūti apturēta pēc kļūdām. Pamēģini vēlreiz pēc minūtes.',
+    pickStatsMissingSorted:
+        'Neizdevās nolasīt statistiku par {count} no šiem foto. GuruShots tos nenosūtīja, vai arī lasīšana uz minūti apturēta pēc kļūdām. Tie ir saraksta beigās. Pamēģini vēlreiz pēc minūtes.',
     pickIdle: 'Foto vēl nav ielādēti. Ielādē foto, meklē vai izmanto pogu „Automātiski”.',
     pickIdleWithPicks: 'Izvēlētos foto var iesniegt jau tagad. Ielādē foto vai meklē, lai redzētu pārējo bibliotēku.',
     pickAutoRunning: 'Foto tiek sarindoti… tas var aizņemt minūti. Nekas netiek iesniegts.',

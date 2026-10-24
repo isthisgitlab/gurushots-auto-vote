@@ -11,6 +11,7 @@ import { fireEvent, render, screen } from './helpers/test-utils';
 import { PhotoGrid } from '@/components/app/PhotoGrid';
 import { mockTranslator } from './helpers/setup';
 import { app, errors } from '../../src/ts/translations/english';
+import type { TileStats } from '@/hooks/usePhotoStatsLoader';
 import type { ListState, LibraryPhoto } from '@/hooks/useLibraryListing';
 import type { WindowApi } from '../../src/ts/types/ipc';
 
@@ -75,6 +76,21 @@ const grid = (over: Partial<Props> = {}) => render(<PhotoGrid {...baseProps(over
 const more = () => screen.getByRole('button', { name: 'Load more photos' });
 // The grid's own live region: it is the first on the page, before the header's read-at line.
 const statusRegion = () => screen.getAllByRole('status')[0];
+// The tiles in the order they render, told apart by the first 8 characters of their ids.
+const tileOrder = () =>
+    screen
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label') ?? '')
+        .filter((label) => label.startsWith('Photo '))
+        .map((label) => label.slice('Photo '.length, 'Photo '.length + 8));
+const tileStat = (n: number, over: Partial<Omit<TileStats, 'id'>> = {}): TileStats => ({
+    id: idOf(n),
+    votes: 10,
+    views: 10,
+    likes: 0,
+    guruPicks: 0,
+    ...over,
+});
 
 beforeEach(() => {
     mockTranslator.t.mockImplementation(english);
@@ -491,5 +507,174 @@ describe('a search listing', () => {
             ),
         });
         expect(missing.textContent).not.toContain('deleted');
+    });
+});
+
+describe('the loaded-photo sort', () => {
+    const listingOf = (ids: number[]) => ({ status: 'ready', listing: listing(ids.map((n) => photo(n))) }) as ListState;
+
+    test('ratio: known values descending, a views-0 ratio after every real one, unknown last, ties keep the listing order', () => {
+        grid({
+            sortBy: 'ratio',
+            sortStats: new Map([
+                [idOf(1), tileStat(1, { votes: 30, views: 10 })],
+                [idOf(2), tileStat(2, { votes: 30, views: 15 })],
+                [idOf(3), tileStat(3, { votes: 5, views: 0 })],
+                // 4 ties with 1 and is listed after it, so it keeps its place behind it.
+                [idOf(4), tileStat(4, { votes: 30, views: 10 })],
+            ]),
+            state: listingOf([5, 2, 1, 4, 3, 6]),
+        });
+        // 5 and 6 have no stats: unknown last, in the listing's order; 3 is known but has no views.
+        expect(tileOrder()).toEqual([shortOf(1), shortOf(4), shortOf(2), shortOf(3), shortOf(5), shortOf(6)]);
+    });
+
+    test('likes and Guru picks: known values descending, unknown last', () => {
+        const stats = new Map([
+            [idOf(1), tileStat(1, { likes: 5, guruPicks: 1 })],
+            [idOf(2), tileStat(2, { likes: 9, guruPicks: 3 })],
+            [idOf(3), tileStat(3, { likes: 1, guruPicks: 9 })],
+        ]);
+        const first = grid({ sortBy: 'likes', sortStats: stats, state: listingOf([1, 2, 3]) });
+        expect(tileOrder()).toEqual([shortOf(2), shortOf(1), shortOf(3)]);
+        first.unmount();
+        grid({ sortBy: 'guruPicks', sortStats: stats, state: listingOf([1, 2, 3]) });
+        expect(tileOrder()).toEqual([shortOf(3), shortOf(2), shortOf(1)]);
+    });
+
+    test('the pinned picks the listing does not return stay first in pick order', () => {
+        grid({
+            sortBy: 'ratio',
+            sortStats: new Map([
+                [idOf(1), tileStat(1, { votes: 100, views: 1 })],
+                [idOf(9), tileStat(9, { votes: 1, views: 100 })],
+            ]),
+            known: new Map([[idOf(9), photo(9)]]),
+            selected: [idOf(9)],
+            state: listingOf([1, 2]),
+        });
+        expect(tileOrder()[0]).toBe(shortOf(9));
+    });
+
+    test('answers landing mid-run do not reorder; the snapshot refreshed at the run end reorders once', () => {
+        const stats = new Map([
+            [idOf(1), tileStat(1, { votes: 1, views: 100 })],
+            [idOf(2), tileStat(2, { votes: 100, views: 1 })],
+            [idOf(3), tileStat(3, { votes: 2, views: 1 })],
+        ]);
+        const first = grid({ sortBy: 'ratio', state: listingOf([1, 2, 3]) });
+        expect(tileOrder()).toEqual([shortOf(1), shortOf(2), shortOf(3)]);
+        // The live Map fills in while the run is out; the sort snapshot is still empty, so nothing moves.
+        first.rerender(<PhotoGrid {...baseProps({ sortBy: 'ratio', stats, state: listingOf([1, 2, 3]) })} />);
+        expect(tileOrder()).toEqual([shortOf(1), shortOf(2), shortOf(3)]);
+        // The run ends: the loader hands the grid its refreshed snapshot, and the tiles reorder once.
+        first.rerender(
+            <PhotoGrid {...baseProps({ sortBy: 'ratio', stats, sortStats: stats, state: listingOf([1, 2, 3]) })} />,
+        );
+        // 2 (100 votes per view), then 3 (2), then 1 (0.01).
+        expect(tileOrder()).toEqual([shortOf(2), shortOf(3), shortOf(1)]);
+    });
+
+    test('a sort change reorders at once from the stats already read, with no stats call', () => {
+        const stats = new Map([
+            [idOf(1), tileStat(1, { votes: 1, views: 100 })],
+            [idOf(2), tileStat(2, { votes: 100, views: 1 })],
+        ]);
+        const first = grid({ sortStats: stats, state: listingOf([1, 2]) });
+        expect(tileOrder()).toEqual([shortOf(1), shortOf(2)]);
+        first.rerender(<PhotoGrid {...baseProps({ sortBy: 'ratio', sortStats: stats, state: listingOf([1, 2]) })} />);
+        expect(tileOrder()).toEqual([shortOf(2), shortOf(1)]);
+        expect(jest.mocked(window.api.getPhotoStats)).not.toHaveBeenCalled();
+    });
+    test('a reorder of the same tiles (a run ending under a loaded sort) reports nothing new', () => {
+        const onTileIds = jest.fn<void, [string[]]>();
+        const stats = new Map([
+            [idOf(1), tileStat(1, { votes: 1, views: 100 })],
+            [idOf(2), tileStat(2, { votes: 100, views: 1 })],
+        ]);
+        // The run is out: the empty snapshot keeps the listing's order, and the ids were reported.
+        const first = grid({ sortBy: 'ratio', onTileIds, state: listingOf([1, 2]) });
+        expect(tileOrder()).toEqual([shortOf(1), shortOf(2)]);
+        expect(onTileIds).toHaveBeenCalledTimes(1);
+        // The run ends: the refreshed snapshot reorders the tiles — the same set, so no new report.
+        first.rerender(
+            <PhotoGrid
+                {...baseProps({ sortBy: 'ratio', onTileIds, stats, sortStats: stats, state: listingOf([1, 2]) })}
+            />,
+        );
+        expect(tileOrder()).toEqual([shortOf(2), shortOf(1)]);
+        expect(onTileIds).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('the ids reported for the stats loader', () => {
+    test('the listed photos shown are reported; refused hidden ones and stub tiles are not', () => {
+        const onTileIds = jest.fn<void, [string[]]>();
+        grid({
+            onTileIds,
+            selected: [idOf(9)],
+            state: {
+                status: 'ready',
+                listing: listing([photo(1), photo(2, { allowed: false, message: 'No' }), photo(3)], {
+                    truncated: true,
+                    nextStart: 3,
+                }),
+            } as ListState,
+        });
+        // 2 is refused and hidden; 9 is an unreached pick, so it renders as a saved-pick stub.
+        expect(onTileIds).toHaveBeenCalledWith([idOf(1), idOf(3)]);
+    });
+
+    test('the report comes once per change: a re-render with the same tiles sends nothing', () => {
+        const onTileIds = jest.fn<void, [string[]]>();
+        const props = baseProps({ onTileIds });
+        const first = render(<PhotoGrid {...props} />);
+        first.rerender(<PhotoGrid {...props} />);
+        expect(onTileIds).toHaveBeenCalledTimes(1);
+    });
+
+    test("the report keeps the grid's render order, so the loader reads the visible top first", () => {
+        const onTileIds = jest.fn<void, [string[]]>();
+        grid({
+            onTileIds,
+            state: { status: 'ready', listing: listing([photo(3), photo(1), photo(2)]) } as ListState,
+        });
+        expect(onTileIds).toHaveBeenCalledWith([idOf(3), idOf(1), idOf(2)]);
+    });
+
+    test('while idle, only the records the grid shows as full tiles are reported', () => {
+        const onTileIds = jest.fn<void, [string[]]>();
+        grid({
+            onTileIds,
+            extraPhotos: new Map([[idOf(7), photo(7)]]),
+            idleIds: [idOf(7), idOf(8)],
+            state: { status: 'idle' } as ListState,
+        });
+        // 8 is a saved pick without a record: a stub, never asked for.
+        expect(onTileIds).toHaveBeenCalledWith([idOf(7)]);
+    });
+    test('a refused photo hidden under a Ratio sort: the shown order is right and the hidden photo is not asked for', () => {
+        const onTileIds = jest.fn<void, [string[]]>();
+        grid({
+            sortBy: 'ratio',
+            onTileIds,
+            sortStats: new Map([
+                [idOf(1), tileStat(1, { votes: 1, views: 100 })],
+                // Photo 2 is refused and hidden, so it never takes a place in the order.
+                [idOf(2), tileStat(2, { votes: 50, views: 100 })],
+                [idOf(3), tileStat(3, { votes: 100, views: 100 })],
+            ]),
+            state: {
+                status: 'ready',
+                listing: listing([photo(1), photo(2, { allowed: false, message: 'No' }), photo(3)], {
+                    truncated: true,
+                    nextStart: 3,
+                }),
+            } as ListState,
+        });
+        // The hidden photo does not displace anyone: 3 (ratio 1.0) before 1 (0.01), and only the
+        // shown ids are reported to the loader, in the order the grid displays them.
+        expect(tileOrder()).toEqual([shortOf(3), shortOf(1)]);
+        expect(onTileIds).toHaveBeenCalledWith([idOf(3), idOf(1)]);
     });
 });

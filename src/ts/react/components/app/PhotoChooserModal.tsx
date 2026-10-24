@@ -285,6 +285,11 @@ function PhotoChooserBody({
                 idleMemberId={picker.suggestedMemberId}
                 idleIds={picker.idleShown}
                 recommendedIds={recommendedIds}
+                stats={picker.stats}
+                sortStats={picker.sortStats}
+                sortBy={picker.sortBy}
+                showStats={picker.showStats}
+                onTileIds={picker.setTileIds}
                 tileSlot={
                     challengeId !== null && pinsError === null
                         ? (id) =>

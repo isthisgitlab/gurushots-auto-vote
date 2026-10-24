@@ -11,6 +11,7 @@ import { asPreview } from '../../libraryPreview';
 import { LIBRARY_BATCH_PHOTOS, MAX_LIBRARY_KEEP_PHOTOS, MAX_WON_IDS } from '../../settings/limits';
 
 import type { WindowApi } from '../../types/ipc';
+import type { LibraryOrder } from '../../librarySort';
 import type { LibraryUsage } from '../../types/photoPicker';
 
 type LibraryAnswer = Awaited<ReturnType<WindowApi['getLibraryPhotos']>>;
@@ -20,13 +21,14 @@ export type LibraryPhoto = Listing['photos'][number];
 
 /**
  * What the chooser is showing. `ready` keeps the listing's photos beside what
- * the response said about them (a `preview` listing is the library as last loaded, its marks withheld);
+ * the response said about them (a `preview` listing is the library as last loaded, its marks withheld),
+ * tagged with the order it was read in;
  * every other state is a reason there are none. `idle` is a chooser that reads nothing until asked to.
  */
 export type ListState =
     | { status: 'idle' }
     | { status: 'loading' }
-    | { status: 'ready'; listing: Listing }
+    | { status: 'ready'; listing: Listing; order: LibraryOrder }
     | { status: 'no-context' }
     | { status: 'error'; error: string | null };
 
@@ -97,13 +99,24 @@ export function useLibraryListing(
     const lastSearchRef = useRef('');
     // The member of the listing on screen: the background re-check of a preview, which cannot name one, keeps it.
     const memberRef = useRef<string | null>(null);
+    // The order of the read on its way and of the next one: Votes is what the app has always sent.
+    // A change while a listing is shown or a read is in flight re-reads the term on screen from the
+    // top, so what is on screen is always in the order `orderRef` holds.
+    const [order, setOrderState] = useState<LibraryOrder>('votes');
+    const orderRef = useRef<LibraryOrder>('votes');
     // The state of the newest render, for callbacks that must not depend on `state`.
     const latestState = useRef(state);
     latestState.current = state;
 
     const read = useCallback(
-        (search: string, mode: ReadMode, start: number, keep: number) =>
-            ipc.callOrNull(() => ipc.getLibraryPhotos(challengeId, search || undefined, mode, usage, start, keep)),
+        (search: string, mode: ReadMode, start: number, keep: number, order: LibraryOrder) =>
+            // An explicit votes order reads the same wire as no order (the handler's default), so it
+            // is not named; a date order travels as the 7th argument.
+            ipc.callOrNull(() =>
+                order === 'votes'
+                    ? ipc.getLibraryPhotos(challengeId, search || undefined, mode, usage, start, keep)
+                    : ipc.getLibraryPhotos(challengeId, search || undefined, mode, usage, start, keep, order),
+            ),
         [challengeId, usage],
     );
 
@@ -136,7 +149,7 @@ export function useLibraryListing(
         }
         setSearchTerm(lastSearchRef.current);
         setShownRequestId(requestIdRef.current);
-        setState({ status: 'ready', listing: { ...listing, memberId } });
+        setState({ status: 'ready', listing: { ...listing, memberId }, order: orderRef.current });
     }, []);
 
     /** An answer that is not a listing: where it leaves the chooser (signed out clears what was shown). */
@@ -163,7 +176,7 @@ export function useLibraryListing(
             setLoadMoreFailed(null);
             setState({ status: 'loading' });
             const startedAt = Date.now();
-            const result = await read(search, mode, 0, keep);
+            const result = await read(search, mode, 0, keep, orderRef.current);
             if (request !== requestIdRef.current) return;
             if (!result?.success) return showFailure(result);
             // A cached answer is a preview when it says so, or when the caller trusts no cached marks: unless
@@ -183,7 +196,7 @@ export function useLibraryListing(
                 challengeId !== null && !cachedMarks
                     ? LIBRARY_BATCH_PHOTOS
                     : countedKeep(cachedMarks ? result : asShown);
-            const fresh = await read(search, 'fresh', 0, recheckKeep);
+            const fresh = await read(search, 'fresh', 0, recheckKeep, orderRef.current);
             if (request !== requestIdRef.current) return;
             setRevalidating(false);
             if (fresh?.success) show(fresh, true);
@@ -214,7 +227,7 @@ export function useLibraryListing(
         setRecheckFailed(false);
         setLoadingMore(false);
         setLoadMoreFailed(null);
-        const result = await read(lastSearchRef.current, 'fresh', 0, keepOnScreen());
+        const result = await read(lastSearchRef.current, 'fresh', 0, keepOnScreen(), orderRef.current);
         if (request !== requestIdRef.current) return;
         setRevalidating(false);
         if (result?.success) show(result);
@@ -255,7 +268,13 @@ export function useLibraryListing(
         try {
             setLoadingMore(true);
             setLoadMoreFailed(null);
-            const result = await read(lastSearchRef.current, 'fresh', nextStart, LIBRARY_BATCH_PHOTOS);
+            const result = await read(
+                lastSearchRef.current,
+                'fresh',
+                nextStart,
+                LIBRARY_BATCH_PHOTOS,
+                orderRef.current,
+            );
             if (request !== requestIdRef.current) return;
             if (result === null || !result.success) {
                 setLoadingMore(false);
@@ -295,6 +314,7 @@ export function useLibraryListing(
                         nextStart: result.nextStart,
                         memberId: prev.listing.memberId ?? result.memberId,
                     },
+                    order: prev.order,
                 };
             });
             setLoadingMore(false);
@@ -303,6 +323,23 @@ export function useLibraryListing(
             if (loadingMoreRef.current === request) loadingMoreRef.current = null;
         }
     }, [read, showFailure]);
+
+    /**
+     * Sets the order the reads ask the server for. While a listing is shown or a read is in flight
+     * (the first read, a Load more, a re-check), it starts a new read of the term on screen from the
+     * top, under a new request id, so the answer of a read in the older order can never land; when
+     * idle it only arms the next read. A non-votes order is read fresh by the handler whatever the
+     * mode asks, so no cached vote-ordered listing can answer for it.
+     */
+    const setOrder = useCallback(
+        (next: LibraryOrder) => {
+            orderRef.current = next;
+            setOrderState(next);
+            const current = latestState.current;
+            if (current.status === 'ready' || current.status === 'loading') void load(lastSearchRef.current);
+        },
+        [load],
+    );
 
     // Whether the listing on screen came from a non-empty search term: true while a read of one is
     // ready (a Refresh and a Retry re-read the same term and keep it; a `load('')` clears it). Every
@@ -315,6 +352,8 @@ export function useLibraryListing(
         requestId: shownRequestId,
         revalidating,
         recheckFailed,
+        order,
+        setOrder,
         load,
         refresh,
         retry,

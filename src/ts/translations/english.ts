@@ -877,6 +877,8 @@ export const app = {
     photoChooserNotEligible: 'Not eligible for this challenge',
     photoChooserAllowed: 'Can be entered',
     photoChooserTileLabel: 'Photo {id}: {labels}. {reason}',
+    photoChooserTileStats: 'Ratio {ratio} votes per view, {likes} likes, {guruPicks} Guru picks.',
+    photoChooserTileStatsNoViews: 'No views yet, {likes} likes, {guruPicks} Guru picks.',
     photoChooserPosition: 'Number {n} in your list.',
     photoChooserNoTags: 'No tags',
     photoChooserInheritNote:
@@ -951,6 +953,28 @@ export const app = {
         'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is submitted. Press it again for the next ones.',
     pickLoadPhotos: 'Load photos',
     pickLoadMore: 'Load more photos',
+    pickOrderLabel: 'Order (applies to your whole library)',
+    pickOrderVotes: 'Votes',
+    pickOrderNewest: 'Newest',
+    pickOrderOldest: 'Oldest',
+    pickSortLabel: 'Then sort loaded photos by',
+    pickSortLibrary: 'Library order',
+    pickSortRatio: 'Ratio (votes per view)',
+    pickSortLikes: 'Likes',
+    pickSortGuruPicks: 'Guru picks',
+    pickShowStats: 'Show stats',
+    pickShowStatsHelp:
+        "Reads each photo's votes, views, likes and Guru picks from GuruShots; with many photos loaded this takes a while. Tiles show ratio (votes per view) · ♥ likes · ★ Guru picks.",
+    pickShowStatsLocked: 'Needed for the Ratio, Likes and Guru picks sorts.',
+    pickLoadedSortHelp:
+        'Ratio, likes and Guru picks reorder only the photos loaded so far ({count}). Load more adds more, in {order} order.',
+    pickStatsReading: 'Reading stats: {done} of {total}',
+    pickStatsRead: 'Stats read.',
+    pickStatsReordered: 'Stats read. Photos reordered.',
+    pickStatsMissing:
+        "Stats couldn't be read for {count} of these photos. GuruShots didn't send them, or reading is paused for a minute after errors. Try again in a minute.",
+    pickStatsMissingSorted:
+        "Stats couldn't be read for {count} of these photos. GuruShots didn't send them, or reading is paused for a minute after errors. They're listed last. Try again in a minute.",
     pickIdle: 'Photos are not loaded yet. Load photos, search, or press Auto.',
     pickIdleWithPicks:
         'Your picks can be submitted as they are. Load photos or search to see the rest of your library.',

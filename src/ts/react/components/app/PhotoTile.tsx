@@ -4,8 +4,10 @@ import { ToneNote } from '@/components/ui/ToneNote';
 import { useImageLoads } from '@/hooks/useImageLoads';
 import { buildPhotoUrl } from '@/utils/formatters';
 import { interp } from '@/utils/interp';
+import { TileStatsLine, withStatsLabel } from './TileStats';
 
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
+import type { TileStats } from '@/hooks/usePhotoStatsLoader';
 
 // Edge length requested from the photo CDN for a tile (the grid shows them ~150px wide).
 const TILE_PX = 240;
@@ -142,6 +144,8 @@ function PhotoTileBase({
     locked,
     lockedKey,
     onToggle,
+    stats = null,
+    showStats = false,
 }: {
     photo: LibraryPhoto;
     memberId: string | null;
@@ -161,6 +165,10 @@ function PhotoTileBase({
     /** The translation key of what a locked tile says. */
     lockedKey: string;
     onToggle: (id: string) => void;
+    /** The photo's read stats (the Show-stats loader's): shown while `showStats` is on. */
+    stats?: TileStats | null;
+    /** Show stats is on: the tile carries its ratio, likes and Guru picks. */
+    showStats?: boolean;
 }) {
     const { t } = useTranslation();
     const url = memberId ? buildPhotoUrl(memberId, photo.id, { size: TILE_PX }) : null;
@@ -176,23 +184,26 @@ function PhotoTileBase({
     // what says why the tile cannot be added.
     const dim = unavailable ? 'opacity-50' : '';
     const tone = selected ? 'border-base-content ring-2 ring-base-content' : 'border-base-300';
+    const composed = withRank(
+        withPosition(
+            interp(t('app.photoChooserTileLabel'), {
+                id: shortId(photo.id),
+                labels,
+                reason: reason ?? '',
+            }).trim(),
+            t,
+            position,
+        ),
+        t,
+        rank,
+    );
     return (
         <button
             type="button"
             aria-pressed={selected}
-            aria-label={`${recommended ? `${t('app.photoRecommended')}. ` : ''}${withRank(
-                withPosition(
-                    interp(t('app.photoChooserTileLabel'), {
-                        id: shortId(photo.id),
-                        labels,
-                        reason: reason ?? '',
-                    }).trim(),
-                    t,
-                    position,
-                ),
-                t,
-                rank,
-            )}`}
+            aria-label={`${recommended ? `${t('app.photoRecommended')}. ` : ''}${
+                showStats && stats ? withStatsLabel(composed, t, stats) : composed
+            }`}
             aria-disabled={unavailable}
             className={`${TILE_BASE} ${tone}`}
             onClick={() => {
@@ -206,6 +217,7 @@ function PhotoTileBase({
             <RankBadge rank={rank} />
             <TileImage show={showImage} imageRef={imageRef} url={url} dim={dim} fallback={labels} />
             <span className={`truncate text-xs ${dim}`}>{showImage ? labels : shortId(photo.id)}</span>
+            {showStats && stats && <TileStatsLine stats={stats} dim={dim} />}
             {reason &&
                 (!locked && !full && blockedReason !== null ? (
                     <ToneNote tone="error" as="span" className="text-xs">

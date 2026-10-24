@@ -19,6 +19,15 @@ const LIBRARY_ORDERS = {
 type LibraryOrder = keyof typeof LIBRARY_ORDERS;
 
 /**
+ * The sorts a picker's toolbar can apply to the photos it has loaded. `library` is the server's
+ * order above; the other three reorder what is loaded from the per-photo stats (`get-photo-stats`),
+ * which no server sort exists for.
+ */
+const LOADED_SORTS = ['library', 'ratio', 'likes', 'guruPicks'] as const;
+
+type LoadedSort = (typeof LOADED_SORTS)[number];
+
+/**
  * Whether a received value names a library order; a renderer or CLI can send
  * anything. `Object.hasOwn`, never `in`: 'toString' and '__proto__' are
  * inherited member names, not orders, and must not pass.
@@ -26,5 +35,13 @@ type LibraryOrder = keyof typeof LIBRARY_ORDERS;
 const isLibraryOrder = (value: unknown): value is LibraryOrder =>
     typeof value === 'string' && Object.hasOwn(LIBRARY_ORDERS, value);
 
-export { LIBRARY_ORDERS, isLibraryOrder };
-export type { LibraryOrder };
+/**
+ * Whether a received value names a loaded-photo sort. A plain `includes` over
+ * the fixed array is the same guard here: there is no key lookup to spoof, and
+ * an inherited name like 'toString' is not an element of the list.
+ */
+const isLoadedSort = (value: unknown): value is LoadedSort =>
+    typeof value === 'string' && (LOADED_SORTS as readonly string[]).includes(value);
+
+export { LIBRARY_ORDERS, LOADED_SORTS, isLibraryOrder, isLoadedSort };
+export type { LibraryOrder, LoadedSort };
